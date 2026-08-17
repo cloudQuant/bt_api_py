@@ -61,6 +61,7 @@ class ForwardingClient:
         self._account_cache: dict[str, Any] = {"cash": 0.0, "value": 0.0}
         self._positions_cache: list[dict[str, Any]] = []
         self._orders_cache: list[dict[str, Any]] = []
+        self._pending_commands: set[str] = set()
 
     def connect(self) -> bool:
         """connect method"""
@@ -306,7 +307,18 @@ class ForwardingClient:
         )
 
     def _send_command_sync(self, command: OrderCommand):
-        return self.bus.send_command_sync(command, timeout=self.command_timeout)
+        key = str(command.idempotency_key or command.command_id)
+        try:
+            ack = self.bus.send_command_sync(command, timeout=self.command_timeout)
+        except TimeoutError:
+            self._pending_commands.add(key)
+            raise
+        self._pending_commands.discard(key)
+        return ack
+
+    def pending_commands(self) -> list[str]:
+        """返回超时后结果未知、尚未取回 ack 的命令 key 列表，供对账。"""
+        return sorted(self._pending_commands)
 
     def _refresh_event_caches(self) -> None:
         for symbol_key in list(self._market_subscriptions):
@@ -579,7 +591,14 @@ class ZmqForwardingClient(ForwardingClient):
             self.connect()
         if self._command_client is None:
             raise RuntimeError("ZMQ command client is not connected")
-        return self._command_client.send(command, timeout_ms=self.command_timeout_ms)
+        key = str(command.idempotency_key or command.command_id)
+        try:
+            ack = self._command_client.send(command, timeout_ms=self.command_timeout_ms)
+        except TimeoutError:
+            self._pending_commands.add(key)
+            raise
+        self._pending_commands.discard(key)
+        return ack
 
 
 def _require(payload: dict, key: str) -> NoReturn:

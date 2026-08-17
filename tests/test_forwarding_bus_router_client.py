@@ -284,7 +284,7 @@ async def test_in_memory_bus_sync_command_times_out_inside_running_loop() -> Non
 
     bus.set_command_handler(handler)
 
-    with pytest.raises(TimeoutError, match="timed out after 0.01s"):
+    with pytest.raises(TimeoutError, match="result unknown"):
         bus.send_command_sync(command, timeout=0.01)
 
 
@@ -1217,3 +1217,78 @@ def test_market_event_timestamp_normalized_to_ms() -> None:
     )
     assert tick2.timestamp == 1_700_000_000_123
     assert isinstance(tick2.timestamp, int)
+
+
+# ── Task 1.10: A-04 幽灵订单 / pending 可查询 ───────────────────────────
+
+
+def test_forwarding_client_tracks_pending_commands_on_timeout() -> None:
+    """超时后命令 key 进入 pending_commands() 可查询，不允许静默。"""
+
+    class TimeoutBus(InMemoryForwardingBus):
+        def send_command_sync(
+            self, command: OrderCommand, *, timeout: Optional[float] = None
+        ) -> CommandAck:
+            raise TimeoutError("forwarding command result unknown after timeout")
+
+    client = ForwardingClient(bus=TimeoutBus(), command_timeout=0.01)
+    with pytest.raises(TimeoutError):
+        client.submit_order(
+            {
+                "bt_order_ref": 7,
+                "symbol": "RB2510",
+                "side": "buy",
+                "size": 1,
+                "order_type": "limit",
+                "price": 3500.0,
+            }
+        )
+    pending = client.pending_commands()
+    assert len(pending) == 1
+    assert ":7" in pending[0]
+
+
+@pytest.mark.asyncio
+async def test_sync_command_timeout_does_not_leave_ghost_order() -> None:
+    """超时后命令最终可经幂等重试取回，不得静默已下单。"""
+    released = asyncio.Event()
+    placed: list[OrderRequest] = []
+
+    class BlockingAdapter(MockBrokerAdapter):
+        async def place_order(self, request: OrderRequest):
+            await released.wait()
+            result = await super().place_order(request)
+            placed.append(request)
+            return result
+
+    adapter = BlockingAdapter()
+    router = OrderRouter(adapter)
+    bus = InMemoryForwardingBus()
+    bus.set_command_handler(router.handle_command)
+    client = ForwardingClient(bus=bus, command_timeout=0.05)
+
+    payload = {
+        "bt_order_ref": 7,
+        "symbol": "RB2510",
+        "side": "buy",
+        "size": 1,
+        "order_type": "limit",
+        "price": 3500.0,
+    }
+    with pytest.raises(TimeoutError):
+        client.submit_order(payload)
+
+    pending = client.pending_commands()
+    assert len(pending) == 1
+
+    released.set()
+    for _ in range(100):
+        if placed:
+            break
+        await asyncio.sleep(0.01)
+
+    # 重试同 key：幂等缓存命中，不重复下单
+    result = client.submit_order(payload)
+    assert result.get("order_id")
+    assert len(placed) == 1
+    assert client.pending_commands() == []

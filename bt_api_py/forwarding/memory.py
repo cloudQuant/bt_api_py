@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import inspect
 import math
 import threading
@@ -173,7 +174,7 @@ class InMemoryForwardingBus:
 
 
 def _timeout_error(timeout: float) -> TimeoutError:
-    return TimeoutError(f"forwarding command sync bridge timed out after {timeout}s")
+    return TimeoutError(f"forwarding command result unknown after {timeout}s timeout")
 
 
 def _normalize_timeout(timeout: float | None) -> float | None:
@@ -198,18 +199,45 @@ def _close_awaitable(awaitable: Awaitable[Any]) -> None:
         close()
 
 
-async def _await_with_timeout(awaitable: Awaitable[Any], timeout: float | None) -> Any:
+class _LoopRunner:
+    """常驻事件循环单例，供 sync→async 桥接统一复用。
+
+    一个守护线程跑一个 `run_forever()` 的 loop，所有需要把协程转同步的路径
+    （`_run_awaitable_sync`、`start_sync`、ZMQ `_run_handler`）都把协程投递到
+    这同一个常驻 loop，避免反复 `asyncio.run` 创建/销毁 loop，也避免在新 loop
+    上执行绑定原 loop 的 async handler 导致 RuntimeError。
+    """
+
+    _instance: _LoopRunner | None = None
+    _lock = threading.Lock()
+
+    def __init__(self) -> None:
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(
+            target=self._run_loop, daemon=True, name="forwarding-loop"
+        )
+        self._thread.start()
+
+    def _run_loop(self) -> None:
+        asyncio.set_event_loop(self._loop)
+        self._loop.run_forever()
+
+    def submit(self, awaitable: Awaitable[Any]) -> concurrent.futures.Future[Any]:
+        return asyncio.run_coroutine_threadsafe(awaitable, self._loop)
+
+    @classmethod
+    def get(cls) -> _LoopRunner:
+        with cls._lock:
+            if cls._instance is None or not cls._instance._loop.is_running():
+                cls._instance = cls()
+            return cls._instance
+
+
+def _consume_future_result(future: concurrent.futures.Future[Any]) -> None:
     try:
-        timeout = _normalize_timeout(timeout)
-    except ValueError:
-        _close_awaitable(awaitable)
-        raise
-    try:
-        if timeout is None:
-            return await awaitable
-        return await asyncio.wait_for(awaitable, timeout=timeout)
-    except TimeoutError as exc:
-        raise _timeout_error(timeout) from exc
+        future.exception()
+    except Exception:
+        pass
 
 
 def _run_awaitable_sync(awaitable: Awaitable[Any], *, timeout: float | None = None) -> Any:
@@ -219,24 +247,15 @@ def _run_awaitable_sync(awaitable: Awaitable[Any], *, timeout: float | None = No
         _close_awaitable(awaitable)
         raise
 
+    # run_coroutine_threadsafe 只接受 coroutine，这里把任意 awaitable 包成 coroutine。
+    async def _resolve() -> Any:
+        return await awaitable
+
+    # 统一投递到常驻 loop，禁止嵌套 asyncio.run（会绑定到错误的 loop）。
+    future = _LoopRunner.get().submit(_resolve())
     try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(_await_with_timeout(awaitable, timeout))
-
-    result: dict[str, Any] = {}
-
-    def runner() -> None:
-        try:
-            result["value"] = asyncio.run(_await_with_timeout(awaitable, timeout))
-        except BaseException as exc:  # pragma: no cover - defensive bridge
-            result["error"] = exc
-
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
-    thread.join(None if timeout is None else max(timeout + 0.5, 0.5))
-    if thread.is_alive() and timeout is not None:
-        raise _timeout_error(timeout)
-    if "error" in result:
-        raise result["error"]
-    return result.get("value")
+        return future.result(timeout)
+    except concurrent.futures.TimeoutError:
+        # 结果未知：协程仍在常驻 loop 上继续执行，消费其最终异常避免告警。
+        future.add_done_callback(_consume_future_result)
+        raise _timeout_error(timeout) from None

@@ -142,6 +142,11 @@ class TestBtApiUnifiedInterface:
         with pytest.raises(SubscribeError, match="dataname"):
             self.bt.subscribe("BINANCE_SPOT_BTCUSDT", [{"topic": "kline"}])
 
+    def test_subscribe_unknown_exchange_raises(self):
+        """subscribe 目标交易所未注册时应抛 SubscribeError，而非静默 log。"""
+        with pytest.raises(SubscribeError):
+            self.bt.subscribe("NOTREAL___SPOT___BTCUSDT", [{"topic": "ticker"}])
+
     def test_close_disconnects_all_feeds(self):
         """close() 应调用每个 feed 的 disconnect()。"""
         call_log: list[str] = []

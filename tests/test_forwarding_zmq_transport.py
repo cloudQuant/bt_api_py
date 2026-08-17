@@ -738,3 +738,19 @@ def test_zmq_forwarding_runtime_start_sync_cleans_up_after_thread_start_failure(
     assert runtime._private_publisher is None
     assert runtime._command_server is None
     assert runtime._threads == []
+
+
+@pytest.mark.asyncio
+async def test_start_sync_inside_running_loop_does_not_crash() -> None:
+    """在运行中的事件循环里调用 start_sync 不应因 asyncio.run 崩溃。"""
+    runtime = ZmqForwardingRuntime(
+        MockBrokerAdapter(),
+        market_endpoint=_free_tcp_endpoint(),
+        command_endpoint=_free_tcp_endpoint(),
+    )
+    runtime.start_sync()
+    try:
+        assert runtime.is_running is True
+    finally:
+        runtime.stop_sync()
+    assert runtime.is_running is False

@@ -322,11 +322,10 @@ class BtApi:
         exchange_name = exchange + DATANAME_SEPARATOR + asset_type
         normalized_topics, subscribe_bar_num = self._normalize_subscribe_topics(topics)
         exchange_params = self._copy_exchange_params(self.exchange_kwargs.get(exchange_name, {}))
-        self.subscribe_bar_num += subscribe_bar_num
         data_queue = self.get_data_queue(exchange_name)
         if data_queue is None:
-            self.log(f"exchange_name: {exchange_name} does not exist", level="error")
-            return
+            raise SubscribeError(exchange_name, detail="exchange not registered")
+        self.subscribe_bar_num += subscribe_bar_num
 
         subscribe_handler = ExchangeRegistry.get_stream_class(exchange_name, "subscribe")
         if subscribe_handler is not None:

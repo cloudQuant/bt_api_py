@@ -1,14 +1,13 @@
 """Module documentation"""
 from __future__ import annotations
 
-import asyncio
 import threading
 import time
 from dataclasses import dataclass
 
 from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.forwarding.hub import MarketDataHub
-from bt_api_py.forwarding.memory import InMemoryForwardingBus
+from bt_api_py.forwarding.memory import InMemoryForwardingBus, _run_awaitable_sync
 from bt_api_py.forwarding.router import OrderRouter, RiskRuleSet
 from bt_api_py.forwarding.state import SQLiteStateStore
 from bt_api_py.forwarding.transport import ZmqCommandServer, ZmqEventPublisher
@@ -85,7 +84,7 @@ class ZmqForwardingRuntime(ForwardingRuntime):
         """start_sync method"""
         if self.is_running:
             return
-        asyncio.run(self.start())
+        _run_awaitable_sync(self.start())
         try:
             self._stop.clear()
             self._market_publisher = ZmqEventPublisher(self.market_endpoint)
@@ -137,7 +136,7 @@ class ZmqForwardingRuntime(ForwardingRuntime):
         self._private_publisher = None
         self._market_publisher = None
         if disconnect_adapter:
-            asyncio.run(self.stop())
+            _run_awaitable_sync(self.stop())
 
     async def health(self) -> dict[str, object]:
         """health method"""

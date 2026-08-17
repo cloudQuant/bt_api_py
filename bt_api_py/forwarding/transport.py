@@ -1,7 +1,6 @@
 """Module documentation"""
 from __future__ import annotations
 
-import asyncio
 import inspect
 import threading
 from collections.abc import Awaitable, Callable
@@ -10,6 +9,7 @@ from typing import Union
 import zmq
 from bt_api_base.logging_factory import get_logger
 
+from bt_api_py.forwarding.memory import _run_awaitable_sync
 from bt_api_py.forwarding.schema import (
     CommandAck,
     ForwardingError,
@@ -262,9 +262,5 @@ def _normalize_timeout_ms(timeout_ms: int) -> int:
 def _run_handler(handler: CommandHandler, command: OrderCommand) -> CommandAck:
     result = handler(command)
     if inspect.isawaitable(result):
-        return asyncio.run(_await_handler_result(result))
+        return _run_awaitable_sync(result)
     return result
-
-
-async def _await_handler_result(result: Awaitable[CommandAck]) -> CommandAck:
-    return await result
