@@ -204,7 +204,7 @@ class OrderRouter:
             return ack
 
         try:
-                order = await self.adapter.cancel_order(
+            order = await self.adapter.cancel_order(
                 CancelOrderRequest(
                     account_id=command.account_id,
                     order_id=str(command.order_id),

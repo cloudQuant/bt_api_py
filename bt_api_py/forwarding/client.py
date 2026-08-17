@@ -264,7 +264,7 @@ class ForwardingClient:
             account_id=self.account_id,
             symbol=str(dataname or ""),
             order_id=str(order_ref or ""),
-            idempotency_key=f"cancel:{self.strategy_id}:{self.account_id}:{order_ref}:{uuid.uuid4()}",
+            idempotency_key=f"cancel:{self.strategy_id}:{self.account_id}:{order_ref}",
         )
         ack = self._send_command_sync(command)
         self._drain_private()

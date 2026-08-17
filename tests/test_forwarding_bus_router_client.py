@@ -1064,6 +1064,48 @@ async def test_router_does_not_cache_retryable_errors() -> None:
     assert calls == 2  # retry must reach the adapter again, not return the stale cached rejection
 
 
+def test_cancel_order_idempotency_key_is_deterministic() -> None:
+    """cancel_order 幂等 key 必须确定：相同参数重试产生相同 key。"""
+
+    class RecordingBus(InMemoryForwardingBus):
+        def __init__(self) -> None:
+            super().__init__()
+            self.commands: list[OrderCommand] = []
+
+        def send_command_sync(
+            self, command: OrderCommand, *, timeout: Optional[float] = None
+        ) -> CommandAck:
+            self.commands.append(command)
+            return CommandAck(
+                command_id=command.command_id,
+                idempotency_key=str(command.idempotency_key),
+                accepted=True,
+                status="cancelled",
+                account_id=command.account_id,
+                strategy_id=command.strategy_id,
+                order_id=str(command.order_id),
+                payload={"order_id": str(command.order_id), "order_ref": command.order_id},
+            )
+
+    bus = RecordingBus()
+    client = ForwardingClient(
+        bus=bus,
+        exchange="SIM",
+        market_type="SPOT",
+        account_id="paper",
+        strategy_id="s1",
+    )
+
+    client.cancel_order(order_ref="ref-1")
+    client.cancel_order(order_ref="ref-1")
+
+    assert len(bus.commands) == 2
+    key1 = bus.commands[0].idempotency_key
+    key2 = bus.commands[1].idempotency_key
+    assert key1 == key2, f"idempotency keys must match: {key1!r} != {key2!r}"
+    assert "cancel:" in str(key1)
+
+
 @pytest.mark.asyncio
 async def test_router_caches_terminal_rejects() -> None:
     calls = 0
