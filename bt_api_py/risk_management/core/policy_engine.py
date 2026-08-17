@@ -1,6 +1,6 @@
-""" - 
+"""策略引擎门面 - 
 
-
+规则条件与动作执行分离（动作执行拆到 actions.py），本模块保留规则定义与编排逻辑。
 """
 
 from __future__ import annotations
@@ -13,45 +13,10 @@ from bt_api_base.logging_factory import get_logger
 
 from ..containers.risk_events import RiskLevel
 from ..containers.risk_metrics import RiskMetrics
+from .actions import ActionMixin
+from .policy_types import ActionType, RuleType
 
-
-class RuleType:
-    """"""
-
-    # 
-    CONDITION_BASED = "condition_based"  # 
-    THRESHOLD_BASED = "threshold_based"  # 
-    TIME_BASED = "time_based"  # 
-    EVENT_BASED = "event_based"  # 
-
-    # 
-    AND_RULE = "and_rule"  # AND
-    OR_RULE = "or_rule"  # OR
-    NOT_RULE = "not_rule"  # NOT
-
-    # 
-    ML_PREDICTION = "ml_prediction"  # ML
-
-
-class ActionType:
-    """"""
-
-    # 
-    HALT_TRADING = "halt_trading"  # 
-    LIMIT_ORDERS = "limit_orders"  # 
-    CANCEL_ORDERS = "cancel_orders"  # 
-    REDUCE_POSITIONS = "reduce_positions"  # 
-
-    # 
-    INCREASE_MARGIN = "increase_margin"  # 
-    SEND_ALERT = "send_alert"  # 
-    LOG_EVENT = "log_event"  # 
-    NOTIFY_MANAGER = "notify_manager"  # 
-
-    # 
-    ADJUST_LIMITS = "adjust_limits"  # 
-    UPDATE_MODEL = "update_model"  # 
-    RUN_STRESS_TEST = "run_stress_test"  # 
+__all__ = ["ActionType", "PolicyEngine", "Rule", "RuleCondition", "RuleType"]
 
 
 class RuleCondition:
@@ -66,10 +31,11 @@ class RuleCondition:
 
     def evaluate(self, data: dict[str, Any]) -> bool:
         """
+        评估条件。
 
-        Args: data:
+        Args: data: 上下文数据
 
-        Returns: bool:
+        Returns: bool: 是否满足
         """
         field_value = self._get_nested_value(data, self.field)
 
@@ -135,10 +101,11 @@ class Rule:
 
     def evaluate(self, data: dict[str, Any]) -> bool:
         """
+        评估规则。
 
-        Args: data:
+        Args: data: 上下文数据
 
-        Returns: bool:
+        Returns: bool: 是否触发
         """
         if not self.enabled:
             return False
@@ -162,10 +129,11 @@ class Rule:
 
     def trigger(self, data: dict[str, Any]) -> list[dict[str, Any]]:
         """
+        触发规则。
 
-        Args: data:
+        Args: data: 上下文数据
 
-        Returns: List[Dict[str, Any]]:
+        Returns: List[Dict[str, Any]]: 动作列表
         """
         self.last_triggered = int(time.time())
         self.trigger_count += 1
@@ -173,22 +141,22 @@ class Rule:
         return self.actions
 
 
-class PolicyEngine:
+class PolicyEngine(ActionMixin):
     """
+    策略引擎门面。
 
-    :
-    1.  - 、、
-    2.  - 
-    3.  - 
-    4.  - 
-    5.  - 
-    6.  - 
+    能力:
+    1. 规则管理 - 添加/删除/更新规则
+    2. 条件评估 - 规则条件匹配
+    3. 动作执行 - ActionMixin
+    4. 性能统计 - 命中率等
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         """
+        初始化。
 
-        Args: config:
+        Args: config: 配置字典
         """
         self.logger = get_logger("policy_engine")
         self.config = config or {}
@@ -226,10 +194,11 @@ class PolicyEngine:
 
     def add_rule(self, rule: Rule) -> bool:
         """
+        添加规则。
 
-        Args: rule:
+        Args: rule: 规则对象
 
-        Returns: bool:
+        Returns: bool: 是否成功
         """
         try:
             if rule.rule_id in self.rules:
@@ -249,10 +218,11 @@ class PolicyEngine:
 
     def remove_rule(self, rule_id: str) -> bool:
         """
+        删除规则。
 
-        Args: rule_id: ID
+        Args: rule_id: 规则 ID
 
-        Returns: bool:
+        Returns: bool: 是否成功
         """
         try:
             if rule_id in self.rules:
@@ -278,11 +248,12 @@ class PolicyEngine:
 
     def update_rule(self, rule_id: str, updates: dict[str, Any]) -> bool:
         """
+        更新规则。
 
-        Args: rule_id: ID
-            updates: 
+        Args: rule_id: 规则 ID
+            updates: 更新字段
 
-        Returns: bool:
+        Returns: bool: 是否成功
         """
         try:
             if rule_id not in self.rules:
@@ -314,13 +285,14 @@ class PolicyEngine:
         risk_metrics: RiskMetrics | None = None,
     ) -> dict[str, Any]:
         """
+        评估订单策略。
 
-        Args: exchange_name:
-            account_id: ID
-            order_data: 
-            risk_metrics: 
+        Args: exchange_name: 交易所标识
+            account_id: 账户 ID
+            order_data: 订单数据
+            risk_metrics: 风险指标
 
-        Returns: Dict[str, Any]:
+        Returns: Dict[str, Any]: 评估结果
         """
         start_time = time.time()
 
@@ -411,11 +383,12 @@ class PolicyEngine:
         self, risk_metrics: RiskMetrics, context: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
+        评估风险策略。
 
-        Args: risk_metrics:
-            context: 
+        Args: risk_metrics: 风险指标
+            context: 上下文
 
-        Returns: Dict[str, Any]:
+        Returns: Dict[str, Any]: 评估结果
         """
         start_time = time.time()
 
@@ -477,8 +450,9 @@ class PolicyEngine:
 
     def get_rule_statistics(self) -> dict[str, Any]:
         """
+        获取规则统计。
 
-        Returns: Dict[str, Any]:
+        Returns: Dict[str, Any]: 统计信息
         """
         rule_stats = {}
 
@@ -509,10 +483,11 @@ class PolicyEngine:
 
     def _evaluate_rules(self, data: dict[str, Any]) -> tuple[list[Rule], list[dict[str, Any]]]:
         """
+        评估所有规则。
 
-        Args: data:
+        Args: data: 上下文数据
 
-        Returns: Tuple[List[Rule], List[Dict[str, Any]]]: (, )
+        Returns: Tuple[List[Rule], List[Dict[str, Any]]]: (触发规则, 动作列表)
         """
         triggered_rules = []
         actions = []
@@ -537,172 +512,8 @@ class PolicyEngine:
 
         return triggered_rules, actions
 
-    def _execute_action(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
-        """
-
-        Args: action:
-            data: 
-
-        Returns: Dict[str, Any]:
-        """
-        action_type = action.get("type", "")
-
-        start_time = time.time()
-
-        try:
-            if action_type in self.action_handlers:
-                result = self.action_handlers[action_type](action, data)
-            elif action_type in self.default_actions:
-                result = self.default_actions[action_type](action, data)
-            else:
-                    result = {
-                    "success": False,
-                    "message": f"Unknown action type: {action_type}",
-                }
-
-            execution_time = (time.time() - start_time) * 1000
-
-            return {
-                "action_type": action_type,
-                "success": result.get("success", False),
-                "message": result.get("message", ""),
-                "data": result.get("data", {}),
-                "execution_time_ms": execution_time,
-                "timestamp": int(time.time()),
-            }
-
-        except Exception as e:
-            execution_time = (time.time() - start_time) * 1000
-
-            return {
-                "action_type": action_type,
-                "success": False,
-                "message": f"Action execution error: {e}",
-                "data": {},
-                "execution_time_ms": execution_time,
-                "timestamp": int(time.time()),
-            }
-
-    def _initialize_default_actions(self) -> dict[str, Callable]:
-        """"""
-        return {
-            ActionType.SEND_ALERT: self._action_send_alert,
-            ActionType.LOG_EVENT: self._action_log_event,
-            ActionType.HALT_TRADING: self._action_halt_trading,
-            ActionType.LIMIT_ORDERS: self._action_limit_orders,
-            ActionType.INCREASE_MARGIN: self._action_increase_margin,
-            ActionType.NOTIFY_MANAGER: self._action_notify_manager,
-        }
-
-    def _action_send_alert(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
-        """"""
-        alert_level = action.get("level", "MEDIUM")
-        message = action.get("message", "Risk alert triggered")
-
-        # 
-        self.logger.warning(f"Risk Alert [{alert_level}]: {message}")
-
-        return {
-            "success": True,
-            "message": f"Alert sent: {message}",
-            "data": {
-                "level": alert_level,
-                "message": message,
-                "timestamp": int(time.time()),
-            },
-        }
-
-    def _action_log_event(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
-        """"""
-        event_type = action.get("event_type", "risk_event")
-        message = action.get("message", "Risk event logged")
-
-        self.logger.info(f"Risk Event [{event_type}]: {message}")
-
-        return {
-            "success": True,
-            "message": f"Event logged: {message}",
-            "data": {
-                "event_type": event_type,
-                "message": message,
-                "timestamp": int(time.time()),
-            },
-        }
-
-    def _action_halt_trading(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
-        """"""
-        scope = action.get("scope", "account")  # account, symbol, global
-        duration = action.get("duration", 3600)  # 
-
-        self.logger.warning(f"Trading halted for {scope}: {duration}s")
-
-        return {
-            "success": True,
-            "message": f"Trading halted for {scope}",
-            "data": {
-                "scope": scope,
-                "duration": duration,
-                "timestamp": int(time.time()),
-            },
-        }
-
-    def _action_limit_orders(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
-        """"""
-        limit_type = action.get("limit_type", "frequency")
-        limit_value = action.get("limit_value", 10)
-
-        self.logger.warning(f"Order limit applied: {limit_type} = {limit_value}")
-
-        return {
-            "success": True,
-            "message": f"Order limit applied: {limit_type}",
-            "data": {
-                "limit_type": limit_type,
-                "limit_value": limit_value,
-                "timestamp": int(time.time()),
-            },
-        }
-
-    def _action_increase_margin(
-        self, action: dict[str, Any], data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """"""
-        increase_amount = action.get("increase_amount", 0.1)  # 10%
-        reason = action.get("reason", "Risk mitigation")
-
-        self.logger.warning(f"Margin increased by {increase_amount:.1%}: {reason}")
-
-        return {
-            "success": True,
-            "message": f"Margin increased by {increase_amount:.1%}",
-            "data": {
-                "increase_amount": increase_amount,
-                "reason": reason,
-                "timestamp": int(time.time()),
-            },
-        }
-
-    def _action_notify_manager(
-        self, action: dict[str, Any], data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """"""
-        message = action.get("message", "Risk notification")
-        urgency = action.get("urgency", "medium")
-
-        self.logger.error(f"Manager Notification [{urgency}]: {message}")
-
-        return {
-            "success": True,
-            "message": f"Manager notified: {message}",
-            "data": {
-                "message": message,
-                "urgency": urgency,
-                "timestamp": int(time.time()),
-            },
-        }
-
     def _update_active_rules(self) -> None:
-        """ ()"""
+        """更新活动规则列表（按优先级排序）"""
         enabled_rules = [rule for rule in self.rules.values() if rule.enabled]
         self.active_rules = sorted(
             [rule.rule_id for rule in enabled_rules],
