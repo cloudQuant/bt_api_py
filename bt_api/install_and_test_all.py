@@ -27,7 +27,7 @@ from typing import NamedTuple
 class Result(NamedTuple):
     """Class Result"""
     package: str
-    success: bool
+    status: str  # "PASS" / "FAIL" / "SKIP"
     duration: float
     output: str
     error: str | None
@@ -105,14 +105,14 @@ def install_package(logger, package_path: Path, verbose: bool = False) -> tuple[
         return False, str(e)
 
 
-def run_tests(logger, package_path: Path, verbose: bool = False) -> tuple[bool, str, str]:
-    """Run pytest on a package."""
+def run_tests(logger, package_path: Path, verbose: bool = False) -> tuple[str, str, str]:
+    """Run pytest on a package. Returns (status, output, error)."""
     package_name = package_path.name
     tests_dir = package_path / "tests"
 
     if not tests_dir.exists():
-        logger.info(f"[{package_name}] No tests directory, skipping")
-        return True, "", ""
+        logger.info(f"[{package_name}] No tests directory, SKIP")
+        return "SKIP", "", ""
 
     logger.info(f"[{package_name}] Running pytest...")
 
@@ -134,24 +134,26 @@ def run_tests(logger, package_path: Path, verbose: bool = False) -> tuple[bool, 
         )
         success = result.returncode == 0
         output = result.stdout + result.stderr
+        status = "PASS" if success else "FAIL"
         if success:
-            logger.info(f"[{package_name}] Tests: SUCCESS")
+            logger.info(f"[{package_name}] Tests: PASS")
         else:
-            logger.error(f"[{package_name}] Tests: FAILED (exit {result.returncode})")
-        return success, output, ""
+            logger.error(f"[{package_name}] Tests: FAIL (exit {result.returncode})")
+        return status, output, ""
     except subprocess.TimeoutExpired:
         logger.error(f"[{package_name}] Tests: TIMEOUT (10min)")
-        return False, "", "Test timeout (>10min)"
+        return "FAIL", "", "Test timeout (>10min)"
     except Exception as e:
         logger.error(f"[{package_name}] Tests: EXCEPTION {e}")
-        return False, "", str(e)
+        return "FAIL", "", str(e)
 
 
 def print_summary(logger, results: list[Result], elapsed: float):
-    """Print final summary."""
+    """Print final summary grouped by PASS/FAIL/SKIP."""
     total = len(results)
-    passed = sum(1 for r in results if r.success)
-    failed = total - passed
+    passed = sum(1 for r in results if r.status == "PASS")
+    failed = sum(1 for r in results if r.status == "FAIL")
+    skipped = sum(1 for r in results if r.status == "SKIP")
 
     logger.info("")
     logger.info("=" * 80)
@@ -159,17 +161,16 @@ def print_summary(logger, results: list[Result], elapsed: float):
     logger.info("=" * 80)
 
     for r in results:
-        status = "PASS" if r.success else "FAIL"
-        logger.info(f"  [{status}] {r.package}")
+        logger.info(f"  [{r.status}] {r.package}")
 
     logger.info("")
-    logger.info(f"Total: {total} | Passed: {passed} | Failed: {failed}")
+    logger.info(f"Total: {total} | Passed: {passed} | Failed: {failed} | Skipped: {skipped}")
 
     if failed > 0:
         logger.info("")
         logger.info("FAILED PACKAGES:")
         for r in results:
-            if not r.success:
+            if r.status == "FAIL":
                 logger.info(f"  - {r.package}")
                 if r.error:
                     logger.info(f"    Error: {r.error}")
@@ -177,6 +178,80 @@ def print_summary(logger, results: list[Result], elapsed: float):
     logger.info("=" * 80)
 
     return failed == 0
+
+
+def process_package(logger, package_path: Path, skip_install: bool, verbose: bool) -> Result:
+    """Install and test a single package, returning a Result."""
+    package_name = package_path.name
+    logger.info("")
+    logger.info(f"{'─' * 40}")
+    logger.info(f"Processing: {package_name}")
+    logger.info(f"{'─' * 40}")
+
+    install_success = True
+    install_output = ""
+    install_duration = 0.0
+    if not skip_install:
+        install_start = datetime.now()
+        install_success, install_output = install_package(logger, package_path, verbose)
+        install_duration = (datetime.now() - install_start).total_seconds()
+
+    if install_success or skip_install:
+        test_status, test_output, test_error = run_tests(logger, package_path, verbose)
+    else:
+        test_status = "FAIL"
+        test_output = ""
+        test_error = "Skipped due to install failure"
+
+    return Result(
+        package=package_name,
+        status=test_status,
+        duration=install_duration,
+        output=install_output + "\n" + test_output,
+        error=test_error if test_status == "FAIL" else None,
+    )
+
+
+def write_markdown_report(results: list[Result], elapsed: float, report_path: Path) -> None:
+    """Write a markdown report grouped by PASS/FAIL/SKIP."""
+    passed = [r for r in results if r.status == "PASS"]
+    failed = [r for r in results if r.status == "FAIL"]
+    skipped = [r for r in results if r.status == "SKIP"]
+
+    lines = [
+        "# Submodule Test Report",
+        "",
+        f"Generated: {datetime.now().isoformat()} | Elapsed: {elapsed:.1f}s",
+        "",
+        "| Status | Count |",
+        "|--------|-------|",
+        f"| PASS | {len(passed)} |",
+        f"| FAIL | {len(failed)} |",
+        f"| SKIP | {len(skipped)} |",
+        "",
+        "## Failed Packages",
+        "",
+    ]
+    if failed:
+        lines.append("| Package | Error |")
+        lines.append("|---------|-------|")
+        for r in failed:
+            lines.append(f"| {r.package} | {r.error or ''} |")
+    else:
+        lines.append("_None_")
+    lines += ["", "## Passed Packages", ""]
+    if passed:
+        lines.extend(f"- {r.package}" for r in passed)
+    else:
+        lines.append("_None_")
+    lines += ["", "## Skipped Packages (no tests/)", ""]
+    if skipped:
+        lines.extend(f"- {r.package}" for r in skipped)
+    else:
+        lines.append("_None_")
+    lines.append("")
+
+    report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main():
@@ -210,6 +285,19 @@ def main():
         "--verbose", "-v",
         action="store_true",
         help="Verbose output",
+    )
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=1,
+        help="Number of packages to process in parallel (default: 1, serial)",
+    )
+    parser.add_argument(
+        "--report",
+        type=str,
+        choices=["markdown"],
+        default=None,
+        help="Write a report file (e.g., --report markdown -> /tmp/submodule_report.md)",
     )
     args = parser.parse_args()
 
@@ -251,40 +339,32 @@ def main():
     results: list[Result] = []
     start_time = datetime.now()
 
-    for package_path in all_packages:
-        package_name = package_path.name
-        logger.info("")
-        logger.info(f"{'─' * 40}")
-        logger.info(f"Processing: {package_name}")
-        logger.info(f"{'─' * 40}")
+    if args.parallel > 1:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        install_success = True
-        install_output = ""
-        if not args.skip_install:
-            install_start = datetime.now()
-            install_success, install_output = install_package(logger, package_path, args.verbose)
-            install_duration = (datetime.now() - install_start).total_seconds()
-        else:
-            install_duration = 0
+        with ThreadPoolExecutor(max_workers=args.parallel) as executor:
+            futures = {
+                executor.submit(
+                    process_package, logger, p, args.skip_install, args.verbose
+                ): p
+                for p in all_packages
+            }
+            for future in as_completed(futures):
+                results.append(future.result())
+    else:
+        for package_path in all_packages:
+            results.append(
+                process_package(logger, package_path, args.skip_install, args.verbose)
+            )
 
-        if install_success or args.skip_install:
-            test_success, test_output, test_error = run_tests(logger, package_path, args.verbose)
-        else:
-            test_success = False
-            test_output = ""
-            test_error = "Skipped due to install failure"
-
-        result = Result(
-            package=package_name,
-            success=install_success and test_success,
-            duration=install_duration,
-            output=install_output + "\n" + test_output,
-            error=test_error if not test_success else None,
-        )
-        results.append(result)
-
+    results.sort(key=lambda r: r.package)
     elapsed = (datetime.now() - start_time).total_seconds()
     success = print_summary(logger, results, elapsed)
+
+    if args.report == "markdown":
+        report_path = Path("/tmp/submodule_report.md")
+        write_markdown_report(results, elapsed, report_path)
+        logger.info(f"Markdown report written: {report_path}")
 
     sys.exit(0 if success else 1)
 

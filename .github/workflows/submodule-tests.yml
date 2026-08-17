@@ -1,0 +1,27 @@
+name: submodule-tests
+
+on:
+  schedule:
+    - cron: '0 18 * * *'   # 每日 UTC 18:00(北京 02:00)
+  workflow_dispatch:
+
+jobs:
+  submodule-matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install and test all submodules
+        run: python bt_api/install_and_test_all.py --parallel 4 --report markdown
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: submodule-report
+          path: /tmp/submodule_report.md
