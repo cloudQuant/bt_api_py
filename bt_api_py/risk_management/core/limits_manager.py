@@ -1,6 +1,7 @@
-""" - 
+"""限额管理门面 - 
 
-、、
+按检查类别拆分为子模块（order_limits/position_limits/margin_limits/risk_limits/
+compliance_limits），本模块保留编排逻辑并通过 mixin 继承。
 """
 
 from __future__ import annotations
@@ -11,96 +12,39 @@ from typing import Any, cast
 from bt_api_base.logging_factory import get_logger
 
 from ..containers.risk_metrics import RiskMetrics
+from .compliance_limits import ComplianceLimitsMixin
+from .limits_types import DynamicLimit, LimitStatus, LimitType
+from .margin_limits import MarginLimitsMixin
+from .order_limits import OrderLimitsMixin
+from .position_limits import PositionLimitsMixin
+from .risk_limits import RiskLimitsMixin
+
+__all__ = ["DynamicLimit", "LimitStatus", "LimitType", "LimitsManager"]
 
 
-class LimitType:
-    """"""
-
-    # 
-    MAX_ORDER_SIZE = "max_order_size"  # 
-    MAX_ORDERS_PER_MINUTE = "max_orders_per_minute"  # 
-    MAX_ORDERS_PER_DAY = "max_orders_per_day"  # 
-    MIN_MARGIN_REQUIREMENT = "min_margin_requirement"  # 
-
-    # 
-    MAX_POSITION_SIZE = "max_position_size"  # 
-    MAX_NOTIONAL_EXPOSURE = "max_notional_exposure"  # 
-    MAX_LEVERAGE = "max_leverage"  # 
-    MAX_CONCENTRATION = "max_concentration"  # 
-
-    # 
-    MAX_VAR = "max_var"  # VaR
-    MAX_DRAWDOWN = "max_drawdown"  # 
-    MAX_CORRELATION = "max_correlation"  # 
-    MIN_LIQUIDITY = "min_liquidity"  # 
-
-    # 
-    REGULATORY_LIMITS = "regulatory_limits"  # 
-    REPORTING_THRESHOLDS = "reporting_thresholds"  # 
-
-
-class LimitStatus:
-    """"""
-
-    WITHIN_LIMIT = "WITHIN_LIMIT"  # 
-    WARNING = "WARNING"  #  ()
-    BREACHED = "BREACHED"  # 
-    CRITICAL = "CRITICAL"  # 
-
-
-class DynamicLimit:
-    """"""
-
-    def __init__(
-        self,
-        limit_type: str,
-        base_value: float,
-        adjustment_factors: dict[str, float],
-        min_value: float | None = None,
-        max_value: float | None = None,
-    ) -> None:
-        """__init__ method"""
-        self.limit_type = limit_type
-        self.base_value = base_value
-        self.adjustment_factors = adjustment_factors
-        self.min_value = min_value or base_value * 0.1
-        self.max_value = max_value or base_value * 10.0
-        self.current_value = base_value
-        self.last_adjustment = int(time.time())
-
-    def calculate_adjusted_value(self, risk_factors: dict[str, float]) -> float:
-        """"""
-        adjusted_value = self.base_value
-
-        for factor_name, factor_value in risk_factors.items():
-            if factor_name in self.adjustment_factors:
-                adjustment = self.adjustment_factors[factor_name]
-                adjusted_value *= 1 + adjustment * factor_value
-
-        # 
-        adjusted_value = max(self.min_value, min(self.max_value, adjusted_value))
-
-        self.current_value = adjusted_value
-        self.last_adjustment = int(time.time())
-
-        return adjusted_value
-
-
-class LimitsManager:
+class LimitsManager(
+    OrderLimitsMixin,
+    PositionLimitsMixin,
+    MarginLimitsMixin,
+    RiskLimitsMixin,
+    ComplianceLimitsMixin,
+):
     """
+    限额管理门面，聚合各类限额检查。
 
-    :
-    1.  - 
-    2.  - 
-    3.  - VaR、
-    4.  - 
-    5.  - 
+    类别:
+    1. 订单限额 - OrderLimitsMixin
+    2. 持仓限额 - PositionLimitsMixin
+    3. 保证金限额 - MarginLimitsMixin
+    4. 风险限额 - RiskLimitsMixin
+    5. 合规限额 - ComplianceLimitsMixin
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         """
+        初始化。
 
-        Args: config:
+        Args: config: 配置字典
         """
         self.logger = get_logger("limits_manager")
         self.config = config or {}
@@ -131,12 +75,13 @@ class LimitsManager:
         self, limit_type: str, exchange_name: str, account_id: str, value: float, **kwargs
     ) -> None:
         """
+        设置静态限额。
 
-        Args: limit_type:
-            exchange_name: 
-            account_id: ID
-            value: 
-            **kwargs: 
+        Args: limit_type: 限额类型
+            exchange_name: 交易所标识
+            account_id: 账户 ID
+            value: 限额值
+            **kwargs: 附加参数
         """
         key = f"{exchange_name}:{account_id}"
 
@@ -161,13 +106,14 @@ class LimitsManager:
         **kwargs,
     ) -> None:
         """
+        设置动态限额。
 
-        Args: limit_type:
-            exchange_name: 
-            account_id: ID
-            base_value: 
-            adjustment_factors: 
-            **kwargs: 
+        Args: limit_type: 限额类型
+            exchange_name: 交易所标识
+            account_id: 账户 ID
+            base_value: 基准值
+            adjustment_factors: 调整因子
+            **kwargs: 附加参数
         """
         key = f"{exchange_name}:{account_id}"
         limit_key = f"{key}:{limit_type}"
@@ -191,13 +137,14 @@ class LimitsManager:
         current_metrics: RiskMetrics | None = None,
     ) -> dict[str, Any]:
         """
+        检查交易前限额。
 
-        Args: exchange_name:
-            account_id: ID
-            order_data: 
-            current_metrics: 
+        Args: exchange_name: 交易所标识
+            account_id: 账户 ID
+            order_data: 订单数据
+            current_metrics: 当前风险指标
 
-        Returns: Dict[str, Any]:
+        Returns: Dict[str, Any]: 检查结果
         """
         cache_key = f"pre_trade:{exchange_name}:{account_id}:{hash(str(order_data))}"
 
@@ -304,13 +251,14 @@ class LimitsManager:
         current_metrics: RiskMetrics | None = None,
     ) -> dict[str, Any]:
         """
+        检查持仓限额。
 
-        Args: exchange_name:
-            account_id: ID
-            position_data: 
-            current_metrics: 
+        Args: exchange_name: 交易所标识
+            account_id: 账户 ID
+            position_data: 持仓数据
+            current_metrics: 当前风险指标
 
-        Returns: Dict[str, Any]:
+        Returns: Dict[str, Any]: 检查结果
         """
         checks = []
         warnings = []
@@ -364,12 +312,13 @@ class LimitsManager:
         self, exchange_name: str, account_id: str, risk_factors: dict[str, float] | None = None
     ) -> dict[str, Any]:
         """
+        获取当前限额。
 
-        Args: exchange_name:
-            account_id: ID
-            risk_factors:  ()
+        Args: exchange_name: 交易所标识
+            account_id: 账户 ID
+            risk_factors: 风险因子（用于动态限额调整）
 
-        Returns: Dict[str, Any]:
+        Returns: Dict[str, Any]: 当前限额
         """
         key = f"{exchange_name}:{account_id}"
         current_limits: dict[str, Any] = {}
@@ -409,10 +358,11 @@ class LimitsManager:
         self, exchange_name: str, account_id: str, risk_factors: dict[str, float]
     ) -> None:
         """
+        调整动态限额。
 
-        Args: exchange_name:
-            account_id: ID
-            risk_factors: 
+        Args: exchange_name: 交易所标识
+            account_id: 账户 ID
+            risk_factors: 风险因子
         """
         key = f"{exchange_name}:{account_id}"
 
@@ -429,12 +379,13 @@ class LimitsManager:
         time_window: int | None = None,
     ) -> list[dict[str, Any]]:
         """
+        获取限额违约记录。
 
-        Args: exchange_name:
-            account_id: ID
-            time_window:  ()
+        Args: exchange_name: 交易所标识（可选）
+            account_id: 账户 ID（可选）
+            time_window: 时间窗口（秒，可选）
 
-        Returns: List[Dict[str, Any]]:
+        Returns: List[Dict[str, Any]]: 违约记录
         """
         breaches = []
         current_time = int(time.time())
@@ -470,11 +421,12 @@ class LimitsManager:
 
     def get_limit_utilization(self, exchange_name: str, account_id: str) -> dict[str, float]:
         """
+        获取限额利用率。
 
-        Args: exchange_name:
-            account_id: ID
+        Args: exchange_name: 交易所标识
+            account_id: 账户 ID
 
-        Returns: Dict[str, float]:
+        Returns: Dict[str, float]: 限额利用率
         """
         utilization: dict[str, float] = {}
 
@@ -541,386 +493,6 @@ class LimitsManager:
         }
 
         self.logger.info(f"Initialized {len(all_default_limits)} default limits")
-
-    def _check_max_order_size(
-        self,
-        exchange_name: str,
-        account_id: str,
-        order_data: dict[str, Any],
-        current_metrics: RiskMetrics | None,
-    ) -> dict[str, Any]:
-        """"""
-        order_size = order_data.get("size", 0) * order_data.get("price", 1)
-        limits = self.get_current_limits(exchange_name, account_id)
-        limit_value = limits.get(LimitType.MAX_ORDER_SIZE, {}).get("value", 1000000)
-
-        utilization = order_size / limit_value if limit_value > 0 else 0
-
-        if utilization > self.critical_threshold:
-            status = LimitStatus.CRITICAL
-            restriction = "Order exceeds maximum size limit"
-        elif utilization > self.warning_threshold:
-            status = LimitStatus.WARNING
-            restriction = "Order approaching size limit"
-            warning = f"Order size {order_size:,.0f} is {utilization:.1%} of limit"
-        else:
-            status = LimitStatus.WITHIN_LIMIT
-            restriction = ""
-            warning = ""
-
-        return {
-            "limit_type": LimitType.MAX_ORDER_SIZE,
-            "current_value": order_size,
-            "limit_value": limit_value,
-            "utilization_ratio": utilization,
-            "status": status,
-            "warning": warning,
-            "restriction": restriction,
-        }
-
-    def _check_order_frequency(
-        self, exchange_name: str, account_id: str, order_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """"""
-        #  - 
-        current_time = int(time.time())
-        key = f"{exchange_name}:{account_id}"
-
-        #  ()
-        recent_orders = getattr(self, "_recent_orders", {})
-        if key not in recent_orders:
-            recent_orders[key] = []
-
-        # 1
-        recent_orders[key] = [t for t in recent_orders[key] if current_time - t < 60]
-        recent_orders[key].append(current_time)
-
-        orders_per_minute = len(recent_orders[key])
-        limits = self.get_current_limits(exchange_name, account_id)
-        limit_value = limits.get(LimitType.MAX_ORDERS_PER_MINUTE, {}).get("value", 60)
-
-        utilization = orders_per_minute / limit_value if limit_value > 0 else 0
-
-        if utilization > self.critical_threshold:
-            status = LimitStatus.CRITICAL
-            restriction = "Order frequency exceeds limit"
-        elif utilization > self.warning_threshold:
-            status = LimitStatus.WARNING
-            restriction = "Order frequency approaching limit"
-            warning = f"Orders per minute {orders_per_minute} is {utilization:.1%} of limit"
-        else:
-            status = LimitStatus.WITHIN_LIMIT
-            restriction = ""
-            warning = ""
-
-        return {
-            "limit_type": LimitType.MAX_ORDERS_PER_MINUTE,
-            "current_value": orders_per_minute,
-            "limit_value": limit_value,
-            "utilization_ratio": utilization,
-            "status": status,
-            "warning": warning,
-            "restriction": restriction,
-        }
-
-    def _check_margin_requirement(
-        self,
-        exchange_name: str,
-        account_id: str,
-        order_data: dict[str, Any],
-        current_metrics: RiskMetrics | None,
-    ) -> dict[str, Any]:
-        """"""
-        # 
-        order_value = order_data.get("size", 0) * order_data.get("price", 1)
-        current_margin = current_metrics.credit_risk.credit_utilization if current_metrics else 0
-        limits = self.get_current_limits(exchange_name, account_id)
-        min_margin_ratio = limits.get(LimitType.MIN_MARGIN_REQUIREMENT, {}).get("value", 0.1)
-
-        required_margin = order_value * min_margin_ratio
-        available_margin = order_value * (1 - current_margin)
-        margin_sufficient = available_margin >= required_margin
-
-        utilization = current_margin if margin_sufficient else 1.0
-
-        if not margin_sufficient:
-            status = LimitStatus.CRITICAL
-            restriction = "Insufficient margin for order"
-            warning = f"Required margin: {required_margin:,.0f}, Available: {available_margin:,.0f}"
-        elif current_margin > 0.8:
-            status = LimitStatus.WARNING
-            restriction = ""
-            warning = f"High margin utilization: {current_margin:.1%}"
-        else:
-            status = LimitStatus.WITHIN_LIMIT
-            restriction = ""
-            warning = ""
-
-        return {
-            "limit_type": LimitType.MIN_MARGIN_REQUIREMENT,
-            "current_value": current_margin,
-            "limit_value": min_margin_ratio,
-            "utilization_ratio": utilization,
-            "status": status,
-            "warning": warning,
-            "restriction": restriction,
-        }
-
-    def _check_position_limits(
-        self,
-        exchange_name: str,
-        account_id: str,
-        order_data: dict[str, Any],
-        current_metrics: RiskMetrics | None,
-    ) -> dict[str, Any]:
-        """"""
-        #  - 
-        if not current_metrics:
-            return {
-                "limit_type": "position_limits",
-                "status": LimitStatus.WITHIN_LIMIT,
-                "warning": "",
-                "restriction": "",
-            }
-
-        # 
-        checks = []
-
-        # 
-        current_position = getattr(current_metrics, "total_position_value", 0)
-        limits = self.get_current_limits(exchange_name, account_id)
-        max_position = limits.get(LimitType.MAX_POSITION_SIZE, {}).get("value", 10000000)
-
-        if max_position > 0:
-            utilization = current_position / max_position
-            if utilization > self.critical_threshold:
-                checks.append(
-                    {
-                        "limit_type": LimitType.MAX_POSITION_SIZE,
-                        "status": LimitStatus.CRITICAL,
-                        "restriction": "Position size exceeds limit",
-                    }
-                )
-            elif utilization > self.warning_threshold:
-                checks.append(
-                    {
-                        "limit_type": LimitType.MAX_POSITION_SIZE,
-                        "status": LimitStatus.WARNING,
-                        "warning": f"Position approaching limit: {utilization:.1%}",
-                    }
-                )
-
-        # 
-        if checks:
-            worst_check = max(
-                checks, key=lambda x: {"CRITICAL": 3, "WARNING": 2, "WITHIN_LIMIT": 1}[x["status"]]
-            )
-            return worst_check
-        else: return {
-                "limit_type": "position_limits",
-                "status": LimitStatus.WITHIN_LIMIT,
-                "warning": "",
-                "restriction": "",
-            }
-
-    def _check_risk_limits(
-        self,
-        exchange_name: str,
-        account_id: str,
-        order_data: dict[str, Any],
-        current_metrics: RiskMetrics | None,
-    ) -> dict[str, Any]:
-        """"""
-        if not current_metrics:
-            return {
-                "limit_type": "risk_limits",
-                "status": LimitStatus.WITHIN_LIMIT,
-                "warning": "",
-                "restriction": "",
-            }
-
-        limits = self.get_current_limits(exchange_name, account_id)
-        checks = []
-
-        # VaR
-        current_var = float(current_metrics.market_risk.value_at_risk_1d)
-        max_var = limits.get(LimitType.MAX_VAR, {}).get("value", 1000000)
-
-        if max_var > 0:
-            utilization = current_var / max_var
-            if utilization > self.critical_threshold:
-                checks.append(
-                    {
-                        "limit_type": LimitType.MAX_VAR,
-                        "status": LimitStatus.CRITICAL,
-                        "restriction": "VaR exceeds limit",
-                    }
-                )
-            elif utilization > self.warning_threshold:
-                checks.append(
-                    {
-                        "limit_type": LimitType.MAX_VAR,
-                        "status": LimitStatus.WARNING,
-                        "warning": f"VaR approaching limit: {utilization:.1%}",
-                    }
-                )
-
-        # 
-        if checks:
-            worst_check = max(
-                checks, key=lambda x: {"CRITICAL": 3, "WARNING": 2, "WITHIN_LIMIT": 1}[x["status"]]
-            )
-            return worst_check
-        else: return {
-                "limit_type": "risk_limits",
-                "status": LimitStatus.WITHIN_LIMIT,
-                "warning": "",
-                "restriction": "",
-            }
-
-    def _check_compliance_limits(
-        self,
-        exchange_name: str,
-        account_id: str,
-        order_data: dict[str, Any],
-        current_metrics: RiskMetrics | None,
-    ) -> dict[str, Any]:
-        """"""
-        # 
-        return {
-            "limit_type": "compliance_limits",
-            "status": LimitStatus.WITHIN_LIMIT,
-            "warning": "",
-            "restriction": "",
-        }
-
-    def _check_max_position_size(
-        self, exchange_name: str, account_id: str, position_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """"""
-        total_position = position_data.get("total_value", 0)
-        limits = self.get_current_limits(exchange_name, account_id)
-        max_position = limits.get(LimitType.MAX_POSITION_SIZE, {}).get("value", 10000000)
-
-        utilization = total_position / max_position if max_position > 0 else 0
-
-        if utilization > self.critical_threshold:
-            status = LimitStatus.CRITICAL
-            restriction = "Position size exceeds limit"
-        elif utilization > self.warning_threshold:
-            status = LimitStatus.WARNING
-            restriction = ""
-            warning = f"Position size {total_position:,.0f} is {utilization:.1%} of limit"
-        else:
-            status = LimitStatus.WITHIN_LIMIT
-            restriction = ""
-            warning = ""
-
-        return {
-            "limit_type": LimitType.MAX_POSITION_SIZE,
-            "current_value": total_position,
-            "limit_value": max_position,
-            "utilization_ratio": utilization,
-            "status": status,
-            "warning": warning,
-            "restriction": restriction,
-        }
-
-    def _check_notional_exposure(
-        self, exchange_name: str, account_id: str, position_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """"""
-        notional_exposure = position_data.get("notional_exposure", 0)
-        limits = self.get_current_limits(exchange_name, account_id)
-        max_notional = limits.get(LimitType.MAX_NOTIONAL_EXPOSURE, {}).get("value", 50000000)
-
-        utilization = notional_exposure / max_notional if max_notional > 0 else 0
-
-        if utilization > self.critical_threshold:
-            status = LimitStatus.CRITICAL
-            restriction = "Notional exposure exceeds limit"
-        elif utilization > self.warning_threshold:
-            status = LimitStatus.WARNING
-            restriction = ""
-            warning = f"Notional exposure {notional_exposure:,.0f} is {utilization:.1%} of limit"
-        else:
-            status = LimitStatus.WITHIN_LIMIT
-            restriction = ""
-            warning = ""
-
-        return {
-            "limit_type": LimitType.MAX_NOTIONAL_EXPOSURE,
-            "current_value": notional_exposure,
-            "limit_value": max_notional,
-            "utilization_ratio": utilization,
-            "status": status,
-            "warning": warning,
-            "restriction": restriction,
-        }
-
-    def _check_leverage_limit(
-        self, exchange_name: str, account_id: str, position_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """"""
-        current_leverage = position_data.get("leverage", 1.0)
-        limits = self.get_current_limits(exchange_name, account_id)
-        max_leverage = limits.get(LimitType.MAX_LEVERAGE, {}).get("value", 10.0)
-
-        utilization = current_leverage / max_leverage if max_leverage > 0 else 0
-
-        if utilization > self.critical_threshold:
-            status = LimitStatus.CRITICAL
-            restriction = "Leverage exceeds limit"
-        elif utilization > self.warning_threshold:
-            status = LimitStatus.WARNING
-            restriction = ""
-            warning = f"Leverage {current_leverage:.1f}x is {utilization:.1%} of limit"
-        else:
-            status = LimitStatus.WITHIN_LIMIT
-            restriction = ""
-            warning = ""
-
-        return {
-            "limit_type": LimitType.MAX_LEVERAGE,
-            "current_value": current_leverage,
-            "limit_value": max_leverage,
-            "utilization_ratio": utilization,
-            "status": status,
-            "warning": warning,
-            "restriction": restriction,
-        }
-
-    def _check_concentration_limit(
-        self, exchange_name: str, account_id: str, position_data: dict[str, Any]
-    ) -> dict[str, Any]:
-        """"""
-        concentration_ratio = position_data.get("concentration_ratio", 0)
-        limits = self.get_current_limits(exchange_name, account_id)
-        max_concentration = limits.get(LimitType.MAX_CONCENTRATION, {}).get("value", 0.3)
-
-        utilization = concentration_ratio / max_concentration if max_concentration > 0 else 0
-
-        if utilization > self.critical_threshold:
-            status = LimitStatus.CRITICAL
-            restriction = "Concentration exceeds limit"
-        elif utilization > self.warning_threshold:
-            status = LimitStatus.WARNING
-            restriction = ""
-            warning = f"Concentration {concentration_ratio:.1%} is {utilization:.1%} of limit"
-        else:
-            status = LimitStatus.WITHIN_LIMIT
-            restriction = ""
-            warning = ""
-
-        return {
-            "limit_type": LimitType.MAX_CONCENTRATION,
-            "current_value": concentration_ratio,
-            "limit_value": max_concentration,
-            "utilization_ratio": utilization,
-            "status": status,
-            "warning": warning,
-            "restriction": restriction,
-        }
 
     def _record_limit_check(self, check_record: dict[str, Any]) -> None:
         """"""
