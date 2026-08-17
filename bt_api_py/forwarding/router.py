@@ -36,6 +36,46 @@ def _normalize_order_type(value: Any) -> Literal["limit", "market"]:
     return order_type  # type: ignore[return-value]  # 已通过 _VALID_ORDER_TYPES 白名单校验
 
 
+def _emit_audit(
+    audit_logger: Any,
+    event_type: str,
+    *,
+    user_id: str | None,
+    resource: str | None,
+    action: str | None,
+    outcome: str,
+    details: dict[str, Any],
+) -> None:
+    """向下单/撤单路径发送脱敏审计事件；未接入审计或 security extra 缺失时静默降级。
+
+    details 只允许放非敏感字段（symbol/side/quantity/price/order_id/error_code），
+    严禁写入密钥、签名或 token。
+    """
+    if audit_logger is None:
+        return
+    log_method = getattr(audit_logger, "log_event", None)
+    if log_method is None:
+        return
+    try:
+        from bt_api_py.security_compliance.core.audit_logger import (
+            AuditEvent,
+            EventType,
+            SeverityLevel,
+        )
+    except ImportError:  # security extra 未安装，审计降级
+        return
+    event = AuditEvent(
+        event_type=EventType(event_type),
+        severity=SeverityLevel.MEDIUM,
+        user_id=user_id,
+        resource=resource,
+        action=action,
+        outcome=outcome,
+        details=details,
+    )
+    log_method(event)
+
+
 @dataclass
 class RiskRuleSet:
     """Class RiskRuleSet"""
@@ -55,12 +95,14 @@ class OrderRouter:
         bus: InMemoryForwardingBus | None = None,
         risk_rules: RiskRuleSet | None = None,
         state_store: SQLiteStateStore | None = None,
+        audit_logger: Any | None = None,
     ) -> None:
         """__init__ method"""
         self.adapter = adapter
         self.bus = bus
         self.risk_rules = risk_rules or RiskRuleSet()
         self.state_store = state_store
+        self.audit_logger = audit_logger
         self._acks_by_idempotency_key: OrderedDict[str, CommandAck] = OrderedDict()
         self._sequence_id = 0
         if self.bus is not None:
@@ -142,6 +184,15 @@ class OrderRouter:
 
         risk_error = self._validate_order(command)
         if risk_error:
+            _emit_audit(
+                self.audit_logger,
+                "order_created",
+                user_id=command.strategy_id,
+                resource=command.symbol,
+                action="place_order",
+                outcome="failure",
+                details={"account_id": command.account_id, "reason": risk_error},
+            )
             ack = self._reject(command, risk_error)
             self._remember_ack(ack)
             return ack
@@ -150,6 +201,15 @@ class OrderRouter:
             side = _normalize_side(command.side)
             order_type = _normalize_order_type(command.order_type)
         except ValueError as exc:
+            _emit_audit(
+                self.audit_logger,
+                "order_created",
+                user_id=command.strategy_id,
+                resource=command.symbol,
+                action="place_order",
+                outcome="failure",
+                details={"account_id": command.account_id, "error_code": "INVALID_PARAM", "reason": str(exc)},
+            )
             ack = self._reject(command, str(exc), payload={"error_code": "INVALID_PARAM"})
             self._publish_error(command, str(exc), error_code="INVALID_PARAM")
             return ack  # 注意:不 _remember_ack,输入错误是调用方问题,不占幂等表
@@ -169,17 +229,51 @@ class OrderRouter:
         try:
             order = await self.adapter.place_order(request)
         except BrokerError as exc:
+            _emit_audit(
+                self.audit_logger,
+                "order_created",
+                user_id=command.strategy_id,
+                resource=command.symbol,
+                action="place_order",
+                outcome="failure",
+                details={"account_id": command.account_id, "error_code": str(exc.code)},
+            )
             ack = self._reject(command, str(exc), payload={"error_code": str(exc.code)})
             if not exc.retryable:
                 self._remember_ack(ack)
             self._publish_error(command, str(exc), error_code=str(exc.code))
             return ack
         except Exception as exc:
+            _emit_audit(
+                self.audit_logger,
+                "order_created",
+                user_id=command.strategy_id,
+                resource=command.symbol,
+                action="place_order",
+                outcome="error",
+                details={"account_id": command.account_id, "error_code": type(exc).__name__},
+            )
             ack = self._reject(command, str(exc), payload={"error_code": type(exc).__name__})
             self._publish_error(command, str(exc), error_code=type(exc).__name__)
             return ack
 
         payload = _snapshot_to_dict(order)
+        _emit_audit(
+            self.audit_logger,
+            "order_created",
+            user_id=command.strategy_id,
+            resource=command.symbol,
+            action="place_order",
+            outcome="success",
+            details={
+                "account_id": command.account_id,
+                "side": str(command.side),
+                "size": str(command.size),
+                "price": str(command.price),
+                "order_id": str(payload.get("order_id") or ""),
+                "status": str(payload.get("status") or "accepted"),
+            },
+        )
         ack = self._ack(
             command,
             True,
@@ -201,6 +295,15 @@ class OrderRouter:
             return cached
 
         if not command.order_id:
+            _emit_audit(
+                self.audit_logger,
+                "order_cancelled",
+                user_id=command.strategy_id,
+                resource=command.symbol,
+                action="cancel_order",
+                outcome="failure",
+                details={"account_id": command.account_id, "reason": "cancel_order requires order_id"},
+            )
             ack = self._reject(command, "cancel_order requires order_id")
             self._remember_ack(ack)
             return ack
@@ -215,17 +318,48 @@ class OrderRouter:
                 )
             )
         except BrokerError as exc:
+            _emit_audit(
+                self.audit_logger,
+                "order_cancelled",
+                user_id=command.strategy_id,
+                resource=command.symbol,
+                action="cancel_order",
+                outcome="failure",
+                details={"account_id": command.account_id, "error_code": str(exc.code)},
+            )
             ack = self._reject(command, str(exc), payload={"error_code": str(exc.code)})
             if not exc.retryable:
                 self._remember_ack(ack)
             self._publish_error(command, str(exc), error_code=str(exc.code))
             return ack
         except Exception as exc:
+            _emit_audit(
+                self.audit_logger,
+                "order_cancelled",
+                user_id=command.strategy_id,
+                resource=command.symbol,
+                action="cancel_order",
+                outcome="error",
+                details={"account_id": command.account_id, "error_code": type(exc).__name__},
+            )
             ack = self._reject(command, str(exc), payload={"error_code": type(exc).__name__})
             self._publish_error(command, str(exc), error_code=type(exc).__name__)
             return ack
 
         payload = _snapshot_to_dict(order)
+        _emit_audit(
+            self.audit_logger,
+            "order_cancelled",
+            user_id=command.strategy_id,
+            resource=command.symbol,
+            action="cancel_order",
+            outcome="success",
+            details={
+                "account_id": command.account_id,
+                "order_id": str(payload.get("order_id") or command.order_id),
+                "status": str(payload.get("status") or "cancelled"),
+            },
+        )
         ack = self._ack(
             command,
             True,
