@@ -389,17 +389,25 @@ class BtApi:
 
         retry_count = 0
         current_delay = DOWNLOAD_RETRY_DELAY_SEC
+        downloaded_intervals: list[tuple[datetime, datetime]] = []
         while begin_time < stop_time:
             if retry_count >= DOWNLOAD_MAX_RETRIES:
-                self.log(
-                    f"download aborted: max retries ({DOWNLOAD_MAX_RETRIES}) exceeded for {symbol}",
-                    level="error",
+                msg = (
+                    f"kline download incomplete for {symbol} after "
+                    f"{DOWNLOAD_MAX_RETRIES} retries — {len(downloaded_intervals)} "
+                    f"interval(s) downloaded before exhaustion"
                 )
-                return
+                self.log(msg, level="error")
+                raise PartialDownloadError(
+                    msg,
+                    downloaded_intervals=downloaded_intervals,
+                )
             try:
+                batch_start = begin_time
                 begin_time = self._download_single_batch(
                     feed, exchange_name, symbol, period, begin_time, stop_time, extra_data
                 )
+                downloaded_intervals.append((batch_start, begin_time))
                 retry_count = 0
                 current_delay = DOWNLOAD_RETRY_DELAY_SEC
             except (
@@ -530,17 +538,16 @@ class BtApi:
         return list(self.exchange_feeds.keys())
 
     def close(self) -> None:
-        """关闭所有 feed 的 HTTP 连接，释放资源。"""
+        """Close all exchange feeds (WebSocket streams + HTTP clients)."""
+        errors: list[str] = []
         for exchange_name, feed in self.exchange_feeds.items():
-            client = getattr(feed, "_http_client", None)
-            if client is not None and hasattr(client, "close"):
-                try:
-                    client.close()
-                except Exception as e:
-                    self.log(
-                        f"Error closing feed client for {exchange_name}: {type(e).__name__}: {e}",
-                        level="warning",
-                    )
+            try:
+                if hasattr(feed, "disconnect"):
+                    feed.disconnect()
+            except Exception as exc:
+                errors.append(f"{exchange_name}: {type(exc).__name__}: {exc}")
+        if errors:
+            raise RuntimeError("failed to close feeds: " + "; ".join(errors))
 
     def __enter__(self) -> BtApi:
         return self
@@ -565,26 +572,17 @@ class BtApi:
         await self.async_close()
 
     async def async_close(self) -> None:
-        """异步关闭所有 feed 的 HTTP 连接，释放资源。"""
+        """Close all exchange feeds (WebSocket streams + HTTP clients)."""
+        # Feed.disconnect() is sync-only; no async variant exists in the base class.
+        errors: list[str] = []
         for exchange_name, feed in self.exchange_feeds.items():
-            client = getattr(feed, "_http_client", None)
-            if client is not None and hasattr(client, "async_close"):
-                try:
-                    await client.async_close()
-                except Exception as e:
-                    self.log(
-                        f"Error async closing feed client for {exchange_name}: "
-                        f"{type(e).__name__}: {e}",
-                        level="warning",
-                    )
-            elif client is not None and hasattr(client, "close"):
-                try:
-                    client.close()
-                except Exception as e:
-                    self.log(
-                        f"Error closing feed client for {exchange_name}: {type(e).__name__}: {e}",
-                        level="warning",
-                    )
+            try:
+                if hasattr(feed, "disconnect"):
+                    feed.disconnect()
+            except Exception as exc:
+                errors.append(f"{exchange_name}: {type(exc).__name__}: {exc}")
+        if errors:
+            raise RuntimeError("failed to close feeds: " + "; ".join(errors))
 
     @staticmethod
     def list_available_exchanges() -> list[str]:

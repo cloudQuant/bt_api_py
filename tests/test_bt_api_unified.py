@@ -137,6 +137,65 @@ class TestBtApiUnifiedInterface:
         with pytest.raises(SubscribeError, match="dataname"):
             self.bt.subscribe("BINANCE_SPOT_BTCUSDT", [{"topic": "kline"}])
 
+    def test_close_disconnects_all_feeds(self):
+        """close() 应调用每个 feed 的 disconnect()。"""
+        call_log: list[str] = []
+
+        class _SpyFeed:
+            def __init__(self, name: str) -> None:
+                self._name = name
+
+            def disconnect(self) -> None:
+                call_log.append(self._name)
+
+        self.bt.exchange_feeds["FEED_A___SPOT"] = _SpyFeed("A")  # type: ignore[assignment]
+        self.bt.exchange_feeds["FEED_B___SPOT"] = _SpyFeed("B")  # type: ignore[assignment]
+
+        self.bt.close()
+
+        assert call_log == ["A", "B"], (
+            f"Expected both feeds disconnected, got {call_log}"
+        )
+
+    def test_close_is_idempotent(self):
+        """close() 连续调用两次不抛异常。"""
+        call_count = 0
+
+        class _CountingFeed:
+            def disconnect(self) -> None:
+                nonlocal call_count
+                call_count += 1
+
+        self.bt.exchange_feeds["FEED_C___SPOT"] = _CountingFeed()  # type: ignore[assignment]
+
+        self.bt.close()
+        self.bt.close()
+
+        # Second call should not crash; disconnect may be called again
+        assert call_count >= 1
+
+    def test_close_collects_errors_from_all_feeds(self):
+        """close() 应尝试关闭所有 feed，最后聚合抛出一个 RuntimeError。"""
+        call_log: list[str] = []
+
+        class _FailingFeed:
+            def __init__(self, name: str) -> None:
+                self._name = name
+
+            def disconnect(self) -> None:
+                call_log.append(self._name)
+                raise RuntimeError(f"boom: {self._name}")
+
+        self.bt.exchange_feeds["FEED_X___SPOT"] = _FailingFeed("X")  # type: ignore[assignment]
+        self.bt.exchange_feeds["FEED_Y___SPOT"] = _FailingFeed("Y")  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="failed to close feeds"):
+            self.bt.close()
+
+        assert call_log == ["X", "Y"], (
+            f"Both feeds should have been attempted, got {call_log}"
+        )
+
 
 class TestKlinePeriodDeltas:
     """测试 K 线周期时间映射的正确性"""
