@@ -111,17 +111,16 @@ class MockBrokerAdapter(BrokerAdapter):
             new_quantity = old_quantity + signed_quantity
             position.quantity = new_quantity
             position.market_price = fill_price
-            if new_quantity == 0:
-                position.average_price = 0.0
-            elif old_quantity == 0 or (old_quantity > 0) != (signed_quantity > 0):
-                # 无持仓或方向反转：成本重置为成交价
-                position.average_price = fill_price
-            elif abs(new_quantity) > abs(old_quantity):
-                # 同向加仓：加权平均
-                position.average_price = (
-                    abs(old_quantity) * old_average + abs(signed_quantity) * fill_price
-                ) / abs(new_quantity)
-            # 同向减仓：成本价不变（保持 old_average）
+            if new_quantity != 0:
+                if old_quantity == 0 or (old_quantity > 0) != (signed_quantity > 0):
+                    # 无持仓或方向反转：成本重置为成交价
+                    position.average_price = fill_price
+                elif abs(new_quantity) > abs(old_quantity):
+                    # 同向加仓：加权平均
+                    position.average_price = (
+                        abs(old_quantity) * old_average + abs(signed_quantity) * fill_price
+                    ) / abs(new_quantity)
+                # 减仓（含归零）：成本价不变（保持 old_average）
         cash_delta = -cost if request.side == "buy" else cost
         self.account.cash += cash_delta
         self.account.available_cash += cash_delta

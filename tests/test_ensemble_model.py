@@ -375,8 +375,11 @@ class TestRiskEnsembleModel:
         assert len(predictions) == 10
         assert proba.shape[0] == 10
 
-    def test_save_and_load_model(self):
+    def test_save_and_load_model(self, tmp_path, monkeypatch):
         """Test model save and load - sklearn models need refitting after load."""
+        import bt_api_py.risk_management.ml_models.ml_base as ml_base
+
+        monkeypatch.setattr(ml_base, "_MODELS_DIR", tmp_path)
         model = RiskEnsembleModel()
 
         np.random.seed(42)
@@ -385,14 +388,13 @@ class TestRiskEnsembleModel:
 
         model.train(X, y)
 
-        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
-            model_path = f.name
+        model_path = tmp_path / "model.pkl"
 
         try:
-            assert model.save_model(model_path) is True
+            assert model.save_model(str(model_path)) is True
 
             new_model = RiskEnsembleModel()
-            assert new_model.load_model(model_path) is True
+            assert new_model.load_model(str(model_path)) is True
 
             # Metadata should be loaded
             assert new_model.is_trained is True

@@ -126,7 +126,7 @@ async def test_mock_broker_adapter_updates_existing_position_on_repeat_order() -
     assert second.status == "filled"
     assert position.quantity == 3
     assert position.market_price == 3600.0
-    assert position.average_price == 3600.0
+    assert position.average_price == (1 * 3500.0 + 2 * 3600.0) / 3  # 加权平均
 
 
 @pytest.mark.asyncio
