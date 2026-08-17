@@ -95,6 +95,7 @@ class _RuntimeRegistrar:
 
 
 _runtime_registrar = _RuntimeRegistrar()
+_plugins_loaded = False
 
 
 def _initialize_plugin_and_legacy_registrations() -> None:
@@ -106,8 +107,35 @@ def _initialize_plugin_and_legacy_registrations() -> None:
     loader.load_all()
 
 
-# Load plugins at module import time
-_initialize_plugin_and_legacy_registrations()
+def _ensure_plugins_loaded() -> None:
+    """惰性加载插件（首次 BtApi 实例化时），坏插件不阻断整体导入。"""
+    global _plugins_loaded
+    if _plugins_loaded:
+        return
+    try:
+        _initialize_plugin_and_legacy_registrations()
+    except Exception as exc:  # noqa: BLE001 - 单插件失败已由 loader 降级，此处兜底
+        get_logger("api").warning(f"Plugin loading degraded: {type(exc).__name__}: {exc}")
+    finally:
+        _plugins_loaded = True
+
+
+# 常用异步方法白名单（A-09：__getattr__ 只代理白名单内的方法，避免 hasattr 恒真）
+_ASYNC_METHODS = frozenset(
+    {
+        "async_get_tick",
+        "async_get_depth",
+        "async_get_kline",
+        "async_make_order",
+        "async_cancel_order",
+        "async_cancel_all",
+        "async_query_order",
+        "async_get_open_orders",
+        "async_get_balance",
+        "async_get_account",
+        "async_get_position",
+    }
+)
 
 
 class BtApi:
@@ -149,6 +177,7 @@ class BtApi:
         self.event_bus = event_bus or EventBus()
         self._subscription_flags = {}
         self._async_proxy_cache = {}
+        _ensure_plugins_loaded()
         self.init_exchange(exchange_kwargs or {})
 
     def init_exchange(self, exchange_kwargs: dict[str, Any]) -> None:
@@ -812,8 +841,8 @@ class BtApi:
     #   bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000, "limit")
 
     def __getattr__(self, name: str) -> Any:
-        """动态代理 async_* 方法到对应 Feed 实例（带缓存）。"""
-        if name.startswith("async_"):
+        """动态代理白名单内的 async_* 方法到对应 Feed 实例（带缓存）。"""
+        if name in _ASYNC_METHODS:
             cache = self.__dict__.setdefault("_async_proxy_cache", {})
             if name in cache:
                 return cache[name]
