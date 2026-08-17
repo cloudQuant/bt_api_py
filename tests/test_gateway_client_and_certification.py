@@ -50,7 +50,7 @@ def test_certification_audit_sinks_mask_sensitive_fields(tmp_path: Path) -> None
     memory_payload = memory.emit(event)
     file_payload = jsonl.emit(event)
 
-    assert memory_payload["evidence"]["auth_code"] == "****7890"
-    assert memory_payload["raw_fields"]["password"] == "****cret"
-    assert file_payload["evidence"]["auth_code"] == "****7890"
+    assert memory_payload["evidence"]["auth_code"] == "**********"
+    assert memory_payload["raw_fields"]["password"] == "******"
+    assert file_payload["evidence"]["auth_code"] == "**********"
     assert memory.query(scenario_id="AUTH-01")[0]["message"] == "auth ok"

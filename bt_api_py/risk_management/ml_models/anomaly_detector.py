@@ -9,9 +9,6 @@ import time
 from typing import Any, cast
 
 import numpy as np
-from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
-from sklearn.svm import OneClassSVM
 
 from .ml_base import BaseMLModel
 
@@ -113,6 +110,10 @@ class AnomalyDetector(BaseMLModel):
         self.use_ensemble = self.config.get("use_ensemble", True)
 
         # 
+        from sklearn.ensemble import IsolationForest
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.svm import OneClassSVM
+
         self.isolation_forest = IsolationForest(
             contamination=self.contamination, random_state=42, n_estimators=100
         )

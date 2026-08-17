@@ -14,7 +14,10 @@ from typing import Any
 
 import numpy as np
 from bt_api_base.logging_factory import get_logger
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+
+
+# 模型文件仅允许从包内 models/ 目录加载（防 pickle 任意路径反序列化）
+_MODELS_DIR = Path(__file__).resolve().parent / "models"
 
 
 class BaseMLModel(ABC):
@@ -112,6 +115,8 @@ class BaseMLModel(ABC):
         try:
             y_pred = self.predict(X)
 
+            from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+
             metrics = {
                 "accuracy": accuracy_score(y, y_pred),
                 "precision": precision_score(y, y_pred, average="weighted", zero_division=0),
@@ -170,9 +175,15 @@ class BaseMLModel(ABC):
 
         Returns: bool:
         """
+        path = Path(file_path).resolve()
+        if not path.is_relative_to(_MODELS_DIR):
+            raise ValueError(
+                f"Refusing to load model from {file_path!r}: "
+                f"model files must be under {_MODELS_DIR}"
+            )
         try:
-            with Path(file_path).open("rb") as f:
-                model_data = pickle.load(f)  # nosec B301 # trusted model files only
+            with path.open("rb") as f:
+                model_data = pickle.load(f)  # nosec B301
 
             self.model = model_data.get("model")
             self.model_name = model_data.get("model_name", self.model_name)

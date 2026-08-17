@@ -9,9 +9,6 @@ import time
 from typing import Any, cast
 
 import numpy as np
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score
 
 from .ml_base import BaseMLModel, RiskPredictionResult
 
@@ -85,6 +82,9 @@ class RiskEnsembleModel(BaseMLModel):
         self.weight_update_frequency = self.config.get("weight_update_frequency", 100)
 
         # 
+        from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+        from sklearn.linear_model import LogisticRegression
+
         self.models = {
             "random_forest": RandomForestClassifier(
                 n_estimators=100, max_depth=10, random_state=42, n_jobs=-1

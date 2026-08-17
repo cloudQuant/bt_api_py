@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -123,8 +122,11 @@ class TestBaseMLModel:
         assert "recall" in metrics
         assert "f1_score" in metrics
 
-    def test_save_and_load_model(self):
+    def test_save_and_load_model(self, tmp_path, monkeypatch):
         """Test model save and load roundtrip."""
+        import bt_api_py.risk_management.ml_models.ml_base as ml_base
+
+        monkeypatch.setattr(ml_base, "_MODELS_DIR", tmp_path)
         model = DummyMLModel("test", config={"key": "value"})
         model.feature_names = ["f1", "f2"]
         model.feature_importance = {"f1": 0.8, "f2": 0.2}
@@ -133,16 +135,15 @@ class TestBaseMLModel:
         y = np.array([0, 1])
         model.train(X, y)
 
-        with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as f:
-            model_path = f.name
+        model_path = tmp_path / "model.pkl"
 
         try:
             # Save
-            assert model.save_model(model_path) is True
+            assert model.save_model(str(model_path)) is True
 
             # Load into new model
             new_model = DummyMLModel("other")
-            assert new_model.load_model(model_path) is True
+            assert new_model.load_model(str(model_path)) is True
 
             assert new_model.model_name == "test"
             assert new_model.config == {"key": "value"}
@@ -159,12 +160,15 @@ class TestBaseMLModel:
         # Invalid path should return False
         assert model.save_model("/nonexistent/path/model.pkl") is False
 
-    def test_load_model_error_handling(self):
+    def test_load_model_error_handling(self, tmp_path, monkeypatch):
         """Test load_model handles errors gracefully."""
+        import bt_api_py.risk_management.ml_models.ml_base as ml_base
+
+        monkeypatch.setattr(ml_base, "_MODELS_DIR", tmp_path)
         model = DummyMLModel("test")
 
-        # Non-existent file should return False
-        assert model.load_model("/nonexistent/path/model.pkl") is False
+        # 包内不存在文件应返回 False
+        assert model.load_model(str(tmp_path / "nonexistent.pkl")) is False
 
     def test_get_feature_importance(self):
         """Test getting feature importance."""

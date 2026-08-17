@@ -9,6 +9,7 @@ from __future__ import annotations
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
 import queue
 import time
+import warnings
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -322,6 +323,12 @@ class BtApi:
         return api
 
     def get_async_request_api(self, exchange_name: str) -> Any:
+        """Deprecated alias for get_request_api."""
+        warnings.warn(
+            "get_async_request_api is deprecated; use get_request_api instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.get_request_api(exchange_name)
 
     def get_data_queue(self, exchange_name: str) -> queue.Queue | None:

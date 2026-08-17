@@ -41,7 +41,7 @@ def mask_sensitive(value: Any) -> Any:
         for key, item in value.items():
             if str(key).lower() in _SENSITIVE_KEYS:
                 text = str(item or "")
-                masked[key] = "****" + text[-4:] if len(text) > 4 else "****"
+                masked[key] = "*" * len(text)
             else:
                 masked[key] = mask_sensitive(item)
         return masked
