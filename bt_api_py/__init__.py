@@ -55,7 +55,35 @@ from bt_api_base.instrument_manager import InstrumentManager, get_instrument_man
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
+from bt_api_py.backtrader import BtApiBroker
+from bt_api_py.brokers import (
+    available_adapters,
+    list_registered_adapters,
+    load_adapter,
+    register_adapter,
+)
 from bt_api_py.bt_api import BtApi
+from bt_api_py.certification import (
+    CertificationAuditEvent,
+    CertificationScenarioRegistry,
+    default_certification_scenario_registry,
+)
+from bt_api_py.forwarding import (
+    MAX_MESSAGE_BYTES,
+    BtApiForwardingAdapter,
+    ForwardingClient,
+    ForwardingRuntime,
+    InMemoryForwardingBus,
+    MarketDataHub,
+    MarketEvent,
+    OrderCommand,
+    OrderRouter,
+    PrivateEvent,
+    SQLiteStateStore,
+    ZmqForwardingClient,
+    ZmqForwardingRuntime,
+)
+from bt_api_py.gateway import GatewayClient
 
 __all__ = [
     "__version__",
@@ -68,6 +96,8 @@ __all__ = [
     "nested_balance_handler",
     "simple_balance_handler",
     "BtApi",
+    "CertificationAuditEvent",
+    "CertificationScenarioRegistry",
     "BtApiError",
     "EventBus",
     "ExchangeNotFoundError",
@@ -87,11 +117,14 @@ __all__ = [
     "ConfigurationError",
     "WebSocketError",
     "CurrencyNotFoundError",
+    "default_certification_scenario_registry",
     "QueueNotInitializedError",
     "ExchangeRegistry",
     "get_logger",
     "InstrumentManager",
     "get_instrument_manager",
+    "available_adapters",
+    "BtApiBroker",
     "ErrorCategory",
     "UnifiedErrorCode",
     "UnifiedError",
@@ -101,4 +134,21 @@ __all__ = [
     "UnifiedRequestFailedError",
     "ErrorTranslator",
     "OKXErrorTranslator",
+    "list_registered_adapters",
+    "load_adapter",
+    "register_adapter",
+    "ForwardingClient",
+    "GatewayClient",
+    "ForwardingRuntime",
+    "BtApiForwardingAdapter",
+    "InMemoryForwardingBus",
+    "MAX_MESSAGE_BYTES",
+    "MarketDataHub",
+    "MarketEvent",
+    "OrderCommand",
+    "OrderRouter",
+    "PrivateEvent",
+    "SQLiteStateStore",
+    "ZmqForwardingClient",
+    "ZmqForwardingRuntime",
 ]
