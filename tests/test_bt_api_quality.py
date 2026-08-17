@@ -110,7 +110,7 @@ def test_calculate_aligned_stop_time_uses_full_daily_delta(monkeypatch):
         def now(cls, tz=None):
             return cls(2026, 3, 20, 10, 30, 45, tzinfo=UTC)
 
-    monkeypatch.setattr("bt_api_py.bt_api.datetime", FrozenDateTime)
+    monkeypatch.setattr("bt_api_py.data_downloader.datetime", FrozenDateTime)
 
     api = BtApi(None, debug=False)
     aligned = api._calculate_aligned_stop_time("1D")
