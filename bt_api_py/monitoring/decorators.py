@@ -29,13 +29,11 @@ def monitor_performance(
 ) -> Callable[[F], F]:
     """Decorator to monitor function performance.
 
-    Args:
-        name: Custom name for the metrics. If None, uses function name.
+    Args: name: Custom name for the metrics. If None, uses function name.
         registry: Custom metrics registry. If None, uses default.
         include_args: Whether to include function arguments in metric names.
 
-    Returns:
-        Decorated function with monitoring.
+    Returns: Decorated function with monitoring.
     """
 
     def decorator(func: F) -> F:
@@ -88,13 +86,11 @@ def monitor_execution_time(
 ) -> Callable[[F], F]:
     """Decorator to monitor only execution time (lighter version).
 
-    Args:
-        name: Custom name for the metric. If None, uses function name.
+    Args: name: Custom name for the metric. If None, uses function name.
         registry: Custom metrics registry. If None, uses default.
         buckets: Custom buckets for the histogram.
 
-    Returns:
-        Decorated function with execution time monitoring.
+    Returns: Decorated function with execution time monitoring.
     """
 
     def decorator(func: F) -> F:
@@ -134,13 +130,11 @@ def monitor_calls(
 ) -> Callable[[F], F]:
     """Decorator to monitor function calls and success rates.
 
-    Args:
-        name: Custom name for the metrics. If None, uses function name.
+    Args: name: Custom name for the metrics. If None, uses function name.
         registry: Custom metrics registry. If None, uses default.
         track_success: Whether to track successful calls separately.
 
-    Returns:
-        Decorated function with call monitoring.
+    Returns: Decorated function with call monitoring.
     """
 
     def decorator(func: F) -> F:
@@ -197,12 +191,10 @@ def monitor_async_performance(
 ) -> Callable[[F], F]:
     """Decorator to monitor async function performance.
 
-    Args:
-        name: Custom name for the metrics. If None, uses function name.
+    Args: name: Custom name for the metrics. If None, uses function name.
         registry: Custom metrics registry. If None, uses default.
 
-    Returns:
-        Decorated async function with monitoring.
+    Returns: Decorated async function with monitoring.
     """
 
     def decorator(func: F) -> F:
@@ -226,16 +218,17 @@ def monitor_async_performance(
         @functools.wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             calls_counter.inc()
+            start_time = time.perf_counter()
 
             try:
-                start_time = time.perf_counter()
                 result = await func(*args, **kwargs)
-                duration = time.perf_counter() - start_time
-                duration_histogram.observe(duration)
                 return result
             except Exception:
                 errors_counter.inc()
                 raise
+            finally:
+                duration = time.perf_counter() - start_time
+                duration_histogram.observe(duration)
 
         wrapper._monitoring_metrics = {  # type: ignore[attr-defined]
             "duration": duration_histogram,
@@ -251,11 +244,9 @@ def monitor_async_performance(
 def get_function_metrics(func: Callable) -> dict[str, Any] | None:
     """Get monitoring metrics attached to a function.
 
-    Args:
-        func: Function to get metrics from.
+    Args: func: Function to get metrics from.
 
-    Returns:
-        Dictionary of metrics if available, None otherwise.
+    Returns: Dictionary of metrics if available, None otherwise.
     """
     if hasattr(func, "_monitoring_metrics"):
         return cast("dict[str, Any]", func._monitoring_metrics)
@@ -269,8 +260,7 @@ def get_function_metrics(func: Callable) -> dict[str, Any] | None:
 def reset_function_metrics(func: Callable) -> None:
     """Reset metrics for a monitored function.
 
-    Args:
-        func: Function to reset metrics for.
+    Args: func: Function to reset metrics for.
     """
     metrics = get_function_metrics(func)
     if not metrics:

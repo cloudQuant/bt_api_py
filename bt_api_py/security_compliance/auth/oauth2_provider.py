@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from numbers import Integral
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 try:
     from cryptography.hazmat.backends import default_backend
@@ -39,7 +39,8 @@ class GrantType(Enum):
 
     AUTHORIZATION_CODE = "authorization_code"
     CLIENT_CREDENTIALS = "client_credentials"
-    REFRESH_TOKEN = "refresh_token"
+    # OAuth grant type, not a secret.
+    REFRESH_TOKEN = "refresh_token"  # nosec B105
     PKCE = "authorization_code_with_pkce"
 
 
@@ -213,8 +214,7 @@ class OAuth2Provider:
                 numeric = int(text)
             except ValueError as exc:
                 raise OAuthError(f"{field_name} must be positive") from exc
-        else:
-            raise OAuthError(f"{field_name} must be positive")
+        else: raise OAuthError(f"{field_name} must be positive")
         if numeric <= 0:
             raise OAuthError(f"{field_name} must be positive")
         return numeric
@@ -695,7 +695,7 @@ class OAuth2Provider:
                 issuer=self.issuer_url,
             )
 
-            return payload
+            return cast("dict[str, Any]", payload)
 
         except Exception as e:
             raise OAuthError(f"Invalid JWT: {e}") from e

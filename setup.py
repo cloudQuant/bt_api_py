@@ -59,6 +59,8 @@ CTP_API_VER = "6.7.7"
 # ---------------------------------------------------------------------------
 CTP_PKG_DIR = os.path.join("bt_api_py", "ctp")
 CTP_API_DIR = os.path.join(CTP_PKG_DIR, "api", CTP_API_VER)
+CTP_WRAP_CPP = os.path.join(CTP_PKG_DIR, "ctp_wrap.cpp")
+CYTHON_SOURCE = "bt_api_py/functions/calculate_number/calculate_numbers.pyx"
 
 ctp_package_data = []  # runtime 库文件列表 (相对于 bt_api_py/ctp/)
 ctp_inc_dirs = []
@@ -173,16 +175,18 @@ else:
 # ---------------------------------------------------------------------------
 #  CTP Extension
 # ---------------------------------------------------------------------------
-CTP_EXT = Extension(
-    "bt_api_py.ctp._ctp",
-    sources=[os.path.join(CTP_PKG_DIR, "ctp_wrap.cpp")],
-    include_dirs=ctp_inc_dirs,
-    library_dirs=ctp_lib_dirs,
-    libraries=ctp_lib_names,
-    extra_link_args=ctp_link_args,
-    extra_compile_args=ctp_compile_args,
-    language="c++",
-)
+CTP_EXT = None
+if os.path.exists(CTP_WRAP_CPP) and _CTP_RUNTIME_LIBS:
+    CTP_EXT = Extension(
+        "bt_api_py.ctp._ctp",
+        sources=[CTP_WRAP_CPP],
+        include_dirs=ctp_inc_dirs,
+        library_dirs=ctp_lib_dirs,
+        libraries=ctp_lib_names,
+        extra_link_args=ctp_link_args,
+        extra_compile_args=ctp_compile_args,
+        language="c++",
+    )
 
 # ---------------------------------------------------------------------------
 #  Cython Extension (calculate_numbers)
@@ -208,14 +212,16 @@ elif sys.platform.startswith("win"):
     _cython_link_args = []  # MSVC 使用 /openmp 编译参数
 # macOS: 不链接 gomp (系统 clang 不自带 OpenMP)
 
-CYTHON_EXT = Extension(
-    name="bt_api_py.functions.calculate_number.calculate_numbers_by_cython",
-    sources=["bt_api_py/functions/calculate_number/calculate_numbers.pyx"],
-    include_dirs=[np.get_include(), "bt_api_py/functions/calculate_number"],
-    language="c++",
-    extra_compile_args=[_opt_flag(2), _cpp_std("c++11")],
-    extra_link_args=_cython_link_args,
-)
+CYTHON_EXT = None
+if os.path.exists(CYTHON_SOURCE):
+    CYTHON_EXT = Extension(
+        name="bt_api_py.functions.calculate_number.calculate_numbers_by_cython",
+        sources=[CYTHON_SOURCE],
+        include_dirs=[np.get_include(), "bt_api_py/functions/calculate_number"],
+        language="c++",
+        extra_compile_args=[_opt_flag(2), _cpp_std("c++11")],
+        extra_link_args=_cython_link_args,
+    )
 
 # ---------------------------------------------------------------------------
 #  自定义 BuildExt: 编译后将 CTP runtime 库复制到 _ctp.so 所在目录
@@ -286,15 +292,18 @@ pkg_data = {
         "functions/calculate_number/*",
         "functions/update_data/*",
     ],
-    "bt_api_py.ctp": [
+}
+
+if os.path.isdir(CTP_PKG_DIR):
+    pkg_data["bt_api_py.ctp"] = [
         "ctp.py",  # 向后兼容垫片 (auto-generated)
         "_ctp_base.py",  # SWIG 基础设施 (auto-generated)
         "ctp_*.py",  # 拆分后的子模块 (auto-generated)
         "client.py",  # 高层封装
         "api/**/*",  # API 头文件 & 库文件
-    ]
-    + ctp_package_data,  # runtime 库
-}
+    ] + ctp_package_data  # runtime 库
+
+ext_modules = [ext for ext in (CYTHON_EXT, CTP_EXT) if ext is not None]
 
 # ---------------------------------------------------------------------------
 #  setup()
@@ -306,7 +315,7 @@ setup(
     version=VERSION,
     packages=find_packages(include=["bt_api_py", "bt_api_py.*"], exclude=["tests"]),
     package_data=pkg_data,
-    ext_modules=[CYTHON_EXT, CTP_EXT],
+    ext_modules=ext_modules,
     cmdclass={
         "build_ext": _BuildExt,
     },

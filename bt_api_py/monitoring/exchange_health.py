@@ -67,6 +67,7 @@ class ExchangeHealthMonitor:
     """Monitors health of exchange connections."""
 
     def __init__(self, exchange_name: str) -> None:
+        """__init__ method"""
         self.exchange_name = exchange_name
         self._checks: list[HealthCheck] = []
         self._results: dict[str, deque] = {}
@@ -226,8 +227,7 @@ class ExchangeHealthMonitor:
             return HealthStatus.DEGRADED
         elif healthy_count == len(self._checks):
             return HealthStatus.HEALTHY
-        else:
-            return HealthStatus.UNKNOWN
+        else: return HealthStatus.UNKNOWN
 
     def get_health_summary(self) -> ExchangeHealthSummary:
         """Get comprehensive health summary."""
@@ -327,8 +327,7 @@ class HealthCheckFactory:
         """Create a WebSocket connection health check."""
 
         async def ws_check():
-            try:
-                return websocket_client.is_connected()
+            try: return websocket_client.is_connected()
             except Exception:
                 return False
 
@@ -349,8 +348,7 @@ class HealthCheckFactory:
                 age = time.time() - last_update
                 if age <= max_age_seconds:
                     return True
-                else:
-                    return {
+                else: return {
                         "status": HealthStatus.DEGRADED.value,
                         "message": f"Data is {age:.1f}s old (max {max_age_seconds}s)",
                     }
@@ -374,8 +372,7 @@ class HealthCheckFactory:
                 usage = await rate_limiter.get_usage_percentage()
                 if usage <= threshold:
                     return True
-                else:
-                    return {
+                else: return {
                         "status": HealthStatus.DEGRADED.value,
                         "message": f"Rate limit usage at {usage:.1%} (threshold {threshold:.1%})",
                     }

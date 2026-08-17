@@ -1,11 +1,12 @@
-"""机器学习模型基类
+"""
 
-定义机器学习模型的基础接口和通用功能
+
 """
 
 from __future__ import annotations
 
-import pickle
+# Model persistence only supports trusted local files.
+import pickle  # nosec B403
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -17,29 +18,28 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 
 
 class BaseMLModel(ABC):
-    """机器学习模型基类
+    """
 
-    定义所有ML模型的通用接口和基础功能
+    ML
     """
 
     def __init__(self, model_name: str, config: dict[str, Any] | None = None) -> None:
-        """初始化ML模型
+        """ML
 
-        Args:
-            model_name: 模型名称
-            config: 模型配置
+        Args: model_name:
+            config: 
         """
         self.model_name = model_name
         self.config = config or {}
         self.logger = get_logger(f"ml_model_{model_name}")
 
-        # 模型状态
+        # 
         self.model: Any = None
         self.is_trained = False
         self.training_time = 0.0
         self.last_training_time = 0.0
 
-        # 性能指标
+        # 
         self.metrics = {
             "accuracy": 0.0,
             "precision": 0.0,
@@ -50,14 +50,14 @@ class BaseMLModel(ABC):
             "features_count": 0,
         }
 
-        # 模型版本
+        # 
         self.model_version = "1.0.0"
         self.data_version = "1.0.0"
 
-        # 训练历史
+        # 
         self.training_history: list[dict[str, Any]] = []
 
-        # 特征信息
+        # 
         self.feature_names: list[str] = []
         self.feature_importance: dict[str, float] = {}
 
@@ -70,48 +70,40 @@ class BaseMLModel(ABC):
         y: np.ndarray,
         validation_data: tuple[np.ndarray, np.ndarray] | None = None,
     ) -> dict[str, Any]:
-        """训练模型
+        """
 
-        Args:
-            X: 特征矩阵
-            y: 目标变量
-            validation_data: 验证数据 (X_val, y_val)
+        Args: X:
+            y: 
+            validation_data:  (X_val, y_val)
 
-        Returns:
-            Dict[str, Any]: 训练结果
+        Returns: Dict[str, Any]:
         """
 
     @abstractmethod
     def predict(self, X: np.ndarray) -> np.ndarray:
-        """预测
+        """
 
-        Args:
-            X: 特征矩阵
+        Args: X:
 
-        Returns:
-            np.ndarray: 预测结果
+        Returns: np.ndarray:
         """
 
     @abstractmethod
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """预测概率
+        """
 
-        Args:
-            X: 特征矩阵
+        Args: X:
 
-        Returns:
-            np.ndarray: 预测概率
+        Returns: np.ndarray:
         """
 
     def evaluate(self, X: np.ndarray, y: np.ndarray) -> dict[str, float]:
-        """评估模型性能
+        """
 
-        Args:
-            X: 测试特征
-            y: 测试目标
+        Args: X:
+            y: 
 
-        Returns:
-            Dict[str, float]: 评估指标
+        Returns: Dict[str, float]:
         """
         if not self.is_trained:
             self.logger.warning("Model not trained yet")
@@ -127,7 +119,7 @@ class BaseMLModel(ABC):
                 "f1_score": f1_score(y, y_pred, average="weighted", zero_division=0),
             }
 
-            # 更新模型指标
+            # 
             self.metrics.update(metrics)
 
             return metrics
@@ -137,13 +129,11 @@ class BaseMLModel(ABC):
             return {}
 
     def save_model(self, file_path: str) -> bool:
-        """保存模型
+        """
 
-        Args:
-            file_path: 保存路径
+        Args: file_path:
 
-        Returns:
-            bool: 保存是否成功
+        Returns: bool:
         """
         try:
             model_data = {
@@ -171,13 +161,14 @@ class BaseMLModel(ABC):
             return False
 
     def load_model(self, file_path: str) -> bool:
-        """加载模型
+        """
 
-        Args:
-            file_path: 模型文件路径
+        Args: file_path:
 
-        Returns:
-            bool: 加载是否成功
+        Security: pickle 。，
+            、。
+
+        Returns: bool:
         """
         try:
             with Path(file_path).open("rb") as f:
@@ -203,27 +194,24 @@ class BaseMLModel(ABC):
             return False
 
     def get_feature_importance(self) -> dict[str, float]:
-        """获取特征重要性
+        """
 
-        Returns:
-            Dict[str, float]: 特征重要性
+        Returns: Dict[str, float]:
         """
         return self.feature_importance
 
     def update_feature_names(self, feature_names: list[str]) -> None:
-        """更新特征名称
+        """
 
-        Args:
-            feature_names: 特征名称列表
+        Args: feature_names:
         """
         self.feature_names = feature_names
         self.metrics["features_count"] = len(feature_names)
 
     def get_model_info(self) -> dict[str, Any]:
-        """获取模型信息
+        """
 
-        Returns:
-            Dict[str, Any]: 模型信息
+        Returns: Dict[str, Any]:
         """
         return {
             "model_name": self.model_name,
@@ -238,42 +226,37 @@ class BaseMLModel(ABC):
         }
 
     def _record_training_step(self, step_data: dict[str, Any]) -> None:
-        """记录训练步骤
+        """
 
-        Args:
-            step_data: 训练步骤数据
+        Args: step_data:
         """
         step_data["timestamp"] = int(time.time())
         self.training_history.append(step_data)
 
-        # 限制历史记录大小
+        # 
         if len(self.training_history) > 1000:
             self.training_history = self.training_history[-500:]
 
     def _preprocess_features(self, X: np.ndarray) -> np.ndarray:
-        """预处理特征
-
-        Args:
-            X: 原始特征矩阵
-
-        Returns:
-            np.ndarray: 预处理后的特征矩阵
         """
-        # 基础预处理：处理NaN、标准化等
+
+        Args: X:
+
+        Returns: np.ndarray:
+        """
+        # ：NaN、
         if np.isnan(X).any():
             X = np.nan_to_num(X, nan=0.0)
 
         return X
 
     def _validate_input(self, X: np.ndarray, y: np.ndarray | None = None) -> bool:
-        """验证输入数据
+        """
 
-        Args:
-            X: 特征矩阵
-            y: 目标变量 (可选)
+        Args: X:
+            y:  ()
 
-        Returns:
-            bool: 验证是否通过
+        Returns: bool:
         """
         if X.size == 0:
             self.logger.error("Empty feature matrix")
@@ -292,11 +275,11 @@ class BaseMLModel(ABC):
         return True
 
     def __str__(self) -> str:
-        """字符串表示"""
+        """"""
         return f"{self.__class__.__name__}(name={self.model_name}, trained={self.is_trained})"
 
     def __repr__(self) -> str:
-        """详细字符串表示"""
+        """"""
         return (
             f"{self.__class__.__name__}(name={self.model_name}, "
             f"version={self.model_version}, trained={self.is_trained}, "
@@ -305,7 +288,7 @@ class BaseMLModel(ABC):
 
 
 class RiskPredictionResult:
-    """风险预测结果"""
+    """"""
 
     def __init__(
         self,
@@ -316,6 +299,7 @@ class RiskPredictionResult:
         timestamp: int,
         features_used: list[str],
     ) -> None:
+        """__init__ method"""
         self.prediction = prediction
         self.probability = probability
         self.confidence = confidence
@@ -329,7 +313,7 @@ class RiskPredictionResult:
         self.ensemble_method: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式"""
+        """"""
         return {
             "prediction": self.prediction,
             "probability": self.probability,
@@ -341,9 +325,10 @@ class RiskPredictionResult:
 
 
 class ModelMetrics:
-    """模型性能指标"""
+    """"""
 
     def __init__(self) -> None:
+        """__init__ method"""
         self.accuracy = 0.0
         self.precision = 0.0
         self.recall = 0.0
@@ -358,7 +343,7 @@ class ModelMetrics:
     def update_from_sklearn_metrics(
         self, y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.ndarray | None = None
     ) -> None:
-        """从scikit-learn指标更新"""
+        """scikit-learn"""
         from sklearn.metrics import (
             accuracy_score,
             classification_report,
@@ -385,7 +370,7 @@ class ModelMetrics:
                 self.roc_auc = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        """转换为字典格式"""
+        """"""
         return {
             "accuracy": self.accuracy,
             "precision": self.precision,
@@ -401,30 +386,28 @@ class ModelMetrics:
 
 
 class ModelComparator:
-    """模型比较器"""
+    """"""
 
     def __init__(self) -> None:
+        """__init__ method"""
         self.models: dict[str, BaseMLModel] = {}
         self.test_results: dict[str, dict[str, Any]] = {}
 
     def add_model(self, name: str, model: BaseMLModel) -> None:
-        """添加模型
+        """
 
-        Args:
-            name: 模型名称
-            model: 模型实例
+        Args: name:
+            model: 
         """
         self.models[name] = model
 
     def compare_models(self, X_test: np.ndarray, y_test: np.ndarray) -> dict[str, dict[str, Any]]:
-        """比较模型性能
+        """
 
-        Args:
-            X_test: 测试特征
-            y_test: 测试目标
+        Args: X_test:
+            y_test: 
 
-        Returns:
-            Dict[str, Dict[str, Any]]: 各模型的性能指标
+        Returns: Dict[str, Dict[str, Any]]:
         """
         results: dict[str, dict[str, Any]] = {}
 
@@ -439,13 +422,11 @@ class ModelComparator:
         return results
 
     def get_best_model(self, metric: str = "f1_score") -> tuple[str | None, BaseMLModel | None]:
-        """获取最佳模型
+        """
 
-        Args:
-            metric: 评估指标
+        Args: metric:
 
-        Returns:
-            Tuple[str | None, BaseMLModel | None]: (模型名称, 模型实例)
+        Returns: Tuple[str | None, BaseMLModel | None]: (, )
         """
         best_name: str | None = None
         best_score: float = -1.0
@@ -462,11 +443,11 @@ class ModelComparator:
         return best_name, best_model
 
     def get_comparison_report(self) -> dict[str, Any]:
-        """获取比较报告"""
+        """"""
         if not self.test_results:
             return {"error": "No test results available"}
 
-        # 计算各指标的最佳模型
+        # 
         best_models: dict[str, str | None] = {}
         metrics = ["accuracy", "precision", "recall", "f1_score"]
 

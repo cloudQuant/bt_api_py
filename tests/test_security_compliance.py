@@ -757,8 +757,10 @@ class TestIdentityManager:
         assert self.manager.authenticate_user("carol", "secret123") is None
 
         assert self.manager.activate_user(local_identity.identity_id) is True
-        assert local_identity.status == UserStatus.ACTIVE
-        assert "suspension_reason" not in local_identity.attributes
+        activated_identity = self.manager.get_identity(local_identity.identity_id)
+        assert activated_identity is not None
+        assert activated_identity.status == UserStatus.ACTIVE
+        assert "suspension_reason" not in activated_identity.attributes
 
         assert self.manager.lock_user(ldap_identity.identity_id, "security") is True
         assert ldap_identity.status == UserStatus.LOCKED

@@ -35,10 +35,10 @@ class TestSeverityLevel:
 
     def test_severity_levels(self):
         """Test severity level values."""
-        assert SeverityLevel.LOW == 1
-        assert SeverityLevel.MEDIUM == 2
-        assert SeverityLevel.HIGH == 3
-        assert SeverityLevel.CRITICAL == 4
+        assert SeverityLevel.LOW.value == 1
+        assert SeverityLevel.MEDIUM.value == 2
+        assert SeverityLevel.HIGH.value == 3
+        assert SeverityLevel.CRITICAL.value == 4
 
 
 class TestAuditEvent:

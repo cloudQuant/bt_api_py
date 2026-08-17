@@ -1,6 +1,6 @@
-"""风险管理核心模块
+"""
 
-包含风险管理器的核心组件和基础功能
+
 """
 
 from __future__ import annotations

@@ -1,5 +1,7 @@
+"""Module-level docstring."""
 from __future__ import annotations
 
+from bt_api_py.testing.contract_cases import run_broker_contract_cases
 from bt_api_py.testing.fixtures import (
     EventBusStub,
     QueueStub,
@@ -12,4 +14,5 @@ __all__ = [
     "QueueStub",
     "create_isolated_exchange_registry",
     "reset_gateway_runtime_registrar",
+    "run_broker_contract_cases",
 ]

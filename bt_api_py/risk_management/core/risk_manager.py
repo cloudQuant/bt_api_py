@@ -34,6 +34,7 @@ class RiskManager:
     def __init__(
         self, event_bus: EventBus | None = None, config: dict[str, Any] | None = None
     ) -> None:
+        """__init__ method"""
         self.logger = get_logger("risk_manager")
         self.event_bus = event_bus or EventBus()
         self.config = config or {}
@@ -265,10 +266,10 @@ class RiskManager:
             if order_size > 500000:
                 result["approved"] = False
                 result["mitigation_required"] = True
-                result["warnings"].append("订单大小超过风险阈值")
+                result["warnings"].append("")
                 result["restrictions"].append("max_order_size")
             elif order_size >= 100000:
-                result["warnings"].append("订单大小较高")
+                result["warnings"].append("")
 
             if risk_level == RiskLevel.CRITICAL.value or risk_score >= 0.9:
                 result["approved"] = False
@@ -307,7 +308,7 @@ class RiskManager:
                 "approved": False,
                 "risk_level": "UNKNOWN",
                 "risk_score": 1.0,
-                "warnings": [f"风险检查错误: {exc}"],
+                "warnings": [f": {exc}"],
                 "restrictions": ["system_error"],
                 "mitigation_required": True,
                 "detailed_checks": [],

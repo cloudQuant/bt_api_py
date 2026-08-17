@@ -6,6 +6,441 @@
 [![Docs](https://github.com/cloudQuant/bt_api_py/actions/workflows/docs.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/docs.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
+**Language / 语言**: [English (default)](#en) | [中文](#zh)
+
+<a id="en"></a>
+## English
+
+[🇨🇳 切换到中文](#zh)
+
+**bt_api_py** is a unified multi-exchange trading API framework built for quant trading, arbitrage execution, market making, and multi-account asset management. It unifies REST, async REST, and WebSocket APIs from different exchanges into a single Python interface to reduce integration duplication.
+
+**Quick links**
+
+- [Online docs](https://cloudquant.github.io/bt_api_py/)
+- [Installation guide](https://cloudquant.github.io/bt_api_py/getting-started/installation/)
+- [Quickstart](https://cloudquant.github.io/bt_api_py/getting-started/quickstart/)
+- [Docs directory in this repo](docs/)
+- [Issue tracker](https://github.com/cloudQuant/bt_api_py/issues)
+
+## Why choose bt_api_py
+
+- **Unified exchange surface**: Manage Binance, OKX, HTX, CTP, Interactive Brokers, and more via one `BtApi` interface.
+- **Three operation modes**: Synchronous REST, async REST, and WebSocket subscription are all supported.
+- **Standardized domain model**: Consistent containers like `Ticker`, `OrderBook`, `Bar`, `Order`, `Position`, and `Balance`.
+- **Extensible architecture**: New exchanges are added through registry + adapter patterns without changing core API code.
+- **Event-driven design**: Built-in `EventBus` is suitable for execution workflows, market data forwarding, and state fan-out.
+- **Forwarding-ready runtime**: Built-in market fan-out and order routing primitives support one market stream serving multiple strategies and one account serving multiple trading clients.
+
+### Core use cases
+
+- Quant strategy development
+- Multi-exchange arbitrage systems
+- Market making systems requiring low-latency updates
+- Multi-account asset and position management
+- Automated trading bots
+
+## Core Features
+
+### Multi-exchange unified interface
+`BtApi` exposes a single API surface for spot, futures, options, and stock feeds, reducing per-exchange integration work.
+
+### Three API calling modes
+- **Sync REST API**: Good for scripts and small tools.
+- **Async REST API**: Good for high-concurrency collection and batch workflows.
+- **WebSocket subscriptions**: Good for low-latency streaming data and event-driven systems.
+
+### Plug-and-play exchange extension
+New exchanges can be added by implementing adapters and registry entries without changing the core package.
+
+### Event-driven mechanics
+Built-in `EventBus` handles asynchronous updates such as market updates, order changes, and fills.
+
+### Market data and order forwarding
+`bt_api_py.forwarding` provides a lightweight gateway layer for sharing exchange
+connections across multiple strategy processes:
+
+- `MarketDataHub` fans out normalized `MarketEvent` objects with topic prefixes such as `md.BINANCE.SWAP.BTC-USDT.tick`.
+- `OrderRouter` centralizes account-level order submission, cancellation, basic risk checks, idempotency, and private order/trade/account events.
+- `ForwardingClient` is an embedded in-process client for tests and local strategy runners.
+- `ZmqForwardingRuntime` / `ZmqForwardingClient` provide ZeroMQ `PUB/SUB` market streams and `ROUTER/DEALER` order commands for multi-process deployments.
+- `SQLiteStateStore` persists command acknowledgements and private events so idempotent order commands can survive process restarts.
+- Forwarding payloads are capped by the exported `MAX_MESSAGE_BYTES` limit before entering JSON/ZMQ transport paths.
+- Embedded clients use `command_timeout` for synchronous command calls. Account, position, and open-order queries fall back to cached snapshots on missing handlers or timeouts; order submission and cancellation still surface command failures.
+- Client-side realtime event queues use `event_cache_size=4096` by default to bound slow-consumer memory growth. Set `event_cache_size=None` only when a strategy runner intentionally needs unbounded local event accumulation.
+- `ForwardingClient.stats()` refreshes current subscriptions by default, then reports pending and dropped realtime event counts so slow consumers can be diagnosed without inspecting private queues. Use `stats(refresh=False)` for a local-cache-only snapshot.
+
+The recommended boundary is to keep exchange connectivity, market fan-out,
+account sharing, risk checks, idempotency, and transport protocols in
+`bt_api_py.forwarding`. Strategy engines such as Backtrader should consume this
+boundary through a thin client adapter instead of owning the exchange sockets or
+account router themselves.
+
+### Standardized containers
+Over 20 standardized container types include:
+- Market: `Ticker`, `OrderBook`, `Bar`, `MarkPrice`, `FundingRate`
+- Trading: `Order`, `Trade`, `Position`, `Balance`, `Account`
+- Other: `Symbol`, `Instrument`, `Liquidation`, `Greek`
+
+### Cross-platform support
+Current target compatibility is Python `3.9-3.14`; CI runs on Linux, macOS, and Windows.
+
+## Supported exchanges
+
+### Quick snapshot
+
+The full exchange support matrix is automatically refreshed in the Chinese section below.
+
+- Fully supported: Binance, HTX, CTP, Interactive Brokers (REST + WebSocket + test pass).
+- Implemented with known WebSocket gaps: OKX, Bybit, Bitget, Kraken, Gate.io, Upbit, Crypto.com, HitBTC, Phemex, Gemini.
+- Implemented and under gap-fixing: KuCoin, MEXC, Bitfinex, Coinbase, BYDFi.
+- Implemented but test depth still needs strengthening: Hyperliquid, dYdX.
+
+> Current conservative total: 4 fully supported + 17 partially implemented + 40+ registered exchanges = 73+ exchanges.
+
+## Installation & compatibility
+
+| Item | Support |
+|------|---------|
+| Python | `3.9` - `3.14` |
+| OS | Linux, macOS, Windows |
+| Installation | PyPI, source install |
+| Main APIs | REST, Async REST, WebSocket |
+
+### Option 1: install from PyPI
+
+```bash
+pip install bt_api_py
+```
+
+### Option 2: editable source install
+
+Compile Cython and CTP SWIG extensions locally first, then install dependencies by platform.
+
+#### macOS
+
+```bash
+xcode-select --install
+brew install swig
+```
+
+#### Linux (Debian/Ubuntu)
+
+```bash
+sudo apt install swig g++
+```
+
+#### Windows 11
+
+```bash
+winget install Microsoft.VisualStudio.2022.BuildTools
+# Open Visual Studio Installer, select "Desktop development with C++"
+winget install miniconda3
+conda install -c conda-forge swig libiconv
+```
+
+Then:
+
+```bash
+git clone --recurse-submodules https://github.com/cloudQuant/bt_api_py
+cd bt_api_py
+python -m pip install --upgrade pip
+pip install -e .
+
+# Development mode
+pip install -e ".[dev]"
+```
+
+If you already cloned the repository without submodules, initialize the exchange plugin submodules:
+
+```bash
+git submodule update --init --recursive --jobs 8
+```
+
+To check and install `bt_api_*` plugin packages together, use the repository script. The default strategy skips packages that are already installed, then tries local submodule source installs for missing packages, falls back to PyPI when source installs are unavailable or fail, and reports any remaining failures in the summary.
+
+```bash
+# Install bt_api_py itself and all plugins with source-first strategy
+python scripts/install_bt_api_submodules.py --with-root --editable-root --strategy source-first
+
+# Only install from local submodule source, without PyPI fallback
+python scripts/install_bt_api_submodules.py --with-root --editable-root --strategy source-only --upgrade
+
+# Install selected plugins only
+python scripts/install_bt_api_submodules.py bt_api_base bt_api_binance bt_api_okx --strategy source-first
+
+# Check installation status only, without installing packages
+python scripts/install_bt_api_submodules.py --strategy none
+```
+
+### Optional extras
+
+| Extra | Purpose |
+|------|---------|
+| `bt_api_py[all]` | Install all optional dependencies |
+| `bt_api_py[dev]` | `pytest`, `ruff`, `mypy`, and other dev tools |
+| `bt_api_py[security]` | `security_compliance`, OAuth/JWT, encryption, password hashing |
+| `bt_api_py[ib]` | Interactive Brokers native support |
+| `bt_api_py[ib_web]` | IB Web API and browser automation dependencies |
+| `bt_api_py[visualization]` | Charting and visualization tools |
+
+```bash
+pip install bt_api_py[all]
+pip install bt_api_py[dev]
+pip install bt_api_py[security]
+```
+
+## Quick start
+
+### Synchronous market query
+
+```python
+from bt_api_py import BtApi
+
+exchange_kwargs = {
+    "BINANCE___SPOT": {
+        "api_key": "your_api_key",
+        "secret": "your_secret",
+        "testnet": True,
+    }
+}
+
+api = BtApi(exchange_kwargs=exchange_kwargs)
+ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
+print(ticker)
+```
+
+### Make order
+
+```python
+order = api.make_order(
+    exchange_name="BINANCE___SPOT",
+    symbol="BTCUSDT",
+    volume=0.001,
+    price=50000,
+    order_type="limit",
+)
+print(order)
+```
+
+### Async calls
+
+```python
+import asyncio
+from bt_api_py import BtApi
+
+async def main():
+    api = BtApi(
+        exchange_kwargs={
+            "BINANCE___SPOT": {
+                "api_key": "your_api_key",
+                "secret": "your_secret",
+                "testnet": True,
+            }
+        }
+    )
+
+    ticker = await api.async_get_tick("BINANCE___SPOT", "BTCUSDT")
+    print(ticker)
+
+asyncio.run(main())
+```
+
+### WebSocket subscribe
+
+```python
+api.subscribe(
+    "BINANCE___SPOT___BTCUSDT",
+    [
+        {"topic": "ticker", "symbol": "BTCUSDT"},
+        {"topic": "depth", "symbol": "BTCUSDT"},
+    ],
+)
+
+data_queue = api.get_data_queue("BINANCE___SPOT")
+message = data_queue.get(timeout=10)
+print(type(message).__name__, message)
+```
+
+### Embedded forwarding runtime
+
+```python
+import asyncio
+
+from bt_api_py.brokers.mock import MockBrokerAdapter
+from bt_api_py.forwarding import ForwardingClient, ForwardingRuntime
+
+
+async def main():
+    runtime = ForwardingRuntime(MockBrokerAdapter())
+    await runtime.start()
+
+    client = ForwardingClient(
+        bus=runtime.bus,
+        exchange="SIM",
+        market_type="SPOT",
+        account_id="paper",
+        strategy_id="demo_strategy",
+        command_timeout=2.0,
+        event_cache_size=4096,
+    )
+    client.connect()
+    client.subscribe("RB2510")
+
+    runtime.market_data.publish_tick(
+        exchange="SIM",
+        market_type="SPOT",
+        symbol="RB2510",
+        price=3500.0,
+    )
+    print(client.poll_tick("RB2510").price)
+    print(client.stats(refresh=False)["dropped_event_counts"])
+
+    order = client.submit_order(
+        {
+            "symbol": "RB2510",
+            "side": "buy",
+            "size": 1,
+            "order_type": "limit",
+            "price": 3500.0,
+        }
+    )
+    print(order["order_id"])
+
+    await runtime.stop()
+
+
+asyncio.run(main())
+```
+
+### ZeroMQ forwarding service
+
+```python
+from bt_api_py.brokers.mock import MockBrokerAdapter
+from bt_api_py.forwarding import ZmqForwardingClient, ZmqForwardingRuntime
+
+runtime = ZmqForwardingRuntime(
+    MockBrokerAdapter(),
+    market_endpoint="tcp://127.0.0.1:7001",
+    command_endpoint="tcp://127.0.0.1:7002",
+    private_endpoint="tcp://127.0.0.1:7003",
+)
+runtime.start_sync()
+
+client = ZmqForwardingClient(
+    market_endpoint="tcp://127.0.0.1:7001",
+    command_endpoint="tcp://127.0.0.1:7002",
+    private_endpoint="tcp://127.0.0.1:7003",
+    exchange="SIM",
+    market_type="SPOT",
+    account_id="paper",
+    strategy_id="demo_strategy",
+    command_timeout_ms=2000,
+    event_cache_size=4096,
+)
+client.connect()
+client.subscribe("RB2510")
+print(client.stats(refresh=False))
+```
+
+### Forwarding deployment guide
+
+| Mode | Best for | Transport | Notes |
+|------|----------|-----------|-------|
+| Embedded runtime | Unit tests, local simulations, single-process strategy runners | `InMemoryForwardingBus` | Use `ForwardingRuntime` + `ForwardingClient`; `command_timeout` is in seconds. |
+| ZeroMQ service | Multiple strategy processes or services sharing one upstream exchange/account gateway | `PUB/SUB` for market/private events, `ROUTER/DEALER` for commands | Use `ZmqForwardingRuntime` + `ZmqForwardingClient`; `command_timeout_ms` is in milliseconds. |
+| Existing `BtApi` bridge | Reusing current WebSocket queues from exchange adapters | `BtApiForwardingAdapter` into `MarketDataHub` | Good for gradually moving existing connectors behind the forwarding boundary. |
+| Restart-safe order routing | Live trading processes that need idempotency across restarts | `SQLiteStateStore` | Pass the store into `ForwardingRuntime` / `ZmqForwardingRuntime` to persist acknowledgements and private events. |
+
+Market topics use normalized symbols, so `BTC/USDT` and `BTC-USDT` map to the
+same topic key through `normalize_market_symbol`. Keep order payload symbols in
+the exchange-native format expected by the broker adapter. Client-side realtime
+event caches are bounded by `event_cache_size` and keep the latest events when a
+consumer falls behind. Use `ForwardingClient.stats()` to refresh current
+subscriptions and inspect pending and dropped event counts, or
+`stats(refresh=False)` for a local-cache-only snapshot.
+
+### Forwarding diagnostics and lifecycle
+
+`ForwardingClient.stats()` returns a compact runtime snapshot:
+
+| Field | Meaning |
+|-------|---------|
+| `connected` | Whether the client is currently connected |
+| `event_cache_size` | Per-queue realtime cache bound; `None` means unbounded |
+| `market_subscription_count` / `private_subscription_count` | Active local subscriptions |
+| `pending_event_counts` | Locally cached tick, orderbook, bar, and private broker updates |
+| `dropped_event_counts` | Events dropped because a bounded local queue was full |
+
+When a bounded client queue is full, the oldest cached event is discarded before
+the newest event is appended. Monitor `dropped_event_counts` to detect slow
+strategy consumers and increase `event_cache_size` only when the extra local
+memory is intentional. For ZeroMQ deployments, `ZmqForwardingRuntime.start_sync()`
+and `stop_sync()` are idempotent; `runtime.is_running` and `await runtime.health()`
+can be used by service supervisors to confirm endpoint and forwarder status.
+
+## Core API summary
+
+| Method | Description |
+|--------|-------------|
+| `get_tick(exchange, symbol)` | Query latest ticker |
+| `get_depth(exchange, symbol, count=20)` | Query order book depth |
+| `get_kline(exchange, symbol, period, count=20)` | Query OHLCV k-lines |
+| `make_order(exchange, symbol, volume, price, order_type)` | Unified order creation |
+| `cancel_order(exchange, symbol, order_id)` | Cancel order |
+| `get_balance(exchange, symbol=None)` | Query balances |
+| `get_position(exchange, symbol=None)` | Query positions |
+| `async_get_tick(...)` / `async_make_order(...)` | Async APIs delegating to respective feeds |
+| `subscribe(dataname, topics)` | Start WebSocket subscription |
+| `get_data_queue(exchange)` | Read data pushed from WebSocket |
+| `get_event_bus()` | Get EventBus instance |
+
+## Forwarding API summary
+
+| Object | Description |
+|--------|-------------|
+| `MarketEvent` / `OrderCommand` / `PrivateEvent` | Standard forwarding schemas |
+| `MarketDataHub` | Normalizes and fans out market events by topic |
+| `BtApiForwardingAdapter` | Bridges existing `BtApi.get_data_queue()` data into `MarketDataHub` |
+| `OrderRouter` | Central order gateway with idempotency, basic risk checks, and private events |
+| `SQLiteStateStore` | Persists command acknowledgements and private events |
+| `ForwardingRuntime` / `ForwardingClient` | Embedded in-process runtime and client |
+| `ZmqForwardingRuntime` / `ZmqForwardingClient` | Multi-process ZeroMQ runtime and client |
+| `MAX_MESSAGE_BYTES` / `normalize_market_symbol` | Shared transport size guard and market topic symbol normalizer |
+
+## Development and tests
+
+Please refer to the Chinese section for the complete test and roadmap details. The core commands are the same:
+
+```bash
+pip install -e ".[dev]"
+./scripts/run_tests.sh --help
+pytest tests/test_bt_api_quality.py \
+  tests/test_event_bus.py \
+  tests/core/test_async_context.py \
+  tests/gateway/test_config.py -q
+ruff check bt_api_py tests
+mypy bt_api_py --ignore-missing-imports
+```
+
+## Roadmap and FAQ
+
+- See full roadmap in the section below in Chinese.
+- Major short-term goals include improving WebSocket support for Bybit/Gate.io and adding historical replay in backtesting.
+- FAQ section in Chinese below covers Python versions, adding new exchanges, WebSocket handling, sandbox usage, rate limits, and support channels.
+
+## License and support
+
+- License: MIT
+- Author: **cloudQuant**
+- Contact: yunjinqi@gmail.com
+- Issues: https://github.com/cloudQuant/bt_api_py/issues
+
+<a id="zh"></a>
+## 中文
+
+[🇺🇸 Switch to English](#en)
+
 **bt_api_py** 是一个统一多交易所交易 API 框架，面向量化交易、套利执行、做市和多账户资产管理场景。它把不同交易所的 REST、异步 REST 和 WebSocket 接口统一到同一套 Python API 上，尽量减少接入层重复工作。
 
 **快速入口**
@@ -23,6 +458,7 @@
 - **标准化数据模型**: `Ticker`、`OrderBook`、`Bar`、`Order`、`Position`、`Balance` 等容器统一字段语义。
 - **可扩展架构**: 基于 Registry 和 Adapter 模式，新增交易所时不需要修改核心入口。
 - **事件驱动**: 内置 `EventBus`，适合策略执行、行情转发和状态订阅。
+- **行情与交易转发**: 内置 forwarding 运行时，一条行情连接可以服务多个策略，一个账户可以通过中心化路由服务多个交易客户端。
 
 ## 适用场景
 
@@ -48,6 +484,23 @@
 ### 事件驱动机制
 内置 `EventBus` 事件总线，可处理行情更新、订单变化、成交通知等异步事件。
 
+### 行情与交易转发
+`bt_api_py.forwarding` 提供轻量级网关层，用于把交易所连接共享给多个策略进程：
+
+- `MarketDataHub` 按 topic 扇出标准化 `MarketEvent`，例如 `md.BINANCE.SWAP.BTC-USDT.tick`。
+- `OrderRouter` 集中处理账户级下单、撤单、基础风控、幂等和私有订单/成交/账户事件。
+- `ForwardingClient` 适合嵌入式、本地测试和单进程策略运行。
+- `ZmqForwardingRuntime` / `ZmqForwardingClient` 提供 ZeroMQ `PUB/SUB` 行情流和 `ROUTER/DEALER` 交易命令通道。
+- `SQLiteStateStore` 持久化命令确认和私有事件，保证幂等下单在进程重启后仍可恢复。
+- 转发消息进入 JSON/ZMQ 传输路径前会受导出的 `MAX_MESSAGE_BYTES` 上限保护。
+- 嵌入式客户端使用 `command_timeout` 保护同步命令调用；账户、持仓和开放订单查询在无 handler 或超时时回退到本地缓存，下单和撤单仍会向调用方暴露命令失败。
+- 客户端实时事件队列默认使用 `event_cache_size=4096` 限制慢消费者内存增长；只有策略 runner 明确需要本地无限积压事件时才建议设置 `event_cache_size=None`。
+- `ForwardingClient.stats()` 默认会刷新当前订阅，然后报告待消费和已丢弃的实时事件数量，便于诊断慢消费者而不需要读取内部队列；如只想查看本地缓存快照，可使用 `stats(refresh=False)`。
+
+推荐的职责边界是：交易所连接、行情扇出、账户共享、风控、幂等和传输协议都放在
+`bt_api_py.forwarding`；Backtrader 这类策略引擎只通过轻量客户端适配层消费这个边界，
+不直接负责交易所 socket 或账户路由。
+
 ### 标准化数据容器
 提供 20+ 种标准化数据类型：
 - **行情数据**: `Ticker`、`OrderBook`、`Bar`、`MarkPrice`、`FundingRate`
@@ -56,8 +509,6 @@
 
 ### 跨平台支持
 项目当前以 `Python 3.9-3.14` 为兼容目标，CI 覆盖 Linux、macOS 和 Windows。
-
-## 支持的交易所
 
 <!-- BEGIN GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
 > 测试状态建议通过 `bash scripts/run_exchange_tests.sh <name>` 复核，当前口径更新于 2026-04-06。
@@ -253,6 +704,118 @@ message = data_queue.get(timeout=10)
 print(type(message).__name__, message)
 ```
 
+### 嵌入式转发运行时
+
+```python
+import asyncio
+
+from bt_api_py.brokers.mock import MockBrokerAdapter
+from bt_api_py.forwarding import ForwardingClient, ForwardingRuntime
+
+
+async def main():
+    runtime = ForwardingRuntime(MockBrokerAdapter())
+    await runtime.start()
+
+    client = ForwardingClient(
+        bus=runtime.bus,
+        exchange="SIM",
+        market_type="SPOT",
+        account_id="paper",
+        strategy_id="demo_strategy",
+        command_timeout=2.0,
+        event_cache_size=4096,
+    )
+    client.connect()
+    client.subscribe("RB2510")
+
+    runtime.market_data.publish_tick(
+        exchange="SIM",
+        market_type="SPOT",
+        symbol="RB2510",
+        price=3500.0,
+    )
+    print(client.poll_tick("RB2510").price)
+    print(client.stats(refresh=False)["dropped_event_counts"])
+
+    order = client.submit_order(
+        {
+            "symbol": "RB2510",
+            "side": "buy",
+            "size": 1,
+            "order_type": "limit",
+            "price": 3500.0,
+        }
+    )
+    print(order["order_id"])
+
+    await runtime.stop()
+
+
+asyncio.run(main())
+```
+
+### ZeroMQ 转发服务
+
+```python
+from bt_api_py.brokers.mock import MockBrokerAdapter
+from bt_api_py.forwarding import ZmqForwardingClient, ZmqForwardingRuntime
+
+runtime = ZmqForwardingRuntime(
+    MockBrokerAdapter(),
+    market_endpoint="tcp://127.0.0.1:7001",
+    command_endpoint="tcp://127.0.0.1:7002",
+    private_endpoint="tcp://127.0.0.1:7003",
+)
+runtime.start_sync()
+
+client = ZmqForwardingClient(
+    market_endpoint="tcp://127.0.0.1:7001",
+    command_endpoint="tcp://127.0.0.1:7002",
+    private_endpoint="tcp://127.0.0.1:7003",
+    exchange="SIM",
+    market_type="SPOT",
+    account_id="paper",
+    strategy_id="demo_strategy",
+    command_timeout_ms=2000,
+    event_cache_size=4096,
+)
+client.connect()
+client.subscribe("RB2510")
+print(client.stats(refresh=False))
+```
+
+### Forwarding 部署模式选择
+
+| 模式 | 适合场景 | 传输方式 | 说明 |
+|------|----------|----------|------|
+| 嵌入式运行时 | 单元测试、本地仿真、单进程策略 | `InMemoryForwardingBus` | 使用 `ForwardingRuntime` + `ForwardingClient`；`command_timeout` 单位是秒。 |
+| ZeroMQ 服务 | 多策略进程或多个服务共享同一个上游行情和账户网关 | 行情/私有事件走 `PUB/SUB`，交易命令走 `ROUTER/DEALER` | 使用 `ZmqForwardingRuntime` + `ZmqForwardingClient`；`command_timeout_ms` 单位是毫秒。 |
+| 现有 `BtApi` 桥接 | 复用当前交易所适配器的 WebSocket 队列 | `BtApiForwardingAdapter` 写入 `MarketDataHub` | 适合把已有连接逐步迁移到 forwarding 边界后面。 |
+| 可恢复订单路由 | 实盘进程需要跨重启保持下单幂等 | `SQLiteStateStore` | 将 state store 传入 `ForwardingRuntime` / `ZmqForwardingRuntime`，持久化命令确认和私有事件。 |
+
+行情 topic 使用标准化 symbol，`BTC/USDT` 和 `BTC-USDT` 会通过
+`normalize_market_symbol` 映射到同一个 topic key。订单 payload 的 symbol 应保持交易所
+adapter 期望的原始格式。客户端实时事件缓存受 `event_cache_size` 限制，消费者落后时会保留最新事件。可以用 `ForwardingClient.stats()` 刷新当前订阅并查看待消费和已丢弃事件数量；如只想查看本地缓存快照，可使用 `stats(refresh=False)`。
+
+### Forwarding 诊断和生命周期
+
+`ForwardingClient.stats()` 会返回一份轻量运行时快照：
+
+| 字段 | 含义 |
+|------|------|
+| `connected` | client 当前是否已连接 |
+| `event_cache_size` | 每个实时事件队列的缓存上限；`None` 表示不限制 |
+| `market_subscription_count` / `private_subscription_count` | 当前本地订阅数量 |
+| `pending_event_counts` | 本地待消费的 tick、orderbook、bar 和私有 broker update 数量 |
+| `dropped_event_counts` | 因有界队列已满而丢弃的事件数量 |
+
+当有界队列已满时，client 会先丢弃最老的缓存事件，再追加最新事件。实盘中应监控
+`dropped_event_counts` 来发现消费过慢的策略，只有确认需要更多本地积压能力时才调大
+`event_cache_size`。ZeroMQ 部署下，`ZmqForwardingRuntime.start_sync()` 和
+`stop_sync()` 都是幂等的；服务管理器可以通过 `runtime.is_running` 和
+`await runtime.health()` 检查 endpoint 与转发线程状态。
+
 ## 核心 API 一览
 
 | 方法 | 说明 |
@@ -268,6 +831,19 @@ print(type(message).__name__, message)
 | `subscribe(dataname, topics)` | 发起 WebSocket 订阅 |
 | `get_data_queue(exchange)` | 读取 WebSocket 推送结果 |
 | `get_event_bus()` | 获取事件总线实例 |
+
+## Forwarding API 一览
+
+| 对象 | 说明 |
+|------|------|
+| `MarketEvent` / `OrderCommand` / `PrivateEvent` | 转发层标准消息模型 |
+| `MarketDataHub` | 按 topic 标准化并扇出行情事件 |
+| `BtApiForwardingAdapter` | 将现有 `BtApi.get_data_queue()` 数据桥接到 `MarketDataHub` |
+| `OrderRouter` | 中心化订单网关，支持幂等、基础风控和私有事件 |
+| `SQLiteStateStore` | 持久化命令确认和私有事件 |
+| `ForwardingRuntime` / `ForwardingClient` | 嵌入式进程内运行时和客户端 |
+| `ZmqForwardingRuntime` / `ZmqForwardingClient` | 多进程 ZeroMQ 运行时和客户端 |
+| `MAX_MESSAGE_BYTES` / `normalize_market_symbol` | 共享传输消息大小保护和行情 topic symbol 标准化工具 |
 
 ## 仓库结构
 
@@ -376,6 +952,7 @@ pytest tests -m ctp -v
 ### 近期计划 (v0.16-v0.20)
 
 - [x] 添加 HTX (Huobi) 交易所完整支持（现货、杠杆、合约、期权）
+- [x] 增加行情与交易转发 MVP（MarketDataHub、OrderRouter、ZeroMQ、SQLite 幂等持久化）
 - [ ] 完善 Bybit、Gate.io 等交易所的 WebSocket 支持
 - [ ] 完善回测框架，支持历史数据回放
 - [ ] WebSocket 断线重连优化

@@ -20,6 +20,9 @@ env:
   COVERAGE_THRESHOLD: "40"
   SMOKE_TEST_PATHS: >-
     tests/test_bt_api_quality.py
+    tests/test_forwarding_schema.py
+    tests/test_forwarding_bus_router_client.py
+    tests/test_monitoring_contracts.py
   FULL_SUITE_MARKERS: "not network and not integration and not performance and not e2e and not ctp"
 
 jobs:
@@ -50,10 +53,10 @@ jobs:
         run: ruff format --check bt_api_py tests
 
       - name: MyPy type check
-        run: mypy bt_api_py --ignore-missing-imports
+        run: mypy bt_api_py tests --ignore-missing-imports
 
       - name: Bandit security scan
-        run: bandit -r bt_api_py -ll --skip B101,B311
+        run: bandit -r bt_api_py -c pyproject.toml
 
       - name: Dependency audit
         run: pip-audit || true

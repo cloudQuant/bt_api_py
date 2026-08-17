@@ -15,6 +15,7 @@ class GrafanaDashboardBuilder:
     """Builds Grafana dashboards for bt_api_py monitoring."""
 
     def __init__(self, title: str = "BT API Py Dashboard") -> None:
+        """__init__ method"""
         self.dashboard: dict[str, Any] = {
             "dashboard": {
                 "id": None,

@@ -19,6 +19,7 @@ class AccessDeniedError(BtApiError):
     """Access denied due to insufficient permissions."""
 
     def __init__(self, user_id: str, resource: str, action: str, reason: str = ""):
+        """__init__ method"""
         msg = f"Access denied for user {user_id} to {action} {resource}"
         if reason:
             msg += f": {reason}"

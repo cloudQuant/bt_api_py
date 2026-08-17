@@ -15,8 +15,7 @@ class TLSManager:
     def __init__(self, config: dict[str, Any]) -> None:
         """Initialize TLS manager.
 
-        Args:
-            config: Configuration dictionary containing TLS settings including
+        Args: config: Configuration dictionary containing TLS settings including
                 version, cipher_suites, and certificate_validation.
         """
         self.config = config
@@ -27,8 +26,7 @@ class TLSManager:
     def get_ssl_context(self) -> Any:
         """Get SSL context for secure connections.
 
-        Returns:
-            Configured SSL context object with appropriate TLS version,
+        Returns: Configured SSL context object with appropriate TLS version,
             cipher suites, and certificate validation settings.
         """
         import ssl
@@ -58,11 +56,9 @@ class TLSManager:
     def validate_certificate(self, cert_path: str) -> bool:
         """Validate TLS certificate.
 
-        Args:
-            cert_path: Path to the certificate file to validate.
+        Args: cert_path: Path to the certificate file to validate.
 
-        Returns:
-            True if certificate is valid, False otherwise.
+        Returns: True if certificate is valid, False otherwise.
         """
         try:
             import ssl

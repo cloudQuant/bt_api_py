@@ -1,6 +1,6 @@
-"""限制管理器 - 管理各种风险限制和动态调整
+""" - 
 
-支持预交易限制、仓位限制、集中度限制等
+、、
 """
 
 from __future__ import annotations
@@ -14,42 +14,42 @@ from ..containers.risk_metrics import RiskMetrics
 
 
 class LimitType:
-    """限制类型常量"""
+    """"""
 
-    # 预交易限制
-    MAX_ORDER_SIZE = "max_order_size"  # 最大订单大小
-    MAX_ORDERS_PER_MINUTE = "max_orders_per_minute"  # 每分钟最大订单数
-    MAX_ORDERS_PER_DAY = "max_orders_per_day"  # 每日最大订单数
-    MIN_MARGIN_REQUIREMENT = "min_margin_requirement"  # 最小保证金要求
+    # 
+    MAX_ORDER_SIZE = "max_order_size"  # 
+    MAX_ORDERS_PER_MINUTE = "max_orders_per_minute"  # 
+    MAX_ORDERS_PER_DAY = "max_orders_per_day"  # 
+    MIN_MARGIN_REQUIREMENT = "min_margin_requirement"  # 
 
-    # 仓位限制
-    MAX_POSITION_SIZE = "max_position_size"  # 最大仓位大小
-    MAX_NOTIONAL_EXPOSURE = "max_notional_exposure"  # 最大名义暴露
-    MAX_LEVERAGE = "max_leverage"  # 最大杠杆
-    MAX_CONCENTRATION = "max_concentration"  # 最大集中度
+    # 
+    MAX_POSITION_SIZE = "max_position_size"  # 
+    MAX_NOTIONAL_EXPOSURE = "max_notional_exposure"  # 
+    MAX_LEVERAGE = "max_leverage"  # 
+    MAX_CONCENTRATION = "max_concentration"  # 
 
-    # 风险限制
-    MAX_VAR = "max_var"  # 最大VaR
-    MAX_DRAWDOWN = "max_drawdown"  # 最大回撤
-    MAX_CORRELATION = "max_correlation"  # 最大相关性
-    MIN_LIQUIDITY = "min_liquidity"  # 最小流动性
+    # 
+    MAX_VAR = "max_var"  # VaR
+    MAX_DRAWDOWN = "max_drawdown"  # 
+    MAX_CORRELATION = "max_correlation"  # 
+    MIN_LIQUIDITY = "min_liquidity"  # 
 
-    # 合规限制
-    REGULATORY_LIMITS = "regulatory_limits"  # 监管限制
-    REPORTING_THRESHOLDS = "reporting_thresholds"  # 报告阈值
+    # 
+    REGULATORY_LIMITS = "regulatory_limits"  # 
+    REPORTING_THRESHOLDS = "reporting_thresholds"  # 
 
 
 class LimitStatus:
-    """限制状态"""
+    """"""
 
-    WITHIN_LIMIT = "WITHIN_LIMIT"  # 在限制内
-    WARNING = "WARNING"  # 警告 (接近限制)
-    BREACHED = "BREACHED"  # 超出限制
-    CRITICAL = "CRITICAL"  # 严重超出限制
+    WITHIN_LIMIT = "WITHIN_LIMIT"  # 
+    WARNING = "WARNING"  #  ()
+    BREACHED = "BREACHED"  # 
+    CRITICAL = "CRITICAL"  # 
 
 
 class DynamicLimit:
-    """动态限制配置"""
+    """"""
 
     def __init__(
         self,
@@ -59,6 +59,7 @@ class DynamicLimit:
         min_value: float | None = None,
         max_value: float | None = None,
     ) -> None:
+        """__init__ method"""
         self.limit_type = limit_type
         self.base_value = base_value
         self.adjustment_factors = adjustment_factors
@@ -68,7 +69,7 @@ class DynamicLimit:
         self.last_adjustment = int(time.time())
 
     def calculate_adjusted_value(self, risk_factors: dict[str, float]) -> float:
-        """计算调整后的限制值"""
+        """"""
         adjusted_value = self.base_value
 
         for factor_name, factor_value in risk_factors.items():
@@ -76,7 +77,7 @@ class DynamicLimit:
                 adjustment = self.adjustment_factors[factor_name]
                 adjusted_value *= 1 + adjustment * factor_value
 
-        # 应用限制范围
+        # 
         adjusted_value = max(self.min_value, min(self.max_value, adjusted_value))
 
         self.current_value = adjusted_value
@@ -86,43 +87,42 @@ class DynamicLimit:
 
 
 class LimitsManager:
-    """限制管理器
+    """
 
-    管理各类风险限制:
-    1. 预交易限制 - 订单前的风险检查
-    2. 仓位限制 - 持仓规模和集中度限制
-    3. 风险限制 - VaR、回撤等风险指标限制
-    4. 动态限制 - 基于风险水平动态调整
-    5. 合规限制 - 监管要求的限制
+    :
+    1.  - 
+    2.  - 
+    3.  - VaR、
+    4.  - 
+    5.  - 
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
-        """初始化限制管理器
+        """
 
-        Args:
-            config: 管理器配置
+        Args: config:
         """
         self.logger = get_logger("limits_manager")
         self.config = config or {}
 
-        # 限制存储
-        self.static_limits: dict[str, dict[str, Any]] = {}  # 静态限制
-        self.dynamic_limits: dict[str, DynamicLimit] = {}  # 动态限制
-        self.user_limits: dict[str, dict[str, Any]] = {}  # 用户特定限制
-        self.exchange_limits: dict[str, dict[str, float]] = {}  # 交易所限制
+        # 
+        self.static_limits: dict[str, dict[str, Any]] = {}  # 
+        self.dynamic_limits: dict[str, DynamicLimit] = {}  # 
+        self.user_limits: dict[str, dict[str, Any]] = {}  # 
+        self.exchange_limits: dict[str, dict[str, float]] = {}  # 
 
-        # 限制检查历史
+        # 
         self.check_history: list[dict[str, Any]] = []
 
-        # 配置参数
-        self.warning_threshold = self.config.get("warning_threshold", 0.8)  # 警告阈值 (80%)
-        self.critical_threshold = self.config.get("critical_threshold", 1.0)  # 严重阈值 (100%)
-        self.check_cache_ttl = self.config.get("check_cache_ttl", 60)  # 检查结果缓存时间
+        # 
+        self.warning_threshold = self.config.get("warning_threshold", 0.8)  #  (80%)
+        self.critical_threshold = self.config.get("critical_threshold", 1.0)  #  (100%)
+        self.check_cache_ttl = self.config.get("check_cache_ttl", 60)  # 
 
-        # 检查结果缓存
+        # 
         self.check_cache: dict[str, dict[str, Any]] = {}
 
-        # 初始化默认限制
+        # 
         self._initialize_default_limits()
 
         self.logger.info("LimitsManager initialized")
@@ -130,14 +130,13 @@ class LimitsManager:
     def set_static_limit(
         self, limit_type: str, exchange_name: str, account_id: str, value: float, **kwargs
     ) -> None:
-        """设置静态限制
+        """
 
-        Args:
-            limit_type: 限制类型
-            exchange_name: 交易所名称
-            account_id: 账户ID
-            value: 限制值
-            **kwargs: 其他参数
+        Args: limit_type:
+            exchange_name: 
+            account_id: ID
+            value: 
+            **kwargs: 
         """
         key = f"{exchange_name}:{account_id}"
 
@@ -161,15 +160,14 @@ class LimitsManager:
         adjustment_factors: dict[str, float],
         **kwargs,
     ) -> None:
-        """设置动态限制
+        """
 
-        Args:
-            limit_type: 限制类型
-            exchange_name: 交易所名称
-            account_id: 账户ID
-            base_value: 基础值
-            adjustment_factors: 调整因子
-            **kwargs: 其他参数
+        Args: limit_type:
+            exchange_name: 
+            account_id: ID
+            base_value: 
+            adjustment_factors: 
+            **kwargs: 
         """
         key = f"{exchange_name}:{account_id}"
         limit_key = f"{key}:{limit_type}"
@@ -192,20 +190,18 @@ class LimitsManager:
         order_data: dict[str, Any],
         current_metrics: RiskMetrics | None = None,
     ) -> dict[str, Any]:
-        """检查预交易限制
+        """
 
-        Args:
-            exchange_name: 交易所名称
-            account_id: 账户ID
-            order_data: 订单数据
-            current_metrics: 当前风险指标
+        Args: exchange_name:
+            account_id: ID
+            order_data: 
+            current_metrics: 
 
-        Returns:
-            Dict[str, Any]: 检查结果
+        Returns: Dict[str, Any]:
         """
         cache_key = f"pre_trade:{exchange_name}:{account_id}:{hash(str(order_data))}"
 
-        # 检查缓存
+        # 
         if cache_key in self.check_cache:
             cached_result = self.check_cache[cache_key]
             if int(time.time()) - cached_result["timestamp"] < self.check_cache_ttl:
@@ -217,41 +213,41 @@ class LimitsManager:
             restrictions = []
             mitigation_required = False
 
-            # 检查订单大小限制
+            # 
             order_size_check = self._check_max_order_size(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(order_size_check)
 
-            # 检查订单频率限制
+            # 
             frequency_check = self._check_order_frequency(exchange_name, account_id, order_data)
             checks.append(frequency_check)
 
-            # 检查保证金要求
+            # 
             margin_check = self._check_margin_requirement(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(margin_check)
 
-            # 检查仓位限制
+            # 
             position_check = self._check_position_limits(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(position_check)
 
-            # 检查风险指标限制
+            # 
             risk_check = self._check_risk_limits(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(risk_check)
 
-            # 检查合规限制
+            # 
             compliance_check = self._check_compliance_limits(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(compliance_check)
 
-            # 汇总结果
+            # 
             approved = True
             for check in checks:
                 if check["status"] in [LimitStatus.BREACHED, LimitStatus.CRITICAL]:
@@ -270,13 +266,13 @@ class LimitsManager:
                 "timestamp": int(time.time()),
             }
 
-            # 缓存结果
+            # 
             self.check_cache[cache_key] = {
                 "result": result,
                 "timestamp": int(time.time()),
             }
 
-            # 记录检查历史
+            # 
             self._record_limit_check(
                 {
                     "type": "pre_trade",
@@ -307,42 +303,40 @@ class LimitsManager:
         position_data: dict[str, Any],
         current_metrics: RiskMetrics | None = None,
     ) -> dict[str, Any]:
-        """检查仓位限制
+        """
 
-        Args:
-            exchange_name: 交易所名称
-            account_id: 账户ID
-            position_data: 仓位数据
-            current_metrics: 当前风险指标
+        Args: exchange_name:
+            account_id: ID
+            position_data: 
+            current_metrics: 
 
-        Returns:
-            Dict[str, Any]: 检查结果
+        Returns: Dict[str, Any]:
         """
         checks = []
         warnings = []
 
         try:
-            # 检查最大仓位大小
+            # 
             max_position_check = self._check_max_position_size(
                 exchange_name, account_id, position_data
             )
             checks.append(max_position_check)
 
-            # 检查名义暴露
+            # 
             notional_check = self._check_notional_exposure(exchange_name, account_id, position_data)
             checks.append(notional_check)
 
-            # 检查杠杆限制
+            # 
             leverage_check = self._check_leverage_limit(exchange_name, account_id, position_data)
             checks.append(leverage_check)
 
-            # 检查集中度限制
+            # 
             concentration_check = self._check_concentration_limit(
                 exchange_name, account_id, position_data
             )
             checks.append(concentration_check)
 
-            # 汇总结果
+            # 
             approved = True
             for check in checks:
                 if check["status"] in [LimitStatus.BREACHED, LimitStatus.CRITICAL]:
@@ -369,24 +363,22 @@ class LimitsManager:
     def get_current_limits(
         self, exchange_name: str, account_id: str, risk_factors: dict[str, float] | None = None
     ) -> dict[str, Any]:
-        """获取当前有效限制
+        """
 
-        Args:
-            exchange_name: 交易所名称
-            account_id: 账户ID
-            risk_factors: 风险因子 (用于动态限制调整)
+        Args: exchange_name:
+            account_id: ID
+            risk_factors:  ()
 
-        Returns:
-            Dict[str, Any]: 当前限制值
+        Returns: Dict[str, Any]:
         """
         key = f"{exchange_name}:{account_id}"
         current_limits: dict[str, Any] = {}
 
-        # 获取静态限制
+        # 
         if key in self.static_limits:
             current_limits.update(self.static_limits[key])
 
-        # 获取动态限制
+        # 
         for limit_key, dynamic_limit in self.dynamic_limits.items():
             if limit_key.startswith(key):
                 limit_type = limit_key.split(":")[-1]
@@ -403,11 +395,11 @@ class LimitsManager:
                     "last_adjustment": dynamic_limit.last_adjustment,
                 }
 
-        # 获取用户特定限制
+        # 
         if key in self.user_limits:
             current_limits.update(self.user_limits[key])
 
-        # 获取交易所限制
+        # 
         if exchange_name in self.exchange_limits:
             current_limits.update(self.exchange_limits[exchange_name])
 
@@ -416,12 +408,11 @@ class LimitsManager:
     def adjust_dynamic_limits(
         self, exchange_name: str, account_id: str, risk_factors: dict[str, float]
     ) -> None:
-        """调整动态限制
+        """
 
-        Args:
-            exchange_name: 交易所名称
-            account_id: 账户ID
-            risk_factors: 风险因子
+        Args: exchange_name:
+            account_id: ID
+            risk_factors: 
         """
         key = f"{exchange_name}:{account_id}"
 
@@ -437,21 +428,19 @@ class LimitsManager:
         account_id: str | None = None,
         time_window: int | None = None,
     ) -> list[dict[str, Any]]:
-        """获取限制违规记录
+        """
 
-        Args:
-            exchange_name: 交易所名称过滤
-            account_id: 账户ID过滤
-            time_window: 时间窗口 (秒)
+        Args: exchange_name:
+            account_id: ID
+            time_window:  ()
 
-        Returns:
-            List[Dict[str, Any]]: 违规记录
+        Returns: List[Dict[str, Any]]:
         """
         breaches = []
         current_time = int(time.time())
 
         for check_record in self.check_history:
-            # 应用过滤器
+            # 
             if exchange_name and check_record.get("exchange_name") != exchange_name:
                 continue
             if account_id and check_record.get("account_id") != account_id:
@@ -480,18 +469,16 @@ class LimitsManager:
         return sorted(breaches, key=lambda x: x["timestamp"], reverse=True)
 
     def get_limit_utilization(self, exchange_name: str, account_id: str) -> dict[str, float]:
-        """获取限制使用率
+        """
 
-        Args:
-            exchange_name: 交易所名称
-            account_id: 账户ID
+        Args: exchange_name:
+            account_id: ID
 
-        Returns:
-            Dict[str, float]: 各限制的使用率
+        Returns: Dict[str, float]:
         """
         utilization: dict[str, float] = {}
 
-        # 从最近的检查记录中计算使用率
+        # 
         recent_checks = [
             check
             for check in self.check_history
@@ -499,7 +486,7 @@ class LimitsManager:
                 check.get("exchange_name") == exchange_name
                 and check.get("account_id") == account_id
                 and int(time.time()) - check.get("timestamp", 0) < 3600
-            )  # 最近1小时
+            )  # 1
         ]
 
         for check_record in recent_checks:
@@ -518,35 +505,35 @@ class LimitsManager:
 
         return utilization
 
-    # 私有方法
+    # 
 
     def _initialize_default_limits(self) -> None:
-        """初始化默认限制"""
-        # 默认预交易限制
+        """"""
+        # 
         default_pre_trade_limits = {
-            LimitType.MAX_ORDER_SIZE: 1000000,  # 100万
+            LimitType.MAX_ORDER_SIZE: 1000000,  # 100
             LimitType.MAX_ORDERS_PER_MINUTE: 60,
             LimitType.MAX_ORDERS_PER_DAY: 10000,
             LimitType.MIN_MARGIN_REQUIREMENT: 0.1,  # 10%
         }
 
-        # 默认仓位限制
+        # 
         default_position_limits = {
-            LimitType.MAX_POSITION_SIZE: 10000000,  # 1000万
-            LimitType.MAX_NOTIONAL_EXPOSURE: 50000000,  # 5000万
+            LimitType.MAX_POSITION_SIZE: 10000000,  # 1000
+            LimitType.MAX_NOTIONAL_EXPOSURE: 50000000,  # 5000
             LimitType.MAX_LEVERAGE: 10.0,
             LimitType.MAX_CONCENTRATION: 0.3,  # 30%
         }
 
-        # 默认风险限制
+        # 
         default_risk_limits = {
-            LimitType.MAX_VAR: 1000000,  # 100万
+            LimitType.MAX_VAR: 1000000,  # 100
             LimitType.MAX_DRAWDOWN: 0.2,  # 20%
             LimitType.MAX_CORRELATION: 0.9,  # 90%
             LimitType.MIN_LIQUIDITY: 0.6,  # 60%
         }
 
-        # 合并所有默认限制
+        # 
         all_default_limits = {
             **default_pre_trade_limits,
             **default_position_limits,
@@ -562,7 +549,7 @@ class LimitsManager:
         order_data: dict[str, Any],
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
-        """检查最大订单大小"""
+        """"""
         order_size = order_data.get("size", 0) * order_data.get("price", 1)
         limits = self.get_current_limits(exchange_name, account_id)
         limit_value = limits.get(LimitType.MAX_ORDER_SIZE, {}).get("value", 1000000)
@@ -594,17 +581,17 @@ class LimitsManager:
     def _check_order_frequency(
         self, exchange_name: str, account_id: str, order_data: dict[str, Any]
     ) -> dict[str, Any]:
-        """检查订单频率"""
-        # 简化实现 - 实际应该基于历史订单数据
+        """"""
+        #  - 
         current_time = int(time.time())
         key = f"{exchange_name}:{account_id}"
 
-        # 获取最近的订单历史 (简化)
+        #  ()
         recent_orders = getattr(self, "_recent_orders", {})
         if key not in recent_orders:
             recent_orders[key] = []
 
-        # 清理超过1分钟的订单
+        # 1
         recent_orders[key] = [t for t in recent_orders[key] if current_time - t < 60]
         recent_orders[key].append(current_time)
 
@@ -643,8 +630,8 @@ class LimitsManager:
         order_data: dict[str, Any],
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
-        """检查保证金要求"""
-        # 简化实现
+        """"""
+        # 
         order_value = order_data.get("size", 0) * order_data.get("price", 1)
         current_margin = current_metrics.credit_risk.credit_utilization if current_metrics else 0
         limits = self.get_current_limits(exchange_name, account_id)
@@ -686,8 +673,8 @@ class LimitsManager:
         order_data: dict[str, Any],
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
-        """检查仓位限制"""
-        # 简化实现 - 基于当前指标
+        """"""
+        #  - 
         if not current_metrics:
             return {
                 "limit_type": "position_limits",
@@ -696,10 +683,10 @@ class LimitsManager:
                 "restriction": "",
             }
 
-        # 检查各种仓位限制
+        # 
         checks = []
 
-        # 最大仓位大小
+        # 
         current_position = getattr(current_metrics, "total_position_value", 0)
         limits = self.get_current_limits(exchange_name, account_id)
         max_position = limits.get(LimitType.MAX_POSITION_SIZE, {}).get("value", 10000000)
@@ -723,14 +710,13 @@ class LimitsManager:
                     }
                 )
 
-        # 返回最严重的检查结果
+        # 
         if checks:
             worst_check = max(
                 checks, key=lambda x: {"CRITICAL": 3, "WARNING": 2, "WITHIN_LIMIT": 1}[x["status"]]
             )
             return worst_check
-        else:
-            return {
+        else: return {
                 "limit_type": "position_limits",
                 "status": LimitStatus.WITHIN_LIMIT,
                 "warning": "",
@@ -744,7 +730,7 @@ class LimitsManager:
         order_data: dict[str, Any],
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
-        """检查风险指标限制"""
+        """"""
         if not current_metrics:
             return {
                 "limit_type": "risk_limits",
@@ -756,7 +742,7 @@ class LimitsManager:
         limits = self.get_current_limits(exchange_name, account_id)
         checks = []
 
-        # 检查VaR限制
+        # VaR
         current_var = float(current_metrics.market_risk.value_at_risk_1d)
         max_var = limits.get(LimitType.MAX_VAR, {}).get("value", 1000000)
 
@@ -779,14 +765,13 @@ class LimitsManager:
                     }
                 )
 
-        # 返回最严重的检查结果
+        # 
         if checks:
             worst_check = max(
                 checks, key=lambda x: {"CRITICAL": 3, "WARNING": 2, "WITHIN_LIMIT": 1}[x["status"]]
             )
             return worst_check
-        else:
-            return {
+        else: return {
                 "limit_type": "risk_limits",
                 "status": LimitStatus.WITHIN_LIMIT,
                 "warning": "",
@@ -800,8 +785,8 @@ class LimitsManager:
         order_data: dict[str, Any],
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
-        """检查合规限制"""
-        # 简化实现
+        """"""
+        # 
         return {
             "limit_type": "compliance_limits",
             "status": LimitStatus.WITHIN_LIMIT,
@@ -812,7 +797,7 @@ class LimitsManager:
     def _check_max_position_size(
         self, exchange_name: str, account_id: str, position_data: dict[str, Any]
     ) -> dict[str, Any]:
-        """检查最大仓位大小"""
+        """"""
         total_position = position_data.get("total_value", 0)
         limits = self.get_current_limits(exchange_name, account_id)
         max_position = limits.get(LimitType.MAX_POSITION_SIZE, {}).get("value", 10000000)
@@ -844,7 +829,7 @@ class LimitsManager:
     def _check_notional_exposure(
         self, exchange_name: str, account_id: str, position_data: dict[str, Any]
     ) -> dict[str, Any]:
-        """检查名义暴露"""
+        """"""
         notional_exposure = position_data.get("notional_exposure", 0)
         limits = self.get_current_limits(exchange_name, account_id)
         max_notional = limits.get(LimitType.MAX_NOTIONAL_EXPOSURE, {}).get("value", 50000000)
@@ -876,7 +861,7 @@ class LimitsManager:
     def _check_leverage_limit(
         self, exchange_name: str, account_id: str, position_data: dict[str, Any]
     ) -> dict[str, Any]:
-        """检查杠杆限制"""
+        """"""
         current_leverage = position_data.get("leverage", 1.0)
         limits = self.get_current_limits(exchange_name, account_id)
         max_leverage = limits.get(LimitType.MAX_LEVERAGE, {}).get("value", 10.0)
@@ -908,7 +893,7 @@ class LimitsManager:
     def _check_concentration_limit(
         self, exchange_name: str, account_id: str, position_data: dict[str, Any]
     ) -> dict[str, Any]:
-        """检查集中度限制"""
+        """"""
         concentration_ratio = position_data.get("concentration_ratio", 0)
         limits = self.get_current_limits(exchange_name, account_id)
         max_concentration = limits.get(LimitType.MAX_CONCENTRATION, {}).get("value", 0.3)
@@ -938,10 +923,10 @@ class LimitsManager:
         }
 
     def _record_limit_check(self, check_record: dict[str, Any]) -> None:
-        """记录限制检查"""
+        """"""
         check_record["timestamp"] = int(time.time())
         self.check_history.append(check_record)
 
-        # 限制历史记录大小
+        # 
         if len(self.check_history) > 10000:
             self.check_history = self.check_history[-5000:]

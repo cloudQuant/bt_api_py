@@ -43,6 +43,7 @@ class Counter:
     """Counter metric that only increases."""
 
     def __init__(self, name: str, description: str = "") -> None:
+        """__init__ method"""
         self.name = name
         self.description = description
         self._value: float = 0.0
@@ -73,6 +74,7 @@ class Gauge:
     """Gauge metric that can increase and decrease."""
 
     def __init__(self, name: str, description: str = "") -> None:
+        """__init__ method"""
         self.name = name
         self.description = description
         self._value: float = 0.0
@@ -108,6 +110,7 @@ class Histogram:
     def __init__(
         self, name: str, description: str = "", buckets: list[float] | None = None
     ) -> None:
+        """__init__ method"""
         self.name = name
         self.description = description
         self.buckets = buckets or [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
@@ -161,6 +164,7 @@ class MetricRegistry:
     """Registry for collecting and managing metrics."""
 
     def __init__(self) -> None:
+        """__init__ method"""
         self._metrics: dict[str, Metric] = {}
         self._collectors: WeakSet[Callable] = WeakSet()
         self._lock = threading.Lock()
@@ -238,6 +242,7 @@ class PerformanceTimer:
     """High-precision performance timer."""
 
     def __init__(self, histogram: Histogram | None = None) -> None:
+        """__init__ method"""
         self._histogram = histogram
         self._start_time: float | None = None
         self._end_time: float | None = None
@@ -260,10 +265,12 @@ class PerformanceTimer:
         return duration
 
     def __enter__(self) -> PerformanceTimer:
+        """__enter__ method"""
         self.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """__exit__ method"""
         self.stop()
 
 

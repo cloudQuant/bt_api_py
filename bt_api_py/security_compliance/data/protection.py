@@ -144,8 +144,7 @@ class DataProtectionManager:
             return {k: self.mask_data(v, mask_level) for k, v in data.items()}
         elif isinstance(data, list):
             return [self.mask_data(item, mask_level) for item in data]
-        else:
-            return data
+        else: return data
 
     def _mask_string(self, data: str, mask_level: str) -> str:
         """Mask string data."""

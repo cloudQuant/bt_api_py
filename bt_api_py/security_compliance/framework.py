@@ -27,8 +27,7 @@ class SecurityFramework:
     def __init__(self, config: dict[str, Any]) -> None:
         """Initialize security framework with configuration.
 
-        Args:
-            config: Configuration dictionary containing all security settings.
+        Args: config: Configuration dictionary containing all security settings.
         """
         self.config = config
         self._initialize_components()
@@ -76,8 +75,7 @@ class SecurityFramework:
     def _init_encryption_manager(self) -> EncryptionManager:
         """Initialize encryption manager based on configuration.
 
-        Returns:
-            Configured EncryptionManager instance.
+        Returns: Configured EncryptionManager instance.
         """
         encryption_config = self.config.get("encryption", {})
         provider_type = KeyProvider(encryption_config.get("provider", "local"))
@@ -94,8 +92,7 @@ class SecurityFramework:
     def _init_audit_logger(self) -> AuditLogger:
         """Initialize audit logger.
 
-        Returns:
-            Configured AuditLogger instance.
+        Returns: Configured AuditLogger instance.
         """
         audit_config = self.config.get("audit", {})
 
@@ -109,8 +106,7 @@ class SecurityFramework:
     def _init_oauth2_provider(self) -> OAuth2Provider:
         """Initialize OAuth2 provider.
 
-        Returns:
-            Configured OAuth2Provider instance.
+        Returns: Configured OAuth2Provider instance.
         """
         oauth_config = self.config.get("oauth2", {})
 
@@ -126,8 +122,7 @@ class SecurityFramework:
     def _init_mfa_provider(self) -> MFAProvider:
         """Initialize MFA provider.
 
-        Returns:
-            Configured MFAProvider instance.
+        Returns: Configured MFAProvider instance.
         """
         mfa_config = self.config.get("mfa", {})
 
@@ -143,8 +138,7 @@ class SecurityFramework:
     def get_security_status(self) -> dict[str, Any]:
         """Get comprehensive security status.
 
-        Returns:
-            Dictionary containing security status for all components including
+        Returns: Dictionary containing security status for all components including
             encryption, access control, audit, and compliance settings.
         """
         return {
@@ -181,8 +175,7 @@ def create_security_config_from_env() -> dict[str, Any]:
     Reads security-related environment variables and constructs a complete
     configuration dictionary for the SecurityFramework.
 
-    Returns:
-        Configuration dictionary with all security settings from environment.
+    Returns: Configuration dictionary with all security settings from environment.
     """
     return {
         "encryption": {
@@ -258,8 +251,7 @@ _security_framework: SecurityFramework | None = None
 def get_security_framework() -> SecurityFramework | None:
     """Get the global security framework instance.
 
-    Returns:
-        The global SecurityFramework instance or None if not initialized.
+    Returns: The global SecurityFramework instance or None if not initialized.
     """
     return _security_framework
 
@@ -267,11 +259,9 @@ def get_security_framework() -> SecurityFramework | None:
 def initialize_security_framework(config: dict[str, Any] | None = None) -> SecurityFramework:
     """Initialize the global security framework.
 
-    Args:
-        config: Optional configuration dictionary. If None, reads from environment.
+    Args: config: Optional configuration dictionary. If None, reads from environment.
 
-    Returns:
-        Initialized SecurityFramework instance.
+    Returns: Initialized SecurityFramework instance.
     """
     global _security_framework
 
@@ -285,14 +275,11 @@ def initialize_security_framework(config: dict[str, Any] | None = None) -> Secur
 def integrate_with_bt_api(bt_api_instance: Any) -> Any:
     """Integrate security framework with bt_api_py instance.
 
-    Args:
-        bt_api_instance: The bt_api instance to secure.
+    Args: bt_api_instance: The bt_api instance to secure.
 
-    Returns:
-        The modified bt_api instance with security features.
+    Returns: The modified bt_api instance with security features.
 
-    Raises:
-        RuntimeError: If security framework is not initialized.
+    Raises: RuntimeError: If security framework is not initialized.
     """
     framework = get_security_framework()
     if not framework:
@@ -337,13 +324,11 @@ def require_permission(
 ) -> Any:
     """Decorator to require specific permissions for a function.
 
-    Args:
-        resource: The resource being accessed.
+    Args: resource: The resource being accessed.
         action: The action being performed.
         level: Required permission level.
 
-    Returns:
-        Decorator function.
+    Returns: Decorator function.
     """
 
     def decorator(func: Any) -> Any:
@@ -368,12 +353,10 @@ def require_permission(
 def audit_access(event_type: EventType, severity: SeverityLevel = SeverityLevel.MEDIUM) -> Any:
     """Decorator to audit function access.
 
-    Args:
-        event_type: Type of audit event.
+    Args: event_type: Type of audit event.
         severity: Severity level of the event.
 
-    Returns:
-        Decorator function.
+    Returns: Decorator function.
     """
 
     def decorator(func: Any) -> Any:

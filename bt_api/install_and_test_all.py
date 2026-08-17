@@ -8,8 +8,7 @@ This script:
 3. Runs pytest on each package
 4. Reports detailed results
 
-Usage:
-    python install_and_test_all.py
+Usage: python install_and_test_all.py
     python install_and_test_all.py --bt-api-dir /path/to/bt_api
     python install_and_test_all.py --add-package /path/to/bt_api_py
     python install_and_test_all.py --only bt_api_base
@@ -26,6 +25,7 @@ from typing import NamedTuple
 
 
 class Result(NamedTuple):
+    """Class Result"""
     package: str
     success: bool
     duration: float
@@ -34,6 +34,7 @@ class Result(NamedTuple):
 
 
 def setup_logging(verbose: bool = False):
+    """setup_logging function"""
     import logging
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
@@ -179,6 +180,7 @@ def print_summary(logger, results: list[Result], elapsed: float):
 
 
 def main():
+    """main function"""
     parser = argparse.ArgumentParser(description="Install and test all bt_api packages")
     parser.add_argument(
         "--bt-api-dir",

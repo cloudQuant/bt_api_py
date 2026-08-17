@@ -221,8 +221,8 @@ class IdentityManager:
                 identity.last_login = time.time()
                 return identity
         elif provider == IdentityProvider.SAML:
-            # SAML authentication uses different flow
-            pass
+            # SAML authentication uses a redirect/assertion flow, not username/password.
+            return None
 
         return None
 

@@ -27,7 +27,20 @@ class PrometheusFormatter:
         # Replace invalid characters with underscores
         import re
 
-        return re.sub(r"[^a-zA-Z0-9_:]", "_", name)
+        formatted = re.sub(r"[^a-zA-Z0-9_:]", "_", name)
+        if not formatted or not re.match(r"^[a-zA-Z_:]", formatted):
+            return f"_{formatted}"
+        return formatted
+
+    @staticmethod
+    def format_label_name(name: str) -> str:
+        """Format label name for Prometheus."""
+        import re
+
+        formatted = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        if not formatted or not re.match(r"^[a-zA-Z_]", formatted):
+            return f"_{formatted}"
+        return formatted
 
     @staticmethod
     def format_labels(labels: dict[str, str]) -> str:
@@ -35,8 +48,15 @@ class PrometheusFormatter:
         if not labels:
             return ""
 
-        label_pairs = [f'{k}="{v}"' for k, v in labels.items()]
+        label_pairs = [
+            f'{PrometheusFormatter.format_label_name(key)}="{PrometheusFormatter._escape_label_value(value)}"'
+            for key, value in sorted(labels.items())
+        ]
         return "{" + ",".join(label_pairs) + "}"
+
+    @staticmethod
+    def _escape_label_value(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
 
     @classmethod
     def format_help(cls, name: str, description: str) -> str:
@@ -60,28 +80,30 @@ class PrometheusFormatter:
         grouped_metrics = {}
         for full_name, value in metrics_data.items():
             # Extract base name and labels
-            if "_bucket{" in full_name or "_count" in full_name or "_sum" in full_name:
+            if "_bucket{" in full_name or full_name.endswith(("_count", "_sum")):
                 # Histogram metric
                 if "_bucket{" in full_name:
-                    base_name = full_name.split("_bucket{")[0]
+                    base_name = cls.format_metric_name(full_name.split("_bucket{")[0])
                     metric_type = "histogram"
-                    # Extract bucket value
-                    bucket_part = full_name.split("{")[1].rstrip("}")
-                    labels_str = f'{{le="{bucket_part.split("=")[1]}"}}'
+                    bucket_part = full_name.split("{", 1)[1].rstrip("}")
+                    bucket_value = bucket_part.split("=", 1)[1].strip('"')
+                    if bucket_value == "inf":
+                        bucket_value = "+Inf"
+                    labels_str = cls.format_labels({"le": bucket_value})
                     lines.append(f"{base_name}_bucket{labels_str} {value}")
-                elif "_count" in full_name:
-                    base_name = full_name.replace("_count", "")
+                elif full_name.endswith("_count"):
+                    base_name = cls.format_metric_name(full_name.removesuffix("_count"))
                     metric_type = "histogram"
                     lines.append(f"{base_name}_count {value}")
-                elif "_sum" in full_name:
-                    base_name = full_name.replace("_sum", "")
+                elif full_name.endswith("_sum"):
+                    base_name = cls.format_metric_name(full_name.removesuffix("_sum"))
                     metric_type = "histogram"
                     lines.append(f"{base_name}_sum {value}")
 
                 grouped_metrics[base_name] = metric_type
             else:
                 # Simple metric (counter or gauge)
-                base_name = full_name
+                base_name = cls.format_metric_name(full_name)
                 metric_type = "gauge"  # Default to gauge
                 lines.append(f"{base_name} {value}")
                 grouped_metrics[base_name] = metric_type
@@ -102,6 +124,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
     """HTTP request handler for metrics endpoint."""
 
     def __init__(self, registry: MetricRegistry, *args, **kwargs) -> None:
+        """__init__ method"""
         self.registry = registry
         super().__init__(*args, **kwargs)
 
@@ -192,10 +215,11 @@ class PrometheusExporter:
 
     def __init__(
         self,
-        host: str = "0.0.0.0",  # nosec B104 # intentional for prometheus exporter
+        host: str = "0.0.0.0",
         port: int = 8080,
         registry: MetricRegistry | None = None,
     ) -> None:
+        """__init__ method"""
         self.host = host
         self.port = port
         self.registry = registry or get_registry()
@@ -264,24 +288,22 @@ _global_exporter: PrometheusExporter | None = None
 
 
 def start_prometheus_exporter(
-    host: str = "0.0.0.0",  # nosec B104 # intentional for prometheus exporter
+    host: str = "0.0.0.0",
     port: int = 8080,
     async_mode: bool = False,
 ) -> PrometheusExporter:
     """Start the Prometheus metrics exporter.
 
-    Args:
-        host: Host to bind to
+    Args: host: Host to bind to
         port: Port to bind to
         async_mode: Whether to use async mode (requires aiohttp)
 
-    Returns:
-        Prometheus exporter instance
+    Returns: Prometheus exporter instance
     """
     global _global_exporter
 
     if async_mode:
-        raise NotImplementedError("Async mode not yet implemented")
+        raise ValueError("async_mode=True is not supported by start_prometheus_exporter")
 
     _global_exporter = PrometheusExporter(host, port)
     _global_exporter.start()

@@ -1,142 +1,207 @@
-"""
-CTP SimNow 环境自动选择器
+"""CTP SimNow front selection helpers.
 
-根据当前时间自动选择第一套或第二套 SimNow 环境：
-- 第一套：交易时段（与生产一致），支持3组前置地址
-- 第二套：7x24 环境，交易日 16:00~次日09:00，非交易日 16:00~次日12:00
-
-使用方式：
-    from bt_api_py.ctp_env_selector import get_ctp_fronts
-    td_front, md_front, env_name = get_ctp_fronts()
+The public tuple-returning ``get_ctp_fronts`` API is kept for existing callers.
+New code should prefer ``select_ctp_fronts`` so the selected environment and
+reason can be displayed in gateway health and smoke reports.
 """
 
 from __future__ import annotations
 
 import os
+from dataclasses import asdict, dataclass
 from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
-# ── 交易时段定义 (中国标准时间 UTC+8) ──────────────────────────
-# 期货交易时段：
-#   日盘: 09:00-11:30, 13:30-15:00
-#   夜盘: 21:00-次日02:30 (部分品种到 01:00 或 23:00)
-# 第一套环境与生产一致，覆盖这些时段
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
-_TRADING_SESSIONS = [
+_TRADING_SESSIONS = (
     (time(9, 0), time(11, 30)),
     (time(13, 30), time(15, 0)),
     (time(21, 0), time(23, 59, 59)),
-]
-
-# 夜盘跨日部分 00:00 ~ 02:30
+)
 _NIGHT_SESSION_AFTER_MIDNIGHT = (time(0, 0), time(2, 30))
 
-# 第二套环境服务时段：
-#   交易日: 16:00 ~ 次日 09:00
-#   非交易日: 16:00 ~ 次日 12:00
-# 简化判断: 非交易时段都可用第二套
+
+@dataclass(frozen=True)
+class CtpFrontSelection:
+    """Resolved CTP front addresses and selection metadata."""
+
+    td_front: str
+    md_front: str
+    env_name: str
+    selection_reason: str
+    selected_at: str
+    requested_env: str
+    set1_group: str = ""
+
+    @property
+    def selected_ctp_env(self) -> str:
+        return self.env_name
+
+    def to_dict(self) -> dict[str, str]:
+        payload = asdict(self)
+        payload["selected_ctp_env"] = self.env_name
+        return payload
 
 
-def _is_weekday(dt: datetime) -> bool:
-    """判断是否为工作日 (周一~周五)"""
-    return dt.weekday() < 5
+def _normalize_now(now: datetime | None) -> datetime:
+    if now is None:
+        return datetime.now(SHANGHAI_TZ)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=SHANGHAI_TZ)
+    return now.astimezone(SHANGHAI_TZ)
 
 
-def _in_trading_session(now: datetime) -> bool:
-    """判断当前时间是否在第一套环境可用的交易时段内"""
-    t = now.time()
+def _is_weekday(value: datetime) -> bool:
+    return value.weekday() < 5
 
-    # 夜盘跨日 00:00~02:30 — 属于前一天的夜盘
-    if _NIGHT_SESSION_AFTER_MIDNIGHT[0] <= t <= _NIGHT_SESSION_AFTER_MIDNIGHT[1]:
+
+def _in_trading_session(value: datetime) -> bool:
+    current = value.time()
+    if _NIGHT_SESSION_AFTER_MIDNIGHT[0] <= current <= _NIGHT_SESSION_AFTER_MIDNIGHT[1]:
         return True
-
-    # 检查日盘 + 夜盘 21:00~23:59
-    return any(start <= t <= end for start, end in _TRADING_SESSIONS)
+    return any(start <= current <= end for start, end in _TRADING_SESSIONS)
 
 
-def _is_set1_available(now: datetime) -> bool:
-    """判断第一套环境是否可用（需要在交易日的交易时段内）"""
-    t = now.time()
-
-    # 夜盘跨日 00:00~02:30: 需要看前一天是否是工作日
-    if _NIGHT_SESSION_AFTER_MIDNIGHT[0] <= t <= _NIGHT_SESSION_AFTER_MIDNIGHT[1]:
-        # 周六凌晨 (weekday=5) 仍属于周五夜盘
-        prev_day_weekday = (now.weekday() - 1) % 7
-        return prev_day_weekday < 5  # 前一天是工作日
-
-    # 日盘 + 夜盘 21:00 起
-    if not _is_weekday(now):
-        return False
-
-    return _in_trading_session(now)
+def _is_set1_available(value: datetime) -> bool:
+    current = value.time()
+    if _NIGHT_SESSION_AFTER_MIDNIGHT[0] <= current <= _NIGHT_SESSION_AFTER_MIDNIGHT[1]:
+        previous_weekday = (value.weekday() - 1) % 7
+        return previous_weekday < 5
+    return _is_weekday(value) and _in_trading_session(value)
 
 
-def get_ctp_fronts(
+def _set_env_fronts(td_front: str, md_front: str) -> None:
+    os.environ["CTP_TD_FRONT"] = td_front
+    os.environ["CTP_MD_FRONT"] = md_front
+
+
+def _select_set1(
+    *,
+    requested_env: str,
+    reason: str,
+    selected_at: str,
+    set1_group: str | None = None,
+    apply_env: bool = True,
+) -> CtpFrontSelection:
+    group = str(set1_group or os.environ.get("CTP_SET1_GROUP", "1")).strip() or "1"
+    td_front = os.environ.get(f"CTP_SET1_TD_FRONT_{group}", "tcp://182.254.243.31:30001")
+    md_front = os.environ.get(f"CTP_SET1_MD_FRONT_{group}", "tcp://182.254.243.31:30011")
+    if apply_env:
+        _set_env_fronts(td_front, md_front)
+    return CtpFrontSelection(
+        td_front=td_front,
+        md_front=md_front,
+        env_name=f"set1_group{group}",
+        selection_reason=reason,
+        selected_at=selected_at,
+        requested_env=requested_env,
+        set1_group=group,
+    )
+
+
+def _select_set2(
+    *,
+    requested_env: str,
+    reason: str,
+    selected_at: str,
+    apply_env: bool = True,
+) -> CtpFrontSelection:
+    td_front = os.environ.get("CTP_SET2_TD_FRONT", "tcp://182.254.243.31:40001")
+    md_front = os.environ.get("CTP_SET2_MD_FRONT", "tcp://182.254.243.31:40011")
+    if apply_env:
+        _set_env_fronts(td_front, md_front)
+    return CtpFrontSelection(
+        td_front=td_front,
+        md_front=md_front,
+        env_name="set2_7x24",
+        selection_reason=reason,
+        selected_at=selected_at,
+        requested_env=requested_env,
+    )
+
+
+def select_ctp_fronts(
     env: str = "",
     now: datetime | None = None,
-) -> tuple[str, str, str]:
+    *,
+    set1_group: str | None = None,
+    apply_env: bool = True,
+) -> CtpFrontSelection:
+    """Resolve CTP TD/MD fronts for ``auto``, ``set1`` or ``set2``.
+
+    ``auto`` uses Asia/Shanghai trading sessions. Legal holiday calendars are
+    intentionally not consulted in this iteration; callers can force ``set1`` or
+    ``set2`` when an exchange holiday makes the simple session rule inaccurate.
     """
-    获取 CTP 前置地址。
 
-    Parameters
-    ----------
-    env : str
-        环境选择: "auto" / "set1" / "set2"。
-        为空时从 CTP_ENV 环境变量读取，默认 "auto"。
-    now : datetime, optional
-        当前时间，默认 datetime.now()。供测试用。
+    current = _normalize_now(now)
+    requested_env = str(env or os.environ.get("CTP_ENV", "auto")).strip().lower() or "auto"
+    selected_at = current.isoformat(timespec="seconds")
 
-    Returns
-    -------
-    (td_front, md_front, env_name) : tuple[str, str, str]
-        交易前置、行情前置、环境名称("set1_groupN" 或 "set2_7x24")
-    """
-    if now is None:
-        now = datetime.now()
+    if requested_env == "set1":
+        return _select_set1(
+            requested_env=requested_env,
+            reason="forced_set1",
+            selected_at=selected_at,
+            set1_group=set1_group,
+            apply_env=apply_env,
+        )
+    if requested_env == "set2":
+        return _select_set2(
+            requested_env=requested_env,
+            reason="forced_set2",
+            selected_at=selected_at,
+            apply_env=apply_env,
+        )
+    if requested_env not in {"auto", ""}:
+        return _select_set2(
+            requested_env=requested_env,
+            reason=f"unknown_env_fallback:{requested_env}",
+            selected_at=selected_at,
+            apply_env=apply_env,
+        )
+    if _is_set1_available(current):
+        return _select_set1(
+            requested_env="auto",
+            reason="auto_regular_trading_session",
+            selected_at=selected_at,
+            set1_group=set1_group,
+            apply_env=apply_env,
+        )
+    return _select_set2(
+        requested_env="auto",
+        reason="auto_outside_regular_session",
+        selected_at=selected_at,
+        apply_env=apply_env,
+    )
 
-    if not env:
-        env = os.environ.get("CTP_ENV", "auto").strip().lower()
 
-    if env == "set1":
-        return _get_set1_fronts()
-    elif env == "set2":
-        return _get_set2_fronts()
-    else:
-        # auto 模式
-        if _is_set1_available(now):
-            return _get_set1_fronts()
-        else:
-            return _get_set2_fronts()
+def select_ctp_fronts_dict(
+    env: str = "",
+    now: datetime | None = None,
+    *,
+    set1_group: str | None = None,
+    apply_env: bool = True,
+) -> dict[str, str]:
+    """Return ``select_ctp_fronts`` as a plain dict for JSON APIs."""
 
-
-def _get_set1_fronts() -> tuple[str, str, str]:
-    """获取第一套环境前置地址（根据 CTP_SET1_GROUP 选组）"""
-    group = os.environ.get("CTP_SET1_GROUP", "1").strip()
-    td = os.environ.get(f"CTP_SET1_TD_FRONT_{group}", "tcp://182.254.243.31:30001")
-    md = os.environ.get(f"CTP_SET1_MD_FRONT_{group}", "tcp://182.254.243.31:30011")
-    # 同步写入兼容变量
-    os.environ["CTP_TD_FRONT"] = td
-    os.environ["CTP_MD_FRONT"] = md
-    return td, md, f"set1_group{group}"
+    return select_ctp_fronts(
+        env=env,
+        now=now,
+        set1_group=set1_group,
+        apply_env=apply_env,
+    ).to_dict()
 
 
-def _get_set2_fronts() -> tuple[str, str, str]:
-    """获取第二套 7x24 环境前置地址"""
-    td = os.environ.get("CTP_SET2_TD_FRONT", "tcp://182.254.243.31:40001")
-    md = os.environ.get("CTP_SET2_MD_FRONT", "tcp://182.254.243.31:40011")
-    # 同步写入兼容变量
-    os.environ["CTP_TD_FRONT"] = td
-    os.environ["CTP_MD_FRONT"] = md
-    return td, md, "set2_7x24"
+def get_ctp_fronts(env: str = "", now: datetime | None = None) -> tuple[str, str, str]:
+    """Backward-compatible tuple API: ``(td_front, md_front, env_name)``."""
+
+    selected = select_ctp_fronts(env=env, now=now)
+    return selected.td_front, selected.md_front, selected.env_name
 
 
 def apply_ctp_env() -> tuple[str, str, str]:
-    """
-    一键应用 CTP 环境选择，更新 CTP_TD_FRONT / CTP_MD_FRONT 环境变量。
-    建议在 load_dotenv() 之后立即调用。
+    """Apply selected fronts to ``CTP_TD_FRONT`` and ``CTP_MD_FRONT``."""
 
-    Returns
-    -------
-    (td_front, md_front, env_name) : tuple[str, str, str]
-    """
-    td, md, name = get_ctp_fronts()
-    return td, md, name
+    return get_ctp_fronts()

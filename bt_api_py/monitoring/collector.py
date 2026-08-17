@@ -52,6 +52,7 @@ class MetricsCollector:
     """Main metrics collector that coordinates all monitoring."""
 
     def __init__(self, collection_interval: float = 5.0) -> None:
+        """__init__ method"""
         self.collection_interval = collection_interval
         self._running = False
         self._task: asyncio.Task | None = None

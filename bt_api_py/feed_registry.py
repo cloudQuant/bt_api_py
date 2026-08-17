@@ -33,14 +33,11 @@ def register(name: str) -> Callable:
     """
     Decorator to register an exchange feed with the framework.
 
-    Args:
-        name: Unique identifier for the feed (e.g., "BINANCE_SPOT", "OKX_SWAP")
+    Args: name: Unique identifier for the feed (e.g., "BINANCE_SPOT", "OKX_SWAP")
 
-    Returns:
-        Decorator function
+    Returns: Decorator function
 
-    Example:
-        @register("BINANCE_SPOT")
+    Example: @register("BINANCE_SPOT")
         class BinanceSpotFeed:
             pass
     """
@@ -62,14 +59,11 @@ def get_feed(name: str) -> type:
     """
     Get a registered feed class by name.
 
-    Args:
-        name: Feed identifier
+    Args: name: Feed identifier
 
-    Returns:
-        Feed class
+    Returns: Feed class
 
-    Raises:
-        KeyError: If feed is not registered
+    Raises: KeyError: If feed is not registered
     """
     feed_class = ExchangeRegistry.get_feed_class(name)
     if feed_class is None:
@@ -82,8 +76,7 @@ def get_all_feeds() -> dict[str, type]:
     """
     Get all registered feeds.
 
-    Returns:
-        Dictionary of feed name to feed class
+    Returns: Dictionary of feed name to feed class
     """
     return ExchangeRegistry.get_feed_classes()
 
@@ -92,11 +85,9 @@ def is_registered(name: str) -> bool:
     """
     Check if a feed is registered.
 
-    Args:
-        name: Feed identifier
+    Args: name: Feed identifier
 
-    Returns:
-        True if registered, False otherwise
+    Returns: True if registered, False otherwise
     """
     return ExchangeRegistry.get_feed_class(name) is not None
 
@@ -105,11 +96,9 @@ def unregister(name: str) -> bool:
     """
     Unregister a feed.
 
-    Args:
-        name: Feed identifier
+    Args: name: Feed identifier
 
-    Returns:
-        True if successfully unregistered, False if not registered
+    Returns: True if successfully unregistered, False if not registered
     """
     _legacy_registry.pop(name, None)
     return ExchangeRegistry.unregister_feed(name)

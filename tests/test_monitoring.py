@@ -29,6 +29,7 @@ from bt_api_py.monitoring import (
     SystemMetricsCollector,
     get_business_collector,
     get_registry,
+    monitor_async_performance,
     monitor_calls,
     monitor_execution_time,
     monitor_performance,
@@ -196,6 +197,31 @@ class TestDecorators:
             calls_test(True)
 
         assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_monitor_async_performance_tracks_success_errors_and_duration(self) -> None:
+        """Test async performance monitoring tracks failed-call durations too."""
+        call_count = 0
+
+        @monitor_async_performance("async_test")
+        async def async_test(should_fail: bool = False) -> str:
+            nonlocal call_count
+            call_count += 1
+            await asyncio.sleep(0)
+            if should_fail:
+                raise ValueError("async failure")
+            return "success"
+
+        result = await async_test(False)
+        with pytest.raises(ValueError, match="async failure"):
+            await async_test(True)
+
+        metrics = async_test._monitoring_metrics  # type: ignore[attr-defined]
+        assert result == "success"
+        assert call_count == 2
+        assert metrics["calls"].get() == 2.0
+        assert metrics["errors"].get() == 1.0
+        assert metrics["duration"].get_count() == 2
 
     def test_timer_context_manager(self) -> None:
         """Test timer context manager."""

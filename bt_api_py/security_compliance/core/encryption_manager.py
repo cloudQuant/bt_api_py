@@ -631,11 +631,9 @@ def get_encryption_manager() -> EncryptionManager | None:
 def initialize_encryption_manager(key_manager: KeyManager) -> EncryptionManager:
     """Initialize the global encryption manager (thread-safe).
 
-    Args:
-        key_manager: The key manager to use for encryption operations.
+    Args: key_manager: The key manager to use for encryption operations.
 
-    Returns:
-        The initialized EncryptionManager instance.
+    Returns: The initialized EncryptionManager instance.
     """
     global _encryption_manager
     with _global_lock:

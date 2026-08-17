@@ -33,7 +33,8 @@ class EventType(enum.Enum):
 
     USER_LOGIN = "user_login"
     USER_LOGOUT = "user_logout"
-    PASSWORD_CHANGE = "password_change"
+    # Audit event name, not a secret.
+    PASSWORD_CHANGE = "password_change"  # nosec B105
     ROLE_ASSIGNMENT = "role_assignment"
     PERMISSION_GRANTED = "permission_granted"
 
@@ -147,8 +148,7 @@ class AuditLogger:
     ):
         """Initialize audit logger.
 
-        Args:
-            log_file: Path to audit log file
+        Args: log_file: Path to audit log file
             encryption_key: Optional key for log encryption
             retention_days: Log retention period in days
             enable_real_time: Enable real-time monitoring
@@ -180,9 +180,8 @@ class AuditLogger:
                     if last_line:
                         last_event = json.loads(last_line)
                         self._last_hash = last_event.get("event_hash")
-        except (json.JSONDecodeError, KeyError):
-            # File might be corrupted or empty
-            pass
+        except (json.JSONDecodeError, KeyError) as exc:
+            _logger.debug("Could not load last audit hash: %s", exc)
 
     def log_event(self, event: AuditEvent) -> None:
         """Log an audit event with cryptographic integrity."""

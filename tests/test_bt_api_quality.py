@@ -5,9 +5,11 @@ from datetime import datetime
 
 import pytest
 
+from bt_api_py import MAX_MESSAGE_BYTES
 from bt_api_py._compat import UTC
 from bt_api_py.bt_api import BtApi
 from bt_api_py.exceptions import InvalidOrderError, SubscribeError
+from bt_api_py.forwarding.schema import MAX_MESSAGE_BYTES as FORWARDING_MAX_MESSAGE_BYTES
 
 
 class _DummyFeed:
@@ -114,3 +116,7 @@ def test_calculate_aligned_stop_time_uses_full_daily_delta(monkeypatch):
     aligned = api._calculate_aligned_stop_time("1D")
 
     assert aligned == datetime(2026, 3, 20, 0, 0, 0, tzinfo=UTC)
+
+
+def test_top_level_package_exports_forwarding_message_size_limit():
+    assert MAX_MESSAGE_BYTES == FORWARDING_MAX_MESSAGE_BYTES

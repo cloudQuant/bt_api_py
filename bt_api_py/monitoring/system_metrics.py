@@ -40,6 +40,7 @@ class SystemMetricsCollector:
     def __init__(
         self, collection_interval: float = 5.0, registry: MetricRegistry | None = None
     ) -> None:
+        """__init__ method"""
         self.collection_interval = collection_interval
         self._running = False
         self._task: asyncio.Task | None = None
@@ -267,6 +268,7 @@ class BusinessMetricsCollector:
     """Collects business-specific metrics for trading systems."""
 
     def __init__(self, registry: MetricRegistry | None = None) -> None:
+        """__init__ method"""
         self.registry = registry or MetricRegistry()
         self.setup_business_metrics()
 

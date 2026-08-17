@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, cast
 
@@ -17,6 +18,12 @@ from bt_api_base.logging_factory import get_logger
 LogEvent = Any
 
 logger = get_logger("monitoring")
+
+DEFAULT_REQUEST_TIMEOUT = 10.0
+correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
+request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
+session_id_var: ContextVar[str | None] = ContextVar("session_id", default=None)
+user_id_var: ContextVar[str | None] = ContextVar("user_id", default=None)
 
 
 class ElasticsearchClient:
@@ -31,7 +38,9 @@ class ElasticsearchClient:
         password: str | None = None,
         use_ssl: bool = False,
         verify_certs: bool = True,
+        request_timeout: float = DEFAULT_REQUEST_TIMEOUT,
     ) -> None:
+        """__init__ method"""
         self.host = host
         self.port = port
         self.index_prefix = index_prefix
@@ -39,6 +48,7 @@ class ElasticsearchClient:
         self.password = password
         self.use_ssl = use_ssl
         self.verify_certs = verify_certs
+        self.request_timeout = request_timeout
         self._session: Any = None
 
     async def connect(self) -> None:
@@ -58,8 +68,14 @@ class ElasticsearchClient:
             auth = aiohttp.BasicAuth(self.username, self.password)
 
         connector = aiohttp.TCPConnector(ssl=self.verify_certs if self.use_ssl else False)
+        timeout = aiohttp.ClientTimeout(total=self.request_timeout)
 
-        self._session = aiohttp.ClientSession(base_url=base_url, auth=auth, connector=connector)
+        self._session = aiohttp.ClientSession(
+            base_url=base_url,
+            auth=auth,
+            connector=connector,
+            timeout=timeout,
+        )
 
         # Test connection
         await self._test_connection()
@@ -162,12 +178,15 @@ class LogstashHandler(logging.Handler):
         host: str = "localhost",
         port: int = 5000,
         transport: str = "tcp",  # tcp, udp, or http
+        request_timeout: float = DEFAULT_REQUEST_TIMEOUT,
         **kwargs,
     ) -> None:
+        """__init__ method"""
         super().__init__()
         self.host = host
         self.port = port
         self.transport = transport
+        self.request_timeout = request_timeout
         self._writer: Any = None
         self._kwargs = kwargs
 
@@ -179,10 +198,10 @@ class LogstashHandler(logging.Handler):
             except ImportError:
                 raise ImportError("aiohttp is required for HTTP Logstash transport") from None
 
-            self._writer = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=self.request_timeout)
+            self._writer = aiohttp.ClientSession(timeout=timeout)
         elif self.transport == "udp":
-            # UDP transport would need different implementation
-            raise NotImplementedError("UDP transport not yet implemented")
+            raise ValueError("Unsupported transport: udp")
         else:
             raise ValueError(f"Unsupported transport: {self.transport}")
 
@@ -199,7 +218,8 @@ class LogstashHandler(logging.Handler):
             log_data = self.format_to_logstash(record)
 
             # Send asynchronously
-            asyncio.create_task(self._send_log(log_data))
+            loop = asyncio.get_running_loop()
+            loop.create_task(self._send_log(log_data))
         except Exception:
             self.handleError(record)
 
@@ -216,14 +236,6 @@ class LogstashHandler(logging.Handler):
             "process": record.process,
             "process_name": record.processName,
         }
-
-        # Add context variables
-        from bt_api_py.logging_system import (
-            correlation_id_var,
-            request_id_var,
-            session_id_var,
-            user_id_var,
-        )
 
         correlation_id = correlation_id_var.get()
         if correlation_id:
@@ -299,7 +311,7 @@ class LogstashHandler(logging.Handler):
 
         except Exception as e:
             # Log at debug to avoid recursion (don't ship this to Logstash)
-            logger.debug("Failed to send log to Logstash: %s", e, exc_info=True)
+            logger.debug(f"Failed to send log to Logstash: {e}")
 
 
 class ELKIntegration:
@@ -315,28 +327,53 @@ class ELKIntegration:
         logstash_host: str = "localhost",
         logstash_port: int = 5000,
         logstash_transport: str = "tcp",
+        request_timeout: float = DEFAULT_REQUEST_TIMEOUT,
     ) -> None:
+        """__init__ method"""
         self.elasticsearch_client = ElasticsearchClient(
             host=elasticsearch_host,
             port=elasticsearch_port,
             index_prefix=elasticsearch_index_prefix,
             username=elasticsearch_username,
             password=elasticsearch_password,
+            request_timeout=request_timeout,
         )
 
         self.logstash_handler = LogstashHandler(
             host=logstash_host,
             port=logstash_port,
             transport=logstash_transport,
+            request_timeout=request_timeout,
         )
 
         self._connected = False
 
     async def connect(self) -> None:
         """Connect to ELK stack."""
-        await self.elasticsearch_client.connect()
-        await self.elasticsearch_client.create_index_template()
-        await self.logstash_handler.connect()
+        if self._connected:
+            return
+
+        try:
+            await self.elasticsearch_client.connect()
+            await self.elasticsearch_client.create_index_template()
+            await self.logstash_handler.connect()
+        except Exception:
+            try:
+                await self.elasticsearch_client.disconnect()
+            except Exception as cleanup_error:
+                logger.debug(
+                    f"Failed to clean up Elasticsearch after ELK connect failure: {cleanup_error}"
+                )
+
+            try:
+                await self.logstash_handler.disconnect()
+            except Exception as cleanup_error:
+                logger.debug(
+                    f"Failed to clean up Logstash after ELK connect failure: {cleanup_error}"
+                )
+
+            self._connected = False
+            raise
 
         # Add Logstash handler to root logger
         logging.getLogger().addHandler(self.logstash_handler)
@@ -348,10 +385,24 @@ class ELKIntegration:
         if self._connected:
             logging.getLogger().removeHandler(self.logstash_handler)
 
-        await self.elasticsearch_client.disconnect()
-        await self.logstash_handler.disconnect()
+        disconnect_error: Exception | None = None
+        try:
+            await self.elasticsearch_client.disconnect()
+        except Exception as error:
+            logger.debug(f"Failed to disconnect Elasticsearch: {error}")
+            disconnect_error = error
+
+        try:
+            await self.logstash_handler.disconnect()
+        except Exception as error:
+            logger.debug(f"Failed to disconnect Logstash: {error}")
+            if disconnect_error is None:
+                disconnect_error = error
 
         self._connected = False
+
+        if disconnect_error is not None:
+            raise RuntimeError("Failed to disconnect ELK stack") from disconnect_error
 
     async def send_log_event(self, event: LogEvent) -> None:
         """Send a log event directly to Elasticsearch."""
@@ -478,7 +529,13 @@ async def setup_elk_integration(**kwargs) -> ELKIntegration:
     global _elk_integration
     if _elk_integration is None:
         _elk_integration = ELKIntegration(**kwargs)
-    await _elk_integration.connect()
+
+    try:
+        await _elk_integration.connect()
+    except Exception:
+        _elk_integration = None
+        raise
+
     return _elk_integration
 
 
@@ -491,5 +548,6 @@ async def shutdown_elk_integration() -> None:
     """Shutdown ELK stack integration."""
     global _elk_integration
     if _elk_integration:
-        await _elk_integration.disconnect()
-        _elk_integration = None
+        try:
+            await _elk_integration.disconnect()
+        finally: _elk_integration = None

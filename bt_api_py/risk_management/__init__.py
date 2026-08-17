@@ -1,29 +1,29 @@
-"""智能风控和合规监控系统
+"""
 
 Intelligent Risk Management and Compliance Monitoring System for 73+ exchanges.
 
-核心功能:
-1. 实时风险监控 - 交易前、交易中、交易后全流程风控
-2. 智能风险评估 - 机器学习驱动的风险评分和预测
-3. 合规监控 - 市场操纵检测、内幕交易监控、反洗钱
-4. 动态限制管理 - 基于风险等级的动态调整和自动限制
-5. 异常检测 - 行为分析、模式识别、异常交易检测
-6. 实时监控仪表板 - 风险指标可视化、告警系统、决策支持
+:
+1.  - 、、
+2.  - 
+3.  - 、、
+4.  - 
+5.  - 、、
+6.  - 、、
 
-技术特性:
-- 机器学习模型 (随机森林、神经网络、异常检测算法)
-- 实时流处理 (异步事件处理)
-- 复杂事件处理 (CEP) 引擎
-- 图计算 (关系网络分析)
-- 时间序列数据库 (风险指标存储)
-- 规则引擎 (基于事件和模式的规则系统)
+:
+-  (、、)
+-  ()
+-  (CEP) 
+-  ()
+-  ()
+-  ()
 
-合规标准:
-- 市场操纵检测 (spoofing、layering、front running)
-- 反洗钱 (AML) 和了解你的客户 (KYC)
-- 交易报告 (MiFID II、SEC Rule 606)
-- 仓位限制和集中度限制
-- 信用风险和保证金管理
+:
+-  (spoofing、layering、front running)
+-  (AML)  (KYC)
+-  (MiFID II、SEC Rule 606)
+- 
+- 
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ __all__ = [
     "RiskLevel",
 ]
 
-# 版本信息
+# 
 __version__ = "1.0.0"
 __compliance_standards__ = [
     "MiFID II",
@@ -81,7 +81,7 @@ __compliance_standards__ = [
     "IOSCO Principles",
 ]
 
-# 默认配置
+# 
 DEFAULT_RISK_CONFIG = {
     "risk_thresholds": {
         "low": 0.3,

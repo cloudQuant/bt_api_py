@@ -6,9 +6,11 @@ Setup complete monitoring system for production trading environment.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
-from bt_api_py.logging_system import get_logger, setup_logging_for_production
+from bt_api_base.logging_factory import get_logger
+
 from bt_api_py.monitoring import (
     get_all_dashboard_configs,
     save_dashboard_to_file,
@@ -16,6 +18,40 @@ from bt_api_py.monitoring import (
     start_global_monitoring,
     start_prometheus_exporter,
 )
+
+LOG_LEVELS = {
+    "CRITICAL": logging.CRITICAL,
+    "FATAL": logging.FATAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "WARN": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
+
+def _resolve_log_level(level: object) -> int:
+    if not isinstance(level, str):
+        raise ValueError("log_level must be a valid logging level name")
+
+    normalized_level = level.strip().upper()
+    if normalized_level not in LOG_LEVELS:
+        valid_levels = ", ".join(sorted(LOG_LEVELS))
+        raise ValueError(f"log_level must be one of: {valid_levels}")
+
+    return LOG_LEVELS[normalized_level]
+
+
+def setup_logging_for_production(log_file: str, level: str = "INFO") -> None:
+    """Configure process logging for monitoring setup."""
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        filename=str(log_path),
+        level=_resolve_log_level(level),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
 
 class MonitoringConfig:
@@ -25,7 +61,7 @@ class MonitoringConfig:
     metrics_collection_interval: float = 5.0
 
     # Prometheus exporter
-    prometheus_host: str = "0.0.0.0"  # nosec B104 # intentional for prometheus exporter
+    prometheus_host: str = "0.0.0.0"
     prometheus_port: int = 8080
     prometheus_async: bool = False
 
@@ -46,6 +82,7 @@ class MonitoringConfig:
     logstash_host: str = "localhost"
     logstash_port: int = 5000
     logstash_transport: str = "tcp"
+    elk_request_timeout: float = 10.0
 
     # Grafana dashboards
     dashboards_output_dir: str = "monitoring/grafana/dashboards"
@@ -56,9 +93,9 @@ class MonitoringConfig:
 
     def __init__(self, **kwargs: object) -> None:
         """Initialize config from kwargs with defaults from class attributes."""
-        for key, default in {
+        defaults: dict[str, object] = {
             "metrics_collection_interval": 5.0,
-            "prometheus_host": "0.0.0.0",  # nosec B104
+            "prometheus_host": "0.0.0.0",
             "prometheus_port": 8080,
             "prometheus_async": False,
             "log_level": "INFO",
@@ -75,16 +112,62 @@ class MonitoringConfig:
             "logstash_host": "localhost",
             "logstash_port": 5000,
             "logstash_transport": "tcp",
+            "elk_request_timeout": 10.0,
             "dashboards_output_dir": "monitoring/grafana/dashboards",
             "health_check_interval": 30.0,
             "health_check_timeout": 5.0,
-        }.items():
+        }
+        unknown_keys = sorted(set(kwargs) - set(defaults))
+        if unknown_keys:
+            raise ValueError(f"Unknown monitoring config option(s): {', '.join(unknown_keys)}")
+
+        for key, default in defaults.items():
             setattr(self, key, kwargs.get(key, default))
+
+        self._validate()
+
+    def _validate(self) -> None:
+        """Validate monitoring config values that should fail before setup starts."""
+        for key in ("prometheus_port", "elasticsearch_port", "logstash_port"):
+            self._validate_port(key)
+
+        for key in (
+            "metrics_collection_interval",
+            "elk_request_timeout",
+            "health_check_interval",
+            "health_check_timeout",
+        ):
+            self._validate_positive_number(key)
+
+        self._validate_positive_int("log_max_size")
+        self._validate_non_negative_int("log_backup_count")
+        _resolve_log_level(self.log_level)
+
+    def _validate_port(self, key: str) -> None:
+        value = getattr(self, key)
+        if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 65535:
+            raise ValueError(f"{key} must be an integer between 1 and 65535")
+
+    def _validate_positive_number(self, key: str) -> None:
+        value = getattr(self, key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{key} must be a positive number")
+
+    def _validate_positive_int(self, key: str) -> None:
+        value = getattr(self, key)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{key} must be a positive integer")
+
+    def _validate_non_negative_int(self, key: str) -> None:
+        value = getattr(self, key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise ValueError(f"{key} must be a non-negative integer")
 
 
 async def setup_monitoring(config: MonitoringConfig) -> None:
     """Setup complete monitoring system."""
     logger = get_logger(__name__)
+    resources_started = False
 
     try:
         # Setup logging first
@@ -96,6 +179,7 @@ async def setup_monitoring(config: MonitoringConfig) -> None:
 
         # Start metrics collection
         await start_global_monitoring(config.metrics_collection_interval)
+        resources_started = True
         logger.info("Metrics collection started")
 
         # Start Prometheus exporter
@@ -119,6 +203,7 @@ async def setup_monitoring(config: MonitoringConfig) -> None:
                 logstash_host=config.logstash_host,
                 logstash_port=config.logstash_port,
                 logstash_transport=config.logstash_transport,
+                request_timeout=config.elk_request_timeout,
             )
             logger.info("ELK stack integration configured")
 
@@ -130,6 +215,8 @@ async def setup_monitoring(config: MonitoringConfig) -> None:
 
     except Exception as e:
         logger.error(f"Failed to setup monitoring: {e}")
+        if resources_started:
+            await cleanup_monitoring()
         raise
 
 
@@ -154,18 +241,28 @@ async def cleanup_monitoring() -> None:
         stop_prometheus_exporter,
     )
 
+    logger = get_logger("monitoring")
+
     try:
         await stop_global_monitoring()
+    except Exception as e:
+        logger.debug(f"Cleanup global monitoring failed: {e}")
+
+    try:
         stop_prometheus_exporter()
+    except Exception as e:
+        logger.debug(f"Cleanup Prometheus exporter failed: {e}")
+
+    try:
         await shutdown_elk_integration()
     except Exception as e:
-        get_logger("monitoring").debug("Cleanup monitoring resources failed: %s", e, exc_info=True)
+        logger.debug(f"Cleanup ELK integration failed: {e}")
 
 
 # Production configuration
 PRODUCTION_CONFIG = MonitoringConfig(
     metrics_collection_interval=5.0,
-    prometheus_host="0.0.0.0",  # nosec B104
+    prometheus_host="0.0.0.0",
     prometheus_port=8080,
     log_level="INFO",
     log_file="logs/bt_api_py.log",

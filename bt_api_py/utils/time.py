@@ -1,3 +1,4 @@
+"""Module-level docstring."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -6,11 +7,9 @@ from datetime import datetime
 def convert_utc_timestamp(timestamp):
     """Convert millisecond timestamp to datetime object
 
-    Args:
-        timestamp: Millisecond timestamp (int or string)
+    Args: timestamp: Millisecond timestamp (int or string)
 
-    Returns:
-        datetime: UTC datetime object
+    Returns: datetime: UTC datetime object
     """
     if timestamp is None:
         return None
