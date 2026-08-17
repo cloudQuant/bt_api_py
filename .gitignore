@@ -112,6 +112,9 @@ hal.config.yaml
 .opencode/
 .windsurf/
 .ruff_cache/
+.joyincode/
+.omo/
+AGENTS.md
 
 # Keys / secrets
 keys/
