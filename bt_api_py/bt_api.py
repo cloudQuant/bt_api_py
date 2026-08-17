@@ -25,7 +25,16 @@ from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
 from .balance_manager import BalanceManagerMixin
-from .data_downloader import DataDownloaderMixin, _calculate_time_delta, _parse_time
+from .data_downloader import (
+    DOWNLOAD_MAX_RETRIES,
+    DOWNLOAD_RETRY_BACKOFF_FACTOR,
+    DOWNLOAD_RETRY_DELAY_SEC,
+    DOWNLOAD_RETRY_MAX_DELAY_SEC,
+    KLINE_PERIOD_DELTAS,
+    DataDownloaderMixin,
+    _calculate_time_delta,
+    _parse_time,
+)
 
 __all__ = ["BtApi"]
 
