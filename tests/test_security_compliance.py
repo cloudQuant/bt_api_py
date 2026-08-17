@@ -1128,10 +1128,15 @@ class TestSecurityFrameworkHelpers:
         assert config["compliance"]["gdpr_compliance"] is False
         assert config["encryption_key"] == "enc-key"
 
-    def test_initialize_and_get_security_framework(self, monkeypatch: pytest.MonkeyPatch):
+    def test_initialize_and_get_security_framework(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ):
         config = {
-            "encryption": {"provider": "local", "provider_config": {"key_dir": "./tmp_keys"}},
-            "audit": {"log_file": "./tmp_audit.log"},
+            "encryption": {
+                "provider": "local",
+                "provider_config": {"key_dir": str(tmp_path / "tmp_keys")},
+            },
+            "audit": {"log_file": str(tmp_path / "tmp_audit.log")},
         }
 
         initialized = initialize_security_framework(config)

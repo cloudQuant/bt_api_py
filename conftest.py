@@ -224,9 +224,9 @@ def test_data_dir(project_root_path):
     return project_root_path / "tests" / "data"
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def reset_environment():
-    """Reset environment variables before each test."""
+    """Reset environment variables after the test that opts into it."""
     original_env = os.environ.copy()
     yield
     # Restore original environment

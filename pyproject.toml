@@ -52,7 +52,6 @@ Repository = "https://github.com/cloudQuant/bt_api_py"
 
 [tool.pytest.ini_options]
 addopts = [
-    "--dist=loadgroup",
     "--import-mode=importlib",
     "--strict-markers",
     "--tb=short",
@@ -87,9 +86,6 @@ markers = [
 ]
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
 
 [tool.coverage.run]
 source = ["bt_api_py"]
