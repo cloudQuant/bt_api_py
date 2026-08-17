@@ -4,6 +4,7 @@ from typing import Optional
 
 import pytest
 
+import bt_api_py.forwarding.client as client_module
 import bt_api_py.forwarding.router as router_module
 from bt_api_py.brokers.errors import BrokerError, BrokerErrorCode
 from bt_api_py.brokers.mock import MockBrokerAdapter
@@ -16,6 +17,7 @@ from bt_api_py.forwarding import (
     ForwardingRuntime,
     InMemoryForwardingBus,
     MarketDataHub,
+    MarketEvent,
     OrderCommand,
     OrderRouter,
     PrivateEvent,
@@ -153,7 +155,7 @@ def test_market_data_hub_publishes_bars_for_forwarding_client() -> None:
     assert event.event_type == "bar"
     assert event.payload["raw"] == "kept"
     assert bar == {
-        "datetime": event.event_time / 1000.0,
+        "datetime": event.event_time,
         "open": 3490.0,
         "high": 3510.0,
         "low": 3480.0,
@@ -1132,3 +1134,86 @@ async def test_router_caches_terminal_rejects() -> None:
     await router.handle_command(cmd)
     await router.handle_command(cmd)
     assert calls == 1  # terminal rejection hits the cache
+
+
+# ── Task 1.9: A-14 / A-15 / A-19 / A-20 ────────────────────────────────
+
+
+def test_sqlite_state_store_memory_uri_uses_in_memory_db(tmp_path, monkeypatch) -> None:
+    """`memory:` 内存指示符不应在磁盘创建文件，而应得到真正的内存库。"""
+    monkeypatch.chdir(tmp_path)
+    store = SQLiteStateStore("memory:")
+    ack = CommandAck(command_id="c1", idempotency_key="k1", accepted=True, status="ok")
+    store.save_command_ack(ack)
+    assert store.get_command_ack("k1") is not None
+    store.close()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_order_router_ack_cache_is_bounded() -> None:
+    """幂等 ack 缓存应有 LRU 上限，最旧的 ack 被逐出。"""
+    router = OrderRouter(MockBrokerAdapter())
+    for i in range(10_001):
+        ack = CommandAck(command_id=f"c{i}", idempotency_key=f"k{i}", accepted=True, status="ok")
+        router._remember_ack(ack)
+    assert len(router._acks_by_idempotency_key) == 10_000
+    assert "k0" not in router._acks_by_idempotency_key
+    assert "k10000" in router._acks_by_idempotency_key
+
+
+def test_fetch_open_orders_includes_new_status() -> None:
+    """fetch_open_orders 应包含 status == "new" 的订单，而不仅是 "submitted"。"""
+
+    class StubBus(InMemoryForwardingBus):
+        def send_command_sync(
+            self, command: OrderCommand, *, timeout: Optional[float] = None
+        ) -> CommandAck:
+            return CommandAck(
+                command_id=command.command_id,
+                idempotency_key=str(command.idempotency_key),
+                accepted=True,
+                status="ok",
+                payload={
+                    "orders": [
+                        {"order_id": "o1", "status": "new"},
+                        {"order_id": "o2", "status": "submitted"},
+                        {"order_id": "o3", "status": "filled"},
+                    ]
+                },
+            )
+
+    client = ForwardingClient(bus=StubBus())
+    result = client.fetch_open_orders()
+    assert {order["order_id"] for order in result} == {"o1", "o2"}
+
+
+def test_market_event_timestamp_normalized_to_ms() -> None:
+    """tick/bar timestamp 应统一为毫秒 int，秒级输入换算为 *1000。"""
+    # payload 提供秒级 timestamp → 转换为毫秒
+    tick = client_module._market_event_to_tick(
+        MarketEvent(
+            event_type="tick",
+            exchange="SIM",
+            market_type="SPOT",
+            symbol="RB2510",
+            payload={"timestamp": 1_700_000_000},
+            event_time=1_700_000_000_000,
+            receive_time=1_700_000_000_000,
+        )
+    )
+    assert tick.timestamp == 1_700_000_000_000
+    assert isinstance(tick.timestamp, int)
+
+    # 无 payload timestamp → 直接使用 event_time（毫秒）
+    tick2 = client_module._market_event_to_tick(
+        MarketEvent(
+            event_type="tick",
+            exchange="SIM",
+            market_type="SPOT",
+            symbol="RB2510",
+            event_time=1_700_000_000_123,
+            receive_time=1_700_000_000_123,
+        )
+    )
+    assert tick2.timestamp == 1_700_000_000_123
+    assert isinstance(tick2.timestamp, int)

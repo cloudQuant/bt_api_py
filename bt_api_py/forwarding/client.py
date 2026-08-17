@@ -235,7 +235,7 @@ class ForwardingClient:
             self._orders_cache = [
                 order
                 for order in ack.payload.get("orders", [])
-                if order.get("status") == "submitted"
+                if order.get("status") in {"submitted", "new"}
             ]
         return list(self._orders_cache)
 
@@ -387,9 +387,27 @@ class ForwardingClient:
         queue.append(item)
 
 
+_MS_TIMESTAMP_THRESHOLD = 1e11
+
+
+def _timestamp_ms(payload: dict[str, Any], event_time_ms: int) -> int:
+    """统一把事件时间戳归一为毫秒 int。
+
+    `event_time` 语义为毫秒；`payload["timestamp"]` 可能由调用方传入秒或毫秒。
+    小于阈值的数值视为秒级，换算为毫秒。
+    """
+    raw = payload.get("timestamp")
+    if raw is None:
+        return int(event_time_ms)
+    value = float(raw)
+    if value < _MS_TIMESTAMP_THRESHOLD:
+        return int(value * 1000)
+    return int(value)
+
+
 def _market_event_to_tick(event: MarketEvent) -> Any:
     payload = dict(event.payload or {})
-    timestamp = float(payload.get("timestamp") or event.event_time / 1000.0)
+    timestamp = _timestamp_ms(payload, event.event_time)
     return SimpleNamespace(
         timestamp=timestamp,
         symbol=event.symbol,
@@ -409,7 +427,7 @@ def _market_event_to_tick(event: MarketEvent) -> Any:
 
 def _market_event_to_orderbook(event: MarketEvent) -> Any:
     payload = dict(event.payload or {})
-    timestamp = float(payload.get("timestamp") or event.event_time / 1000.0)
+    timestamp = _timestamp_ms(payload, event.event_time)
     return SimpleNamespace(
         timestamp=timestamp,
         symbol=event.symbol,
@@ -423,7 +441,7 @@ def _market_event_to_orderbook(event: MarketEvent) -> Any:
 
 def _market_event_to_bar(event: MarketEvent) -> dict[str, Any]:
     payload = dict(event.payload or {})
-    timestamp = float(payload.get("timestamp") or event.event_time / 1000.0)
+    timestamp = _timestamp_ms(payload, event.event_time)
     return {
         "datetime": payload.get("datetime") or timestamp,
         "open": float(payload.get("open", payload.get("price", 0.0)) or 0.0),

@@ -99,6 +99,11 @@ class TestBtApiUnifiedInterface:
         with pytest.raises(ExchangeNotFoundError):
             self.bt._get_feed("INVALID___EXCHANGE")
 
+    def test_update_balance_raises_on_unknown_exchange(self):
+        """update_balance 对未注册交易所应抛 ExchangeNotFoundError 而非裸 KeyError。"""
+        with pytest.raises(ExchangeNotFoundError):
+            self.bt.update_balance("INVALID___EXCHANGE", "USDT")
+
     def test_unified_method_raises_on_invalid_exchange(self):
         """统一接口方法对不存在的交易所应抛出 ExchangeNotFoundError"""
         with pytest.raises(ExchangeNotFoundError):

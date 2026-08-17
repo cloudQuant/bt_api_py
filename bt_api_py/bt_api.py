@@ -483,7 +483,7 @@ class BtApi:
                 self.log(f"No balance handler registered for {exchange_name}", level="warning")
 
     def update_balance(self, exchange_name: str, currency: str | None = None) -> None:
-        feed = self.exchange_feeds[exchange_name]
+        feed = self._get_feed(exchange_name)
         balance_data = feed.get_balance()
         balance_data.init_data()
         account_list = balance_data.get_data()

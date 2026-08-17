@@ -1,6 +1,7 @@
 """Module documentation"""
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from typing import Any
@@ -18,6 +19,7 @@ logger = get_logger("forwarding.router")
 
 _VALID_SIDES = frozenset({"buy", "sell"})
 _VALID_ORDER_TYPES = frozenset({"limit", "market"})
+_MAX_CACHED_ACKS = 10_000
 
 
 def _normalize_side(value: Any) -> str:
@@ -59,7 +61,7 @@ class OrderRouter:
         self.bus = bus
         self.risk_rules = risk_rules or RiskRuleSet()
         self.state_store = state_store
-        self._acks_by_idempotency_key: dict[str, CommandAck] = {}
+        self._acks_by_idempotency_key: OrderedDict[str, CommandAck] = OrderedDict()
         self._sequence_id = 0
         if self.bus is not None:
             self.bus.set_command_handler(self.handle_command)
@@ -244,11 +246,16 @@ class OrderRouter:
             return None
         cached = self.state_store.get_command_ack(key)
         if cached is not None:
-            self._acks_by_idempotency_key[key] = cached
+            self._cache_ack(key, cached)
         return cached
 
+    def _cache_ack(self, key: str, ack: CommandAck) -> None:
+        self._acks_by_idempotency_key[key] = ack
+        if len(self._acks_by_idempotency_key) > _MAX_CACHED_ACKS:
+            self._acks_by_idempotency_key.popitem(last=False)
+
     def _remember_ack(self, ack: CommandAck) -> None:
-        self._acks_by_idempotency_key[str(ack.idempotency_key)] = ack
+        self._cache_ack(str(ack.idempotency_key), ack)
         if self.state_store is not None:
             self.state_store.save_command_ack(ack)
 
