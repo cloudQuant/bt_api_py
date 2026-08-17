@@ -30,6 +30,8 @@ from bt_api_base.exceptions import (
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
+from bt_api_py.exceptions import PartialDownloadError
+
 __all__ = ["BtApi"]
 
 DATANAME_SEPARATOR = "___"

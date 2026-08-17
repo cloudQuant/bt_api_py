@@ -1,3 +1,6 @@
+"""Module-level docstring."""
+from datetime import datetime
+
 from bt_api_base.exceptions import (
     AuthenticationError,
     BtApiError,
@@ -9,7 +12,6 @@ from bt_api_base.exceptions import (
     ExchangeNotFoundError,
     InsufficientBalanceError,
     InvalidOrderError,
-    InvalidSymbolError,
     OrderError,
     OrderNotFoundError,
     QueueNotInitializedError,
@@ -20,6 +22,23 @@ from bt_api_base.exceptions import (
     SubscribeError,
     WebSocketError,
 )
+
+
+class PartialDownloadError(Exception):
+    """Raised when historical kline download is incomplete after exhausting retries.
+
+    Carries the list of successfully downloaded intervals and the failure reason.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        downloaded_intervals: list[tuple[datetime, datetime]] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.downloaded_intervals = downloaded_intervals or []
+
 
 __all__ = [
     "BtApiError",
@@ -42,4 +61,5 @@ __all__ = [
     "WebSocketError",
     "CurrencyNotFoundError",
     "QueueNotInitializedError",
+    "PartialDownloadError",
 ]
