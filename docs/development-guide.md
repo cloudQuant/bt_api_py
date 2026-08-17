@@ -521,7 +521,7 @@ from aiohttp import ClientSession
 
 # 本地导入
 from bt_api_py.exceptions import BtApiError, ExchangeNotFoundError
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 ```
 
 **规则：**
@@ -585,7 +585,7 @@ class NewExchangeOrderData(OrderData):
 ```python
 # bt_api_py/exchange_registers/register_newexchange.py
 
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 from bt_api_py.feeds.live_newexchange.spot import NewExchangeSpotFeed
 
 # 注册Feed

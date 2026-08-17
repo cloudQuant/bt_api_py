@@ -172,7 +172,7 @@ from aiohttp import ClientSession
 
 # Local imports
 from bt_api_py.exceptions import BtApiError, ExchangeNotFoundError
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 ```
 
 **Import rules:**
@@ -364,7 +364,7 @@ class OrderData(AutoInitMixin):
 When adding a new exchange, use the registry pattern:
 
 ```python
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 from bt_api_py.feeds.live_newexchange import NewExchangeFeed
 
 # Register the exchange

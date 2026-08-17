@@ -365,7 +365,7 @@ pytest tests/test_file.py    # 单个文件
 ### 对于新开发者
 1. 从 `README.md` 和 `docs/getting-started/quickstart.md` 开始
 2. 查看 `bt_api_py/bt_api.py` 了解主API
-3. 阅读 `bt_api_py/registry.py` 理解注册机制
+3. 阅读 `bt_api_base/registry.py` 理解注册机制
 4. 研究 `bt_api_py/containers/orders/` 学习容器模式
 
 ### 对于贡献者

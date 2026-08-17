@@ -75,7 +75,7 @@
 
 - ✅ [README.md](https://github.com/cloudQuant/bt_api_py#readme) - 项目主要说明
 - ✅ [CONTRIBUTING.md](https://github.com/cloudQuant/bt_api_py/blob/master/CONTRIBUTING.md) - 贡献指南
-- ✅ [CHANGELOG.md](./getting-started/change_log.md) - 变更日志
+- ✅ [CHANGELOG.md](https://github.com/cloudQuant/bt_api_py/blob/master/CHANGELOG.md) - 变更日志
 
 ---
 
@@ -88,7 +88,6 @@
 - [安装指南](./getting-started/installation.md) - 安装步骤和环境配置
 - [快速开始](./getting-started/quickstart.md) - 30秒快速上手
 - [常见问题](./getting-started/faq.md) - FAQ和故障排除
-- [变更日志](./getting-started/change_log.md) - 版本更新记录
 
 ### 2. 使用指南（Guides）
 
@@ -531,8 +530,8 @@ bt_api_py/
 ### 核心文件
 
 - `bt_api_py/bt_api.py` - BtApi主类，统一API入口
-- `bt_api_py/registry.py` - ExchangeRegistry，交易所注册表
-- `bt_api_py/event_bus.py` - EventBus，事件总线
+- `bt_api_base/registry.py` - ExchangeRegistry，交易所注册表
+- `bt_api_base/event_bus.py` - EventBus，事件总线
 - `bt_api_py/exceptions.py` - 自定义异常层次结构
 - `bt_api_py/__init__.py` - 包入口，导出主要API
 

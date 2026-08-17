@@ -549,7 +549,7 @@ pip install bt_api_py==0.15.1
 
 # 验证
 python -c "import bt_api_py; print(bt_api_py.__version__)"
-python -c "from bt_api_py.registry import ExchangeRegistry; print('OK')"
+python -c "from bt_api_base.registry import ExchangeRegistry; print('OK')"
 ```
 
 **验证标准：**

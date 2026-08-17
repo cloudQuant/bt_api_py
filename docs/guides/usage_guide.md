@@ -103,7 +103,7 @@ exchange_kwargs = {
 ### 方式三：使用 AuthConfig 类
 
 ```python
-from bt_api_py.auth_config import CryptoAuthConfig
+from bt_api_base.auth_config import CryptoAuthConfig
 
 config = CryptoAuthConfig(
     exchange="BINANCE",
@@ -601,7 +601,7 @@ bt_api.download_history_bars(
 除了从数据队列轮询，还可以使用 EventBus 注册回调函数：
 
 ```python
-from bt_api_py.event_bus import EventBus
+from bt_api_base.event_bus import EventBus
 
 # 创建带事件总线的 BtApi
 
@@ -674,7 +674,7 @@ for exchange_name in bt_api.list_exchanges():
 CTP 使用中国期货市场的专用协议，需要额外配置：
 
 ```python
-from bt_api_py.auth_config import CtpAuthConfig
+from bt_api_base.auth_config import CtpAuthConfig
 
 ctp_config = CtpAuthConfig(
     broker_id="9999",
@@ -717,7 +717,7 @@ order = api.make_order(
 ### TWS/Gateway 原生 API
 
 ```python
-from bt_api_py.auth_config import IbAuthConfig
+from bt_api_base.auth_config import IbAuthConfig
 
 ib_config = IbAuthConfig(
     host="127.0.0.1",
@@ -736,7 +736,7 @@ bt_api = BtApi(exchange_kwargs)
 ### IB Web API
 
 ```python
-from bt_api_py.auth_config import IbWebAuthConfig
+from bt_api_base.auth_config import IbWebAuthConfig
 
 ib_web_config = IbWebAuthConfig(
     base_url="https://localhost:5000",

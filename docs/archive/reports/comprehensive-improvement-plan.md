@@ -98,7 +98,7 @@ def __new__(cls):
 - 在 `_create_feed()` 中添加实例缓存和弱引用清理
 - 移除 `_RegistryMeta` 元类魔法，改用标准依赖注入
 
-**文件位置**: `bt_api_py/registry.py`
+**文件位置**: `bt_api_base/registry.py`
 **优先级**: 中
 
 ---
@@ -728,14 +728,14 @@ def mask_sensitive(data: dict) -> dict:
 | 文件路径 | 问题数 | 主要问题 |
 |----------|--------|----------|
 | `bt_api_py/bt_api.py` | 5 | 类过大、假异步、无输入验证 |
-| `bt_api_py/registry.py` | 3 | 全局单例、元类魔法 |
+| `bt_api_base/registry.py` | 3 | 全局单例、元类魔法 |
 | `bt_api_py/feeds/feed.py` | 6 | 无 ABC、日志泄露、硬编码重试 |
 | `bt_api_py/websocket_manager.py` | 4 | 交易所逻辑硬编码、无策略模式 |
 | `bt_api_py/cache.py` | 4 | 无测试、缓存 None 值 bug、O(n) 清理 |
 | `bt_api_py/rate_limiter.py` | 5 | 无测试、竞态条件、轮询等待 |
 | `bt_api_py/connection_pool.py` | 4 | 无测试、并发风险、无自适应 |
 | `bt_api_py/security.py` | 5 | 静默失败、弱验证、硬编码交易所名 |
-| `bt_api_py/auth_config.py` | 4 | 明文存储、无验证、参数过多 |
+| `bt_api_base/auth_config.py` | 4 | 明文存储、无验证、参数过多 |
 | `bt_api_py/gateway/runtime.py` | 5 | CTP 耦合、字符串分发、忙等待 |
 | `bt_api_py/gateway/client.py` | 5 | 可变性违反、无重试、无安全存储 |
 | `bt_api_py/core/dependency_injection.py` | 4 | 运行时反射、静默回退、全局状态 |

@@ -233,7 +233,7 @@ class MyExMarketWssData(BaseDataStream):
 
 # bt_api_py/feeds/register_myex.py
 
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 from bt_api_py.feeds.live_myex_feed import MyExRequestDataSwap
 from bt_api_py.containers.exchanges.myex_exchange_data import MyExExchangeDataSwap
 from bt_api_py.balance_utils import simple_balance_handler

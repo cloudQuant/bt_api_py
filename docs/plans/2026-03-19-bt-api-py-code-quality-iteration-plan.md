@@ -208,8 +208,8 @@
 优先文件：
 
 1. `bt_api_py/bt_api.py`
-2. `bt_api_py/registry.py`
-3. `bt_api_py/event_bus.py`
+2. `bt_api_base/registry.py`
+3. `bt_api_base/event_bus.py`
 4. `bt_api_py/core/services.py`
 5. `bt_api_py/core/interfaces.py`
 

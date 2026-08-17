@@ -873,7 +873,7 @@ from bt_api_py.containers.exchanges.<exchange>_exchange_data import (
 )
 from bt_api_py.feeds.live_<exchange>.spot import <Exchange>RequestDataSpot
 from bt_api_py.feeds.live_<exchange>.swap import <Exchange>RequestDataSwap
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 
 
 def _<exchange>_subscribe_handler(data_queue, exchange_params, topics, bt_api):
@@ -953,7 +953,7 @@ from bt_api_py.containers.exchanges.<exchange>_exchange_data import (
     <Exchange>ExchangeDataSpot,
 )
 from bt_api_py.feeds.live_<exchange>.spot import <Exchange>RequestDataSpot
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 
 
 def init_req_feed():

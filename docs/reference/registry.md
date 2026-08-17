@@ -21,7 +21,7 @@ BtApi 使用 → ExchangeRegistry
 
 ```python
 # bt_api_py/exchange_registers/my_exchange.py
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 from .my_exchange_feed import MyExchangeFeed
 from .my_exchange_stream import MyExchangeStream
 
@@ -42,7 +42,7 @@ print(exchanges)
 ---
 
 <!--
-::: bt_api_py.registry.ExchangeRegistry
+::: bt_api_base.registry.ExchangeRegistry
     options:
       show_root_heading: true
       show_source: false

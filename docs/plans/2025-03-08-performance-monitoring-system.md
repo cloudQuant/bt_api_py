@@ -1747,7 +1747,7 @@ def test_end_to_end_monitoring():
         }
     }
     
-    with patch('bt_api_py.registry.ExchangeRegistry.create_feed') as mock_create:
+    with patch('bt_api_base.registry.ExchangeRegistry.create_feed') as mock_create:
         mock_feed = Mock()
         mock_feed.get_tick.return_value = {"price": 50000}
         mock_create.return_value = mock_feed

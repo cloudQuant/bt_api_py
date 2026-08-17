@@ -68,7 +68,7 @@ plugins:
       default_handler: python
       handlers:
         python:
-          paths: [src]
+          paths: [.]
           options:
             docstring_style: google
             show_root_heading: true
@@ -162,7 +162,6 @@ nav:
       - 快速入门: getting-started/quickstart.md
       - 常见问题: getting-started/faq.md
       - 交互式示例: examples/gallery.md
-      - 更新日志: getting-started/change_log.md
 
   # ── 使用指南 (How-to Guides) ──────────────────────────────────
   - 使用指南:
@@ -279,3 +278,5 @@ exclude_docs: |
   exchanges/binance/algo/spot-algo/fee-structure.md
   # Plans
   plans/
+  # SDD 计划文档不发布
+  superpowers/

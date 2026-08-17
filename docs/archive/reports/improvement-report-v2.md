@@ -49,7 +49,7 @@
 
 ### 2.1 EventBus handler 列表并发修改 [HIGH]
 
-**文件:** `bt_api_py/event_bus.py:27-37, 44`
+**文件:** `bt_api_base/event_bus.py:27-37, 44`
 
 **问题:** `emit()` 迭代 handler 列表时，`off()` 可以修改同一列表，导致 `RuntimeError: list changed size during iteration`。
 
@@ -144,7 +144,7 @@ class Container:
 ### 3.1 双重注册系统并存 [HIGH]
 
 **文件:**
-- `bt_api_py/registry.py` — ExchangeRegistry（metaclass 单例，主注册系统）
+- `bt_api_base/registry.py` — ExchangeRegistry（metaclass 单例，主注册系统）
 - `bt_api_py/feeds/registry.py` — 模块级 `_registry` 字典（旧注册系统）
 
 **问题:** 两套完全独立的注册系统共存：
@@ -221,10 +221,10 @@ class CoinbaseWssTradeData(CoinbaseTradeData):
 ### 4.1 核心模块缺少 `__all__` 声明 [MEDIUM]
 
 **涉及文件:**
-- `bt_api_py/registry.py`
-- `bt_api_py/auth_config.py`
+- `bt_api_base/registry.py`
+- `bt_api_base/auth_config.py`
 - `bt_api_py/cache.py`
-- `bt_api_py/event_bus.py`
+- `bt_api_base/event_bus.py`
 - `bt_api_py/rate_limiter.py`
 - `bt_api_py/logging_factory.py`
 - `bt_api_py/config_loader.py`
@@ -347,7 +347,7 @@ except Exception as e:
 ### 7.1 废弃的 logger.warn() 调用 [MEDIUM]
 
 **涉及文件:**
-- `bt_api_py/event_bus.py:48` — `self.logger.warn(...)`
+- `bt_api_base/event_bus.py:48` — `self.logger.warn(...)`
 - `bt_api_py/bt_api.py:64` — `self.logger.warn(txt)`
 - `bt_api_py/config_loader.py` — `logger.warn(...)`
 
@@ -416,8 +416,8 @@ except Exception as e:
 
 | 文件路径 | 问题类型 | 严重级别 |
 |----------|----------|----------|
-| `bt_api_py/event_bus.py:44` | handler 列表并发迭代竞争 | HIGH |
-| `bt_api_py/event_bus.py:48` | 废弃的 warn() 调用 | MEDIUM |
+| `bt_api_base/event_bus.py:44` | handler 列表并发迭代竞争 | HIGH |
+| `bt_api_base/event_bus.py:48` | 废弃的 warn() 调用 | MEDIUM |
 | `bt_api_py/instrument_manager.py` | 全局状态无锁保护 | HIGH |
 | `bt_api_py/logging_factory.py:25,37,52` | 缓存无锁保护 | MEDIUM |
 | `bt_api_py/cache.py:36-56` | 声称线程安全但无实现 | MEDIUM |

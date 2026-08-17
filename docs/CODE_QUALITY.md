@@ -82,7 +82,7 @@
 
 ## 渐进式 Mypy 加强（2025-03）
 
-- **已启用 `disallow_untyped_defs`**：`bt_api_py.exceptions`、`bt_api_py.event_bus`
+- **已启用 `disallow_untyped_defs`**：`bt_api_py.exceptions`、`bt_api_base.event_bus`
 - **后续扩展计划**：按模块逐步启用，建议顺序 `registry` → `bt_api` → `logging_*` → `containers` 子模块
 
 ## 测试覆盖率目标（2025-03）

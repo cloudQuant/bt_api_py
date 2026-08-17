@@ -68,7 +68,7 @@ AuthConfig (基类)
 ---
 
 <!--
-::: bt_api_py.auth_config
+::: bt_api_base.auth_config
     options:
       show_root_heading: false
       show_source: false

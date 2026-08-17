@@ -410,7 +410,7 @@ bt_api_py 是一个统一的多交易所交易 API 框架，支持 73+ 交易所
 | `bt_api_py/connection_pool.py:196` | 类型提示过于宽泛 | LOW | 待修复 |
 | `bt_api_py/security.py:199-200` | 解密失败静默回退 | HIGH | 待修复 |
 | ~~`bt_api_py/security_compliance/data/protection.py:214,230`~~ | ~~加解密静默失败~~ | ~~HIGH~~ | 已修复 |
-| `bt_api_py/event_bus.py:48` | 使用废弃的 warn() | LOW | 待修复 |
+| `bt_api_base/event_bus.py:48` | 使用废弃的 warn() | LOW | 待修复 |
 | `bt_api_py/feeds/registry.py` | print() 调用 | MEDIUM | 待修复 |
 
 ## 附录 B: 改进效果预估

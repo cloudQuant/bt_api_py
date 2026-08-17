@@ -100,7 +100,7 @@ Registry 模式是 bt_api_py 的核心设计，确保新增交易所时无需修
 
 # feeds/register_binance.py
 
-from bt_api_py.registry import ExchangeRegistry
+from bt_api_base.registry import ExchangeRegistry
 
 def register_binance():
 

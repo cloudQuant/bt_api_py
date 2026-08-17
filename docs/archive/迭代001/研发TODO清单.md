@@ -193,7 +193,7 @@
   pip install -e packages/bt_api_binance
   python -c "
   from bt_api_py.plugins.loader import PluginLoader
-  from bt_api_py.registry import ExchangeRegistry
+  from bt_api_base.registry import ExchangeRegistry
   from bt_api_py.gateway.registrar import GatewayRuntimeRegistrar
   loader = PluginLoader(ExchangeRegistry, GatewayRuntimeRegistrar)
   loader.load_all()

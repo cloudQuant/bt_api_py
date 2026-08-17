@@ -49,7 +49,7 @@ event_bus.off("BarEvent", on_bar)
 ---
 
 <!--
-::: bt_api_py.event_bus.EventBus
+::: bt_api_base.event_bus.EventBus
     options:
       show_root_heading: true
       show_source: false
