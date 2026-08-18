@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import os as _os
 
-from bt_api_base._compat import UTC
-
 # 版本单一源：从 pyproject.toml 经 importlib.metadata 读取。
-from importlib.metadata import PackageNotFoundError, version as _package_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _package_version
+
+from bt_api_base._compat import UTC
 
 try:
     __version__ = _package_version("bt_api_py")
@@ -63,6 +64,35 @@ from bt_api_base.instrument_manager import InstrumentManager, get_instrument_man
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
+from bt_api_py._contracts import (
+    AccountSnapshot,
+    AuthorizationError,
+    BalanceSnapshot,
+    CancelAllRequest,
+    CancelOrderRequest,
+    CapabilityNotSupportedError,
+    CommandResultUnknownError,
+    Consistency,
+    DepthSnapshot,
+    FillSnapshot,
+    ForwardingConfig,
+    Freshness,
+    KlineSnapshot,
+    LegacyOrderApiError,
+    LiveQueryFailedError,
+    OrderRequest,
+    OrderSnapshot,
+    OrderType,
+    PluginNotInstalledError,
+    PositionSnapshot,
+    ProtocolCorrelationError,
+    QueryOrderRequest,
+    Side,
+    StaleDataUnavailableError,
+    SubscribeRequest,
+    TickerSnapshot,
+    TransportMode,
+)
 from bt_api_py.brokers import (
     available_adapters,
     list_registered_adapters,
@@ -109,6 +139,7 @@ def __getattr__(name: str):
         globals()["BtApi"] = _BtApi
         return _BtApi
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "__version__",
@@ -175,4 +206,32 @@ __all__ = [
     "SQLiteStateStore",
     "ZmqForwardingClient",
     "ZmqForwardingRuntime",
+    # v1 BtApi contract types (data types only, not a second trading client)
+    "Side",
+    "OrderType",
+    "Consistency",
+    "TransportMode",
+    "ForwardingConfig",
+    "OrderRequest",
+    "CancelOrderRequest",
+    "CancelAllRequest",
+    "QueryOrderRequest",
+    "SubscribeRequest",
+    "Freshness",
+    "TickerSnapshot",
+    "DepthSnapshot",
+    "KlineSnapshot",
+    "AccountSnapshot",
+    "BalanceSnapshot",
+    "PositionSnapshot",
+    "OrderSnapshot",
+    "FillSnapshot",
+    "CapabilityNotSupportedError",
+    "PluginNotInstalledError",
+    "LiveQueryFailedError",
+    "StaleDataUnavailableError",
+    "CommandResultUnknownError",
+    "ProtocolCorrelationError",
+    "AuthorizationError",
+    "LegacyOrderApiError",
 ]
