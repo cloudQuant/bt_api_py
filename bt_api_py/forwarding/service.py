@@ -1,4 +1,5 @@
 """Module documentation"""
+
 from __future__ import annotations
 
 import threading
@@ -11,6 +12,7 @@ from bt_api_py.forwarding.memory import InMemoryForwardingBus, _run_awaitable_sy
 from bt_api_py.forwarding.router import OrderRouter, RiskRuleSet
 from bt_api_py.forwarding.state import SQLiteStateStore
 from bt_api_py.forwarding.transport import ZmqCommandServer, ZmqEventPublisher
+from bt_api_py.gateway.config import GatewayConfig
 
 
 @dataclass
@@ -60,15 +62,29 @@ class ZmqForwardingRuntime(ForwardingRuntime):
         market_endpoint: str,
         command_endpoint: str,
         private_endpoint: str | None = None,
+        enable_trading: bool = False,
+        allow_remote: bool = False,
+        allow_shared_private_endpoint: bool = False,
         bus: InMemoryForwardingBus | None = None,
         risk_rules: RiskRuleSet | None = None,
         state_store: SQLiteStateStore | None = None,
     ) -> None:
         """__init__ method"""
         super().__init__(adapter=adapter, bus=bus, risk_rules=risk_rules, state_store=state_store)
-        self.market_endpoint = market_endpoint
-        self.command_endpoint = command_endpoint
-        self.private_endpoint = private_endpoint or market_endpoint
+        # Safe-by-default: read-only loopback/IPC unless explicitly authorized.
+        # A missing private_endpoint must not silently share the public market port.
+        config = GatewayConfig(
+            command_endpoint=command_endpoint,
+            market_endpoint=market_endpoint,
+            private_endpoint=private_endpoint,
+            enable_trading=enable_trading,
+            allow_remote=allow_remote,
+            allow_shared_private_endpoint=allow_shared_private_endpoint,
+        )
+        self.config = config
+        self.market_endpoint = config.market_endpoint
+        self.command_endpoint = config.command_endpoint
+        self.private_endpoint = config.private_endpoint or config.market_endpoint
         self._market_publisher: ZmqEventPublisher | None = None
         self._private_publisher: ZmqEventPublisher | None = None
         self._command_server: ZmqCommandServer | None = None
@@ -177,4 +193,5 @@ class ZmqForwardingRuntime(ForwardingRuntime):
                     continue
                 if self._private_publisher is not None:
                     self._private_publisher.publish(event)
-        finally: subscription.close()
+        finally:
+            subscription.close()

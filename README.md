@@ -315,6 +315,12 @@ asyncio.run(main())
 
 ### ZeroMQ forwarding service
 
+> **Safety notice (mock/local only):** the forwarding gateway defaults to
+> read-only loopback/IPC mode. Remote TCP and write-enabled operation require
+> authenticated deployment (CurveZMQ + ACL), which lands in a later iteration.
+> Do not expose these endpoints on a public network or attach production
+> credentials before then.
+
 ```python
 from bt_api_py.brokers.mock import MockBrokerAdapter
 from bt_api_py.forwarding import ZmqForwardingClient, ZmqForwardingRuntime
@@ -756,6 +762,8 @@ asyncio.run(main())
 ```
 
 ### ZeroMQ 转发服务
+
+> **安全提示（仅限 mock/本地）：** 转发网关默认处于只读 loopback/IPC 模式。远程 TCP 和写操作需要认证部署（CurveZMQ + ACL），该能力在后续迭代交付。在此之前不要把端点暴露到公网，也不要接入生产凭证。
 
 ```python
 from bt_api_py.brokers.mock import MockBrokerAdapter

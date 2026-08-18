@@ -747,6 +747,7 @@ async def test_start_sync_inside_running_loop_does_not_crash() -> None:
         MockBrokerAdapter(),
         market_endpoint=_free_tcp_endpoint(),
         command_endpoint=_free_tcp_endpoint(),
+        private_endpoint=_free_tcp_endpoint(),
     )
     runtime.start_sync()
     try:

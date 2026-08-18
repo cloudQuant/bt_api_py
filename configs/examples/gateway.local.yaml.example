@@ -1,0 +1,13 @@
+# Local development gateway configuration (mock / simulation only).
+#
+# This example is intentionally read-only and loopback-only. Remote TCP,
+# write-enabled operation, and CurveZMQ authentication land in Iteration 4/5.
+# Do not copy this file into a production deployment.
+
+command_endpoint: "tcp://127.0.0.1:7002"
+market_endpoint: "tcp://127.0.0.1:7001"
+private_endpoint: "tcp://127.0.0.1:7003"
+
+enable_trading: false
+allow_remote: false
+allow_shared_private_endpoint: false
