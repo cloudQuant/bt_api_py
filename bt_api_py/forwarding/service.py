@@ -10,6 +10,7 @@ from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.forwarding.hub import MarketDataHub
 from bt_api_py.forwarding.memory import InMemoryForwardingBus, _run_awaitable_sync
 from bt_api_py.forwarding.router import OrderRouter, RiskRuleSet
+from bt_api_py.forwarding.source_supervisor import SourceSupervisor
 from bt_api_py.forwarding.state import SQLiteStateStore
 from bt_api_py.forwarding.transport import ZmqCommandServer, ZmqEventPublisher
 from bt_api_py.gateway.config import GatewayConfig
@@ -23,6 +24,7 @@ class ForwardingRuntime:
     bus: InMemoryForwardingBus | None = None
     risk_rules: RiskRuleSet | None = None
     state_store: SQLiteStateStore | None = None
+    source: object | None = None
 
     def __post_init__(self) -> None:
         if self.bus is None:
@@ -34,6 +36,7 @@ class ForwardingRuntime:
             risk_rules=self.risk_rules,
             state_store=self.state_store,
         )
+        self.source_supervisor = SourceSupervisor(self.source) if self.source is not None else None
 
     async def start(self) -> bool:
         """start method"""

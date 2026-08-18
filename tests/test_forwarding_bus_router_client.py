@@ -200,7 +200,7 @@ def test_btapi_forwarding_adapter_bridges_existing_data_queue() -> None:
     forwarded = adapter.forward_once("SIM")
     event = subscription.poll()
 
-    assert api.subscriptions == [("SIM___SPOT___RB2510", ["ticker"])]
+    assert api.subscriptions == [("SIM___SPOT___RB2510", [{"topic": "ticker"}])]
     assert forwarded == 1
     assert event.event_type == "tick"
     assert event.payload["price"] == 3500.0
@@ -1046,7 +1046,9 @@ async def test_router_does_not_cache_retryable_errors() -> None:
             nonlocal calls
             calls += 1
             raise BrokerError(
-                BrokerErrorCode.NETWORK_ERROR, "timeout", retryable=True,
+                BrokerErrorCode.NETWORK_ERROR,
+                "timeout",
+                retryable=True,
             )
 
     router = OrderRouter(FlakyAdapter())
@@ -1117,7 +1119,9 @@ async def test_router_caches_terminal_rejects() -> None:
             nonlocal calls
             calls += 1
             raise BrokerError(
-                BrokerErrorCode.INSUFFICIENT_FUNDS, "no money", retryable=False,
+                BrokerErrorCode.INSUFFICIENT_FUNDS,
+                "no money",
+                retryable=False,
             )
 
     router = OrderRouter(TerminalAdapter())
