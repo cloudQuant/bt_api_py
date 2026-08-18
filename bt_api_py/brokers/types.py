@@ -19,6 +19,8 @@ class BrokerEvent(StrEnum):
     POSITION_UPDATED = "position_updated"
     ACCOUNT_UPDATED = "account_updated"
     ERROR = "error"
+    CONNECTION_LOST = "connection_lost"
+    RESYNC_REQUIRED = "resync_required"
 
 
 @dataclass(slots=True)

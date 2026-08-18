@@ -2,6 +2,7 @@
 
 from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.brokers.errors import BrokerError, BrokerErrorCode
+from bt_api_py.brokers.feed_bridge import FeedBrokerAdapter
 from bt_api_py.brokers.loader import available_adapters, load_adapter, register_builtin_adapters
 from bt_api_py.brokers.registry import list_registered_adapters, register_adapter
 from bt_api_py.brokers.types import (
@@ -23,6 +24,7 @@ __all__ = [
     "BrokerErrorCode",
     "BrokerEvent",
     "CancelOrderRequest",
+    "FeedBrokerAdapter",
     "list_registered_adapters",
     "load_adapter",
     "OrderRequest",

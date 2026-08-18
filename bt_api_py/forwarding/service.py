@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import threading
 import time
 from dataclasses import dataclass
@@ -9,6 +11,7 @@ from dataclasses import dataclass
 from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.forwarding.hub import MarketDataHub
 from bt_api_py.forwarding.memory import InMemoryForwardingBus, _run_awaitable_sync
+from bt_api_py.forwarding.private_event_pump import PrivateEventPump
 from bt_api_py.forwarding.router import OrderRouter, RiskRuleSet
 from bt_api_py.forwarding.source_supervisor import SourceSupervisor
 from bt_api_py.forwarding.state import SQLiteStateStore
@@ -37,13 +40,23 @@ class ForwardingRuntime:
             state_store=self.state_store,
         )
         self.source_supervisor = SourceSupervisor(self.source) if self.source is not None else None
+        account_id = str(getattr(self.adapter, "account_id", "default"))
+        self.private_event_pump = PrivateEventPump(self.adapter, self.bus, account_id=account_id)
+        self._pump_task: asyncio.Task | None = None
 
     async def start(self) -> bool:
         """start method"""
-        return await self.order_router.connect()
+        result = await self.order_router.connect()
+        self._pump_task = asyncio.create_task(self.private_event_pump.run_once())
+        return result
 
     async def stop(self) -> bool:
         """stop method"""
+        if self._pump_task is not None:
+            self._pump_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._pump_task
+            self._pump_task = None
         return await self.order_router.disconnect()
 
     async def health(self) -> dict[str, object]:
