@@ -1,0 +1,33 @@
+# Exchange bundle catalog for bt_api_py.
+#
+# A "bundle" groups independent plugin packages that must be installed and
+# loadable for a given use case. The doctor command and CI read this file to
+# report per-venue install/load/certification status instead of relying on a
+# fixed plugin count.
+#
+# certification tiers (see docs/acceptance): experimental | read_only_certified
+# | certified | retired
+
+[bundles.core-reference]
+description = "Core reference venues: Binance Spot + OKX Spot + CTP Future"
+
+[[bundles.core-reference.venues]]
+package = "bt_api_binance"
+plugin = "binance"
+exchange = "BINANCE___SPOT"
+min_version = "2.0.0"
+certification = "experimental"
+
+[[bundles.core-reference.venues]]
+package = "bt_api_okx"
+plugin = "okx"
+exchange = "OKX___SPOT"
+min_version = "0.15.0"
+certification = "experimental"
+
+[[bundles.core-reference.venues]]
+package = "bt_api_ctp"
+plugin = "ctp"
+exchange = "CTP___FUTURE"
+min_version = "0.15.0"
+certification = "experimental"

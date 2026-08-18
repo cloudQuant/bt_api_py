@@ -294,3 +294,8 @@ cookies = [
 all = [
     "bt_api_py[dev,security,visualization,email,time,ib,ib_web,mt5,cookies,monitoring]",
 ]
+core-reference = [
+    "bt_api_binance>=2.0.0",
+    "bt_api_okx>=0.15.0",
+    "bt_api_ctp>=0.15.0",
+]
