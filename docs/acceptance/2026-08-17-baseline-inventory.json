@@ -1,0 +1,740 @@
+{
+  "generated_at": "2026-08-18T14:32:38.120116+00:00",
+  "parent": {
+    "branch": "master",
+    "commit": "f01c26072f50780d5e02087f2467a7e00ff474ce"
+  },
+  "plugins": [
+    {
+      "certified": false,
+      "entry_point": "bt_api_binance.plugin:register_plugin",
+      "installed": true,
+      "name": "binance",
+      "package": "bt_api_binance",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bitfinex.plugin:register_plugin",
+      "installed": true,
+      "name": "bitfinex",
+      "package": "bt_api_bitfinex",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bitget.plugin:register_plugin",
+      "installed": true,
+      "name": "bitget",
+      "package": "bt_api_bitget",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bitinka.plugin:register_plugin",
+      "installed": true,
+      "name": "bitinka",
+      "package": "bt_api_bitinka",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bitmart.plugin:register_plugin",
+      "installed": true,
+      "name": "bitmart",
+      "package": "bt_api_bitmart",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bitso.plugin:register_plugin",
+      "installed": true,
+      "name": "bitso",
+      "package": "bt_api_bitso",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bitstamp.plugin:register_plugin",
+      "installed": true,
+      "name": "bitstamp",
+      "package": "bt_api_bitstamp",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bitvavo.plugin:register_plugin",
+      "installed": true,
+      "name": "bitvavo",
+      "package": "bt_api_bitvavo",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_btcturk.plugin:register_plugin",
+      "installed": true,
+      "name": "btcturk",
+      "package": "bt_api_btcturk",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_buda.plugin:register_plugin",
+      "installed": true,
+      "name": "buda",
+      "package": "bt_api_buda",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_bybit.plugin:register_plugin",
+      "installed": true,
+      "name": "bybit",
+      "package": "bt_api_bybit",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_ctp.plugin:register_plugin",
+      "installed": true,
+      "name": "ctp",
+      "package": "bt_api_ctp",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_dydx.plugin:register_plugin",
+      "installed": true,
+      "name": "dydx",
+      "package": "bt_api_dydx",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_gateio.plugin:register_plugin",
+      "installed": true,
+      "name": "gateio",
+      "package": "bt_api_gateio",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_giottus.plugin:register_plugin",
+      "installed": true,
+      "name": "giottus",
+      "package": "bt_api_giottus",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_htx.plugin:register_plugin",
+      "installed": true,
+      "name": "htx",
+      "package": "bt_api_htx",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_hyperliquid.plugin:register_plugin",
+      "installed": true,
+      "name": "hyperliquid",
+      "package": "bt_api_hyperliquid",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_ib_web.plugin:register_plugin",
+      "installed": true,
+      "name": "ib_web",
+      "package": "bt_api_ib_web",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_independent_reserve.plugin:register_plugin",
+      "installed": true,
+      "name": "independent_reserve",
+      "package": "bt_api_independent_reserve",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_kraken.plugin:register_plugin",
+      "installed": true,
+      "name": "kraken",
+      "package": "bt_api_kraken",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_kucoin.plugin:register_plugin",
+      "installed": true,
+      "name": "kucoin",
+      "package": "bt_api_kucoin",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_localbitcoins.plugin:register_plugin",
+      "installed": true,
+      "name": "localbitcoins",
+      "package": "bt_api_localbitcoins",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_mercado_bitcoin.plugin:register_plugin",
+      "installed": true,
+      "name": "mercado_bitcoin",
+      "package": "bt_api_mercado_bitcoin",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_mt5.plugin:register_plugin",
+      "installed": true,
+      "name": "mt5",
+      "package": "bt_api_mt5",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_okx.plugin:register_plugin",
+      "installed": true,
+      "name": "okx",
+      "package": "bt_api_okx",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_ripio.plugin:register_plugin",
+      "installed": true,
+      "name": "ripio",
+      "package": "bt_api_ripio",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_satoshitango.plugin:register_plugin",
+      "installed": true,
+      "name": "satoshitango",
+      "package": "bt_api_satoshitango",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_swyftx.plugin:register_plugin",
+      "installed": true,
+      "name": "swyftx",
+      "package": "bt_api_swyftx",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_valr.plugin:register_plugin",
+      "installed": true,
+      "name": "valr",
+      "package": "bt_api_valr",
+      "status": "installed"
+    },
+    {
+      "certified": false,
+      "entry_point": "bt_api_zebpay.plugin:register_plugin",
+      "installed": true,
+      "name": "zebpay",
+      "package": "bt_api_zebpay",
+      "status": "installed"
+    }
+  ],
+  "schema_version": 1,
+  "submodules": [
+    {
+      "checked_out_commit": "6db0c19329dc94528de697e65166c0b15dfd2565",
+      "dirty": false,
+      "path": "bt_api/bt_api_base",
+      "pin_mismatch": false,
+      "pinned_commit": "6db0c19329dc94528de697e65166c0b15dfd2565",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "b5b2c2cb19e22f38670fc73d053f310ad9cbc8c6",
+      "dirty": false,
+      "path": "bt_api/bt_api_binance",
+      "pin_mismatch": false,
+      "pinned_commit": "b5b2c2cb19e22f38670fc73d053f310ad9cbc8c6",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "bfd3776827fd4856e2ea631956cdeba826e6b67d",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitfinex",
+      "pin_mismatch": false,
+      "pinned_commit": "bfd3776827fd4856e2ea631956cdeba826e6b67d",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "403c7b709350601e4f7bcfd1adb74c290e5d08ca",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitget",
+      "pin_mismatch": false,
+      "pinned_commit": "403c7b709350601e4f7bcfd1adb74c290e5d08ca",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "fcf58bc3f0e15d5be32a107d7035944e989f6b87",
+      "dirty": false,
+      "path": "bt_api/bt_api_bithumb",
+      "pin_mismatch": false,
+      "pinned_commit": "fcf58bc3f0e15d5be32a107d7035944e989f6b87",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "8c64212693a709625c97f6bbb0f2d0919284cfeb",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitinka",
+      "pin_mismatch": false,
+      "pinned_commit": "8c64212693a709625c97f6bbb0f2d0919284cfeb",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "cfeb08edfc6397db1fd79687ebf1236a2c58dbaf",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitmart",
+      "pin_mismatch": false,
+      "pinned_commit": "cfeb08edfc6397db1fd79687ebf1236a2c58dbaf",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "6fe745d4c82da705de1a78bfa385aaa1b68f252f",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitrue",
+      "pin_mismatch": false,
+      "pinned_commit": "6fe745d4c82da705de1a78bfa385aaa1b68f252f",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "1b0d9ce76d00763958b2d7ef3857b805088f1d34",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitso",
+      "pin_mismatch": false,
+      "pinned_commit": "1b0d9ce76d00763958b2d7ef3857b805088f1d34",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "fed58c013f9a333e16003d6e245b5e9a85cc572a",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitstamp",
+      "pin_mismatch": false,
+      "pinned_commit": "fed58c013f9a333e16003d6e245b5e9a85cc572a",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "f2f5cbb64345bf62bc371177fc3583ce27ec747b",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitunix",
+      "pin_mismatch": false,
+      "pinned_commit": "f2f5cbb64345bf62bc371177fc3583ce27ec747b",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "2be8da1e0aafb225e523bb673d19a02239dfecad",
+      "dirty": false,
+      "path": "bt_api/bt_api_bitvavo",
+      "pin_mismatch": false,
+      "pinned_commit": "2be8da1e0aafb225e523bb673d19a02239dfecad",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "ba87c1be7883b090c12a05b249e2f41766dcd470",
+      "dirty": false,
+      "path": "bt_api/bt_api_btbns",
+      "pin_mismatch": false,
+      "pinned_commit": "ba87c1be7883b090c12a05b249e2f41766dcd470",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "6e023a628eb2ab6d163477295997e390450925e0",
+      "dirty": false,
+      "path": "bt_api/bt_api_btc_markets",
+      "pin_mismatch": false,
+      "pinned_commit": "6e023a628eb2ab6d163477295997e390450925e0",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "be8b6b73f28ca8f7f42099a35803020bf21fbf24",
+      "dirty": false,
+      "path": "bt_api/bt_api_btcturk",
+      "pin_mismatch": false,
+      "pinned_commit": "be8b6b73f28ca8f7f42099a35803020bf21fbf24",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "24e8fb49cfd424f9aada00cbf56bac24240d3a99",
+      "dirty": false,
+      "path": "bt_api/bt_api_buda",
+      "pin_mismatch": false,
+      "pinned_commit": "24e8fb49cfd424f9aada00cbf56bac24240d3a99",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "43a1fdbefc00d595f004bb89e6a8b0b73832de0f",
+      "dirty": false,
+      "path": "bt_api/bt_api_bybit",
+      "pin_mismatch": false,
+      "pinned_commit": "43a1fdbefc00d595f004bb89e6a8b0b73832de0f",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "8972d1d58a3cc4e5517d2b553679c9f547869724",
+      "dirty": false,
+      "path": "bt_api/bt_api_bydfi",
+      "pin_mismatch": false,
+      "pinned_commit": "8972d1d58a3cc4e5517d2b553679c9f547869724",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "08ef5d87d18a8c003e1cc0242b3f435a79f61249",
+      "dirty": false,
+      "path": "bt_api/bt_api_coinbase",
+      "pin_mismatch": false,
+      "pinned_commit": "08ef5d87d18a8c003e1cc0242b3f435a79f61249",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "37508a187665b2cf49a9c2db6712c28d10d61ee5",
+      "dirty": false,
+      "path": "bt_api/bt_api_coincheck",
+      "pin_mismatch": false,
+      "pinned_commit": "37508a187665b2cf49a9c2db6712c28d10d61ee5",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "ee41598df66d782283ff178d445f23f51bb51b82",
+      "dirty": false,
+      "path": "bt_api/bt_api_coindcx",
+      "pin_mismatch": false,
+      "pinned_commit": "ee41598df66d782283ff178d445f23f51bb51b82",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "f836fad3578be80cfb30a408c4490c042a63c754",
+      "dirty": false,
+      "path": "bt_api/bt_api_coinex",
+      "pin_mismatch": false,
+      "pinned_commit": "f836fad3578be80cfb30a408c4490c042a63c754",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "1933e789ce7670ec7fe57e1d7ced16ec17c33fb9",
+      "dirty": false,
+      "path": "bt_api/bt_api_coinone",
+      "pin_mismatch": false,
+      "pinned_commit": "1933e789ce7670ec7fe57e1d7ced16ec17c33fb9",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "de5ba828d9b13222ab08d37c4ebf3663e955b27d",
+      "dirty": false,
+      "path": "bt_api/bt_api_coinspot",
+      "pin_mismatch": false,
+      "pinned_commit": "de5ba828d9b13222ab08d37c4ebf3663e955b27d",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "863925e6169336574bf26853866b43c6681fc47d",
+      "dirty": false,
+      "path": "bt_api/bt_api_coinswitch",
+      "pin_mismatch": false,
+      "pinned_commit": "863925e6169336574bf26853866b43c6681fc47d",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "0c3cb3108bf54d5aa6a050009b8c6a0f9aa67a5e",
+      "dirty": false,
+      "path": "bt_api/bt_api_cryptocom",
+      "pin_mismatch": false,
+      "pinned_commit": "0c3cb3108bf54d5aa6a050009b8c6a0f9aa67a5e",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "b1e21b3581799b011dbf90757ee6cc07fcb64628",
+      "dirty": false,
+      "path": "bt_api/bt_api_ctp",
+      "pin_mismatch": true,
+      "pinned_commit": "a8a3792995ebee73a3d54860d56a5af2520bbf5f",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "901772244753299006361e880306314dc162cca0",
+      "dirty": false,
+      "path": "bt_api/bt_api_dydx",
+      "pin_mismatch": false,
+      "pinned_commit": "901772244753299006361e880306314dc162cca0",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "44e69170a4a0a756a14bf89b8ea0a8c68374eaf5",
+      "dirty": false,
+      "path": "bt_api/bt_api_exmo",
+      "pin_mismatch": false,
+      "pinned_commit": "44e69170a4a0a756a14bf89b8ea0a8c68374eaf5",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "5e0974181596a6c773709b5be49a98d08bc10c95",
+      "dirty": false,
+      "path": "bt_api/bt_api_foxbit",
+      "pin_mismatch": false,
+      "pinned_commit": "5e0974181596a6c773709b5be49a98d08bc10c95",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "bb14588a80d3e7939bcbd3c747a8463090e4aece",
+      "dirty": false,
+      "path": "bt_api/bt_api_gateio",
+      "pin_mismatch": false,
+      "pinned_commit": "bb14588a80d3e7939bcbd3c747a8463090e4aece",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "2c416099162cfff5197c4859a61626059eb7db15",
+      "dirty": false,
+      "path": "bt_api/bt_api_gemini",
+      "pin_mismatch": false,
+      "pinned_commit": "2c416099162cfff5197c4859a61626059eb7db15",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "51505fe64112f89530384608ef46354745a8ed3b",
+      "dirty": false,
+      "path": "bt_api/bt_api_giottus",
+      "pin_mismatch": false,
+      "pinned_commit": "51505fe64112f89530384608ef46354745a8ed3b",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "470a032fd83443335e59ec2f5cf88d56e30f7107",
+      "dirty": false,
+      "path": "bt_api/bt_api_gmx",
+      "pin_mismatch": false,
+      "pinned_commit": "470a032fd83443335e59ec2f5cf88d56e30f7107",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "e3f3d6a9dceaa23c13272330fca6b83c3794d478",
+      "dirty": false,
+      "path": "bt_api/bt_api_hitbtc",
+      "pin_mismatch": false,
+      "pinned_commit": "e3f3d6a9dceaa23c13272330fca6b83c3794d478",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "59d825010b07cebf635d2807422b2b471d5e8805",
+      "dirty": false,
+      "path": "bt_api/bt_api_htx",
+      "pin_mismatch": false,
+      "pinned_commit": "59d825010b07cebf635d2807422b2b471d5e8805",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "c3dbe3ac2745327cd35e58b6d736d1b994f43127",
+      "dirty": false,
+      "path": "bt_api/bt_api_hyperliquid",
+      "pin_mismatch": false,
+      "pinned_commit": "c3dbe3ac2745327cd35e58b6d736d1b994f43127",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "29951384ebfdafac7df17cadda6e3068d565768c",
+      "dirty": false,
+      "path": "bt_api/bt_api_ib_web",
+      "pin_mismatch": false,
+      "pinned_commit": "29951384ebfdafac7df17cadda6e3068d565768c",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "94a3b3b2b9900384ad7141b794d0dfc573dfd9a0",
+      "dirty": false,
+      "path": "bt_api/bt_api_independent_reserve",
+      "pin_mismatch": false,
+      "pinned_commit": "94a3b3b2b9900384ad7141b794d0dfc573dfd9a0",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "0e60795524d244e21877911781fc4f455beb3a58",
+      "dirty": false,
+      "path": "bt_api/bt_api_korbit",
+      "pin_mismatch": false,
+      "pinned_commit": "0e60795524d244e21877911781fc4f455beb3a58",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "40c323d5fc5ec4112a391b675aac05cbcbc6fb7a",
+      "dirty": false,
+      "path": "bt_api/bt_api_kraken",
+      "pin_mismatch": false,
+      "pinned_commit": "40c323d5fc5ec4112a391b675aac05cbcbc6fb7a",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "8c6e1bd09bb5be76d7e7447abe34e47977fea2a9",
+      "dirty": false,
+      "path": "bt_api/bt_api_kucoin",
+      "pin_mismatch": false,
+      "pinned_commit": "8c6e1bd09bb5be76d7e7447abe34e47977fea2a9",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "0b06e79e6d2bfdbe0a3f6d860ece7a14454a7246",
+      "dirty": false,
+      "path": "bt_api/bt_api_latoken",
+      "pin_mismatch": false,
+      "pinned_commit": "0b06e79e6d2bfdbe0a3f6d860ece7a14454a7246",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "29703c5bb058a22faff782d99b44de36a8ce0dca",
+      "dirty": false,
+      "path": "bt_api/bt_api_localbitcoins",
+      "pin_mismatch": false,
+      "pinned_commit": "29703c5bb058a22faff782d99b44de36a8ce0dca",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "2f722ce2af234c3496ca528f6a17f96b45a2dc5b",
+      "dirty": false,
+      "path": "bt_api/bt_api_luno",
+      "pin_mismatch": false,
+      "pinned_commit": "2f722ce2af234c3496ca528f6a17f96b45a2dc5b",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "cdedde9ed0b938f5d15debe9e98d11b051d8bd38",
+      "dirty": false,
+      "path": "bt_api/bt_api_mercado_bitcoin",
+      "pin_mismatch": false,
+      "pinned_commit": "cdedde9ed0b938f5d15debe9e98d11b051d8bd38",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "a3eea751173428e249b4bfe4e2ac31476d15f0a2",
+      "dirty": false,
+      "path": "bt_api/bt_api_mexc",
+      "pin_mismatch": false,
+      "pinned_commit": "a3eea751173428e249b4bfe4e2ac31476d15f0a2",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "edd392a8ff9a0a58bde6058d61c80d8ca2050af7",
+      "dirty": false,
+      "path": "bt_api/bt_api_mt5",
+      "pin_mismatch": false,
+      "pinned_commit": "edd392a8ff9a0a58bde6058d61c80d8ca2050af7",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "10e0b67e7f793d88b74aa1c4cd85f2d2c0031967",
+      "dirty": false,
+      "path": "bt_api/bt_api_okx",
+      "pin_mismatch": false,
+      "pinned_commit": "10e0b67e7f793d88b74aa1c4cd85f2d2c0031967",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "e43037f2ec0d7e7aec68d23287471221df7f665e",
+      "dirty": false,
+      "path": "bt_api/bt_api_phemex",
+      "pin_mismatch": false,
+      "pinned_commit": "e43037f2ec0d7e7aec68d23287471221df7f665e",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "596e8d0353d90a0a5218554808882088034d4891",
+      "dirty": false,
+      "path": "bt_api/bt_api_poloniex",
+      "pin_mismatch": false,
+      "pinned_commit": "596e8d0353d90a0a5218554808882088034d4891",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "2fd261f77f6144fe3b776bb166b9c47e3f48955f",
+      "dirty": false,
+      "path": "bt_api/bt_api_ripio",
+      "pin_mismatch": false,
+      "pinned_commit": "2fd261f77f6144fe3b776bb166b9c47e3f48955f",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "e7907bfadeaaa33953f278345e01f8669bc721b2",
+      "dirty": false,
+      "path": "bt_api/bt_api_satoshitango",
+      "pin_mismatch": false,
+      "pinned_commit": "e7907bfadeaaa33953f278345e01f8669bc721b2",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "b8654accbe18719ea0337638251875ced3e4e6b2",
+      "dirty": false,
+      "path": "bt_api/bt_api_swyftx",
+      "pin_mismatch": false,
+      "pinned_commit": "b8654accbe18719ea0337638251875ced3e4e6b2",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "dcd866e7dff01e583da98c7435f76511c2d03f46",
+      "dirty": false,
+      "path": "bt_api/bt_api_upbit",
+      "pin_mismatch": false,
+      "pinned_commit": "dcd866e7dff01e583da98c7435f76511c2d03f46",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "a7d96af6407a3961f8b2a46c31ffe99da3326761",
+      "dirty": false,
+      "path": "bt_api/bt_api_valr",
+      "pin_mismatch": false,
+      "pinned_commit": "a7d96af6407a3961f8b2a46c31ffe99da3326761",
+      "plugin_status": "installed"
+    },
+    {
+      "checked_out_commit": "23022205d22cc798085e03b3fb0ea02c8714baf2",
+      "dirty": false,
+      "path": "bt_api/bt_api_wazirx",
+      "pin_mismatch": false,
+      "pinned_commit": "23022205d22cc798085e03b3fb0ea02c8714baf2",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "792980d133473f04e76b6db8e85657db04df99bc",
+      "dirty": false,
+      "path": "bt_api/bt_api_yobit",
+      "pin_mismatch": false,
+      "pinned_commit": "792980d133473f04e76b6db8e85657db04df99bc",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "6859129fe72f5579cb05cb6eff1e0627e809f312",
+      "dirty": false,
+      "path": "bt_api/bt_api_zaif",
+      "pin_mismatch": false,
+      "pinned_commit": "6859129fe72f5579cb05cb6eff1e0627e809f312",
+      "plugin_status": null
+    },
+    {
+      "checked_out_commit": "6effd6edf3f02eb2d1c9e04c3e46c9540cba1d5f",
+      "dirty": false,
+      "path": "bt_api/bt_api_zebpay",
+      "pin_mismatch": false,
+      "pinned_commit": "6effd6edf3f02eb2d1c9e04c3e46c9540cba1d5f",
+      "plugin_status": "installed"
+    }
+  ],
+  "summary": {
+    "dirty_submodules": [],
+    "pin_mismatch_submodules": [
+      "bt_api/bt_api_ctp"
+    ],
+    "plugin_count": 30,
+    "submodule_count": 60
+  }
+}
