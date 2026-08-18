@@ -9,7 +9,6 @@ from __future__ import annotations
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
 import queue
 import warnings
-from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
@@ -23,6 +22,8 @@ from bt_api_base.exceptions import (
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
+from ._contracts.errors import CapabilityNotSupportedError
+from ._contracts.models import Consistency, ForwardingConfig, TransportMode
 from .balance_manager import BalanceManagerMixin
 from .data_downloader import DataDownloaderMixin
 
@@ -78,23 +79,6 @@ def _ensure_plugins_loaded() -> None:
 
 
 # 常用异步方法白名单（A-09：__getattr__ 只代理白名单内的方法，避免 hasattr 恒真）
-_ASYNC_METHODS = frozenset(
-    {
-        "async_get_tick",
-        "async_get_depth",
-        "async_get_kline",
-        "async_make_order",
-        "async_cancel_order",
-        "async_cancel_all",
-        "async_query_order",
-        "async_get_open_orders",
-        "async_get_balance",
-        "async_get_account",
-        "async_get_position",
-    }
-)
-
-
 class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     """统一多交易所 API 入口，通过 ExchangeRegistry 实现交易所即插即用。"""
 
@@ -108,13 +92,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     subscribe_bar_num: int
     event_bus: EventBus
     _subscription_flags: dict[str, bool]
-    _async_proxy_cache: dict[str, Callable[..., Any]]
+    transport_mode: TransportMode
+    _backend: Any
 
     def __init__(
         self,
         exchange_kwargs: dict[str, Any] | None = None,
         debug: bool = True,
         event_bus: EventBus | None = None,
+        *,
+        transport_mode: TransportMode = TransportMode.DIRECT,
+        forwarding_config: ForwardingConfig | None = None,
     ) -> None:
         """初始化 BtApi 实例。
 
@@ -122,6 +110,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             exchange_kwargs: 交易所配置 dict，key 为 exchange_name，value 为对应参数。
             debug: 是否开启 debug 模式，控制日志输出。
             event_bus: 事件总线实例，用于 BarEvent/OrderEvent 等回调；None 则创建默认实例。
+            transport_mode: direct（默认，直接持有 Feed）或 zmq（经转发网关）。
+            forwarding_config: ZMQ 模式下的转发网关端点与 scope 配置。
         """
         self.exchange_kwargs = {}
         self.debug = debug
@@ -133,9 +123,21 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self.subscribe_bar_num = 0
         self.event_bus = event_bus or EventBus()
         self._subscription_flags = {}
-        self._async_proxy_cache = {}
+        self.transport_mode = transport_mode
+        self._backend = self._build_backend(transport_mode, forwarding_config)
         _ensure_plugins_loaded()
         self.init_exchange(exchange_kwargs or {})
+
+    def _build_backend(
+        self, transport_mode: TransportMode, forwarding_config: ForwardingConfig | None
+    ) -> Any:
+        if transport_mode is TransportMode.ZMQ:
+            if forwarding_config is None:
+                raise ValueError("transport_mode=ZMQ requires forwarding_config")
+            from .forwarding.btapi_backend import ZmqBtApiBackend
+
+            return ZmqBtApiBackend(forwarding_config)
+        return None
 
     def init_exchange(self, exchange_kwargs: dict[str, Any]) -> None:
         """根据 exchange_kwargs 初始化并添加交易所。
@@ -262,17 +264,13 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     def get_request_api(self, exchange_name: str) -> Any:
         """Get the REST Feed instance for the specified exchange (synchronous API).
 
-        Args:
-            exchange_name: Exchange identifier (e.g., "BINANCE___SPOT")
-
-        Returns:
-            Feed instance if exchange exists, None otherwise
-
-        Example:
-            >>> api = BtApi({"BINANCE___SPOT": {...}})
-            >>> feed = api.get_request_api("BINANCE___SPOT")
-            >>> ticker = feed.get_tick("BTCUSDT")
+        ZMQ transport has no direct feed escape hatch and raises
+        ``CapabilityNotSupportedError`` instead of returning ``None``.
         """
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                "get_request_api", detail="ZMQ transport has no direct feed escape hatch"
+            )
         api = self.exchange_feeds.get(exchange_name)
         if api is None:
             self.log(f"exchange_name: {exchange_name} does not exist", level="error")
@@ -589,6 +587,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 币种 (None 表示全部)
         """
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_balance(
+                exchange_name, consistency=self._pop_consistency(kwargs)
+            )
         return self._get_feed(exchange_name).get_balance(symbol, extra_data=extra_data, **kwargs)
 
     def get_account(
@@ -598,6 +600,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 币种
         """
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_account(
+                exchange_name, consistency=self._pop_consistency(kwargs)
+            )
         return self._get_feed(exchange_name).get_account(symbol, extra_data=extra_data, **kwargs)
 
     def get_position(
@@ -607,33 +613,104 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_position(
+                exchange_name, consistency=self._pop_consistency(kwargs)
+            )
         return self._get_feed(exchange_name).get_position(symbol, extra_data=extra_data, **kwargs)
 
-    # ── 异步接口（自动代理）──────────────────────────────────────────
-    # async_get_tick / async_make_order / async_cancel_order 等异步方法
-    # 通过 __getattr__ 自动生成，调用对应 feed 的 async_* 方法。
-    # 用法与手写版完全一致:
-    #   bt_api.async_get_tick("BINANCE___SWAP", "BTC-USDT")
-    #   bt_api.async_make_order("OKX___SWAP", "BTC-USDT", 0.001, 50000, "limit")
+    @staticmethod
+    def _pop_consistency(kwargs: dict[str, Any]) -> Consistency:
+        value = kwargs.pop("consistency", Consistency.LIVE)
+        if isinstance(value, Consistency):
+            return value
+        return Consistency(str(value))
 
-    def __getattr__(self, name: str) -> Any:
-        """动态代理白名单内的 async_* 方法到对应 Feed 实例（带缓存）。"""
-        if name in _ASYNC_METHODS:
-            cache = self.__dict__.setdefault("_async_proxy_cache", {})
-            if name in cache:
-                return cache[name]
+    # ── 异步接口（显式方法，替代动态 __getattr__ 代理）────────────────
 
-            def _async_proxy(exchange_name: str, *args: Any, **kwargs: Any) -> Any:
-                feed = self._get_feed(exchange_name)
-                feed_method = getattr(feed, name, None)
-                if feed_method is None:
-                    raise AttributeError(f"Feed for {exchange_name} has no method {name!r}")
-                return feed_method(*args, **kwargs)
+    async def async_get_tick(
+        self, exchange_name: str, symbol: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_tick(exchange_name, symbol)
+        return await self._get_feed(exchange_name).async_get_tick(symbol, *args, **kwargs)
 
-            _async_proxy.__name__ = name
-            cache[name] = _async_proxy
-            return _async_proxy
-        raise AttributeError(f"'BtApi' object has no attribute {name!r}")
+    async def async_get_depth(
+        self, exchange_name: str, symbol: str, count: int = 20, **kwargs: Any
+    ) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_depth(exchange_name, symbol, count)
+        return await self._get_feed(exchange_name).async_get_depth(symbol, count=count, **kwargs)
+
+    async def async_get_kline(
+        self,
+        exchange_name: str,
+        symbol: str,
+        period: str,
+        count: int = 20,
+        **kwargs: Any,
+    ) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_kline(exchange_name, symbol, period, count)
+        return await self._get_feed(exchange_name).async_get_kline(
+            symbol, period, count=count, **kwargs
+        )
+
+    async def async_make_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                "async_make_order", detail="ZMQ order submission uses typed OrderRequest"
+            )
+        return await self._get_feed(exchange_name).async_make_order(*args, **kwargs)
+
+    async def async_cancel_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                "async_cancel_order", detail="ZMQ cancel uses typed CancelOrderRequest"
+            )
+        return await self._get_feed(exchange_name).async_cancel_order(*args, **kwargs)
+
+    async def async_cancel_all(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                "async_cancel_all", detail="ZMQ cancel-all uses typed CancelAllRequest"
+            )
+        return await self._get_feed(exchange_name).async_cancel_all(*args, **kwargs)
+
+    async def async_query_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                "async_query_order", detail="ZMQ query uses typed QueryOrderRequest"
+            )
+        return await self._get_feed(exchange_name).async_query_order(*args, **kwargs)
+
+    async def async_get_open_orders(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_open_orders(
+                exchange_name, consistency=self._pop_consistency(kwargs)
+            )
+        return await self._get_feed(exchange_name).async_get_open_orders(*args, **kwargs)
+
+    async def async_get_balance(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_balance(
+                exchange_name, consistency=self._pop_consistency(kwargs)
+            )
+        return await self._get_feed(exchange_name).async_get_balance(*args, **kwargs)
+
+    async def async_get_account(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_account(
+                exchange_name, consistency=self._pop_consistency(kwargs)
+            )
+        return await self._get_feed(exchange_name).async_get_account(*args, **kwargs)
+
+    async def async_get_position(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.get_position(
+                exchange_name, consistency=self._pop_consistency(kwargs)
+            )
+        return await self._get_feed(exchange_name).async_get_position(*args, **kwargs)
 
     # ── 批量操作 ───────────────────────────────────────────────────
 

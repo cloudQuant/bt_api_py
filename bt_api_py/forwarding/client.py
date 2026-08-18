@@ -59,9 +59,9 @@ class ForwardingClient:
         self._bars: dict[str, deque[dict[str, Any]]] = defaultdict(self._new_mapping_event_queue)
         self._broker_updates: deque[dict[str, Any]] = self._new_mapping_event_queue()
         self._dropped_event_counts: dict[str, int] = dict.fromkeys(_EVENT_CACHE_KINDS, 0)
-        self._account_cache: dict[str, Any] = {"cash": 0.0, "value": 0.0}
-        self._positions_cache: list[dict[str, Any]] = []
-        self._orders_cache: list[dict[str, Any]] = []
+        self._account_cache: dict[str, Any] | None = None
+        self._positions_cache: list[dict[str, Any]] | None = None
+        self._orders_cache: list[dict[str, Any]] | None = None
         self._pending_commands: set[str] = set()
 
     def connect(self) -> bool:
@@ -194,14 +194,16 @@ class ForwardingClient:
         try:
             ack = self._send_command_sync(command)
         except (RuntimeError, TimeoutError):
-            return dict(self._account_cache)
+            if self._account_cache is not None:
+                return dict(self._account_cache)
+            raise
         if ack.accepted:
             self._account_cache = {
                 "cash": ack.payload.get("available_cash", ack.payload.get("cash", 0.0)),
                 "value": ack.payload.get("equity", ack.payload.get("value", 0.0)),
                 **ack.payload,
             }
-        return dict(self._account_cache)
+        return dict(self._account_cache or {})
 
     get_account = get_balance
 
@@ -216,10 +218,12 @@ class ForwardingClient:
         try:
             ack = self._send_command_sync(command)
         except (RuntimeError, TimeoutError):
-            return list(self._positions_cache)
+            if self._positions_cache is not None:
+                return list(self._positions_cache)
+            raise
         if ack.accepted:
             self._positions_cache = list(ack.payload.get("positions", []))
-        return list(self._positions_cache)
+        return list(self._positions_cache or [])
 
     def fetch_open_orders(self) -> list[dict[str, Any]]:
         """fetch_open_orders method"""
@@ -232,14 +236,16 @@ class ForwardingClient:
         try:
             ack = self._send_command_sync(command)
         except (RuntimeError, TimeoutError):
-            return list(self._orders_cache)
+            if self._orders_cache is not None:
+                return list(self._orders_cache)
+            raise
         if ack.accepted:
             self._orders_cache = [
                 order
                 for order in ack.payload.get("orders", [])
                 if order.get("status") in {"submitted", "new"}
             ]
-        return list(self._orders_cache)
+        return list(self._orders_cache or [])
 
     get_open_orders = fetch_open_orders
 
@@ -370,7 +376,7 @@ class ForwardingClient:
         elif kind == "position":
             self._positions_cache = [
                 item
-                for item in self._positions_cache
+                for item in (self._positions_cache or [])
                 if item.get("symbol") != payload.get("symbol")
             ]
             self._positions_cache.append(payload)
