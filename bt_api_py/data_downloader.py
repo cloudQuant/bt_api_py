@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Protocol
 
 from bt_api_base._compat import UTC
 from bt_api_base.exceptions import (
@@ -56,11 +56,19 @@ def _parse_time(input_time: str | datetime | None) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+class _DataDownloaderHost(Protocol):
+    """Host attributes required from ``BtApi`` by :class:`DataDownloaderMixin`."""
+
+    def _get_feed(self, exchange_name: str) -> Any: ...
+    def push_bar_data_to_queue(self, exchange_name: str, data: Any) -> None: ...
+    def log(self, txt: str, level: str = "info") -> None: ...
+
+
 class DataDownloaderMixin:
     """历史 K 线下载方法（供 BtApi 混入）。"""
 
     def download_history_bars(
-        self,
+        self: _DataDownloaderHost & DataDownloaderMixin,
         exchange_name: str,
         symbol: str,
         period: str,
@@ -82,7 +90,7 @@ class DataDownloaderMixin:
         )
 
     def _download_kline_by_count(
-        self,
+        self: _DataDownloaderHost,
         feed: Any,
         exchange_name: str,
         symbol: str,
@@ -95,7 +103,7 @@ class DataDownloaderMixin:
         self.log(f"download completely: {symbol}, new {count} bar")
 
     def _download_kline_by_range(
-        self,
+        self: _DataDownloaderHost & DataDownloaderMixin,
         feed: Any,
         exchange_name: str,
         symbol: str,
@@ -151,13 +159,13 @@ class DataDownloaderMixin:
 
         self.log(f"download all data completely: {symbol}, period: {period}")
 
-    def _calculate_aligned_stop_time(self, period: str) -> datetime:
+    def _calculate_aligned_stop_time(self: _DataDownloaderHost, period: str) -> datetime:
         now = datetime.now(UTC)
         period_seconds = int(_calculate_time_delta(period).total_seconds())
         return now - timedelta(seconds=now.timestamp() % period_seconds)
 
     def _download_single_batch(
-        self,
+        self: _DataDownloaderHost,
         feed: Any,
         exchange_name: str,
         symbol: str,

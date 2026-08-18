@@ -16,7 +16,6 @@ from typing import Any
 from bt_api_base.event_bus import EventBus
 from bt_api_base.exceptions import (
     BtApiError,
-    CurrencyNotFoundError,
     ExchangeNotFoundError,
     InvalidOrderError,
     SubscribeError,
@@ -25,16 +24,7 @@ from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
 from .balance_manager import BalanceManagerMixin
-from .data_downloader import (
-    DOWNLOAD_MAX_RETRIES,
-    DOWNLOAD_RETRY_BACKOFF_FACTOR,
-    DOWNLOAD_RETRY_DELAY_SEC,
-    DOWNLOAD_RETRY_MAX_DELAY_SEC,
-    KLINE_PERIOD_DELTAS,
-    DataDownloaderMixin,
-    _calculate_time_delta,
-    _parse_time,
-)
+from .data_downloader import DataDownloaderMixin
 
 __all__ = ["BtApi"]
 
@@ -81,7 +71,7 @@ def _ensure_plugins_loaded() -> None:
         return
     try:
         _initialize_plugin_and_legacy_registrations()
-    except Exception as exc:  # noqa: BLE001 - 单插件失败已由 loader 降级，此处兜底
+    except Exception as exc:
         get_logger("api").warning(f"Plugin loading degraded: {type(exc).__name__}: {exc}")
     finally:
         _plugins_loaded = True
@@ -573,9 +563,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         the unified facade thin so callers can pass through exchange-specific
         arguments such as ``limit``, ``count``, ``start_time`` or ``end_time``.
         """
-        return self._get_feed(exchange_name).get_deals(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._get_feed(exchange_name).get_deals(symbol, extra_data=extra_data, **kwargs)
 
     def get_trades(
         self,
@@ -590,9 +578,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         may map it to account fills. Callers that require real account fees
         should prefer :meth:`get_deals` when the feed supports it.
         """
-        return self._get_feed(exchange_name).get_trades(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._get_feed(exchange_name).get_trades(symbol, extra_data=extra_data, **kwargs)
 
     # ── 账户查询（同步）────────────────────────────────────────────
 

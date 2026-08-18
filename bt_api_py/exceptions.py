@@ -1,4 +1,5 @@
 """Module-level docstring."""
+
 from datetime import datetime
 
 from bt_api_base.exceptions import (
@@ -12,6 +13,7 @@ from bt_api_base.exceptions import (
     ExchangeNotFoundError,
     InsufficientBalanceError,
     InvalidOrderError,
+    InvalidSymbolError,
     OrderError,
     OrderNotFoundError,
     QueueNotInitializedError,

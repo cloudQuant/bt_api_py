@@ -6,7 +6,8 @@ from datetime import timedelta
 
 import pytest
 
-from bt_api_py.bt_api import KLINE_PERIOD_DELTAS, BtApi
+from bt_api_py.bt_api import BtApi
+from bt_api_py.data_downloader import KLINE_PERIOD_DELTAS
 from bt_api_py.exceptions import ExchangeNotFoundError, InvalidOrderError, SubscribeError
 
 
@@ -190,9 +191,7 @@ class TestBtApiUnifiedInterface:
 
         self.bt.close()
 
-        assert call_log == ["A", "B"], (
-            f"Expected both feeds disconnected, got {call_log}"
-        )
+        assert call_log == ["A", "B"], f"Expected both feeds disconnected, got {call_log}"
 
     def test_close_is_idempotent(self):
         """close() 连续调用两次不抛异常。"""
@@ -229,9 +228,7 @@ class TestBtApiUnifiedInterface:
         with pytest.raises(RuntimeError, match="failed to close feeds"):
             self.bt.close()
 
-        assert call_log == ["X", "Y"], (
-            f"Both feeds should have been attempted, got {call_log}"
-        )
+        assert call_log == ["X", "Y"], f"Both feeds should have been attempted, got {call_log}"
 
 
 class TestKlinePeriodDeltas:

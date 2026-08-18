@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 
 from bt_api_py._compat import UTC
-from bt_api_py.bt_api import _calculate_time_delta, _parse_time
+from bt_api_py.data_downloader import _calculate_time_delta, _parse_time
 from bt_api_py.exceptions import DataParseError
 
 

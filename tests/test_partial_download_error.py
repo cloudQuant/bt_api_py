@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from bt_api_py.bt_api import DOWNLOAD_MAX_RETRIES, BtApi
+from bt_api_py.bt_api import BtApi
+from bt_api_py.data_downloader import DOWNLOAD_MAX_RETRIES
 from bt_api_py.exceptions import PartialDownloadError, RequestError
 
 
@@ -20,9 +21,13 @@ class TestKlineDownloadRetryExhaustion:
 
         begin_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
-        with patch.object(
-            api, "_download_single_batch", side_effect=RequestError("mock network error")
-        ), patch("time.sleep", return_value=None), pytest.raises(PartialDownloadError) as exc_info:
+        with (
+            patch.object(
+                api, "_download_single_batch", side_effect=RequestError("mock network error")
+            ),
+            patch("time.sleep", return_value=None),
+            pytest.raises(PartialDownloadError) as exc_info,
+        ):
             api._download_kline_by_range(
                 feed=None,
                 exchange_name="TEST___SPOT",
@@ -49,9 +54,11 @@ class TestKlineDownloadRetryExhaustion:
         # Build a side_effect: 1 success, then many failures
         side_effects = [advanced_time] + [RequestError("mock error")] * (DOWNLOAD_MAX_RETRIES + 1)
 
-        with patch.object(
-            api, "_download_single_batch", side_effect=side_effects
-        ), patch("time.sleep", return_value=None), pytest.raises(PartialDownloadError) as exc_info:
+        with (
+            patch.object(api, "_download_single_batch", side_effect=side_effects),
+            patch("time.sleep", return_value=None),
+            pytest.raises(PartialDownloadError) as exc_info,
+        ):
             api._download_kline_by_range(
                 feed=None,
                 exchange_name="TEST___SPOT",
