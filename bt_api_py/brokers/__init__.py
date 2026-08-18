@@ -1,4 +1,5 @@
 """Module-level docstring."""
+
 from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.brokers.errors import BrokerError, BrokerErrorCode
 from bt_api_py.brokers.loader import available_adapters, load_adapter, register_builtin_adapters

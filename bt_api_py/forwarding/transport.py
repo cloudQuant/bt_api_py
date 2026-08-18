@@ -1,10 +1,10 @@
 """Module documentation"""
+
 from __future__ import annotations
 
 import inspect
 import threading
 from collections.abc import Awaitable, Callable
-from typing import Union
 
 import zmq
 from bt_api_base.logging_factory import get_logger
@@ -143,7 +143,7 @@ class ZmqEventSubscriber:
         self.socket.close(linger=0)
 
 
-CommandHandler = Callable[[OrderCommand], Union[CommandAck, Awaitable[CommandAck]]]
+CommandHandler = Callable[[OrderCommand], CommandAck | Awaitable[CommandAck]]
 
 
 class ZmqCommandServer:

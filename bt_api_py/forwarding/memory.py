@@ -1,14 +1,16 @@
 """Module-level docstring."""
+
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import inspect
 import math
 import threading
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import Any, Union
+from typing import Any
 
 from bt_api_py.forwarding.schema import CommandAck, MarketEvent, OrderCommand, PrivateEvent
 
@@ -49,7 +51,7 @@ class MarketSubscription:
         self.bus._remove_subscription(self)
 
 
-CommandHandler = Callable[[OrderCommand], Union[CommandAck, Awaitable[CommandAck]]]
+CommandHandler = Callable[[OrderCommand], CommandAck | Awaitable[CommandAck]]
 
 
 class InMemoryForwardingBus:
@@ -89,8 +91,7 @@ class InMemoryForwardingBus:
             if replay > 0:
                 for topic, events in self._market_replay.items():
                     if topic.startswith(topic_prefix):
-                        for event in list(events)[-replay:
-                            ]:
+                        for event in list(events)[-replay:]:
                             subscription.put(event)
         return subscription
 
@@ -103,8 +104,7 @@ class InMemoryForwardingBus:
             if replay > 0:
                 for topic, events in self._private_replay.items():
                     if topic.startswith(topic_prefix):
-                        for event in list(events)[-replay:
-                            ]:
+                        for event in list(events)[-replay:]:
                             subscription.put(event)
         return subscription
 
@@ -213,9 +213,7 @@ class _LoopRunner:
 
     def __init__(self) -> None:
         self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(
-            target=self._run_loop, daemon=True, name="forwarding-loop"
-        )
+        self._thread = threading.Thread(target=self._run_loop, daemon=True, name="forwarding-loop")
         self._thread.start()
 
     def _run_loop(self) -> None:
@@ -234,10 +232,8 @@ class _LoopRunner:
 
 
 def _consume_future_result(future: concurrent.futures.Future[Any]) -> None:
-    try:
+    with contextlib.suppress(Exception):
         future.exception()
-    except Exception:
-        pass
 
 
 def _run_awaitable_sync(awaitable: Awaitable[Any], *, timeout: float | None = None) -> Any:

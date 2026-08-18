@@ -1,9 +1,10 @@
 """Module-level docstring."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 
 OrderSide = Literal["buy", "sell"]
@@ -11,8 +12,9 @@ OrderType = Literal["market", "limit"]
 OrderStatus = Literal["new", "submitted", "filled", "cancelled", "rejected"]
 
 
-class BrokerEvent(str, Enum):
+class BrokerEvent(StrEnum):
     """Class BrokerEvent"""
+
     ORDER_UPDATED = "order_updated"
     POSITION_UPDATED = "position_updated"
     ACCOUNT_UPDATED = "account_updated"
@@ -22,6 +24,7 @@ class BrokerEvent(str, Enum):
 @dataclass(slots=True)
 class BrokerCapabilities:
     """Class BrokerCapabilities"""
+
     supports_market_data: bool = True
     supports_order_submit: bool = True
     supports_order_cancel: bool = True
@@ -41,6 +44,7 @@ class BrokerCapabilities:
 @dataclass(slots=True)
 class OrderRequest:
     """Class OrderRequest"""
+
     account_id: str
     symbol: str
     side: OrderSide
@@ -55,6 +59,7 @@ class OrderRequest:
 @dataclass(slots=True)
 class CancelOrderRequest:
     """Class CancelOrderRequest"""
+
     account_id: str
     order_id: str
     symbol: str | None = None
@@ -64,6 +69,7 @@ class CancelOrderRequest:
 @dataclass(slots=True)
 class OrderSnapshot:
     """Class OrderSnapshot"""
+
     order_id: str
     account_id: str
     symbol: str
@@ -74,13 +80,14 @@ class OrderSnapshot:
     price: float | None = None
     filled_quantity: float = 0.0
     average_price: float | None = None
-    submitted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    submitted_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(slots=True)
 class PositionSnapshot:
     """Class PositionSnapshot"""
+
     account_id: str
     symbol: str
     quantity: float
@@ -92,10 +99,11 @@ class PositionSnapshot:
 @dataclass(slots=True)
 class AccountSnapshot:
     """Class AccountSnapshot"""
+
     account_id: str
     currency: str = "CNY"
     cash: float = 0.0
     equity: float = 0.0
     margin_used: float = 0.0
     available_cash: float = 0.0
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))

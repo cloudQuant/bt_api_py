@@ -1,4 +1,5 @@
 """Module-level docstring."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -17,6 +18,7 @@ from bt_api_py.brokers.types import (
 
 class GatewayBridgeAdapter(BrokerAdapter):
     """Class GatewayBridgeAdapter"""
+
     def __init__(self, gateway_service: Any | None = None, *, account_id: str = "gateway") -> None:
         """__init__ method"""
         self.gateway_service = gateway_service or {}

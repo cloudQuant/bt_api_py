@@ -1,13 +1,14 @@
 """Module documentation"""
+
 from __future__ import annotations
 
 import json
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field, is_dataclass
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 SCHEMA_VERSION = "1.0"
 MAX_MESSAGE_BYTES = 1_000_000
@@ -24,7 +25,7 @@ def now_ms() -> int:
 
 def utc_now_iso() -> str:
     """utc_now_iso function"""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def normalize_market_symbol(symbol: Any) -> str:

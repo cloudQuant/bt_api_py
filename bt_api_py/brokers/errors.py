@@ -1,11 +1,13 @@
 """Module-level docstring."""
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class BrokerErrorCode(str, Enum):
+class BrokerErrorCode(StrEnum):
     """Class BrokerErrorCode"""
+
     ADAPTER_NOT_INSTALLED = "adapter_not_installed"
     AUTH_FAILED = "auth_failed"
     RATE_LIMITED = "rate_limited"
@@ -18,6 +20,7 @@ class BrokerErrorCode(str, Enum):
 
 class BrokerError(Exception):
     """Class BrokerError"""
+
     def __init__(
         self,
         code: BrokerErrorCode,

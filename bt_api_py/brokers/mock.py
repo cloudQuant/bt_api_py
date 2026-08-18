@@ -1,8 +1,9 @@
 """Module documentation"""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from bt_api_py.brokers.base import BrokerAdapter
@@ -19,6 +20,7 @@ from bt_api_py.brokers.types import (
 
 class MockBrokerAdapter(BrokerAdapter):
     """Class MockBrokerAdapter"""
+
     def __init__(self, account_id: str = "paper", initial_cash: float = 1_000_000.0) -> None:
         """__init__ method"""
         self.account_id = account_id
@@ -92,8 +94,8 @@ class MockBrokerAdapter(BrokerAdapter):
             price=request.price,
             filled_quantity=request.quantity,
             average_price=fill_price,
-            submitted_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            submitted_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         self.orders[order.order_id] = order
         position = self.positions.get(request.symbol)
@@ -128,7 +130,7 @@ class MockBrokerAdapter(BrokerAdapter):
             item.quantity * (item.market_price or item.average_price)
             for item in self.positions.values()
         )
-        self.account.updated_at = datetime.now(timezone.utc)
+        self.account.updated_at = datetime.now(UTC)
         return order
 
     async def cancel_order(self, request: CancelOrderRequest) -> OrderSnapshot:
@@ -140,7 +142,7 @@ class MockBrokerAdapter(BrokerAdapter):
         if order.status == "filled":
             return order
         order.status = "cancelled"
-        order.updated_at = datetime.now(timezone.utc)
+        order.updated_at = datetime.now(UTC)
         return order
 
     async def get_quote(self, symbol: str) -> dict[str, Any]:

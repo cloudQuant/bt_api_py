@@ -35,14 +35,21 @@ class GatewayClient(ZmqForwardingClient):
         command_timeout_ms: int | None = None,
         **kwargs: Any,
     ) -> None:
-        if gateway_command_endpoint or gateway_event_endpoint or gateway_market_endpoint or event_endpoint:
+        if (
+            gateway_command_endpoint
+            or gateway_event_endpoint
+            or gateway_market_endpoint
+            or event_endpoint
+        ):
             warnings.warn(
                 "gateway_*_endpoint and event_endpoint are deprecated aliases; "
                 "use command_endpoint/market_endpoint/private_endpoint",
                 DeprecationWarning,
                 stacklevel=2,
             )
-        market = gateway_market_endpoint or market_endpoint or event_endpoint or gateway_event_endpoint
+        market = (
+            gateway_market_endpoint or market_endpoint or event_endpoint or gateway_event_endpoint
+        )
         command = gateway_command_endpoint or command_endpoint
         private = private_endpoint or gateway_event_endpoint or event_endpoint or market
         if not market or not command:
@@ -67,7 +74,9 @@ class GatewayClient(ZmqForwardingClient):
             private_endpoint=str(private) if private else None,
             exchange=str(exchange_type or kwargs.get("exchange") or "CTP"),
             market_type=str(asset_type or kwargs.get("market_type") or "FUTURE"),
-            account_id=str(account_id or kwargs.get("investor_id") or kwargs.get("user_id") or "paper"),
+            account_id=str(
+                account_id or kwargs.get("investor_id") or kwargs.get("user_id") or "paper"
+            ),
             strategy_id=str(strategy_id or "default"),
             command_timeout_ms=timeout_ms,
             event_cache_size=kwargs.get("event_cache_size", 4096),

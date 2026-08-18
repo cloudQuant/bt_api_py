@@ -1,4 +1,5 @@
 """Module documentation"""
+
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -79,6 +80,7 @@ def _emit_audit(
 @dataclass
 class RiskRuleSet:
     """Class RiskRuleSet"""
+
     allowed_accounts: set[str] | None = None
     allowed_symbols: set[str] | None = None
     max_order_size: float | None = None
@@ -208,7 +210,11 @@ class OrderRouter:
                 resource=command.symbol,
                 action="place_order",
                 outcome="failure",
-                details={"account_id": command.account_id, "error_code": "INVALID_PARAM", "reason": str(exc)},
+                details={
+                    "account_id": command.account_id,
+                    "error_code": "INVALID_PARAM",
+                    "reason": str(exc),
+                },
             )
             ack = self._reject(command, str(exc), payload={"error_code": "INVALID_PARAM"})
             self._publish_error(command, str(exc), error_code="INVALID_PARAM")
@@ -302,7 +308,10 @@ class OrderRouter:
                 resource=command.symbol,
                 action="cancel_order",
                 outcome="failure",
-                details={"account_id": command.account_id, "reason": "cancel_order requires order_id"},
+                details={
+                    "account_id": command.account_id,
+                    "reason": "cancel_order requires order_id",
+                },
             )
             ack = self._reject(command, "cancel_order requires order_id")
             self._remember_ack(ack)
@@ -563,7 +572,9 @@ def _order_event_payload(command: OrderCommand, payload: dict[str, Any]) -> dict
     external_order_id = _first_text(payload, "external_order_id", "order_id")
     if not external_order_id and order_sys_id:
         external_order_id = order_sys_id
-    id_source = str(payload.get("id_source") or ("exchange" if external_order_id else "local_pending"))
+    id_source = str(
+        payload.get("id_source") or ("exchange" if external_order_id else "local_pending")
+    )
     order_ref = _first_text(payload, "order_ref", "OrderRef") or str(command.client_order_id or "")
     client_order_id = _first_text(payload, "client_order_id") or str(command.client_order_id or "")
     symbol = _first_text(payload, "symbol", "data_name", "instrument") or command.symbol
