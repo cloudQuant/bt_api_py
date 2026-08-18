@@ -8,8 +8,10 @@ from __future__ import annotations
 # 导入注册模块，确保交易所在使用前完成注册
 # 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
 import queue
+import uuid
 import warnings
 from copy import deepcopy
+from decimal import Decimal
 from typing import Any
 
 from bt_api_base.event_bus import EventBus
@@ -21,8 +23,15 @@ from bt_api_base.exceptions import (
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
-from ._contracts.errors import CapabilityNotSupportedError
-from ._contracts.models import Consistency, ForwardingConfig, TransportMode
+from ._contracts.errors import CapabilityNotSupportedError, LegacyOrderApiError
+from ._contracts.models import (
+    Consistency,
+    ForwardingConfig,
+    OrderRequest,
+    OrderType,
+    Side,
+    TransportMode,
+)
 from .balance_manager import BalanceManagerMixin
 from .data_downloader import DataDownloaderMixin
 
@@ -465,44 +474,108 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     def make_order(
         self,
         exchange_name: str,
-        symbol: str,
-        volume: float,
-        price: float,
-        order_type: str,
+        symbol: str | OrderRequest,
+        volume: float | None = None,
+        price: float | None = None,
+        order_type: str | None = None,
         offset: str = "open",
         post_only: bool = False,
         client_order_id: str | None = None,
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        """下单
-        :param exchange_name: 交易所标识
-        :param symbol: 交易对
-        :param volume: 数量
-        :param price: 价格 (市价单传0)
-        :param order_type: 订单类型, "limit" / "market"
-        :param offset: 开平方向, "open" / "close" / "close_today" / "close_yesterday"
-        :param post_only: 是否只做 maker
-        :param client_order_id: 客户端自定义订单ID
+        """下单。
+
+        标准形式（v1）：``make_order(exchange_name, OrderRequest(...))``。
+        兼容形式：``make_order(exchange_name, symbol, volume, price, "buy-limit")``；
+        仅当 order_type 能推导 side（``side-type``）时兼容，裸 ``limit``/``market``
+        无法推导 side 时抛 ``LegacyOrderApiError``。
         """
-        normalized_order_type = self._validate_order_args(
-            exchange_name=exchange_name,
-            symbol=symbol,
-            volume=volume,
-            price=price,
-            order_type=order_type,
-        )
-        return self._get_feed(exchange_name).make_order(
+        if isinstance(symbol, OrderRequest):
+            return self._make_order_typed(exchange_name, symbol)
+        return self._make_order_legacy(
+            exchange_name,
             symbol,
             volume,
             price,
-            normalized_order_type,
-            offset=offset,
-            post_only=post_only,
-            client_order_id=client_order_id,
-            extra_data=extra_data,
+            order_type,
+            offset,
+            post_only,
+            client_order_id,
+            extra_data,
             **kwargs,
         )
+
+    def _make_order_typed(self, exchange_name: str, request: OrderRequest) -> Any:
+        if self.transport_mode is TransportMode.ZMQ:
+            return self._backend.make_order(exchange_name, request)
+        from ._feed_adapter import FeedAdapter
+        from ._venue_mappers import get_venue_mapper
+
+        mapper = get_venue_mapper(exchange_name)
+        if mapper is not None:
+            return FeedAdapter(self._get_feed(exchange_name), mapper).make_order(request)
+        return self._get_feed(exchange_name).make_order(
+            request.symbol,
+            float(request.quantity),
+            float(request.price) if request.price is not None else 0,
+            f"{request.side.value}-{request.order_type.value}",
+            offset="close" if request.reduce_only else "open",
+            post_only=request.time_in_force == "post_only",
+            client_order_id=request.client_order_id,
+        )
+
+    def _make_order_legacy(
+        self,
+        exchange_name: str,
+        symbol: str,
+        volume: float | None,
+        price: float | None,
+        order_type: str | None,
+        offset: str,
+        post_only: bool,
+        client_order_id: str | None,
+        extra_data: Any,
+        **kwargs: Any,
+    ) -> Any:
+        self._get_feed(exchange_name)  # raise ExchangeNotFoundError before arg parsing
+        if volume is None or volume <= 0:
+            raise InvalidOrderError(exchange_name, symbol, "volume must be > 0")
+        if price is None or price < 0:
+            raise InvalidOrderError(exchange_name, symbol, "price must be >= 0")
+
+        if isinstance(order_type, str) and "-" in order_type:
+            side_str, type_str = order_type.split("-", 1)
+            try:
+                side = Side(side_str.lower())
+                ord_type = OrderType(type_str.lower())
+            except ValueError as exc:
+                raise InvalidOrderError(
+                    exchange_name, symbol, f"invalid order_type: {order_type}"
+                ) from exc
+        elif order_type in ("limit", "market"):
+            raise LegacyOrderApiError(
+                f"cannot derive side from order_type={order_type!r}; "
+                "use BtApi.make_order(exchange_name, OrderRequest(...))"
+            )
+        else:
+            raise InvalidOrderError(
+                exchange_name,
+                symbol,
+                "order_type must be one of: limit, market, or a side-type pair like buy-limit",
+            )
+
+        request = OrderRequest(
+            symbol=symbol,
+            side=side,
+            order_type=ord_type,
+            quantity=Decimal(str(volume)),
+            price=Decimal(str(price)) if price and price > 0 else None,
+            account_id="legacy",
+            client_order_id=client_order_id or f"legacy-{uuid.uuid4().hex[:16]}",
+            reduce_only=offset in ("close", "close_today", "close_yesterday"),
+        )
+        return self._make_order_typed(exchange_name, request)
 
     def cancel_order(
         self, exchange_name: str, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any

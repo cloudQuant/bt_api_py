@@ -17,9 +17,28 @@ ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
 ticker.init_data()
 print(ticker.get_last_price())
 
-# 下单
-order = api.make_order("BINANCE___SPOT", "BTCUSDT", 0.001, 50000, "limit")
+# 下单（v1 标准形式：OrderRequest）
+from decimal import Decimal
+from bt_api_py import OrderRequest, OrderType, Side
+
+order = api.make_order(
+    "BINANCE___SPOT",
+    OrderRequest(
+        symbol="BTCUSDT",
+        side=Side.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("0.001"),
+        price=Decimal("50000"),
+        account_id="paper",
+        client_order_id="cid-1",
+    ),
+)
 ```
+
+> `make_order(exchange_name, OrderRequest(...))` 是唯一标准下单形式。旧位置参数
+> `make_order(exchange_name, symbol, volume, price, order_type)` 仅在 `order_type`
+> 能推导买卖方向时兼容（如 `"buy-limit"`）；裸 `"limit"`/`"market"` 无法推导
+> side，会在调用交易所前抛出 `LegacyOrderApiError`。
 
 ---
 

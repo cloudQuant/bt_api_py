@@ -213,12 +213,20 @@ print(ticker)
 ### Make order
 
 ```python
+from decimal import Decimal
+from bt_api_py import OrderRequest, OrderType, Side
+
 order = api.make_order(
-    exchange_name="BINANCE___SPOT",
-    symbol="BTCUSDT",
-    volume=0.001,
-    price=50000,
-    order_type="limit",
+    "BINANCE___SPOT",
+    OrderRequest(
+        symbol="BTCUSDT",
+        side=Side.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("0.001"),
+        price=Decimal("50000"),
+        account_id="paper",
+        client_order_id="cid-1",
+    ),
 )
 print(order)
 ```
@@ -661,12 +669,20 @@ print(ticker)
 ### 统一下单
 
 ```python
+from decimal import Decimal
+from bt_api_py import OrderRequest, OrderType, Side
+
 order = api.make_order(
-    exchange_name="BINANCE___SPOT",
-    symbol="BTCUSDT",
-    volume=0.001,
-    price=50000,
-    order_type="limit",
+    "BINANCE___SPOT",
+    OrderRequest(
+        symbol="BTCUSDT",
+        side=Side.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("0.001"),
+        price=Decimal("50000"),
+        account_id="paper",
+        client_order_id="cid-1",
+    ),
 )
 print(order)
 ```
