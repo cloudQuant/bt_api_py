@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-18T00:00:00+00:00",
+  "plan_task": "Task 0.3 — restore executable quality gates",
+  "before_remediation": {
+    "ruff_errors": 624,
+    "mypy_errors": 102,
+    "pytest_offline": "522 passed, 3 failed, 3 deselected",
+    "source": "plan section 1.3 (2026-08-17 baseline)"
+  },
+  "after_remediation": {
+    "core_paths": {
+      "ruff_check": "clean",
+      "ruff_format_check": "clean",
+      "mypy": "clean"
+    },
+    "full_offline_pytest": {
+      "passed": 540,
+      "failed": 3,
+      "deselected": 3
+    },
+    "full_ruff_errors": 642,
+    "full_mypy_errors": 74
+  },
+  "core_paths": [
+    "bt_api_py/bt_api.py",
+    "bt_api_py/exceptions.py",
+    "bt_api_py/balance_manager.py",
+    "bt_api_py/data_downloader.py",
+    "bt_api_py/forwarding/",
+    "bt_api_py/gateway/",
+    "bt_api_py/brokers/"
+  ],
+  "remediated_defects": [
+    "exceptions.py: __all__ referenced undefined InvalidSymbolError (F822) — imported it",
+    "balance_manager.py / data_downloader.py: mixins now declare host attributes via Protocol",
+    "bt_api.py: removed unused re-export imports (DOWNLOAD_*, KLINE_PERIOD_DELTAS, _calculate_time_delta, _parse_time, CurrencyNotFoundError)",
+    "brokers: BrokerErrorCode/BrokerEvent now inherit StrEnum (UP042); datetime.UTC alias (UP017)"
+  ],
+  "remaining_failures": [
+    {
+      "test": "tests/test_bt_api_plugin_integration.py::test_plugin_loader_registers_bt_api_alpaca_for_bt_api",
+      "cause": "bt_api_alpaca package not installed in environment",
+      "owner": "QA/release owner",
+      "planned_iteration": "I2 (Task 2.1)"
+    },
+    {
+      "test": "tests/test_bt_api_plugin_integration.py::test_bt_api_consumes_alpaca_plugin_balance_and_subscribe",
+      "cause": "bt_api_alpaca package not installed in environment",
+      "owner": "QA/release owner",
+      "planned_iteration": "I2 (Task 2.1)"
+    },
+    {
+      "test": "tests/test_plugin_discovery.py::test_all_plugin_entry_points_discoverable",
+      "cause": "hardcoded >=61 plugin count assertion (finding U-08)",
+      "owner": "QA/release owner",
+      "planned_iteration": "I2 (Task 2.1)"
+    }
+  ],
+  "mypy_remaining_errors": {
+    "count": 74,
+    "primary_module": "bt_api_py/risk_management/core/",
+    "owner": "risk/monitoring owner",
+    "planned_iteration": "I6 (per-module batch)"
+  },
+  "python_version_decision": {
+    "decision_id": "D-03",
+    "decision": "unify root package Python support to 3.11+",
+    "applied": {
+      "requires-python": ">=3.11",
+      "ruff_target_version": "py311",
+      "classifiers": "3.11, 3.12, 3.13"
+    },
+    "note": "README and CI compatibility matrix (3.9-3.14) still need syncing in Task 6.1/6.3"
+  },
+  "coverage_gate": {
+    "current": 40,
+    "target": ">=80 (I6, per-module staged)",
+    "note": "not lowered in I0"
+  }
+}
