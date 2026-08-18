@@ -14,7 +14,6 @@ from typing import Any
 
 from bt_api_base.event_bus import EventBus
 from bt_api_base.exceptions import (
-    BtApiError,
     ExchangeNotFoundError,
     InvalidOrderError,
     SubscribeError,
@@ -315,13 +314,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         data_queue = self.get_data_queue(exchange_name)
         if data_queue is None:
             raise SubscribeError(exchange_name, detail="exchange not registered")
-        self.subscribe_bar_num += subscribe_bar_num
 
         subscribe_handler = ExchangeRegistry.get_stream_class(exchange_name, "subscribe")
-        if subscribe_handler is not None:
-            subscribe_handler(data_queue, exchange_params, normalized_topics, self)
-        else:
-            self.log(f"No subscribe handler registered for {exchange_name}", level="error")
+        if subscribe_handler is None:
+            raise CapabilityNotSupportedError(
+                "subscribe", detail=f"no stream handler registered for {exchange_name}"
+            )
+        subscribe_handler(data_queue, exchange_params, normalized_topics, self)
+        self.subscribe_bar_num += subscribe_bar_num
 
     def push_bar_data_to_queue(self, exchange_name: str, data: Any) -> None:
         data_queue = self.get_data_queue(exchange_name)
@@ -626,6 +626,25 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             return value
         return Consistency(str(value))
 
+    def get_capabilities(self, exchange_name: str) -> Any:
+        """Return a read-only capability report for the given exchange."""
+        from ._contracts.capabilities import CapabilityReport
+
+        if self.transport_mode is TransportMode.ZMQ:
+            return CapabilityReport(exchange_name=exchange_name, status="experimental")
+        feed = self.exchange_feeds.get(exchange_name)
+        if feed is None:
+            return CapabilityReport(exchange_name=exchange_name, status="retired")
+        capabilities = getattr(feed, "capabilities", None)
+        operations: dict[str, bool] = {}
+        if capabilities is not None and hasattr(capabilities, "as_dict"):
+            operations = capabilities.as_dict()
+        return CapabilityReport(
+            exchange_name=exchange_name,
+            status="loadable",
+            operations=operations,
+        )
+
     # ── 异步接口（显式方法，替代动态 __getattr__ 代理）────────────────
 
     async def async_get_tick(
@@ -717,7 +736,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     def get_all_ticks(self, symbol: str, extra_data: Any = None, **kwargs: Any) -> dict[str, Any]:
         """从所有已连接的交易所获取行情
         :param symbol: 交易对
-        :return: dict {exchange_name: ticker_data}
+        :return: dict {exchange_name: ticker_data 或 Exception}
         """
         results = {}
         for exchange_name in self.exchange_feeds:
@@ -725,15 +744,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 results[exchange_name] = self.get_tick(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except BtApiError as e:
+            except Exception as e:
                 self.log(f"get_tick failed for {exchange_name}: {e}", level="warning")
+                results[exchange_name] = e
         return results
 
     def get_all_balances(
         self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
     ) -> dict[str, Any]:
         """从所有已连接的交易所查询余额
-        :return: dict {exchange_name: balance_data}
+        :return: dict {exchange_name: balance_data 或 Exception}
         """
         results = {}
         for exchange_name in self.exchange_feeds:
@@ -741,15 +761,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 results[exchange_name] = self.get_balance(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except BtApiError as e:
+            except Exception as e:
                 self.log(f"get_balance failed for {exchange_name}: {e}", level="warning")
+                results[exchange_name] = e
         return results
 
     def get_all_positions(
         self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
     ) -> dict[str, Any]:
         """从所有已连接的交易所查询持仓
-        :return: dict {exchange_name: position_data}
+        :return: dict {exchange_name: position_data 或 Exception}
         """
         results = {}
         for exchange_name in self.exchange_feeds:
@@ -757,15 +778,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 results[exchange_name] = self.get_position(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except BtApiError as e:
+            except Exception as e:
                 self.log(f"get_position failed for {exchange_name}: {e}", level="warning")
+                results[exchange_name] = e
         return results
 
     def cancel_all_orders(
         self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
     ) -> dict[str, Any]:
         """撤销所有已连接交易所的所有订单
-        :return: dict {exchange_name: result}
+        :return: dict {exchange_name: result 或 Exception}
         """
         results = {}
         for exchange_name in self.exchange_feeds:
@@ -773,6 +795,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 results[exchange_name] = self.cancel_all(
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
-            except BtApiError as e:
+            except Exception as e:
                 self.log(f"cancel_all failed for {exchange_name}: {e}", level="warning")
+                results[exchange_name] = e
         return results

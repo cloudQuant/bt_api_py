@@ -6,6 +6,8 @@ They are data types only — not a second business client.
 
 from __future__ import annotations
 
+from bt_api_py._contracts.cache_policy import CacheEntry, CachePolicy
+from bt_api_py._contracts.capabilities import SUPPORT_STATUSES, CapabilityReport
 from bt_api_py._contracts.errors import (
     AuthorizationError,
     BtApiContractError,
@@ -38,15 +40,19 @@ from bt_api_py._contracts.models import (
     TickerSnapshot,
     TransportMode,
 )
+from bt_api_py._contracts.subscriptions import SubscriptionHandle
 
 __all__ = [
     "AccountSnapshot",
     "AuthorizationError",
     "BalanceSnapshot",
     "BtApiContractError",
+    "CacheEntry",
+    "CachePolicy",
     "CancelAllRequest",
     "CancelOrderRequest",
     "CapabilityNotSupportedError",
+    "CapabilityReport",
     "CommandResultUnknownError",
     "Consistency",
     "DepthSnapshot",
@@ -65,7 +71,9 @@ __all__ = [
     "QueryOrderRequest",
     "Side",
     "StaleDataUnavailableError",
+    "SUPPORT_STATUSES",
     "SubscribeRequest",
+    "SubscriptionHandle",
     "TickerSnapshot",
     "TransportMode",
 ]
