@@ -12,6 +12,7 @@
 | [发布流程](release-flow.md) | TestPyPI → tag → Release → PyPI 的受控链路 |
 | [子模块升级](submodule-bump.md) | 插件仓变更进入主仓的 SHA bump 协议（pilot 三仓） |
 | [指标 Schema](metrics-schema.json) | M7 每周治理摘要的数据结构定义 |
+| [演练证据](evidence/) | M6 端到端演练与运营期的脱敏证据归档规则 |
 
 ## 快速入口
 
