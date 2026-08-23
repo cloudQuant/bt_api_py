@@ -24,9 +24,11 @@
 | 日期 | 门 | 变更 | 决策人 |
 |---|---|---|---|
 | 2026-08-23 | D0–D8 | 初次记录；D3(master 部分)、D4、D5(PVR) 为 blocked | cloudQuant（依据 v2 计划实施授权） |
+| 2026-08-23 | D3/M4/M6 | M4 观察期完成：五类草稿演练归档（`evidence/m4-draft-pr-drills-20260823.md`），期间发现并修复 5 项缺陷（PR #1/#2/#9/#11）；`PR_GOVERNANCE_STRICT=true` 启用；M6 验收矩阵判定 Implementation Complete（`evidence/m6-acceptance-matrix-20260823.md`）。**D3 追记：单一维护者运营约束**——dev/code-opt Ruleset 要求非作者批准，唯一维护者无法自批准，激活将冻结全部合并；推迟至第二维护者确认或 owner 批准 bypass actor 策略。四个 Ruleset 均保持未应用（与 manifest 一致，verify exit 0） | cloudQuant |
 
 ## Blocked 解除条件
 
 - **D3-master**：第二位维护者获得 write 权限并在 CODEOWNERS 生效分支完成一次 review drill。
+- **D3-dev/code-opt（运营约束）**：满足其一即可申请激活——(a) 上述第二维护者确认；(b) owner 书面批准 solo 期 bypass actor 并回填对应 manifest 的 `bypass_actors`。
 - **D4**：管理员创建 `pypi`/`testpypi` Environment、绑定 trusted publisher、建立 `v*` tag rule，并提供变更前后 API 摘要。
 - **D5-PVR**：管理员在 Settings → Security 开启 Private Vulnerability Reporting，`GET /private-vulnerability-reporting` 返回 `{"enabled":true}`。
