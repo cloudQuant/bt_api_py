@@ -40,7 +40,9 @@ jobs:
           echo "changed<<EOF" >> "$GITHUB_OUTPUT"
           echo "$CHANGED" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
-          GITLINKS=$(git diff --raw "$BASE_SHA..$HEAD_SHA" | awk '$4 ~ /160000/' | wc -l | tr -d ' ')
+          # git diff --raw header is ":oldmode newmode oldsha newsha status";
+          # gitlinks are marked by mode 160000, which awk sees as $1/$2.
+          GITLINKS=$(git diff --raw "$BASE_SHA..$HEAD_SHA" | awk '$2 == "160000"' | wc -l | tr -d ' ')
           echo "count=$GITLINKS" >> "$GITHUB_OUTPUT"
 
       - name: Full submodule validation
