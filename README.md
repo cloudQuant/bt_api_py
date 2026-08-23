@@ -1,6 +1,6 @@
 # bt_api_py
 
-[![Python 3.9-3.14](https://img.shields.io/badge/python-3.9--3.14-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11-3.14](https://img.shields.io/badge/python-3.11--3.14-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/pypi/v/bt_api_py.svg)](https://pypi.org/project/bt_api_py/)
 [![Tests](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml)
 [![Docs](https://github.com/cloudQuant/bt_api_py/actions/workflows/docs.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/docs.yml)
@@ -83,7 +83,7 @@ Over 20 standardized container types include:
 - Other: `Symbol`, `Instrument`, `Liquidation`, `Greek`
 
 ### Cross-platform support
-Current target compatibility is Python `3.9-3.14`; CI runs on Linux, macOS, and Windows.
+Current target compatibility is Python `3.11-3.13` (release-blocking) and `3.14` (canary); CI runs on Linux, macOS, and Windows.
 
 ## Supported exchanges
 
@@ -102,7 +102,7 @@ The full exchange support matrix is automatically refreshed in the Chinese secti
 
 | Item | Support |
 |------|---------|
-| Python | `3.9` - `3.14` |
+| Python | `3.11` - `3.13`（阻塞发布）；`3.14`（canary） |
 | OS | Linux, macOS, Windows |
 | Installation | PyPI, source install |
 | Main APIs | REST, Async REST, WebSocket |
@@ -522,7 +522,7 @@ mypy bt_api_py --ignore-missing-imports
 - **其他数据**: `Symbol`、`Instrument`、`Liquidation`、`Greek`
 
 ### 跨平台支持
-项目当前以 `Python 3.9-3.14` 为兼容目标，CI 覆盖 Linux、macOS 和 Windows。
+项目当前以 `Python 3.11-3.13` 为兼容目标（`3.14` 为 canary），CI 覆盖 Linux、macOS 和 Windows。
 
 <!-- BEGIN GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
 > 测试状态建议通过 `bash scripts/run_exchange_tests.sh <name>` 复核，当前口径更新于 2026-04-06。
@@ -558,7 +558,7 @@ mypy bt_api_py --ignore-missing-imports
 
 | 项目 | 当前支持 |
 |------|----------|
-| Python | `3.9` - `3.14` |
+| Python | `3.11` - `3.13`（阻塞发布）；`3.14`（canary） |
 | 操作系统 | Linux, macOS, Windows |
 | 安装方式 | PyPI, 源码开发安装 |
 | 主要接口 | REST, Async REST, WebSocket |
@@ -959,7 +959,7 @@ pytest tests -m "not network and not integration and not performance and not e2e
 ### CI 说明
 
 - Push / Pull Request: 运行 `Quality Gates`、`Compatibility` 矩阵和 Ubuntu 完整基线测试。
-- 兼容性矩阵: Linux、macOS、Windows GitHub-hosted runner x Python `3.9` 到 `3.14`。
+- 兼容性矩阵: Linux、macOS、Windows GitHub-hosted runner x Python `3.11` 到 `3.13`（阻塞）+ `3.14`（canary）。
 - Windows 说明: GitHub Actions 使用官方支持的 `windows-latest` hosted runner；项目兼容目标包含 Windows 11。
 
 ### 需要真实账户或网络的测试
@@ -993,7 +993,7 @@ pytest tests -m ctp -v
 ## 常见问题 (FAQ)
 
 ### Q: 支持哪些 Python 版本？
-当前兼容目标是 Python `3.9` 到 `3.14`。如果你希望和默认 CI 环境保持一致，优先使用 Python `3.11`。
+当前兼容目标是 Python `3.11` 到 `3.13`（`3.14` 为 canary，不阻塞发布）。默认 CI 环境为 Python `3.11`，推荐与之保持一致。
 
 ### Q: 如何添加新的交易所？
 请参考 [开发者指南](https://cloudquant.github.io/bt_api_py/explanation/developer_guide/)，实现 `AbstractFeed` 接口并注册到 `ExchangeRegistry` 即可。基本步骤：

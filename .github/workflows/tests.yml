@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [master, dev, code-optimization]
   pull_request:
-    branches: [main, master, develop]
+    branches: [master, dev, code-optimization]
   workflow_dispatch:
     inputs:
       coverage-threshold:
@@ -157,4 +157,4 @@ jobs:
           echo "| Compatibility matrix | ${{ needs.compatibility.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Ubuntu baseline suite | ${{ needs.full-suite.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Compatibility matrix: macOS, Linux, Windows x Python 3.9-3.14." >> "$GITHUB_STEP_SUMMARY"
+          echo "Compatibility matrix: macOS, Linux, Windows x Python 3.11-3.13 (blocking) + 3.14 (canary)." >> "$GITHUB_STEP_SUMMARY"

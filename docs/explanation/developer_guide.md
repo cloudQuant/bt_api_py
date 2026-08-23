@@ -2,6 +2,14 @@
 
 本文档面向希望扩展 bt_api_py 的开发者，介绍如何添加新交易所、新数据容器、编写测试等。
 
+## 贡献流程与分支模型
+
+普通贡献（新功能、Bug 修复、文档、测试）的 PR 一律以 **`dev`** 为目标分支；
+`master` 仅接受 promotion 与 hotfix；交易所适配器变更在对应的
+`bt_api/bt_api_*` 插件仓进行。完整路由表、风险分级与门禁说明见
+[分支模型](../governance/branch-model.md) 与
+[CONTRIBUTING](https://github.com/cloudQuant/bt_api_py/blob/dev/CONTRIBUTING.md)。
+
 ---
 
 ## 开发环境搭建

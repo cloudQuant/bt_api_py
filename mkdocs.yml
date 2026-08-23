@@ -9,7 +9,7 @@ site_url: https://cloudquant.github.io/bt_api_py/
 # 仓库配置
 repo_name: cloudQuant/bt_api_py
 repo_url: https://github.com/cloudQuant/bt_api_py
-edit_uri: edit/master/docs/
+edit_uri: edit/dev/docs/
 
 # 版权信息
 copyright: Copyright &copy; 2024 cloudQuant. MIT License.
@@ -240,6 +240,12 @@ nav:
       - 多策略架构: explanation/multi_strategy_architecture.md
       - 交易所集成模式: explanation/exchange_integration_patterns.md
       - 开发者指南: explanation/developer_guide.md
+
+  # ── 项目治理 (Governance) ────────────────────────────────────
+  - 项目治理:
+      - 治理总览: governance/README.md
+      - 分支模型与 PR 路由: governance/branch-model.md
+      - 决策日志: governance/decision-log.md
 
   # ── 支持与帮助 ───────────────────────────────────────────────
   - 支持与帮助:

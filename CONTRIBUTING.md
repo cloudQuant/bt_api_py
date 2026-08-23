@@ -163,6 +163,11 @@ bt_api_py/
 
 ## Pull Request Process
 
+> **目标分支**：普通贡献（功能、修复、文档、测试）一律提交到 **`dev`** 分支。
+> `master` 仅接受 promotion 与 hotfix；交易所适配器变更请到对应
+> `bt_api/bt_api_*` 插件仓提 PR。完整路由表见
+> [docs/governance/branch-model.md](docs/governance/branch-model.md)。
+
 1. **Create a branch**: `git checkout -b feature/your-feature-name`
 
 2. **Make your changes**:
@@ -171,9 +176,9 @@ bt_api_py/
    - Format code: `make format`
    - Check code quality: `make check`
 
-3. **Commit your changes**:
+3. **Commit your changes** (always stage explicit paths, never stage the whole tree with a bare dot):
    ```bash
-   git add .
+   git add bt_api_py/changed_module.py tests/test_changed_module.py
    git commit -m "feat: add new feature description"
    ```
 
