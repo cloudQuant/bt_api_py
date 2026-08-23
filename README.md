@@ -1031,11 +1031,21 @@ pytest tests -m ctp -v
 
 1. Fork 本仓库
 2. 创建您的特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交您的更改 (`git commit -m 'Add some AmazingFeature'`)
+3. 提交您的更改（只 stage 明确的文件路径，不要整树暂存）
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启一个 Pull Request
+5. 开启一个 Pull Request，**目标分支选择 `dev`**
+
+> `master` 仅接受 promotion 与 hotfix；交易所适配器变更请到对应
+> `bt_api/bt_api_*` 插件仓提 PR。路由表见
+> [docs/governance/branch-model.md](docs/governance/branch-model.md)。
 
 详细贡献指南请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [开发者指南](https://cloudquant.github.io/bt_api_py/explanation/developer_guide/)。
+
+### 安全与行为准则
+
+- 安全漏洞请勿开公开 issue，按 [SECURITY.md](SECURITY.md) 的私密通道报告；
+  **绝不在 issue/PR 中张贴 API 密钥或账户信息**
+- 社区行为规范见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 ## 许可证
 

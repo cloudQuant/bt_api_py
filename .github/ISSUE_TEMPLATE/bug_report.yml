@@ -1,0 +1,70 @@
+name: Bug Report
+description: 报告 bt_api_py 的缺陷 / Report a defect in bt_api_py
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告问题。**请不要在任何字段中粘贴 API 密钥、账户信息或订单数据。**
+        安全漏洞请勿使用此表单，见 [SECURITY.md](https://github.com/cloudQuant/bt_api_py/blob/master/SECURITY.md)。
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / Version
+      description: bt_api_py 版本或 commit SHA
+      placeholder: "0.15.x 或 commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: exchange
+    attributes:
+      label: 涉及模块或交易所 / Affected module or exchange
+      options:
+        - BINANCE
+        - OKX
+        - HTX
+        - CTP
+        - IB (Interactive Brokers)
+        - 其他交易所 / Other exchange（请在描述中注明）
+        - 核心框架（BtApi/containers/feeds 基类）
+        - gateway / websocket
+        - forwarding（MarketDataHub/OrderRouter/Zmq）
+        - 安装/打包/文档
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境 / Environment
+      description: 操作系统、Python 版本、安装方式（PyPI/源码）
+      placeholder: "macOS 15, Python 3.11.9, pip install bt_api_py"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 最小复现 / Minimal reproduction
+      description: 可运行的最小代码；凭据用占位符
+      placeholder: |
+        from bt_api_py import BtApi
+        # ... 复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为 / Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为 / Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: 脱敏后的错误日志或堆栈
+      render: shell

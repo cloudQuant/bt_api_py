@@ -3,6 +3,9 @@
 > 状态：生效中（迭代03，2026-08-23）。本文与 `CONTRIBUTING.md`、根 `README.md`
 > 的贡献章节、`.github/pull_request_template.md` 保持同一口径；发现不一致时以
 > 本文件为准并发 issue 修正。
+>
+> 社区入口：Bug/Feature/Question 通过 `.github/ISSUE_TEMPLATE/` 表单提交；
+> 安全问题走根目录 `SECURITY.md` 私密通道；行为规范见 `CODE_OF_CONDUCT.md`。
 
 ## 1. 分支角色
 
