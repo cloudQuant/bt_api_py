@@ -1,4 +1,4 @@
-"""策略引擎门面 - 
+"""策略引擎门面 -
 
 规则条件与动作执行分离（动作执行拆到 actions.py），本模块保留规则定义与编排逻辑。
 """
@@ -55,7 +55,8 @@ class RuleCondition:
             return field_value in self.value
         elif self.operator == "contains":
             return self.value in str(field_value)
-        else: return False
+        else:
+            return False
 
     def _get_nested_value(self, data: dict[str, Any], field: str) -> Any:
         """"""
@@ -65,7 +66,8 @@ class RuleCondition:
         for key in keys:
             if isinstance(value, dict) and key in value:
                 value = value[key]
-            else: return None
+            else:
+                return None
 
         return value
 
@@ -110,21 +112,22 @@ class Rule:
         if not self.enabled:
             return False
 
-        # 
+        #
         current_time = int(time.time())
         if current_time - self.last_triggered < self.cooldown:
             return False
 
-        # 
+        #
         if self.rule_type == RuleType.CONDITION_BASED:
             return all(condition.evaluate(data) for condition in self.conditions)
         elif self.rule_type == RuleType.THRESHOLD_BASED:
             return self._evaluate_threshold_conditions(data)
-        else: return False
+        else:
+            return False
 
     def _evaluate_threshold_conditions(self, data: dict[str, Any]) -> bool:
         """"""
-        # 
+        #
         return all(condition.evaluate(data) for condition in self.conditions)
 
     def trigger(self, data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -161,24 +164,24 @@ class PolicyEngine(ActionMixin):
         self.logger = get_logger("policy_engine")
         self.config = config or {}
 
-        # 
+        #
         self.rules: dict[str, Rule] = {}
-        self.rule_groups: dict[str, set[str]] = {}  # 
+        self.rule_groups: dict[str, set[str]] = {}  #
         self.active_rules: list[str] = []  # ID
 
-        # 
+        #
         self.action_handlers: dict[str, Callable] = {}
         self.default_actions = self._initialize_default_actions()
 
-        # 
+        #
         self.execution_history: list[dict[str, Any]] = []
 
-        # 
+        #
         self.max_rules_per_evaluation = self.config.get("max_rules_per_evaluation", 100)
-        self.execution_timeout = self.config.get("execution_timeout", 5.0)  # 
+        self.execution_timeout = self.config.get("execution_timeout", 5.0)  #
         self.enable_rule_cache = self.config.get("enable_rule_cache", True)
 
-        # 
+        #
         self.performance_stats: dict[str, Any] = {
             "total_evaluations": 0,
             "total_triggers": 0,
@@ -187,7 +190,7 @@ class PolicyEngine(ActionMixin):
             "rule_hit_rates": {},
         }
 
-        # 
+        #
         self._initialize_default_rules()
 
         self.logger.info("PolicyEngine initialized")
@@ -228,10 +231,10 @@ class PolicyEngine(ActionMixin):
             if rule_id in self.rules:
                 del self.rules[rule_id]
 
-                # 
+                #
                 self._update_active_rules()
 
-                # 
+                #
                 for rule_ids in self.rule_groups.values():
                     if rule_id in rule_ids:
                         rule_ids.remove(rule_id)
@@ -262,12 +265,12 @@ class PolicyEngine(ActionMixin):
 
             rule = self.rules[rule_id]
 
-            # 
+            #
             for field, value in updates.items():
                 if hasattr(rule, field):
                     setattr(rule, field, value)
 
-            # 
+            #
             self._update_active_rules()
 
             self.logger.info(f"Rule updated: {rule_id}")
@@ -297,7 +300,7 @@ class PolicyEngine(ActionMixin):
         start_time = time.time()
 
         try:
-            # 
+            #
             evaluation_data = {
                 "exchange_name": exchange_name,
                 "account_id": account_id,
@@ -307,16 +310,16 @@ class PolicyEngine(ActionMixin):
                 "evaluation_type": "order_policy",
             }
 
-            # 
+            #
             triggered_rules, actions = self._evaluate_rules(evaluation_data)
 
-            # 
+            #
             execution_results = []
             for action in actions:
                 result = self._execute_action(action, evaluation_data)
                 execution_results.append(result)
 
-            # 
+            #
             approved = not any(
                 result.get("action_type") in [ActionType.HALT_TRADING, ActionType.CANCEL_ORDERS]
                 and not result.get("success", False)
@@ -351,7 +354,7 @@ class PolicyEngine(ActionMixin):
                 "evaluation_time_ms": evaluation_time,
             }
 
-            # 
+            #
             self._record_execution(
                 {
                     "type": "order_policy",
@@ -393,7 +396,7 @@ class PolicyEngine(ActionMixin):
         start_time = time.time()
 
         try:
-            # 
+            #
             evaluation_data = {
                 "risk_metrics": risk_metrics.__dict__,
                 "context": context or {},
@@ -401,10 +404,10 @@ class PolicyEngine(ActionMixin):
                 "evaluation_type": "risk_policy",
             }
 
-            # 
+            #
             triggered_rules, actions = self._evaluate_rules(evaluation_data)
 
-            # 
+            #
             execution_results = []
             for action in actions:
                 result = self._execute_action(action, evaluation_data)
@@ -424,7 +427,7 @@ class PolicyEngine(ActionMixin):
                 "risk_score": float(risk_metrics.overall_risk_score),
             }
 
-            # 
+            #
             self._record_execution(
                 {
                     "type": "risk_policy",
@@ -479,7 +482,7 @@ class PolicyEngine(ActionMixin):
             "execution_history_size": len(self.execution_history),
         }
 
-    # 
+    #
 
     def _evaluate_rules(self, data: dict[str, Any]) -> tuple[list[Rule], list[dict[str, Any]]]:
         """
@@ -492,8 +495,7 @@ class PolicyEngine(ActionMixin):
         triggered_rules = []
         actions = []
 
-        for rule_id in self.active_rules[:
-            self.max_rules_per_evaluation]:
+        for rule_id in self.active_rules[: self.max_rules_per_evaluation]:
             if rule_id not in self.rules:
                 continue
 
@@ -528,15 +530,15 @@ class PolicyEngine(ActionMixin):
         self.performance_stats["total_evaluations"] += 1
         self.performance_stats["total_triggers"] += rules_triggered
 
-        # 
+        #
         current_avg = self.performance_stats["average_evaluation_time_ms"]
         new_avg = current_avg * 0.9 + evaluation_time * 0.1
         self.performance_stats["average_evaluation_time_ms"] = new_avg
 
-        # 
+        #
         if rules_evaluated > 0:
             hit_rate = rules_triggered / rules_evaluated
-            #  - 
+            #  -
             self.performance_stats["rule_hit_rates"]["overall"] = (
                 self.performance_stats["rule_hit_rates"].get("overall", 0) * 0.9 + hit_rate * 0.1
             )
@@ -546,13 +548,13 @@ class PolicyEngine(ActionMixin):
         execution_record["timestamp"] = int(time.time())
         self.execution_history.append(execution_record)
 
-        # 
+        #
         if len(self.execution_history) > 10000:
             self.execution_history = self.execution_history[-5000:]
 
     def _initialize_default_rules(self) -> None:
         """"""
-        # 
+        #
         high_risk_rule = Rule(
             rule_id="high_risk_halt_trading",
             name="High Risk Trading Halt",
@@ -578,7 +580,7 @@ class PolicyEngine(ActionMixin):
             cooldown=300,  # 5
         )
 
-        # 
+        #
         margin_rule = Rule(
             rule_id="insufficient_margin",
             name="Insufficient Margin",
@@ -603,7 +605,7 @@ class PolicyEngine(ActionMixin):
             cooldown=600,  # 10
         )
 
-        # 
+        #
         volatility_rule = Rule(
             rule_id="high_volatility_alert",
             name="High Volatility Alert",
@@ -628,7 +630,7 @@ class PolicyEngine(ActionMixin):
             cooldown=1800,  # 30
         )
 
-        # 
+        #
         self.add_rule(high_risk_rule)
         self.add_rule(margin_rule)
         self.add_rule(volatility_rule)

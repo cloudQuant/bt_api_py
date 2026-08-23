@@ -19,7 +19,7 @@ class ComplianceLimitsMixin:
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
         """"""
-        # 
+        #
         return {
             "limit_type": "compliance_limits",
             "status": LimitStatus.WITHIN_LIMIT,

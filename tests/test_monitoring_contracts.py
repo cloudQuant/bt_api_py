@@ -4,7 +4,7 @@ import asyncio
 import logging
 import sys
 import warnings
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -462,8 +462,8 @@ async def test_elk_search_logs_builds_filtered_query() -> None:
     integration = ELKIntegration(elasticsearch_index_prefix="bt_api_py")
     integration._connected = True
     integration.elasticsearch_client._session = session
-    start_time = datetime(2026, 6, 17, 9, 30, tzinfo=timezone.utc)
-    end_time = datetime(2026, 6, 17, 10, 0, tzinfo=timezone.utc)
+    start_time = datetime(2026, 6, 17, 9, 30, tzinfo=UTC)
+    end_time = datetime(2026, 6, 17, 10, 0, tzinfo=UTC)
 
     result = await integration.search_logs(
         level="INFO",

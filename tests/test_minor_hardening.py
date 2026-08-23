@@ -71,10 +71,14 @@ async def test_mock_broker_weighted_average_price() -> None:
     adapter = MockBrokerAdapter()
     await adapter.connect()
     await adapter.place_order(
-        OrderRequest(account_id="paper", symbol="RB", side="buy", quantity=1, order_type="limit", price=100.0)
+        OrderRequest(
+            account_id="paper", symbol="RB", side="buy", quantity=1, order_type="limit", price=100.0
+        )
     )
     await adapter.place_order(
-        OrderRequest(account_id="paper", symbol="RB", side="buy", quantity=1, order_type="limit", price=200.0)
+        OrderRequest(
+            account_id="paper", symbol="RB", side="buy", quantity=1, order_type="limit", price=200.0
+        )
     )
     positions = await adapter.list_positions("paper")
     assert positions[0].average_price == 150.0  # (1*100 + 1*200)/2

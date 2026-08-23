@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from bt_api_base.plugins.loader import PluginLoader
 from bt_api_base.registry import ExchangeRegistry
 

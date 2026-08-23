@@ -1,7 +1,4 @@
-"""
-
-
-"""
+""" """
 
 from __future__ import annotations
 
@@ -14,7 +11,6 @@ from typing import Any
 
 import numpy as np
 from bt_api_base.logging_factory import get_logger
-
 
 # 模型文件仅允许从包内 models/ 目录加载（防 pickle 任意路径反序列化）
 _MODELS_DIR = Path(__file__).resolve().parent / "models"
@@ -30,19 +26,19 @@ class BaseMLModel(ABC):
         """ML
 
         Args: model_name:
-            config: 
+            config:
         """
         self.model_name = model_name
         self.config = config or {}
         self.logger = get_logger(f"ml_model_{model_name}")
 
-        # 
+        #
         self.model: Any = None
         self.is_trained = False
         self.training_time = 0.0
         self.last_training_time = 0.0
 
-        # 
+        #
         self.metrics = {
             "accuracy": 0.0,
             "precision": 0.0,
@@ -53,14 +49,14 @@ class BaseMLModel(ABC):
             "features_count": 0,
         }
 
-        # 
+        #
         self.model_version = "1.0.0"
         self.data_version = "1.0.0"
 
-        # 
+        #
         self.training_history: list[dict[str, Any]] = []
 
-        # 
+        #
         self.feature_names: list[str] = []
         self.feature_importance: dict[str, float] = {}
 
@@ -76,7 +72,7 @@ class BaseMLModel(ABC):
         """
 
         Args: X:
-            y: 
+            y:
             validation_data:  (X_val, y_val)
 
         Returns: Dict[str, Any]:
@@ -104,7 +100,7 @@ class BaseMLModel(ABC):
         """
 
         Args: X:
-            y: 
+            y:
 
         Returns: Dict[str, float]:
         """
@@ -124,7 +120,7 @@ class BaseMLModel(ABC):
                 "f1_score": f1_score(y, y_pred, average="weighted", zero_division=0),
             }
 
-            # 
+            #
             self.metrics.update(metrics)
 
             return metrics
@@ -244,7 +240,7 @@ class BaseMLModel(ABC):
         step_data["timestamp"] = int(time.time())
         self.training_history.append(step_data)
 
-        # 
+        #
         if len(self.training_history) > 1000:
             self.training_history = self.training_history[-500:]
 
@@ -408,7 +404,7 @@ class ModelComparator:
         """
 
         Args: name:
-            model: 
+            model:
         """
         self.models[name] = model
 
@@ -416,7 +412,7 @@ class ModelComparator:
         """
 
         Args: X_test:
-            y_test: 
+            y_test:
 
         Returns: Dict[str, Dict[str, Any]]:
         """
@@ -458,7 +454,7 @@ class ModelComparator:
         if not self.test_results:
             return {"error": "No test results available"}
 
-        # 
+        #
         best_models: dict[str, str | None] = {}
         metrics = ["accuracy", "precision", "recall", "f1_score"]
 

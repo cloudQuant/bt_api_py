@@ -68,9 +68,13 @@ def check_manifest(
 
     if expected_enforcement == "disabled":
         if ruleset is not None and ruleset.get("enforcement") == "active":
+            gate = (
+                manifest.get("pending_decision_gate")
+                or manifest.get("activation_requires")
+                or "n/a"
+            )
             drifts.append(
-                f"{label}: ruleset is active but manifest requires disabled "
-                f"(pending gate: {manifest.get('pending_decision_gate', 'n/a')})"
+                f"{label}: ruleset is active but manifest requires disabled (pending gate: {gate})"
             )
         return
 

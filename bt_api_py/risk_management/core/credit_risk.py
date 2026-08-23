@@ -19,19 +19,19 @@ class CreditRiskMixin:
         #  ()
         credit_score = self._calculate_credit_score(account_data)
 
-        # 
+        #
         probability_of_default = self._calculate_probability_of_default(credit_score)
 
-        # 
+        #
         loss_given_default = self._calculate_loss_given_default(position_data)
 
-        # 
+        #
         exposure_at_default = self._calculate_exposure_at_default(position_data)
 
-        # 
+        #
         credit_utilization = self._calculate_credit_utilization(account_data)
 
-        # 
+        #
         settlement_risk = self._calculate_settlement_risk(position_data)
 
         return CreditRiskMetrics(
@@ -41,23 +41,23 @@ class CreditRiskMixin:
                 "loss_given_default": loss_given_default,
                 "exposure_at_default": exposure_at_default,
                 "credit_utilization": credit_utilization,
-                "counterparty_risk": {},  # 
+                "counterparty_risk": {},  #
                 "settlement_risk": settlement_risk,
-                "maturity_profile": {},  # 
+                "maturity_profile": {},  #
             }
         )
 
     def _calculate_credit_score(self, account_data: dict[str, Any]) -> Decimal:
         """"""
-        # 
-        base_score = Decimal("750")  # 
+        #
+        base_score = Decimal("750")  #
         account_age = account_data.get("account_age_days", 0)
         trading_volume = account_data.get("trading_volume", 0)
 
-        # 
+        #
         age_adjustment = Decimal(str(min(account_age / 365 * 10, 50)))  # +50
 
-        # 
+        #
         volume_adjustment = Decimal(str(min(trading_volume / 1000000 * 5, 25)))  # +25
 
         final_score = base_score + age_adjustment + volume_adjustment
@@ -73,7 +73,8 @@ class CreditRiskMixin:
             return Decimal("0.005")  # 0.5%
         elif score >= 600:
             return Decimal("0.02")  # 2%
-        else: return Decimal("0.1")  # 10%
+        else:
+            return Decimal("0.1")  # 10%
 
     def _calculate_loss_given_default(self, position_data: dict[str, Any]) -> Decimal:
         """"""
@@ -95,11 +96,11 @@ class CreditRiskMixin:
 
     def _calculate_settlement_risk(self, position_data: dict[str, Any]) -> Decimal:
         """"""
-        # 
+        #
         portfolio_value = position_data.get("portfolio_value", 0)
         settlement_cycle = position_data.get("settlement_cycle_days", 2)
 
-        # 
+        #
         risk_factor = 0.001 * settlement_cycle  # 0.1%
         settlement_risk = portfolio_value * risk_factor
 

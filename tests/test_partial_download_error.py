@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -19,7 +19,7 @@ class TestKlineDownloadRetryExhaustion:
         """When every batch download fails, retry exhaustion must raise PartialDownloadError."""
         api = BtApi(None, debug=False)
 
-        begin_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        begin_time = datetime(2024, 1, 1, tzinfo=UTC)
 
         with (
             patch.object(
@@ -46,7 +46,7 @@ class TestKlineDownloadRetryExhaustion:
         """When some batches succeed then retries exhaust, intervals should be recorded."""
         api = BtApi(None, debug=False)
 
-        begin_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        begin_time = datetime(2024, 1, 1, tzinfo=UTC)
 
         # First batch succeeds, advancing begin_time by 1 minute
         advanced_time = begin_time + timedelta(minutes=1)

@@ -1,4 +1,4 @@
-""" - ML.
+"""- ML.
 
 、、XGBoost
 """
@@ -16,12 +16,12 @@ from .ml_base import BaseMLModel, RiskPredictionResult
 class EnsembleMethod:
     """."""
 
-    VOTING = "voting"  # 
-    STACKING = "stacking"  # 
-    BAGGING = "bagging"  # 
-    BOOSTING = "boosting"  # 
-    WEIGHTED_AVERAGE = "weighted_average"  # 
-    DYNAMIC_WEIGHTING = "dynamic_weighting"  # 
+    VOTING = "voting"  #
+    STACKING = "stacking"  #
+    BAGGING = "bagging"  #
+    BOOSTING = "boosting"  #
+    WEIGHTED_AVERAGE = "weighted_average"  #
+    DYNAMIC_WEIGHTING = "dynamic_weighting"  #
 
 
 class ModelWeight:
@@ -50,7 +50,7 @@ class ModelWeight:
         if not self.performance_history:
             return self.weight
 
-        # 
+        #
         performance_factor = self.current_performance / 0.5  # 0.5
         dynamic_weight = self.weight * performance_factor
 
@@ -64,8 +64,8 @@ class RiskEnsembleModel(BaseMLModel):
     1.  - 、
     2.  - 、
     3.  - 、
-    4.  - 
-    5.  - 
+    4.  -
+    5.  -
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
@@ -76,12 +76,12 @@ class RiskEnsembleModel(BaseMLModel):
         """
         super().__init__("RiskEnsembleModel", config)
 
-        # 
+        #
         self.ensemble_method = self.config.get("ensemble_method", EnsembleMethod.WEIGHTED_AVERAGE)
         self.use_dynamic_weighting = self.config.get("use_dynamic_weighting", True)
         self.weight_update_frequency = self.config.get("weight_update_frequency", 100)
 
-        # 
+        #
         from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
         from sklearn.linear_model import LogisticRegression
 
@@ -99,7 +99,7 @@ class RiskEnsembleModel(BaseMLModel):
             ),
         }
 
-        # 
+        #
         self.model_weights = {
             "random_forest": ModelWeight("random_forest", 0.4, 0.6, 0.5),
             "gradient_boosting": ModelWeight("gradient_boosting", 0.4, 0.6, 0.5),
@@ -114,15 +114,15 @@ class RiskEnsembleModel(BaseMLModel):
         )
         self.use_stacking = self.ensemble_method == EnsembleMethod.STACKING
 
-        # 
+        #
         self.prediction_history: list[dict[str, Any]] = []
         self.weight_history: list[dict[str, float]] = []
 
-        # 
+        #
         self.model_performance: dict[str, dict[str, float]] = {}
         self.ensemble_performance: dict[str, float] = {}
 
-        # 
+        #
         self.prediction_cache: dict[str, RiskPredictionResult] = {}
         self.cache_size_limit = 1000
 
@@ -137,8 +137,8 @@ class RiskEnsembleModel(BaseMLModel):
         """.
 
         Args: X:
-            y: 
-            validation_data: 
+            y:
+            validation_data:
 
         Returns: Dict[str, Any]:
 
@@ -149,10 +149,10 @@ class RiskEnsembleModel(BaseMLModel):
             return {"error": "Invalid input data"}
 
         try:
-            # 
+            #
             X_processed = self._preprocess_features(X)
 
-            # 
+            #
             if validation_data is None:
                 from sklearn.model_selection import train_test_split
 
@@ -164,14 +164,14 @@ class RiskEnsembleModel(BaseMLModel):
                 X_val, y_val = validation_data
                 X_val = self._preprocess_features(X_val)
 
-            # 
+            #
             model_results = {}
             for name, model in self.models.items():
                 model_start = time.time()
                 model.fit(X_train, y_train)
                 model_time = time.time() - model_start
 
-                # 
+                #
                 train_score = model.score(X_train, y_train)
                 val_score = model.score(X_val, y_val)
 
@@ -181,7 +181,7 @@ class RiskEnsembleModel(BaseMLModel):
                     "validation_score": val_score,
                 }
 
-                # 
+                #
                 self.model_weights[name].update_performance(val_score)
 
                 self.logger.info(f"Model {name} trained - Val Score: {val_score:.4f}")
@@ -190,21 +190,21 @@ class RiskEnsembleModel(BaseMLModel):
             if self.use_stacking:
                 self._train_meta_learner(X_train, y_train, X_val, y_val)
 
-            # 
+            #
             self.is_trained = True
             self.training_time = time.time() - start_time
             self.last_training_time = int(time.time())
             self.metrics["training_samples"] = len(X_train)
             self.metrics["validation_samples"] = len(X_val)
 
-            # 
+            #
             ensemble_metrics = self._evaluate_ensemble(X_val, y_val)
             self.ensemble_performance = ensemble_metrics
 
-            # 
+            #
             self._update_model_weights(ensemble_metrics)
 
-            # 
+            #
             self._record_training_step(
                 {
                     "action": "train_ensemble",
@@ -260,7 +260,8 @@ class RiskEnsembleModel(BaseMLModel):
             return self._predict_weighted_average(X_processed)
         elif self.ensemble_method == EnsembleMethod.DYNAMIC_WEIGHTING:
             return self._predict_dynamic_weighting(X_processed)
-        else: return self._predict_weighted_average(X_processed)
+        else:
+            return self._predict_weighted_average(X_processed)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         """.
@@ -283,7 +284,8 @@ class RiskEnsembleModel(BaseMLModel):
             return self._predict_proba_weighted_average(X_processed)
         elif self.ensemble_method == EnsembleMethod.DYNAMIC_WEIGHTING:
             return self._predict_proba_dynamic_weighting(X_processed)
-        else: return self._predict_proba_weighted_average(X_processed)
+        else:
+            return self._predict_proba_weighted_average(X_processed)
 
     def predict_risk(
         self, features: np.ndarray | dict[str, Any], return_details: bool = False
@@ -291,20 +293,20 @@ class RiskEnsembleModel(BaseMLModel):
         """.
 
         Args: features:
-            return_details: 
+            return_details:
 
         Returns: RiskPredictionResult:
 
         """
         try:
-            # 
+            #
             cache_key = self._generate_cache_key(features)
 
-            # 
+            #
             if cache_key in self.prediction_cache:
                 return self.prediction_cache[cache_key]
 
-            # 
+            #
             if isinstance(features, dict):
                 X = self._dict_to_features(features)
                 feature_names = list(features.keys())
@@ -312,11 +314,11 @@ class RiskEnsembleModel(BaseMLModel):
                 X = features.reshape(1, -1) if features.ndim == 1 else features
                 feature_names = self.feature_names
 
-            # 
+            #
             probabilities = self.predict_proba(X)
             predictions = self.predict(X)
 
-            # 
+            #
             individual_predictions = {}
             individual_probabilities = {}
 
@@ -327,10 +329,10 @@ class RiskEnsembleModel(BaseMLModel):
                 individual_predictions[name] = pred
                 individual_probabilities[name] = proba
 
-            # 
+            #
             confidence = self._calculate_prediction_confidence(probabilities[0])
 
-            # 
+            #
             result = RiskPredictionResult(
                 prediction=int(predictions[0]),
                 probability=float(probabilities[0][1])
@@ -342,7 +344,7 @@ class RiskEnsembleModel(BaseMLModel):
                 features_used=feature_names,
             )
 
-            # 
+            #
             if return_details:
                 result.individual_predictions = individual_predictions
                 result.individual_probabilities = individual_probabilities
@@ -351,10 +353,10 @@ class RiskEnsembleModel(BaseMLModel):
                 }
                 result.ensemble_method = self.ensemble_method
 
-            # 
+            #
             self.prediction_cache[cache_key] = result
             if len(self.prediction_cache) > self.cache_size_limit:
-                # 
+                #
                 oldest_key = next(iter(self.prediction_cache))
                 del self.prediction_cache[oldest_key]
 
@@ -375,7 +377,7 @@ class RiskEnsembleModel(BaseMLModel):
         """.
 
         Args: true_labels:
-            predictions: 
+            predictions:
 
         """
         if not self.is_trained:
@@ -384,7 +386,7 @@ class RiskEnsembleModel(BaseMLModel):
         try:
             from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
-            # 
+            #
             accuracy = accuracy_score(true_labels, predictions)
             precision = precision_score(
                 true_labels, predictions, average="weighted", zero_division=0
@@ -403,7 +405,7 @@ class RiskEnsembleModel(BaseMLModel):
             if self.use_dynamic_weighting:
                 self._update_weights_based_on_performance(true_labels, predictions)
 
-            # 
+            #
             self.prediction_history.append(
                 {
                     "timestamp": int(time.time()),
@@ -453,7 +455,7 @@ class RiskEnsembleModel(BaseMLModel):
 
         feature_importance: dict[str, list[float]] = {}
 
-        # 
+        #
         for model in self.models.values():
             if hasattr(model, "feature_importances_"):
                 importance = model.feature_importances_
@@ -465,7 +467,7 @@ class RiskEnsembleModel(BaseMLModel):
                         feature_importance[feature_name] = []
                     feature_importance[feature_name].append(imp)
 
-        # 
+        #
         avg_importance: dict[str, float] = {}
         for feature, values in feature_importance.items():
             avg_importance[feature] = float(np.mean(values))
@@ -473,13 +475,13 @@ class RiskEnsembleModel(BaseMLModel):
         self.feature_importance = avg_importance
         return avg_importance
 
-    # 
+    #
 
     def _train_meta_learner(
         self, X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray
     ) -> None:
         """."""
-        # 
+        #
         meta_features_train = []
         meta_features_val = []
 
@@ -496,10 +498,10 @@ class RiskEnsembleModel(BaseMLModel):
                 meta_features_train.append(train_pred)
                 meta_features_val.append(val_pred)
 
-        # 
+        #
         X_meta_train = np.hstack(meta_features_train)
 
-        # 
+        #
         self.meta_learner.fit(X_meta_train, y_train)
 
     def _predict_stacking(self, X: np.ndarray) -> np.ndarray:
@@ -540,7 +542,7 @@ class RiskEnsembleModel(BaseMLModel):
             pred = model.predict(X)
             predictions_list.append(pred)
 
-        # 
+        #
         predictions_arr = np.array(predictions_list)
         majority_vote = np.apply_along_axis(
             lambda x: np.bincount(x).argmax(), axis=0, arr=predictions_arr
@@ -557,7 +559,7 @@ class RiskEnsembleModel(BaseMLModel):
                 proba = model.predict_proba(X)
                 probabilities.append(proba)
 
-        # 
+        #
         avg_proba = np.mean(probabilities, axis=0)
         return cast("np.ndarray", avg_proba)
 
@@ -661,9 +663,9 @@ class RiskEnsembleModel(BaseMLModel):
         """."""
         f1_score = performance_metrics.get("f1_score", 0.5)
 
-        # 
+        #
         for weight_config in self.model_weights.values():
-            # 
+            #
             if f1_score > 0.8:
                 # ，
                 weight_config.weight = min(weight_config.weight * 1.05, weight_config.max_weight)
@@ -671,7 +673,7 @@ class RiskEnsembleModel(BaseMLModel):
                 # ，
                 weight_config.weight = max(weight_config.weight * 0.95, 0.1)
 
-        # 
+        #
         total_weight = sum(w.weight for w in self.model_weights.values())
         if total_weight > 0:
             for weight_config in self.model_weights.values():
@@ -682,6 +684,7 @@ class RiskEnsembleModel(BaseMLModel):
     ) -> None:
         """."""
         X_for_individual = self._get_last_X_for_individual_predictions()
+        from sklearn.metrics import f1_score
 
         if X_for_individual is not None:
             for name, model in self.models.items():
@@ -702,9 +705,9 @@ class RiskEnsembleModel(BaseMLModel):
     def _calculate_prediction_confidence(self, probabilities: np.ndarray) -> float:
         """."""
         if len(probabilities) == 1:
-            return 0.5  # 
+            return 0.5  #
 
-        # 
+        #
         max_prob = np.max(probabilities)
         return float(max_prob)
 
@@ -719,7 +722,7 @@ class RiskEnsembleModel(BaseMLModel):
     def _generate_cache_key(self, features: np.ndarray | dict[str, Any]) -> str:
         """."""
         if isinstance(features, dict):
-            # 
+            #
             feature_str = str(sorted(features.items()))
         else:
             feature_str = str(features.tolist())

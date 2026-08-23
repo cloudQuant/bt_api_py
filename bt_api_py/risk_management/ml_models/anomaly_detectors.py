@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import numpy as np
+import numpy as np  # noqa: TC002 (runtime use in anomaly detectors)
 
 from .anomaly_types import AnomalyDetectionResult, AnomalySeverity, AnomalyType
 
@@ -123,7 +123,7 @@ class AnomalyDetectorsMixin:
         bid_ask_spread = market_data.get("bid_ask_spread", 0)
         market_depth = market_data.get("market_depth", 1000000)
 
-        # 
+        #
         spread_anomaly = bid_ask_spread > 100  # 100 bps
         depth_anomaly = market_depth < 100000  # 10
 

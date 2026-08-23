@@ -232,6 +232,9 @@ exclude_dirs = ["tests", "bt_api_py/ctp", "build", "dist", ".venv", "venv"]
 skips = [
     "B101",  # assert_used - allowed in tests (ruff S101)
     "B104",  # bind all interfaces - explicit default for Prometheus exporters
+    "B105",  # hardcoded_password_string - false positives on enum values (PASS),
+             # empty config defaults, and field names ("refresh_token"); real
+             # secret leakage is covered by gitleaks diff scanning in CI
 ]
 
 [project.optional-dependencies]
@@ -253,6 +256,8 @@ dev = [
     "mypy>=1.0",
     "pre-commit>=3.0.0",
     "bandit[toml]>=1.7.0",
+    "pip-audit>=2.7.0",
+    "setuptools>=83.0.0",
     "hypothesis>=6.0.0",
     "psutil>=5.9.0",
     "scikit-learn>=1.3.0",

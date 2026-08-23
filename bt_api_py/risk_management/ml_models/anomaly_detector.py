@@ -42,12 +42,12 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         """
         super().__init__("AnomalyDetector", config)
 
-        # 
-        self.contamination = self.config.get("contamination", 0.1)  # 
+        #
+        self.contamination = self.config.get("contamination", 0.1)  #
         self.anomaly_threshold = self.config.get("anomaly_threshold", 0.5)
         self.use_ensemble = self.config.get("use_ensemble", True)
 
-        # 
+        #
         from sklearn.ensemble import IsolationForest
         from sklearn.preprocessing import StandardScaler
         from sklearn.svm import OneClassSVM
@@ -58,19 +58,19 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         self.one_class_svm = OneClassSVM(kernel="rbf", gamma="scale", nu=self.contamination)
         self.scaler = StandardScaler()
 
-        # 
+        #
         self.z_threshold = self.config.get("z_threshold", 3.0)
         self.iqr_factor = self.config.get("iqr_factor", 1.5)
 
-        # 
+        #
         self.window_size = self.config.get("window_size", 50)
         self.trend_threshold = self.config.get("trend_threshold", 2.0)
 
-        # 
+        #
         self.detection_history: list[AnomalyDetectionResult] = []
         self.feature_stats: dict[str, dict[str, float]] = {}
 
-        # 
+        #
         self.anomaly_patterns = self._load_anomaly_patterns()
 
         self.logger.info("AnomalyDetector initialized")
@@ -96,26 +96,26 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
             return {"error": "Invalid input data"}
 
         try:
-            # 
+            #
             X_processed = self._preprocess_features(X)
 
             # Isolation Forest
             self.isolation_forest.fit(X_processed)
 
             # One-Class SVM ()
-            if len(X_processed) < 10000:  # 
+            if len(X_processed) < 10000:  #
                 self.one_class_svm.fit(X_processed)
 
-            # 
+            #
             self._compute_feature_statistics(X_processed)
 
-            # 
+            #
             self.is_trained = True
             self.training_time = time.time() - start_time
             self.last_training_time = int(time.time())
             self.metrics["training_samples"] = len(X_processed)
 
-            # 
+            #
             self._record_training_step(
                 {
                     "action": "train",
@@ -153,7 +153,7 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         Returns: AnomalyDetectionResult: 检测结果
         """
         try:
-            # 
+            #
             if isinstance(X, dict):
                 X_vector = self._dict_to_features(X)
                 feature_names = list(X.keys())
@@ -173,10 +173,10 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
                     features_used=feature_names,
                 )
 
-            # 
+            #
             X_processed = self._preprocess_features(X_vector)
 
-            # 
+            #
             if method == "isolation_forest":
                 result = self._detect_with_isolation_forest(X_processed, feature_names)
             elif method == "one_class_svm":
@@ -188,7 +188,7 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
             else:
                 raise ValueError(f"Unknown detection method: {method}")
 
-            # 
+            #
             self.detection_history.append(result)
             if len(self.detection_history) > 10000:
                 self.detection_history = self.detection_history[-5000:]
@@ -222,13 +222,13 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         X_processed = self._preprocess_features(X)
 
         if self.use_ensemble:
-            # 
+            #
             if_pred = self.isolation_forest.predict(X_processed)
             svm_pred = (
                 self.one_class_svm.predict(X_processed) if len(X_processed) < 10000 else if_pred
             )
 
-            # 
+            #
             predictions = []
             for i in range(len(X_processed)):
                 votes = [if_pred[i], svm_pred[i]]
@@ -261,10 +261,10 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
                 else if_scores
             )
 
-            # 
+            #
             ensemble_scores = (if_scores + svm_scores) / 2
         else:
-                ensemble_scores = cast(
+            ensemble_scores = cast(
                 "np.ndarray", self.isolation_forest.decision_function(X_processed)
             )
 
@@ -286,10 +286,10 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         """
         anomalies = []
 
-        # 
+        #
         features = self._extract_trading_features(trading_data)
 
-        # 
+        #
         volume_anomaly = self._detect_volume_anomaly(trading_data, features)
         if volume_anomaly:
             anomalies.append(volume_anomaly)
@@ -318,10 +318,10 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         """
         anomalies = []
 
-        # 
+        #
         features = self._extract_market_features(market_data)
 
-        # 
+        #
         volatility_anomaly = self._detect_volatility_anomaly(market_data, features)
         if volatility_anomaly:
             anomalies.append(volatility_anomaly)
@@ -348,10 +348,10 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         """
         anomalies = []
 
-        # 
+        #
         features = self._extract_operational_features(operational_data)
 
-        # 
+        #
         performance_anomaly = self._detect_performance_anomaly(operational_data, features)
         if performance_anomaly:
             anomalies.append(performance_anomaly)
@@ -366,7 +366,7 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
 
         return anomalies
 
-    # 
+    #
 
     def _detect_with_isolation_forest(
         self, X: np.ndarray, feature_names: list[str]
@@ -378,7 +378,7 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         is_anomaly = prediction == -1
         anomaly_score = abs(score)
 
-        # 
+        #
         anomaly_type, severity = self._classify_anomaly(X[0], is_anomaly, anomaly_score)
 
         return AnomalyDetectionResult(
@@ -451,25 +451,25 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
 
     def _detect_ensemble(self, X: np.ndarray, feature_names: list[str]) -> AnomalyDetectionResult:
         """"""
-        # 
+        #
         if_result = self._detect_with_isolation_forest(X, feature_names)
         svm_result = self._detect_with_one_class_svm(X, feature_names)
         stat_result = self._detect_statistical(X, feature_names)
 
-        # 
+        #
         votes = [if_result.is_anomaly, svm_result.is_anomaly, stat_result.is_anomaly]
         vote_count = sum(votes)
 
         is_anomaly = vote_count >= 2  # 2
 
-        # 
+        #
         ensemble_score = (
             if_result.anomaly_score * 0.4
             + svm_result.anomaly_score * 0.3
             + stat_result.anomaly_score * 0.3
         )
 
-        # 
+        #
         explanations = []
         if if_result.is_anomaly:
             explanations.append(f"IsolationForest: {if_result.explanation}")
@@ -502,7 +502,7 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         if not is_anomaly:
             return None, AnomalySeverity.LOW
 
-        # 
+        #
         if score > 0.8:
             severity = AnomalySeverity.CRITICAL
         elif score > 0.6:
@@ -512,7 +512,7 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         else:
             severity = AnomalySeverity.LOW
 
-        # 
+        #
         anomaly_type = "general_anomaly"
 
         return anomaly_type, severity
@@ -524,10 +524,10 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
         if not is_anomaly:
             return "No anomaly detected"
 
-        # 
+        #
         if len(feature_names) == len(features):
             feature_contributions = [
-                (name, abs(value)) for name, value in zip(feature_names, features)
+                (name, abs(value)) for name, value in zip(feature_names, features, strict=True)
             ]
             feature_contributions.sort(key=lambda x: x[1], reverse=True)
 
@@ -602,7 +602,7 @@ class AnomalyDetector(BaseMLModel, AnomalyDetectorsMixin):
 
     def _load_anomaly_patterns(self) -> dict[str, Any]:
         """"""
-        # 
+        #
         return {
             "volume_spike": {"threshold": 5.0, "description": "Unusual trading volume"},
             "price_crash": {"threshold": 0.1, "description": "Rapid price decline"},

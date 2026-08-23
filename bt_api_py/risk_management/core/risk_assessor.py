@@ -1,4 +1,4 @@
-""" - 
+"""-
 
 ，
 """
@@ -21,13 +21,13 @@ class RiskAssessmentResult:
     def __init__(self, data: dict[str, Any]) -> None:
         """__init__ method"""
         self.score = Decimal(str(data.get("score", 0)))  #  0-1
-        self.level = RiskLevel(data.get("level", "LOW"))  # 
+        self.level = RiskLevel(data.get("level", "LOW"))  #
         self.confidence = Decimal(str(data.get("confidence", 0)))  #  0-1
-        self.factors = data.get("factors", {})  # 
-        self.recommendations = data.get("recommendations", [])  # 
-        self.prediction = data.get("prediction", {})  # 
-        self.model_version = data.get("model_version", "")  # 
-        self.assessment_time = data.get("assessment_time", int(time.time()))  # 
+        self.factors = data.get("factors", {})  #
+        self.recommendations = data.get("recommendations", [])  #
+        self.prediction = data.get("prediction", {})  #
+        self.model_version = data.get("model_version", "")  #
+        self.assessment_time = data.get("assessment_time", int(time.time()))  #
 
 
 class RiskFactor:
@@ -39,21 +39,21 @@ class RiskFactor:
         self.weight = weight  #  0-1
         self.score = score  #  0-1
         self.description = description
-        self.contribution = weight * score  # 
+        self.contribution = weight * score  #
 
 
 class RiskAssessor:
     """
 
-    
+
 
     :
     1.  (、、、、)
-    2. 
-    3. 
-    4. 
-    5. 
-    6. 
+    2.
+    3.
+    4.
+    5.
+    6.
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
@@ -64,7 +64,7 @@ class RiskAssessor:
         self.logger = get_logger("risk_assessor")
         self.config = config or {}
 
-        # 
+        #
         self.factor_weights = self.config.get(
             "factor_weights",
             {
@@ -76,7 +76,7 @@ class RiskAssessor:
             },
         )
 
-        # 
+        #
         self.risk_thresholds = self.config.get(
             "risk_thresholds",
             {
@@ -87,23 +87,23 @@ class RiskAssessor:
             },
         )
 
-        # 
+        #
         self.use_ml_models = self.config.get("use_ml_models", True)
         self.model_update_interval = self.config.get("model_update_interval", 86400)  # 24
         self.min_samples_for_ml = self.config.get("min_samples_for_ml", 1000)
 
-        # 
+        #
         self.historical_assessments: list[RiskAssessmentResult] = []
         self.risk_factors_history: list[dict[str, float]] = []
 
-        # 
+        #
         self.assessment_stats = {
             "total_assessments": 0,
             "average_score": 0.0,
             "score_distribution": {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0},
         }
 
-        # 
+        #
         self._init_ml_components()
 
         self.logger.info("RiskAssessor initialized")
@@ -118,7 +118,7 @@ class RiskAssessor:
             "ensemble": self._create_ensemble_model(),
         }
 
-        # 
+        #
         self.last_training_time = 0
         self.model_accuracy = {"random_forest": 0.8, "neural_network": 0.75, "ensemble": 0.85}
 
@@ -134,10 +134,10 @@ class RiskAssessor:
                 f"Assessing risk for {risk_metrics.exchange_name}:{risk_metrics.account_id}"
             )
 
-            # 
+            #
             risk_factors = self._extract_risk_factors(risk_metrics)
 
-            # 
+            #
             traditional_score = self._calculate_traditional_score(risk_factors)
 
             # ML
@@ -146,16 +146,16 @@ class RiskAssessor:
             if self.use_ml_models and len(self.historical_assessments) >= self.min_samples_for_ml:
                 ml_score, ml_confidence = self._predict_with_ml(risk_factors)
 
-            # 
+            #
             final_score = self._ensemble_scores(traditional_score, ml_score, ml_confidence)
 
-            # 
+            #
             risk_level = self._determine_risk_level(float(final_score))
 
-            # 
+            #
             recommendations = self._generate_recommendations(risk_factors, risk_level)
 
-            # 
+            #
             result = RiskAssessmentResult(
                 {
                     "score": final_score,
@@ -176,10 +176,10 @@ class RiskAssessor:
                 }
             )
 
-            # 
+            #
             self._update_historical_data(result, risk_factors)
 
-            # 
+            #
             self._update_statistics(result)
 
             total = cast("int", self.assessment_stats["total_assessments"])
@@ -189,7 +189,7 @@ class RiskAssessor:
 
         except Exception as e:
             self.logger.error(f"Error assessing risk: {e}")
-            # 
+            #
             return RiskAssessmentResult(
                 {
                     "score": Decimal("0.5"),
@@ -212,7 +212,7 @@ class RiskAssessor:
         """
         factors = []
 
-        # 
+        #
         factors.append(
             RiskFactor(
                 name="market_volatility",
@@ -226,9 +226,7 @@ class RiskAssessor:
             RiskFactor(
                 name="value_at_risk",
                 weight=self.factor_weights["market_risk"] * 0.3,
-                score=min(
-                    float(risk_metrics.market_risk.value_at_risk_1d) / 1000000, 1.0
-                ),  # 100
+                score=min(float(risk_metrics.market_risk.value_at_risk_1d) / 1000000, 1.0),  # 100
                 description="",
             )
         )
@@ -242,14 +240,12 @@ class RiskAssessor:
             )
         )
 
-        # 
+        #
         factors.append(
             RiskFactor(
                 name="credit_score",
                 weight=self.factor_weights["credit_risk"] * 0.5,
-                score=max(
-                    0, 1 - float(risk_metrics.credit_risk.credit_score) / 850
-                ),  # 850
+                score=max(0, 1 - float(risk_metrics.credit_risk.credit_score) / 850),  # 850
                 description="",
             )
         )
@@ -263,7 +259,7 @@ class RiskAssessor:
             )
         )
 
-        # 
+        #
         factors.append(
             RiskFactor(
                 name="system_health",
@@ -291,7 +287,7 @@ class RiskAssessor:
             )
         )
 
-        # 
+        #
         factors.append(
             RiskFactor(
                 name="liquidity_score",
@@ -305,14 +301,12 @@ class RiskAssessor:
             RiskFactor(
                 name="bid_ask_spread",
                 weight=self.factor_weights["liquidity_risk"] * 0.5,
-                score=min(
-                    float(risk_metrics.liquidity_risk.bid_ask_spread) / 1000, 1.0
-                ),  # 1000bps
+                score=min(float(risk_metrics.liquidity_risk.bid_ask_spread) / 1000, 1.0),  # 1000bps
                 description="",
             )
         )
 
-        # 
+        #
         factors.append(
             RiskFactor(
                 name="compliance_score",
@@ -359,19 +353,19 @@ class RiskAssessor:
         if not self.use_ml_models:
             return 0.0, 0.0
 
-        # 
+        #
         features = [rf.score for rf in risk_factors]
 
         # ML
-        # 
+        #
         rf_score = self._predict_rf(features) * self.model_accuracy["random_forest"]
         nn_score = self._predict_nn(features) * self.model_accuracy["neural_network"]
         ensemble_score = self._predict_ensemble(features) * self.model_accuracy["ensemble"]
 
-        # 
+        #
         final_score = (rf_score + nn_score + ensemble_score) / 3
 
-        # 
+        #
         confidence = sum(self.model_accuracy.values()) / len(self.model_accuracy)
 
         return final_score, confidence
@@ -412,7 +406,8 @@ class RiskAssessor:
             return RiskLevel.HIGH
         elif score >= self.risk_thresholds["medium"]:
             return RiskLevel.MEDIUM
-        else: return RiskLevel.LOW
+        else:
+            return RiskLevel.LOW
 
     def _generate_recommendations(
         self, risk_factors: list[RiskFactor], risk_level: RiskLevel
@@ -420,36 +415,33 @@ class RiskAssessor:
         """
 
         Args: risk_factors:
-            risk_level: 
+            risk_level:
 
         Returns: List[str]:
         """
         recommendations = []
 
-        # 
-        if risk_level == RiskLevel.CRITICAL:
-            recommendations.extend(
-                ["", "", ""]
-            )
-        elif risk_level == RiskLevel.HIGH:
-            recommendations.extend(["", "", ""])
-        elif risk_level == RiskLevel.MEDIUM:
+        #
+        if (
+            risk_level == RiskLevel.CRITICAL
+            or risk_level == RiskLevel.HIGH
+            or risk_level == RiskLevel.MEDIUM
+        ):
             recommendations.extend(["", "", ""])
 
-        # 
+        #
         high_risk_factors = [rf for rf in risk_factors if rf.score > 0.7]
         for factor in high_risk_factors:
             if factor.name == "market_volatility":
                 recommendations.append("")
             elif factor.name == "position_concentration":
                 recommendations.append("，")
-            elif factor.name == "credit_score":
-                recommendations.append("")
-            elif factor.name == "system_health":
-                recommendations.append("")
-            elif factor.name == "liquidity_score":
-                recommendations.append("")
-            elif factor.name == "compliance_score":
+            elif (
+                factor.name == "credit_score"
+                or factor.name == "system_health"
+                or factor.name == "liquidity_score"
+                or factor.name == "compliance_score"
+            ):
                 recommendations.append("")
 
         return recommendations
@@ -461,11 +453,11 @@ class RiskAssessor:
 
         Returns: Dict[str, Any]:
         """
-        # 
+        #
         current_scores = [rf.score for rf in risk_factors]
         avg_score = sum(current_scores) / len(current_scores)
 
-        # 
+        #
         trend = "STABLE"
         if len(self.historical_assessments) >= 5:
             recent_scores = [float(r.score) for r in self.historical_assessments[-5:]]
@@ -474,7 +466,7 @@ class RiskAssessor:
             elif recent_scores[-1] < recent_scores[0]:
                 trend = "DECREASING"
 
-        # 
+        #
         next_period_risk = avg_score
         if trend == "INCREASING":
             next_period_risk *= 1.1
@@ -494,15 +486,15 @@ class RiskAssessor:
         """
 
         Args: result:
-            risk_factors: 
+            risk_factors:
         """
         self.historical_assessments.append(result)
 
-        # 
+        #
         if len(self.historical_assessments) > 10000:
             self.historical_assessments = self.historical_assessments[-5000:]
 
-        # 
+        #
         factors_data = {rf.name: rf.score for rf in risk_factors}
         self.risk_factors_history.append(factors_data)
 
@@ -518,10 +510,10 @@ class RiskAssessor:
         current_avg = cast("float", self.assessment_stats["average_score"])
         new_score = float(result.score)
 
-        # 
+        #
         self.assessment_stats["average_score"] = (current_avg * (total - 1) + new_score) / total
 
-        # 
+        #
         dist = cast("dict[str, int]", self.assessment_stats["score_distribution"])
         dist[result.level.value] = dist.get(result.level.value, 0) + 1
 
@@ -554,15 +546,15 @@ class RiskAssessor:
 
     def _predict_rf(self, features: list[float]) -> float:
         """"""
-        # 
+        #
         return sum(features) / len(features) * 0.9
 
     def _predict_nn(self, features: list[float]) -> float:
         """"""
-        # 
+        #
         return sum(features) / len(features) * 0.95
 
     def _predict_ensemble(self, features: list[float]) -> float:
         """"""
-        # 
+        #
         return sum(features) / len(features) * 0.92
