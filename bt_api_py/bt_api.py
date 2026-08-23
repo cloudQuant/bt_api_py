@@ -1,6 +1,11 @@
 """
 Integrate all exchange APIs using this BtApi class
 通过 ExchangeRegistry 实现交易所的即插即用，新增交易所无需修改此文件
+
+Exchange key convention (exchange_kwargs / get_tick dataname 前缀):
+``EXCHANGE___MARKET_TYPE``, e.g. ``BINANCE___SPOT``、``CTP___FUTURE``。
+三下划线为保留分隔符；订阅数据名追加 symbol：
+``EXCHANGE___MARKET_TYPE___SYMBOL``。
 """
 
 from __future__ import annotations
