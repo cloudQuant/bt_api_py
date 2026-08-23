@@ -30,9 +30,7 @@ def test_plugin_load_failure_does_not_break_init(monkeypatch) -> None:
     def broken_load() -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(
-        bt_api_module, "_initialize_plugin_and_legacy_registrations", broken_load
-    )
+    monkeypatch.setattr(bt_api_module, "_initialize_plugin_and_legacy_registrations", broken_load)
     api = BtApi(None, debug=False)
     assert api is not None
     assert bt_api_module._plugins_loaded is True  # finally 里置 True

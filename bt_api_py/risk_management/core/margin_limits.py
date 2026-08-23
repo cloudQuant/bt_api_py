@@ -11,6 +11,8 @@ from .limits_types import LimitStatus, LimitType
 class MarginLimitsMixin:
     """保证金限额检查方法（供 LimitsManager 混入）。"""
 
+    def get_current_limits(self, exchange_name: str, account_id: str) -> dict[str, Any]: ...
+
     def _check_margin_requirement(
         self,
         exchange_name: str,
@@ -19,7 +21,7 @@ class MarginLimitsMixin:
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
         """"""
-        # 
+        #
         order_value = order_data.get("size", 0) * order_data.get("price", 1)
         current_margin = current_metrics.credit_risk.credit_utilization if current_metrics else 0
         limits = self.get_current_limits(exchange_name, account_id)

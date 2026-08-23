@@ -21,10 +21,7 @@ def test_prometheus_exporter_default_host_is_loopback() -> None:
     from bt_api_py.monitoring.prometheus import PrometheusExporter, start_prometheus_exporter
 
     assert inspect.signature(PrometheusExporter.__init__).parameters["host"].default == "127.0.0.1"
-    assert (
-        inspect.signature(start_prometheus_exporter).parameters["host"].default
-        == "127.0.0.1"
-    )
+    assert inspect.signature(start_prometheus_exporter).parameters["host"].default == "127.0.0.1"
 
 
 def test_prometheus_public_bind_emits_warning(monkeypatch) -> None:

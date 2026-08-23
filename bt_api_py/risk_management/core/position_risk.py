@@ -20,7 +20,7 @@ class PositionRiskMixin:
         if total_value == 0:
             return PositionConcentration({})
 
-        # 
+        #
         weights = [pos.get("value", 0) / total_value for pos in positions]
         herfindahl_index = sum(w**2 for w in weights)
 
@@ -29,7 +29,7 @@ class PositionRiskMixin:
         top_10_value = sum(pos.get("value", 0) for pos in sorted_positions[:10])
         top_10_ratio = top_10_value / total_value
 
-        # 
+        #
         single_position_max = max(weights) if weights else 0
 
         return PositionConcentration(
@@ -37,8 +37,8 @@ class PositionRiskMixin:
                 "herfindahl_index": herfindahl_index,
                 "top_10_holdings_ratio": top_10_ratio,
                 "single_position_max": single_position_max,
-                "sector_concentration": {},  # 
-                "geographic_concentration": {},  # 
+                "sector_concentration": {},  #
+                "geographic_concentration": {},  #
             }
         )
 
@@ -50,14 +50,14 @@ class PositionRiskMixin:
         if total_value == 0:
             return SectorExposure({})
 
-        # 
+        #
         sector_exposure: dict[str, float] = {}
         for pos in positions:
             sector = pos.get("sector", "other")
             value = pos.get("value", 0)
             sector_exposure[sector] = sector_exposure.get(sector, 0) + value
 
-        # 
+        #
         sector_percentages = {}
         for sector, value in sector_exposure.items():
             sector_percentages[sector] = value / total_value

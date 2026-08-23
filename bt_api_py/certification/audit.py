@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +22,7 @@ _SENSITIVE_KEYS = {
 }
 
 
-class CertificationAuditStatus(str, Enum):
+class CertificationAuditStatus(StrEnum):
     """Certification scenario/event result states."""
 
     PASS = "PASS"
@@ -64,7 +64,7 @@ class CertificationAuditEvent:
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     trace_id: str = ""
     severity: str = "INFO"
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     gateway_key: str = ""
     exchange_type: str = "CTP"
     account_id_masked: str = ""

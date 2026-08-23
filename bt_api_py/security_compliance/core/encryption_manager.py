@@ -40,7 +40,7 @@ from bt_api_base.logging_factory import get_logger
 logger = get_logger("security_compliance.encryption_manager")
 
 try:
-    import boto3  # noqa: F401
+    import boto3
 
     AWS_AVAILABLE = True
 except Exception as exc:  # 包括 AttributeError(底层依赖版本冲突)
@@ -48,7 +48,7 @@ except Exception as exc:  # 包括 AttributeError(底层依赖版本冲突)
     AWS_AVAILABLE = False
 
 try:
-    import hvac  # HashiCorp Vault client  # noqa: F401
+    import hvac  # HashiCorp Vault client
 
     VAULT_AVAILABLE = True
 except Exception as exc:  # 包括 AttributeError(底层依赖版本冲突)

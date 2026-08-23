@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cloudQuant/bt_api_py/blob/master/docs/governance/metrics-schema.json",
+  "title": "bt_api_py weekly governance metrics",
+  "description": "Schema for the weekly governance summary produced by triage rotation (M7). One JSON document per ISO week; values are integers or null (null = not measured this week, must be explained in notes).",
+  "type": "object",
+  "required": ["week", "generated_at", "metrics"],
+  "additionalProperties": false,
+  "properties": {
+    "week": {
+      "type": "string",
+      "description": "ISO-8601 week, e.g. 2026-W35.",
+      "pattern": "^\\d{4}-W\\d{2}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO-8601 date the summary was generated.",
+      "format": "date"
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prs_opened",
+        "pr_misroute_count",
+        "first_response_median_hours",
+        "first_substantive_review_median_hours",
+        "merge_cycle_median_hours",
+        "ci_failure_rate",
+        "ci_flake_count",
+        "bypass_events",
+        "unforwarded_hotfixes",
+        "submodule_sha_lag_count"
+      ],
+      "properties": {
+        "prs_opened": { "type": ["integer", "null"], "minimum": 0 },
+        "pr_misroute_count": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "PRs initially targeted at the wrong branch per section 4.1 routing table."
+        },
+        "first_response_median_hours": { "type": ["number", "null"], "minimum": 0 },
+        "first_substantive_review_median_hours": { "type": ["number", "null"], "minimum": 0 },
+        "merge_cycle_median_hours": { "type": ["number", "null"], "minimum": 0 },
+        "ci_failure_rate": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Failed CI runs / total CI runs on long-lived branches."
+        },
+        "ci_flake_count": { "type": ["integer", "null"], "minimum": 0 },
+        "bypass_events": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Ruleset bypasses; each must reference an issue with reason and follow-up PR."
+        },
+        "unforwarded_hotfixes": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "master hotfixes older than 1 working day without a dev forward-port PR or documented exception."
+        },
+        "submodule_sha_lag_count": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "D6 pilot plugin repos whose merged state is not yet reflected by a parent SHA bump."
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Explanations for null values, incidents, and policy adjustments backed by this week's data."
+    }
+  }
+}

@@ -306,7 +306,7 @@ class TestRiskManagement:
             exchange_name="BINANCE",
             account_id="test_account",
             order_data=order_data,
-            risk_metrics=risk_metrics,
+            risk_metrics=risk_metrics,  # type: ignore[arg-type]  # testing with raw dict form
         )
 
         assert result is not None

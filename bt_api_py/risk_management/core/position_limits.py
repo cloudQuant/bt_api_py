@@ -11,6 +11,11 @@ from .limits_types import LimitStatus, LimitType
 class PositionLimitsMixin:
     """持仓限额检查方法（供 LimitsManager 混入）。"""
 
+    critical_threshold: float
+    warning_threshold: float
+
+    def get_current_limits(self, exchange_name: str, account_id: str) -> dict[str, Any]: ...
+
     def _check_position_limits(
         self,
         exchange_name: str,
@@ -19,7 +24,7 @@ class PositionLimitsMixin:
         current_metrics: RiskMetrics | None,
     ) -> dict[str, Any]:
         """"""
-        #  - 
+        #  -
         if not current_metrics:
             return {
                 "limit_type": "position_limits",
@@ -28,10 +33,10 @@ class PositionLimitsMixin:
                 "restriction": "",
             }
 
-        # 
+        #
         checks = []
 
-        # 
+        #
         current_position = getattr(current_metrics, "total_position_value", 0)
         limits = self.get_current_limits(exchange_name, account_id)
         max_position = limits.get(LimitType.MAX_POSITION_SIZE, {}).get("value", 10000000)
@@ -55,13 +60,14 @@ class PositionLimitsMixin:
                     }
                 )
 
-        # 
+        #
         if checks:
             worst_check = max(
                 checks, key=lambda x: {"CRITICAL": 3, "WARNING": 2, "WITHIN_LIMIT": 1}[x["status"]]
             )
             return worst_check
-        else: return {
+        else:
+            return {
                 "limit_type": "position_limits",
                 "status": LimitStatus.WITHIN_LIMIT,
                 "warning": "",

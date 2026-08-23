@@ -1,4 +1,5 @@
 """Module documentation"""
+
 from __future__ import annotations
 
 from collections import deque
@@ -16,6 +17,7 @@ DEFAULT_CONTRACT_QUANTITY = 1.0
 
 class QueueStub:
     """Class QueueStub"""
+
     def __init__(self) -> None:
         """__init__ method"""
         self._items: deque[Any] = deque()
@@ -35,6 +37,7 @@ class QueueStub:
 
 class EventBusStub:
     """Class EventBusStub"""
+
     def __init__(self) -> None:
         """__init__ method"""
         self.events: list[tuple[str, Any]] = []

@@ -629,6 +629,7 @@ class TestOAuth2Provider:
             grant_type=GrantType.AUTHORIZATION_CODE,
         )
 
+        assert token.refresh_token is not None
         new_token = provider.refresh_access_token(
             refresh_token=token.refresh_token, client_id="client1"
         )
@@ -685,6 +686,7 @@ class TestOAuth2Provider:
             grant_type=GrantType.AUTHORIZATION_CODE,
         )
 
+        assert token.refresh_token is not None
         result = provider.revoke_token(token.refresh_token)
 
         assert result is True
@@ -761,6 +763,7 @@ if __name__ == "__main__":
 
 
 # ── Merged from test_oauth2_provider_quality.py (v1) ──
+
 
 class TestOAuth2ProviderQuality:
     def test_register_client_copies_mutable_inputs(self):
@@ -921,14 +924,14 @@ class TestOAuth2ProviderQuality:
                 redirect_uris=["https://app.example.com/callback"],
                 scopes={"read"},
                 grant_types={GrantType.AUTHORIZATION_CODE},
-                is_confidential="true",
+                is_confidential="true",  # type: ignore[arg-type]  # intentionally testing non-bool validation
             )
 
     def test_register_user_rejects_non_boolean_mfa_enabled(self):
         provider = OAuth2Provider("https://issuer.example.com")
 
         with pytest.raises(OAuthError, match="mfa_enabled"):
-            provider.register_user("user-a", "user-a", "user@example.com", mfa_enabled="yes")
+            provider.register_user("user-a", "user-a", "user@example.com", mfa_enabled="yes")  # type: ignore[arg-type]  # intentionally testing non-bool validation
 
     @pytest.mark.parametrize(
         ("field_name", "register_kwargs", "error_match"),
@@ -993,10 +996,11 @@ class TestOAuth2ProviderQuality:
         )
 
         with pytest.raises(OAuthError, match="scopes must be an iterable of strings"):
-            provider.validate_access_token(access_token.token, required_scopes="read")
+            provider.validate_access_token(access_token.token, required_scopes="read")  # type: ignore[arg-type]  # intentionally testing non-iterable scopes
 
 
 # ── Merged from test_oauth2_provider_quality_v2.py ──
+
 
 @pytest.fixture
 def provider() -> OAuth2Provider:

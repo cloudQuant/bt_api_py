@@ -214,7 +214,8 @@ class OAuth2Provider:
                 numeric = int(text)
             except ValueError as exc:
                 raise OAuthError(f"{field_name} must be positive") from exc
-        else: raise OAuthError(f"{field_name} must be positive")
+        else:
+            raise OAuthError(f"{field_name} must be positive")
         if numeric <= 0:
             raise OAuthError(f"{field_name} must be positive")
         return numeric

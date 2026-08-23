@@ -12,6 +12,10 @@ from .policy_types import ActionType
 class ActionMixin:
     """动作执行方法（供 PolicyEngine 混入）。"""
 
+    action_handlers: dict[str, Callable]
+    default_actions: dict[str, Callable]
+    logger: Any
+
     def _execute_action(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         """
         执行动作。
@@ -31,7 +35,7 @@ class ActionMixin:
             elif action_type in self.default_actions:
                 result = self.default_actions[action_type](action, data)
             else:
-                    result = {
+                result = {
                     "success": False,
                     "message": f"Unknown action type: {action_type}",
                 }
@@ -75,7 +79,7 @@ class ActionMixin:
         alert_level = action.get("level", "MEDIUM")
         message = action.get("message", "Risk alert triggered")
 
-        # 
+        #
         self.logger.warning(f"Risk Alert [{alert_level}]: {message}")
 
         return {
@@ -108,7 +112,7 @@ class ActionMixin:
     def _action_halt_trading(self, action: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
         """"""
         scope = action.get("scope", "account")  # account, symbol, global
-        duration = action.get("duration", 3600)  # 
+        duration = action.get("duration", 3600)  #
 
         self.logger.warning(f"Trading halted for {scope}: {duration}s")
 

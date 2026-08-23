@@ -16,22 +16,22 @@ class LiquidityRiskMixin:
     ) -> LiquidityRiskMetrics:
         """"""
 
-        # 
+        #
         liquidity_score = self._calculate_liquidity_score(position_data, market_data)
 
-        # 
+        #
         bid_ask_spread = self._calculate_bid_ask_spread(market_data)
 
-        # 
+        #
         market_depth = self._calculate_market_depth(market_data)
 
-        # 
+        #
         impact_cost = self._calculate_impact_cost(position_data, market_data)
 
-        # 
+        #
         volume_profile = self._calculate_volume_profile(market_data)
 
-        # 
+        #
         liquidation_value = self._calculate_liquidation_value(position_data, market_data)
 
         return LiquidityRiskMetrics(
@@ -42,7 +42,7 @@ class LiquidityRiskMixin:
                 "impact_cost": impact_cost,
                 "volume_profile": volume_profile,
                 "liquidation_value": liquidation_value,
-                "funding_constraints": {},  # 
+                "funding_constraints": {},  #
             }
         )
 
@@ -50,7 +50,7 @@ class LiquidityRiskMixin:
         self, position_data: dict[str, Any], market_data: dict[str, Any]
     ) -> Decimal:
         """"""
-        # 
+        #
         bid_ask_spread = market_data.get("bid_ask_spread", 10)  # bps
         market_depth = market_data.get("market_depth", 1000000)  # USD
         volume_24h = market_data.get("volume_24h", 50000000)  # USD
@@ -77,8 +77,8 @@ class LiquidityRiskMixin:
 
     def _calculate_market_depth(self, market_data: dict[str, Any]) -> Decimal:
         """"""
-        bid_depth = market_data.get("bid_depth", 0)  # 
-        ask_depth = market_data.get("ask_depth", 0)  # 
+        bid_depth = market_data.get("bid_depth", 0)  #
+        ask_depth = market_data.get("ask_depth", 0)  #
         total_depth = bid_depth + ask_depth
 
         return Decimal(str(total_depth))
@@ -94,7 +94,7 @@ class LiquidityRiskMixin:
         if market_depth == 0:
             return Decimal("0")
 
-        # 
+        #
         size_ratio = abs(position_size) / market_depth
         spread_cost = bid_ask_spread / 2  # bps
         impact_cost = spread_cost * (1 + size_ratio)

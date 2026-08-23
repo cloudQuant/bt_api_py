@@ -1,0 +1,20 @@
+name: Question
+description: 使用问题咨询 / Usage question
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        使用问题请优先查阅[在线文档](https://cloudquant.github.io/bt_api_py/)。
+        **不要粘贴 API 密钥或账户信息。**
+  - type: textarea
+    id: question
+    attributes:
+      label: 你的问题 / Your question
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 相关上下文 / Context
+      description: 已尝试的方案、相关文档章节、版本与环境信息

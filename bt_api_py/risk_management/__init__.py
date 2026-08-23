@@ -4,16 +4,16 @@ Intelligent Risk Management and Compliance Monitoring System for 73+ exchanges.
 
 :
 1.  - 、、
-2.  - 
+2.  -
 3.  - 、、
-4.  - 
+4.  -
 5.  - 、、
 6.  - 、、
 
 :
 -  (、、)
 -  ()
--  (CEP) 
+-  (CEP)
 -  ()
 -  ()
 -  ()
@@ -22,8 +22,8 @@ Intelligent Risk Management and Compliance Monitoring System for 73+ exchanges.
 -  (spoofing、layering、front running)
 -  (AML)  (KYC)
 -  (MiFID II、SEC Rule 606)
-- 
-- 
+-
+-
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ __all__ = [
     "RiskLevel",
 ]
 
-# 
+#
 __version__ = "1.0.0"
 __compliance_standards__ = [
     "MiFID II",
@@ -61,7 +61,7 @@ __compliance_standards__ = [
     "IOSCO Principles",
 ]
 
-# 
+#
 DEFAULT_RISK_CONFIG = {
     "risk_thresholds": {
         "low": 0.3,

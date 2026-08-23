@@ -2,7 +2,7 @@ import asyncio
 import socket
 import time
 from collections.abc import Callable, Generator
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
@@ -702,7 +702,7 @@ def test_zmq_forwarding_runtime_start_sync_cleans_up_after_thread_start_failure(
 
     class FakeThread:
         def __init__(self, *args: object, **kwargs: object) -> None:
-            self.ident: Optional[int] = None
+            self.ident: int | None = None
             self.join_count = 0
             self.index = len(created_threads)
             created_threads.append(self)
@@ -712,7 +712,7 @@ def test_zmq_forwarding_runtime_start_sync_cleans_up_after_thread_start_failure(
                 raise RuntimeError("thread start failed")
             self.ident = self.index + 1
 
-        def join(self, timeout: Optional[float] = None) -> None:
+        def join(self, timeout: float | None = None) -> None:
             self.join_count += 1
 
         def is_alive(self) -> bool:

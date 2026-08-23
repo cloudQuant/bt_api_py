@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import pytest
 from bt_api_base.plugins.loader import PluginLoader
 from bt_api_base.registry import ExchangeRegistry
 
@@ -33,7 +34,9 @@ def teardown_function() -> None:
 
 
 def _load_alpaca_plugin(monkeypatch) -> PluginLoader:
-    package_root = Path(__file__).resolve().parents[2] / "bt_api_alpaca"
+    package_root = Path(__file__).resolve().parents[2] / "bt_api" / "bt_api_alpaca"
+    if not (package_root / "bt_api_alpaca" / "plugin.py").is_file():
+        pytest.skip(f"alpaca plugin checkout not present: {package_root}")
     monkeypatch.syspath_prepend(str(package_root))
     loader = PluginLoader(ExchangeRegistry, bt_api_module._runtime_registrar)
     monkeypatch.setattr(loader, "_discover_entry_points", lambda group: [_FakeEntryPoint()])

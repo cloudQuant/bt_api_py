@@ -1,4 +1,4 @@
-"""风险计算门面 - 
+"""风险计算门面 -
 
 VaR、CVaR、、、
 按风险类别拆分为子模块（market_risk/position_risk/credit_risk/operational_risk/
@@ -62,13 +62,13 @@ class RiskCalculator(
         self.logger = get_logger("risk_calculator")
         self.config = config or {}
 
-        # 
+        #
         self.var_confidence_levels = self.config.get("var_confidence_levels", [0.95, 0.99])
-        self.var_time_horizons = self.config.get("var_time_horizons", [1, 10])  # 
+        self.var_time_horizons = self.config.get("var_time_horizons", [1, 10])  #
         self.min_data_points = self.config.get("min_data_points", 100)
         self.default_volatility_window = self.config.get("default_volatility_window", 30)
 
-        # 
+        #
         self.stress_scenarios = self.config.get(
             "stress_scenarios",
             {
@@ -79,6 +79,41 @@ class RiskCalculator(
         )
 
         self.logger.info("RiskCalculator initialized")
+
+    def _calculate_market_risk(
+        self, position_data: dict[str, Any], market_data: dict[str, Any]
+    ) -> MarketRiskMetrics:
+        """聚合市场风险指标（编排 Market/Position 两个 mixin 的计算）。"""
+        price_history = market_data.get("price_history", [])
+        returns = self._calculate_returns(price_history)
+
+        var_1d = self._calculate_var(returns, confidence=0.95, time_horizon=1)
+        var_10d = self._calculate_var(returns, confidence=0.95, time_horizon=10)
+        expected_shortfall = self._calculate_cvar(returns, confidence=0.95)
+        volatility = self._calculate_volatility(returns)
+        beta = self._calculate_beta(returns, market_data.get("market_returns", []))
+        correlation_matrix = self._calculate_correlation_matrix(
+            market_data.get("asset_returns", {})
+        )
+        stress_test_results = self._run_stress_tests(position_data, market_data)
+        scenario_analysis = self._run_scenario_analysis(position_data, market_data)
+        position_concentration = self._calculate_position_concentration(position_data)
+        sector_exposure = self._calculate_sector_exposure(position_data)
+
+        return MarketRiskMetrics(
+            {
+                "value_at_risk_1d": var_1d,
+                "value_at_risk_10d": var_10d,
+                "expected_shortfall": expected_shortfall,
+                "volatility": volatility,
+                "beta": beta,
+                "correlation_matrix": correlation_matrix,
+                "stress_test_results": stress_test_results,
+                "scenario_analysis": scenario_analysis,
+                "position_concentration": self._serialize_metrics(position_concentration),
+                "sector_exposure": self._serialize_metrics(sector_exposure),
+            }
+        )
 
     def calculate_risk_metrics(
         self,
@@ -102,27 +137,27 @@ class RiskCalculator(
         try:
             self.logger.debug(f"Calculating risk metrics for {exchange_name}:{account_id}")
 
-            # 
+            #
             market_risk = self._calculate_market_risk(position_data, market_data)
             credit_risk = self._calculate_credit_risk(account_data, position_data)
             operational_risk = self._calculate_operational_risk(account_data)
             liquidity_risk = self._calculate_liquidity_risk(position_data, market_data)
             compliance_risk = self._calculate_compliance_risk(account_data)
 
-            # 
+            #
             risk_limits = self._check_all_risk_limits(
                 market_risk, credit_risk, operational_risk, liquidity_risk
             )
 
-            # 
+            #
             historical_comparison = self._calculate_historical_comparison(exchange_name, account_id)
 
-            # 
+            #
             predictive_indicators = self._calculate_predictive_indicators(
                 market_risk, credit_risk, operational_risk, liquidity_risk
             )
 
-            # 
+            #
             risk_metrics = RiskMetrics(
                 {
                     "exchange_name": exchange_name,
@@ -155,11 +190,11 @@ class RiskCalculator(
         liquidity_risk: LiquidityRiskMetrics,
     ) -> LimitsCheckResult:
         """"""
-        # 
+        #
         return LimitsCheckResult(
             {
                 "limit_name": "comprehensive_check",
-                "current_value": 0.7,  # 
+                "current_value": 0.7,  #
                 "limit_value": 0.8,
                 "utilization_ratio": 0.875,
                 "status": "WITHIN_LIMIT",
@@ -172,7 +207,7 @@ class RiskCalculator(
         self, exchange_name: str, account_id: str
     ) -> HistoricalComparison:
         """"""
-        # 
+        #
         return HistoricalComparison(
             {
                 "day_over_day_change": 0.05,
@@ -192,9 +227,9 @@ class RiskCalculator(
         liquidity_risk: LiquidityRiskMetrics,
     ) -> PredictiveIndicators:
         """"""
-        # 
+        #
         current_risk = float(market_risk.volatility)
-        next_period_risk = current_risk * 1.05  # 
+        next_period_risk = current_risk * 1.05  #
 
         return PredictiveIndicators(
             {
@@ -217,7 +252,7 @@ class RiskCalculator(
         """"""
         actions = []
 
-        # 
+        #
         if float(market_risk.volatility) > 0.3:
             actions.append("")
 
