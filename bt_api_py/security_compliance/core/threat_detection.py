@@ -273,8 +273,7 @@ class ThreatDetector:
                     "user_id": threat.user_id,
                     "timestamp": threat.timestamp,
                 }
-                for threat in recent_threats[-10:
-                    ]  # Last 10 events
+                for threat in recent_threats[-10:]  # Last 10 events
             ],
         }
 

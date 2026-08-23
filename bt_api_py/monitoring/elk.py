@@ -550,4 +550,5 @@ async def shutdown_elk_integration() -> None:
     if _elk_integration:
         try:
             await _elk_integration.disconnect()
-        finally: _elk_integration = None
+        finally:
+            _elk_integration = None

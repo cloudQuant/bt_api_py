@@ -39,9 +39,10 @@ def _load_default_fronts() -> dict[str, dict[str, str]]:
                         for field in ("td_front", "md_front"):
                             if section.get(field):
                                 defaults[key][field] = str(section[field])
-    except Exception:  # noqa: BLE001 - 配置不可用时用硬编码兜底
+    except Exception:
         pass
     return defaults
+
 
 _TRADING_SESSIONS = (
     (time(9, 0), time(11, 30)),

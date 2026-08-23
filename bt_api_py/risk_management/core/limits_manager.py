@@ -1,4 +1,4 @@
-"""限额管理门面 - 
+"""限额管理门面 -
 
 按检查类别拆分为子模块（order_limits/position_limits/margin_limits/risk_limits/
 compliance_limits），本模块保留编排逻辑并通过 mixin 继承。
@@ -49,24 +49,24 @@ class LimitsManager(
         self.logger = get_logger("limits_manager")
         self.config = config or {}
 
-        # 
-        self.static_limits: dict[str, dict[str, Any]] = {}  # 
-        self.dynamic_limits: dict[str, DynamicLimit] = {}  # 
-        self.user_limits: dict[str, dict[str, Any]] = {}  # 
-        self.exchange_limits: dict[str, dict[str, float]] = {}  # 
+        #
+        self.static_limits: dict[str, dict[str, Any]] = {}  #
+        self.dynamic_limits: dict[str, DynamicLimit] = {}  #
+        self.user_limits: dict[str, dict[str, Any]] = {}  #
+        self.exchange_limits: dict[str, dict[str, float]] = {}  #
 
-        # 
+        #
         self.check_history: list[dict[str, Any]] = []
 
-        # 
+        #
         self.warning_threshold = self.config.get("warning_threshold", 0.8)  #  (80%)
         self.critical_threshold = self.config.get("critical_threshold", 1.0)  #  (100%)
-        self.check_cache_ttl = self.config.get("check_cache_ttl", 60)  # 
+        self.check_cache_ttl = self.config.get("check_cache_ttl", 60)  #
 
-        # 
+        #
         self.check_cache: dict[str, dict[str, Any]] = {}
 
-        # 
+        #
         self._initialize_default_limits()
 
         self.logger.info("LimitsManager initialized")
@@ -148,7 +148,7 @@ class LimitsManager(
         """
         cache_key = f"pre_trade:{exchange_name}:{account_id}:{hash(str(order_data))}"
 
-        # 
+        #
         if cache_key in self.check_cache:
             cached_result = self.check_cache[cache_key]
             if int(time.time()) - cached_result["timestamp"] < self.check_cache_ttl:
@@ -160,41 +160,41 @@ class LimitsManager(
             restrictions = []
             mitigation_required = False
 
-            # 
+            #
             order_size_check = self._check_max_order_size(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(order_size_check)
 
-            # 
+            #
             frequency_check = self._check_order_frequency(exchange_name, account_id, order_data)
             checks.append(frequency_check)
 
-            # 
+            #
             margin_check = self._check_margin_requirement(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(margin_check)
 
-            # 
+            #
             position_check = self._check_position_limits(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(position_check)
 
-            # 
+            #
             risk_check = self._check_risk_limits(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(risk_check)
 
-            # 
+            #
             compliance_check = self._check_compliance_limits(
                 exchange_name, account_id, order_data, current_metrics
             )
             checks.append(compliance_check)
 
-            # 
+            #
             approved = True
             for check in checks:
                 if check["status"] in [LimitStatus.BREACHED, LimitStatus.CRITICAL]:
@@ -213,13 +213,13 @@ class LimitsManager(
                 "timestamp": int(time.time()),
             }
 
-            # 
+            #
             self.check_cache[cache_key] = {
                 "result": result,
                 "timestamp": int(time.time()),
             }
 
-            # 
+            #
             self._record_limit_check(
                 {
                     "type": "pre_trade",
@@ -264,27 +264,27 @@ class LimitsManager(
         warnings = []
 
         try:
-            # 
+            #
             max_position_check = self._check_max_position_size(
                 exchange_name, account_id, position_data
             )
             checks.append(max_position_check)
 
-            # 
+            #
             notional_check = self._check_notional_exposure(exchange_name, account_id, position_data)
             checks.append(notional_check)
 
-            # 
+            #
             leverage_check = self._check_leverage_limit(exchange_name, account_id, position_data)
             checks.append(leverage_check)
 
-            # 
+            #
             concentration_check = self._check_concentration_limit(
                 exchange_name, account_id, position_data
             )
             checks.append(concentration_check)
 
-            # 
+            #
             approved = True
             for check in checks:
                 if check["status"] in [LimitStatus.BREACHED, LimitStatus.CRITICAL]:
@@ -323,11 +323,11 @@ class LimitsManager(
         key = f"{exchange_name}:{account_id}"
         current_limits: dict[str, Any] = {}
 
-        # 
+        #
         if key in self.static_limits:
             current_limits.update(self.static_limits[key])
 
-        # 
+        #
         for limit_key, dynamic_limit in self.dynamic_limits.items():
             if limit_key.startswith(key):
                 limit_type = limit_key.split(":")[-1]
@@ -344,11 +344,11 @@ class LimitsManager(
                     "last_adjustment": dynamic_limit.last_adjustment,
                 }
 
-        # 
+        #
         if key in self.user_limits:
             current_limits.update(self.user_limits[key])
 
-        # 
+        #
         if exchange_name in self.exchange_limits:
             current_limits.update(self.exchange_limits[exchange_name])
 
@@ -391,7 +391,7 @@ class LimitsManager(
         current_time = int(time.time())
 
         for check_record in self.check_history:
-            # 
+            #
             if exchange_name and check_record.get("exchange_name") != exchange_name:
                 continue
             if account_id and check_record.get("account_id") != account_id:
@@ -430,7 +430,7 @@ class LimitsManager(
         """
         utilization: dict[str, float] = {}
 
-        # 
+        #
         recent_checks = [
             check
             for check in self.check_history
@@ -457,11 +457,11 @@ class LimitsManager(
 
         return utilization
 
-    # 
+    #
 
     def _initialize_default_limits(self) -> None:
         """"""
-        # 
+        #
         default_pre_trade_limits = {
             LimitType.MAX_ORDER_SIZE: 1000000,  # 100
             LimitType.MAX_ORDERS_PER_MINUTE: 60,
@@ -469,7 +469,7 @@ class LimitsManager(
             LimitType.MIN_MARGIN_REQUIREMENT: 0.1,  # 10%
         }
 
-        # 
+        #
         default_position_limits = {
             LimitType.MAX_POSITION_SIZE: 10000000,  # 1000
             LimitType.MAX_NOTIONAL_EXPOSURE: 50000000,  # 5000
@@ -477,7 +477,7 @@ class LimitsManager(
             LimitType.MAX_CONCENTRATION: 0.3,  # 30%
         }
 
-        # 
+        #
         default_risk_limits = {
             LimitType.MAX_VAR: 1000000,  # 100
             LimitType.MAX_DRAWDOWN: 0.2,  # 20%
@@ -485,7 +485,7 @@ class LimitsManager(
             LimitType.MIN_LIQUIDITY: 0.6,  # 60%
         }
 
-        # 
+        #
         all_default_limits = {
             **default_pre_trade_limits,
             **default_position_limits,
@@ -499,6 +499,6 @@ class LimitsManager(
         check_record["timestamp"] = int(time.time())
         self.check_history.append(check_record)
 
-        # 
+        #
         if len(self.check_history) > 10000:
             self.check_history = self.check_history[-5000:]

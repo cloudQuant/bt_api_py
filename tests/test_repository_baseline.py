@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "verify_repository_baseline.py"
@@ -22,7 +23,7 @@ GIT = shutil.which("git") or "git"
 VALID_STATUSES = {"installed", "loadable", "certified", "experimental", "retired"}
 
 
-def _generate_manifest(tmp_path: Path) -> dict[str, object]:
+def _generate_manifest(tmp_path: Path) -> dict[str, Any]:
     out = tmp_path / "baseline.json"
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), "--json", str(out)],

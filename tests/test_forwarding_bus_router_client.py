@@ -1,6 +1,6 @@
 import asyncio
 import queue
-from typing import Optional
+from typing import Any, cast
 
 import pytest
 
@@ -28,8 +28,8 @@ from bt_api_py.forwarding import (
 
 class FakeBtApi:
     def __init__(self) -> None:
-        self.queue = queue.Queue()
-        self.subscriptions = []
+        self.queue: queue.Queue[Any] = queue.Queue()
+        self.subscriptions: list[tuple[str, Any]] = []
 
     def add_exchange(self, *args, **kwargs):
         return {"args": args, "kwargs": kwargs}
@@ -324,7 +324,8 @@ async def test_order_router_enforces_idempotency_and_publishes_private_events() 
 
     assert first.accepted is True
     assert second.order_id == first.order_id
-    assert len(router.adapter.orders) == 1
+    mock_adapter = cast("MockBrokerAdapter", router.adapter)
+    assert len(mock_adapter.orders) == 1
     updates = []
     while True:
         event = strategy_events.poll()
@@ -709,8 +710,8 @@ def test_forwarding_client_exposes_backtrader_style_market_and_order_api() -> No
 
 def test_forwarding_client_requires_explicit_side_and_order_type() -> None:
     bus = InMemoryForwardingBus()
-    hub = MarketDataHub(bus)
-    router = OrderRouter(MockBrokerAdapter(), bus=bus)
+    _hub = MarketDataHub(bus)
+    _router = OrderRouter(MockBrokerAdapter(), bus=bus)
     client = ForwardingClient(
         bus=bus,
         exchange="SIM",
@@ -977,10 +978,10 @@ def test_forwarding_client_passes_configured_command_timeout() -> None:
     class RecordingBus(InMemoryForwardingBus):
         def __init__(self) -> None:
             super().__init__()
-            self.recorded_timeout: Optional[float] = None
+            self.recorded_timeout: float | None = None
 
         def send_command_sync(
-            self, command: OrderCommand, *, timeout: Optional[float] = None
+            self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
             self.recorded_timeout = timeout
             return CommandAck(
@@ -1023,7 +1024,7 @@ def test_forwarding_client_rejects_negative_event_cache_size() -> None:
 def test_forwarding_client_returns_cached_query_snapshots_when_command_times_out() -> None:
     class TimeoutBus(InMemoryForwardingBus):
         def send_command_sync(
-            self, command: OrderCommand, *, timeout: Optional[float] = None
+            self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
             raise TimeoutError("query timed out")
 
@@ -1077,7 +1078,7 @@ def test_cancel_order_idempotency_key_is_deterministic() -> None:
             self.commands: list[OrderCommand] = []
 
         def send_command_sync(
-            self, command: OrderCommand, *, timeout: Optional[float] = None
+            self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
             self.commands.append(command)
             return CommandAck(
@@ -1170,7 +1171,7 @@ def test_fetch_open_orders_includes_new_status() -> None:
 
     class StubBus(InMemoryForwardingBus):
         def send_command_sync(
-            self, command: OrderCommand, *, timeout: Optional[float] = None
+            self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
             return CommandAck(
                 command_id=command.command_id,
@@ -1231,7 +1232,7 @@ def test_forwarding_client_tracks_pending_commands_on_timeout() -> None:
 
     class TimeoutBus(InMemoryForwardingBus):
         def send_command_sync(
-            self, command: OrderCommand, *, timeout: Optional[float] = None
+            self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
             raise TimeoutError("forwarding command result unknown after timeout")
 

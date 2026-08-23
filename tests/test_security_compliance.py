@@ -10,6 +10,7 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -472,7 +473,7 @@ class TestEncryptionManager:
             create_key_manager(KeyProvider.HASHICORP_VAULT)
 
         with pytest.raises(EncryptionError, match="Unsupported key provider"):
-            create_key_manager("invalid_provider")
+            create_key_manager(cast("Any", "invalid_provider"))  # testing invalid provider string
 
         original_manager = encryption_module._encryption_manager
         encryption_module._encryption_manager = None
@@ -502,7 +503,7 @@ class TestOAuth2Provider:
             client_id="test_client",
             client_secret="secret123",
             redirect_uris=["https://test.example.com/callback"],
-            scopes=["read", "write"],
+            scopes={"read", "write"},
             grant_types={GrantType.AUTHORIZATION_CODE},
         )
 
@@ -515,7 +516,7 @@ class TestOAuth2Provider:
             client_id="test_client",
             client_secret="secret123",
             redirect_uris=["https://test.example.com/callback"],
-            scopes=["read", "write"],
+            scopes={"read", "write"},
             grant_types={GrantType.AUTHORIZATION_CODE},
         )
 
@@ -536,7 +537,7 @@ class TestOAuth2Provider:
             client_id="test_client",
             client_secret="secret123",
             redirect_uris=["https://test.example.com/callback"],
-            scopes=["read", "write"],
+            scopes={"read", "write"},
             grant_types={GrantType.AUTHORIZATION_CODE},
         )
 
@@ -1199,11 +1200,12 @@ class TestSecurityFrameworkHelpers:
 
         assert result == "created"
         assert secured.security is framework_module._security_framework
-        assert framework_module._security_framework.access_control.calls == [
+        sf = cast("Any", framework_module._security_framework)
+        assert sf.access_control.calls == [
             ("user-1", Resource.EXCHANGE_CONFIG, "create", PermissionLevel.WRITE)
         ]
-        assert len(framework_module._security_framework.audit_logger.events) == 1
-        assert framework_module._security_framework.audit_logger.events[0].action == "create"
+        assert len(sf.audit_logger.events) == 1
+        assert sf.audit_logger.events[0].action == "create"
         assert bt_api.calls == [(("BINANCE",), {"market": "spot"})]
 
     def test_require_permission_decorator(self):
@@ -1259,7 +1261,8 @@ class TestSecurityFrameworkHelpers:
         with pytest.raises(ValueError, match="boom"):
             failing(user_id="user-2")
 
-        events = framework_module._security_framework.audit_logger.events
+        sf2 = cast("Any", framework_module._security_framework)
+        events = sf2.audit_logger.events
         assert [event.action for event in events] == ["execute", "success", "execute", "error"]
         assert events[0].user_id == "user-1"
         assert events[1].outcome == "success"

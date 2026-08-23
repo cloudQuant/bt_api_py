@@ -14,28 +14,30 @@ from ..containers.risk_metrics import LatencyMetrics, OperationalRiskMetrics
 class OperationalRiskMixin:
     """操作风险计算方法（供 RiskCalculator 混入）。"""
 
+    def _serialize_metrics(self, metrics: Any) -> dict[str, Any]: ...
+
     def _calculate_operational_risk(self, account_data: dict[str, Any]) -> OperationalRiskMetrics:
         """"""
 
-        # 
+        #
         system_health_score = self._calculate_system_health_score(account_data)
 
-        # 
+        #
         latency_metrics = self._calculate_latency_metrics(account_data)
 
-        # 
+        #
         error_rate = self._calculate_error_rate(account_data)
 
-        # 
+        #
         system_availability = self._calculate_system_availability(account_data)
 
-        # 
+        #
         data_quality_score = self._calculate_data_quality_score(account_data)
 
-        # 
+        #
         processing_capacity = self._calculate_processing_capacity(account_data)
 
-        # 
+        #
         vulnerability_score = self._calculate_vulnerability_score(account_data)
 
         return OperationalRiskMetrics(
@@ -47,19 +49,19 @@ class OperationalRiskMixin:
                 "data_quality_score": data_quality_score,
                 "processing_capacity": processing_capacity,
                 "vulnerability_score": vulnerability_score,
-                "incident_history": [],  # 
+                "incident_history": [],  #
             }
         )
 
     def _calculate_system_health_score(self, account_data: dict[str, Any]) -> Decimal:
         """"""
-        # 
+        #
         cpu_usage = account_data.get("cpu_usage", 0.5)
         memory_usage = account_data.get("memory_usage", 0.5)
         disk_usage = account_data.get("disk_usage", 0.3)
         error_rate = account_data.get("error_rate", 0.01)
 
-        # 
+        #
         health_score = 1.0 - (
             cpu_usage * 0.3 + memory_usage * 0.3 + disk_usage * 0.2 + error_rate * 0.2
         )
@@ -130,6 +132,6 @@ class OperationalRiskMixin:
         medium_vulns = account_data.get("medium_vulnerabilities", 3)
         low_vulns = account_data.get("low_vulnerabilities", 5)
 
-        # 
+        #
         vuln_score = (critical_vulns * 10 + high_vulns * 5 + medium_vulns * 2 + low_vulns * 1) / 100
         return Decimal(str(min(vuln_score, 1.0)))

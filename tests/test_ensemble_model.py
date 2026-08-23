@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -456,9 +455,7 @@ class TestEnsembleZeroDivisionGuard:
         ensemble.ensemble_method = "weighted_average"
         ensemble.is_trained = False
         ensemble.training_history = []
-        ensemble.performance_tracker = {}
-        ensemble._prediction_cache = {}
-        ensemble._prediction_cache_maxsize = 100
+        ensemble.cache_size_limit = 100
         return ensemble
 
     def test_weighted_average_zero_weight_returns_zeros(self):

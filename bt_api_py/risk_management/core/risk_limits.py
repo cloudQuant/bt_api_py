@@ -11,6 +11,11 @@ from .limits_types import LimitStatus, LimitType
 class RiskLimitsMixin:
     """风险限额检查方法（供 LimitsManager 混入）。"""
 
+    critical_threshold: float
+    warning_threshold: float
+
+    def get_current_limits(self, exchange_name: str, account_id: str) -> dict[str, Any]: ...
+
     def _check_risk_limits(
         self,
         exchange_name: str,
@@ -53,13 +58,14 @@ class RiskLimitsMixin:
                     }
                 )
 
-        # 
+        #
         if checks:
             worst_check = max(
                 checks, key=lambda x: {"CRITICAL": 3, "WARNING": 2, "WITHIN_LIMIT": 1}[x["status"]]
             )
             return worst_check
-        else: return {
+        else:
+            return {
                 "limit_type": "risk_limits",
                 "status": LimitStatus.WITHIN_LIMIT,
                 "warning": "",

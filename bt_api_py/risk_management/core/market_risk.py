@@ -15,12 +15,22 @@ from ..containers.risk_metrics import MarketRiskMetrics
 class MarketRiskMixin:
     """市场风险计算方法（供 RiskCalculator 混入）。"""
 
+    min_data_points: int
+    default_volatility_window: int
+    stress_scenarios: dict[str, dict[str, Any]]
+
+    def _calculate_position_concentration(self, position_data: dict[str, Any]) -> Any: ...
+
+    def _calculate_sector_exposure(self, position_data: dict[str, Any]) -> Any: ...
+
+    def _serialize_metrics(self, metrics: Any) -> dict[str, Any]: ...
+
     def _calculate_market_risk(
         self, position_data: dict[str, Any], market_data: dict[str, Any]
     ) -> MarketRiskMetrics:
         """"""
 
-        # 
+        #
         price_history = market_data.get("price_history", [])
         returns = self._calculate_returns(price_history)
 
@@ -31,27 +41,27 @@ class MarketRiskMixin:
         # CVaR (Expected Shortfall)
         expected_shortfall = self._calculate_cvar(returns, confidence=0.95)
 
-        # 
+        #
         volatility = self._calculate_volatility(returns)
 
         # Beta ()
         beta = self._calculate_beta(returns, market_data.get("market_returns", []))
 
-        # 
+        #
         correlation_matrix = self._calculate_correlation_matrix(
             market_data.get("asset_returns", {})
         )
 
-        # 
+        #
         stress_test_results = self._run_stress_tests(position_data, market_data)
 
-        # 
+        #
         scenario_analysis = self._run_scenario_analysis(position_data, market_data)
 
-        # 
+        #
         position_concentration = self._calculate_position_concentration(position_data)
 
-        # 
+        #
         sector_exposure = self._calculate_sector_exposure(position_data)
 
         return MarketRiskMetrics(
@@ -89,11 +99,11 @@ class MarketRiskMixin:
         if not returns or len(returns) < self.min_data_points:
             return Decimal("0")
 
-        # 
+        #
         var_percentile = (1 - confidence) * 100
         var = np.percentile(returns, var_percentile)
 
-        # 
+        #
         var_time_adjusted = var * math.sqrt(time_horizon)
 
         return Decimal(str(abs(var_time_adjusted)))
@@ -123,7 +133,7 @@ class MarketRiskMixin:
         if len(returns) < 2:
             return Decimal("0")
 
-        # 
+        #
         recent_returns = returns[-window:] if len(returns) > window else returns
 
         if len(recent_returns) < 2:
@@ -135,9 +145,9 @@ class MarketRiskMixin:
     def _calculate_beta(self, asset_returns: list[float], market_returns: list[float]) -> Decimal:
         """Beta"""
         if len(asset_returns) < 2 or len(market_returns) < 2:
-            return Decimal("1.0")  # 
+            return Decimal("1.0")  #
 
-        # 
+        #
         min_len = min(len(asset_returns), len(market_returns))
         asset_returns = asset_returns[-min_len:]
         market_returns = market_returns[-min_len:]
@@ -145,7 +155,7 @@ class MarketRiskMixin:
         if len(asset_returns) < 2:
             return Decimal("1.0")
 
-        # 
+        #
         if statistics.stdev(market_returns) == 0:
             return Decimal("1.0")
 
@@ -183,7 +193,7 @@ class MarketRiskMixin:
                 if asset1 == asset2:
                     correlation_matrix[asset1][asset2] = 1.0
                 else:
-                    # 
+                    #
                     min_len = min(len(returns1), len(returns2))
                     r1 = returns1[-min_len:]
                     r2 = returns2[-min_len:]
@@ -215,7 +225,7 @@ class MarketRiskMixin:
             elif scenario_name == "liquidity_crisis":
                 scenario_params.get("spread_increase", 3.0)
                 scenario_params.get("volume_decrease", 0.5)
-                # 
+                #
                 stressed_value = portfolio_value * (1 - 0.1)  # 10%
                 loss = portfolio_value - stressed_value
 

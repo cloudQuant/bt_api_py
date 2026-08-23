@@ -12,6 +12,11 @@ from .limits_types import LimitStatus, LimitType
 class OrderLimitsMixin:
     """订单限额检查方法（供 LimitsManager 混入）。"""
 
+    critical_threshold: float
+    warning_threshold: float
+
+    def get_current_limits(self, exchange_name: str, account_id: str) -> dict[str, Any]: ...
+
     def _check_max_order_size(
         self,
         exchange_name: str,
@@ -52,7 +57,7 @@ class OrderLimitsMixin:
         self, exchange_name: str, account_id: str, order_data: dict[str, Any]
     ) -> dict[str, Any]:
         """"""
-        #  - 
+        #  -
         current_time = int(time.time())
         key = f"{exchange_name}:{account_id}"
 

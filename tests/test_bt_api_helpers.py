@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 
@@ -86,21 +86,21 @@ class TestParseTime:
     def test_parse_unsupported_type(self):
         """Test parsing unsupported type raises DataParseError."""
         with pytest.raises(DataParseError, match="Unsupported time format"):
-            _parse_time(12345)
+            _parse_time(12345)  # type: ignore[arg-type]  # intentionally testing unsupported type
 
     @pytest.mark.parametrize(
         "raw,expected_utc",
         [
-            ("2024-01-01T08:00:00", datetime(2024, 1, 1, 8, 0, tzinfo=timezone.utc)),
+            ("2024-01-01T08:00:00", datetime(2024, 1, 1, 8, 0, tzinfo=UTC)),
             # naive datetime 一律按 UTC
-            (datetime(2024, 1, 1, 8, 0), datetime(2024, 1, 1, 8, 0, tzinfo=timezone.utc)),
+            (datetime(2024, 1, 1, 8, 0), datetime(2024, 1, 1, 8, 0, tzinfo=UTC)),
         ],
     )
     def test_parse_time_naive_always_utc(self, raw, expected_utc):
         """naive 输入(字符串/datetime)统一按 UTC 解释,而非本地时区."""
         result = _parse_time(raw)
         assert result is not None
-        assert result.astimezone(timezone.utc) == expected_utc
+        assert result.astimezone(UTC) == expected_utc
 
 
 if __name__ == "__main__":

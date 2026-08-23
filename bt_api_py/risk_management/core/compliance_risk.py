@@ -14,19 +14,19 @@ class ComplianceRiskMixin:
     def _calculate_compliance_risk(self, account_data: dict[str, Any]) -> ComplianceRiskMetrics:
         """"""
 
-        # 
+        #
         compliance_score = self._calculate_compliance_score(account_data)
 
-        # 
+        #
         regulatory_violations = self._get_regulatory_violations(account_data)
 
-        # 
+        #
         reporting_compliance = self._calculate_reporting_compliance(account_data)
 
-        # 
+        #
         audit_findings = self._get_audit_findings(account_data)
 
-        # 
+        #
         policy_adherence = self._calculate_policy_adherence(account_data)
 
         # KYC
