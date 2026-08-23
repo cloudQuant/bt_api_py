@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "verify_repository_baseline.py"
 GIT = shutil.which("git") or "git"
@@ -43,6 +45,25 @@ def _gitmodules_paths() -> list[str]:
     ]
 
 
+def _require_initialized_submodules() -> None:
+    proc = subprocess.run(
+        [GIT, "submodule", "status", "--recursive"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if not lines or any(line.startswith("-") for line in lines):
+        pytest.skip("submodules not initialized (CI checks out without them)")
+
+
+def _require_installed_plugins() -> None:
+    from importlib.metadata import entry_points
+
+    if not list(entry_points(group="bt_api.plugins")):
+        pytest.skip("plugin packages not installed (CI installs only root package)")
+
+
 def test_manifest_contains_parent_commit(tmp_path: Path) -> None:
     manifest = _generate_manifest(tmp_path)
     assert manifest["schema_version"] == 1
@@ -63,6 +84,7 @@ def test_manifest_covers_every_gitmodules_path(tmp_path: Path) -> None:
 
 
 def test_manifest_has_required_submodule_fields(tmp_path: Path) -> None:
+    _require_initialized_submodules()
     manifest = _generate_manifest(tmp_path)
     required = {"path", "pinned_commit", "checked_out_commit", "dirty", "pin_mismatch"}
     for submodule in manifest["submodules"]:
@@ -72,6 +94,7 @@ def test_manifest_has_required_submodule_fields(tmp_path: Path) -> None:
 
 
 def test_pin_mismatch_is_never_silently_ignored(tmp_path: Path) -> None:
+    _require_initialized_submodules()
     manifest = _generate_manifest(tmp_path)
     for submodule in manifest["submodules"]:
         assert submodule["pin_mismatch"] == (
@@ -80,6 +103,7 @@ def test_pin_mismatch_is_never_silently_ignored(tmp_path: Path) -> None:
 
 
 def test_ctp_pin_divergence_is_reported(tmp_path: Path) -> None:
+    _require_initialized_submodules()
     manifest = _generate_manifest(tmp_path)
     ctp = next(s for s in manifest["submodules"] if s["path"] == "bt_api/bt_api_ctp")
     # Independently re-derive the gitlink and checkout to cross-check the manifest.
@@ -99,6 +123,7 @@ def test_ctp_pin_divergence_is_reported(tmp_path: Path) -> None:
 
 
 def test_manifest_lists_plugins_with_valid_status(tmp_path: Path) -> None:
+    _require_installed_plugins()
     manifest = _generate_manifest(tmp_path)
     plugins = manifest["plugins"]
     assert isinstance(plugins, list)

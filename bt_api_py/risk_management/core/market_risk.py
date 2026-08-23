@@ -9,8 +9,6 @@ from typing import Any
 
 import numpy as np
 
-from ..containers.risk_metrics import MarketRiskMetrics
-
 
 class MarketRiskMixin:
     """市场风险计算方法（供 RiskCalculator 混入）。"""
@@ -18,66 +16,6 @@ class MarketRiskMixin:
     min_data_points: int
     default_volatility_window: int
     stress_scenarios: dict[str, dict[str, Any]]
-
-    def _calculate_position_concentration(self, position_data: dict[str, Any]) -> Any: ...
-
-    def _calculate_sector_exposure(self, position_data: dict[str, Any]) -> Any: ...
-
-    def _serialize_metrics(self, metrics: Any) -> dict[str, Any]: ...
-
-    def _calculate_market_risk(
-        self, position_data: dict[str, Any], market_data: dict[str, Any]
-    ) -> MarketRiskMetrics:
-        """"""
-
-        #
-        price_history = market_data.get("price_history", [])
-        returns = self._calculate_returns(price_history)
-
-        # VaR
-        var_1d = self._calculate_var(returns, confidence=0.95, time_horizon=1)
-        var_10d = self._calculate_var(returns, confidence=0.95, time_horizon=10)
-
-        # CVaR (Expected Shortfall)
-        expected_shortfall = self._calculate_cvar(returns, confidence=0.95)
-
-        #
-        volatility = self._calculate_volatility(returns)
-
-        # Beta ()
-        beta = self._calculate_beta(returns, market_data.get("market_returns", []))
-
-        #
-        correlation_matrix = self._calculate_correlation_matrix(
-            market_data.get("asset_returns", {})
-        )
-
-        #
-        stress_test_results = self._run_stress_tests(position_data, market_data)
-
-        #
-        scenario_analysis = self._run_scenario_analysis(position_data, market_data)
-
-        #
-        position_concentration = self._calculate_position_concentration(position_data)
-
-        #
-        sector_exposure = self._calculate_sector_exposure(position_data)
-
-        return MarketRiskMetrics(
-            {
-                "value_at_risk_1d": var_1d,
-                "value_at_risk_10d": var_10d,
-                "expected_shortfall": expected_shortfall,
-                "volatility": volatility,
-                "beta": beta,
-                "correlation_matrix": correlation_matrix,
-                "stress_test_results": stress_test_results,
-                "scenario_analysis": scenario_analysis,
-                "position_concentration": self._serialize_metrics(position_concentration),
-                "sector_exposure": self._serialize_metrics(sector_exposure),
-            }
-        )
 
     def _calculate_returns(self, price_history: list[float]) -> list[float]:
         """"""
