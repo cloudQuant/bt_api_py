@@ -81,9 +81,9 @@ jobs:
               echo "- Result: **validated** (${{ steps.detect.outputs.count }} gitlink change(s))"
               echo "- Old/new SHA pairs are listed in the PR template; report artifact attached."
               echo ""
-              '```'
+              echo '```'
               echo "${{ steps.detect.outputs.changed }}"
-              '```'
+              echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
