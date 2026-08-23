@@ -8,7 +8,7 @@ forwarding client protocol underneath.
 from __future__ import annotations
 
 import warnings
-from typing import Any, cast
+from typing import Any
 
 from bt_api_py.forwarding.client import ZmqForwardingClient
 
@@ -57,16 +57,14 @@ class GatewayClient(ZmqForwardingClient):
 
         timeout_ms = command_timeout_ms
         if timeout_ms is None:
-            timeout_sec = (
+            raw = (
                 gateway_command_timeout_sec
                 if gateway_command_timeout_sec not in (None, "")
                 else command_timeout_sec
             )
-            resolved = cast(
-                "float | int | str",
-                timeout_sec if timeout_sec not in (None, "") else 2.0,
-            )
-            timeout_ms = int(float(resolved) * 1000)
+            if raw is None or raw == "":
+                raw = 2.0
+            timeout_ms = int(float(raw) * 1000)
 
         super().__init__(
             market_endpoint=str(market),
