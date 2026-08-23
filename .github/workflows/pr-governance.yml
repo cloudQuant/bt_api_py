@@ -91,9 +91,9 @@ jobs:
             echo "- Target branch: \`${{ github.event.pull_request.base.ref }}\`"
             echo "- Mode: ${{ vars.PR_GOVERNANCE_STRICT == 'true' && 'strict' || 'report-only' }}"
             echo ""
-            '```'
+            echo '```'
             cat pr-result.txt 2>/dev/null || echo "(validator did not produce output)"
-            '```'
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce in strict mode
