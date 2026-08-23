@@ -1,0 +1,13 @@
+{
+  "$comment": "Master hotfix PR with complete evidence: release:hotfix + risk:r3 labels and reproduction/test evidence in body. Must pass; removing labels or evidence must fail.",
+  "target_branch": "master",
+  "labels": ["risk:r3", "release:hotfix", "target:master"],
+  "body": "最小复现：pytest tests/gateway/test_order_idempotency.py::test_duplicate_submit -x 在 master 基线复现。\n回归测试已新增并通过。影响范围：OrderRouter 幂等去重，不改变公共 API。\n关联 Issue: Closes #456",
+  "changed_files": [
+    "bt_api_py/forwarding/order_router.py",
+    "tests/test_forwarding_bus_router_client.py"
+  ],
+  "submodules_changed": false,
+  "old_sha": null,
+  "new_sha": null
+}

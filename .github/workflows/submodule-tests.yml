@@ -1,13 +1,94 @@
 name: submodule-tests
 
 on:
+  pull_request:
+    branches: [dev, master, code-optimization]
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: '0 18 * * *'   # 每日 UTC 18:00(北京 02:00)
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  submodule-matrix:
+  # Stable summary for every long-lived-branch PR (plan M4 step 3): reports
+  # "not-applicable" and succeeds when no gitlink/.gitmodules change is present,
+  # so the check never leaves a PR stuck on "Waiting for status".
+  submodule-gate:
+    name: Submodule Gate / Summary
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Detect submodule changes
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          CHANGED=$(git diff --name-only "$BASE_SHA..$HEAD_SHA" -- .gitmodules bt_api/ || true)
+          echo "changed<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          GITLINKS=$(git diff --raw "$BASE_SHA..$HEAD_SHA" | awk '$4 ~ /160000/' | wc -l | tr -d ' ')
+          echo "count=$GITLINKS" >> "$GITHUB_OUTPUT"
+
+      - name: Full submodule validation
+        if: steps.detect.outputs.count != '0'
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        if: steps.detect.outputs.count != '0'
+        with:
+          python-version: '3.11'
+
+      - name: Install and test all submodules
+        if: steps.detect.outputs.count != '0'
+        run: python bt_api/install_and_test_all.py --parallel 4 --report markdown
+
+      - uses: actions/upload-artifact@v7
+        if: steps.detect.outputs.count != '0' && always()
+        with:
+          name: submodule-report-pr-${{ github.event.pull_request.number }}
+          path: /tmp/submodule_report.md
+          if-no-files-found: ignore
+
+      - name: Publish gate summary
+        if: always()
+        run: |
+          {
+            echo "## Submodule Gate / Summary"
+            echo ""
+            if [ "${{ steps.detect.outputs.count }}" = "0" ]; then
+              echo "- Result: **not-applicable** (no gitlink or .gitmodules change)"
+              echo "- Submodule validation not required for this PR."
+            else
+              echo "- Result: **validated** (${{ steps.detect.outputs.count }} gitlink change(s))"
+              echo "- Old/new SHA pairs are listed in the PR template; report artifact attached."
+              echo ""
+              '```'
+              echo "${{ steps.detect.outputs.changed }}"
+              '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  submodule-matrix:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
         with:

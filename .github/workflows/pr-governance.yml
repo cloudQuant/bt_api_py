@@ -1,0 +1,103 @@
+name: PR Governance
+
+on:
+  pull_request:
+    branches: [dev, master, code-optimization]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+# Read-only by design: no label writes, no secrets beyond the read-only
+# GITHUB_TOKEN, no pull_request_target. Strictness is controlled by the
+# repo variable PR_GOVERNANCE_STRICT after the observation period (plan M4).
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-governance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  governance:
+    name: PR Governance / Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Collect PR context
+        id: collect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ', ') }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          base, head = os.environ["BASE_SHA"], os.environ["HEAD_SHA"]
+          files = subprocess.run(
+              ["git", "diff", "--name-only", f"{base}..{head}"],
+              capture_output=True, text=True, check=True,
+          ).stdout.split()
+          raw = subprocess.run(
+              ["git", "diff", "--raw", f"{base}..{head}", "--", ".gitmodules", "bt_api/"],
+              capture_output=True, text=True, check=True,
+          ).stdout
+          old_shas, new_shas = [], []
+          for line in raw.splitlines():
+              parts = line.split("\t")[0].split()
+              meta, _path = line.split("\t", 1)
+              cols = meta.split()
+              # mode 160000 marks a gitlink change; columns: src dst mode status
+              if len(cols) >= 5 and cols[2] == "160000":
+                  old_shas.append(cols[3].lstrip(":"))
+                  new_shas.append(cols[4])
+          context = {
+              "target_branch": os.environ.get("TARGET_BRANCH", ""),
+              "labels": [x.strip() for x in os.environ.get("PR_LABELS", "").split(",") if x.strip()],
+              "body": os.environ.get("PR_BODY", ""),
+              "changed_files": files,
+              "submodules_changed": bool(old_shas),
+              "old_sha": old_shas[0] if old_shas else None,
+              "new_sha": new_shas[0] if new_shas else None,
+          }
+          with open("pr-context.json", "w") as fh:
+              json.dump(context, fh)
+          PY
+
+      - name: Validate governance metadata
+        id: validate
+        env:
+          STRICT_MODE: ${{ vars.PR_GOVERNANCE_STRICT == 'true' && '--strict' || '' }}
+        run: |
+          set +e
+          python scripts/ci/validate_pr_governance.py --context pr-context.json $STRICT_MODE | tee pr-result.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## PR Governance / Summary"
+            echo ""
+            echo "- Target branch: \`${{ github.event.pull_request.base.ref }}\`"
+            echo "- Mode: ${{ vars.PR_GOVERNANCE_STRICT == 'true' && 'strict' || 'report-only' }}"
+            echo ""
+            '```'
+            cat pr-result.txt 2>/dev/null || echo "(validator did not produce output)"
+            '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce in strict mode
+        if: always() && steps.validate.outputs.exitcode != '0' && vars.PR_GOVERNANCE_STRICT == 'true'
+        run: |
+          echo "::error::PR governance violations found (strict mode)"
+          exit 1
