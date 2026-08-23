@@ -1,0 +1,58 @@
+{
+  "$comment": "Drifted state used by test_verify_github_governance.py: dev ruleset lost its required status checks AND approval count is wrong AND force pushes are no longer blocked; CODEOWNERS reports an error. Every mutation must be reported as drift.",
+  "rulesets": [
+    {
+      "name": "dev-integration",
+      "enforcement": "active",
+      "includes_refs": ["refs/heads/dev"],
+      "bypass_actors": [],
+      "rules": [
+        {
+          "type": "pull_request",
+          "parameters": {
+            "required_approving_review_count": 0,
+            "dismiss_stale_reviews_on_push": true,
+            "require_code_owner_review": true,
+            "required_review_thread_resolution": false
+          }
+        },
+        { "type": "deletion" }
+      ]
+    },
+    {
+      "name": "code-optimization-lab",
+      "enforcement": "active",
+      "includes_refs": ["refs/heads/code-optimization"],
+      "bypass_actors": [],
+      "rules": [
+        {
+          "type": "pull_request",
+          "parameters": {
+            "required_approving_review_count": 1,
+            "dismiss_stale_reviews_on_push": false,
+            "require_code_owner_review": false,
+            "required_review_thread_resolution": false
+          }
+        },
+        { "type": "non_fast_forward" },
+        { "type": "deletion" },
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "required_status_checks": [
+              { "context": "PR Governance / Summary" },
+              { "context": "Tests / Quality Gate" }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "codeowners_errors": [
+    {
+      "path": ".github/CODEOWNERS",
+      "line": 5,
+      "message": "Could not resolve to a User with the username 'ghost-owner'."
+    }
+  ]
+}

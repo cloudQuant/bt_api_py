@@ -1,0 +1,17 @@
+{
+  "$comment": "Expected Ruleset state for branch code-optimization (performance/architecture line). Selective PRs only; never merged whole into master.",
+  "target": "code-optimization",
+  "enforcement": "active",
+  "pull_request_required": true,
+  "approvals_required": 1,
+  "dismiss_stale_reviews": false,
+  "require_code_owner_review": false,
+  "block_force_pushes": true,
+  "block_deletions": true,
+  "bypass_actors": [],
+  "required_checks": [
+    "PR Governance / Summary",
+    "Tests / Quality Gate"
+  ],
+  "last_verified": "2026-08-23"
+}

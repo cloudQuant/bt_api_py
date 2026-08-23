@@ -1,0 +1,20 @@
+{
+  "$comment": "Expected Ruleset state for branch master (release line). approvals_required=2 is BLOCKED on decision gate D3: only one maintainer is confirmed today. Until D3 unblocks, this ruleset must stay disabled and master governance must not be claimed complete.",
+  "target": "master",
+  "enforcement": "disabled",
+  "pending_decision_gate": "D3",
+  "enforcement_target": "active-after-D3",
+  "pull_request_required": true,
+  "approvals_required": 2,
+  "dismiss_stale_reviews": true,
+  "require_code_owner_review": true,
+  "block_force_pushes": true,
+  "block_deletions": true,
+  "bypass_actors": [],
+  "bypass_note": "Emergency bypass restricted to D4-confirmed release actors; every bypass needs an issue with reason, timestamp, and follow-up PR.",
+  "required_checks": [
+    "PR Governance / Summary",
+    "Tests / Quality Gate"
+  ],
+  "last_verified": "2026-08-23"
+}

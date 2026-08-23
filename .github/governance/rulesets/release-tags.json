@@ -1,0 +1,12 @@
+{
+  "$comment": "Tag ruleset for release tags (v*). Only D4-confirmed release actors may create/update/delete release tags. D4 is currently blocked (no pypi/testpypi environments, trusted publisher unconfirmed), so this ruleset stays disabled until M6 admin application.",
+  "target": "refs/tags/v*",
+  "enforcement": "disabled",
+  "pending_decision_gate": "D4",
+  "block_deletions": true,
+  "block_updates": true,
+  "block_creations_except_actors": true,
+  "bypass_actors": [],
+  "bypass_note": "Populate with D4-confirmed release actor IDs before enabling.",
+  "last_verified": "2026-08-23"
+}
