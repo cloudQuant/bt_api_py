@@ -1,0 +1,5 @@
+{
+  "$comment": "Sanitized summary of GitHub Rulesets API state that satisfies all manifests in .github/governance/rulesets/ during the observation period (plan v2 §4.2.4): no rulesets exist yet remotely (baseline B2), every manifest is disabled, and CODEOWNERS resolves cleanly. Produced by an admin from read-only API responses; never contains tokens.",
+  "rulesets": [],
+  "codeowners_errors": []
+}

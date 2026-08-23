@@ -163,6 +163,21 @@ bt_api_py/
 
 ## Pull Request Process
 
+> **目标分支**：普通贡献（功能、修复、文档、测试）一律提交到 **`dev`** 分支。
+> `master` 仅接受 promotion 与 hotfix；交易所适配器变更请到对应
+> `bt_api/bt_api_*` 插件仓提 PR。完整路由表见
+> [docs/governance/branch-model.md](docs/governance/branch-model.md)。
+
+### 主仓 vs 插件仓：我的改动应该提到哪里？
+
+| 改动内容 | 提交位置 |
+|---|---|
+| 交易所适配器实现（feeds 行为、签名逻辑、WebSocket 解析） | 对应 `bt_api/bt_api_<exchange>` 插件仓；合并后由维护者在主仓发独立 SHA bump PR 到 `dev`（协议见 [docs/governance/submodule-bump.md](docs/governance/submodule-bump.md)） |
+| 交易所注册表条目、`exchange_registers/`、错误映射 | 主仓 `dev` |
+| 核心框架（`BtApi`、containers 基础类型、gateway/websocket、forwarding） | 主仓 `dev` |
+| 文档、测试、示例、CI、打包配置 | 主仓 `dev` |
+| `.gitmodules` / gitlink 变更 | 主仓 `dev`，须附插件仓 PR 链接与新旧 SHA |
+
 1. **Create a branch**: `git checkout -b feature/your-feature-name`
 
 2. **Make your changes**:
@@ -171,9 +186,9 @@ bt_api_py/
    - Format code: `make format`
    - Check code quality: `make check`
 
-3. **Commit your changes**:
+3. **Commit your changes** (always stage explicit paths, never stage the whole tree with a bare dot):
    ```bash
-   git add .
+   git add bt_api_py/changed_module.py tests/test_changed_module.py
    git commit -m "feat: add new feature description"
    ```
 

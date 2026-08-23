@@ -1,34 +1,65 @@
 name: Publish to PyPI
 
+# Release flow (docs/governance/release-flow.md):
+#   dev → master promotion → TestPyPI dispatch at a pinned master-reachable SHA
+#   → fresh-env install smoke → v* tag on the SAME SHA → GitHub Release → PyPI.
+# Manual dispatch can NEVER target production PyPI; only `release: published`
+# events reach the pypi environment (plan M5 steps 1–3).
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      publish_target:
-        description: 'Publish target'
+      expected_sha:
+        description: 'Full commit SHA to publish (must be reachable from master)'
         required: true
-        default: 'testpypi'
-        type: choice
-        options:
-          - testpypi
-          - pypi
+        type: string
 
 permissions:
   contents: read
-  id-token: write          # OIDC for trusted publishing
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+
+      - name: Guard manual dispatch source
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          EXPECTED="${{ inputs.expected_sha }}"
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "expected=$EXPECTED actual=$ACTUAL"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::checkout SHA does not match expected_sha input"
+            exit 1
+          fi
+          git fetch origin master --quiet
+          if ! git merge-base --is-ancestor "$ACTUAL" origin/master; then
+            echo "::error::expected_sha is not reachable from master"
+            exit 1
+          fi
+
+      - name: Guard release provenance
+        if: github.event_name == 'release'
+        run: |
+          git fetch origin master --quiet
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::release tag commit is not reachable from master"
+            exit 1
+          fi
 
       - name: Verify tag matches package version
         if: github.event_name == 'release'
@@ -41,36 +72,96 @@ jobs:
             exit 1
           fi
 
+      - name: Read package version
+        id: version
+        run: |
+          VERSION="$(python - <<'PY'
+          import tomllib
+          print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])
+          PY
+          )"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Build
         run: |
           python -m pip install --quiet build twine
           python -m build
           twine check dist/*
 
+      - name: Record artifact digests
+        run: |
+          mkdir -p dist-meta
+          sha256sum dist/* | tee dist-meta/SHA256SUMS.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: |
+            dist/
+            dist-meta/
 
-  publish:
+  publish-testpypi:
+    if: github.event_name == 'workflow_dispatch'
     needs: [build]
     runs-on: ubuntu-latest
     environment:
-      name: ${{ (github.event_name == 'release' || inputs.publish_target == 'pypi') && 'pypi' || 'testpypi' }}
-      url: ${{ (github.event_name == 'release' || inputs.publish_target == 'pypi') && 'https://pypi.org/p/bt_api_py' || 'https://test.pypi.org/p/bt_api_py' }}
+      name: testpypi
+      url: https://test.pypi.org/p/bt_api_py
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Download dist
         uses: actions/download-artifact@v4
         with:
           name: dist
-          path: dist/
+          path: dist-artifact/
 
       - name: Publish to TestPyPI
-        if: github.event_name == 'workflow_dispatch' && inputs.publish_target == 'testpypi'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist-artifact/dist/
+
+  smoke-install-testpypi:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [publish-testpypi]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Install candidate in a fresh virtualenv and smoke test
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          echo "smoke-installing bt_api_py==$VERSION from TestPyPI"
+          python3 -m venv .venv-smoke
+          ./.venv-smoke/bin/pip install --upgrade pip
+          ./.venv-smoke/bin/pip install \
+            --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            "bt_api_py==$VERSION"
+          ./.venv-smoke/bin/python -c "import bt_api_py; print('smoke OK:', bt_api_py.__version__)"
+
+  publish-pypi:
+    if: github.event_name == 'release'
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/bt_api_py
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist-artifact/
 
       - name: Publish to PyPI
-        if: github.event_name == 'release' || inputs.publish_target == 'pypi'
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist-artifact/dist/

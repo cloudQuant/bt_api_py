@@ -1,0 +1,16 @@
+{
+  "$comment": "Stable check-run names that may be marked required in branch Rulesets. A name is added here ONLY after it has been observed on draft PRs across applicable AND not-applicable paths (plan section 4.2.3).",
+  "dev": [
+    "PR Governance / Summary",
+    "Tests / Quality Gate"
+  ],
+  "master": [
+    "PR Governance / Summary",
+    "Tests / Quality Gate"
+  ],
+  "code-optimization": [
+    "PR Governance / Summary",
+    "Tests / Quality Gate"
+  ],
+  "last_verified": "2026-08-23"
+}

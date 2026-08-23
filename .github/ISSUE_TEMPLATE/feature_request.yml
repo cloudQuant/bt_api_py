@@ -1,0 +1,46 @@
+name: Feature Request
+description: 提议新功能或改进 / Propose a feature or improvement
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提议前请先搜索既有 issue。**不要粘贴任何凭据。**
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题场景 / Problem
+      description: 你想解决什么问题？当前方案的痛点是什么？
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及领域 / Area
+      options:
+        - 新交易所支持 / New exchange support
+        - 已有交易所增强 / Existing exchange enhancement
+        - 核心框架 API
+        - forwarding / 网关
+        - 回测 / 数据
+        - 文档 / 示例
+        - 打包 / CI
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望方案 / Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案 / Alternatives considered
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: 贡献意愿 / Willingness to contribute
+      options:
+        - label: 我愿意提交 PR 实现该功能（目标分支 dev）

@@ -1,0 +1,19 @@
+# gitleaks configuration for bt_api_py (plan M4 step 6).
+# Extends the upstream default rules; local additions below only REDUCE false
+# positives for documented placeholder values. Real credentials must never be
+# committed, even in fixtures.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented placeholder credentials used in docs, tests, and examples"
+regexes = [
+  '''your[_-]?api[_-]?key''',
+  '''your[_-]?secret''',
+  '''<your[_-]?\w+>''',
+  '''EXAMPLE[_A-Z]*KEY''',
+]
+paths = [
+  '''(^|/)configs/examples/''',
+]

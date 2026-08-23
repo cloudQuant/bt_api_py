@@ -1,0 +1,28 @@
+# Default owner: single maintainer until a second maintainer is confirmed (decision gate D3).
+# All paths below are explicit for auditability; they intentionally overlap with the default rule.
+# Syntax reference: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Governance and automation
+/.github/                    @cloudQuant
+/.github/CODEOWNERS          @cloudQuant
+/scripts/                    @cloudQuant
+/docs/governance/            @cloudQuant
+
+# Core package surfaces (risk:r2 per docs/governance/branch-model.md)
+/bt_api_py/bt_api.py         @cloudQuant
+/bt_api_py/containers/       @cloudQuant
+/bt_api_py/feeds/            @cloudQuant
+/bt_api_py/gateway/          @cloudQuant
+/bt_api_py/websocket/        @cloudQuant
+/bt_api_py/forwarding/       @cloudQuant
+/bt_api_py/ctp/              @cloudQuant
+
+# Packaging, submodules, and release path (risk:r3)
+/pyproject.toml              @cloudQuant
+/setup.py                    @cloudQuant
+/.gitmodules                 @cloudQuant
+/.github/workflows/publish.yml      @cloudQuant
+/.github/workflows/submodule-tests.yml @cloudQuant
+
+# Documentation
+/docs/                       @cloudQuant

@@ -1,0 +1,10 @@
+{
+  "$comment": "Submodule SHA bump PR targeting dev. Must carry old/new gitlink SHAs; removing them must fail.",
+  "target_branch": "dev",
+  "labels": ["risk:r1", "sha-bump-required", "target:dev"],
+  "body": "插件仓 PR: https://github.com/cloudQuant/bt_api_binance/pull/12\n插件 CI 已通过；兼容性说明：无公共接口变化。回滚 SHA 见 old_sha。",
+  "changed_files": ["bt_api/bt_api_binance", ".gitmodules"],
+  "submodules_changed": true,
+  "old_sha": "3f2a1b4c5d6e7f809a1b2c3d4e5f60718293a4b5",
+  "new_sha": "7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f809"
+}

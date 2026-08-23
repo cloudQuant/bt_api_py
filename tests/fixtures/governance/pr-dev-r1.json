@@ -1,0 +1,13 @@
+{
+  "$comment": "Ordinary R1 feature PR targeting dev. Must pass validation.",
+  "target_branch": "dev",
+  "labels": ["risk:r1", "target:dev"],
+  "body": "## 关联 Issue\nCloses #123\n\n已执行 pytest tests/gateway -q，全部通过。",
+  "changed_files": [
+    "bt_api_py/gateway/config.py",
+    "tests/gateway/test_config.py"
+  ],
+  "submodules_changed": false,
+  "old_sha": null,
+  "new_sha": null
+}
