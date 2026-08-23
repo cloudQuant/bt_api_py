@@ -1,0 +1,24 @@
+{
+  "$comment": "Post-M6 policy-drift state used with an activated dev manifest copy (see test_verify_github_governance.py): the dev ruleset is active but lost its required status checks, its approval count dropped to 0, and force pushes are no longer blocked. Every policy mutation must be reported as drift.",
+  "rulesets": [
+    {
+      "name": "dev-integration",
+      "enforcement": "active",
+      "includes_refs": ["refs/heads/dev"],
+      "bypass_actors": [],
+      "rules": [
+        {
+          "type": "pull_request",
+          "parameters": {
+            "required_approving_review_count": 0,
+            "dismiss_stale_reviews_on_push": true,
+            "require_code_owner_review": true,
+            "required_review_thread_resolution": false
+          }
+        },
+        { "type": "deletion" }
+      ]
+    }
+  ],
+  "codeowners_errors": []
+}

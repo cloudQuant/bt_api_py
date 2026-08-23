@@ -1,5 +1,5 @@
 {
-  "$comment": "Drifted state used by test_verify_github_governance.py: dev ruleset lost its required status checks AND approval count is wrong AND force pushes are no longer blocked; CODEOWNERS reports an error. Every mutation must be reported as drift.",
+  "$comment": "Drifted state used by test_verify_github_governance.py: an admin applied dev and code-optimization rulesets as ACTIVE before M6 draft-PR drill evidence exists, while the in-repo manifests still require disabled; CODEOWNERS also reports an error. Both premature activations and the CODEOWNERS error must be reported as drift naming the blocking gate.",
   "rulesets": [
     {
       "name": "dev-integration",
@@ -10,13 +10,23 @@
         {
           "type": "pull_request",
           "parameters": {
-            "required_approving_review_count": 0,
+            "required_approving_review_count": 1,
             "dismiss_stale_reviews_on_push": true,
             "require_code_owner_review": true,
-            "required_review_thread_resolution": false
+            "required_review_thread_resolution": true
           }
         },
-        { "type": "deletion" }
+        { "type": "non_fast_forward" },
+        { "type": "deletion" },
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "required_status_checks": [
+              { "context": "PR Governance / Summary" },
+              { "context": "Tests / Quality Gate" }
+            ]
+          }
+        }
       ]
     },
     {
