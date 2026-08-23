@@ -230,7 +230,7 @@ open htmlcov/index.html
 ```
 
 **验证标准：**
-- 覆盖率 >= 40%（当前强制线）
+- 覆盖率 >= 40%（当前强制线，来源 `pyproject.toml` `fail_under` 与 CI `COVERAGE_THRESHOLD`，两处必须一致）
 - 覆盖率相对上一版本无下降（下降需在发布说明中解释）
 - 新功能有测试
 - （提升目标）向 60% 迈进的测试增量已记录
