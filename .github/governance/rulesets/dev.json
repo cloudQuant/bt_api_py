@@ -1,7 +1,8 @@
 {
-  "$comment": "Expected Ruleset state for branch dev. Applied remotely by admin only (see docs/governance/decision-log.md D0/D3). CI verifies via scripts/ci/verify_github_governance.py.",
+  "$comment": "Expected Ruleset state for branch dev. Per plan v2 (§4.2.4, M3 step 6, M4 step 8) the ruleset stays DISABLED during the observation period: PR Governance runs report-only and the five M4 draft-PR drills must produce stable summaries on applicable AND not-applicable paths first. Admin flips remote + this manifest to active only after M6 evidence lands in docs/governance/evidence/ (see docs/governance/decision-log.md D0/D3). CI verifies via scripts/ci/verify_github_governance.py.",
   "target": "dev",
-  "enforcement": "active",
+  "enforcement": "disabled",
+  "activation_requires": "M6 five-scenario draft-PR drill evidence with stable summaries (docs/governance/evidence/)",
   "pull_request_required": true,
   "approvals_required": 1,
   "dismiss_stale_reviews": true,

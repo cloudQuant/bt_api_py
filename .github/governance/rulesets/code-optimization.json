@@ -1,7 +1,8 @@
 {
-  "$comment": "Expected Ruleset state for branch code-optimization (performance/architecture line). Selective PRs only; never merged whole into master.",
+  "$comment": "Expected Ruleset state for branch code-optimization (performance/architecture line). Selective PRs only; never merged whole into master. Per plan v2 (§4.2.4, M3 step 6) the ruleset stays DISABLED until M6 draft-PR drills confirm stable summaries; admin flips remote + this manifest together after evidence lands in docs/governance/evidence/.",
   "target": "code-optimization",
-  "enforcement": "active",
+  "enforcement": "disabled",
+  "activation_requires": "M6 five-scenario draft-PR drill evidence with stable summaries (docs/governance/evidence/)",
   "pull_request_required": true,
   "approvals_required": 1,
   "dismiss_stale_reviews": false,
