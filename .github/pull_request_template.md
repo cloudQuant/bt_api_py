@@ -29,7 +29,7 @@
 ## 子模块 SHA（如适用）
 
 <!-- 若本 PR 变更 gitlink 或 .gitmodules：旧 SHA → 新 SHA，插件仓 PR 链接，回滚 SHA。
-     不涉及则写 N/A -->
+     协议详见 docs/governance/submodule-bump.md。不涉及则写 N/A -->
 
 ## 安全 / 发布影响
 

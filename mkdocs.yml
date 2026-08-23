@@ -246,6 +246,8 @@ nav:
       - 治理总览: governance/README.md
       - 分支模型与 PR 路由: governance/branch-model.md
       - 决策日志: governance/decision-log.md
+      - 发布流程: governance/release-flow.md
+      - 子模块升级协议: governance/submodule-bump.md
 
   # ── 支持与帮助 ───────────────────────────────────────────────
   - 支持与帮助:

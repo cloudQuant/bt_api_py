@@ -172,7 +172,7 @@ bt_api_py/
 
 | 改动内容 | 提交位置 |
 |---|---|
-| 交易所适配器实现（feeds 行为、签名逻辑、WebSocket 解析） | 对应 `bt_api/bt_api_<exchange>` 插件仓；合并后由维护者在主仓发独立 SHA bump PR 到 `dev` |
+| 交易所适配器实现（feeds 行为、签名逻辑、WebSocket 解析） | 对应 `bt_api/bt_api_<exchange>` 插件仓；合并后由维护者在主仓发独立 SHA bump PR 到 `dev`（协议见 [docs/governance/submodule-bump.md](docs/governance/submodule-bump.md)） |
 | 交易所注册表条目、`exchange_registers/`、错误映射 | 主仓 `dev` |
 | 核心框架（`BtApi`、containers 基础类型、gateway/websocket、forwarding） | 主仓 `dev` |
 | 文档、测试、示例、CI、打包配置 | 主仓 `dev` |

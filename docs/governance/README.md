@@ -9,6 +9,8 @@
 | [分支模型](branch-model.md) | `dev` / `master` / `code-optimization` 角色、PR 路由表、风险分级 |
 | [决策日志](decision-log.md) | 决策门 D0–D8 的状态、决策人与解除阻塞条件 |
 | [基线快照](baseline-2026-08-23.md) | 迭代03实施前的脱敏事实记录（含历史凭据核查结论） |
+| [发布流程](release-flow.md) | TestPyPI → tag → Release → PyPI 的受控链路 |
+| [子模块升级](submodule-bump.md) | 插件仓变更进入主仓的 SHA bump 协议（pilot 三仓） |
 | [指标 Schema](metrics-schema.json) | M7 每周治理摘要的数据结构定义 |
 
 ## 快速入口
@@ -21,7 +23,7 @@
 - 我要了解为什么这样设计 → 读迭代计划
   `docs/迭代计划/迭代03-开源项目治理与社区PR协作/正式迭代计划.md`
 
-> 发布流程（release-flow）与子模块升级协议（submodule-bump）文档随迭代03 M5 里程碑交付。
+> 发布演练证据存放在 `docs/governance/evidence/`（脱敏摘要）。
 
 ## 边界声明
 

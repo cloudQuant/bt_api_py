@@ -511,31 +511,21 @@ unzip -l dist/bt_api_py-0.15.1-py3-none-any.whl
 
 ---
 
-### 6.4 发布到PyPI测试（选填）
+### 6.4 发布到PyPI测试（必填，受控流程）
 
-- [ ] 先发布到TestPyPI验证
-- [ ] 安装TestPyPI版本测试
-- [ ] 验证安装后功能正常
-- [ ] 确认无误后发布到正式PyPI
+> **迭代03 起**：发布走 [docs/governance/release-flow.md](governance/release-flow.md)
+> 的受控链路（`publish.yml` 机械强制），不再使用本地 `twine upload`。
 
-**命令：**
-```bash
-# 发布到TestPyPI
-twine upload --repository testpypi dist/*
-
-# 测试安装
-pip install --index-url https://test.pypi.org/simple/ bt_api_py
-
-# 测试功能
-python -c "import bt_api_py; print(bt_api_py.__version__)"
-
-# 发布到正式PyPI
-twine upload dist/*
-```
+- [ ] 在目标 `master` SHA 上 dispatch `publish.yml`（填 `expected_sha`）
+- [ ] TestPyPI 发布成功且 fresh venv 冒烟安装通过
+- [ ] 对**同一 SHA** 打 `vX.Y.Z` tag 并创建 GitHub Release（触发正式 PyPI）
+- [ ] PyPI 安装验证：版本号正确、导入正常
+- [ ] 核对 workflow artifact 中 `dist-meta/SHA256SUMS.txt`
 
 **验证标准：**
-- TestPyPI版本可安装
-- 功能正常
+- 手动 dispatch 无法选择生产 PyPI（workflow 已禁止）
+- Git SHA、包版本、artifact SHA256 三者可追溯
+- TestPyPI 失败时未创建 Release
 
 ---
 
