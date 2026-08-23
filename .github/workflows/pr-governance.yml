@@ -53,13 +53,12 @@ jobs:
           ).stdout
           old_shas, new_shas = [], []
           for line in raw.splitlines():
-              parts = line.split("\t")[0].split()
               meta, _path = line.split("\t", 1)
+              # git diff --raw header: :oldmode newmode oldsha newsha status
               cols = meta.split()
-              # mode 160000 marks a gitlink change; columns: src dst mode status
-              if len(cols) >= 5 and cols[2] == "160000":
-                  old_shas.append(cols[3].lstrip(":"))
-                  new_shas.append(cols[4])
+              if len(cols) >= 5 and cols[1] == "160000":
+                  old_shas.append(cols[2])
+                  new_shas.append(cols[3])
           context = {
               "target_branch": os.environ.get("TARGET_BRANCH", ""),
               "labels": [x.strip() for x in os.environ.get("PR_LABELS", "").split(",") if x.strip()],
