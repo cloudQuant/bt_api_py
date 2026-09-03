@@ -10,6 +10,8 @@ import zipfile
 from importlib.resources import files
 from pathlib import Path
 
+import yaml
+
 from bt_api_py._plugin_catalog import PluginCatalog
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -94,8 +96,21 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
     )
 
     assert "scripts/ci/verify_wheel_contract.py" in tests_workflow
-    assert "scripts/ci/verify_wheel_contract.py" in publish_workflow
     assert "bt_api_py.doctor --bundle core-reference --format json" in publish_workflow
+
+    publish_data = yaml.safe_load(publish_workflow)
+    publish_steps = publish_data["jobs"]["build"]["steps"]
+    wheel_contract_step = next(
+        step
+        for step in publish_steps
+        if step.get("name") == "Verify installed wheel resource contract"
+    )
+    wheel_contract_run = wheel_contract_step["run"]
+
+    assert "python scripts/ci/verify_wheel_contract.py" in wheel_contract_run
+    assert "--dist-dir dist" in wheel_contract_run
+    assert "--receipt dist-meta/wheel-contract-receipt.json" in wheel_contract_run
+    assert "+" not in wheel_contract_run
 
 
 def test_built_wheel_contains_catalog_but_not_bytecode(tmp_path: Path) -> None:

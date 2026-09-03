@@ -95,7 +95,9 @@ jobs:
 
       - name: Verify installed wheel resource contract
         run: |
-          python scripts/ci/verify_wheel_contract.py +            --dist-dir dist +            --receipt dist-meta/wheel-contract-receipt.json
+          python scripts/ci/verify_wheel_contract.py \
+            --dist-dir dist \
+            --receipt dist-meta/wheel-contract-receipt.json
 
       - uses: actions/upload-artifact@v4
         with:
