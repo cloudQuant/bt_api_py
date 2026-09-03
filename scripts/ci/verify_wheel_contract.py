@@ -10,7 +10,6 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import venv
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -68,6 +67,26 @@ def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
+def _isolated_subprocess_env() -> dict[str, str]:
+    """Return an environment that cannot join a parent pytest-cov session.
+
+    The installed-wheel probe deliberately starts a second interpreter outside
+    this source checkout.  pytest-cov exports ``COV_CORE_*`` variables to
+    subprocesses; allowing them into that interpreter creates statement-only
+    coverage shards because the wheel has no project coverage configuration.
+    Those shards then make the parent branch-coverage report impossible to
+    combine.  The probe is an installation test, not a coverage child.
+    """
+
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    for key in tuple(env):
+        if key.startswith("COV_CORE_") or key in {"COVERAGE_FILE", "COVERAGE_PROCESS_START"}:
+            env.pop(key, None)
+    env["PYTHONNOUSERSITE"] = "1"
+    return env
+
+
 def _run(command: list[str], *, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603 - arguments are assembled from local artifacts only.
         command,
@@ -92,11 +111,18 @@ def _isolated_install_probe(wheel: Path) -> tuple[str, dict[str, Any], dict[str,
     with tempfile.TemporaryDirectory(prefix="bt-api-py-wheel-contract-") as temp_dir:
         temp_root = Path(temp_dir)
         venv_dir = temp_root / "venv"
-        venv.EnvBuilder(with_pip=True, system_site_packages=True).create(venv_dir)
+        env = _isolated_subprocess_env()
+        create = _run(
+            [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)],
+            cwd=temp_root,
+            env=env,
+        )
+        if create.returncode != 0:
+            raise WheelContractError(
+                "isolated virtualenv creation failed: "
+                f"{create.stderr.strip() or create.stdout.strip()}"
+            )
         python = _venv_python(venv_dir)
-        env = dict(os.environ)
-        env.pop("PYTHONPATH", None)
-        env["PYTHONNOUSERSITE"] = "1"
 
         install = _run(
             [

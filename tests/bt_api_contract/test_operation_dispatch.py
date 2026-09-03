@@ -11,6 +11,7 @@ from bt_api_py._contracts.errors import CapabilityNotSupportedError
 from bt_api_py._contracts.models import (
     CancelAllRequest,
     CancelOrderRequest,
+    CommandStatus,
     Consistency,
     ForwardingConfig,
     OrderRequest,
@@ -19,6 +20,7 @@ from bt_api_py._contracts.models import (
     Side,
     TransportMode,
 )
+from bt_api_py._operation_backend import OperationBackend
 from bt_api_py.bt_api import BtApi
 
 
@@ -67,6 +69,21 @@ class RecordingBackend:
 
     def query_order(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return self._record("query_order", *args, **kwargs)
+
+    def get_command_status(self, *args: Any, **kwargs: Any) -> CommandStatus:
+        self._record("get_command_status", *args, **kwargs)
+        return CommandStatus(
+            command_id=str(args[1]),
+            idempotency_key="idem-1",
+            status="succeeded",
+            account_id="acct-1",
+            strategy_id="strategy-1",
+            accepted=True,
+        )
+
+    def get_capabilities(self, *args: Any, **kwargs: Any) -> dict[str, bool]:
+        self._record("get_capabilities", *args, **kwargs)
+        return {"get_tick": True, "get_trades": False}
 
 
 class ExplodingFeed:
@@ -195,3 +212,65 @@ def test_zmq_get_trades_is_an_explicit_capability_failure() -> None:
 
     with pytest.raises(CapabilityNotSupportedError, match=r"get_trades.*transport=zmq"):
         api.get_trades("SIM___SPOT")
+
+
+def test_operation_backend_protocol_exposes_the_public_transport_surface() -> None:
+    required_operations = {
+        "get_tick",
+        "get_depth",
+        "get_kline",
+        "get_account",
+        "get_balance",
+        "get_position",
+        "get_open_orders",
+        "get_deals",
+        "make_order",
+        "cancel_order",
+        "cancel_all",
+        "query_order",
+        "get_command_status",
+    }
+
+    assert all(callable(getattr(OperationBackend, name)) for name in required_operations)
+
+
+@pytest.mark.asyncio
+async def test_zmq_async_surface_and_reconciliation_stay_on_the_backend() -> None:
+    api = _zmq_api()
+    backend = RecordingBackend()
+    api._backend = backend
+
+    assert await api.async_get_tick("SIM___SPOT", "BTC-USDT") == {"operation": "get_tick"}
+    assert await api.async_get_depth("SIM___SPOT", "BTC-USDT", 3) == {"operation": "get_depth"}
+    assert await api.async_get_kline("SIM___SPOT", "BTC-USDT", "1m", 3) == {
+        "operation": "get_kline"
+    }
+    assert await api.async_get_open_orders("SIM___SPOT", consistency="cache_ok") == {
+        "operation": "get_open_orders"
+    }
+    assert await api.async_get_balance("SIM___SPOT", consistency="cache_ok") == {
+        "operation": "get_balance"
+    }
+    assert await api.async_get_account("SIM___SPOT", consistency="cache_ok") == {
+        "operation": "get_account"
+    }
+    assert await api.async_get_position("SIM___SPOT", consistency="cache_ok") == {
+        "operation": "get_position"
+    }
+
+    for operation in (
+        api.async_make_order,
+        api.async_cancel_order,
+        api.async_cancel_all,
+        api.async_query_order,
+    ):
+        with pytest.raises(CapabilityNotSupportedError):
+            await operation("SIM___SPOT")
+
+    report = api.get_capabilities("SIM___SPOT")
+    assert report.status == "experimental"
+    assert report.operations == {"get_tick": True, "get_trades": False}
+    assert api.get_command_status("SIM___SPOT", "command-1").status == "succeeded"
+
+    with pytest.raises(CapabilityNotSupportedError, match="extra_data"):
+        api.get_tick("SIM___SPOT", "BTC-USDT", extra_data={"legacy": True})

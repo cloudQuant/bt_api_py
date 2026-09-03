@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import zipfile
@@ -13,6 +14,16 @@ from bt_api_py._plugin_catalog import PluginCatalog
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WHEEL_CONTRACT_SCRIPT = REPOSITORY_ROOT / "scripts" / "ci" / "verify_wheel_contract.py"
+
+
+def _build_subprocess_env() -> dict[str, str]:
+    """Keep isolated build probes out of a parent pytest-cov session."""
+
+    env = dict(os.environ)
+    for key in tuple(env):
+        if key.startswith("COV_CORE_") or key in {"COVERAGE_FILE", "COVERAGE_PROCESS_START"}:
+            env.pop(key, None)
+    return env
 
 
 def test_default_bundle_catalog_uses_packaged_resource() -> None:
@@ -34,6 +45,7 @@ def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Pa
         [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(dist_dir)],
         cwd=REPOSITORY_ROOT,
         capture_output=True,
+        env=_build_subprocess_env(),
         text=True,
     )
     assert build.returncode == 0, build.stderr
@@ -50,6 +62,7 @@ def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Pa
         ],
         cwd=tmp_path,
         capture_output=True,
+        env=_build_subprocess_env(),
         text=True,
     )
 
@@ -91,6 +104,7 @@ def test_built_wheel_contains_catalog_but_not_bytecode(tmp_path: Path) -> None:
         [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(dist_dir)],
         cwd=REPOSITORY_ROOT,
         capture_output=True,
+        env=_build_subprocess_env(),
         text=True,
     )
     assert build.returncode == 0, build.stderr
