@@ -31,9 +31,9 @@ echo "  bt_api_py 基础测试套件"
 echo "  项目目录: $PROJECT_ROOT"
 echo "============================================================"
 
-python -m pytest \
+/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest \
     tests/test_bt_api.py \
-    tests/test_bt_api_unified.py \
+    tests/bt_api_contract/test_bt_api_unified.py \
     tests/test_event_bus.py \
     tests/test_registry.py \
     tests/test_registry_and_balance.py \
