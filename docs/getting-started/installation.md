@@ -1,85 +1,39 @@
-# 安装指南
+# 安装与本地诊断
 
-bt_api_py 支持 Python 3.9 到 3.14。
+## Python policy
 
-## 从 PyPI 安装
+Python 3.11、3.12、3.13 是 release-blocking CI 版本；3.14 只运行 canary，不代表无条件发布支持。项目不声明 Python 3.9 或 3.10 支持。
+
+## 安装 wheel
 
 ```bash
-pip install bt_api_py
-
+python -m pip install --upgrade pip
+python -m pip install bt_api_py
+python -m bt_api_py.doctor --bundle core-reference --format json
 ```
 
-## 从源码安装
+doctor 从已安装包中的 bundle metadata 读取信息。它的成功只证明 wheel 资源和诊断路径可用；可选插件缺失时会报告 `disabled`/原因，不会把该结果写成连接或实盘认证。
+
+## 源码开发
 
 ```bash
-git clone <https://github.com/cloudQuant/bt_api_py>
+git clone --recurse-submodules https://github.com/cloudQuant/bt_api_py
 cd bt_api_py
-pip install -e .
-
+python -m pip install -e ".[dev]"
 ```
 
-## 安装开发依赖
-
-如果你需要参与开发，请安装开发依赖：
+没有使用 `--recurse-submodules` 时，先初始化所需插件：
 
 ```bash
-pip install -e ".[dev]"
-
+git submodule update --init --recursive
 ```
 
-## 验证安装
-
-安装完成后，可以通过以下命令验证：
-
-```python
-import bt_api_py
-print(bt_api_py.__version__)
-
-```
-
-## 支持的平台
-
-| 平台 | 架构 | 状态 |
-|------|------|------|
-| Linux | x86_64 | ✅ 完全支持 |
-| macOS | arm64 (Apple Silicon) | ✅ 完全支持 |
-| macOS | x86_64 (Intel) | ✅ 完全支持 |
-| Windows | x64 | ✅ 完全支持 |
-
-## 可选依赖
-
-某些功能需要额外的依赖：
-
-### WebSocket 支持
+插件验证必须在隔离环境完成：
 
 ```bash
-pip install websockets
-
+python scripts/ci/submodule_validation.py \
+  --profile core-reference \
+  --artifacts-dir /private/tmp/bt-api-py-core-reference-artifacts
 ```
 
-### 异步 HTTP 支持
-
-```bash
-pip install httpx
-
-```
-
-### CTP 交易支持
-
-CTP 使用 SWIG 绑定，需要编译 C++ 扩展：
-
-```bash
-
-# macOS
-
-brew install swig
-
-# Ubuntu/Debian
-
-sudo apt-get install swig
-
-# Windows
-
-# 从 <https://www.swig.org/download.html> 下载安装
-
-```
+结果会包含 JSON、JUnit 和每个安装/导入/测试阶段的日志。一个不存在或无法安装的插件是明确的 `unavailable`/失败结果，而非已支持状态。

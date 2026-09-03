@@ -1,46 +1,24 @@
 # BtApi
 
-`BtApi` 是 bt_api_py 框架的核心入口类，统一管理所有交易所的连接、行情查询、交易操作和账户管理。
-
-## 使用示例
+`BtApi` is the single public façade. It builds a `DirectBackend` by default; passing `transport_mode=TransportMode.ZMQ` and a `ForwardingConfig` activates the forwarding backend.
 
 ```python
-from bt_api_py import BtApi
+from bt_api_py import BtApi, ForwardingConfig, TransportMode
 
-api = BtApi(exchange_kwargs={
-    "BINANCE___SPOT": {"api_key": "...", "secret": "..."},
-    "OKX___SWAP":     {"api_key": "...", "secret": "...", "passphrase": "..."},
-})
-
-# 查行情
-ticker = api.get_tick("BINANCE___SPOT", "BTCUSDT")
-ticker.init_data()
-print(ticker.get_last_price())
-
-# 下单（v1 标准形式：OrderRequest）
-from decimal import Decimal
-from bt_api_py import OrderRequest, OrderType, Side
-
-order = api.make_order(
-    "BINANCE___SPOT",
-    OrderRequest(
-        symbol="BTCUSDT",
-        side=Side.BUY,
-        order_type=OrderType.LIMIT,
-        quantity=Decimal("0.001"),
-        price=Decimal("50000"),
+api = BtApi(
+    debug=False,
+    transport_mode=TransportMode.ZMQ,
+    forwarding_config=ForwardingConfig(
+        command_endpoint="tcp://gateway.example:5555",
+        market_endpoint="tcp://gateway.example:5556",
+        private_endpoint="tcp://gateway.example:5557",
         account_id="paper",
-        client_order_id="cid-1",
+        strategy_id="strategy-a",
     ),
 )
 ```
 
-> `make_order(exchange_name, OrderRequest(...))` 是唯一标准下单形式。旧位置参数
-> `make_order(exchange_name, symbol, volume, price, order_type)` 仅在 `order_type`
-> 能推导买卖方向时兼容（如 `"buy-limit"`）；裸 `"limit"`/`"market"` 无法推导
-> side，会在调用交易所前抛出 `LegacyOrderApiError`。
-
----
+The endpoints above are illustrative; configuring a client does not establish a production authorization boundary. Inspect `api.get_capabilities(exchange_name)` before relying on an operation.
 
 ::: bt_api_py.bt_api.BtApi
     options:
@@ -52,6 +30,3 @@ order = api.make_order(
       filters:
         - "!^_"
         - "!^__"
-        - "!^log$"
-        - "!^init_logger$"
-        - "!^push_bar_data_to_queue$"

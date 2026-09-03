@@ -1,20 +1,12 @@
-# MkDocs 配置文件
-# https://www.mkdocs.org/user-guide/configuration/
-
 site_name: bt_api_py
-site_description: 统一多交易所交易 API 框架 — 一套代码对接 Binance、OKX、HTX、CTP、Interactive Brokers
+site_description: Evidence-bounded Python exchange API and forwarding runtime
 site_author: cloudQuant
 site_url: https://cloudquant.github.io/bt_api_py/
-
-# 仓库配置
 repo_name: cloudQuant/bt_api_py
 repo_url: https://github.com/cloudQuant/bt_api_py
 edit_uri: edit/dev/docs/
-
-# 版权信息
 copyright: Copyright &copy; 2024 cloudQuant. MIT License.
 
-# 主题配置
 theme:
   name: material
   language: zh
@@ -23,44 +15,27 @@ theme:
       scheme: default
       primary: indigo
       accent: indigo
-      toggle:
-        icon: material/weather-night
-        name: 切换深色模式
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: indigo
       accent: indigo
-      toggle:
-        icon: material/weather-sunny
-        name: 切换浅色模式
   features:
     - navigation.instant
     - navigation.instant.progress
     - navigation.tracking
-    - navigation.tabs
-    - navigation.tabs.sticky
     - navigation.sections
-    - navigation.indexes
     - navigation.top
-    - navigation.footer
     - search.suggest
     - search.highlight
-    - search.share
     - content.code.copy
-    - content.code.annotate
-    - content.tabs.link
-    - content.tooltips
     - toc.follow
   icon:
     repo: fontawesome/brands/github
     logo: material/chart-line
 
-# 插件配置
 plugins:
   - search:
-      lang:
-        - zh
-        - en
+      lang: [zh, en]
       separator: '[\s\-\.]+'
   - minify:
       minify_html: true
@@ -73,218 +48,89 @@ plugins:
             docstring_style: google
             show_root_heading: true
             show_source: false
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
             members_order: source
-            separate_signature: true
-            show_signature_annotations: true
-            unwrap_annotated: true
-            merge_init_into_class: true
-            docstring_section_style: table
 
-# 额外配置
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/cloudQuant/bt_api_py
-      name: GitHub
-    - icon: fontawesome/brands/python
-      link: https://pypi.org/project/bt_api_py/
-      name: PyPI
-  analytics:
-    feedback:
-      title: 这篇文档对您有帮助吗？
-      ratings:
-        - icon: material/thumb-up-outline
-          name: 有帮助
-          data: 1
-          note: 感谢您的反馈！
-        - icon: material/thumb-down-outline
-          name: 需要改进
-          data: 0
-          note: 感谢您的反馈，我们将持续改进。
-
-# Markdown 扩展
 markdown_extensions:
-  - abbr
   - admonition
   - attr_list
-  - def_list
-  - footnotes
   - md_in_html
   - toc:
       permalink: true
       toc_depth: 3
-  - pymdownx.arithmatex:
-      generic: true
-  - pymdownx.betterem:
-      smart_enable: all
-  - pymdownx.caret
-  - pymdownx.details
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.keys
-  - pymdownx.mark
-  - pymdownx.smartsymbols
-  - pymdownx.superfences:
-      custom_fences:
-        - name: mermaid
-          class: mermaid
-          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
-      combine_header_slug: true
   - pymdownx.tasklist:
       custom_checkbox: true
-  - pymdownx.tilde
-
-# 额外 CSS/JS
-extra_javascript:
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
 
 extra_css:
   - stylesheets/extra.css
 
-# 导航结构 — 遵循 Diátaxis 框架
-# https://diataxis.fr/  (Tutorials | How-to Guides | Reference | Explanation)
 nav:
   - 首页: index.md
-
-  # ── 入门 (Tutorials) ──────────────────────────────────────────
   - 入门:
-      - 安装: getting-started/installation.md
-      - 快速入门: getting-started/quickstart.md
-      - 常见问题: getting-started/faq.md
-      - 交互式示例: examples/gallery.md
-
-  # ── 使用指南 (How-to Guides) ──────────────────────────────────
-  - 使用指南:
-      - 基础用法: guides/usage_guide.md
-      - API模式: guides/api-patterns.md
-      - WebSocket流式传输: guides/websocket-streaming.md
-      - 参数说明: guides/params.md
-      - 错误处理: guides/error_handling.md
-      - 最佳实践: guides/best_practices.md
-      - 安全实践: guides/security_best_practices.md
-      - 性能优化: guides/performance.md
-      - 代码示例: guides/examples/api_examples.md
-
-  # ── API 参考 (Reference) — 自动生成自源代码 ───────────────────
+      - 安装与诊断: getting-started/installation.md
+  - 使用:
+      - BtApi 使用: guides/usage_guide.md
   - API 参考:
-      - 概览: reference/index.md
-      - 核心API: reference/core-api.md
+      - Core contract: reference/core-api.md
       - BtApi: reference/bt_api.md
-      - 认证配置: reference/auth_config.md
-      - 异常体系: reference/exceptions.md
-      - 注册表: reference/registry.md
-      - 事件总线: reference/event_bus.md
-      - 数据容器: reference/data_containers.md
-      - WebSocket 订阅: reference/websocket.md
+  - 运行时:
+      - 架构: explanation/architecture.md
+      - Support status policy: operations/support-status-policy.md
+      - Submodule validation: ci/submodule-validation-profiles.md
 
-  # ── 交易所原生 API 文档 ────────────────────────────────────────
-  - 交易所:
-      - 交易所状态: exchanges/EXCHANGE_STATUS.md
-      - Binance:
-          - 集成指南: exchanges/binance.md
-          - 概览: exchanges/binance/index.md
-          - 现货 (SPOT):
-              - 快速参考: exchanges/binance/spot/README.md
-              - REST API: exchanges/binance/spot/rest-api.md
-              - WebSocket 流: exchanges/binance/spot/websocket-streams.md
-              - WebSocket API: exchanges/binance/spot/websocket-api.md
-              - 用户数据流: exchanges/binance/spot/user-data-stream.md
-              - 枚举类型: exchanges/binance/spot/enums.md
-              - 错误码: exchanges/binance/spot/errors.md
-              - 交易规则: exchanges/binance/spot/filters.md
-          - 合约 (DERIVATIVES):
-              - 概览: exchanges/binance/derivatives/index.md
-              - 快速开始: exchanges/binance/derivatives/quick-start.md
-          - 杠杆 (MARGIN):
-              - 接口索引: exchanges/binance/margin_trading/README.md
-          - 算法交易 (ALGO):
-              - 接口索引: exchanges/binance/algo/README.md
-              - 快速开始: exchanges/binance/algo/quick-start.md
-      - OKX:
-          - 概览: exchanges/okx/index.md
-          - 交易账户: exchanges/okx/trading_account.md
-          - 订单交易: exchanges/okx/order_book_trading_trade.md
-          - 行情数据: exchanges/okx/market_data.md
-          - 公共数据: exchanges/okx/public_data.md
-          - 资金账户: exchanges/okx/funding_account.md
-          - 算法交易: exchanges/okx/order_book_trading_algo.md
-          - 网格交易: exchanges/okx/order_book_trading_grid.md
-          - 价差交易: exchanges/okx/spread_trading.md
-          - 大宗交易: exchanges/okx/block_trading.md
-          - 状态与错误: exchanges/okx/status_announcement_error.md
-      - HTX (Huobi):
-          - 概览: exchanges/htx/index.md
-      - CTP (中国期货):
-          - 快速入门: exchanges/ctp/quickstart.md
-      - Interactive Brokers:
-          - 快速入门: exchanges/ib/quickstart.md
-          - 概览: exchanges/ib/index.md
-          - API 快速参考: exchanges/ib/api_reference_quick.md
-          - 实现指南: exchanges/ib/implementation_guide.md
-          - 交易 API: exchanges/ib/trading.md
-          - 账户管理: exchanges/ib/account_management.md
-
-   # ── 深度解读 (Explanation) ────────────────────────────────────
-  - 深度解读:
-      - 架构设计: explanation/architecture.md
-      - 多策略架构: explanation/multi_strategy_architecture.md
-      - 交易所集成模式: explanation/exchange_integration_patterns.md
-      - 开发者指南: explanation/developer_guide.md
-
-  # ── 项目治理 (Governance) ────────────────────────────────────
-  - 项目治理:
-      - 治理总览: governance/README.md
-      - 分支模型与 PR 路由: governance/branch-model.md
-      - 决策日志: governance/decision-log.md
-      - 发布流程: governance/release-flow.md
-      - 子模块升级协议: governance/submodule-bump.md
-
-  # ── 支持与帮助 ───────────────────────────────────────────────
-  - 支持与帮助:
-      - 常见问题: support/faq.md
-
-# 排除不在导航中的残留文件
+# Historical vendor manuals and old planning material remain in the checkout,
+# but are excluded from the active site until they have current contract
+# evidence and link validation.
 exclude_docs: |
-  exchanges/htx/api_reference.md
-  exchanges/okx/trading_statistics.md
-  exchanges/okx/order_book_trading_others.md
-  exchanges/okx/sub_account.md
-  exchanges/binance/spot/sbe-market-data-streams.md
-  exchanges/binance/derivatives/change-log.md
-  # Archive files (not part of main docs)
+  acceptance/
   archive/
-  # Root level docs not in nav
+  architecture/
+  decisions/
+  exchanges/
+  governance/
+  plans/
+  security/
+  superpowers/
+  迭代计划/
   AGENTS.md
   CODE_QUALITY.md
   MIGRATION_GUIDE.md
   SECURITY_COMPLIANCE.md
+  code-quality-baseline.md
   development-guide.md
   project-overview.md
   project-structure-optimization.md
   release-checklist.md
   source-tree-analysis.md
   test-markers-guide.md
-  # Architecture docs
-  architecture/
-  # Reference docs not in nav
+  getting-started/faq.md
+  getting-started/quickstart.md
+  examples/
+  explanation/developer_guide.md
+  explanation/exchange_integration_patterns.md
+  explanation/multi_strategy_architecture.md
+  guides/api-patterns.md
+  guides/best_practices.md
+  guides/error_handling.md
+  guides/examples/
+  guides/params.md
+  guides/performance.md
+  guides/security_best_practices.md
+  guides/websocket-streaming.md
+  reference/auth_config.md
+  reference/data_containers.md
+  reference/event_bus.md
+  reference/exceptions.md
+  reference/index.md
   reference/installation.md
-  # Security docs
-  security/
-  # Exchange docs not in nav
-  exchanges/EXCHANGE_CAPABILITY_MATRIX.md
-  exchanges/binance/algo/future-algo/twap-new-order.md
-  exchanges/binance/algo/spot-algo/fee-structure.md
-  # Plans
-  plans/
-  # SDD 计划文档不发布
-  superpowers/
+  reference/registry.md
+  reference/websocket.md
+  operations/repository-release-checklist.md
+  support/
