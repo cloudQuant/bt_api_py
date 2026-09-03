@@ -16,6 +16,12 @@
 | Private vulnerability reporting | enabled=false | Blocked | 管理员评估并启用或记录正式豁免。 |
 | 当前开放 PR | 无 | Pending | 分拆的迭代 PR 创建后重新核验 checks、审查和 merge 状态。 |
 
+## 候选阶段只读复核
+
+> 复核时间：2026-09-03T05:53:43Z
+
+再次执行本文列出的只读 GitHub 命令，结果未发生改善：默认分支仍为 `dev`；rulesets 仍为空；`dev` 与 `master` 均为 `protected=false`；environment 仍只有 `github-pages`；PVR 仍为 `enabled=false`；开放 PR 仍为空。没有进行任何远端写操作。
+
 ## 迭代 03 修正提交
 
 本地提交 7d5db275（fix(governance): correct iteration 03 acceptance gates）尚未位于 origin/dev。它应作为普通 dev PR 的候选，独立审查并在合入后重新执行治理验收；在此之前不得把其本地测试结果写成远端治理已完成。

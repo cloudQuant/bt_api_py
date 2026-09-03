@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "receipt_type": "iteration-04-candidate",
+  "generated_at": "2026-09-03T06:03:21Z",
+  "repository": "cloudQuant/bt_api_py",
+  "candidate_source": {
+    "branch": "codex/iteration-04-runtime-contract-delivery-trust",
+    "base_ref": "origin/dev",
+    "base_sha": "fdeb6c1182d8a4be5c9c2b713bba7007f1c03fa7",
+    "head_sha": "18d787bc71cc0db03cb9f6ccd7589e25e311a16f",
+    "worktree": "/private/tmp/bt_api_py_iter04_impl_20260903"
+  },
+  "runner": {
+    "python": "Python 3.11.8",
+    "environment": "conda base"
+  },
+  "commands": [
+    {
+      "name": "collect",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests --collect-only -q",
+      "exit_code": 0,
+      "summary": "682 tests collected"
+    },
+    {
+      "name": "offline-suite",
+      "command": "SKIP_LIVE_TESTS=true /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests -m 'not network and not integration and not performance and not e2e and not ctp' -q --maxfail=0",
+      "exit_code": 0,
+      "summary": "671 passed, 5 skipped, 6 deselected, 2 warnings"
+    },
+    {
+      "name": "targeted-runtime-coverage",
+      "command": "SKIP_LIVE_TESTS=true /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests/bt_api_contract tests/forwarding --cov=bt_api_py.bt_api --cov=bt_api_py._direct_backend --cov=bt_api_py._operation_backend --cov=bt_api_py.forwarding.btapi_backend --cov-report=term-missing -q",
+      "exit_code": 0,
+      "summary": "105 passed; combined reported coverage 86.15%; all required module line coverages are above 85%"
+    },
+    {
+      "name": "scoped-ruff",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff check bt_api_py tests scripts/ci scripts/generate_exchange_support_docs.py bt_api/install_and_test_all.py",
+      "exit_code": 0,
+      "summary": "All checks passed"
+    },
+    {
+      "name": "scoped-format",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff format --check bt_api_py tests scripts/ci scripts/generate_exchange_support_docs.py bt_api/install_and_test_all.py",
+      "exit_code": 0,
+      "summary": "196 files already formatted"
+    },
+    {
+      "name": "mypy",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m mypy bt_api_py tests --ignore-missing-imports",
+      "exit_code": 0,
+      "summary": "Success: no issues found in 189 source files"
+    },
+    {
+      "name": "wheel-contract",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m build --outdir <temporary-dist> && /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python scripts/ci/verify_wheel_contract.py --dist-dir <temporary-dist> --receipt docs/acceptance/iteration-04-wheel-receipt.json",
+      "exit_code": 0,
+      "summary": "Installed wheel, packaged resource, sdist resource, and core-reference doctor all passed",
+      "receipt_path": "docs/acceptance/iteration-04-wheel-receipt.json"
+    },
+    {
+      "name": "submodule-core-reference",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python scripts/ci/submodule_validation.py --profile core-reference --artifacts-dir /private/tmp/bt-api-py-iteration04-core-reference-18d-LZxUie",
+      "exit_code": 0,
+      "summary": "4 passed, 0 unavailable, 0 failed",
+      "receipt_path": "/private/tmp/bt-api-py-iteration04-core-reference-18d-LZxUie/submodule-validation.json"
+    },
+    {
+      "name": "submodule-all-diagnostic",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python scripts/ci/submodule_validation.py --profile all --diagnostic --artifacts-dir /private/tmp/bt-api-py-iteration04-all-diagnostic-18d-y3ptCl",
+      "exit_code": 0,
+      "summary": "4 passed, 56 unavailable, 0 failed; diagnostic command exits zero by design and its JSON result is failed because coverage is incomplete",
+      "receipt_path": "/private/tmp/bt-api-py-iteration04-all-diagnostic-18d-y3ptCl/submodule-validation.json"
+    },
+    {
+      "name": "docs",
+      "command": "scripts/generate_exchange_support_docs.py --check; scripts/ci/check_docs_contract.py; mkdocs build --strict",
+      "exit_code": 0,
+      "summary": "Support generator check, document contract, and strict MkDocs build passed"
+    }
+  ],
+  "coverage": {
+    "metric": "line coverage",
+    "minimum_required_percent": 85.0,
+    "modules": {
+      "bt_api_py._direct_backend": {
+        "covered_lines": 42,
+        "total_lines": 45,
+        "line_percent": 93.33
+      },
+      "bt_api_py._operation_backend": {
+        "covered_lines": 17,
+        "total_lines": 17,
+        "line_percent": 100.0
+      },
+      "bt_api_py.bt_api": {
+        "covered_lines": 386,
+        "total_lines": 436,
+        "line_percent": 88.53
+      },
+      "bt_api_py.forwarding.btapi_backend": {
+        "covered_lines": 164,
+        "total_lines": 183,
+        "line_percent": 89.62
+      }
+    },
+    "note": "pytest-cov's displayed Cover column also weights branches. The threshold above is the plan's line-coverage threshold, calculated from Stmts minus Miss."
+  },
+  "submodule_revisions": {
+    "bt_api_base": {
+      "base_sha": "6db0c19329dc94528de697e65166c0b15dfd2565",
+      "candidate_sha": "123b03a364ec077148ae759f06535685920c82da",
+      "status": "local-only"
+    },
+    "bt_api_binance": {
+      "base_sha": "b5b2c2cb19e22f38670fc73d053f310ad9cbc8c6",
+      "candidate_sha": "e08ef327b9effd898300a3f33931d6e9cb4cda92",
+      "status": "local-only"
+    },
+    "bt_api_okx": {
+      "base_sha": "10e0b67e7f793d88b74aa1c4cd85f2d2c0031967",
+      "candidate_sha": "91027d1be5ea01e2792a909c12e807f0b9719a89",
+      "status": "local-only"
+    },
+    "bt_api_ctp": {
+      "base_sha": "a8a3792995ebee73a3d54860d56a5af2520bbf5f",
+      "candidate_sha": "5686d3fce09c3f75b304b2464d4884b2e450dadd",
+      "status": "local-only"
+    }
+  },
+  "external_gate_recheck": {
+    "captured_at": "2026-09-03T05:53:43Z",
+    "mode": "read-only",
+    "default_branch": "dev",
+    "rulesets": "blocked: empty",
+    "dev_protection": "blocked: protected=false",
+    "master_protection": "blocked: protected=false",
+    "release_environments": "blocked: only github-pages exists",
+    "private_vulnerability_reporting": "blocked: enabled=false",
+    "open_pull_requests": 0
+  },
+  "result": {
+    "local_implementation": "validated",
+    "strict_t7_candidate": "blocked",
+    "external_release_gate": "blocked",
+    "released": false,
+    "blockers": [
+      "The exact T7 command 'ruff check bt_api_py tests scripts' exits 1 with 2215 legacy-script findings.",
+      "The exact T7 command 'ruff format --check bt_api_py tests scripts' exits 2 with three parse errors and 16 files requiring formatting.",
+      "The all-profile diagnostic has complete per-package logs but only 4 initialized packages; the other 56 are unavailable and therefore not certified.",
+      "The four candidate submodule commits are local-only and must be independently pushed, reviewed, and made remotely reachable before a parent gitlink PR can be opened.",
+      "GitHub rulesets, branch protection, release environments, PVR, real PR review, and hosted CI evidence remain absent."
+    ]
+  }
+}
