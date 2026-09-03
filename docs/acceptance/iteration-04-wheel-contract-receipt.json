@@ -1,0 +1,75 @@
+{
+  "doctor": {
+    "exit_code": 0,
+    "payload": {
+      "description": "Core reference venues: Binance Spot + OKX Spot + CTP Future",
+      "name": "core-reference",
+      "venues": [
+        {
+          "certification": "experimental",
+          "entry_point": true,
+          "exchange": "BINANCE___SPOT",
+          "installed": true,
+          "min_version": "2.0.0",
+          "package": "bt_api_binance",
+          "plugin": "binance",
+          "status": "loadable",
+          "version": "2.0.1",
+          "version_ok": true
+        },
+        {
+          "certification": "experimental",
+          "entry_point": true,
+          "exchange": "OKX___SPOT",
+          "installed": true,
+          "min_version": "0.15.0",
+          "package": "bt_api_okx",
+          "plugin": "okx",
+          "status": "loadable",
+          "version": "0.15.2",
+          "version_ok": true
+        },
+        {
+          "certification": "experimental",
+          "entry_point": true,
+          "exchange": "CTP___FUTURE",
+          "installed": true,
+          "min_version": "0.15.0",
+          "package": "bt_api_ctp",
+          "plugin": "ctp",
+          "status": "loadable",
+          "version": "2.0.0",
+          "version_ok": true
+        }
+      ]
+    },
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "382cc1dd841530272ce9facefedbb5993e8611353ccbed723d468ce1f5b20571"
+  },
+  "generated_at": "2026-09-03T03:46:46.701200Z",
+  "head_sha": "5511fad7b6b60fa4f41ad4024e833f5c6bd40dfd",
+  "package_file": "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-0t_rax03/venv/lib/python3.11/site-packages/bt_api_py/__init__.py",
+  "probe": {
+    "bundles": [
+      "core-reference"
+    ],
+    "package_file": "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-0t_rax03/venv/lib/python3.11/site-packages/bt_api_py/__init__.py",
+    "resource": "/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-0t_rax03/venv/lib/python3.11/site-packages/bt_api_py/configs/exchange-bundles.toml",
+    "resource_is_file": true
+  },
+  "resource_sha256": {
+    "sdist": "c1cb1c1bdd3e7b537de057359879490e4fd595ef09fd039d7e609c02b618cf3d",
+    "source": "c1cb1c1bdd3e7b537de057359879490e4fd595ef09fd039d7e609c02b618cf3d",
+    "wheel": "c1cb1c1bdd3e7b537de057359879490e4fd595ef09fd039d7e609c02b618cf3d"
+  },
+  "result": "passed",
+  "schema_version": 1,
+  "sdist": {
+    "path": "bt_api_py-0.15.3.tar.gz",
+    "sha256": "86c1782d92e83ba5ae27364756cfa1060060e19dcdd9440a8f36857613ef385e"
+  },
+  "wheel": {
+    "path": "bt_api_py-0.15.3-py3-none-any.whl",
+    "sha256": "08ff17787c45b61716087c2006d7d3858516487e3f72a6191feb3a752863bcbd"
+  }
+}
