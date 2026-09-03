@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import queue
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -176,7 +176,7 @@ def test_direct_runtime_utilities_and_batch_failures_are_explicit() -> None:
     with pytest.raises(InvalidOrderError, match="volume"):
         api._validate_order_args("COVERAGE___SPOT", "BTC-USDT", 0, 100, "limit")
     with pytest.raises(TypeError, match="mapping"):
-        api._copy_exchange_params("not-a-mapping")
+        api._copy_exchange_params(cast("dict[str, Any]", "not-a-mapping"))
 
     for results in (
         api.get_all_ticks("BTC-USDT"),

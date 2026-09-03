@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from decimal import Decimal
 
 import pytest
 
@@ -100,7 +101,7 @@ def test_cache_ok_maps_latest_tick_depth_and_bar_to_typed_snapshots() -> None:
     assert tick.freshness.stale is True
     assert tick.raw["vendor"] == "fixture"
     assert isinstance(depth, DepthSnapshot)
-    assert depth.bids[0] == (101, 3)
+    assert depth.bids[0] == (Decimal("101"), Decimal("3"))
     assert isinstance(bar, KlineSnapshot)
     assert bar.period == "1m"
     assert str(bar.close) == "101.0"
