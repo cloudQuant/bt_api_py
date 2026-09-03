@@ -25,10 +25,14 @@ from bt_api_base.registry import ExchangeRegistry
 
 from ._contracts.errors import CapabilityNotSupportedError, LegacyOrderApiError
 from ._contracts.models import (
+    CancelAllRequest,
+    CancelOrderRequest,
+    CommandStatus,
     Consistency,
     ForwardingConfig,
     OrderRequest,
     OrderType,
+    QueryOrderRequest,
     Side,
     TransportMode,
 )
@@ -145,7 +149,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             from .forwarding.btapi_backend import ZmqBtApiBackend
 
             return ZmqBtApiBackend(forwarding_config)
-        return None
+        from ._direct_backend import DirectBackend
+
+        return DirectBackend(self._get_feed, self.exchange_feeds)
 
     def init_exchange(self, exchange_kwargs: dict[str, Any]) -> None:
         """根据 exchange_kwargs 初始化并添加交易所。
@@ -431,7 +437,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识, 如 "BINANCE___SWAP"
         :param symbol: 交易对, 如 "BTC-USDT"
         """
-        return self._get_feed(exchange_name).get_tick(symbol, extra_data=extra_data, **kwargs)
+        consistency = self._pop_consistency(kwargs)
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("get_tick", extra_data, kwargs)
+            return self._backend.get_tick(exchange_name, symbol, consistency=consistency)
+        return self._backend.get_tick(
+            exchange_name,
+            symbol,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
+        )
 
     def get_depth(
         self,
@@ -446,8 +462,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param symbol: 交易对
         :param count: 深度档数
         """
-        return self._get_feed(exchange_name).get_depth(
-            symbol, count=count, extra_data=extra_data, **kwargs
+        consistency = self._pop_consistency(kwargs)
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("get_depth", extra_data, kwargs)
+            return self._backend.get_depth(exchange_name, symbol, count, consistency=consistency)
+        return self._backend.get_depth(
+            exchange_name,
+            symbol,
+            count,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
         )
 
     def get_kline(
@@ -465,8 +490,20 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param period: K线周期, 如 "1m", "5m", "1H", "1D"
         :param count: K线数量
         """
-        return self._get_feed(exchange_name).get_kline(
-            symbol, period, count=count, extra_data=extra_data, **kwargs
+        consistency = self._pop_consistency(kwargs)
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("get_kline", extra_data, kwargs)
+            return self._backend.get_kline(
+                exchange_name, symbol, period, count, consistency=consistency
+            )
+        return self._backend.get_kline(
+            exchange_name,
+            symbol,
+            period,
+            count,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
         )
 
     # ── 交易操作（同步）────────────────────────────────────────────
@@ -507,23 +544,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
 
     def _make_order_typed(self, exchange_name: str, request: OrderRequest) -> Any:
-        if self.transport_mode is TransportMode.ZMQ:
-            return self._backend.make_order(exchange_name, request)
-        from ._feed_adapter import FeedAdapter
-        from ._venue_mappers import get_venue_mapper
-
-        mapper = get_venue_mapper(exchange_name)
-        if mapper is not None:
-            return FeedAdapter(self._get_feed(exchange_name), mapper).make_order(request)
-        return self._get_feed(exchange_name).make_order(
-            request.symbol,
-            float(request.quantity),
-            float(request.price) if request.price is not None else 0,
-            f"{request.side.value}-{request.order_type.value}",
-            offset="close" if request.reduce_only else "open",
-            post_only=request.time_in_force == "post_only",
-            client_order_id=request.client_order_id,
-        )
+        return self._backend.make_order(exchange_name, request)
 
     def _make_order_legacy(
         self,
@@ -538,7 +559,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         extra_data: Any,
         **kwargs: Any,
     ) -> Any:
-        self._get_feed(exchange_name)  # raise ExchangeNotFoundError before arg parsing
+        if self.transport_mode is TransportMode.DIRECT:
+            self._get_feed(exchange_name)  # preserve the legacy direct error ordering
+        elif extra_data is not None or kwargs:
+            self._reject_zmq_legacy_options("make_order", extra_data, kwargs)
         if volume is None or volume <= 0:
             raise InvalidOrderError(exchange_name, symbol, "volume must be > 0")
         if price is None or price < 0:
@@ -578,37 +602,71 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         return self._make_order_typed(exchange_name, request)
 
     def cancel_order(
-        self, exchange_name: str, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+        self,
+        exchange_name: str,
+        symbol: str | CancelOrderRequest,
+        order_id: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """撤单
         :param exchange_name: 交易所标识
         :param symbol: 交易对
         :param order_id: 订单ID
         """
-        return self._get_feed(exchange_name).cancel_order(
-            symbol, order_id, extra_data=extra_data, **kwargs
+        request = (
+            symbol
+            if isinstance(symbol, CancelOrderRequest)
+            else CancelOrderRequest(symbol=symbol, account_id="legacy", order_id=order_id)
         )
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("cancel_order", extra_data, kwargs)
+            return self._backend.cancel_order(exchange_name, request)
+        return self._backend.cancel_order(exchange_name, request, extra_data=extra_data, **kwargs)
 
     def cancel_all(
-        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+        self,
+        exchange_name: str,
+        symbol: str | CancelAllRequest | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """撤销所有订单
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
-        return self._get_feed(exchange_name).cancel_all(symbol, extra_data=extra_data, **kwargs)
+        request = (
+            symbol
+            if isinstance(symbol, CancelAllRequest)
+            else CancelAllRequest(account_id="legacy", symbol=symbol)
+        )
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("cancel_all", extra_data, kwargs)
+            return self._backend.cancel_all(exchange_name, request)
+        return self._backend.cancel_all(exchange_name, request, extra_data=extra_data, **kwargs)
 
     def query_order(
-        self, exchange_name: str, symbol: str, order_id: str, extra_data: Any = None, **kwargs: Any
+        self,
+        exchange_name: str,
+        symbol: str | QueryOrderRequest,
+        order_id: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """查询订单
         :param exchange_name: 交易所标识
         :param symbol: 交易对
         :param order_id: 订单ID
         """
-        return self._get_feed(exchange_name).query_order(
-            symbol, order_id, extra_data=extra_data, **kwargs
+        request = (
+            symbol
+            if isinstance(symbol, QueryOrderRequest)
+            else QueryOrderRequest(symbol=symbol, account_id="legacy", order_id=order_id)
         )
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("query_order", extra_data, kwargs)
+            return self._backend.query_order(exchange_name, request)
+        return self._backend.query_order(exchange_name, request, extra_data=extra_data, **kwargs)
 
     def get_open_orders(
         self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
@@ -617,8 +675,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
-        return self._get_feed(exchange_name).get_open_orders(
-            symbol, extra_data=extra_data, **kwargs
+        consistency = self._pop_consistency(kwargs)
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("get_open_orders", extra_data, kwargs)
+            return self._backend.get_open_orders(exchange_name, consistency=consistency)
+        return self._backend.get_open_orders(
+            exchange_name,
+            symbol=symbol,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
         )
 
     def get_deals(
@@ -634,7 +700,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         the unified facade thin so callers can pass through exchange-specific
         arguments such as ``limit``, ``count``, ``start_time`` or ``end_time``.
         """
-        return self._get_feed(exchange_name).get_deals(symbol, extra_data=extra_data, **kwargs)
+        consistency = self._pop_consistency(kwargs)
+        if self.transport_mode is TransportMode.ZMQ:
+            self._reject_zmq_legacy_options("get_deals", extra_data, kwargs)
+            return self._backend.get_deals(exchange_name, consistency=consistency)
+        return self._backend.get_deals(
+            exchange_name,
+            symbol=symbol,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
+        )
 
     def get_trades(
         self,
@@ -649,6 +725,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         may map it to account fills. Callers that require real account fees
         should prefer :meth:`get_deals` when the feed supports it.
         """
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                "get_trades",
+                detail="transport=zmq; no forwarding public-trades protocol is enabled",
+            )
         return self._get_feed(exchange_name).get_trades(symbol, extra_data=extra_data, **kwargs)
 
     # ── 账户查询（同步）────────────────────────────────────────────
@@ -660,11 +741,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 币种 (None 表示全部)
         """
+        consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
-            return self._backend.get_balance(
-                exchange_name, consistency=self._pop_consistency(kwargs)
-            )
-        return self._get_feed(exchange_name).get_balance(symbol, extra_data=extra_data, **kwargs)
+            self._reject_zmq_legacy_options("get_balance", extra_data, kwargs)
+            return self._backend.get_balance(exchange_name, consistency=consistency)
+        return self._backend.get_balance(
+            exchange_name,
+            symbol=symbol,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
+        )
 
     def get_account(
         self, exchange_name: str, symbol: str = "ALL", extra_data: Any = None, **kwargs: Any
@@ -673,11 +760,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 币种
         """
+        consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
-            return self._backend.get_account(
-                exchange_name, consistency=self._pop_consistency(kwargs)
-            )
-        return self._get_feed(exchange_name).get_account(symbol, extra_data=extra_data, **kwargs)
+            self._reject_zmq_legacy_options("get_account", extra_data, kwargs)
+            return self._backend.get_account(exchange_name, consistency=consistency)
+        return self._backend.get_account(
+            exchange_name,
+            symbol=symbol,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
+        )
 
     def get_position(
         self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
@@ -686,11 +779,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
+        consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
-            return self._backend.get_position(
-                exchange_name, consistency=self._pop_consistency(kwargs)
-            )
-        return self._get_feed(exchange_name).get_position(symbol, extra_data=extra_data, **kwargs)
+            self._reject_zmq_legacy_options("get_position", extra_data, kwargs)
+            return self._backend.get_position(exchange_name, consistency=consistency)
+        return self._backend.get_position(
+            exchange_name,
+            symbol=symbol,
+            consistency=consistency,
+            extra_data=extra_data,
+            **kwargs,
+        )
 
     @staticmethod
     def _pop_consistency(kwargs: dict[str, Any]) -> Consistency:
@@ -699,12 +798,31 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             return value
         return Consistency(str(value))
 
+    @staticmethod
+    def _reject_zmq_legacy_options(operation: str, extra_data: Any, kwargs: dict[str, Any]) -> None:
+        """Do not silently drop feed-specific legacy options in ZMQ mode."""
+        if extra_data is None and not kwargs:
+            return
+        names = sorted(kwargs)
+        if extra_data is not None:
+            names.insert(0, "extra_data")
+        raise CapabilityNotSupportedError(
+            operation,
+            detail=(
+                "transport=zmq does not support feed-specific legacy options: " + ", ".join(names)
+            ),
+        )
+
     def get_capabilities(self, exchange_name: str) -> Any:
         """Return a read-only capability report for the given exchange."""
         from ._contracts.capabilities import CapabilityReport
 
         if self.transport_mode is TransportMode.ZMQ:
-            return CapabilityReport(exchange_name=exchange_name, status="experimental")
+            return CapabilityReport(
+                exchange_name=exchange_name,
+                status="experimental",
+                operations=self._backend.get_capabilities(exchange_name),
+            )
         feed = self.exchange_feeds.get(exchange_name)
         if feed is None:
             return CapabilityReport(exchange_name=exchange_name, status="retired")
@@ -717,6 +835,19 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             status="loadable",
             operations=operations,
         )
+
+    def get_command_status(self, exchange_name: str, command_id: str) -> CommandStatus:
+        """Reconcile a ZMQ command after :class:`CommandResultUnknownError`.
+
+        Direct feeds have no shared forwarding receipt store, so callers must
+        use their native venue query semantics in that transport mode.
+        """
+        if self.transport_mode is not TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                "get_command_status",
+                detail="transport=direct has no forwarding command receipt store",
+            )
+        return self._backend.get_command_status(exchange_name, command_id)
 
     # ── 异步接口（显式方法，替代动态 __getattr__ 代理）────────────────
 

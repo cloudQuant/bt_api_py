@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections import defaultdict, deque
 from math import isfinite
 from types import SimpleNamespace
 from typing import Any, NoReturn, TypeVar
 
+from bt_api_py._contracts.errors import CommandResultUnknownError
+from bt_api_py._contracts.models import CommandStatus
 from bt_api_py.forwarding.memory import InMemoryForwardingBus, MarketSubscription
 from bt_api_py.forwarding.schema import (
     MarketEvent,
@@ -62,7 +65,14 @@ class ForwardingClient:
         self._account_cache: dict[str, Any] | None = None
         self._positions_cache: list[dict[str, Any]] | None = None
         self._orders_cache: list[dict[str, Any]] | None = None
+        self._deals_cache: list[dict[str, Any]] | None = None
         self._pending_commands: set[str] = set()
+        self._pending_commands_by_id: dict[str, OrderCommand] = {}
+        self._latest_market_events: dict[tuple[str, str], MarketEvent] = {}
+        self._latest_account_event: PrivateEvent | None = None
+        self._latest_position_events: dict[str, PrivateEvent] = {}
+        self._latest_order_events: dict[str, PrivateEvent] = {}
+        self._latest_fill_events: dict[str, PrivateEvent] = {}
 
     def connect(self) -> bool:
         """connect method"""
@@ -141,6 +151,45 @@ class ForwardingClient:
 
     get_next_bar = poll_bar
 
+    def peek_market_event(self, symbol: str, event_type: str) -> MarketEvent | None:
+        """Return the latest matching event without removing poll queue items."""
+        symbol_key = normalize_market_symbol(symbol)
+        self._drain_market(symbol_key)
+        return self._latest_market_events.get((symbol_key, str(event_type).lower()))
+
+    def peek_tick_event(self, symbol: str) -> MarketEvent | None:
+        return self.peek_market_event(symbol, "tick")
+
+    def peek_orderbook_event(self, symbol: str) -> MarketEvent | None:
+        return self.peek_market_event(symbol, "orderbook")
+
+    def peek_bar_event(self, symbol: str) -> MarketEvent | None:
+        return self.peek_market_event(symbol, "bar")
+
+    def wait_for_next_market_event(
+        self,
+        symbol: str,
+        event_type: str,
+        *,
+        after_sequence_id: int = 0,
+        timeout_ms: int = 0,
+    ) -> MarketEvent | None:
+        """Wait only for an event newer than the caller's observed sequence.
+
+        This is intentionally a bounded cache wait, not a fabricated request/
+        response market-data API.  Poll queues remain untouched.
+        """
+        timeout_ms = _normalize_command_timeout_ms(timeout_ms)
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while True:
+            event = self.peek_market_event(symbol, event_type)
+            if event is not None and event.sequence_id > after_sequence_id:
+                return event
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            time.sleep(min(0.005, remaining))
+
     def has_pending_tick(self, symbol: str) -> bool:
         """has_pending_tick method"""
         symbol_key = normalize_market_symbol(symbol)
@@ -183,7 +232,7 @@ class ForwardingClient:
             "dropped_event_counts": dict(self._dropped_event_counts),
         }
 
-    def get_balance(self) -> dict[str, Any]:
+    def get_balance(self, *, allow_cached_failure: bool = True) -> dict[str, Any]:
         """get_balance method"""
         self._drain_private()
         command = OrderCommand(
@@ -194,7 +243,7 @@ class ForwardingClient:
         try:
             ack = self._send_command_sync(command)
         except (RuntimeError, TimeoutError):
-            if self._account_cache is not None:
+            if allow_cached_failure and self._account_cache is not None:
                 return dict(self._account_cache)
             raise
         if ack.accepted:
@@ -207,7 +256,7 @@ class ForwardingClient:
 
     get_account = get_balance
 
-    def get_positions(self) -> list[dict[str, Any]]:
+    def get_positions(self, *, allow_cached_failure: bool = True) -> list[dict[str, Any]]:
         """get_positions method"""
         self._drain_private()
         command = OrderCommand(
@@ -218,14 +267,14 @@ class ForwardingClient:
         try:
             ack = self._send_command_sync(command)
         except (RuntimeError, TimeoutError):
-            if self._positions_cache is not None:
+            if allow_cached_failure and self._positions_cache is not None:
                 return list(self._positions_cache)
             raise
         if ack.accepted:
             self._positions_cache = list(ack.payload.get("positions", []))
         return list(self._positions_cache or [])
 
-    def fetch_open_orders(self) -> list[dict[str, Any]]:
+    def fetch_open_orders(self, *, allow_cached_failure: bool = True) -> list[dict[str, Any]]:
         """fetch_open_orders method"""
         self._drain_private()
         command = OrderCommand(
@@ -236,7 +285,7 @@ class ForwardingClient:
         try:
             ack = self._send_command_sync(command)
         except (RuntimeError, TimeoutError):
-            if self._orders_cache is not None:
+            if allow_cached_failure and self._orders_cache is not None:
                 return list(self._orders_cache)
             raise
         if ack.accepted:
@@ -284,6 +333,93 @@ class ForwardingClient:
         result.setdefault("order_ref", order_ref)
         return result
 
+    def cancel_all(
+        self, symbol: str | None = None, *, idempotency_key: str | None = None
+    ) -> dict[str, Any]:
+        command = OrderCommand(
+            command_type="cancel_all",
+            strategy_id=self.strategy_id,
+            account_id=self.account_id,
+            symbol=str(symbol or ""),
+            idempotency_key=idempotency_key
+            or f"cancel-all:{self.strategy_id}:{self.account_id}:{symbol or '*'}",
+        )
+        ack = self._send_command_sync(command)
+        if not ack.accepted:
+            raise RuntimeError(ack.reason or "forwarded cancel-all rejected")
+        return dict(ack.payload)
+
+    def query_order(self, order_ref: Any, dataname: str | None = None) -> dict[str, Any]:
+        command = OrderCommand(
+            command_type="query_order",
+            strategy_id=self.strategy_id,
+            account_id=self.account_id,
+            symbol=str(dataname or ""),
+            order_id=str(order_ref or ""),
+            idempotency_key=f"query:{self.strategy_id}:{self.account_id}:{order_ref}",
+        )
+        ack = self._send_command_sync(command)
+        if not ack.accepted:
+            raise RuntimeError(ack.reason or "forwarded query rejected")
+        return dict(ack.payload)
+
+    def get_deals(self, *, allow_cached_failure: bool = True) -> list[dict[str, Any]]:
+        """Read private fills through the router or a deliberate cache fallback."""
+        self._drain_private()
+        command = OrderCommand(
+            command_type="list_deals",
+            strategy_id=self.strategy_id,
+            account_id=self.account_id,
+        )
+        try:
+            ack = self._send_command_sync(command)
+        except (RuntimeError, TimeoutError):
+            if allow_cached_failure and self._deals_cache is not None:
+                return list(self._deals_cache)
+            raise
+        if ack.accepted:
+            self._deals_cache = list(ack.payload.get("deals", []))
+        return list(self._deals_cache or [])
+
+    def get_command_status(self, command_id: str) -> CommandStatus:
+        command = OrderCommand(
+            command_type="get_command_status",
+            strategy_id=self.strategy_id,
+            account_id=self.account_id,
+            query_command_id=command_id,
+            idempotency_key=f"status:{self.strategy_id}:{self.account_id}:{command_id}",
+        )
+        ack = self._send_command_sync(command)
+        payload = dict(ack.payload)
+        status = str(payload.get("status") or ack.status)
+        return CommandStatus(
+            command_id=str(payload.get("command_id") or command_id),
+            idempotency_key=str(payload.get("idempotency_key") or ""),
+            status=status,
+            account_id=str(payload.get("account_id") or self.account_id),
+            strategy_id=str(payload.get("strategy_id") or self.strategy_id),
+            accepted=payload.get("accepted"),
+            order_id=payload.get("order_id"),
+            reason=str(payload.get("reason") or ack.reason),
+            raw=payload,
+        )
+
+    def latest_account_event(self) -> PrivateEvent | None:
+        self._drain_private()
+        return self._latest_account_event
+
+    def latest_position_events(self) -> list[PrivateEvent]:
+        self._drain_private()
+        return list(self._latest_position_events.values())
+
+    def latest_order_events(self) -> list[PrivateEvent]:
+        self._drain_private()
+        return list(self._latest_order_events.values())
+
+    def latest_fill_events(self) -> list[PrivateEvent]:
+        self._drain_private()
+        return list(self._latest_fill_events.values())
+
     def poll_broker_update(self) -> dict[str, Any] | None:
         """poll_broker_update method"""
         self._drain_private()
@@ -308,6 +444,7 @@ class ForwardingClient:
             order_type=str(payload.get("order_type") or _require(payload, "order_type")),
             price=payload.get("price"),
             time_in_force=str(payload.get("time_in_force") or "GTC"),
+            reduce_only=bool(payload.get("reduce_only", False)),
             client_order_id=str(payload.get("client_order_id") or bt_ref or idempotency_key),
             idempotency_key=str(idempotency_key),
             extra={key: value for key, value in payload.items() if key not in _ORDER_COMMAND_KEYS},
@@ -319,8 +456,12 @@ class ForwardingClient:
             ack = self.bus.send_command_sync(command, timeout=self.command_timeout)
         except TimeoutError:
             self._pending_commands.add(key)
-            raise
+            self._pending_commands_by_id[command.command_id] = command
+            raise CommandResultUnknownError(
+                command.command_id, key, detail="forwarding command timed out; reconcile status"
+            ) from None
         self._pending_commands.discard(key)
+        self._pending_commands_by_id.pop(command.command_id, None)
         return ack
 
     def pending_commands(self) -> list[str]:
@@ -345,6 +486,12 @@ class ForwardingClient:
 
     def _cache_market_event(self, event: MarketEvent) -> None:
         symbol = normalize_market_symbol(event.symbol)
+        if (
+            str(event.exchange).upper() != self.exchange.upper()
+            or str(event.market_type).upper() != self.market_type.upper()
+        ):
+            return
+        self._latest_market_events[(symbol, str(event.event_type).lower())] = event
         if event.event_type == "tick":
             self._append_cached_event(self._ticks[symbol], _market_event_to_tick(event), "tick")
         elif event.event_type == "orderbook":
@@ -365,22 +512,39 @@ class ForwardingClient:
                 self._cache_private_event(event)
 
     def _cache_private_event(self, event: PrivateEvent) -> None:
+        if event.account_id != self.account_id or (
+            event.strategy_id and event.strategy_id != self.strategy_id
+        ):
+            return
         payload = dict(event.payload or {})
         kind = str(payload.get("kind") or event.event_type).lower()
         if kind == "account":
+            self._latest_account_event = event
             self._account_cache = {
                 "cash": payload.get("available_cash", payload.get("cash", 0.0)),
                 "value": payload.get("equity", payload.get("value", 0.0)),
                 **payload,
             }
         elif kind == "position":
+            self._latest_position_events[str(payload.get("symbol") or "")] = event
             self._positions_cache = [
                 item
                 for item in (self._positions_cache or [])
                 if item.get("symbol") != payload.get("symbol")
             ]
             self._positions_cache.append(payload)
-        elif kind in {"order", "trade", "error"}:
+        elif kind == "order":
+            key = str(
+                payload.get("order_id") or payload.get("external_order_id") or event.sequence_id
+            )
+            self._latest_order_events[key] = event
+            self._append_cached_event(self._broker_updates, payload, "broker_update")
+        elif kind == "trade":
+            key = str(payload.get("trade_id") or event.sequence_id)
+            self._latest_fill_events[key] = event
+            self._deals_cache = [dict(item.payload) for item in self._latest_fill_events.values()]
+            self._append_cached_event(self._broker_updates, payload, "broker_update")
+        elif kind == "error":
             self._append_cached_event(self._broker_updates, payload, "broker_update")
 
     def _clear_event_caches(self) -> None:
@@ -388,6 +552,12 @@ class ForwardingClient:
         self._orderbooks.clear()
         self._bars.clear()
         self._broker_updates.clear()
+        self._latest_market_events.clear()
+        self._latest_account_event = None
+        self._latest_position_events.clear()
+        self._latest_order_events.clear()
+        self._latest_fill_events.clear()
+        self._deals_cache = None
 
     def _new_any_event_queue(self) -> deque[Any]:
         return deque(maxlen=self.event_cache_size)
@@ -488,6 +658,7 @@ _ORDER_COMMAND_KEYS = {
     "strategy_id",
     "symbol",
     "time_in_force",
+    "reduce_only",
 }
 
 
@@ -603,8 +774,12 @@ class ZmqForwardingClient(ForwardingClient):
             ack = self._command_client.send(command, timeout_ms=self.command_timeout_ms)
         except TimeoutError:
             self._pending_commands.add(key)
-            raise
+            self._pending_commands_by_id[command.command_id] = command
+            raise CommandResultUnknownError(
+                command.command_id, key, detail="forwarding command timed out; reconcile status"
+            ) from None
         self._pending_commands.discard(key)
+        self._pending_commands_by_id.pop(command.command_id, None)
         return ack
 
 

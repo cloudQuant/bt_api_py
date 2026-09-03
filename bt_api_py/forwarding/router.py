@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
@@ -9,6 +10,7 @@ from typing import Any, Literal
 
 from bt_api_base.logging_factory import get_logger
 
+from bt_api_py._contracts.errors import ProtocolCorrelationError
 from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.brokers.errors import BrokerError
 from bt_api_py.brokers.types import CancelOrderRequest, OrderRequest
@@ -21,6 +23,17 @@ logger = get_logger("forwarding.router")
 _VALID_SIDES = frozenset({"buy", "sell"})
 _VALID_ORDER_TYPES = frozenset({"limit", "market"})
 _MAX_CACHED_ACKS = 10_000
+
+
+@dataclass(frozen=True)
+class _CommandReceipt:
+    """Bounded terminal command state retained for idempotency and lookup."""
+
+    ack: CommandAck
+    fingerprint: str
+    account_id: str
+    strategy_id: str
+    expires_at: float
 
 
 def _normalize_side(value: Any) -> Literal["buy", "sell"]:
@@ -98,6 +111,7 @@ class OrderRouter:
         risk_rules: RiskRuleSet | None = None,
         state_store: SQLiteStateStore | None = None,
         audit_logger: Any | None = None,
+        command_result_ttl_seconds: float = 3600.0,
     ) -> None:
         """__init__ method"""
         self.adapter = adapter
@@ -105,7 +119,13 @@ class OrderRouter:
         self.risk_rules = risk_rules or RiskRuleSet()
         self.state_store = state_store
         self.audit_logger = audit_logger
+        if command_result_ttl_seconds <= 0:
+            raise ValueError("command_result_ttl_seconds must be > 0")
+        self.command_result_ttl_seconds = float(command_result_ttl_seconds)
         self._acks_by_idempotency_key: OrderedDict[str, CommandAck] = OrderedDict()
+        self._receipts_by_idempotency_key: OrderedDict[str, _CommandReceipt] = OrderedDict()
+        self._receipts_by_command_id: OrderedDict[str, _CommandReceipt] = OrderedDict()
+        self._deals_by_account: dict[str, list[dict[str, Any]]] = {}
         self._sequence_id = 0
         if self.bus is not None:
             self.bus.set_command_handler(self.handle_command)
@@ -131,6 +151,7 @@ class OrderRouter:
         return {
             "adapter": adapter_health,
             "cached_ack_count": len(self._acks_by_idempotency_key),
+            "command_receipt_count": len(self._receipts_by_command_id),
             "sequence_id": self._sequence_id,
             "state_store_enabled": self.state_store is not None,
             "bus_attached": self.bus is not None,
@@ -152,11 +173,18 @@ class OrderRouter:
 
     async def handle_command(self, command: OrderCommand) -> CommandAck:
         """handle_command method"""
+        self._purge_expired_receipts()
         command_type = str(command.command_type or "").lower()
+        if command_type == "get_command_status":
+            return self._command_status_ack(command)
         if command_type == "place_order":
             return await self.place_order(command)
         if command_type == "cancel_order":
             return await self.cancel_order(command)
+        if command_type == "cancel_all":
+            return await self.cancel_all(command)
+        if command_type == "query_order":
+            return await self.query_order(command)
         if command_type == "get_account":
             account = await self.adapter.get_account(command.account_id)
             return self._ack(command, True, "ok", payload=_snapshot_to_dict(account))
@@ -175,6 +203,13 @@ class OrderRouter:
                 True,
                 "ok",
                 payload={"orders": [_snapshot_to_dict(item) for item in orders]},
+            )
+        if command_type == "list_deals":
+            return self._ack(
+                command,
+                True,
+                "ok",
+                payload={"deals": list(self._deals_by_account.get(command.account_id, []))},
             )
         return self._reject(command, f"unsupported command_type: {command.command_type}")
 
@@ -196,7 +231,7 @@ class OrderRouter:
                 details={"account_id": command.account_id, "reason": risk_error},
             )
             ack = self._reject(command, risk_error)
-            self._remember_ack(ack)
+            self._remember_ack(ack, command)
             return ack
 
         try:
@@ -229,7 +264,11 @@ class OrderRouter:
             price=command.price,
             client_order_id=command.client_order_id,
             idempotency_key=command.idempotency_key,
-            extra=dict(command.extra or {}),
+            extra={
+                **dict(command.extra or {}),
+                "reduce_only": bool(command.reduce_only),
+                "time_in_force": command.time_in_force,
+            },
         )
 
         try:
@@ -246,7 +285,7 @@ class OrderRouter:
             )
             ack = self._reject(command, str(exc), payload={"error_code": str(exc.code)})
             if not exc.retryable:
-                self._remember_ack(ack)
+                self._remember_ack(ack, command)
             self._publish_error(command, str(exc), error_code=str(exc.code))
             return ack
         except Exception as exc:
@@ -287,9 +326,12 @@ class OrderRouter:
             order_id=str(payload.get("order_id") or ""),
             payload=payload,
         )
-        self._remember_ack(ack)
+        self._remember_ack(ack, command)
         self._publish_order_update(command, payload)
         if str(payload.get("status") or "").lower() == "filled":
+            self._deals_by_account.setdefault(command.account_id, []).append(
+                _trade_event_payload(command, payload)
+            )
             self._publish_trade_update(command, payload)
         await self._publish_account_state(command.account_id, command.strategy_id)
         return ack
@@ -314,7 +356,7 @@ class OrderRouter:
                 },
             )
             ack = self._reject(command, "cancel_order requires order_id")
-            self._remember_ack(ack)
+            self._remember_ack(ack, command)
             return ack
 
         try:
@@ -338,7 +380,7 @@ class OrderRouter:
             )
             ack = self._reject(command, str(exc), payload={"error_code": str(exc.code)})
             if not exc.retryable:
-                self._remember_ack(ack)
+                self._remember_ack(ack, command)
             self._publish_error(command, str(exc), error_code=str(exc.code))
             return ack
         except Exception as exc:
@@ -376,12 +418,78 @@ class OrderRouter:
             order_id=str(payload.get("order_id") or command.order_id),
             payload=payload,
         )
-        self._remember_ack(ack)
+        self._remember_ack(ack, command)
         self._publish_order_update(command, payload)
         return ack
 
+    async def cancel_all(self, command: OrderCommand) -> CommandAck:
+        """Cancel every cancellable order in the command's scoped account."""
+        cached = self._get_cached_ack(command)
+        if cached is not None:
+            return cached
+        try:
+            orders = await self.adapter.list_orders(command.account_id)
+            cancelled = []
+            for order in orders:
+                if command.symbol and order.symbol != command.symbol:
+                    continue
+                if str(order.status).lower() in {"filled", "cancelled", "rejected"}:
+                    continue
+                cancelled_order = await self.adapter.cancel_order(
+                    CancelOrderRequest(
+                        account_id=command.account_id,
+                        order_id=order.order_id,
+                        symbol=order.symbol,
+                        idempotency_key=command.idempotency_key,
+                    )
+                )
+                cancelled.append(_snapshot_to_dict(cancelled_order))
+        except Exception as exc:
+            ack = self._reject(command, str(exc), payload={"error_code": type(exc).__name__})
+            self._remember_ack(ack, command)
+            return ack
+        ack = self._ack(command, True, "cancelled", payload={"orders": cancelled})
+        self._remember_ack(ack, command)
+        return ack
+
+    async def query_order(self, command: OrderCommand) -> CommandAck:
+        """Look up one order without ever consulting another account scope."""
+        cached = self._get_cached_ack(command)
+        if cached is not None:
+            return cached
+        if not command.order_id:
+            ack = self._reject(command, "query_order requires order_id")
+            self._remember_ack(ack, command)
+            return ack
+        try:
+            orders = await self.adapter.list_orders(command.account_id)
+        except Exception as exc:
+            ack = self._reject(command, str(exc), payload={"error_code": type(exc).__name__})
+            self._remember_ack(ack, command)
+            return ack
+        for order in orders:
+            if order.order_id == command.order_id:
+                payload = _snapshot_to_dict(order)
+                ack = self._ack(
+                    command,
+                    True,
+                    str(payload.get("status") or "ok"),
+                    order_id=order.order_id,
+                    payload=payload,
+                )
+                self._remember_ack(ack, command)
+                return ack
+        ack = self._reject(command, "order not found")
+        self._remember_ack(ack, command)
+        return ack
+
     def _get_cached_ack(self, command: OrderCommand) -> CommandAck | None:
+        self._purge_expired_receipts()
         key = str(command.idempotency_key)
+        receipt = self._receipts_by_idempotency_key.get(key)
+        if receipt is not None:
+            self._assert_same_request(command, receipt)
+            return receipt.ack
         cached = self._acks_by_idempotency_key.get(key)
         if cached is not None:
             return cached
@@ -397,10 +505,80 @@ class OrderRouter:
         if len(self._acks_by_idempotency_key) > _MAX_CACHED_ACKS:
             self._acks_by_idempotency_key.popitem(last=False)
 
-    def _remember_ack(self, ack: CommandAck) -> None:
+    def _remember_ack(self, ack: CommandAck, command: OrderCommand | None = None) -> None:
         self._cache_ack(str(ack.idempotency_key), ack)
+        if command is not None:
+            receipt = _CommandReceipt(
+                ack=ack,
+                fingerprint=command.request_fingerprint,
+                account_id=command.account_id,
+                strategy_id=command.strategy_id,
+                expires_at=time.monotonic() + self.command_result_ttl_seconds,
+            )
+            self._receipts_by_idempotency_key[str(ack.idempotency_key)] = receipt
+            self._receipts_by_command_id[ack.command_id] = receipt
+            self._trim_receipts()
         if self.state_store is not None:
             self.state_store.save_command_ack(ack)
+
+    def _assert_same_request(self, command: OrderCommand, receipt: _CommandReceipt) -> None:
+        if (
+            command.request_fingerprint != receipt.fingerprint
+            or command.account_id != receipt.account_id
+            or command.strategy_id != receipt.strategy_id
+        ):
+            raise ProtocolCorrelationError(
+                "idempotency_key was reused with a different request fingerprint or scope"
+            )
+
+    def _trim_receipts(self) -> None:
+        while len(self._receipts_by_command_id) > _MAX_CACHED_ACKS:
+            _command_id, receipt = self._receipts_by_command_id.popitem(last=False)
+            key = receipt.ack.idempotency_key
+            if self._receipts_by_idempotency_key.get(key) is receipt:
+                self._receipts_by_idempotency_key.pop(key, None)
+
+    def _purge_expired_receipts(self) -> None:
+        now = time.monotonic()
+        expired_ids = [
+            command_id
+            for command_id, receipt in self._receipts_by_command_id.items()
+            if receipt.expires_at <= now
+        ]
+        for command_id in expired_ids:
+            receipt = self._receipts_by_command_id.pop(command_id)
+            if self._receipts_by_idempotency_key.get(receipt.ack.idempotency_key) is receipt:
+                self._receipts_by_idempotency_key.pop(receipt.ack.idempotency_key, None)
+
+    def _command_status_ack(self, command: OrderCommand) -> CommandAck:
+        target = str(command.query_command_id or "")
+        if not target:
+            return self._reject(command, "get_command_status requires query_command_id")
+        receipt = self._receipts_by_command_id.get(target)
+        if receipt is None:
+            return self._ack(
+                command,
+                True,
+                "expired",
+                payload={"command_id": target, "status": "expired"},
+            )
+        if receipt.account_id != command.account_id or receipt.strategy_id != command.strategy_id:
+            raise ProtocolCorrelationError("command status scope does not match original command")
+        ack = receipt.ack
+        return self._ack(
+            command,
+            True,
+            "ok",
+            payload={
+                "accepted": ack.accepted,
+                "account_id": ack.account_id,
+                "command_id": ack.command_id,
+                "idempotency_key": ack.idempotency_key,
+                "order_id": ack.order_id,
+                "reason": ack.reason,
+                "status": "succeeded" if ack.accepted else "failed",
+            },
+        )
 
     def _validate_order(self, command: OrderCommand) -> str | None:
         rules = self.risk_rules

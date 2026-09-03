@@ -38,5 +38,15 @@ class CachePolicy:
     def get(self, key: str) -> CacheEntry | None:
         return self._entries.get(key)
 
+    def get_within_age(self, key: str, max_age_ms: int) -> CacheEntry | None:
+        """Return an entry only while its recorded observation remains usable."""
+        entry = self.get(key)
+        if entry is None:
+            return None
+        age_ms = (datetime.now(UTC) - entry.freshness.observed_at).total_seconds() * 1000
+        if age_ms > max_age_ms:
+            return None
+        return entry
+
     def __contains__(self, key: str) -> bool:
         return key in self._entries

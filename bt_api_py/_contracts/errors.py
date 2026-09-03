@@ -56,7 +56,7 @@ class StaleDataUnavailableError(BtApiContractError):
         self.exchange_name = exchange_name
 
 
-class CommandResultUnknownError(BtApiContractError):
+class CommandResultUnknownError(BtApiContractError, TimeoutError):
     """Raised when a command result is unknown (e.g. transport timeout).
 
     The caller must reconcile via ``get_command_status``, never blind-retry.

@@ -48,6 +48,14 @@ class ForwardingConfig:
     private_endpoint: str
     account_id: str
     strategy_id: str
+    market_read_timeout_ms: int = 250
+    max_cache_age_ms: int = 5_000
+
+    def __post_init__(self) -> None:
+        if self.market_read_timeout_ms < 0:
+            raise ValueError("market_read_timeout_ms must be non-negative")
+        if self.max_cache_age_ms < 0:
+            raise ValueError("max_cache_age_ms must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -128,6 +136,22 @@ class QueryOrderRequest:
             raise ValueError("account_id must be a non-empty string")
         if not self.order_id and not self.client_order_id:
             raise ValueError("order_id or client_order_id must be provided")
+
+
+@dataclass(frozen=True)
+class CommandStatus:
+    """A bounded forwarding-router receipt used after an unknown command result."""
+
+    command_id: str
+    idempotency_key: str
+    status: str  # pending | succeeded | failed | expired
+    account_id: str
+    strategy_id: str
+    accepted: bool | None = None
+    order_id: str | None = None
+    reason: str = ""
+    expires_at: datetime | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -242,6 +266,7 @@ __all__ = [
     "BalanceSnapshot",
     "CancelAllRequest",
     "CancelOrderRequest",
+    "CommandStatus",
     "Consistency",
     "DepthSnapshot",
     "FillSnapshot",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -120,9 +121,12 @@ class OrderCommand:
     exchange: str = ""
     market_type: str = ""
     time_in_force: str = "GTC"
+    reduce_only: bool = False
     client_order_id: str | None = None
     order_id: str | None = None
     idempotency_key: str | None = None
+    query_command_id: str | None = None
+    request_fingerprint: str = ""
     command_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     created_at: str = field(default_factory=utc_now_iso)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -134,6 +138,8 @@ class OrderCommand:
             self.idempotency_key = self.command_id
         if self.client_order_id is None and self.command_type == "place_order":
             self.client_order_id = self.idempotency_key
+        if not self.request_fingerprint:
+            self.request_fingerprint = command_request_fingerprint(self)
 
     def to_dict(self) -> dict[str, Any]:
         """to_dict method"""
@@ -145,6 +151,36 @@ class OrderCommand:
         values = dict(data)
         values.pop("_message_type", None)
         return cls(**values)
+
+
+def command_request_fingerprint(command: OrderCommand) -> str:
+    """Return a canonical, non-secret request-intent fingerprint.
+
+    Transport envelope fields such as the generated command id and creation
+    time are deliberately excluded.  The digest may be persisted or compared,
+    while raw request material (including any opaque ``extra`` values) is
+    never written to a receipt merely for idempotency checking.
+    """
+    intent = {
+        "account_id": command.account_id,
+        "client_order_id": command.client_order_id,
+        "command_type": command.command_type,
+        "exchange": command.exchange,
+        "extra": command.extra,
+        "market_type": command.market_type,
+        "order_id": command.order_id,
+        "order_type": command.order_type,
+        "price": command.price,
+        "query_command_id": command.query_command_id,
+        "reduce_only": bool(command.reduce_only),
+        "side": command.side,
+        "size": command.size,
+        "strategy_id": command.strategy_id,
+        "symbol": command.symbol,
+        "time_in_force": command.time_in_force,
+    }
+    encoded = json.dumps(_clean(intent), default=str, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 @dataclass
