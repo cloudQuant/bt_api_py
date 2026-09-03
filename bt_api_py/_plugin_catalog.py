@@ -1,6 +1,6 @@
 """Exchange bundle catalog (Task 2.1).
 
-Reads ``configs/exchange-bundles.toml`` and reports per-venue install, entry
+Reads the packaged ``bt_api_py.configs/exchange-bundles.toml`` resource and reports per-venue install, entry
 point and certification status from installed distributions. No fixed plugin
 counts; every venue is explained individually.
 """
@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass
-from importlib import metadata
+from importlib import metadata, resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Any
 
 PLUGIN_GROUP = "bt_api.plugins"
-DEFAULT_BUNDLES_PATH = Path(__file__).resolve().parent.parent / "configs" / "exchange-bundles.toml"
+DEFAULT_BUNDLES_RESOURCE = resources.files("bt_api_py.configs").joinpath("exchange-bundles.toml")
 CERTIFIED_CARDS_DIR = (
     Path(__file__).resolve().parent.parent / "docs" / "acceptance" / "exchange-cards"
 )
@@ -37,8 +38,9 @@ class VenueStatus:
 class PluginCatalog:
     """Reads bundle configuration and reports per-venue install status."""
 
-    def __init__(self, bundles_path: str | Path = DEFAULT_BUNDLES_PATH) -> None:
-        self._bundles_path = Path(bundles_path)
+    def __init__(self, bundles_path: str | Path | Traversable | None = None) -> None:
+        resource = DEFAULT_BUNDLES_RESOURCE if bundles_path is None else bundles_path
+        self._bundles_path = Path(resource) if isinstance(resource, str) else resource
         self._config = self._load()
 
     def _load(self) -> dict[str, Any]:

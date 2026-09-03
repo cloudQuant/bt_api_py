@@ -93,6 +93,10 @@ jobs:
           mkdir -p dist-meta
           sha256sum dist/* | tee dist-meta/SHA256SUMS.txt
 
+      - name: Verify installed wheel resource contract
+        run: |
+          python scripts/ci/verify_wheel_contract.py +            --dist-dir dist +            --receipt dist-meta/wheel-contract-receipt.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -143,6 +147,7 @@ jobs:
             --extra-index-url https://pypi.org/simple/ \
             "bt_api_py==$VERSION"
           ./.venv-smoke/bin/python -c "import bt_api_py; print('smoke OK:', bt_api_py.__version__)"
+          ./.venv-smoke/bin/python -m bt_api_py.doctor --bundle core-reference --format json
 
   publish-pypi:
     if: github.event_name == 'release'
