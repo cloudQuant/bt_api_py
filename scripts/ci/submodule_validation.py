@@ -26,6 +26,7 @@ from typing import Any
 
 DEFAULT_TIMEOUT_SECONDS = 300
 TEST_TIMEOUT_SECONDS = 600
+OFFLINE_TEST_MARKER_EXPRESSION = "not network and not integration and not performance and not e2e"
 
 
 @dataclass
@@ -179,6 +180,22 @@ def unavailable_phase(artifacts_dir: Path, package: str, phase: str, detail: str
     )
 
 
+def failed_phase(artifacts_dir: Path, package: str, phase: str, detail: str) -> PhaseResult:
+    """Record a local validation failure that has no subprocess exit code."""
+    stdout_path, stderr_path = _phase_paths(artifacts_dir, package, phase)
+    _write_log(stdout_path, "")
+    _write_log(stderr_path, detail + "\n")
+    return PhaseResult(
+        status="failed",
+        exit_code=None,
+        duration_seconds=0.0,
+        stdout_path=_relative(stdout_path, artifacts_dir),
+        stderr_path=_relative(stderr_path, artifacts_dir),
+        classification=phase,
+        detail=detail,
+    )
+
+
 def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
@@ -218,6 +235,33 @@ def _module_name(package_path: Path, package_name: str) -> str:
         except (OSError, tomllib.TOMLDecodeError):
             pass
     return package_name.replace("-", "_")
+
+
+def _offline_pytest_command(
+    isolated_python: Path,
+    package_path: Path,
+    tests_dir: Path,
+    *,
+    collect_only: bool,
+) -> list[str]:
+    """Build an isolated pytest command that cannot execute live service tests."""
+    command = [
+        str(isolated_python),
+        "-m",
+        "pytest",
+        "--confcutdir",
+        str(package_path),
+        "--disable-socket",
+        "--allow-unix-socket",
+        "tests",
+    ]
+    if (tests_dir / "network").is_dir():
+        command.append("--ignore=tests/network")
+    command.extend(["-m", OFFLINE_TEST_MARKER_EXPRESSION])
+    if collect_only:
+        command.append("--collect-only")
+    command.append("-q")
+    return command
 
 
 def validate_package(
@@ -269,7 +313,16 @@ def validate_package(
     result.environment["base_wheel"] = str(base_wheel)
 
     result.phases["base_install"] = run_phase(
-        command=[str(isolated_python), "-m", "pip", "install", "--no-deps", str(base_wheel)],
+        command=[
+            str(isolated_python),
+            "-m",
+            "pip",
+            "install",
+            str(base_wheel),
+            "pytest>=7.0",
+            "pytest-asyncio>=0.21.0",
+            "pytest-socket>=0.7.0",
+        ],
         cwd=repository_root,
         artifacts_dir=artifacts_dir,
         package=package,
@@ -280,8 +333,40 @@ def validate_package(
         result.classification = "base_install"
         return result
 
+    plugin_dist_dir = artifacts_dir / "plugin-dist" / package
+    plugin_dist_dir.mkdir(parents=True, exist_ok=True)
+    result.phases["build"] = run_phase(
+        command=[
+            str(isolated_python),
+            "-m",
+            "pip",
+            "wheel",
+            "--no-deps",
+            "--wheel-dir",
+            str(plugin_dist_dir),
+            ".",
+        ],
+        cwd=package_path,
+        artifacts_dir=artifacts_dir,
+        package=package,
+        phase="build",
+        timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
+    )
+    if result.phases["build"].status != "passed":
+        result.classification = "build"
+        return result
+    plugin_wheels = sorted(plugin_dist_dir.glob("*.whl"))
+    if not plugin_wheels:
+        result.phases["build"] = failed_phase(
+            artifacts_dir, package, "build", "wheel build completed without producing a wheel artifact"
+        )
+        result.classification = "build"
+        return result
+    plugin_wheel = plugin_wheels[-1]
+    result.environment["plugin_wheel"] = str(plugin_wheel)
+
     result.phases["install"] = run_phase(
-        command=[str(isolated_python), "-m", "pip", "install", "--no-deps", "."],
+        command=[str(isolated_python), "-m", "pip", "install", str(plugin_wheel)],
         cwd=package_path,
         artifacts_dir=artifacts_dir,
         package=package,
@@ -326,26 +411,40 @@ def validate_package(
         result.classification = "no_tests"
         return result
 
+    test_environment = {
+        "PYTHONPATH": "",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "SKIP_LIVE_TESTS": "true",
+    }
+    result.environment["test_selection"] = (
+        f"offline markers: {OFFLINE_TEST_MARKER_EXPRESSION}; "
+        "tests/network ignored when present"
+    )
+
     result.phases["collection"] = run_phase(
-        command=[str(isolated_python), "-m", "pytest", "tests", "--collect-only", "-q"],
+        command=_offline_pytest_command(
+            isolated_python, package_path, tests_dir, collect_only=True
+        ),
         cwd=package_path,
         artifacts_dir=artifacts_dir,
         package=package,
         phase="collection",
         timeout_seconds=TEST_TIMEOUT_SECONDS,
-        environment={"PYTHONPATH": ""},
+        environment=test_environment,
     )
     if result.phases["collection"].status != "passed":
         result.classification = "collection"
         return result
     result.phases["test"] = run_phase(
-        command=[str(isolated_python), "-m", "pytest", "tests", "-q"],
+        command=_offline_pytest_command(
+            isolated_python, package_path, tests_dir, collect_only=False
+        ),
         cwd=package_path,
         artifacts_dir=artifacts_dir,
         package=package,
         phase="test",
         timeout_seconds=TEST_TIMEOUT_SECONDS,
-        environment={"PYTHONPATH": ""},
+        environment=test_environment,
     )
     if result.phases["test"].status != "passed":
         result.classification = result.phases["test"].classification

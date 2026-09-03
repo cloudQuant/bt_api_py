@@ -8,7 +8,9 @@
   --artifacts-dir /private/tmp/bt-api-py-core-reference-artifacts
 ```
 
-每个插件都会使用独立 virtual environment；`bt_api_base` 先构建 wheel，再安装进每个插件环境。验证器为 `resolve`、`venv`、`base_install`、`install`、`import`、`collection`、`test` 分别保存 stdout/stderr。因此缺失子模块、构建失败、依赖冲突、导入失败、测试收集失败和测试超时是不同结论。
+每个插件都会使用独立 virtual environment；`bt_api_base` 先构建 wheel，再安装进每个插件环境。每个插件也先独立构建 wheel，再从该 wheel 安装。验证器为 `resolve`、`venv`、`base_install`、`build`、`install`、`import`、`collection`、`test` 分别保存 stdout/stderr。因此缺失子模块、构建失败、依赖冲突、导入失败、测试收集失败和测试超时是不同结论。
+
+默认测试选择是离线的：跳过 `tests/network`（如存在）与 `network`、`integration`、`performance`、`e2e` 标记，并通过 `pytest-socket` 禁用外部 socket（保留 asyncio 所需的 Unix domain socket）。这样未正确标记的网络测试会留下可诊断的失败，而不会在候选验证时向外部服务发起请求。父仓库的 `conftest.py` 也被 `--confcutdir` 隔离，子模块仅加载自身测试配置。
 
 可用 profile：
 
