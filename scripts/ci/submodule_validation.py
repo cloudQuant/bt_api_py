@@ -358,7 +358,10 @@ def validate_package(
     plugin_wheels = sorted(plugin_dist_dir.glob("*.whl"))
     if not plugin_wheels:
         result.phases["build"] = failed_phase(
-            artifacts_dir, package, "build", "wheel build completed without producing a wheel artifact"
+            artifacts_dir,
+            package,
+            "build",
+            "wheel build completed without producing a wheel artifact",
         )
         result.classification = "build"
         return result
@@ -417,8 +420,7 @@ def validate_package(
         "SKIP_LIVE_TESTS": "true",
     }
     result.environment["test_selection"] = (
-        f"offline markers: {OFFLINE_TEST_MARKER_EXPRESSION}; "
-        "tests/network ignored when present"
+        f"offline markers: {OFFLINE_TEST_MARKER_EXPRESSION}; tests/network ignored when present"
     )
 
     result.phases["collection"] = run_phase(

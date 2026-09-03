@@ -21,9 +21,11 @@ def _write_package(
     package_dir.mkdir(parents=True)
     dependency_block = ""
     if dependencies:
-        dependency_block = "dependencies = [\n" + "".join(
-            f'    "{dependency}",\n' for dependency in dependencies
-        ) + "]\n"
+        dependency_block = (
+            "dependencies = [\n"
+            + "".join(f'    "{dependency}",\n' for dependency in dependencies)
+            + "]\n"
+        )
     (package_dir / "pyproject.toml").write_text(
         f"""[build-system]
 requires = ["setuptools>=64"]
@@ -43,7 +45,9 @@ version = \"0.0.1\"
         tests_dir = package_dir / "tests"
         tests_dir.mkdir()
         imported_module = f"import {test_import}\n" if test_import else ""
-        assertion = f"    assert {test_import}\n" if test_import else "    assert pytest.__version__\n"
+        assertion = (
+            f"    assert {test_import}\n" if test_import else "    assert pytest.__version__\n"
+        )
         (tests_dir / "test_environment.py").write_text(
             "import pytest\n"
             + imported_module
