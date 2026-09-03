@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "receipt_type": "iteration-04-baseline",
+  "captured_at": "2026-09-03T03:31:18Z",
+  "repository": "cloudQuant/bt_api_py",
+  "worktree": {
+    "path": "/private/tmp/bt_api_py_iter04_impl_20260903",
+    "branch": "codex/iteration-04-runtime-contract-delivery-trust",
+    "head_sha": "fdeb6c1182d8a4be5c9c2b713bba7007f1c03fa7",
+    "upstream": "origin/dev",
+    "status_porcelain_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "submodules": {
+      "total": 60,
+      "initialized": 0,
+      "uninitialized": 60,
+      "status_sha256": "dc39b464368086ef172c6333eafdc70f02c7db5f6757bca79641dc28af44aab6"
+    }
+  },
+  "runner": {
+    "python": "Python 3.11.8",
+    "environment": "conda base",
+    "note": "The runner had an older editable bt_api_py 0.15.0 installed outside this worktree. Baseline pytest ran from the isolated source tree; wheel acceptance must use an isolated installation."
+  },
+  "commands": [
+    {
+      "name": "collect",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests --collect-only -q",
+      "exit_code": 0,
+      "summary": "640 tests collected",
+      "output_sha256": "0acd078c60524417f635a1abff1e00861cf1305b36ba97e6c53d54b02e294ef5"
+    },
+    {
+      "name": "offline-suite",
+      "command": "SKIP_LIVE_TESTS=true /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests -m 'not network and not integration and not performance and not e2e and not ctp' -q --maxfail=0",
+      "exit_code": 0,
+      "summary": "629 passed, 5 skipped, 6 deselected",
+      "output_sha256": "219f12184cec63c1e7078bb2291bf370d035420d05b6cd625b05d48b2488e5fc"
+    },
+    {
+      "name": "ruff",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff check bt_api_py tests",
+      "exit_code": 0,
+      "summary": "All checks passed",
+      "output_sha256": "98733c3446b52dc3e6b6943142b19a142025d9727521f6abc3783a20e4b6d3c6"
+    },
+    {
+      "name": "ruff-format",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff format --check bt_api_py tests",
+      "exit_code": 0,
+      "summary": "180 files already formatted",
+      "output_sha256": "db87de558ddedaff9456ae8455c45c4c3c079fc75d0c5ccd2cedbaf808b6c275"
+    },
+    {
+      "name": "mypy",
+      "command": "/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m mypy bt_api_py tests --ignore-missing-imports",
+      "exit_code": 0,
+      "summary": "Success: no issues found in 180 source files",
+      "output_sha256": "637a08b29fa43db3eed3c12d41f6a3e11d9afe7d86752efaf10cd94057ab92a1"
+    }
+  ],
+  "result": {
+    "local_baseline": "passed",
+    "release_status": "not-evaluated",
+    "limitations": [
+      "No live, network, integration, performance, e2e, or CTP tests were run.",
+      "No submodule package was initialized in this isolated worktree.",
+      "This receipt proves only the listed local commands at this SHA."
+    ]
+  }
+}
