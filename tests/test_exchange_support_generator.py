@@ -20,15 +20,16 @@ def _load_module():
     return module
 
 
-def test_renderers_use_same_exchange_counts() -> None:
+def test_renderer_uses_evidence_tiers_without_certified_exchange_counts() -> None:
     module = _load_module()
     data = module.load_data()
 
-    readme = module.render_readme(data)
-    status = module.render_status(data)
+    rendered = module.render(data)
 
-    assert f"{len(data['fully_supported'])} 个完整支持" in readme
-    assert f"| ✅ 完整支持 | {len(data['fully_supported'])} |" in status
+    assert "evidence tiers, not a count of production-ready exchanges" in rendered
+    for entry in data["entries"]:
+        assert entry["name"] in rendered
+        assert f"`{entry['tier']}`" in rendered
 
 
 def test_replace_marker_block_updates_only_target_section() -> None:
