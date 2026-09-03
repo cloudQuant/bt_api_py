@@ -1,0 +1,23 @@
+# Profiles are evidence scopes, not claims that every listed package is
+# installable or production-certified.  core-reference derives its venue list
+# from bt_api_py/configs/exchange-bundles.toml so that the doctor and CI use the
+# same declared pilot set.
+
+[profiles.core-reference]
+bundle = "core-reference"
+include_base = true
+
+[profiles.native-build]
+packages = ["bt_api_ctp", "bt_api_mt5"]
+include_base = true
+
+[profiles.external-service]
+packages = ["bt_api_binance", "bt_api_okx", "bt_api_ib_web"]
+include_base = true
+
+[profiles.experimental]
+discover_submodules = true
+include_base = true
+
+[profiles.all]
+include_profiles = ["core-reference", "native-build", "external-service", "experimental"]

@@ -5,21 +5,18 @@ on:
     branches: [dev, master, code-optimization]
     types: [opened, synchronize, reopened]
   schedule:
-    - cron: '0 18 * * *'   # 每日 UTC 18:00(北京 02:00)
+    - cron: "0 18 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  # Stable summary for every long-lived-branch PR (plan M4 step 3): reports
-  # "not-applicable" and succeeds when no gitlink/.gitmodules change is present,
-  # so the check never leaves a PR stuck on "Waiting for status".
   submodule-gate:
-    name: Submodule Gate / Summary
+    name: Submodule Gate / Core Reference
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v6
@@ -28,7 +25,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Detect submodule changes
         id: detect
@@ -36,75 +33,99 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          CHANGED=$(git diff --name-only "$BASE_SHA..$HEAD_SHA" -- .gitmodules bt_api/ || true)
-          echo "changed<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$CHANGED" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          # git diff --raw header is ":oldmode newmode oldsha newsha status";
-          # gitlinks are marked by mode 160000, which awk sees as $1/$2.
           GITLINKS=$(git diff --raw "$BASE_SHA..$HEAD_SHA" | awk '$2 == "160000"' | wc -l | tr -d ' ')
           echo "count=$GITLINKS" >> "$GITHUB_OUTPUT"
 
-      - name: Full submodule validation
+      - name: Checkout changed submodule graph
         if: steps.detect.outputs.count != '0'
         uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 1
 
-      - uses: actions/setup-python@v6
+      - name: Validate core-reference in isolated environments
+        id: validation
         if: steps.detect.outputs.count != '0'
-        with:
-          python-version: '3.11'
+        continue-on-error: true
+        run: |
+          python scripts/ci/submodule_validation.py \
+            --profile core-reference \
+            --artifacts-dir submodule-artifacts/core-reference
 
-      - name: Install and test all submodules
-        if: steps.detect.outputs.count != '0'
-        run: python bt_api/install_and_test_all.py --parallel 4 --report markdown
+      - name: Record not-applicable evidence
+        if: steps.detect.outputs.count == '0'
+        run: |
+          mkdir -p submodule-artifacts
+          printf '{"result":"not-applicable","reason":"no gitlink change"}\n' > submodule-artifacts/not-applicable.json
 
-      - uses: actions/upload-artifact@v7
-        if: steps.detect.outputs.count != '0' && always()
+      - name: Upload submodule validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
-          name: submodule-report-pr-${{ github.event.pull_request.number }}
-          path: /tmp/submodule_report.md
-          if-no-files-found: ignore
+          name: submodule-validation-pr-${{ github.event.pull_request.number }}
+          path: submodule-artifacts/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Publish gate summary
         if: always()
         run: |
           {
-            echo "## Submodule Gate / Summary"
+            echo "## Submodule Gate / Core Reference"
             echo ""
             if [ "${{ steps.detect.outputs.count }}" = "0" ]; then
-              echo "- Result: **not-applicable** (no gitlink or .gitmodules change)"
-              echo "- Submodule validation not required for this PR."
+              echo "- Result: **not-applicable** (no gitlink change)"
             else
-              echo "- Result: **validated** (${{ steps.detect.outputs.count }} gitlink change(s))"
-              echo "- Old/new SHA pairs are listed in the PR template; report artifact attached."
-              echo ""
-              echo '```'
-              echo "${{ steps.detect.outputs.changed }}"
-              echo '```'
+              echo "- Result: **${{ steps.validation.outcome }}**"
+              echo "- Evidence: JSON, JUnit, Markdown index, and per-phase logs are attached."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  submodule-matrix:
+      - name: Fail changed-submodule PR when core reference fails
+        if: steps.detect.outputs.count != '0' && steps.validation.outcome != 'success'
+        run: exit 1
+
+  submodule-diagnostic:
+    name: Submodule Diagnostic / All Profiles
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
+
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install and test all submodules
-        run: python bt_api/install_and_test_all.py --parallel 4 --report markdown
+      - name: Validate core-reference pilot
+        id: core
+        continue-on-error: true
+        run: |
+          python scripts/ci/submodule_validation.py \
+            --profile core-reference \
+            --artifacts-dir submodule-artifacts/core-reference
 
-      - uses: actions/upload-artifact@v4
+      - name: Run all-profile diagnostic evidence
+        if: always()
+        run: |
+          python scripts/ci/submodule_validation.py \
+            --profile all \
+            --diagnostic \
+            --artifacts-dir submodule-artifacts/all
+
+      - name: Upload diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
-          name: submodule-report
-          path: /tmp/submodule_report.md
+          name: submodule-validation-diagnostic-${{ github.run_id }}
+          path: submodule-artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail scheduled pilot when core reference fails
+        if: steps.core.outcome != 'success'
+        run: exit 1

@@ -158,7 +158,9 @@ jobs:
 
       - name: Verify installed wheel resource contract
         run: |
-          python scripts/ci/verify_wheel_contract.py +            --dist-dir dist +            --receipt wheel-contract-receipt.json
+          python scripts/ci/verify_wheel_contract.py \
+            --dist-dir dist \
+            --receipt wheel-contract-receipt.json
 
       - name: Archive wheel contract receipt
         if: always()
