@@ -1,61 +1,62 @@
 # 迭代 04 候选验收报告
 
-> 代码候选：`18d787bc71cc0db03cb9f6ccd7589e25e311a16f`
+> 代码候选（本地）：`9a0bb16049228da1278fe02957e9c0ff9911a0c4`
 >
 > 基线：`origin/dev@fdeb6c1182d8a4be5c9c2b713bba7007f1c03fa7`
 >
-> 取证时间：2026-09-03T06:03:21Z
+> 取证完成时间：2026-09-03T06:39:11Z
 >
 > 机器：Python 3.11.8，Conda base
 > 完整机器可读收据：`docs/acceptance/iteration-04-candidate-receipt.json`
 
 ## 结论
 
-本地实现已完成并经同一代码 SHA 验证；**严格的 T7 候选门禁为 Blocked，发布门禁也为 Blocked**。因此本报告不把任何本地绿色结果写成“已发布”“治理已完成”或“全部支持”。
+**本地代码候选和严格 T7 候选门禁均已通过；External Release Gate 仍为 Blocked。** 这只证明同一候选 SHA 的本地运行时、wheel、核心子模块、文档和严格质量门禁，不表示已发布、远端治理已完成，或 60 个子模块均已认证。
 
 | 层级 | 状态 | 含义 |
 | --- | --- | --- |
 | Local implementation | Validated | 运行时契约、wheel、核心子模块档、活跃文档和范围内质量验证均通过。 |
-| Strict T7 candidate | Blocked | 计划中要求的全量 `scripts/` Ruff 与格式命令未通过。 |
+| Strict T7 candidate | Validated | 计划指定的全量 `bt_api_py`、`tests`、`scripts` Ruff/format、mypy、测试、wheel、core-reference 和文档命令均返回 0。 |
+| Community PR landing | Blocked | 四个子模块 gitlink 所引用的提交仍只存在于本地嵌套仓库，不能作为远端可克隆的 parent PR。 |
 | External Release Gate | Blocked | 远端规则、环境、真实 PR/CI/审查和发布取证尚不存在。 |
 
 ## 已通过的本地证据
 
 | 项目 | 结果 |
 | --- | --- |
-| 主仓收集 | 682 项测试被收集。 |
-| 离线完整套件 | 671 passed、5 skipped、6 deselected；网络、集成、性能、e2e 与 CTP 按计划排除。 |
-| 传输定向覆盖率 | 105 passed；四个关键模块行覆盖率为 93.33%、100.00%、88.53%、89.62%，均不低于 85%。 |
-| 范围内静态质量 | `bt_api_py`、`tests`、`scripts/ci`、本迭代生成器及子模块入口的 Ruff/format 通过；mypy 为 189 个源文件通过。 |
+| 主仓收集 | 688 项测试被收集。 |
+| 完整离线套件 | `SKIP_LIVE_TESTS=true pytest tests -q` 为 683 passed、5 skipped。 |
+| T7 标记离线套件 | 677 passed、5 skipped、6 deselected；网络、集成、性能、e2e 与 CTP 按计划排除。 |
+| 传输定向覆盖率 | 105 passed；四个关键模块的行覆盖率为 93.33%、100.00%、88.53%、89.62%，均不低于 85%。pytest-cov 的含分支展示覆盖率为 86.15%。 |
+| 严格静态质量 | `ruff check bt_api_py tests scripts`、`ruff format --check bt_api_py tests scripts` 均通过；mypy 为 190 个源文件通过。 |
+| 旧脚本修复 | 六个无法解析的历史生成器保留原入口，但改为明确、可测试的退役迁移提示；版本批处理要求显式 `--dry-run` 或 `--apply`，IBKR cookie 工具不再关闭 TLS 验证。 |
 | wheel 契约 | 已安装 wheel 的资源、sdist 资源、源资源哈希一致；`doctor --bundle core-reference --format json` 成功。详见 `docs/acceptance/iteration-04-wheel-receipt.json`。 |
 | 发布工作流回归 | `publish.yml` 中的 wheel 校验命令已被 YAML 解析和 `tests/test_package_resources.py` 覆盖，防止参数折叠或字面量 `+` 回归。 |
-| 核心子模块档 | base、Binance、OKX、CTP 各自在干净虚拟环境中构建 wheel、安装、导入、收集和离线测试，4/4 通过。工件位于 `/private/tmp/bt-api-py-iteration04-core-reference-18d-LZxUie`。 |
+| 核心子模块档 | base、Binance、OKX、CTP 各自在干净虚拟环境中构建 wheel、安装、导入、收集和离线测试，4/4 通过；每阶段 stdout/stderr 均存在。工件位于 `/private/tmp/bt-api-py-iteration04-core-reference-9a0bb160-v3`。 |
 | 支持文档 | 支持状态生成器检查、文档契约和严格 MkDocs 构建均成功。MkDocs 仅给出上游兼容性迁移提示，命令退出码为 0。 |
 
-## 严格候选阻塞项
+## 严格 T7 候选门禁（已通过）
 
-### 1. 全量旧脚本质量门禁
-
-计划的以下两条命令在该 SHA 上失败：
+以下命令均在上述本地候选 SHA 上返回 0：
 
 ~~~bash
+/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests --collect-only -q
+SKIP_LIVE_TESTS=true /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests -m "not network and not integration and not performance and not e2e and not ctp" -q --maxfail=0
+SKIP_LIVE_TESTS=true /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m pytest tests/bt_api_contract tests/forwarding --cov=bt_api_py.bt_api --cov=bt_api_py._direct_backend --cov=bt_api_py._operation_backend --cov=bt_api_py.forwarding.btapi_backend --cov-report=term-missing -q
 /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff check bt_api_py tests scripts
 /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff format --check bt_api_py tests scripts
+/Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m mypy bt_api_py tests --ignore-missing-imports
 ~~~
 
-- 第一条返回 1，报告 **2,215** 项发现，其中 229 项可用安全修复自动处理。
-- 第二条返回 2：三个历史脚本无法被解析，另有 **16** 个文件需要格式化。
-- 本迭代触及的 Python 范围已通过补充范围检查；但该结果不能替代计划要求的全量命令。因此不应降低为“候选通过”。
+为避免通过配置排除来掩盖旧脚本问题，本次没有修改 Ruff 排除规则。历史入口的退役行为已加入 `tests/scripts/test_legacy_generator_retirement.py`，全量 `scripts/` 目录可以被解析、检查和格式化。
 
-建议新开一个仅处理旧 `scripts/` 的质量迭代：先修复三个语法错误，再以固定 Ruff 配置分批清理，最后将这两条精确命令纳入绿色基线。不要通过在 Ruff 配置中排除旧脚本来掩盖此门禁。
-
-### 2. 全量子模块是完整诊断，不是全量认证
+## 全量子模块是完整诊断，不是全量认证
 
 `--profile all --diagnostic` 生成了 60 个包的日志和分类：4 个通过、56 个 `unavailable`、0 个 `failed`。其 JSON 结果为 `failed`，原因是未初始化模块不具备可验证源，而不是任何包的测试失败。
 
-这符合“不得把 0/60 或缺日志说成支持”的设计，但也意味着 56 个包只能保持 unverified/experimental，不能升级为 fully supported 或 certified。工件位于 `/private/tmp/bt-api-py-iteration04-all-diagnostic-18d-y3ptCl`。
+这符合“不得把 0/60 或缺日志说成支持”的设计，但也意味着 56 个包只能保持 unverified/experimental，不能升级为 fully supported 或 certified。工件位于 `/private/tmp/bt-api-py-iteration04-all-diagnostic-9a0bb160-v3`，并已验证每个记录的日志路径均存在。
 
-### 3. 子模块提交尚未可被远端解析
+## 子模块提交尚未可被远端解析
 
 本地核心验证依赖四个任务拥有的子模块提交：
 
@@ -70,7 +71,7 @@
 
 ## 外部发布门禁复核
 
-2026-09-03T05:53:43Z 对 GitHub 执行了只读复核：默认分支是 `dev`，但 rulesets 为空、`dev`/`master` 均未保护、仅存在 `github-pages` environment、PVR 未启用、没有开放 PR。详见 `docs/governance/evidence/iteration-04-external-gate.md` 和 `docs/operations/iteration-04-handoff.md`。
+2026-09-03T06:39:11Z 对 GitHub 执行了只读复核：默认分支是 `dev`，但 rulesets 为空、`dev`/`master` 均未保护、仅存在 `github-pages` environment、PVR 未启用、没有开放 PR。详见 `docs/governance/evidence/iteration-04-external-gate.md` 和 `docs/operations/iteration-04-handoff.md`。
 
 没有执行 push、创建 PR、修改 ruleset、environment、PVR 或发布操作。
 
@@ -80,4 +81,4 @@
 
 ## 后续决策
 
-在修复旧脚本质量门禁、独立落地子模块提交、创建实际 PR 并由管理员完成外部门禁前，候选应保持 **Blocked**。本地实现无需回滚；如任一拆分 PR 需要撤销，应使用对应提交的 `git revert`，而不是重置用户工作区。
+本地候选无需回滚。获得授权后，应先独立落地四个子模块提交、为 56 个 unavailable 模块建立可复现源与问题跟踪，再创建拆分 PR 并完成管理员治理和发布环境门禁。此前状态应保持 **Local Candidate**，不得标记为 Released 或 Governance Complete。

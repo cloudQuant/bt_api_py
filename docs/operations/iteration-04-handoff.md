@@ -2,23 +2,16 @@
 
 ## 当前可交接状态
 
-- 本地代码候选：`18d787bc71cc0db03cb9f6ccd7589e25e311a16f`。
+- 本地代码候选：`9a0bb16049228da1278fe02957e9c0ff9911a0c4`。
 - 本地实现证据：`docs/acceptance/iteration-04-candidate-receipt.json`、`docs/acceptance/iteration-04-candidate-report.md`、`docs/acceptance/iteration-04-wheel-receipt.json`。
-- 结论：运行时/交付物/核心子模块/文档本地验证通过；严格 T7 候选和 External Release Gate 均为 **Blocked**。
+- 结论：运行时/交付物/核心子模块/文档与严格 T7 本地候选均已验证；External Release Gate 为 **Blocked**，且四个本地子模块提交尚不能作为远端可克隆 gitlink 使用。
 - 未执行任何远端写操作：没有 push、PR、ruleset、branch protection、environment、PVR、TestPyPI 或 PyPI 发布。
 
-## 必须先完成的本地/上游工程工作
+## 必须先完成的上游工程工作
 
-1. 建立一个只处理 `scripts/` 的质量迭代，使下列精确命令均返回 0：
+全量 `ruff check bt_api_py tests scripts`、`ruff format --check bt_api_py tests scripts` 已在本地候选上通过；没有通过新增忽略规则来掩盖旧脚本问题。
 
-   ~~~bash
-   /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff check bt_api_py tests scripts
-   /Users/yunjinqi/opt/anaconda3/bin/conda run -n base python -m ruff format --check bt_api_py tests scripts
-   ~~~
-
-   当前基线为 2,215 个 Ruff 发现、3 个解析错误和 16 个待格式化文件。先修语法错误，再按可审查的小批次修复；不要通过排除规则隐藏。
-
-2. 在四个子模块上游仓库独立落地本地提交，然后读回远端 SHA：
+1. 在四个子模块上游仓库独立落地本地提交，然后读回远端 SHA：
 
    | 仓库 | 本地提交 | 发布/版本注意事项 |
    | --- | --- | --- |
@@ -27,9 +20,9 @@
    | bt_api_okx | `91027d1` | 真实网络探测已标记；发布前核对 pyproject、模块和发布版本的一致性。 |
    | bt_api_ctp | `5686d3f` | CTP bar 时间字段修复；发布前核对源码/标签版本一致性。 |
 
-3. 仅在四个 SHA 都可远端 fetch 后，创建单独的 parent gitlink bump PR；不要先 push 一个引用不可达子模块提交的父仓库分支。
+2. 仅在四个 SHA 都可远端 fetch 后，创建单独的 parent gitlink bump PR；不要先 push 一个引用不可达子模块提交的父仓库分支。
 
-4. 对 56 个 unavailable 子模块分批初始化并运行 `--profile all --diagnostic`。每个真实失败都应有 issue/PR、阶段日志和明确的 unverified/experimental 状态；在连续完整绿色基线前，all-profile 保持 scheduled diagnostic。
+3. 对 56 个 unavailable 子模块分批初始化并运行 `--profile all --diagnostic`。每个真实失败都应有 issue/PR、阶段日志和明确的 unverified/experimental 状态；在连续完整绿色基线前，all-profile 保持 scheduled diagnostic。
 
 ## 仓库管理员待办
 

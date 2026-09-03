@@ -22,6 +22,14 @@
 
 再次执行本文列出的只读 GitHub 命令，结果未发生改善：默认分支仍为 `dev`；rulesets 仍为空；`dev` 与 `master` 均为 `protected=false`；environment 仍只有 `github-pages`；PVR 仍为 `enabled=false`；开放 PR 仍为空。没有进行任何远端写操作。
 
+## 严格 T7 后最终只读复核
+
+> 复核时间：2026-09-03T06:39:11Z
+
+在本地严格 T7 候选通过后，重新执行同一组只读 GitHub 命令。远端状态仍未改变：默认分支为 `dev`；rulesets 为空；`dev` 与 `master` 均为 `protected=false`；environment 仍只有 `github-pages`；PVR 为 `enabled=false`；开放 PR 为 0。没有进行任何远端写操作。
+
+该结果使本地候选保持 `Validated`，但使 Community PR landing 和 External Release Gate 保持 `Blocked`；它绝不构成发布、远端治理或托管 CI 成功证据。
+
 ## 迭代 03 修正提交
 
 本地提交 7d5db275（fix(governance): correct iteration 03 acceptance gates）尚未位于 origin/dev。它应作为普通 dev PR 的候选，独立审查并在合入后重新执行治理验收；在此之前不得把其本地测试结果写成远端治理已完成。

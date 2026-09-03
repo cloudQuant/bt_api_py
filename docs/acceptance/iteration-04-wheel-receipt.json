@@ -46,15 +46,15 @@
     "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "stdout_sha256": "382cc1dd841530272ce9facefedbb5993e8611353ccbed723d468ce1f5b20571"
   },
-  "generated_at": "2026-09-03T05:57:57.016618Z",
-  "head_sha": "18d787bc71cc0db03cb9f6ccd7589e25e311a16f",
-  "package_file": "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-ntmmzkk3/venv/lib/python3.11/site-packages/bt_api_py/__init__.py",
+  "generated_at": "2026-09-03T06:31:57.714717Z",
+  "head_sha": "9a0bb16049228da1278fe02957e9c0ff9911a0c4",
+  "package_file": "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-d0pqcl4i/venv/lib/python3.11/site-packages/bt_api_py/__init__.py",
   "probe": {
     "bundles": [
       "core-reference"
     ],
-    "package_file": "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-ntmmzkk3/venv/lib/python3.11/site-packages/bt_api_py/__init__.py",
-    "resource": "/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-ntmmzkk3/venv/lib/python3.11/site-packages/bt_api_py/configs/exchange-bundles.toml",
+    "package_file": "/private/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-d0pqcl4i/venv/lib/python3.11/site-packages/bt_api_py/__init__.py",
+    "resource": "/var/folders/7d/hnmknylj1w91h3cvq6mh3thm0000gn/T/bt-api-py-wheel-contract-d0pqcl4i/venv/lib/python3.11/site-packages/bt_api_py/configs/exchange-bundles.toml",
     "resource_is_file": true
   },
   "resource_sha256": {
@@ -66,10 +66,10 @@
   "schema_version": 1,
   "sdist": {
     "path": "bt_api_py-0.15.3.tar.gz",
-    "sha256": "f1ea57c307120b0b6e2801d47233eba1849bb6a795b39017df5f291a3a2435a8"
+    "sha256": "84197ef2eb95e421d28f23c4402f7df0a3a8519c0398d8096d48b6a54f14db47"
   },
   "wheel": {
     "path": "bt_api_py-0.15.3-py3-none-any.whl",
-    "sha256": "c9bc5f23ad2e8e01a637714740dc4d54163987216782d100b53d01a606234baf"
+    "sha256": "f241e67af6e28283931262eb74bf157f901a487ecdff2698a538b624ef80ab91"
   }
 }
