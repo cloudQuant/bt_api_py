@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Diagnostic script: check OKX spot open orders, positions, and account balance."""
 
 import queue
@@ -6,8 +5,8 @@ import sys
 
 sys.path.insert(0, ".")
 
-from bt_api_py.functions.utils import read_account_config
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
+from bt_api_py.functions.utils import read_account_config
 
 
 def init_feed():
@@ -105,7 +104,7 @@ def main():
         print("\n" + "=" * 60)
         print("4. CANCELLING ALL OPEN ORDERS")
         print("=" * 60)
-        for i, order in enumerate(order_list):
+        for order in order_list:
             od = order.init_data()
             order_id = od.get_order_id()
             symbol = od.get_symbol_name()

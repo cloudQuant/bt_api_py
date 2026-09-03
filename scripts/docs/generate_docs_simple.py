@@ -68,13 +68,13 @@ class SimpleBot:
                 "testnet": True
             }
         })
-        
+
     async def run(self):
         # Monitor price and place orders
         async for ticker in self.api.stream_ticker("BINANCE___SPOT", "BTCUSDT"):
             ticker.init_data()
             price = ticker.get_last_price()
-            
+
             # Simple strategy: buy on dip
             if price < 45000:
                 order = await self.api.async_make_order(
@@ -125,7 +125,7 @@ This guide covers common patterns for using bt_api_py effectively.
 class TradingApp:
     def __init__(self):
         self.api = BtApi(exchange_kwargs=config)
-        
+
     def get_price(self, symbol):
         ticker = self.api.get_tick("BINANCE___SPOT", symbol)
         return ticker.get_last_price()
@@ -164,7 +164,7 @@ def safe_place_order(symbol, volume, price):
         )
         print(f"Order placed: {order.get_order_id()}")
         return order
-        
+
     except InsufficientBalanceError:
         print("Insufficient balance")
     except OrderError as e:
@@ -185,14 +185,14 @@ from bt_api_py import BtApi
 async def process_multiple_symbols():
     api = BtApi()
     symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"]
-    
+
     # Process symbols concurrently
     tasks = [
-        api.async_get_tick("BINANCE___SPOT", symbol) 
+        api.async_get_tick("BINANCE___SPOT", symbol)
         for symbol in symbols
     ]
     tickers = await asyncio.gather(*tasks)
-    
+
     for symbol, ticker in zip(symbols, tickers):
         ticker.init_data()
         print(f"{symbol}: ${ticker.get_last_price():.2f}")
@@ -206,18 +206,18 @@ asyncio.run(process_multiple_symbols())
 ```python
 async def stream_data():
     api = BtApi()
-    
+
     async def process_ticker():
         async for ticker in api.stream_ticker("BINANCE___SPOT", "BTCUSDT"):
             ticker.init_data()
             print(f"Price: ${ticker.get_last_price():.2f}")
-    
+
     async def process_depth():
         async for depth in api.stream_depth("BINANCE___SPOT", "BTCUSDT"):
             depth.init_data()
             if depth.get_bids():
                 print(f"Bid: ${depth.get_bids()[0][0]:.2f}")
-    
+
     # Run multiple streams
     await asyncio.gather(
         process_ticker(),

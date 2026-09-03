@@ -116,7 +116,7 @@ def extract_content_as_markdown(page):
             }
             return out;
         }
-        
+
         function listToMd(el, indent) {
             indent = indent || 0;
             const ordered = el.tagName.toLowerCase() === 'ol';
@@ -164,7 +164,7 @@ def extract_content_as_markdown(page):
             }
             return lines.join('\\n');
         }
-        
+
         function tableToMd(table) {
             const rows = [];
             for (const tr of table.querySelectorAll('tr')) {
@@ -185,7 +185,7 @@ def extract_content_as_markdown(page):
             }
             return '\\n' + lines.join('\\n') + '\\n';
         }
-        
+
         function convertToMd(el) {
             let lines = [];
             for (const child of el.childNodes) {
@@ -196,7 +196,7 @@ def extract_content_as_markdown(page):
                 }
                 if (child.nodeType !== 1) continue;
                 const tag = child.tagName.toLowerCase();
-                
+
                 if (/^h[1-6]$/.test(tag)) {
                     const level = parseInt(tag[1]);
                     let text = child.textContent.trim();
@@ -256,17 +256,17 @@ def extract_content_as_markdown(page):
             }
             return lines.join('\\n');
         }
-        
+
         // Find the article element
         const article = document.querySelector('article');
         if (!article) return '';
-        
+
         // Remove navigation elements (breadcrumbs, pagination)
         article.querySelectorAll('nav').forEach(n => n.remove());
-        
+
         // Get the content div (usually the second child after breadcrumbs)
         const contentDiv = article.querySelector('.markdown, [class*="docItemContent"], [class*="mdxContent"]') || article;
-        
+
         return convertToMd(contentDiv);
     }""")
 

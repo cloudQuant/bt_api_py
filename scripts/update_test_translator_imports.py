@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """更新测试文件中的 translator import"""
-import re
+
 from pathlib import Path
 
 root = Path("/Users/yunjinqi/Documents/new_projects/bt_api_py")
@@ -35,14 +35,15 @@ exchange_translators = {
     "yobit": "bt_api_yobit",
 }
 
+
 def update_file(filepath: Path) -> bool:
     try:
-        content = filepath.read_text(encoding='utf-8')
+        content = filepath.read_text(encoding="utf-8")
     except Exception:
         return False
-    
+
     original = content
-    
+
     for ex, pkg in exchange_translators.items():
         # 处理不同的大小写形式
         translator_class = f"{ex.replace('_', '').title()}ErrorTranslator"
@@ -57,23 +58,26 @@ def update_file(filepath: Path) -> bool:
             translator_class = "CTPErrorTranslator"
         else:
             translator_class = "".join(word.title() for word in ex.split("_")) + "ErrorTranslator"
-        
+
         # 替换 import 语句
         # from bt_api_py.errors.{ex}_translator import {TranslatorClass}
         old_import = f"from bt_api_py.errors.{ex}_translator import {translator_class}"
         new_import = f"from {pkg}.errors.{ex}_translator import {translator_class}"
         content = content.replace(old_import, new_import)
-        
+
         # 处理 bitfinex 特殊文件名
         if ex == "bitfinex":
-            old_import2 = f"from bt_api_py.errors.bitfinex_error_translator import {translator_class}"
+            old_import2 = (
+                f"from bt_api_py.errors.bitfinex_error_translator import {translator_class}"
+            )
             new_import2 = f"from {pkg}.errors.bitfinex_translator import {translator_class}"
             content = content.replace(old_import2, new_import2)
-    
+
     if content != original:
-        filepath.write_text(content, encoding='utf-8')
+        filepath.write_text(content, encoding="utf-8")
         return True
     return False
+
 
 # 处理 tests/errors 目录
 errors_dir = root / "tests/errors"

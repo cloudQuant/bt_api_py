@@ -6,7 +6,6 @@
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Tuple
 
 
 def should_skip(path: Path) -> bool:
@@ -38,13 +37,10 @@ def should_skip(path: Path) -> bool:
     }
 
     # 检查路径的任何部分是否在跳过列表中
-    for part in path.parts:
-        if part in skip_dirs or part.startswith("."):
-            return True
-    return False
+    return any(part in skip_dirs or part.startswith(".") for part in path.parts)
 
 
-def count_lines(file_path: Path) -> Tuple[int, int, int]:
+def count_lines(file_path: Path) -> tuple[int, int, int]:
     """
     统计文件行数
     返回: (总行数, 代码行数, 空行数)
@@ -61,7 +57,7 @@ def count_lines(file_path: Path) -> Tuple[int, int, int]:
         return 0, 0, 0
 
 
-def analyze_project(root_dir: str = ".") -> Dict:
+def analyze_project(root_dir: str = ".") -> dict:
     """分析项目代码行数"""
     root_path = Path(root_dir).resolve()
 
@@ -129,10 +125,7 @@ def analyze_project(root_dir: str = ".") -> Dict:
 
         # 按目录统计
         rel_path = file_path.relative_to(root_path)
-        if len(rel_path.parts) > 1:
-            top_dir = rel_path.parts[0]
-        else:
-            top_dir = "(root)"
+        top_dir = rel_path.parts[0] if len(rel_path.parts) > 1 else "(root)"
 
         stats["by_directory"][top_dir]["files"] += 1
         stats["by_directory"][top_dir]["total"] += total
@@ -148,7 +141,7 @@ def analyze_project(root_dir: str = ".") -> Dict:
     return stats
 
 
-def print_stats(stats: Dict):
+def print_stats(stats: dict):
     """打印统计结果"""
     print("=" * 80)
     print("代码行数统计报告")

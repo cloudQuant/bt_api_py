@@ -136,7 +136,15 @@ def render_docs_index(data: dict) -> str:
     summary = data["summary"]
 
     full_rows = [
-        [f"**{item['name']}**", item["codes"], item["spot"], item["contract"], item["options"], item["stocks"], item["test_status"]]
+        [
+            f"**{item['name']}**",
+            item["codes"],
+            item["spot"],
+            item["contract"],
+            item["options"],
+            item["stocks"],
+            item["test_status"],
+        ]
         for item in full
     ]
     implemented_groups = _group_implemented_api(implemented)
@@ -144,7 +152,9 @@ def render_docs_index(data: dict) -> str:
         [
             "### ✅ 已完整支持（REST + WebSocket + 测试通过）",
             "",
-            _render_table(["交易所", "代码", "现货", "合约", "期权", "股票", "测试状态"], full_rows),
+            _render_table(
+                ["交易所", "代码", "现货", "合约", "期权", "股票", "测试状态"], full_rows
+            ),
             "",
             "### 🔧 已实现 API（按当前主要缺口分组）",
             "",
@@ -242,9 +252,17 @@ def render_status(data: dict) -> str:
                 ["状态", "数量", "说明"],
                 [
                     ["✅ 完整支持", str(len(full)), "REST、WebSocket 和测试资产均已具备"],
-                    ["🔧 已实现 API", str(len(implemented)), "已有实现，但仍需继续验证、补测试或补 WebSocket 能力"],
-                    ["📋 已注册", summary["framework_ready_label"], "已注册或基础框架接入，等待继续完善"],
-                    ["总计", summary["total_supported_label"], "当前仓库对外声明支持的交易所总量"]
+                    [
+                        "🔧 已实现 API",
+                        str(len(implemented)),
+                        "已有实现，但仍需继续验证、补测试或补 WebSocket 能力",
+                    ],
+                    [
+                        "📋 已注册",
+                        summary["framework_ready_label"],
+                        "已注册或基础框架接入，等待继续完善",
+                    ],
+                    ["总计", summary["total_supported_label"], "当前仓库对外声明支持的交易所总量"],
                 ],
             ),
             "",
@@ -277,7 +295,9 @@ def replace_marker_block(text: str, marker: str, body: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="Fail if generated content is out of date.")
+    parser.add_argument(
+        "--check", action="store_true", help="Fail if generated content is out of date."
+    )
     args = parser.parse_args()
 
     data = load_data()

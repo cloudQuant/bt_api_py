@@ -3,13 +3,11 @@
 
 import os
 import re
-from pathlib import Path
-from typing import Dict, List, Tuple
 
 
-def analyze_file_quality(file_path: str) -> Dict:
+def analyze_file_quality(file_path: str) -> dict:
     """分析单个文件的质量指标"""
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         content = f.read()
 
     total_lines = len(content.split("\n"))
@@ -52,7 +50,7 @@ def analyze_file_quality(file_path: str) -> Dict:
     }
 
 
-def find_python_files(root_dir: str) -> List[str]:
+def find_python_files(root_dir: str) -> list[str]:
     """找出所有Python文件"""
     python_files = []
     for root, dirs, files in os.walk(root_dir):
@@ -111,16 +109,16 @@ def main():
     # 将完整列表保存到文件
     output_file = "/Users/yunjinqi/Documents/source_code/bt_api_py/code_quality_analysis.txt"
     with open(output_file, "w", encoding="utf-8") as f:
-        f.write(f"代码质量分析报告\n")
+        f.write("代码质量分析报告\n")
         f.write(f"{'=' * 80}\n\n")
         f.write(f"总文件数: {len(results)}\n")
         f.write(f"需要改进的文件数: {len(low_quality_files)}\n\n")
 
-        f.write(f"\n按目录分组的文件分布:\n")
+        f.write("\n按目录分组的文件分布:\n")
         for dir_name in sorted(dir_groups.keys(), key=lambda x: len(dir_groups[x]), reverse=True):
             f.write(f"{dir_name}: {len(dir_groups[dir_name])} 个文件\n")
 
-        f.write(f"\n\n需要改进的文件列表:\n")
+        f.write("\n\n需要改进的文件列表:\n")
         for i, result in enumerate(low_quality_files, 1):
             rel_path = os.path.relpath(result["file_path"], root_dir)
             f.write(f"{i:3d}. {rel_path}\n")

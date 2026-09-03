@@ -12,14 +12,13 @@ import signal
 import sys
 from pathlib import Path
 
-from bt_api_py.monitoring.config import (
-    setup_monitoring,
-    MonitoringConfig,
-    PRODUCTION_CONFIG,
-    DEVELOPMENT_CONFIG,
-    TESTING_CONFIG,
-)
 from bt_api_py.monitoring import get_logger
+from bt_api_py.monitoring.config import (
+    DEVELOPMENT_CONFIG,
+    PRODUCTION_CONFIG,
+    TESTING_CONFIG,
+    setup_monitoring,
+)
 
 
 async def main() -> None:
@@ -93,7 +92,7 @@ async def main() -> None:
         )
 
         if config.elk_enabled:
-            logger.info(f"ELK stack integration enabled")
+            logger.info("ELK stack integration enabled")
             logger.info(f"Elasticsearch: {config.elasticsearch_host}:{config.elasticsearch_port}")
             logger.info(f"Logstash: {config.logstash_host}:{config.logstash_port}")
 

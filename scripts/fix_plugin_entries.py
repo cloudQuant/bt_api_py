@@ -79,9 +79,7 @@ def register_module(register_file: Path, pkg_name: str) -> str:
 
 def generate_plugin_py(pkg_dir: Path, pkg_name: str, info: dict) -> str:
     """生成 register_plugin 格式的 plugin.py。"""
-    version_line = (
-        f"from {pkg_name} import __version__\n" if has_version(pkg_dir, pkg_name) else ""
-    )
+    version_line = f"from {pkg_name} import __version__\n" if has_version(pkg_dir, pkg_name) else ""
     call = f"{info['func_name']}(registry)" if info["takes_registry"] else f"{info['func_name']}()"
     version_field = "__version__" if version_line else '"0.1.0"'
     reg_mod = info["reg_module"]

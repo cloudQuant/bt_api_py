@@ -156,9 +156,8 @@ def classify_class(name: str) -> str:
         "BatchOrder",
     )
     _risk_keywords_excl = ("Margin", "Commission", "TradingRight", "OrderComm")
-    if any(kw in s for kw in _order_keywords):
-        if not any(kw in s for kw in _risk_keywords_excl):
-            return "ctp_structs_order"
+    if any(kw in s for kw in _order_keywords) and not any(kw in s for kw in _risk_keywords_excl):
+        return "ctp_structs_order"
 
     # ---- 6. 成交相关 (精确后缀匹配) ----
     if s in ("TradeField", "TradeParamField"):
@@ -201,9 +200,8 @@ def classify_class(name: str) -> str:
         "ExchangeOption",
         "ExchangeComb",
     )
-    if any(kw in s for kw in _market_keywords):
-        if not any(kw in s for kw in _market_excl):
-            return "ctp_structs_market"
+    if any(kw in s for kw in _market_keywords) and not any(kw in s for kw in _market_excl):
+        return "ctp_structs_market"
 
     # ---- 10. 风控/保证金/手续费 ----
     _risk_keywords = (
@@ -239,7 +237,7 @@ def parse_ctp_py(ctp_py_path: str):
         constant_names: list[str] — 常量名列表
         class_names:    list[str] — 类名列表 (保持原始顺序)
     """
-    with open(ctp_py_path, "r", encoding="utf-8") as f:
+    with open(ctp_py_path, encoding="utf-8") as f:
         lines = f.readlines()
 
     # ---- 找到三个区域的边界 ----
@@ -363,10 +361,7 @@ def generate_base_module(preamble_code: str, output_dir: str, dry_run: bool = Fa
         )
 
     # Construct the final content
-    if import_lines:
-        restored_imports = "\n".join(import_lines) + "\n\n"
-    else:
-        restored_imports = ""
+    restored_imports = "\n".join(import_lines) + "\n\n" if import_lines else ""
 
     content = (
         _AUTO_GEN_HEADER
@@ -506,7 +501,7 @@ def cleanup_old_files(output_dir):
     for mod_name in _ALL_GENERATED_FILES:
         filepath = os.path.join(output_dir, f"{mod_name}.py")
         if os.path.exists(filepath):
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, encoding="utf-8") as f:
                 first_line = f.readline()
             if _AUTO_GEN_HEADER.strip() in first_line:
                 os.remove(filepath)
@@ -514,7 +509,7 @@ def cleanup_old_files(output_dir):
     # ctp.py 兼容垫片
     ctp_py = os.path.join(output_dir, "ctp.py")
     if os.path.exists(ctp_py):
-        with open(ctp_py, "r", encoding="utf-8") as f:
+        with open(ctp_py, encoding="utf-8") as f:
             first_line = f.readline()
         if _AUTO_GEN_HEADER.strip() in first_line:
             os.remove(ctp_py)
@@ -550,10 +545,10 @@ def split_ctp_wrapper(ctp_py_path=None, output_dir=None, dry_run=False):
         return False
 
     # 如果 ctp.py 已经是兼容垫片，则跳过
-    with open(ctp_py_path, "r", encoding="utf-8") as f:
+    with open(ctp_py_path, encoding="utf-8") as f:
         head = f.readline()
     if _AUTO_GEN_HEADER.strip() in head:
-        print(f"CTP wrapper already split (ctp.py is compat shim), skipping")
+        print("CTP wrapper already split (ctp.py is compat shim), skipping")
         return True
 
     print(f"Splitting CTP wrapper: {ctp_py_path}")

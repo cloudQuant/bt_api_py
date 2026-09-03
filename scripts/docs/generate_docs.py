@@ -27,7 +27,20 @@ EXCHANGE_INFO = {
 - 实时行情、订单簿和交易数据
 - 订单下达和管理
 - 账户余额和持仓跟踪""",
-        "containers": ["accounts", "balances", "bars", "fundingrates", "incomes", "markprices", "orderbooks", "orders", "positions", "symbols", "tickers", "trades"],
+        "containers": [
+            "accounts",
+            "balances",
+            "bars",
+            "fundingrates",
+            "incomes",
+            "markprices",
+            "orderbooks",
+            "orders",
+            "positions",
+            "symbols",
+            "tickers",
+            "trades",
+        ],
         "base_version": "0.15",
     },
     "bt_api_okx": {
@@ -46,7 +59,25 @@ EXCHANGE_INFO = {
 - 资金费率和平局价格数据
 - 强平警告
 - 账户希腊值跟踪""",
-        "containers": ["accounts", "assets", "balances", "bars", "exchanges", "fundingrates", "greeks", "liquidations", "markprices", "openinterests", "orderbooks", "orders", "positions", "pricelimits", "symbols", "tickers", "trades"],
+        "containers": [
+            "accounts",
+            "assets",
+            "balances",
+            "bars",
+            "exchanges",
+            "fundingrates",
+            "greeks",
+            "liquidations",
+            "markprices",
+            "openinterests",
+            "orderbooks",
+            "orders",
+            "positions",
+            "pricelimits",
+            "symbols",
+            "tickers",
+            "trades",
+        ],
         "base_version": "0.15",
     },
     "bt_api_gemini": {
@@ -184,6 +215,7 @@ EXCHANGE_INFO = {
     },
 }
 
+
 def get_default_info(pkg_name: str) -> dict:
     """Get default info for packages not in EXCHANGE_INFO."""
     name = pkg_name.replace("bt_api_", "").upper()
@@ -205,6 +237,7 @@ def get_default_info(pkg_name: str) -> dict:
         "base_version": "0.15",
     }
 
+
 def get_supported_ops(containers: list) -> str:
     """Generate supported operations table."""
     ops = [
@@ -218,15 +251,16 @@ def get_supported_ops(containers: list) -> str:
     ]
     return "\n".join([f"| {op} | {'✅' if supported else '🚧'} |" for op, supported in ops])
 
+
 def generate_readme(pkg_name: str, info: dict) -> str:
     """Generate README.md content."""
-    pkg_short = pkg_name.replace("bt_api_", "")
+    pkg_name.replace("bt_api_", "")
     docs_slug = pkg_name.replace("_", "-")
     supported_ops = get_supported_ops(info["containers"])
 
-    return f"""# {info['name']}
+    return f"""# {info["name"]}
 
-{exchange_description(info['name'])}
+{exchange_description(info["name"])}
 
 [![PyPI Version](https://img.shields.io/pypi/v/{pkg_name}.svg)](https://pypi.org/project/{pkg_name}/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/{pkg_name}.svg)](https://pypi.org/project/{pkg_name}/)
@@ -240,11 +274,11 @@ def generate_readme(pkg_name: str, info: dict) -> str:
 
 ### Overview
 
-This package provides **{info['description_en']}** for the [bt_api](https://github.com/cloudQuant/bt_api_py) framework. It offers a unified interface for interacting with **{info['name']}** exchange.
+This package provides **{info["description_en"]}** for the [bt_api](https://github.com/cloudQuant/bt_api_py) framework. It offers a unified interface for interacting with **{info["name"]}** exchange.
 
 ### Features
 
-{info['features_en']}
+{info["features_en"]}
 
 ### Installation
 
@@ -263,13 +297,13 @@ pip install -e .
 ### Quick Start
 
 ```python
-from {pkg_name} import {info['import_class']}
+from {pkg_name} import {info["import_class"]}
 
 # Initialize
-feed = {info['import_class']}(api_key="your_key", secret="your_secret")
+feed = {info["import_class"]}(api_key="your_key", secret="your_secret")
 
 # Get ticker data
-ticker = feed.get_ticker("{info['symbol_example']}")
+ticker = feed.get_ticker("{info["symbol_example"]}")
 print(ticker)
 ```
 
@@ -291,7 +325,7 @@ print(ticker)
 ### Requirements
 
 - Python 3.9+
-- bt_api_base >= {info['base_version']}
+- bt_api_base >= {info["base_version"]}
 
 ### Architecture
 
@@ -321,11 +355,11 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ### 概述
 
-本包为 [bt_api](https://github.com/cloudQuant/bt_api_py) 框架提供 **{info['description_cn']}**。它提供了与 **{info['name_cn']}** 交易所交互的统一接口。
+本包为 [bt_api](https://github.com/cloudQuant/bt_api_py) 框架提供 **{info["description_cn"]}**。它提供了与 **{info["name_cn"]}** 交易所交互的统一接口。
 
 ### 功能特点
 
-{info['features_cn']}
+{info["features_cn"]}
 
 ### 安装
 
@@ -344,13 +378,13 @@ pip install -e .
 ### 快速开始
 
 ```python
-from {pkg_name} import {info['import_class']}
+from {pkg_name} import {info["import_class"]}
 
 # 初始化
-feed = {info['import_class']}(api_key="your_key", secret="your_secret")
+feed = {info["import_class"]}(api_key="your_key", secret="your_secret")
 
 # 获取行情数据
-ticker = feed.get_ticker("{info['symbol_example']}")
+ticker = feed.get_ticker("{info["symbol_example"]}")
 print(ticker)
 ```
 
@@ -372,7 +406,7 @@ print(ticker)
 ### 系统要求
 
 - Python 3.9+
-- bt_api_base >= {info['base_version']}
+- bt_api_base >= {info["base_version"]}
 
 ### 架构
 
@@ -397,6 +431,7 @@ MIT 许可证 - 详见 [LICENSE](LICENSE)。
 - 邮箱: yunjinqi@gmail.com
 """
 
+
 def exchange_description(name: str) -> str:
     """Get exchange description."""
     descs = {
@@ -412,12 +447,10 @@ def exchange_description(name: str) -> str:
     }
     return descs.get(name, "Exchange plugin for bt_api framework.")
 
+
 def get_info(pkg_name: str) -> dict:
     """Get exchange info, using defaults if not in EXCHANGE_INFO."""
-    if pkg_name in EXCHANGE_INFO:
-        base = EXCHANGE_INFO[pkg_name]
-    else:
-        base = get_default_info(pkg_name)
+    base = EXCHANGE_INFO[pkg_name] if pkg_name in EXCHANGE_INFO else get_default_info(pkg_name)
 
     # Read from pyproject.toml
     pyproject_path = Path(f"bt_api/{pkg_name}/pyproject.toml")
@@ -425,10 +458,10 @@ def get_info(pkg_name: str) -> dict:
         content = pyproject_path.read_text()
         version_match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
         desc_match = re.search(r'^description\s*=\s*"([^"]+)"', content, re.MULTILINE)
-        version = version_match.group(1) if version_match else base["base_version"]
+        version_match.group(1) if version_match else base["base_version"]
         description = desc_match.group(1) if desc_match else f"{base['name']} exchange plugin"
     else:
-        version = base["base_version"]
+        base["base_version"]
         description = f"{base['name']} exchange plugin"
 
     return {
@@ -445,26 +478,74 @@ def get_info(pkg_name: str) -> dict:
         "base_version": base["base_version"],
     }
 
+
 def main():
     """Generate documentation for all packages."""
     packages = [
-        "bt_api_bequant", "bt_api_bigone", "bt_api_binance", "bt_api_bingx",
-        "bt_api_bitbank", "bt_api_bitfinex", "bt_api_bitflyer", "bt_api_bitget",
-        "bt_api_bithumb", "bt_api_bitinka", "bt_api_bitmart", "bt_api_bitrue",
-        "bt_api_bitso", "bt_api_bitstamp", "bt_api_bitunix", "bt_api_bitvavo",
-        "bt_api_btbns", "bt_api_btc_markets", "bt_api_btcturk", "bt_api_buda",
-        "bt_api_bybit", "bt_api_bydfi", "bt_api_coinbase", "bt_api_coincheck",
-        "bt_api_coindcx", "bt_api_coinex", "bt_api_coinone", "bt_api_coinspot",
-        "bt_api_coinswitch", "bt_api_cryptocom", "bt_api_ctp", "bt_api_dydx",
-        "bt_api_exmo", "bt_api_foxbit", "bt_api_gateio", "bt_api_gemini",
-        "bt_api_giottus", "bt_api_gmx", "bt_api_hitbtc", "bt_api_htx",
-        "bt_api_hyperliquid", "bt_api_ib_web", "bt_api_independent_reserve",
-        "bt_api_korbit", "bt_api_kraken", "bt_api_kucoin", "bt_api_latoken",
-        "bt_api_localbitcoins", "bt_api_luno", "bt_api_mercado_bitcoin",
-        "bt_api_mexc", "bt_api_mt5", "bt_api_okx", "bt_api_phemex",
-        "bt_api_poloniex", "bt_api_ripio", "bt_api_satoshitango", "bt_api_swyftx",
-        "bt_api_upbit", "bt_api_valr", "bt_api_wazirx", "bt_api_yobit",
-        "bt_api_zaif", "bt_api_zebpay"
+        "bt_api_bequant",
+        "bt_api_bigone",
+        "bt_api_binance",
+        "bt_api_bingx",
+        "bt_api_bitbank",
+        "bt_api_bitfinex",
+        "bt_api_bitflyer",
+        "bt_api_bitget",
+        "bt_api_bithumb",
+        "bt_api_bitinka",
+        "bt_api_bitmart",
+        "bt_api_bitrue",
+        "bt_api_bitso",
+        "bt_api_bitstamp",
+        "bt_api_bitunix",
+        "bt_api_bitvavo",
+        "bt_api_btbns",
+        "bt_api_btc_markets",
+        "bt_api_btcturk",
+        "bt_api_buda",
+        "bt_api_bybit",
+        "bt_api_bydfi",
+        "bt_api_coinbase",
+        "bt_api_coincheck",
+        "bt_api_coindcx",
+        "bt_api_coinex",
+        "bt_api_coinone",
+        "bt_api_coinspot",
+        "bt_api_coinswitch",
+        "bt_api_cryptocom",
+        "bt_api_ctp",
+        "bt_api_dydx",
+        "bt_api_exmo",
+        "bt_api_foxbit",
+        "bt_api_gateio",
+        "bt_api_gemini",
+        "bt_api_giottus",
+        "bt_api_gmx",
+        "bt_api_hitbtc",
+        "bt_api_htx",
+        "bt_api_hyperliquid",
+        "bt_api_ib_web",
+        "bt_api_independent_reserve",
+        "bt_api_korbit",
+        "bt_api_kraken",
+        "bt_api_kucoin",
+        "bt_api_latoken",
+        "bt_api_localbitcoins",
+        "bt_api_luno",
+        "bt_api_mercado_bitcoin",
+        "bt_api_mexc",
+        "bt_api_mt5",
+        "bt_api_okx",
+        "bt_api_phemex",
+        "bt_api_poloniex",
+        "bt_api_ripio",
+        "bt_api_satoshitango",
+        "bt_api_swyftx",
+        "bt_api_upbit",
+        "bt_api_valr",
+        "bt_api_wazirx",
+        "bt_api_yobit",
+        "bt_api_zaif",
+        "bt_api_zebpay",
     ]
 
     for pkg in packages:
@@ -482,11 +563,11 @@ def main():
         docs_dir.mkdir(exist_ok=True)
 
         # Create index.md
-        index_content = f"""# {info['name']} Documentation
+        index_content = f"""# {info["name"]} Documentation
 
 ## English
 
-Welcome to the {info['name']} documentation for bt_api.
+Welcome to the {info["name"]} documentation for bt_api.
 
 ### Quick Start
 
@@ -495,14 +576,14 @@ pip install {pkg}
 ```
 
 ```python
-from {pkg} import {info['import_class']}
-feed = {info['import_class']}(api_key="your_key", secret="your_secret")
-ticker = feed.get_ticker("{info['symbol_example']}")
+from {pkg} import {info["import_class"]}
+feed = {info["import_class"]}(api_key="your_key", secret="your_secret")
+ticker = feed.get_ticker("{info["symbol_example"]}")
 ```
 
 ## 中文
 
-欢迎使用 bt_api 的 {info['name_cn']} 文档。
+欢迎使用 bt_api 的 {info["name_cn"]} 文档。
 
 ### 快速开始
 
@@ -511,9 +592,9 @@ pip install {pkg}
 ```
 
 ```python
-from {pkg} import {info['import_class']}
-feed = {info['import_class']}(api_key="your_key", secret="your_secret")
-ticker = feed.get_ticker("{info['symbol_example']}")
+from {pkg} import {info["import_class"]}
+feed = {info["import_class"]}(api_key="your_key", secret="your_secret")
+ticker = feed.get_ticker("{info["symbol_example"]}")
 ```
 
 ## API Reference
@@ -647,8 +728,8 @@ python:
 
         # Create mkdocs.yml
         docs_slug = pkg.replace("_", "-")
-        mkdocs_content = f"""site_name: "{info['name']} Documentation"
-site_description: "{info['name']} plugin for bt_api"
+        mkdocs_content = f"""site_name: "{info["name"]} Documentation"
+site_description: "{info["name"]} plugin for bt_api"
 site_author: cloudQuant
 site_url: https://{docs_slug}.readthedocs.io/
 
@@ -688,6 +769,7 @@ markdown_extensions:
         print("  ✓ Created mkdocs.yml")
 
     print("\\nDone! All packages updated.")
+
 
 if __name__ == "__main__":
     main()

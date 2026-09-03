@@ -4,10 +4,10 @@
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 
-def parse_pytest_json(json_file: Path) -> List[Dict[str, Any]]:
+def parse_pytest_json(json_file: Path) -> list[dict[str, Any]]:
     """Parse pytest JSON report and extract test durations."""
     with open(json_file) as f:
         data = json.load(f)
@@ -25,7 +25,7 @@ def parse_pytest_json(json_file: Path) -> List[Dict[str, Any]]:
     return tests
 
 
-def analyze_tests(tests: List[Dict[str, Any]], threshold: float = 1.0) -> None:
+def analyze_tests(tests: list[dict[str, Any]], threshold: float = 1.0) -> None:
     """Analyze and report slow tests."""
     # Sort by duration
     sorted_tests = sorted(tests, key=lambda x: x["duration"], reverse=True)

@@ -14,6 +14,7 @@ IBKR Gateway Cookie 提取工具
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -26,12 +27,12 @@ def get_cookie_from_browser():
     """尝试从浏览器获取 IBKR Gateway cookie"""
     try:
         import browser_cookie3
-        import urllib3
-
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         # 尝试连接 Gateway 验证 cookie
         import requests
+
+        ca_bundle = os.environ.get("BT_API_IBKR_CA_BUNDLE")
+        tls_verify: bool | str = ca_bundle if ca_bundle else True
 
         # 尝试每个可能的浏览器
         browsers = [
@@ -53,7 +54,7 @@ def get_cookie_from_browser():
                     response = requests.get(
                         test_url,
                         cookies=cookies,
-                        verify=False,
+                        verify=tls_verify,
                         timeout=5,
                         proxies={"http": None, "https": None},
                     )
@@ -66,6 +67,7 @@ def get_cookie_from_browser():
                 continue
 
         print("✗ 未找到有效的 IBKR Gateway cookies")
+        print("  如 Gateway 使用私有 CA，请设置 BT_API_IBKR_CA_BUNDLE 指向受信任的 CA 文件。")
         return None
 
     except ImportError:

@@ -24,7 +24,7 @@ import json
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from importlib import metadata
 from pathlib import Path
 
@@ -131,7 +131,7 @@ def collect_baseline(repo_root: Path) -> dict[str, object]:
 
     return {
         "schema_version": SCHEMA_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "parent": {
             "commit": _run_git(repo_root, ["rev-parse", "HEAD"]),
             "branch": _run_git(repo_root, ["rev-parse", "--abbrev-ref", "HEAD"]),

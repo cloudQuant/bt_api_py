@@ -8,7 +8,6 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 
 class MarkdownCleaner:
@@ -18,7 +17,7 @@ class MarkdownCleaner:
         self.fixes_applied = 0
         self.files_processed = 0
 
-    def clean_file(self, file_path: Path) -> Tuple[bool, List[str]]:
+    def clean_file(self, file_path: Path) -> tuple[bool, list[str]]:
         """
         清理单个 Markdown 文件
 
@@ -317,8 +316,8 @@ class MarkdownCleaner:
         return has_changes, fixes
 
     def find_markdown_files(
-        self, directory: Path, exclude_patterns: List[str] = None
-    ) -> List[Path]:
+        self, directory: Path, exclude_patterns: list[str] = None
+    ) -> list[Path]:
         """
         查找目录中的所有 Markdown 文件
 
@@ -415,18 +414,17 @@ class MarkdownCleaner:
                 lines = content.split("\n")
                 for i, line in enumerate(lines):
                     # 检查有序列表和无序列表
-                    if re.match(r"^( *)-[ \t]", line) or re.match(r"^( *)\d+\.[ \t]", line):
-                        # 检查前一行
-                        if (
-                            i > 0
-                            and lines[i - 1].strip() != ""
-                            and not re.match(r"^( *)-[ \t]", lines[i - 1])
-                            and not re.match(r"^( *)\d+\.[ \t]", lines[i - 1])
-                            and not re.match(r"^#{1,6} ", lines[i - 1])
-                        ):
-                            issues.append("列表前缺少空行")
-                            needs_fix = True
-                            break
+                    if (
+                        (re.match(r"^( *)-[ \t]", line) or re.match(r"^( *)\d+\.[ \t]", line))
+                        and i > 0
+                        and lines[i - 1].strip() != ""
+                        and not re.match(r"^( *)-[ \t]", lines[i - 1])
+                        and not re.match(r"^( *)\d+\.[ \t]", lines[i - 1])
+                        and not re.match(r"^#{1,6} ", lines[i - 1])
+                    ):
+                        issues.append("列表前缺少空行")
+                        needs_fix = True
+                        break
 
                 if needs_fix:
                     print(f"⚠️  {relative_path} - 需要修复: {', '.join(issues)}")

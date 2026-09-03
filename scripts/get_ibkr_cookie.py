@@ -13,9 +13,9 @@ IBKR Gateway Cookie 提取工具
     python3 scripts/get_ibkr_cookie.py
 """
 
+import json
 import os
 import sys
-import json
 from pathlib import Path
 
 # 添加项目路径
@@ -27,12 +27,12 @@ def get_cookie_from_browser():
     """尝试从浏览器获取 IBKR Gateway cookie"""
     try:
         import browser_cookie3
-        import urllib3
-
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         # 尝试连接 Gateway 验证 cookie
         import requests
+
+        ca_bundle = os.environ.get("BT_API_IBKR_CA_BUNDLE")
+        tls_verify: bool | str = ca_bundle if ca_bundle else True
 
         # 尝试每个可能的浏览器
         browsers = [
@@ -54,7 +54,7 @@ def get_cookie_from_browser():
                     response = requests.get(
                         test_url,
                         cookies=cookies,
-                        verify=False,
+                        verify=tls_verify,
                         timeout=5,
                         proxies={"http": None, "https": None},
                     )
@@ -63,10 +63,11 @@ def get_cookie_from_browser():
                         return cookies
                 except requests.exceptions.RequestException:
                     continue
-            except Exception as e:
+            except Exception:
                 continue
 
         print("✗ 未找到有效的 IBKR Gateway cookies")
+        print("  如 Gateway 使用私有 CA，请设置 BT_API_IBKR_CA_BUNDLE 指向受信任的 CA 文件。")
         return None
 
     except ImportError:
@@ -118,7 +119,7 @@ def update_env_file(cookie_file_path):
     cookie_source = f"file:{cookie_file_path}"
 
     if env_file.exists():
-        with open(env_file, "r") as f:
+        with open(env_file) as f:
             lines = f.readlines()
 
         # 更新或添加 IB_WEB_COOKIE_SOURCE
@@ -137,7 +138,7 @@ def update_env_file(cookie_file_path):
 
         print(f"✓ 已更新 .env 文件，设置 IB_WEB_COOKIE_SOURCE={cookie_source}")
     else:
-        print(f"✗ .env 文件不存在，请手动添加:")
+        print("✗ .env 文件不存在，请手动添加:")
         print(f"  IB_WEB_COOKIE_SOURCE={cookie_source}")
 
 

@@ -3,10 +3,9 @@
 
 import os
 import re
-from typing import Dict, List
 
 
-def analyze_file_quality(file_path: str) -> Dict:
+def analyze_file_quality(file_path: str) -> dict:
     """分析单个文件的质量指标"""
     with open(file_path, encoding="utf-8") as f:
         content = f.read()
@@ -51,7 +50,7 @@ def analyze_file_quality(file_path: str) -> Dict:
     }
 
 
-def find_python_files(root_dir: str) -> List[str]:
+def find_python_files(root_dir: str) -> list[str]:
     """找出所有Python文件"""
     python_files = []
     for root, dirs, files in os.walk(root_dir):

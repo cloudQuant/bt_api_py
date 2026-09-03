@@ -32,7 +32,6 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 
 @dataclass
@@ -266,11 +265,12 @@ class CodeQualityChecker:
 
         # 检查类中的方法
         for item in node.body:
-            if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
-                # 跳过特殊方法（__init__等）如果不需要检查
-                if not item.name.startswith("_") or item.name in ("__init__", "__call__"):
-                    method_info = self._check_function(item, class_name=node.name)
-                    class_info.methods.append(method_info)
+            # 跳过特殊方法（__init__等）如果不需要检查
+            if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and (
+                not item.name.startswith("_") or item.name in ("__init__", "__call__")
+            ):
+                method_info = self._check_function(item, class_name=node.name)
+                class_info.methods.append(method_info)
 
         return class_info
 
@@ -404,16 +404,11 @@ class CodeQualityChecker:
         sections = func.docstring_sections
 
         # 如果有参数，应该有Args部分
-        if len(func.missing_param_annotations) > 0 or True:  # 简化：所有函数都应该有Args
-            if not sections.get("has_args", False):
-                return False
+        if not sections.get("has_args", False):  # 简化：所有函数都应该有Args
+            return False
 
         # 如果有返回值注释，应该有Returns部分
-        if func.has_return_annotation:
-            if not sections.get("has_returns", False):
-                return False
-
-        return True
+        return not (func.has_return_annotation and not sections.get("has_returns", False))
 
     def _add_missing_type_hint(self, filepath: str, location: str, line: int, issue: str) -> None:
         """添加缺失类型注释的记录"""
@@ -505,8 +500,7 @@ class ReportPrinter:
         print("=" * 80)
         print()
 
-        count = 0
-        for filepath, issues in sorted(self.report.missing_type_hints.items()):
+        for count, (filepath, issues) in enumerate(sorted(self.report.missing_type_hints.items())):
             if count >= limit:
                 print(f"\n... 还有 {len(self.report.missing_type_hints) - limit} 个文件未显示")
                 break
@@ -517,7 +511,6 @@ class ReportPrinter:
             if len(issues) > 10:
                 print(f"  ... 还有 {len(issues) - 10} 个问题")
             print()
-            count += 1
 
     def print_missing_docstrings(self, limit: int = 20) -> None:
         """打印缺失文档注释的详情
@@ -534,8 +527,7 @@ class ReportPrinter:
         print("=" * 80)
         print()
 
-        count = 0
-        for filepath, issues in sorted(self.report.missing_docstrings.items()):
+        for count, (filepath, issues) in enumerate(sorted(self.report.missing_docstrings.items())):
             if count >= limit:
                 print(f"\n... 还有 {len(self.report.missing_docstrings) - limit} 个文件未显示")
                 break
@@ -546,7 +538,6 @@ class ReportPrinter:
             if len(issues) > 10:
                 print(f"  ... 还有 {len(issues) - 10} 个问题")
             print()
-            count += 1
 
     def export_to_file(self, output_file: str) -> None:
         """导出报告到文件
@@ -592,16 +583,16 @@ def main():
 示例:
   # 检查整个bt_api_py目录
   python scripts/check_code_quality.py bt_api_py
-  
+
   # 只检查类型注释
   python scripts/check_code_quality.py bt_api_py --check type-hints
-  
+
   # 只检查文档注释
   python scripts/check_code_quality.py bt_api_py --check docstrings
-  
+
   # 详细模式
   python scripts/check_code_quality.py bt_api_py --verbose
-  
+
   # 导出到文件
   python scripts/check_code_quality.py bt_api_py --output report.txt
         """,

@@ -7,17 +7,28 @@ import sys
 
 def main() -> int:
     cmd = [
-        sys.executable, "-m", "pytest", "tests",
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests",
         "--cov=bt_api_py",
         "--cov-report=term",
         "--cov-fail-under=40",
-        "-n", "8",
-        "--dist=loadgroup"
+        "-n",
+        "8",
+        "--dist=loadgroup",
     ]
 
     print("=== Full Coverage Gate ===", flush=True)
     try:
-        r = subprocess.run(cmd, cwd='.', text=True, capture_output=True, timeout=600, check=False)
+        r = subprocess.run(  # noqa: S603 - command is a fixed local pytest coverage invocation.
+            cmd,
+            cwd=".",
+            text=True,
+            capture_output=True,
+            timeout=600,
+            check=False,
+        )
     except subprocess.TimeoutExpired:
         print("Full coverage gate timed out", flush=True)
         return 1
@@ -29,6 +40,7 @@ def main() -> int:
         print(r.stderr)
     print(f"--- EXIT {r.returncode} ---", flush=True)
     return r.returncode
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

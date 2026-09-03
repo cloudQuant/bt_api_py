@@ -7,7 +7,6 @@ Adds type hints and improves docstrings according to Google style
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 
 class CodeImprover:
@@ -154,7 +153,7 @@ class CodeImprover:
             return code
 
         method_start = match.start()
-        indent = match.group(1)
+        match.group(1)
 
         # Add type hints
         if needs_types:
@@ -260,7 +259,7 @@ class CodeImprover:
 
         print()
         print("=" * 60)
-        print(f"Summary:")
+        print("Summary:")
         print(f"  Files improved: {self.improved_files}/{len(tasks)}")
         print(f"  Methods improved: {self.improved_methods}")
         print("=" * 60)

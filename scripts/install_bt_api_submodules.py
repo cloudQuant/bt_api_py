@@ -15,12 +15,12 @@ from __future__ import annotations
 import argparse
 import configparser
 import importlib.metadata as metadata
+import shutil
 import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 GITMODULES = ROOT / ".gitmodules"
@@ -63,10 +63,41 @@ def run_command(
     cwd: Path = ROOT,
     dry_run: bool = False,
 ) -> subprocess.CompletedProcess[str]:
+    if not cmd or not Path(cmd[0]).is_absolute():
+        raise ValueError("Commands must use an absolute, validated executable path")
     print("+", " ".join(cmd))
     if dry_run:
         return subprocess.CompletedProcess(cmd, 0, "", "")
-    return subprocess.run(cmd, cwd=cwd, text=True)
+    return subprocess.run(  # noqa: S603 - executable is validated before reaching this boundary.
+        cmd,
+        cwd=cwd,
+        text=True,
+    )
+
+
+def resolve_executable(value: str) -> str:
+    """Resolve an executable name or path to an absolute executable file."""
+    candidate = Path(value).expanduser()
+    if not candidate.is_absolute():
+        located = shutil.which(value)
+        if located is None:
+            raise ValueError(f"Executable was not found on PATH: {value}")
+        candidate = Path(located)
+    resolved = candidate.resolve()
+    if not resolved.is_file():
+        raise ValueError(f"Executable is not a file: {resolved}")
+    return str(resolved)
+
+
+def resolve_submodule_path(path_value: str) -> Path:
+    """Resolve a .gitmodules path and reject paths outside this checkout."""
+    root = ROOT.resolve()
+    candidate = (root / path_value).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise ValueError(f"Submodule path escapes repository root: {path_value}") from error
+    return candidate
 
 
 def load_submodule_packages() -> list[PackageSpec]:
@@ -82,8 +113,10 @@ def load_submodule_packages() -> list[PackageSpec]:
         url = parser.get(section, "url", fallback="")
         if not path_value.startswith("bt_api/bt_api_"):
             continue
-        path = ROOT / path_value
-        specs.append(PackageSpec(name=path.name, dist_name=read_project_name(path), path=path, url=url))
+        path = resolve_submodule_path(path_value)
+        specs.append(
+            PackageSpec(name=path.name, dist_name=read_project_name(path), path=path, url=url)
+        )
 
     def sort_key(spec: PackageSpec) -> tuple[int, str]:
         return (0 if spec.name == "bt_api_base" else 1, spec.name)
@@ -108,7 +141,9 @@ def filter_packages(specs: list[PackageSpec], selected: list[str] | None) -> lis
         return specs
 
     selected_names = {item.removeprefix("bt_api/").strip() for item in selected}
-    selected_names = {item if item.startswith("bt_api_") else f"bt_api_{item}" for item in selected_names}
+    selected_names = {
+        item if item.startswith("bt_api_") else f"bt_api_{item}" for item in selected_names
+    }
     found = {spec.name for spec in specs}
     missing = sorted(selected_names - found)
     if missing:
@@ -151,10 +186,11 @@ def ensure_submodules(
         print("Submodule update skipped by --skip-submodule-update")
         return
 
-    run_command(["git", "submodule", "sync", "--recursive"], dry_run=dry_run)
+    git = resolve_executable("git")
+    run_command([git, "submodule", "sync", "--recursive"], dry_run=dry_run)
     paths = [str(spec.path.relative_to(ROOT)) for spec in missing_sources]
     run_command(
-        ["git", "submodule", "update", "--init", "--recursive", "--jobs", str(jobs), *paths],
+        [git, "submodule", "update", "--init", "--recursive", "--jobs", str(jobs), *paths],
         dry_run=dry_run,
     )
 
@@ -310,7 +346,9 @@ def parse_args() -> argparse.Namespace:
         default=sys.executable,
         help="Python executable used for pip commands.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.python = resolve_executable(args.python)
+    return args
 
 
 def main() -> int:

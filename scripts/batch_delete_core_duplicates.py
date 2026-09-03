@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """批量删除 core 中的重复交易所实现"""
+
 import shutil
 from pathlib import Path
 
@@ -7,10 +8,32 @@ root = Path("/Users/yunjinqi/Documents/new_projects/bt_api_py")
 
 # 有插件包的交易所
 plugin_exchanges = [
-    "bigone", "bingx", "bitfinex", "bitso", "bitstamp", "bitvavo", "buda",
-    "cryptocom", "ctp", "dydx", "exmo", "foxbit", "gateio", "gemini",
-    "hitbtc", "htx", "hyperliquid", "ib_web", "kraken", "mexc", "mt5",
-    "okx", "phemex", "poloniex", "upbit", "yobit"
+    "bigone",
+    "bingx",
+    "bitfinex",
+    "bitso",
+    "bitstamp",
+    "bitvavo",
+    "buda",
+    "cryptocom",
+    "ctp",
+    "dydx",
+    "exmo",
+    "foxbit",
+    "gateio",
+    "gemini",
+    "hitbtc",
+    "htx",
+    "hyperliquid",
+    "ib_web",
+    "kraken",
+    "mexc",
+    "mt5",
+    "okx",
+    "phemex",
+    "poloniex",
+    "upbit",
+    "yobit",
 ]
 
 deleted = []
@@ -50,7 +73,7 @@ for ex in plugin_exchanges:
         translator_file = root / "bt_api_py/errors/bitfinex_error_translator.py"
     else:
         translator_file = root / f"bt_api_py/errors/{ex}_translator.py"
-    
+
     if translator_file.exists():
         try:
             translator_file.unlink()

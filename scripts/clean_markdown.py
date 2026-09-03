@@ -4,12 +4,10 @@ Markdown 格式清理脚本
 用于修复项目中 Markdown 文件的格式问题，使其符合标准规范
 """
 
-import os
+import argparse
 import re
 import sys
-import argparse
 from pathlib import Path
-from typing import List, Tuple
 
 
 class MarkdownCleaner:
@@ -19,7 +17,7 @@ class MarkdownCleaner:
         self.fixes_applied = 0
         self.files_processed = 0
 
-    def clean_file(self, file_path: Path) -> Tuple[bool, List[str]]:
+    def clean_file(self, file_path: Path) -> tuple[bool, list[str]]:
         """
         清理单个 Markdown 文件
 
@@ -30,11 +28,11 @@ class MarkdownCleaner:
             (是否有修改, 修改列表)
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
         except UnicodeDecodeError:
             try:
-                with open(file_path, "r", encoding="gbk") as f:
+                with open(file_path, encoding="gbk") as f:
                     content = f.read()
             except UnicodeDecodeError:
                 return False, [f"无法读取文件编码: {file_path}"]
@@ -318,8 +316,8 @@ class MarkdownCleaner:
         return has_changes, fixes
 
     def find_markdown_files(
-        self, directory: Path, exclude_patterns: List[str] = None
-    ) -> List[Path]:
+        self, directory: Path, exclude_patterns: list[str] = None
+    ) -> list[Path]:
         """
         查找目录中的所有 Markdown 文件
 
@@ -382,11 +380,11 @@ class MarkdownCleaner:
             if dry_run:
                 # 试运行模式：只检查不修改
                 try:
-                    with open(file_path, "r", encoding="utf-8") as f:
+                    with open(file_path, encoding="utf-8") as f:
                         content = f.read()
                 except UnicodeDecodeError:
                     try:
-                        with open(file_path, "r", encoding="gbk") as f:
+                        with open(file_path, encoding="gbk") as f:
                             content = f.read()
                     except UnicodeDecodeError:
                         print(f"❌ {relative_path} - 无法读取文件编码")
@@ -416,18 +414,17 @@ class MarkdownCleaner:
                 lines = content.split("\n")
                 for i, line in enumerate(lines):
                     # 检查有序列表和无序列表
-                    if re.match(r"^( *)-[ \t]", line) or re.match(r"^( *)\d+\.[ \t]", line):
-                        # 检查前一行
-                        if (
-                            i > 0
-                            and lines[i - 1].strip() != ""
-                            and not re.match(r"^( *)-[ \t]", lines[i - 1])
-                            and not re.match(r"^( *)\d+\.[ \t]", lines[i - 1])
-                            and not re.match(r"^#{1,6} ", lines[i - 1])
-                        ):
-                            issues.append("列表前缺少空行")
-                            needs_fix = True
-                            break
+                    if (
+                        (re.match(r"^( *)-[ \t]", line) or re.match(r"^( *)\d+\.[ \t]", line))
+                        and i > 0
+                        and lines[i - 1].strip() != ""
+                        and not re.match(r"^( *)-[ \t]", lines[i - 1])
+                        and not re.match(r"^( *)\d+\.[ \t]", lines[i - 1])
+                        and not re.match(r"^#{1,6} ", lines[i - 1])
+                    ):
+                        issues.append("列表前缺少空行")
+                        needs_fix = True
+                        break
 
                 if needs_fix:
                     print(f"⚠️  {relative_path} - 需要修复: {', '.join(issues)}")
@@ -444,7 +441,7 @@ class MarkdownCleaner:
                     print(f"✅ {relative_path} - 无需修复")
 
         if not dry_run:
-            print(f"\n📊 清理完成:")
+            print("\n📊 清理完成:")
             print(f"   处理文件: {self.files_processed}")
             print(f"   应用修复: {self.fixes_applied}")
         else:

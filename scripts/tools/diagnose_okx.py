@@ -104,7 +104,7 @@ def main():
         print("\n" + "=" * 60)
         print("4. CANCELLING ALL OPEN ORDERS")
         print("=" * 60)
-        for i, order in enumerate(order_list):
+        for order in order_list:
             od = order.init_data()
             order_id = od.get_order_id()
             symbol = od.get_symbol_name()

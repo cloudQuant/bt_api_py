@@ -4,14 +4,13 @@
 """
 
 import re
-from pathlib import Path
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from pathlib import Path
 
 
-def extract_capabilities_from_file(file_path: Path) -> Tuple[str, List[str]]:
+def extract_capabilities_from_file(file_path: Path) -> tuple[str, list[str]]:
     """从文件中提取 capabilities"""
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         content = f.read()
 
     # 提取交易所名称和类型
@@ -73,7 +72,7 @@ def extract_capabilities_from_file(file_path: Path) -> Tuple[str, List[str]]:
             capabilities.extend(caps)
 
     # 去重并排序
-    capabilities = sorted(list(set(capabilities)))
+    capabilities = sorted(set(capabilities))
 
     # 清理交易所名称
     if exchange_name:
@@ -111,7 +110,7 @@ def scan_all_exchanges():
     feeds_dir = Path("bt_api_py/feeds")
 
     # 存储所有交易所的能力
-    exchange_caps: Dict[str, Set[str]] = defaultdict(set)
+    exchange_caps: dict[str, set[str]] = defaultdict(set)
 
     # 查找所有 Python 文件
     for py_file in feeds_dir.rglob("*.py"):
@@ -125,12 +124,12 @@ def scan_all_exchanges():
     # 转换为排序后的字典
     result = {}
     for key in sorted(exchange_caps.keys()):
-        result[key] = sorted(list(exchange_caps[key]))
+        result[key] = sorted(exchange_caps[key])
 
     return result
 
 
-def generate_markdown_table(exchange_caps: Dict[str, List[str]]) -> str:
+def generate_markdown_table(exchange_caps: dict[str, list[str]]) -> str:
     """生成 Markdown 表格"""
 
     # 收集所有可能的能力
@@ -138,7 +137,7 @@ def generate_markdown_table(exchange_caps: Dict[str, List[str]]) -> str:
     for caps in exchange_caps.values():
         all_capabilities.update(caps)
 
-    all_capabilities = sorted(list(all_capabilities))
+    all_capabilities = sorted(all_capabilities)
 
     # 生成表头
     header = "| 交易所 | 资产类型 | " + " | ".join(all_capabilities) + " |"
@@ -161,7 +160,7 @@ def generate_markdown_table(exchange_caps: Dict[str, List[str]]) -> str:
     return "\n".join(rows)
 
 
-def generate_csv(exchange_caps: Dict[str, List[str]]) -> str:
+def generate_csv(exchange_caps: dict[str, list[str]]) -> str:
     """生成 CSV 格式"""
 
     # 收集所有可能的能力
@@ -169,7 +168,7 @@ def generate_csv(exchange_caps: Dict[str, List[str]]) -> str:
     for caps in exchange_caps.values():
         all_capabilities.update(caps)
 
-    all_capabilities = sorted(list(all_capabilities))
+    all_capabilities = sorted(all_capabilities)
 
     # 生成表头
     header = ["交易所", "资产类型"] + all_capabilities
@@ -191,11 +190,11 @@ def generate_csv(exchange_caps: Dict[str, List[str]]) -> str:
     return "\n".join(rows)
 
 
-def generate_summary(exchange_caps: Dict[str, List[str]]) -> str:
+def generate_summary(exchange_caps: dict[str, list[str]]) -> str:
     """生成统计摘要"""
     # 统计交易所数量
     exchanges = set()
-    for key in exchange_caps.keys():
+    for key in exchange_caps:
         exchange = key.split("___")[0]
         exchanges.add(exchange)
 
@@ -207,7 +206,7 @@ def generate_summary(exchange_caps: Dict[str, List[str]]) -> str:
 
     # 统计资产类型
     asset_types = defaultdict(int)
-    for key in exchange_caps.keys():
+    for key in exchange_caps:
         asset_type = key.split("___")[1]
         asset_types[asset_type] += 1
 
