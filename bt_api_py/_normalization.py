@@ -295,6 +295,21 @@ def instrument_spec(result, exchange_name, symbol):
         }
         max_quantity_raw = pick(row, "max_quantity", default=lot.get("maxQty"))
         quantity_unit = "base"
+    elif venue == "CTP":
+        if (
+            row.get("metadata_complete") is not True
+            or row.get("evidence_complete") is not True
+        ):
+            raise NormalizedApiError("get_instrument_spec", "ctp_metadata_incomplete")
+        required = {
+            "contract_value": pick(row, "contract_value", "volume_multiple"),
+            "contract_multiplier": pick(row, "contract_multiplier", default="1"),
+            "price_tick": pick(row, "price_tick", "tick_size"),
+            "quantity_step": pick(row, "quantity_step", default="1"),
+            "min_quantity": pick(row, "min_quantity", default="1"),
+        }
+        max_quantity_raw = pick(row, "max_quantity")
+        quantity_unit = "lots"
     else:
         raise CapabilityNotSupportedError(
             "get_instrument_spec",
@@ -1133,6 +1148,7 @@ def _timestamps(row):
             "T",
             "uTime",
             "event_time",
+            "event_time_utc",
             "timestamp_ms",
             default=freshness.get("observed_at"),
         )
@@ -1145,6 +1161,7 @@ def _timestamps(row):
                 "local_time",
                 "local_update_time",
                 "receive_time",
+                "recv_time_utc",
             )
         )
         or time.time()
@@ -1154,6 +1171,7 @@ def _timestamps(row):
         "received_monotonic_ns",
         "local_monotonic_ns",
         "receive_monotonic_ns",
+        "recv_monotonic_ns",
     )
     if received_monotonic in (None, ""):
         received_monotonic = time.monotonic_ns()
@@ -1731,6 +1749,16 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         ),
         front_id=pick(row, "front_id", "FrontID", default=req.get("front_id")),
         session_id=pick(row, "session_id", "SessionID", default=req.get("session_id")),
+        account_id=pick(
+            row,
+            "account_id",
+            "AccountID",
+            "InvestorID",
+            default=req.get("account_id"),
+        ),
+        trading_day=pick(
+            row, "trading_day", "TradingDay", default=req.get("trading_day")
+        ),
         fee_currency=pick(row, "fee_currency", "feeCcy", "commissionAsset"),
         commission_currency=pick(
             row, "commission_currency", "fee_currency", "feeCcy", "commissionAsset"
@@ -1796,6 +1824,9 @@ def trade(row, exchange_name, symbol=None):
         position_side=_side_value(row, exchange_name, position=True),
         quantity_unit=_unit(exchange_name, row),
         position_mode=_position_mode_value(row),
+        exchange_id=pick(row, "exchange_id", "ExchangeID"),
+        account_id=pick(row, "account_id", "AccountID", "InvestorID"),
+        trading_day=pick(row, "trading_day", "TradingDay"),
         fee=number(pick(row, "fee", "trade_fee", "commission")),
         fee_currency=pick(
             row, "fee_currency", "trade_fee_symbol", "commissionAsset", "feeCcy"
@@ -1805,6 +1836,9 @@ def trade(row, exchange_name, symbol=None):
     result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row)
     if row.get("feeCcy") and row.get("fee") not in (None, ""):
         result["fee"] = -number(row["fee"])
+    if row.get("fee_unresolved") is True or row.get("trade_fee_verified") is False:
+        result["fee"] = None
+        result["fee_unresolved"] = True
     return result
 
 
@@ -2032,12 +2066,50 @@ def normalize_event(item, exchange_name, *, kind=None, symbol=None):
         price = number(pick(row, "price", "last_price", "last", "LastPrice"))
         if not price and bid and ask:
             price = (bid + ask) / 2
+        volume_semantics = str(pick(row, "volume_semantics", default="") or "")
+        delta_volume = number(
+            pick(
+                row,
+                "delta_volume",
+                default=pick(row, "volume", "last_volume", "Volume"),
+            )
+        )
+        cumulative_volume = number(
+            pick(row, "cum_volume", "cumulative_volume", "Volume")
+        )
         result.update(
             price=price,
             bid_price=bid,
             ask_price=ask,
-            volume=number(pick(row, "volume", "last_volume", "Volume")),
+            volume=(
+                delta_volume
+                if volume_semantics == "delta"
+                else number(pick(row, "volume", "last_volume", "Volume"))
+            ),
         )
+        if pick(row, "schema_version") not in (None, ""):
+            result.update(
+                schema_version=str(pick(row, "schema_version")),
+                volume_semantics=volume_semantics,
+                cum_volume=cumulative_volume,
+                cumulative_volume=cumulative_volume,
+                delta_volume=delta_volume,
+                volume_complete=bool(pick(row, "volume_complete", default=False)),
+                volume_quality=str(pick(row, "volume_quality", default="") or ""),
+                trading_day=str(
+                    pick(row, "trading_day", "TradingDay", default="") or ""
+                ),
+                action_day=str(pick(row, "action_day", "ActionDay", default="") or ""),
+                event_time_utc=seconds(pick(row, "event_time_utc")),
+                recv_time_utc=seconds(pick(row, "recv_time_utc")),
+                recv_monotonic_ns=int(pick(row, "recv_monotonic_ns", default=0) or 0),
+                connection_generation=int(
+                    pick(row, "connection_generation", default=0) or 0
+                ),
+                ingest_seq=int(pick(row, "ingest_seq", default=0) or 0),
+                quality_flags=tuple(pick(row, "quality_flags", default=()) or ()),
+                event_time_source=str(pick(row, "event_time_source", default="") or ""),
+            )
     elif kind == "bar":
         result.update(
             {

@@ -38,6 +38,7 @@ _IDENTITY = (
     "offset",
     "quantity_unit",
     "position_mode",
+    "trading_day",
 )
 _LEDGER_SEMANTIC_IDENTITY = frozenset(
     {"side", "position_side", "offset", "quantity_unit", "position_mode"}
@@ -1629,6 +1630,17 @@ class _ExecutionSession:
         identity = self._ledger_identity(venue, account_id, row)
         return (*self._ledger_key(identity), str(client_id))
 
+    def _trade_key(self, venue, row):
+        """Scope venue trade IDs to account, trading day, exchange and symbol."""
+        identity = self._ledger_identity(venue, row.get("account_id"), row)
+        return (
+            *self._ledger_key(identity),
+            str(row.get("trading_day") or ""),
+            str(row.get("exchange_id") or ""),
+            str(row.get("symbol") or ""),
+            str(row.get("trade_id") or ""),
+        )
+
     def _load_journal(self):
         if self.path is None or not self.path.exists():
             return
@@ -1721,9 +1733,7 @@ class _ExecutionSession:
                     )
                     continue
                 if event in {"trade", "trade_update"} and row.get("trade_id"):
-                    self.trade_ids.add(
-                        (row.get("exchange_name"), row.get("symbol"), row["trade_id"])
-                    )
+                    self.trade_ids.add(self._trade_key(row.get("exchange_name"), row))
                 client_id = str(row.get("client_order_id") or "")
                 venue = row.get("exchange_name")
                 if not client_id and not (
@@ -2754,6 +2764,7 @@ class _ExecutionSession:
             "offset",
             "position_mode",
             "quantity_unit",
+            "trading_day",
         ):
             if key in _LEDGER_SEMANTIC_IDENTITY and (
                 key not in state_explicit or key not in reported_explicit
@@ -3173,7 +3184,7 @@ class _ExecutionSession:
                 return self._record(
                     state, self._order_update(state, event), origin="event"
                 )
-            trade_key = (venue, event.get("symbol"), event.get("trade_id"))
+            trade_key = self._trade_key(venue, event)
             if event.get("trade_id") and trade_key in self.trade_ids:
                 return None
             update = self._fee(state, self._identity(state, event), trade=True)

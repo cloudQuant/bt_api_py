@@ -1445,6 +1445,141 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
         return self.get_request_api(exchange_name)
 
+    def get_ctp_session_state(
+        self, exchange_name: str = "CTP___FUTURE"
+    ) -> dict[str, Any]:
+        """Return CTP auth/login/settlement evidence without exposing the native client."""
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise CapabilityNotSupportedError(
+                "get_ctp_session_state",
+                detail="CTP session state requires direct transport",
+            )
+        if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            raise CapabilityNotSupportedError(
+                "get_ctp_session_state", detail=f"{exchange_name} is not a CTP provider"
+            )
+        feed = self.exchange_feeds.get(exchange_name)
+        method = getattr(feed, "get_session_state", None)
+        if not callable(method):
+            raise CapabilityNotSupportedError(
+                "get_ctp_session_state", detail="CTP feed has no session-state contract"
+            )
+        state = dict(method())
+        public_fields = {
+            "connected",
+            "auth_state",
+            "login_state",
+            "settlement_state",
+            "read_only_ready",
+            "trading_ready",
+            "ready",
+            "auto_settlement_confirm",
+            "front_id",
+            "session_id",
+            "trading_day",
+            "connection_generation",
+            "account_fingerprint",
+            "settlement_request_id",
+            "settlement_connection_generation",
+            "settlement_trading_day",
+            "settlement_late_callback_count",
+            "settlement_proof_source",
+            "settlement_proof_query_request_id",
+            "request_counts",
+            "last_error",
+            "environment_profile",
+            "environment_readiness",
+        }
+        return {name: value for name, value in state.items() if name in public_fields}
+
+    def query_ctp_result(
+        self,
+        exchange_name: str,
+        query_type: str,
+        **kwargs: Any,
+    ) -> Any:
+        """Run one typed, completion-aware CTP read query."""
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise CapabilityNotSupportedError(
+                "query_ctp_result", detail="typed CTP queries require direct transport"
+            )
+        if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            raise CapabilityNotSupportedError(
+                "query_ctp_result", detail=f"{exchange_name} is not a CTP provider"
+            )
+        methods = {
+            "account": "query_account_result",
+            "positions": "query_positions_result",
+            "orders": "query_orders_result",
+            "trades": "query_trades_result",
+            "instruments": "query_instruments_result",
+            "margin_rate": "query_instrument_margin_rate_result",
+            "commission_rate": "query_instrument_commission_rate_result",
+            # Reading a matching account/day confirmation is also the bounded
+            # cross-process proof that promotes this live session to trading-ready.
+            "settlement_confirmation": "verify_settlement_confirmation",
+        }
+        try:
+            method_name = methods[str(query_type).strip().lower()]
+        except KeyError as exc:
+            raise ValueError(f"unknown CTP query_type {query_type!r}") from exc
+        feed = self.exchange_feeds.get(exchange_name)
+        method = getattr(feed, method_name, None)
+        if not callable(method):
+            raise CapabilityNotSupportedError(
+                "query_ctp_result", detail=f"CTP feed has no {method_name} contract"
+            )
+        return method(**kwargs)
+
+    def verify_ctp_settlement(
+        self,
+        exchange_name: str = "CTP___FUTURE",
+        *,
+        timeout: float = 5.0,
+    ) -> Any:
+        """Verify an account/day server record and promote only that live session."""
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise CapabilityNotSupportedError(
+                "verify_ctp_settlement",
+                detail="CTP settlement verification requires direct transport",
+            )
+        if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            raise CapabilityNotSupportedError(
+                "verify_ctp_settlement", detail=f"{exchange_name} is not a CTP provider"
+            )
+        feed = self.exchange_feeds.get(exchange_name)
+        method = getattr(feed, "verify_settlement_confirmation", None)
+        if not callable(method):
+            raise CapabilityNotSupportedError(
+                "verify_ctp_settlement", detail="CTP feed cannot verify settlement"
+            )
+        return method(timeout=timeout)
+
+    def confirm_ctp_settlement(
+        self,
+        exchange_name: str = "CTP___FUTURE",
+        *,
+        timeout: float = 5.0,
+    ) -> bool:
+        """Explicitly confirm settlement for a logged-in CTP session."""
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise CapabilityNotSupportedError(
+                "confirm_ctp_settlement",
+                detail="CTP settlement requires direct transport",
+            )
+        if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            raise CapabilityNotSupportedError(
+                "confirm_ctp_settlement",
+                detail=f"{exchange_name} is not a CTP provider",
+            )
+        feed = self.exchange_feeds.get(exchange_name)
+        method = getattr(feed, "confirm_settlement", None)
+        if not callable(method):
+            raise CapabilityNotSupportedError(
+                "confirm_ctp_settlement", detail="CTP feed cannot confirm settlement"
+            )
+        return bool(method(timeout=timeout))
+
     def get_data_queue(self, exchange_name: str) -> queue.Queue | None:
         """Get the data queue for the specified exchange.
 
