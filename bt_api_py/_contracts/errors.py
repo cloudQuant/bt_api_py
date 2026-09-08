@@ -9,16 +9,48 @@ class BtApiContractError(BtApiError):
     """Base error for the v1 BtApi typed contract."""
 
 
+class NormalizedApiError(BtApiContractError):
+    """Safe normalized failure; never includes vendor messages or signed URLs."""
+
+    __slots__ = (
+        "operation",
+        "code",
+        "execution_unknown",
+        "definite_reject",
+        "category",
+        "environment_mismatch_possible",
+    )
+
+    def __init__(
+        self,
+        operation: str,
+        code: str,
+        *,
+        execution_unknown: bool = False,
+        definite_reject: bool = False,
+        category: str | None = None,
+        environment_mismatch_possible: bool = False,
+    ) -> None:
+        self.operation = operation
+        self.code = str(code)
+        self.execution_unknown = bool(execution_unknown)
+        self.definite_reject = bool(definite_reject)
+        self.category = str(category) if category is not None else None
+        self.environment_mismatch_possible = bool(environment_mismatch_possible)
+        super().__init__(f"{operation} failed ({self.code})")
+
+
 class CapabilityNotSupportedError(BtApiContractError):
     """Raised when an operation is not supported by the selected venue."""
 
-    def __init__(self, operation: str, *, detail: str = "") -> None:
+    def __init__(self, operation: str, *, detail: str = "", definite_reject: bool = False) -> None:
         message = f"capability not supported: {operation}"
         if detail:
             message = f"{message} — {detail}"
         super().__init__(message)
         self.operation = operation
         self.detail = detail
+        self.definite_reject = definite_reject
 
 
 class PluginNotInstalledError(BtApiContractError):
@@ -107,6 +139,7 @@ __all__ = [
     "CommandResultUnknownError",
     "LegacyOrderApiError",
     "LiveQueryFailedError",
+    "NormalizedApiError",
     "PluginNotInstalledError",
     "ProtocolCorrelationError",
     "StaleDataUnavailableError",

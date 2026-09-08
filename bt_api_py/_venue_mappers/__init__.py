@@ -14,7 +14,9 @@ OrderMapper = Callable[[OrderRequest], dict[str, Any]]
 
 MAPPERS: dict[str, OrderMapper] = {
     "BINANCE___SPOT": _binance_map,
+    "BINANCE___SWAP": _binance_map,
     "OKX___SPOT": _okx_map,
+    "OKX___SWAP": _okx_map,
     "CTP___FUTURE": _ctp_map,
 }
 

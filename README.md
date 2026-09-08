@@ -40,6 +40,46 @@ ack_or_venue_result = api.make_order(
 
 `OrderRequest` is the cross-transport contract. The historical positional form remains only as a compatibility layer and must include a side-qualified type such as `"buy-limit"`; a bare `"limit"` or `"market"` cannot safely infer side.
 
+## Normalized results and durable execution
+
+The existing `BtApi` methods accept `normalized=True` for standard account,
+instrument, position and order results. `poll_event(exchange_name)` returns
+standard market, order and trade dictionaries; quantities retain the venue's
+native units. Position intent uses `position_side`, `offset`, `position_mode`
+and `quantity_unit` on `OrderRequest`, including CTP dated closes and native
+order references. Unsupported venue capabilities fail explicitly.
+
+Enable a durable execution session with the optional constructor argument:
+
+```python
+api = BtApi(
+    exchange_kwargs=exchange_config,  # Supply your configured accounts.
+    debug=False,
+    execution_config={
+        "order_journal": "local-orders.jsonl",
+        "account_currency": "USDT",
+        "order_poll_interval": 0.2,
+    },
+)
+```
+
+`BtApi` remains the only public trading client. Its internal session owns the
+exclusive journal lock, intent persistence, client ID uniqueness, uncertain
+execution reconciliation and cumulative fill/fee state. Call
+`new_client_order_id(exchange_name)` before binding a local order reference,
+submit a typed request with `normalized=True`, then keep polling `poll_event`
+even when no market bar arrives. A timeout never triggers a replacement order.
+An unresolved historical intent blocks new placements until the original order
+is reconciled. Reuse the same journal across restarts and call `close()` when done.
+
+With a session enabled, legacy/raw writes, asynchronous writes and bulk
+cancellation are explicitly rejected where they cannot honor its journal
+contract. Omitting `execution_config` preserves the historical API behavior.
+`get_execution_summary()` reports the session's unresolved orders and fees;
+`get_all_balances(normalized=True)` preserves individual account currencies,
+and `get_portfolio_balance()` rejects mixed or nonzero unknown currencies.
+The session does not contain Backtrader orders, feeds or strategy accounting.
+
 ## Direct and forwarding reads
 
 Direct mode preserves the native Feed result shape. In ZMQ mode, typed reads use `Consistency`:

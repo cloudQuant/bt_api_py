@@ -274,3 +274,40 @@ async def test_zmq_async_surface_and_reconciliation_stay_on_the_backend() -> Non
 
     with pytest.raises(CapabilityNotSupportedError, match="extra_data"):
         api.get_tick("SIM___SPOT", "BTC-USDT", extra_data={"legacy": True})
+
+
+@pytest.mark.asyncio
+async def test_direct_legacy_async_reads_reject_plain_def_returning_none() -> None:
+    class LegacyFeed:
+        calls = []
+
+        def __getattr__(self, name):
+            if not name.startswith("async_get_"):
+                raise AttributeError(name)
+
+            def enqueue(*args, **kwargs):
+                self.calls.append((name, args, kwargs))
+                return None
+
+            return enqueue
+
+    api = BtApi(debug=False)
+    feed = LegacyFeed()
+    api.exchange_feeds["SIM___SPOT"] = feed
+
+    calls = (
+        (api.async_get_tick, ("SIM___SPOT", "BTC-USDT")),
+        (api.async_get_depth, ("SIM___SPOT", "BTC-USDT")),
+        (api.async_get_kline, ("SIM___SPOT", "BTC-USDT", "1m")),
+        (api.async_get_open_orders, ("SIM___SPOT",)),
+        (api.async_get_balance, ("SIM___SPOT",)),
+        (api.async_get_account, ("SIM___SPOT",)),
+        (api.async_get_position, ("SIM___SPOT",)),
+    )
+    for operation, args in calls:
+        with pytest.raises(
+            CapabilityNotSupportedError,
+            match="legacy async adapter returned no result",
+        ):
+            await operation(*args)
+    assert len(feed.calls) == 7

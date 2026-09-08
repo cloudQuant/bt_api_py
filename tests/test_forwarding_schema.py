@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 
 from bt_api_py.forwarding import (
@@ -50,6 +52,24 @@ def test_order_command_defaults_to_idempotent_client_id() -> None:
     assert decoded.idempotency_key == "idem-1"
     assert decoded.client_order_id == "idem-1"
     assert decoded.command_type == "place_order"
+
+
+def test_order_command_decimal_wire_is_canonical_and_lossless() -> None:
+    command = OrderCommand(
+        strategy_id="s1",
+        account_id="paper",
+        symbol="BTCUSDT",
+        size=Decimal("0.0000000100000000000000001"),
+        price=Decimal("60000.123456789012345678900"),
+    )
+
+    encoded = serialize_message(command)
+    decoded = deserialize_message(encoded)
+
+    assert decoded.size == "0.0000000100000000000000001"
+    assert decoded.price == "60000.1234567890123456789"
+    assert b'"size":"0.0000000100000000000000001"' in encoded
+    assert b'"price":"60000.1234567890123456789"' in encoded
 
 
 def test_private_event_round_trips_strategy_topic() -> None:

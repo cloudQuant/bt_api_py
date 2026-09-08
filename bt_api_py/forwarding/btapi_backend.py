@@ -14,7 +14,11 @@ from decimal import Decimal
 from typing import Any
 
 from bt_api_py._contracts.cache_policy import CacheEntry, CachePolicy
-from bt_api_py._contracts.errors import LiveQueryFailedError, StaleDataUnavailableError
+from bt_api_py._contracts.errors import (
+    CapabilityNotSupportedError,
+    LiveQueryFailedError,
+    StaleDataUnavailableError,
+)
 from bt_api_py._contracts.models import (
     AccountSnapshot,
     BalanceSnapshot,
@@ -35,7 +39,14 @@ from bt_api_py._contracts.models import (
     Side,
     TickerSnapshot,
 )
-from bt_api_py.forwarding.schema import CommandAck, MarketEvent, OrderCommand, PrivateEvent
+from bt_api_py.forwarding.schema import (
+    CommandAck,
+    MarketEvent,
+    OrderCommand,
+    PrivateEvent,
+)
+
+_CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION = frozenset({"BINANCE", "OKX"})
 
 
 class ZmqBtApiBackend:
@@ -48,6 +59,7 @@ class ZmqBtApiBackend:
         self._client: Any = None
         self._clients: dict[tuple[str, str], Any] = {}
         self._cache = CachePolicy()
+        self._subscriptions: dict[str, dict[str, set[str]]] = {}
 
     @staticmethod
     def _scope(exchange_name: str) -> tuple[str, str]:
@@ -77,6 +89,92 @@ class ZmqBtApiBackend:
             self._clients[scope] = client
             self._client = client
         return client
+
+    def subscribe(self, exchange_name: str, symbol: str, topics: list[dict[str, Any]]) -> None:
+        kinds = set()
+        for topic in topics:
+            name = str(topic.get("topic", "")).lower()
+            kind = {"depth": "orderbook", "ticker": "tick", "kline": "bar"}.get(name, name)
+            if kind not in {"tick", "orderbook", "bar"}:
+                raise CapabilityNotSupportedError(
+                    "subscribe", detail="unsupported forwarding topic"
+                )
+            kinds.add(kind)
+        self._ensure_client(exchange_name).subscribe(symbol)
+        self._subscriptions.setdefault(exchange_name, {}).setdefault(symbol, set()).update(kinds)
+
+    def poll_event(self, exchange_name: str) -> Any:
+        client = self._ensure_client(exchange_name)
+        # Broker messages must keep progressing even while market data is busy.
+        private = client.poll_broker_update()
+        if private is not None:
+            return private
+        for symbol, kinds in self._subscriptions.get(exchange_name, {}).items():
+            for kind in sorted(kinds):
+                item = getattr(client, "poll_" + kind)(symbol)
+                if item is not None:
+                    if isinstance(item, dict):
+                        return {"kind": kind, "symbol": symbol, **item}
+                    return item
+        return None
+
+    def close(self) -> None:
+        clients = list(self._clients.values())
+        if self._client is not None:
+            clients.append(self._client)
+        seen = set()
+        for client in clients:
+            if id(client) not in seen:
+                client.disconnect()
+                seen.add(id(client))
+        self._clients.clear()
+        self._client = None
+        self._subscriptions.clear()
+
+    @staticmethod
+    def _native_intent(operation: str, exchange_name: str, request: Any) -> dict[str, Any]:
+        """Use the existing fingerprinted extra payload for native gateway intent."""
+        fields = (
+            "position_side",
+            "position_id",
+            "position_mode",
+            "offset",
+            "exchange_id",
+            "front_id",
+            "session_id",
+            "order_ref",
+        )
+        extra = {
+            field: getattr(request, field)
+            for field in fields
+            if getattr(request, field, None) is not None
+        }
+        venue = exchange_name.split("___")[0].upper()
+        unit = getattr(request, "quantity_unit", None)
+        if venue in {"CTP", "MT5"}:
+            if unit is not None:
+                allowed = {"contracts", "native"} if venue == "CTP" else {"lots", "native"}
+                if unit not in allowed:
+                    raise CapabilityNotSupportedError(
+                        operation,
+                        detail="native gateway requires explicit native quantity units",
+                        definite_reject=operation in {"make_order", "cancel_order"},
+                    )
+                if venue == "CTP" and request.quantity != request.quantity.to_integral_value():
+                    from bt_api_py._contracts.errors import NormalizedApiError
+
+                    raise NormalizedApiError(
+                        operation, "fractional_contracts", definite_reject=True
+                    )
+                extra["quantity_unit"] = "contracts" if venue == "CTP" else "lots"
+            return extra
+        if extra or unit not in (None, "base"):
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="native position intent is unsupported for this forwarding venue",
+                definite_reject=operation in {"make_order", "cancel_order"},
+            )
+        return {}
 
     def _cache_key(self, operation: str, exchange_name: str) -> str:
         return f"{operation}:{exchange_name}:{self._config.account_id}:{self._config.strategy_id}"
@@ -191,10 +289,18 @@ class ZmqBtApiBackend:
         return tuple(levels)
 
     def get_tick(
-        self, exchange_name: str, symbol: str, *, consistency: Consistency = Consistency.LIVE
+        self,
+        exchange_name: str,
+        symbol: str,
+        *,
+        consistency: Consistency = Consistency.LIVE,
     ) -> TickerSnapshot:
         event, freshness = self._latest_market_event(
-            self._ensure_client(exchange_name), exchange_name, symbol, "tick", consistency
+            self._ensure_client(exchange_name),
+            exchange_name,
+            symbol,
+            "tick",
+            consistency,
         )
         payload = dict(event.payload)
         return TickerSnapshot(
@@ -214,7 +320,11 @@ class ZmqBtApiBackend:
         consistency: Consistency = Consistency.LIVE,
     ) -> DepthSnapshot:
         event, freshness = self._latest_market_event(
-            self._ensure_client(exchange_name), exchange_name, symbol, "orderbook", consistency
+            self._ensure_client(exchange_name),
+            exchange_name,
+            symbol,
+            "orderbook",
+            consistency,
         )
         payload = dict(event.payload)
         return DepthSnapshot(
@@ -237,7 +347,11 @@ class ZmqBtApiBackend:
     ) -> KlineSnapshot:
         del count  # Latest-event semantics deliberately return one latest bar.
         event, freshness = self._latest_market_event(
-            self._ensure_client(exchange_name), exchange_name, symbol, "bar", consistency
+            self._ensure_client(exchange_name),
+            exchange_name,
+            symbol,
+            "bar",
+            consistency,
         )
         payload = dict(event.payload)
         event_period = payload.get("period")
@@ -306,7 +420,10 @@ class ZmqBtApiBackend:
                 return self._account_from_payload(
                     dict(event.payload),
                     self._event_freshness(
-                        event, source="cache", stale=True, stale_reason="CACHE_OK requested"
+                        event,
+                        source="cache",
+                        stale=True,
+                        stale_reason="CACHE_OK requested",
                     ),
                 )
             entry = self._cache.get_within_age(key, self._config.max_cache_age_ms)
@@ -351,10 +468,10 @@ class ZmqBtApiBackend:
     ) -> list[PositionSnapshot]:
         return [
             PositionSnapshot(
-                id=f"{self._config.account_id}:position:{item.get('symbol', '')}",
+                id=f"{self._config.account_id}:position:{item.get('symbol', item.get('instrument', ''))}",
                 account_id=self._config.account_id,
-                symbol=str(item.get("symbol", "")),
-                quantity=self._decimal(item.get("quantity", item.get("size"))),
+                symbol=str(item.get("symbol", item.get("instrument", ""))),
+                quantity=self._decimal(item.get("quantity", item.get("size", item.get("volume")))),
                 average_price=self._decimal(item.get("average_price", item.get("price"))),
                 freshness=freshness,
                 raw=dict(item),
@@ -437,7 +554,10 @@ class ZmqBtApiBackend:
             return mapper(
                 [dict(event.payload) for event in events],
                 self._event_freshness(
-                    events[-1], source="cache", stale=True, stale_reason="CACHE_OK requested"
+                    events[-1],
+                    source="cache",
+                    stale=True,
+                    stale_reason="CACHE_OK requested",
                 ),
             )
         try:
@@ -473,6 +593,11 @@ class ZmqBtApiBackend:
     def get_deals(
         self, exchange_name: str, *, consistency: Consistency = Consistency.LIVE
     ) -> list[FillSnapshot]:
+        if exchange_name.split("___")[0].upper() in {"CTP", "MT5"}:
+            raise CapabilityNotSupportedError(
+                "get_deals",
+                detail="native gateway does not implement fill history queries",
+            )
         return self._private_read(
             "get_deals",
             exchange_name,
@@ -493,17 +618,26 @@ class ZmqBtApiBackend:
         )
 
     def make_order(self, exchange_name: str, request: OrderRequest) -> CommandAck:
+        exchange, _ = self._scope(exchange_name)
+        if exchange in _CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION:
+            raise CapabilityNotSupportedError(
+                "make_order",
+                detail="crypto forwarding placement requires query_order reconciliation",
+                definite_reject=True,
+            )
+        extra = self._native_intent("make_order", exchange_name, request)
         client = self._ensure_client(exchange_name)
         command = self._command(
             exchange_name,
             symbol=request.symbol,
             side=request.side.value,
-            size=float(request.quantity),
+            size=request.quantity,
             command_type="place_order",
             order_type=request.order_type.value,
-            price=float(request.price) if request.price is not None else None,
+            price=request.price,
             time_in_force=request.time_in_force,
             reduce_only=request.reduce_only,
+            extra={**extra, "reduce_only": request.reduce_only},
             client_order_id=request.client_order_id,
             idempotency_key=request.idempotency_key or request.client_order_id,
             account_id=request.account_id,
@@ -511,13 +645,16 @@ class ZmqBtApiBackend:
         return client._send_command_sync(command)
 
     def cancel_order(self, exchange_name: str, request: CancelOrderRequest) -> CommandAck:
+        extra = self._native_intent("cancel_order", exchange_name, request)
         client = self._ensure_client(exchange_name)
         return client._send_command_sync(
             self._command(
                 exchange_name,
                 command_type="cancel_order",
+                extra=extra,
                 symbol=request.symbol,
-                order_id=request.order_id or request.client_order_id,
+                order_id=request.order_id,
+                client_order_id=request.client_order_id,
                 idempotency_key=request.idempotency_key
                 or f"cancel:{request.account_id}:{request.order_id or request.client_order_id}",
                 account_id=request.account_id,
@@ -525,6 +662,13 @@ class ZmqBtApiBackend:
         )
 
     def cancel_all(self, exchange_name: str, request: CancelAllRequest) -> CommandAck:
+        exchange, _ = self._scope(exchange_name)
+        if exchange in _CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION:
+            raise CapabilityNotSupportedError(
+                "cancel_all",
+                detail="crypto forwarding gateway does not implement cancel_all",
+                definite_reject=True,
+            )
         client = self._ensure_client(exchange_name)
         return client._send_command_sync(
             self._command(
@@ -538,13 +682,28 @@ class ZmqBtApiBackend:
         )
 
     def query_order(self, exchange_name: str, request: QueryOrderRequest) -> CommandAck:
+        exchange, _ = self._scope(exchange_name)
+        if exchange in {"CTP", "MT5"}:
+            raise CapabilityNotSupportedError(
+                "query_order",
+                detail="native gateway does not implement order reconciliation",
+            )
+        if exchange in _CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION:
+            raise CapabilityNotSupportedError(
+                "query_order",
+                detail="crypto forwarding gateway does not implement order reconciliation",
+                definite_reject=True,
+            )
+        extra = self._native_intent("query_order", exchange_name, request)
         client = self._ensure_client(exchange_name)
         return client._send_command_sync(
             self._command(
                 exchange_name,
                 command_type="query_order",
+                extra=extra,
                 symbol=request.symbol,
-                order_id=request.order_id or request.client_order_id,
+                order_id=request.order_id,
+                client_order_id=request.client_order_id,
                 idempotency_key=(
                     f"query:{request.account_id}:{request.order_id or request.client_order_id}"
                 ),
@@ -557,8 +716,16 @@ class ZmqBtApiBackend:
 
     def get_capabilities(self, exchange_name: str) -> dict[str, bool]:
         """Report only forwarding operations with a concrete implementation."""
-        del exchange_name
+        exchange, _ = self._scope(exchange_name)
+        native_gateway = exchange in {"CTP", "MT5"}
+        unreconciled_crypto = exchange in _CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION
         return {
+            "subscribe": True,
+            "poll_event": True,
+            "get_exchange_info": False,
+            "get_funding_rate": False,
+            "get_position_mode": False,
+            "get_account_config": False,
             "get_tick": True,
             "get_depth": True,
             "get_kline": True,
@@ -566,11 +733,11 @@ class ZmqBtApiBackend:
             "get_balance": True,
             "get_position": True,
             "get_open_orders": True,
-            "get_deals": True,
-            "make_order": True,
+            "get_deals": not native_gateway,
+            "make_order": not unreconciled_crypto,
             "cancel_order": True,
-            "cancel_all": True,
-            "query_order": True,
+            "cancel_all": not unreconciled_crypto,
+            "query_order": not (native_gateway or unreconciled_crypto),
             "get_command_status": True,
             "get_trades": False,
         }

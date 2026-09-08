@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 import pytest
+from bt_api_base.feeds.capability import Capability
 
 from bt_api_py._contracts.errors import CapabilityNotSupportedError
 from bt_api_py._contracts.models import OrderRequest, OrderType, Side
@@ -158,6 +159,47 @@ def test_direct_backend_preserves_all_public_v1_operations() -> None:
     assert api.get_capabilities("COVERAGE___SPOT").operations["make_order"] is True
     with pytest.raises(CapabilityNotSupportedError, match="transport=direct"):
         api.get_command_status("COVERAGE___SPOT", "command-1")
+
+
+def test_direct_capability_sets_and_mappings_normalize_to_plain_sorted_flags() -> None:
+    api, feed = _api_with_direct_feed()
+
+    feed.capabilities = {
+        Capability.MAKE_ORDER,
+        Capability.GET_TICK,
+    }
+    set_operations = api.get_capabilities("COVERAGE___SPOT").operations
+    assert set_operations == {"get_tick": True, "make_order": True}
+    assert list(set_operations) == ["get_tick", "make_order"]
+    assert all(type(name) is str for name in set_operations)
+
+    feed.capabilities = {
+        "z_operation": 1,
+        Capability.CANCEL_ORDER: False,
+        "a_operation": 0,
+    }
+    mapping_operations = api.get_capabilities("COVERAGE___SPOT").operations
+    assert mapping_operations == {
+        "a_operation": False,
+        "cancel_order": False,
+        "z_operation": True,
+    }
+    assert list(mapping_operations) == ["a_operation", "cancel_order", "z_operation"]
+
+
+def test_direct_capability_normalization_does_not_render_unknown_objects() -> None:
+    api, feed = _api_with_direct_feed()
+
+    class OpaqueCapability:
+        def __str__(self) -> str:
+            raise AssertionError("unknown capability must not be rendered")
+
+        def __repr__(self) -> str:
+            raise AssertionError("unknown capability must not be rendered")
+
+    feed.capabilities = {Capability.GET_DEPTH, OpaqueCapability()}
+
+    assert api.get_capabilities("COVERAGE___SPOT").operations == {"get_depth": True}
 
 
 def test_direct_runtime_utilities_and_batch_failures_are_explicit() -> None:

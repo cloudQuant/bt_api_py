@@ -6,6 +6,7 @@ import time
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
 from bt_api_base.logging_factory import get_logger
@@ -259,9 +260,9 @@ class OrderRouter:
             account_id=command.account_id,
             symbol=command.symbol,
             side=side,
-            quantity=float(command.size),
+            quantity=float(Decimal(command.size)),
             order_type=order_type,
-            price=command.price,
+            price=float(Decimal(command.price)) if command.price is not None else None,
             client_order_id=command.client_order_id,
             idempotency_key=command.idempotency_key,
             extra={
@@ -594,9 +595,13 @@ class OrderRouter:
             return "strategy_id is required"
         if not command.symbol:
             return "symbol is required"
-        if float(command.size or 0.0) <= 0.0:
+        try:
+            size = Decimal(command.size)
+        except (InvalidOperation, TypeError, ValueError):
+            return "size must be a finite decimal"
+        if not size.is_finite() or size <= 0:
             return "size must be positive"
-        if rules.max_order_size is not None and abs(float(command.size)) > rules.max_order_size:
+        if rules.max_order_size is not None and abs(size) > Decimal(str(rules.max_order_size)):
             return f"size exceeds max_order_size: {rules.max_order_size}"
         return None
 

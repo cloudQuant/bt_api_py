@@ -35,8 +35,8 @@ def test_feed_adapter_routes_mapped_args_to_feed() -> None:
     assert len(calls) == 1
     symbol, vol, price, order_type = calls[0]["args"]
     assert symbol == "BTCUSDT"
-    assert vol == 0.5
-    assert price == 42000.0
+    assert vol == "0.5"
+    assert price == "42000"
     assert order_type == "sell-limit"
     assert calls[0]["kwargs"]["client_order_id"] == "cid-9"
 

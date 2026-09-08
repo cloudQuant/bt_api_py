@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 SCHEMA_VERSION = "1.0"
@@ -32,6 +33,24 @@ def utc_now_iso() -> str:
 def normalize_market_symbol(symbol: Any) -> str:
     """normalize_market_symbol function"""
     return str(symbol or "").replace("/", "-")
+
+
+def canonical_decimal_wire(value: Any, *, optional: bool = False) -> str | None:
+    """Encode a finite decimal as stable, exponent-free JSON text."""
+    if value is None and optional:
+        return None
+    if isinstance(value, bool):
+        raise ForwardingError("Boolean is not a valid decimal wire value")
+    try:
+        decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ForwardingError("Invalid decimal wire value") from None
+    if not decimal_value.is_finite():
+        raise ForwardingError("Decimal wire value must be finite")
+    result = format(decimal_value, "f")
+    if "." in result:
+        result = result.rstrip("0").rstrip(".")
+    return "0" if result in {"", "-0"} else result
 
 
 def market_topic(exchange: str, market_type: str, symbol: str, event_type: str) -> str:
@@ -114,10 +133,10 @@ class OrderCommand:
     account_id: str
     symbol: str = ""
     side: str = "buy"
-    size: float = 0.0
+    size: str | Decimal | float | int = "0"
     command_type: str = "place_order"
     order_type: str = "market"
-    price: float | None = None
+    price: str | Decimal | float | int | None = None
     exchange: str = ""
     market_type: str = ""
     time_in_force: str = "GTC"
@@ -134,6 +153,8 @@ class OrderCommand:
 
     def __post_init__(self) -> None:
         self.command_type = str(self.command_type or "place_order").lower()
+        self.size = canonical_decimal_wire(self.size)
+        self.price = canonical_decimal_wire(self.price, optional=True)
         if self.idempotency_key is None:
             self.idempotency_key = self.command_id
         if self.client_order_id is None and self.command_type == "place_order":

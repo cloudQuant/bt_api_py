@@ -5,12 +5,19 @@ Integrate all exchange APIs using this BtApi class
 
 from __future__ import annotations
 
-# 导入注册模块，确保交易所在使用前完成注册
-# 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表
+import asyncio
+import hashlib
+import inspect
 import queue
+import threading
 import uuid
 import warnings
+from collections import defaultdict, deque
+from collections.abc import Mapping
+from contextlib import suppress
 from copy import deepcopy
+from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -23,28 +30,110 @@ from bt_api_base.exceptions import (
 from bt_api_base.logging_factory import _LoggerProxy, get_logger
 from bt_api_base.registry import ExchangeRegistry
 
-from ._contracts.errors import CapabilityNotSupportedError, LegacyOrderApiError
+from ._contracts.errors import (
+    CapabilityNotSupportedError,
+    LegacyOrderApiError,
+    NormalizedApiError,
+)
 from ._contracts.models import (
     CancelAllRequest,
     CancelOrderRequest,
     CommandStatus,
     Consistency,
+    FeeSchedule,
     ForwardingConfig,
+    Freshness,
+    FundingSnapshot,
+    InstrumentSpec,
     OrderRequest,
     OrderType,
+    PositionModeUpdate,
     QueryOrderRequest,
     Side,
+    TradingReadiness,
     TransportMode,
 )
 from .balance_manager import BalanceManagerMixin
 from .data_downloader import DataDownloaderMixin
 
+# 导入注册模块，确保交易所在使用前完成注册。
+# 自动扫描 exchange_registers/ 下所有模块，无需手动维护 import 列表。
 __all__ = ["BtApi"]
 
 DATANAME_SEPARATOR = "___"
+_NORMALIZED_WRITE_OPERATIONS = frozenset(
+    {"make_order", "cancel_order", "set_position_mode"}
+)
+_CRYPTO_CREDENTIAL_ALIASES = {
+    "OKX": {
+        "public": ("public_key", "api_key"),
+        "secret": ("private_key", "secret_key", "api_secret"),
+        "passphrase": ("passphrase",),
+    },
+    "BINANCE": {
+        "public": ("public_key", "api_key"),
+        "secret": ("private_key", "secret_key", "api_secret"),
+    },
+}
 
 
 _reg_logger = get_logger("registry")
+
+
+def _credential_alias_value(parameters, aliases):
+    supplied = []
+    for alias in aliases:
+        if alias not in parameters or parameters[alias] is None:
+            continue
+        value = parameters[alias]
+        if value == "":
+            continue
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
+            raise NormalizedApiError(
+                "configure_execution",
+                "private_credentials_malformed",
+                definite_reject=True,
+            )
+        supplied.append(value)
+    if len(set(supplied)) > 1:
+        raise NormalizedApiError(
+            "configure_execution", "credential_alias_conflict", definite_reject=True
+        )
+    return supplied[0] if supplied else None
+
+
+def _execution_credential_fingerprints(settings, config, transport_mode):
+    """Preflight private credentials and return hashes of public identifiers only."""
+    if config["market_data_only"] or transport_mode is not TransportMode.DIRECT:
+        return {}
+    fingerprints = {}
+    settings = dict(settings or {})
+    for venue in sorted(settings):
+        parameters = settings.get(venue, {})
+        provider = str(venue).partition(DATANAME_SEPARATOR)[0].upper()
+        aliases = _CRYPTO_CREDENTIAL_ALIASES.get(provider)
+        if aliases is None:
+            continue
+        if not isinstance(parameters, Mapping):
+            raise NormalizedApiError(
+                "configure_execution",
+                "invalid_exchange_credentials",
+                definite_reject=True,
+            )
+        values = {
+            name: _credential_alias_value(parameters, names)
+            for name, names in aliases.items()
+        }
+        if any(value is None for value in values.values()):
+            raise NormalizedApiError(
+                "configure_execution",
+                "private_credentials_missing",
+                definite_reject=True,
+            )
+        public_identifier = values["public"]
+        material = f"bt-api-py\0{provider}\0{public_identifier}".encode()
+        fingerprints[str(venue).strip()] = hashlib.sha256(material).hexdigest()
+    return fingerprints
 
 
 class _RuntimeRegistrar:
@@ -85,7 +174,9 @@ def _ensure_plugins_loaded() -> None:
     try:
         _initialize_plugin_and_legacy_registrations()
     except Exception as exc:
-        get_logger("api").warning(f"Plugin loading degraded: {type(exc).__name__}: {exc}")
+        get_logger("api").warning(
+            f"Plugin loading degraded: {type(exc).__name__}: {exc}"
+        )
     finally:
         _plugins_loaded = True
 
@@ -115,6 +206,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         *,
         transport_mode: TransportMode = TransportMode.DIRECT,
         forwarding_config: ForwardingConfig | None = None,
+        execution_config: dict[str, Any] | None = None,
     ) -> None:
         """初始化 BtApi 实例。
 
@@ -124,6 +216,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             event_bus: 事件总线实例，用于 BarEvent/OrderEvent 等回调；None 则创建默认实例。
             transport_mode: direct（默认，直接持有 Feed）或 zmq（经转发网关）。
             forwarding_config: ZMQ 模式下的转发网关端点与 scope 配置。
+            execution_config: Optional durable execution session. None preserves
+                legacy behavior; configured writes require typed normalized calls.
         """
         self.exchange_kwargs = {}
         self.debug = debug
@@ -135,10 +229,1018 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self.subscribe_bar_num = 0
         self.event_bus = event_bus or EventBus()
         self._subscription_flags = {}
-        self.transport_mode = transport_mode
-        self._backend = self._build_backend(transport_mode, forwarding_config)
-        _ensure_plugins_loaded()
-        self.init_exchange(exchange_kwargs or {})
+        self._subscription_streams: list[Any] = []
+        self._normalized_event_pending = defaultdict(deque)
+        self._position_modes = {}
+        self._position_mode_lock = threading.RLock()
+        self._position_mode_reconcile_required: dict[str, str] = {}
+        self._position_mode_active_placements: dict[str, int] = {}
+        self._execution_session = None
+        self._instrument_cache = {}
+        self._instrument_spec_cache: dict[tuple[str, str], InstrumentSpec] = {}
+        self._event_metrics = defaultdict(
+            int,
+            {
+                "raw_ingress_items": 0,
+                "normalized_events": 0,
+                "delivered_events": 0,
+                "coalesced_events": 0,
+            },
+        )
+        self._private_reconcile_generations: set[tuple[str, int]] = set()
+        self.event_bus.on("ws.connected", self._on_websocket_connected)
+        self.transport_mode = TransportMode(transport_mode)
+        settings = deepcopy(exchange_kwargs or {})
+        if isinstance(forwarding_config, dict):
+            forwarding_config = ForwardingConfig(**forwarding_config)
+        self._backend = self._build_backend(self.transport_mode, forwarding_config)
+        try:
+            self.configure_execution(execution_config, _exchange_names=settings)
+            _ensure_plugins_loaded()
+            if execution_config and execution_config.get("market_data_only"):
+                for value in settings.values():
+                    value["subscribe_account"] = False
+            self.init_exchange(settings)
+            self._validate_required_environments()
+        except Exception:
+            with suppress(Exception):
+                self.close()
+            raise
+
+    def configure_execution(
+        self,
+        execution_config: dict[str, Any] | None,
+        *,
+        _exchange_names: Any = (),
+    ) -> None:
+        """Enable an optional execution session; the same configuration is idempotent.
+
+        Configure before subscribing or submitting orders. Replacing a live
+        session's journal is forbidden. The journal lock is held until close().
+        """
+        if execution_config is None:
+            return
+        from ._execution_session import _ExecutionSession, session_config
+
+        config = session_config(execution_config)
+        if isinstance(_exchange_names, Mapping):
+            exchange_settings = dict(_exchange_names)
+        else:
+            names = tuple(_exchange_names or self.list_exchanges())
+            exchange_settings = {
+                name: self.exchange_kwargs.get(name, {})
+                for name in names
+                if name in self.exchange_kwargs
+            }
+        current = self._execution_session
+        if current is not None:
+            comparable = dict(config)
+            for path_key in ("order_journal", "account_risk_state"):
+                if comparable[path_key] is None:
+                    comparable[path_key] = current.config[path_key]
+            credential_fingerprints = (
+                _execution_credential_fingerprints(
+                    exchange_settings, comparable, self.transport_mode
+                )
+                if exchange_settings
+                else current.credential_fingerprints
+            )
+            if (
+                current.config != comparable
+                or current.closed
+                or current.credential_fingerprints != credential_fingerprints
+            ):
+                raise NormalizedApiError(
+                    "configure_execution", "execution_already_configured"
+                )
+            if self.list_exchanges():
+                self._validate_required_environments()
+            return
+        configured_names = set(exchange_settings) | set(config["required_environments"])
+        for venue in configured_names:
+            provider = str(venue).partition(DATANAME_SEPARATOR)[0].upper()
+            if (
+                provider in _CRYPTO_CREDENTIAL_ALIASES
+                and venue not in config["required_environments"]
+            ):
+                raise NormalizedApiError(
+                    "configure_execution",
+                    "required_environment_missing",
+                    definite_reject=True,
+                )
+        if (
+            not config["market_data_only"]
+            and self.transport_mode is TransportMode.DIRECT
+            and set(config["required_environments"]) - set(exchange_settings)
+        ):
+            raise NormalizedApiError(
+                "configure_execution",
+                "private_credentials_missing",
+                definite_reject=True,
+            )
+        credential_fingerprints = _execution_credential_fingerprints(
+            exchange_settings, config, self.transport_mode
+        )
+        if self._subscription_flags:
+            raise NormalizedApiError(
+                "configure_execution", "configure_before_subscribing"
+            )
+        exchange_names = tuple(
+            _exchange_names.keys()
+            if isinstance(_exchange_names, Mapping)
+            else (_exchange_names or self.list_exchanges())
+        )
+        self._execution_session = _ExecutionSession(
+            config,
+            exchange_names=exchange_names,
+            credential_fingerprints=credential_fingerprints,
+        )
+        if config["market_data_only"]:
+            for value in self.exchange_kwargs.values():
+                value["subscribe_account"] = False
+        if self.list_exchanges():
+            try:
+                self._validate_required_environments()
+            except Exception:
+                self._execution_session.close()
+                self._execution_session = None
+                raise
+
+    def new_client_order_id(
+        self,
+        exchange_name: str,
+        account_id: str | None = None,
+        strategy_id: str | None = None,
+    ) -> str:
+        """Allocate a numeric client reference before the caller binds its order.
+
+        Allocation reserves the value locally; only a persisted order intent
+        consumes it. Decimal references also fit CTP's native OrderRef contract.
+        """
+        if self._execution_session is not None:
+            return self._execution_session.new_client_order_id(
+                exchange_name,
+                account_id=account_id,
+                strategy_id=strategy_id,
+            )
+        import time
+
+        return f"{time.time_ns() % 10**12:012d}"
+
+    def get_execution_identity(self, exchange_name: str) -> dict[str, Any]:
+        """Return the SDK-owned ledger identity used for typed order requests."""
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "get_execution_identity",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        return session.execution_identity(exchange_name)
+
+    def get_execution_summary(self) -> dict[str, Any]:
+        """Read session execution evidence without touching a transport adapter."""
+        if self._execution_session is None:
+            return {
+                "session_enabled": False,
+                "submit_calls": None,
+                "unknown_ids": [],
+                "active_orders": None,
+                "fee_unresolved_orders": [],
+                "estimated_fee_orders": [],
+                "funding_unresolved_orders": [],
+                "funding_evidence_status": "unavailable",
+                "signed_funding_cashflow": None,
+                "evidence_errors": [],
+                "trading_blocked": False,
+            }
+        return {"session_enabled": True, **self._execution_session.summary()}
+
+    def get_account_risk_snapshot(
+        self,
+        *,
+        initialize_baseline: bool = False,
+    ) -> dict[str, Any]:
+        """Return SDK-owned, durable account-equity evidence for execution.
+
+        The method performs authenticated normalized account and position reads
+        for every configured crypto venue.  Before the first baseline it also
+        queries each venue's remote open orders through this public normalized
+        API.  It never accepts runner-supplied equity, flatness, or empty-order
+        claims.  A first baseline is persisted only when both the initial and
+        commit-time remote open-order sweeps are known empty, all positions are
+        authoritatively known flat, and the execution journal has no active or
+        unknown order.
+        """
+        return self._collect_account_risk_snapshot(
+            initialize_baseline=initialize_baseline,
+            reset_loss_latch=False,
+        )
+
+    def reset_account_maximum_loss_latch(self) -> dict[str, Any]:
+        """Explicitly reset a breached loss latch after authoritative flat proof.
+
+        The reset re-baselines equity only after two normalized open-order
+        sweeps, normalized flat positions on every configured venue, and a
+        clean durable execution ledger. Any missing or conflicting evidence
+        leaves the persisted latch unchanged.
+        """
+        return self._collect_account_risk_snapshot(
+            initialize_baseline=False,
+            reset_loss_latch=True,
+        )
+
+    def _collect_account_risk_snapshot(
+        self,
+        *,
+        initialize_baseline: bool,
+        reset_loss_latch: bool,
+        _risk_collection_held: bool = False,
+    ) -> dict[str, Any]:
+        session = self._execution_session
+        if session is None or session.config["market_data_only"]:
+            raise NormalizedApiError(
+                "get_account_risk_snapshot",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        if not _risk_collection_held:
+            # The session marks the entire remote-read interval in progress.
+            # Order placement checks that state both before mapping and under
+            # the journal mutex, while a dedicated lock serializes refreshes.
+            with session.risk_collection():
+                return self._collect_account_risk_snapshot(
+                    initialize_baseline=initialize_baseline,
+                    reset_loss_latch=reset_loss_latch,
+                    _risk_collection_held=True,
+                )
+        observations: dict[str, dict[str, Any]] = {}
+        errors: dict[str, str] = {}
+        requires_open_order_proof = reset_loss_latch or (
+            initialize_baseline and session.requires_risk_baseline()
+        )
+        risk_venues = session.risk_venues()
+
+        def strict_open_order_sweep(
+            error_scope: str,
+        ) -> tuple[set[str], dict[str, str]]:
+            empty_venues: set[str] = set()
+            sweep_errors: dict[str, str] = {}
+            for sweep_venue in risk_venues:
+                error_key = f"{sweep_venue}:{error_scope}"
+                try:
+                    open_orders = self.get_open_orders(
+                        sweep_venue, None, normalized=True
+                    )
+                    if not isinstance(open_orders, list):
+                        raise ValueError("incomplete_open_order_evidence")
+                    if open_orders:
+                        sweep_errors[error_key] = "open_orders_present"
+                    else:
+                        empty_venues.add(sweep_venue)
+                except Exception as error:
+                    code = getattr(error, "code", None)
+                    sweep_errors[error_key] = str(code or type(error).__name__)
+            return empty_venues, sweep_errors
+
+        initially_empty_venues: set[str] = set()
+        if requires_open_order_proof:
+            initially_empty_venues, initial_open_order_errors = strict_open_order_sweep(
+                "open_orders"
+            )
+            errors.update(initial_open_order_errors)
+
+        for venue in risk_venues:
+            currency = session.config["account_currencies"].get(
+                venue, session.config["account_currency"]
+            )
+            open_orders_known = (
+                not requires_open_order_proof or venue in initially_empty_venues
+            )
+            open_orders_empty = open_orders_known
+            try:
+                account = self.get_account(
+                    venue,
+                    currency or "ALL",
+                    normalized=True,
+                )
+                positions = self.get_position(venue, None, normalized=True)
+                if not isinstance(account, Mapping) or not isinstance(positions, list):
+                    raise ValueError("incomplete_account_risk_evidence")
+                quantities = []
+                for position in positions:
+                    if (
+                        not isinstance(position, Mapping)
+                        or "quantity" not in position
+                        or position.get("quantity_known") is not True
+                    ):
+                        raise ValueError("incomplete_position_evidence")
+                    quantity = Decimal(str(position["quantity"]))
+                    if not quantity.is_finite():
+                        raise ValueError("invalid_position_quantity")
+                    quantities.append(quantity)
+                observations[venue] = {
+                    "currency": account.get("currency") or currency,
+                    "equity": account.get("equity", account.get("value")),
+                    "positions_known": True,
+                    "positions_flat": all(quantity == 0 for quantity in quantities),
+                    "open_orders_known": open_orders_known,
+                    "open_orders_empty": open_orders_empty,
+                    "authenticated_account_id": account.get("account_id"),
+                }
+            except Exception as error:
+                code = getattr(error, "code", None)
+                errors[venue] = str(code or type(error).__name__)
+        return session.account_risk_snapshot(
+            observations,
+            evidence_errors=errors,
+            initialize_baseline=initialize_baseline,
+            reset_loss_latch=reset_loss_latch,
+            baseline_commit_check=lambda: strict_open_order_sweep(
+                "baseline_commit_open_orders"
+            )[1],
+        )
+
+    async def async_get_account_risk_snapshot(
+        self,
+        *,
+        initialize_baseline: bool = False,
+    ) -> dict[str, Any]:
+        """Run the authenticated risk snapshot without blocking an event loop."""
+        return await asyncio.to_thread(
+            self.get_account_risk_snapshot,
+            initialize_baseline=initialize_baseline,
+        )
+
+    async def async_reset_account_maximum_loss_latch(self) -> dict[str, Any]:
+        """Run the explicit loss-latch reset without blocking an event loop."""
+        return await asyncio.to_thread(self.reset_account_maximum_loss_latch)
+
+    def get_event_metrics(self) -> dict[str, int]:
+        """Return process-local ingress/coalescing counters without resetting them."""
+        return dict(self._event_metrics)
+
+    def _on_websocket_connected(self, payload: Any) -> None:
+        """Schedule one private-state backfill for each reconnect generation."""
+        if not isinstance(payload, dict) or payload.get("stream_role") != "account":
+            return
+        try:
+            generation = int(payload.get("connection_generation", 0))
+        except (TypeError, ValueError):
+            return
+        if generation <= 1:
+            return
+        exchange_name = str(payload.get("exchange_name") or "")
+        asset_type = str(payload.get("asset_type") or "")
+        if "___" not in exchange_name and exchange_name and asset_type:
+            exchange_name = f"{exchange_name}___{asset_type}"
+        if exchange_name not in self.list_exchanges():
+            return
+        key = (exchange_name, generation)
+        if key in self._private_reconcile_generations:
+            return
+        self._private_reconcile_generations.add(key)
+        self._event_metrics["private_reconcile_triggers"] += 1
+        source = self.data_queues.get(exchange_name)
+        if source is not None:
+            source.put(
+                {
+                    "kind": "reconcile",
+                    "exchange_name": exchange_name,
+                    "status": "required",
+                    "connection_generation": generation,
+                    "scopes": ("orders", "account", "positions", "trades"),
+                    "event_id": f"reconcile:{exchange_name}:{generation}:required",
+                }
+            )
+        threading.Thread(
+            target=self.reconcile_private_state,
+            args=(exchange_name,),
+            kwargs={"connection_generation": generation},
+            daemon=True,
+            name=f"btapi-reconcile-{exchange_name}-{generation}",
+        ).start()
+
+    @staticmethod
+    def _reconcile_rows(value: Any) -> list[dict[str, Any]]:
+        if isinstance(value, dict):
+            return [value]
+        if isinstance(value, (list, tuple)):
+            return [row for row in value if isinstance(row, dict)]
+        return []
+
+    def reconcile_private_state(
+        self,
+        exchange_name: str,
+        *,
+        connection_generation: int | None = None,
+    ) -> dict[str, Any]:
+        """Backfill private state after reconnect and publish one audit status."""
+        operations = (
+            ("orders", lambda: self.get_open_orders(exchange_name, normalized=True)),
+            ("account", lambda: self.get_account(exchange_name, normalized=True)),
+            ("positions", lambda: self.get_position(exchange_name, normalized=True)),
+            ("trades", lambda: self.get_deals(exchange_name, normalized=True)),
+        )
+        scopes: dict[str, dict[str, Any]] = {}
+        for scope, call in operations:
+            try:
+                rows = self._reconcile_rows(call())
+                scopes[scope] = {"status": "complete", "records": len(rows)}
+                kind = {
+                    "orders": "order",
+                    "account": "account",
+                    "positions": "position",
+                    "trades": "trade",
+                }[scope]
+                for row in rows:
+                    event = {"kind": kind, **row}
+                    if scope == "orders" and self._execution_session is not None:
+                        # get_open_orders(normalized=True) already merged these
+                        # rows into the execution session.
+                        continue
+                    self._normalized_event_pending[exchange_name].append(event)
+            except Exception as exc:
+                scopes[scope] = {
+                    "status": "failed",
+                    "error_code": str(getattr(exc, "code", type(exc).__name__)),
+                }
+        failed = [name for name, value in scopes.items() if value["status"] == "failed"]
+        generation = connection_generation if connection_generation is not None else 0
+        result = {
+            "kind": "reconcile",
+            "exchange_name": exchange_name,
+            "status": "complete" if not failed else "partial_failed",
+            "connection_generation": generation,
+            "scopes": scopes,
+            "failed_scopes": tuple(failed),
+            "event_id": f"reconcile:{exchange_name}:{generation}:result",
+        }
+        source = self.data_queues.get(exchange_name)
+        if source is not None:
+            source.put(result)
+        return result
+
+    async def async_reconcile_private_state(
+        self,
+        exchange_name: str,
+        *,
+        connection_generation: int | None = None,
+    ) -> dict[str, Any]:
+        """Run private reconnect backfill without blocking the caller's loop."""
+        return await asyncio.to_thread(
+            self.reconcile_private_state,
+            exchange_name,
+            connection_generation=connection_generation,
+        )
+
+    def get_environment_info(self, exchange_name: str) -> dict[str, Any]:
+        """Return the selected transport environment without configuration secrets.
+
+        Direct feeds expose their resolved environment through the venue's
+        exchange-data object. A ZMQ client cannot prove the gateway's server-side
+        environment, so it deliberately reports an unverified unknown value.
+        """
+        if exchange_name not in self.list_exchanges():
+            raise ExchangeNotFoundError(exchange_name, self.list_exchanges())
+        result = {
+            "exchange_name": exchange_name,
+            "environment": "unknown",
+            "api_region": None,
+            "simulated": None,
+            "transport_mode": self.transport_mode.value,
+            "verified": False,
+        }
+        if self.transport_mode is not TransportMode.DIRECT:
+            return result
+
+        try:
+            verifier = getattr(
+                self.exchange_feeds[exchange_name], "get_environment_info", None
+            )
+            if not callable(verifier):
+                return result
+            proof = verifier()
+            if not isinstance(proof, dict):
+                return result
+            environment = proof.get("environment")
+            simulated = proof.get("simulated")
+            verified = proof.get("verified") is True
+            if environment not in {"production", "demo", "testnet"}:
+                return result
+            if not isinstance(simulated, bool) or simulated != (
+                environment != "production"
+            ):
+                return result
+            provider = str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper()
+            if provider == "OKX":
+                api_region = proof.get("api_region")
+                if not isinstance(api_region, str) or api_region not in {
+                    "global",
+                    "eea",
+                    "us",
+                    "tr",
+                }:
+                    return result
+                if api_region == "tr" and environment != "production":
+                    return result
+            else:
+                api_region = None
+        except Exception:
+            return result
+        return {
+            "exchange_name": exchange_name,
+            "environment": environment,
+            "api_region": api_region,
+            "simulated": simulated,
+            "transport_mode": self.transport_mode.value,
+            "verified": verified,
+        }
+
+    def _validate_required_environment(
+        self, exchange_name: str, *, operation: str = "make_order"
+    ) -> None:
+        session = self._execution_session
+        if session is None:
+            return
+        if session.config["market_data_only"]:
+            return
+        requirements = session.config["required_environments"]
+        expected = requirements.get(exchange_name)
+        if expected is None:
+            provider = str(exchange_name).partition("___")[0].upper()
+            if provider not in {"OKX", "BINANCE"}:
+                return
+            raise NormalizedApiError(
+                operation, "required_environment_missing", definite_reject=True
+            )
+        try:
+            info = self.get_environment_info(exchange_name)
+        except ExchangeNotFoundError:
+            info = {"verified": False}
+        if not info["verified"]:
+            raise NormalizedApiError(
+                operation, "required_environment_unverified", definite_reject=True
+            )
+        if info["environment"] != expected:
+            raise NormalizedApiError(
+                operation, "required_environment_mismatch", definite_reject=True
+            )
+
+    def _validate_required_environments(self) -> None:
+        session = self._execution_session
+        if session is None:
+            return
+        requirements = session.config["required_environments"]
+        if not requirements:
+            return
+        for exchange_name in self.list_exchanges():
+            self._validate_required_environment(exchange_name)
+
+    def _normalized_call(self, operation, exchange_name, symbol, call, *, request=None):
+        """Opt-in SDK result contract; never expose credentials in normalized errors."""
+        from ._normalization import normalize_error, normalize_result
+
+        def invoke():
+            failure = None
+            try:
+                result = call()
+                normalized = normalize_result(
+                    operation, result, exchange_name, symbol, request
+                )
+                if operation in {"query_order", "make_order", "cancel_order"}:
+                    self._enrich_order_commission(exchange_name, normalized)
+                return normalized
+            except Exception as exc:
+                failure = normalize_error(
+                    exc,
+                    operation,
+                    exchange_name=exchange_name,
+                    write=operation in _NORMALIZED_WRITE_OPERATIONS,
+                )
+            # Raise after leaving the except block so Python cannot retain the
+            # credential-bearing transport exception in __context__.
+            raise failure from None
+
+        session = self._execution_session
+        failure = None
+        try:
+            if session is not None and session.config["market_data_only"]:
+                if operation in {
+                    "make_order",
+                    "cancel_order",
+                    "query_order",
+                    "set_position_mode",
+                }:
+                    raise NormalizedApiError(
+                        operation, "market_data_only", definite_reject=True
+                    )
+                if operation in {"get_position", "get_open_orders", "get_deals"}:
+                    return []
+                if operation in {"get_account", "get_balance"}:
+                    return {
+                        "exchange_name": exchange_name,
+                        "cash": 0.0,
+                        "value": 0.0,
+                        "currency": session.currency(exchange_name),
+                    }
+                if operation in {"get_position_mode", "get_account_config"}:
+                    raise CapabilityNotSupportedError(
+                        operation, detail="market-data-only session"
+                    )
+            self._validate_required_environment(exchange_name, operation=operation)
+            if session is not None and operation in {
+                "make_order",
+                "cancel_order",
+                "query_order",
+            }:
+                return session.invoke(operation, exchange_name, request, invoke)
+            result = invoke()
+            if session is not None:
+                if operation in {"get_account", "get_balance"} and isinstance(
+                    result, dict
+                ):
+                    session.accounts[exchange_name] = dict(result)
+                elif operation == "get_open_orders":
+                    result = [
+                        session.event(exchange_name, {**row, "kind": "order"})
+                        for row in result
+                    ]
+            return result
+        except Exception as exc:
+            failure = normalize_error(
+                exc,
+                operation,
+                exchange_name=exchange_name,
+                write=operation in _NORMALIZED_WRITE_OPERATIONS,
+            )
+        # Do not wrap an already normalized failure a second time, and detach
+        # exception chaining before it crosses the public API boundary.
+        raise failure from None
+
+    async def _async_backend_call(
+        self, operation: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        """Await an async backend method, with a worker fallback for sync adapters."""
+        async_method = getattr(self._backend, f"async_{operation}", None)
+        if callable(async_method):
+            if inspect.iscoroutinefunction(async_method):
+                return await async_method(*args, **kwargs)
+            result = await asyncio.to_thread(async_method, *args, **kwargs)
+            return await result if inspect.isawaitable(result) else result
+        sync_method = getattr(self._backend, operation)
+        return await asyncio.to_thread(sync_method, *args, **kwargs)
+
+    async def _async_normalized_call(
+        self,
+        operation: str,
+        exchange_name: str,
+        symbol: str,
+        call: Any,
+        *,
+        request: Any,
+    ) -> Any:
+        """Normalize an awaited result through the same execution-session owner."""
+        from ._normalization import normalize_error, normalize_result
+
+        async def invoke() -> Any:
+            failure = None
+            try:
+                native = await call()
+                normalized = normalize_result(
+                    operation,
+                    native,
+                    exchange_name,
+                    symbol,
+                    request,
+                )
+                if operation in {"query_order", "make_order", "cancel_order"}:
+                    await asyncio.to_thread(
+                        self._enrich_order_commission,
+                        exchange_name,
+                        normalized,
+                    )
+                return normalized
+            except Exception as exc:
+                failure = normalize_error(
+                    exc,
+                    operation,
+                    exchange_name=exchange_name,
+                    write=operation in {"make_order", "cancel_order"},
+                )
+            raise failure from None
+
+        session = self._execution_session
+        if session is not None and session.config["market_data_only"]:
+            raise NormalizedApiError(
+                operation, "market_data_only", definite_reject=True
+            )
+        self._validate_required_environment(exchange_name, operation=operation)
+        if session is not None:
+            return await session.async_invoke(
+                operation,
+                exchange_name,
+                request,
+                invoke,
+            )
+        return await invoke()
+
+    def _enrich_order_commission(self, exchange_name, order):
+        """Attach actual fees only when fills fully reconcile a terminal order.
+
+        Fees remain denominated in commission_currency; consumers must compare
+        that currency with the account currency before recording cash costs.
+        An unavailable fee query does not erase a confirmed order state.
+        """
+        if (
+            not exchange_name.startswith("BINANCE___")
+            or not order.get("terminal_confirmed")
+            or not order.get("filled")
+            or order.get("cumulative_commission") is not None
+            or not order.get("order_id")
+        ):
+            return
+        try:
+            fills = self.get_deals(
+                exchange_name, order["symbol"], count=1000, normalized=True
+            )
+            matching = {
+                fill["trade_id"]: fill
+                for fill in fills
+                if fill.get("trade_id") and fill.get("order_id") == order["order_id"]
+            }
+            from decimal import Decimal
+
+            quantity = sum(
+                (Decimal(str(fill.get("size") or 0)) for fill in matching.values()),
+                Decimal(0),
+            )
+            currencies = {fill.get("fee_currency") for fill in matching.values()}
+            if (
+                quantity != Decimal(str(order["filled"]))
+                or len(currencies) != 1
+                or None in currencies
+                or "" in currencies
+                or any(fill.get("fee") is None for fill in matching.values())
+            ):
+                return
+            order["cumulative_commission"] = float(
+                sum(
+                    (Decimal(str(fill["fee"])) for fill in matching.values()),
+                    Decimal(0),
+                )
+            )
+            order["commission_currency"] = order["fee_currency"] = currencies.pop()
+            order["commission_source"] = "exchange"
+        except Exception:
+            order["commission_source"] = "unavailable"
+
+    def poll_event(self, exchange_name: str) -> dict[str, Any] | None:
+        """Poll normalized events and advance configured pending-order reconciliation.
+
+        Reconciliation is time based and runs even while market events keep
+        arriving. No placement is retried. Call this without requiring a bar.
+        """
+        session = self._execution_session
+        if session is None:
+            event = self._poll_event_raw(exchange_name)
+            if event is not None:
+                self._event_metrics["delivered_events"] += 1
+            return event
+        if session.closed:
+            raise NormalizedApiError("poll_event", "execution_session_closed")
+        session.poll_due(self, exchange_name)
+        if session.pending[exchange_name]:
+            self._event_metrics["delivered_events"] += 1
+            return session.pending[exchange_name].popleft()
+        event = self._poll_event_raw(exchange_name)
+        event = session.event(exchange_name, event) if event is not None else None
+        if event is not None:
+            self._event_metrics["delivered_events"] += 1
+        return event
+
+    def poll_events(
+        self,
+        exchange_name: str,
+        *,
+        max_raw_items: int | None = 100,
+        coalesce_market_snapshots: tuple[str, ...] = (),
+    ) -> list[dict[str, Any]]:
+        """Poll a finite batch of normalized events from one exchange.
+
+        ``poll_event(exchange_name)`` keeps its historical one-event FIFO
+        contract. This batch API is an opt-in path for latency-sensitive
+        consumers which may explicitly coalesce complete market snapshots.
+
+        ``max_raw_items`` counts items removed from the exchange transport, not
+        normalized events produced by a container. ``None`` means the finite
+        ``Queue.qsize()`` snapshot observed at the start of a direct-transport
+        call; items appended by producers during the call remain for the next
+        poll. Transports without an inspectable queue use the conservative
+        default batch bound of 100 when ``None`` is requested.
+
+        Only explicitly named complete snapshot kinds are coalesced. Currently
+        ``orderbook`` and ``tick`` are supported. Coalescing is per kind and
+        symbol, and only within a contiguous market-data segment. Every other
+        event is a barrier, so order, trade, account and position events are
+        neither discarded nor reordered. Callers must not opt incremental
+        order-book deltas into snapshot coalescing.
+        """
+        if max_raw_items is not None and (
+            isinstance(max_raw_items, bool) or not isinstance(max_raw_items, int)
+        ):
+            raise ValueError("max_raw_items must be a non-negative integer or None")
+        if max_raw_items is not None and max_raw_items < 0:
+            raise ValueError("max_raw_items must be a non-negative integer or None")
+        if isinstance(coalesce_market_snapshots, str):
+            raise ValueError(
+                "coalesce_market_snapshots must be an iterable of event kinds"
+            )
+        try:
+            snapshot_kinds = frozenset(
+                str(kind).strip().lower() for kind in coalesce_market_snapshots
+            )
+        except TypeError as exc:
+            raise ValueError(
+                "coalesce_market_snapshots must be an iterable of event kinds"
+            ) from exc
+        unsupported = snapshot_kinds - {"orderbook", "tick"}
+        if unsupported or "" in snapshot_kinds:
+            raise ValueError(
+                "coalesce_market_snapshots supports only complete orderbook and tick snapshots"
+            )
+
+        session = self._execution_session
+        if session is not None:
+            if session.closed:
+                raise NormalizedApiError("poll_events", "execution_session_closed")
+            session.poll_due(self, exchange_name)
+
+        if max_raw_items is None:
+            if self.transport_mode is TransportMode.DIRECT:
+                source = self.data_queues.get(exchange_name)
+                if source is None:
+                    raise CapabilityNotSupportedError(
+                        "poll_events", detail="exchange has no event queue"
+                    )
+                raw_budget = [source.qsize()]
+            else:
+                raw_budget = [100]
+        else:
+            raw_budget = [max_raw_items]
+
+        events: list[dict[str, Any]] = []
+
+        def drain_session_pending() -> None:
+            if session is None:
+                return
+            pending = session.pending[exchange_name]
+            while pending:
+                events.append(pending.popleft())
+
+        drain_session_pending()
+        normalized_pending = self._normalized_event_pending[exchange_name]
+        while raw_budget[0] > 0 or normalized_pending:
+            before_budget = raw_budget[0]
+            before_pending = len(normalized_pending)
+            event = self._poll_event_raw(exchange_name, source_budget=raw_budget)
+            if event is not None:
+                if session is not None:
+                    event = session.event(exchange_name, event)
+                if event is not None:
+                    events.append(event)
+                # Persistence failure deliberately publishes an uncertainty
+                # update before the real fill queued by the execution session.
+                drain_session_pending()
+                continue
+            if (
+                raw_budget[0] == before_budget
+                and len(normalized_pending) == before_pending
+            ):
+                break
+
+        if snapshot_kinds:
+            result = self._coalesce_market_snapshot_events(events, snapshot_kinds)
+            self._event_metrics["coalesced_events"] += len(events) - len(result)
+        else:
+            result = events
+        self._event_metrics["delivered_events"] += len(result)
+        return result
+
+    @staticmethod
+    def _coalesce_market_snapshot_events(
+        events: list[dict[str, Any]], snapshot_kinds: frozenset[str]
+    ) -> list[dict[str, Any]]:
+        """Keep the newest snapshot per stream without crossing event barriers."""
+        result: list[dict[str, Any]] = []
+        latest: dict[tuple[Any, ...], tuple[int, dict[str, Any], int]] = {}
+
+        def flush() -> None:
+            result.extend(
+                {
+                    **event,
+                    "coalesced_count": int(event.get("coalesced_count") or 0) + dropped,
+                }
+                for _, event, dropped in sorted(
+                    latest.values(), key=lambda item: item[0]
+                )
+            )
+            latest.clear()
+
+        for index, event in enumerate(events):
+            kind = str(event.get("kind") or "").lower()
+            symbol = event.get("symbol")
+            complete_snapshot = not (
+                kind == "orderbook"
+                and (
+                    event.get("snapshot_or_delta") == "delta"
+                    or event.get("continuity_status")
+                    in {"gap", "out_of_order", "checksum_failed"}
+                )
+            )
+            if (
+                kind in snapshot_kinds
+                and symbol not in (None, "")
+                and complete_snapshot
+            ):
+                key = (
+                    kind,
+                    event.get("exchange_name") or event.get("exchange"),
+                    event.get("asset_type"),
+                    symbol,
+                )
+                previous = latest.get(key)
+                dropped = (
+                    0
+                    if previous is None
+                    else previous[2] + 1 + int(previous[1].get("coalesced_count") or 0)
+                )
+                latest[key] = (index, event, dropped)
+                continue
+            flush()
+            result.append(event)
+        flush()
+        return result
+
+    def _poll_event_raw(
+        self, exchange_name: str, *, source_budget: list[int] | None = None
+    ) -> dict[str, Any] | None:
+        """Return one normalized SDK event, preserving mixed queue arrival order.
+
+        Event timestamps are Unix seconds. Quantity remains in native venue
+        units. CTP executions arrive as distinct trade events, never as an
+        invented average price in an order report.
+        """
+        from ._normalization import normalize_error, normalize_event
+
+        pending = self._normalized_event_pending[exchange_name]
+        failure = None
+        try:
+            for _ in range(100):
+                from_ingress = False
+                if pending:
+                    item = pending.popleft()
+                elif self.transport_mode is TransportMode.ZMQ:
+                    if source_budget is not None and source_budget[0] <= 0:
+                        return None
+                    item = self._backend.poll_event(exchange_name)
+                    if item is None:
+                        return None
+                    from_ingress = True
+                    if source_budget is not None:
+                        source_budget[0] -= 1
+                else:
+                    source = self.data_queues.get(exchange_name)
+                    if source is None:
+                        raise CapabilityNotSupportedError(
+                            "poll_event", detail="exchange has no event queue"
+                        )
+                    if source_budget is not None and source_budget[0] <= 0:
+                        return None
+                    try:
+                        item = source.get_nowait()
+                    except queue.Empty:
+                        return None
+                    from_ingress = True
+                    if source_budget is not None:
+                        source_budget[0] -= 1
+                if from_ingress:
+                    self._event_metrics["raw_ingress_items"] += 1
+                getter = getattr(item, "get_data", None)
+                if callable(getter):
+                    values = getter()
+                    pending.extend(
+                        values if isinstance(values, (tuple, list)) else [values]
+                    )
+                    continue
+                event = normalize_event(item, exchange_name)
+                if event is not None:
+                    self._event_metrics["normalized_events"] += 1
+                    return event
+            return None
+        except Exception as exc:
+            failure = normalize_error(exc, "poll_event", exchange_name=exchange_name)
+        raise failure from None
 
     def _build_backend(
         self, transport_mode: TransportMode, forwarding_config: ForwardingConfig | None
@@ -194,7 +1296,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         if price < 0:
             raise InvalidOrderError(exchange_name, symbol, "price must be >= 0")
         if not isinstance(order_type, str) or not order_type:
-            raise InvalidOrderError(exchange_name, symbol, "order_type must be a non-empty string")
+            raise InvalidOrderError(
+                exchange_name, symbol, "order_type must be a non-empty string"
+            )
 
         normalized_order_type = order_type.lower()
         if normalized_order_type not in {"limit", "market"}:
@@ -204,7 +1308,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "order_type must be one of: limit, market",
             )
         if normalized_order_type == "limit" and price <= 0:
-            raise InvalidOrderError(exchange_name, symbol, "price must be > 0 for limit order")
+            raise InvalidOrderError(
+                exchange_name, symbol, "price must be > 0 for limit order"
+            )
         return normalized_order_type
 
     @staticmethod
@@ -227,7 +1333,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         subscribe_bar_num = 0
         for index, topic in enumerate(topics):
             if not isinstance(topic, dict):
-                raise SubscribeError("", detail=f"invalid topic at index {index}: expected dict")
+                raise SubscribeError(
+                    "", detail=f"invalid topic at index {index}: expected dict"
+                )
             topic_name = topic.get("topic")
             if not isinstance(topic_name, str) or not topic_name:
                 raise SubscribeError(
@@ -254,21 +1362,53 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             ...     "testnet": True
             ... })
         """
+        if self.transport_mode is TransportMode.ZMQ:
+            added = exchange_name not in self.exchange_kwargs
+            self.exchange_kwargs.setdefault(
+                exchange_name, self._copy_exchange_params(exchange_params)
+            )
+            try:
+                self._validate_required_environment(exchange_name)
+            except Exception:
+                if added:
+                    self.exchange_kwargs.pop(exchange_name, None)
+                raise
+            return
         if exchange_name not in self.exchange_feeds:
             if exchange_name in self.data_queues:
                 raise ExchangeNotFoundError(
-                    exchange_name, "data_queue exists but feed does not — inconsistent state"
+                    exchange_name,
+                    "data_queue exists but feed does not — inconsistent state",
                 )
             stored_exchange_params = self._copy_exchange_params(exchange_params)
+            session = self._execution_session
+            credential_fingerprints = (
+                _execution_credential_fingerprints(
+                    {exchange_name: stored_exchange_params},
+                    session.config,
+                    self.transport_mode,
+                )
+                if session is not None
+                else {}
+            )
             data_queue: queue.Queue[Any] = queue.Queue()
             self.data_queues[exchange_name] = data_queue
             self.exchange_kwargs[exchange_name] = stored_exchange_params
             self.log(f"adding exchange: {exchange_name}")
             try:
-                self.exchange_feeds[exchange_name] = ExchangeRegistry.create_feed(
+                feed = ExchangeRegistry.create_feed(
                     exchange_name, data_queue, **stored_exchange_params
                 )
+                self.exchange_feeds[exchange_name] = feed
+                self._validate_required_environment(exchange_name)
+                fingerprint = credential_fingerprints.get(exchange_name)
+                if fingerprint is not None:
+                    session.bind_credential_identity(exchange_name, fingerprint)
             except Exception:
+                feed = self.exchange_feeds.pop(exchange_name, None)
+                if feed is not None:
+                    with suppress(Exception):
+                        feed.disconnect()
                 self.data_queues.pop(exchange_name, None)
                 self.exchange_kwargs.pop(exchange_name, None)
                 raise
@@ -281,9 +1421,15 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         ZMQ transport has no direct feed escape hatch and raises
         ``CapabilityNotSupportedError`` instead of returning ``None``.
         """
+        if self._execution_session is not None:
+            raise CapabilityNotSupportedError(
+                "get_request_api",
+                detail="execution session does not expose unmanaged writes",
+            )
         if self.transport_mode is TransportMode.ZMQ:
             raise CapabilityNotSupportedError(
-                "get_request_api", detail="ZMQ transport has no direct feed escape hatch"
+                "get_request_api",
+                detail="ZMQ transport has no direct feed escape hatch",
             )
         api = self.exchange_feeds.get(exchange_name)
         if api is None:
@@ -325,12 +1471,20 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         exchange, asset_type, symbol = self._parse_dataname(dataname)
         exchange_name = exchange + DATANAME_SEPARATOR + asset_type
         normalized_topics, subscribe_bar_num = self._normalize_subscribe_topics(topics)
-        exchange_params = self._copy_exchange_params(self.exchange_kwargs.get(exchange_name, {}))
+        if self.transport_mode is TransportMode.ZMQ:
+            self._backend.subscribe(exchange_name, symbol, normalized_topics)
+            self.subscribe_bar_num += subscribe_bar_num
+            return
+        exchange_params = self._copy_exchange_params(
+            self.exchange_kwargs.get(exchange_name, {})
+        )
         data_queue = self.get_data_queue(exchange_name)
         if data_queue is None:
             raise SubscribeError(exchange_name, detail="exchange not registered")
 
-        subscribe_handler = ExchangeRegistry.get_stream_class(exchange_name, "subscribe")
+        subscribe_handler = ExchangeRegistry.get_stream_class(
+            exchange_name, "subscribe"
+        )
         if subscribe_handler is None:
             raise CapabilityNotSupportedError(
                 "subscribe", detail=f"no stream handler registered for {exchange_name}"
@@ -359,11 +1513,58 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
     def list_exchanges(self) -> list[str]:
         """列出所有已添加的交易所"""
-        return list(self.exchange_feeds.keys())
+        return list(
+            self.exchange_kwargs
+            if self.transport_mode is TransportMode.ZMQ
+            else self.exchange_feeds
+        )
 
     def close(self) -> None:
+        """Release transports and the execution lock, including on close failure."""
+        failure = None
+        try:
+            self._close_transports()
+        except Exception as exc:
+            if self._execution_session is not None:
+                from ._normalization import normalize_error
+
+                failure = normalize_error(exc, "close")
+            else:
+                raise
+        finally:
+            self.event_bus.off("ws.connected", self._on_websocket_connected)
+            if self._execution_session is not None:
+                self._execution_session.close()
+        if failure is not None:
+            raise failure from None
+
+    def _close_transports(self) -> None:
         """Close all exchange feeds (WebSocket streams + HTTP clients)."""
+        if self.transport_mode is TransportMode.ZMQ:
+            self._backend.close()
+            self._normalized_event_pending.clear()
+            return
         errors: list[str] = []
+        remaining_streams: list[Any] = []
+        for index, stream in enumerate(self._subscription_streams):
+            stream_failed = False
+            stop = getattr(stream, "stop", None)
+            disconnect = getattr(stream, "disconnect", None)
+            methods = [method for method in (stop, disconnect) if callable(method)]
+            if not methods:
+                close = getattr(stream, "close", None)
+                methods = [close] if callable(close) else []
+            for method in methods:
+                try:
+                    method()
+                except Exception as exc:
+                    stream_failed = True
+                    errors.append(f"subscription {index}: {type(exc).__name__}: {exc}")
+            if stream_failed:
+                remaining_streams.append(stream)
+        self._subscription_streams = remaining_streams
+        if not remaining_streams:
+            self._subscription_flags.clear()
         for exchange_name, feed in self.exchange_feeds.items():
             try:
                 if hasattr(feed, "disconnect"):
@@ -398,15 +1599,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     async def async_close(self) -> None:
         """Close all exchange feeds (WebSocket streams + HTTP clients)."""
         # Feed.disconnect() is sync-only; no async variant exists in the base class.
-        errors: list[str] = []
-        for exchange_name, feed in self.exchange_feeds.items():
-            try:
-                if hasattr(feed, "disconnect"):
-                    feed.disconnect()
-            except Exception as exc:
-                errors.append(f"{exchange_name}: {type(exc).__name__}: {exc}")
-        if errors:
-            raise RuntimeError("failed to close feeds: " + "; ".join(errors))
+        self.close()
 
     @staticmethod
     def list_available_exchanges() -> list[str]:
@@ -437,10 +1630,21 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识, 如 "BINANCE___SWAP"
         :param symbol: 交易对, 如 "BTC-USDT"
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_tick",
+                exchange_name,
+                symbol,
+                lambda: self.get_tick(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_tick", extra_data, kwargs)
-            return self._backend.get_tick(exchange_name, symbol, consistency=consistency)
+            return self._backend.get_tick(
+                exchange_name, symbol, consistency=consistency
+            )
         return self._backend.get_tick(
             exchange_name,
             symbol,
@@ -462,10 +1666,21 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param symbol: 交易对
         :param count: 深度档数
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_depth",
+                exchange_name,
+                symbol,
+                lambda: self.get_depth(
+                    exchange_name, symbol, count, extra_data=extra_data, **kwargs
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_depth", extra_data, kwargs)
-            return self._backend.get_depth(exchange_name, symbol, count, consistency=consistency)
+            return self._backend.get_depth(
+                exchange_name, symbol, count, consistency=consistency
+            )
         return self._backend.get_depth(
             exchange_name,
             symbol,
@@ -490,6 +1705,20 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param period: K线周期, 如 "1m", "5m", "1H", "1D"
         :param count: K线数量
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_kline",
+                exchange_name,
+                symbol,
+                lambda: self.get_kline(
+                    exchange_name,
+                    symbol,
+                    period,
+                    count,
+                    extra_data=extra_data,
+                    **kwargs,
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_kline", extra_data, kwargs)
@@ -505,6 +1734,1021 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             extra_data=extra_data,
             **kwargs,
         )
+
+    def _direct_read_method(
+        self, exchange_name: str, operation: str, *aliases: str
+    ) -> Any:
+        """Resolve an optional read operation without exposing the feed to callers."""
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="transport=zmq has no forwarding protocol for this read operation",
+            )
+        feed = self._get_feed(exchange_name)
+        for name in (operation, *aliases):
+            method = getattr(feed, name, None)
+            if callable(method):
+                return method
+        raise CapabilityNotSupportedError(
+            operation,
+            detail=f"transport=direct; {exchange_name} does not implement this operation",
+        )
+
+    def get_exchange_info(
+        self,
+        exchange_name: str,
+        symbol: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Read native instrument metadata through the direct transport.
+
+        Returns the feed's native response unchanged. Binance exchange info
+        includes ``symbols[].filters``; OKX instruments include ``ctVal``,
+        ``ctValCcy``, ``lotSz``, ``minSz`` and ``tickSz``. Callers must use these
+        fields to distinguish base-asset quantities from contract quantities.
+        The forwarding protocol does not currently support this operation.
+        """
+        if kwargs.pop("normalized", False):
+            cache_key = (exchange_name, symbol)
+            if (
+                self._execution_session is not None
+                and cache_key in self._instrument_cache
+            ):
+                return deepcopy(self._instrument_cache[cache_key])
+            result = self._normalized_call(
+                "get_exchange_info",
+                exchange_name,
+                symbol,
+                lambda: self.get_exchange_info(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
+            if self._execution_session is not None:
+                self._instrument_cache[cache_key] = deepcopy(result)
+            return result
+        method = self._direct_read_method(exchange_name, "get_exchange_info")
+        return method(symbol, extra_data=extra_data, **kwargs)
+
+    def get_funding_rate(
+        self, exchange_name: str, symbol: str, extra_data: Any = None, **kwargs: Any
+    ) -> Any:
+        """Read perpetual funding data, preserving the feed-native response and units."""
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_funding_rate",
+                exchange_name,
+                symbol,
+                lambda: self.get_funding_rate(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
+        method = self._direct_read_method(exchange_name, "get_funding_rate")
+        return method(symbol, extra_data=extra_data, **kwargs)
+
+    def get_instrument_spec(
+        self,
+        exchange_name: str,
+        symbol: str,
+        extra_data: Any = None,
+        *,
+        refresh: bool = False,
+        **kwargs: Any,
+    ) -> InstrumentSpec:
+        """Return strict Decimal quantity/price rules while preserving legacy reads."""
+        from ._normalization import instrument_spec
+
+        cache_key = (exchange_name, symbol)
+        if not refresh and cache_key in self._instrument_spec_cache:
+            return self._instrument_spec_cache[cache_key]
+        self._validate_required_environment(
+            exchange_name, operation="get_instrument_spec"
+        )
+        try:
+            raw = self.get_exchange_info(
+                exchange_name,
+                symbol,
+                extra_data=extra_data,
+                **kwargs,
+            )
+            result = instrument_spec(raw, exchange_name, symbol)
+        except Exception as exc:
+            result = InstrumentSpec(
+                exchange_name=exchange_name,
+                symbol=symbol,
+                asset_type=exchange_name.partition("___")[2].lower(),
+                base_currency="",
+                quote_currency="",
+                contract_type="unknown",
+                linear=True,
+                contract_value=None,
+                contract_multiplier=None,
+                price_tick=None,
+                quantity_step=None,
+                min_quantity=None,
+                max_quantity=None,
+                min_notional=None,
+                quantity_unit="native",
+                status="unknown",
+                freshness=Freshness(
+                    source="unavailable",
+                    observed_at=datetime.now(UTC),
+                    stale=True,
+                    stale_reason="instrument_rules_unavailable",
+                ),
+                raw_rule_fingerprint="",
+                source="unavailable",
+                available=False,
+                unavailable_reason=getattr(exc, "code", "instrument_rules_unavailable"),
+            )
+        if result.available:
+            self._instrument_spec_cache[cache_key] = result
+        return result
+
+    def get_fee_schedule(
+        self,
+        exchange_name: str,
+        symbol: str,
+        account_id: str,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> FeeSchedule:
+        """Read account fee rates as an explicit available/unavailable snapshot."""
+        from ._normalization import fee_schedule, okx_fee_scope
+
+        self._validate_required_environment(exchange_name, operation="get_fee_schedule")
+        try:
+            method = self._direct_read_method(exchange_name, "get_fee")
+            if exchange_name.startswith("OKX___"):
+                forbidden = {"inst_id", "inst_family", "group_id", "uly"} & set(kwargs)
+                if forbidden:
+                    raise NormalizedApiError(
+                        "get_fee_schedule",
+                        "fee_scope_override_forbidden",
+                        definite_reject=True,
+                        category="parameter",
+                    )
+                metadata = self.get_exchange_info(
+                    exchange_name,
+                    symbol,
+                    extra_data=extra_data,
+                    **kwargs,
+                )
+                scope = okx_fee_scope(metadata, exchange_name, symbol)
+                fee_kwargs = {
+                    "inst_type": scope["asset_type"],
+                    "extra_data": extra_data,
+                    **kwargs,
+                }
+                if scope["asset_type"] in {"SPOT", "MARGIN"}:
+                    fee_kwargs["inst_id"] = scope["inst_id"]
+                elif scope["group_id"] is not None:
+                    # OKX forbids groupId together with instId/instFamily.
+                    fee_kwargs["group_id"] = scope["group_id"]
+                else:
+                    fee_kwargs["inst_family"] = scope["inst_family"]
+                native = method(**fee_kwargs)
+                return fee_schedule(
+                    native,
+                    exchange_name,
+                    symbol,
+                    account_id,
+                    expected_group_id=scope["group_id"],
+                    metadata_currency=scope["currency"],
+                )
+            else:
+                native = method(symbol, extra_data=extra_data, **kwargs)
+            return fee_schedule(native, exchange_name, symbol, account_id)
+        except Exception as exc:
+            reason = self._fee_schedule_failure_reason(exc, exchange_name)
+            return FeeSchedule(
+                exchange_name=exchange_name,
+                symbol=symbol,
+                account_id=account_id,
+                maker_rate=None,
+                taker_rate=None,
+                currency=None,
+                source="unavailable",
+                freshness=Freshness(
+                    source="unavailable",
+                    observed_at=datetime.now(UTC),
+                    stale=True,
+                    stale_reason=reason,
+                ),
+                available=False,
+                unavailable_reason=reason,
+            )
+
+    @staticmethod
+    def _fee_schedule_failure_reason(exc: Exception, exchange_name: str) -> str:
+        """Classify a fee read without retaining transport messages or signed URLs."""
+        from ._normalization import normalize_error
+
+        if isinstance(exc, CapabilityNotSupportedError):
+            return "fee_capability_not_supported"
+        normalized = normalize_error(
+            exc,
+            "get_fee_schedule",
+            exchange_name=exchange_name,
+        )
+        code = str(getattr(normalized, "code", ""))
+        category = getattr(normalized, "category", None)
+        if code.startswith("fee_"):
+            return code
+        if category == "parameter":
+            return f"fee_parameter_error_{code}"
+        if category == "auth":
+            return f"fee_auth_error_{code}"
+        if code in {"TimeoutError", "ConnectionError", "OSError"}:
+            return "fee_transport_failed"
+        if code.lstrip("-").isdigit():
+            return f"fee_api_error_{code}"
+        if isinstance(exc, ValueError):
+            return "fee_parameter_error_local_validation"
+        return "fee_read_failed"
+
+    @staticmethod
+    def _unavailable_funding_snapshot(
+        exchange_name: str,
+        symbol: str,
+        reason: str,
+    ) -> FundingSnapshot:
+        """Return a credential-safe fail-closed funding result."""
+        return FundingSnapshot(
+            exchange_name=exchange_name,
+            symbol=symbol,
+            rate=None,
+            next_funding_time=None,
+            settlement_interval_seconds=None,
+            source="unavailable",
+            freshness=Freshness(
+                source="unavailable",
+                observed_at=datetime.now(UTC),
+                stale=True,
+                stale_reason=reason,
+            ),
+            available=False,
+            unavailable_reason=reason,
+        )
+
+    @staticmethod
+    def _binance_funding_symbol_key(value: Any) -> str:
+        """Match Binance native symbols to the SDK's optional dashed spelling."""
+        return "".join(
+            character for character in str(value or "").upper() if character.isalnum()
+        )
+
+    @classmethod
+    def _matching_binance_funding_rows(
+        cls,
+        source: list[dict[str, Any]],
+        symbol: str,
+    ) -> list[dict[str, Any]]:
+        target = cls._binance_funding_symbol_key(symbol)
+        if not target:
+            return []
+        matched = []
+        for row in source:
+            identities = [
+                cls._binance_funding_symbol_key(row.get(field))
+                for field in (
+                    "symbol",
+                    "symbol_name",
+                    "funding_rate_symbol_name",
+                )
+                if row.get(field) not in (None, "")
+            ]
+            if identities and all(identity == target for identity in identities):
+                matched.append(row)
+        return matched
+
+    def _complete_binance_funding_schedule(
+        self,
+        exchange_name: str,
+        symbol: str,
+        premium_native: Any,
+        incomplete: FundingSnapshot,
+        extra_data: Any,
+    ) -> FundingSnapshot:
+        """Complete Binance's premium-index row from exchange-evidenced schedule data.
+
+        ``fundingInfo`` contains only symbols whose schedule or caps were
+        adjusted. For an unlisted symbol, the most recent public funding
+        settlement and ``nextFundingTime`` provide an evidenced interval. No
+        default Binance interval is assumed.
+        """
+        from ._normalization import funding_snapshot, rows, seconds
+
+        try:
+            premium_rows = rows(
+                premium_native,
+                "get_funding_snapshot",
+                exchange_name=exchange_name,
+            )
+        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+            return self._unavailable_funding_snapshot(
+                exchange_name,
+                symbol,
+                "funding_payload_invalid",
+            )
+        matched_premium = self._matching_binance_funding_rows(premium_rows, symbol)
+        if len(matched_premium) != 1:
+            return self._unavailable_funding_snapshot(
+                exchange_name,
+                symbol,
+                "funding_payload_invalid",
+            )
+        premium_row = matched_premium[0]
+        incomplete = funding_snapshot(premium_row, exchange_name, symbol)
+        if (
+            incomplete.available
+            or incomplete.unavailable_reason != "funding_interval_missing"
+        ):
+            return incomplete
+        feed = self._get_feed(exchange_name)
+        transport_failed = False
+        payload_invalid = False
+
+        funding_info = getattr(feed, "get_funding_info", None)
+        if callable(funding_info):
+            try:
+                info_native = funding_info(extra_data=deepcopy(extra_data))
+            except (CapabilityNotSupportedError, NotImplementedError):
+                pass
+            except Exception:
+                transport_failed = True
+            else:
+                try:
+                    info_rows = rows(
+                        info_native,
+                        "get_funding_info",
+                        exchange_name=exchange_name,
+                    )
+                except NormalizedApiError:
+                    transport_failed = True
+                except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+                    payload_invalid = True
+                else:
+                    matched = self._matching_binance_funding_rows(info_rows, symbol)
+                    if len(matched) > 1:
+                        return self._unavailable_funding_snapshot(
+                            exchange_name,
+                            symbol,
+                            "funding_payload_invalid",
+                        )
+                    if matched:
+                        merged = {
+                            **premium_row,
+                            "fundingIntervalHours": matched[0].get(
+                                "fundingIntervalHours"
+                            ),
+                        }
+                        return funding_snapshot(merged, exchange_name, symbol)
+
+        history = getattr(feed, "get_history_funding_rate", None)
+        if callable(history):
+            try:
+                history_native = history(
+                    symbol,
+                    count=2,
+                    extra_data=deepcopy(extra_data),
+                )
+            except (CapabilityNotSupportedError, NotImplementedError):
+                pass
+            except Exception:
+                transport_failed = True
+            else:
+                try:
+                    history_rows = rows(
+                        history_native,
+                        "get_history_funding_rate",
+                        exchange_name=exchange_name,
+                    )
+                except NormalizedApiError:
+                    transport_failed = True
+                except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+                    payload_invalid = True
+                else:
+                    matched = self._matching_binance_funding_rows(history_rows, symbol)
+                    settlements = []
+                    next_epoch = incomplete.next_funding_time.timestamp()
+                    for row in matched:
+                        funding_time = row.get(
+                            "fundingTime", row.get("current_funding_time")
+                        )
+                        try:
+                            funding_epoch = seconds(funding_time)
+                        except (OverflowError, TypeError, ValueError):
+                            payload_invalid = True
+                            continue
+                        if funding_epoch is not None and 0 < funding_epoch < next_epoch:
+                            settlements.append((funding_epoch, funding_time))
+                    if settlements:
+                        _, latest_funding_time = max(
+                            settlements, key=lambda item: item[0]
+                        )
+                        merged = {
+                            **premium_row,
+                            "fundingTime": latest_funding_time,
+                        }
+                        return funding_snapshot(merged, exchange_name, symbol)
+                    if matched:
+                        payload_invalid = True
+
+        if payload_invalid:
+            return self._unavailable_funding_snapshot(
+                exchange_name,
+                symbol,
+                "funding_payload_invalid",
+            )
+        if transport_failed:
+            return self._unavailable_funding_snapshot(
+                exchange_name,
+                symbol,
+                "funding_transport_failed",
+            )
+        return incomplete
+
+    def get_funding_snapshot(
+        self,
+        exchange_name: str,
+        symbol: str,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> FundingSnapshot:
+        """Read the next funding settlement as a Decimal typed snapshot."""
+        from ._normalization import funding_snapshot, rows
+
+        self._validate_required_environment(
+            exchange_name, operation="get_funding_snapshot"
+        )
+
+        try:
+            native = self.get_funding_rate(
+                exchange_name,
+                symbol,
+                extra_data=extra_data,
+                **kwargs,
+            )
+        except Exception:
+            # A failed transport call says nothing about the validity of the
+            # last successful snapshot. Consumers may retain that snapshot
+            # only until its original freshness/schedule deadline.
+            return self._unavailable_funding_snapshot(
+                exchange_name,
+                symbol,
+                "funding_transport_failed",
+            )
+
+        try:
+            if exchange_name.startswith("BINANCE___"):
+                native_rows = rows(
+                    native,
+                    "get_funding_snapshot",
+                    exchange_name=exchange_name,
+                )
+                matching_rows = self._matching_binance_funding_rows(native_rows, symbol)
+                if len(matching_rows) != 1:
+                    return self._unavailable_funding_snapshot(
+                        exchange_name,
+                        symbol,
+                        "funding_payload_invalid",
+                    )
+                native = matching_rows[0]
+            result = funding_snapshot(native, exchange_name, symbol)
+        except (NormalizedApiError, CapabilityNotSupportedError):
+            # Vendor error payloads are raised by the normalizer. They are a
+            # failed read, rather than evidence that a prior schedule changed.
+            return self._unavailable_funding_snapshot(
+                exchange_name,
+                symbol,
+                "funding_transport_failed",
+            )
+        except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
+            # A response that arrived but cannot satisfy the typed contract
+            # invalidates the current read and must fail closed.
+            return self._unavailable_funding_snapshot(
+                exchange_name,
+                symbol,
+                "funding_payload_invalid",
+            )
+        if (
+            exchange_name.startswith("BINANCE___")
+            and result.available is False
+            and result.unavailable_reason == "funding_interval_missing"
+        ):
+            return self._complete_binance_funding_schedule(
+                exchange_name,
+                symbol,
+                native,
+                result,
+                extra_data,
+            )
+        return result
+
+    def get_trading_readiness(
+        self,
+        exchange_name: str,
+        symbol: str,
+        account_id: str,
+        quantity_native: Decimal | None = None,
+        *,
+        margin_mode: str = "cross",
+        position_mode: str | None = None,
+        extra_data: Any = None,
+    ) -> TradingReadiness:
+        """Return a conservative typed preflight for OKX or Binance perpetuals."""
+        self._validate_required_environment(
+            exchange_name, operation="get_trading_readiness"
+        )
+        environment = self.get_environment_info(exchange_name)
+        observed = Freshness(source="exchange", observed_at=datetime.now(UTC))
+        try:
+            if quantity_native is None:
+                raise ValueError("quantity_required")
+            legacy = self.get_order_readiness(
+                exchange_name,
+                symbol,
+                quantity_native,
+                margin_mode=margin_mode,
+                position_mode=position_mode,
+                extra_data=extra_data,
+            )
+            leverage_values = [
+                Decimal(str(value))
+                for value in legacy.get("leverage_by_position_side", {}).values()
+                if value is not None
+            ]
+            if legacy.get("leverage") is not None:
+                leverage_values.append(Decimal(str(legacy["leverage"])))
+            maxima = [
+                Decimal(str(value))
+                for value in (
+                    legacy.get("max_size"),
+                    legacy.get("max_buy"),
+                    legacy.get("max_sell"),
+                )
+                if value is not None
+            ]
+            reasons = list(legacy.get("reasons", ()))
+            if environment.get("verified") is not True:
+                reasons.append("environment_unverified")
+            return TradingReadiness(
+                exchange_name=exchange_name,
+                symbol=symbol,
+                account_id=account_id,
+                environment=str(environment.get("environment", "unknown")),
+                can_trade=legacy.get("checks", {}).get("trading_permission"),
+                position_mode=legacy.get("position_mode"),
+                instrument_status=legacy.get("instrument_state"),
+                max_size=min(maxima) if maxima else None,
+                leverage=min(leverage_values) if leverage_values else None,
+                margin_mode=margin_mode,
+                definite_failure=bool(legacy.get("definite_failure")),
+                blocked_reasons=tuple(dict.fromkeys(reasons)),
+                source=f"{exchange_name.partition('___')[0].lower()}_readiness",
+                freshness=observed,
+                raw={"checks": dict(legacy.get("checks", {}))},
+            )
+        except Exception:
+            return TradingReadiness(
+                exchange_name=exchange_name,
+                symbol=symbol,
+                account_id=account_id,
+                environment=str(environment.get("environment", "unknown")),
+                can_trade=None,
+                position_mode=None,
+                instrument_status=None,
+                max_size=None,
+                leverage=None,
+                margin_mode=margin_mode,
+                definite_failure=False,
+                blocked_reasons=("readiness_unavailable",),
+                source="unavailable",
+                freshness=Freshness(
+                    source="unavailable",
+                    observed_at=datetime.now(UTC),
+                    stale=True,
+                    stale_reason="readiness_read_failed",
+                ),
+                available=False,
+                unavailable_reason="readiness_read_failed",
+            )
+
+    async def async_get_trading_readiness(
+        self,
+        exchange_name: str,
+        symbol: str,
+        account_id: str,
+        quantity_native: Decimal | None = None,
+        *,
+        margin_mode: str = "cross",
+        position_mode: str | None = None,
+        extra_data: Any = None,
+    ) -> TradingReadiness:
+        """Run the same typed readiness contract without blocking the event loop."""
+        return await asyncio.to_thread(
+            self.get_trading_readiness,
+            exchange_name,
+            symbol,
+            account_id,
+            quantity_native,
+            margin_mode=margin_mode,
+            position_mode=position_mode,
+            extra_data=extra_data,
+        )
+
+    def _mark_position_mode_reconcile_required(
+        self, exchange_name: str, reason: str
+    ) -> None:
+        """Invalidate a mode snapshot after an outcome that needs reconciliation."""
+        with self._position_mode_lock:
+            self._position_modes.pop(exchange_name, None)
+            self._position_mode_reconcile_required[exchange_name] = reason
+
+    def _record_verified_position_mode(
+        self, exchange_name: str, position_mode: str
+    ) -> None:
+        """Publish one authoritative mode snapshot and release its safety latch."""
+        with self._position_mode_lock:
+            self._position_modes[exchange_name] = position_mode
+            self._position_mode_reconcile_required.pop(exchange_name, None)
+
+    def _begin_position_mode_placement(
+        self,
+        exchange_name: str,
+        request: OrderRequest | None = None,
+        *,
+        resolve_mode: bool = False,
+    ) -> tuple[OrderRequest | None, bool]:
+        """Atomically enforce mode state and register a crypto order placement."""
+        if exchange_name.partition(DATANAME_SEPARATOR)[0] not in {"OKX", "BINANCE"}:
+            return request, False
+        with self._position_mode_lock:
+            if exchange_name in self._position_mode_reconcile_required:
+                raise NormalizedApiError(
+                    "make_order",
+                    "position_mode_reconcile_required",
+                    definite_reject=True,
+                )
+            if resolve_mode and request is None:
+                raise TypeError("normalized placement requires an OrderRequest")
+            if resolve_mode and request.position_mode is None:
+                self._validate_required_environment(
+                    exchange_name, operation="get_position_mode"
+                )
+                mode = self._position_modes.get(exchange_name)
+                if mode is None:
+                    mode = self.get_position_mode(exchange_name, normalized=True)[
+                        "position_mode"
+                    ]
+                request = replace(request, position_mode=mode)
+            self._position_mode_active_placements[exchange_name] = (
+                self._position_mode_active_placements.get(exchange_name, 0) + 1
+            )
+            return request, True
+
+    def _end_position_mode_placement(self, exchange_name: str) -> None:
+        """Release a crypto placement registration after the provider call ends."""
+        with self._position_mode_lock:
+            active = self._position_mode_active_placements.get(exchange_name, 0)
+            if active <= 1:
+                self._position_mode_active_placements.pop(exchange_name, None)
+            else:
+                self._position_mode_active_placements[exchange_name] = active - 1
+
+    def get_account_config(
+        self, exchange_name: str, extra_data: Any = None, *, normalized: bool = False
+    ) -> Any:
+        """Read account mode and explicit trading permission without changing either.
+
+        OKX exposes this operation as ``get_config``; its native ``data``
+        entries include ``posMode`` and API-key permissions. Binance USD-M
+        futures exposes ``dualSidePosition`` and ``canTrade`` together through
+        its read-only account-configuration endpoint.
+        """
+        if normalized:
+            with self._position_mode_lock:
+                result = self._normalized_call(
+                    "get_account_config",
+                    exchange_name,
+                    None,
+                    lambda: self.get_account_config(
+                        exchange_name, extra_data=extra_data
+                    ),
+                )
+                self._record_verified_position_mode(
+                    exchange_name, result["position_mode"]
+                )
+                return result
+        method = self._direct_read_method(
+            exchange_name, "get_account_config", "get_config"
+        )
+        return method(extra_data=extra_data)
+
+    def get_position_mode(
+        self, exchange_name: str, extra_data: Any = None, *, normalized: bool = False
+    ) -> Any:
+        """Read the native position mode without modifying it.
+
+        Binance returns ``dualSidePosition``. OKX reports ``posMode`` inside
+        its account configuration response. Neither format is normalized to
+        a boolean, and unsupported feeds fail explicitly.
+        """
+        if normalized:
+            with self._position_mode_lock:
+                result = self._normalized_call(
+                    "get_position_mode",
+                    exchange_name,
+                    None,
+                    lambda: self.get_position_mode(
+                        exchange_name, extra_data=extra_data
+                    ),
+                )
+                self._record_verified_position_mode(
+                    exchange_name, result["position_mode"]
+                )
+                return result
+        aliases = ("get_config",) if exchange_name.startswith("OKX___") else ()
+        method = self._direct_read_method(exchange_name, "get_position_mode", *aliases)
+        return method(extra_data=extra_data)
+
+    def set_position_mode(
+        self,
+        exchange_name: str,
+        position_mode: str,
+        extra_data: Any = None,
+        *,
+        normalized: bool = True,
+        **kwargs: Any,
+    ) -> PositionModeUpdate:
+        """Set and read back an account-wide perpetual position mode.
+
+        The public contract accepts only ``net`` and ``dual_side``. A provider
+        acknowledgement is insufficient: the method reads the position mode
+        back from the account and returns only after the requested value is
+        observed. An uncertain outcome invalidates the local mode cache and
+        blocks normalized placements until a fresh normalized read verifies it.
+        """
+        operation = "set_position_mode"
+        if normalized is not True:
+            raise NormalizedApiError(
+                operation, "normalized_result_required", definite_reject=True
+            )
+        if not isinstance(position_mode, str) or position_mode not in {
+            "net",
+            "dual_side",
+        }:
+            raise NormalizedApiError(
+                operation, "invalid_position_mode", definite_reject=True
+            )
+        if exchange_name not in {"OKX___SWAP", "BINANCE___SWAP"}:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail=f"{exchange_name} has no normalized position-mode mutation",
+                definite_reject=True,
+            )
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="transport=zmq has no forwarding protocol for this operation",
+                definite_reject=True,
+            )
+        if self._execution_session is not None:
+            self._execution_session.require_write(operation)
+
+        with self._position_mode_lock:
+            if self._position_mode_active_placements.get(exchange_name, 0):
+                raise NormalizedApiError(
+                    operation,
+                    "position_mode_placement_inflight",
+                    definite_reject=True,
+                )
+            try:
+                acknowledgement = self._normalized_call(
+                    operation,
+                    exchange_name,
+                    None,
+                    lambda: self._backend.set_position_mode(
+                        exchange_name,
+                        position_mode,
+                        extra_data=extra_data,
+                        **kwargs,
+                    ),
+                )
+            except Exception as exc:
+                if getattr(exc, "execution_unknown", False):
+                    self._mark_position_mode_reconcile_required(
+                        exchange_name, "mutation_outcome_unknown"
+                    )
+                raise
+            self._mark_position_mode_reconcile_required(
+                exchange_name, "verification_required"
+            )
+            verification_failed = False
+            try:
+                observed = self._normalized_call(
+                    "get_position_mode",
+                    exchange_name,
+                    None,
+                    lambda: self.get_position_mode(
+                        exchange_name,
+                        extra_data=extra_data,
+                    ),
+                )
+            except Exception:
+                verification_failed = True
+                observed = None
+            if verification_failed:
+                self._mark_position_mode_reconcile_required(
+                    exchange_name, "verification_failed"
+                )
+                raise NormalizedApiError(
+                    operation,
+                    "position_mode_verification_failed",
+                    execution_unknown=True,
+                ) from None
+            if observed["position_mode"] != position_mode:
+                self._mark_position_mode_reconcile_required(
+                    exchange_name, "verification_mismatch"
+                )
+                raise NormalizedApiError(
+                    operation,
+                    "position_mode_verification_mismatch",
+                    execution_unknown=True,
+                ) from None
+            result = PositionModeUpdate(
+                exchange_name=exchange_name,
+                requested_mode=position_mode,
+                position_mode=observed["position_mode"],
+                acknowledged=acknowledgement["acknowledged"],
+                verified=True,
+                cache_updated=True,
+                source=f"{exchange_name.partition('___')[0].lower()}_account_readback",
+                observed_at=datetime.now(UTC),
+            )
+            self._record_verified_position_mode(exchange_name, position_mode)
+            return result
+
+    def get_order_readiness(
+        self,
+        exchange_name: str,
+        symbol: str,
+        quantity_native: Decimal | float | int | str,
+        *,
+        margin_mode: str = "cross",
+        position_mode: str | None = None,
+        normalized: bool = True,
+        extra_data: Any = None,
+    ) -> dict[str, Any]:
+        """Inspect perpetual order prerequisites without submitting an order.
+
+        ``quantity_native`` is an OKX contract count or Binance base-asset
+        quantity. A result with ``ready=True`` still carries
+        ``execution_unproven=True`` because only an exchange order response can
+        prove execution access.
+        """
+        operation = "get_order_readiness"
+        if exchange_name not in {"OKX___SWAP", "BINANCE___SWAP"}:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail=f"{exchange_name} has no normalized readiness mapper",
+            )
+        if self.transport_mode is TransportMode.ZMQ:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="transport=zmq has no forwarding protocol for readiness reads",
+            )
+        if not normalized:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="readiness is available only as a normalized snapshot",
+            )
+        if margin_mode not in {"cross", "isolated"}:
+            raise NormalizedApiError(
+                operation, "invalid_margin_mode", definite_reject=True
+            )
+        session = self._execution_session
+        if session is not None and session.config["market_data_only"]:
+            raise CapabilityNotSupportedError(
+                operation, detail="market-data-only session"
+            )
+        self._validate_required_environment(exchange_name, operation=operation)
+
+        from ._normalization import normalize_error
+
+        def options() -> Any:
+            return deepcopy(extra_data)
+
+        failure = None
+        try:
+            account_config = self._backend.get_account_config(
+                exchange_name, extra_data=options()
+            )
+            if exchange_name == "OKX___SWAP":
+                from ._venue_mappers.okx import normalize_order_readiness
+
+                account_instruments = self._backend.get_account_instruments(
+                    exchange_name, symbol, extra_data=options()
+                )
+                snapshot = normalize_order_readiness(
+                    exchange_name,
+                    symbol,
+                    quantity_native,
+                    margin_mode=margin_mode,
+                    expected_position_mode=position_mode,
+                    account_config=account_config,
+                    account_instruments=account_instruments,
+                )
+                if snapshot["definite_failure"]:
+                    return snapshot
+                leverage_info = self._backend.get_leverage_info(
+                    exchange_name,
+                    symbol,
+                    margin_mode=margin_mode,
+                    extra_data=options(),
+                )
+                max_size = self._backend.get_max_size(
+                    exchange_name,
+                    symbol,
+                    margin_mode=margin_mode,
+                    extra_data=options(),
+                )
+                return normalize_order_readiness(
+                    exchange_name,
+                    symbol,
+                    quantity_native,
+                    margin_mode=margin_mode,
+                    expected_position_mode=position_mode,
+                    account_config=account_config,
+                    account_instruments=account_instruments,
+                    leverage_info=leverage_info,
+                    max_size=max_size,
+                )
+
+            from ._venue_mappers.binance import normalize_order_readiness
+
+            exchange_info = self._backend.get_exchange_info(
+                exchange_name, symbol, extra_data=options()
+            )
+
+            def optional_read(name: str, *args: Any, **read_kwargs: Any) -> Any:
+                method = getattr(self._backend, name, None)
+                if not callable(method):
+                    return None
+                try:
+                    return method(*args, **read_kwargs)
+                except Exception:
+                    return None
+
+            position_mode_info = optional_read(
+                "get_position_mode", exchange_name, extra_data=options()
+            )
+            initial = normalize_order_readiness(
+                exchange_name,
+                symbol,
+                quantity_native,
+                margin_mode=margin_mode,
+                expected_position_mode=position_mode,
+                account_config=account_config,
+                exchange_info=exchange_info,
+                position_mode_info=position_mode_info,
+            )
+            if initial["definite_failure"]:
+                return initial
+            symbol_config = optional_read(
+                "get_symbol_config", exchange_name, symbol, extra_data=options()
+            )
+            leverage_info = optional_read(
+                "get_leverage_info",
+                exchange_name,
+                symbol,
+                margin_mode=margin_mode,
+                extra_data=options(),
+            )
+            max_size = optional_read(
+                "get_max_size",
+                exchange_name,
+                symbol,
+                margin_mode=margin_mode,
+                extra_data=options(),
+            )
+            return normalize_order_readiness(
+                exchange_name,
+                symbol,
+                quantity_native,
+                margin_mode=margin_mode,
+                expected_position_mode=position_mode,
+                account_config=account_config,
+                exchange_info=exchange_info,
+                position_mode_info=position_mode_info,
+                symbol_config=symbol_config,
+                leverage_info=leverage_info,
+                max_size=max_size,
+            )
+        except Exception as exc:
+            failure = normalize_error(exc, operation, exchange_name=exchange_name)
+        raise failure from None
 
     # ── 交易操作（同步）────────────────────────────────────────────
 
@@ -528,20 +2772,57 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         仅当 order_type 能推导 side（``side-type``）时兼容，裸 ``limit``/``market``
         无法推导 side 时抛 ``LegacyOrderApiError``。
         """
-        if isinstance(symbol, OrderRequest):
-            return self._make_order_typed(exchange_name, symbol)
-        return self._make_order_legacy(
-            exchange_name,
-            symbol,
-            volume,
-            price,
-            order_type,
-            offset,
-            post_only,
-            client_order_id,
-            extra_data,
-            **kwargs,
-        )
+        if kwargs.pop("normalized", False):
+            if not isinstance(symbol, OrderRequest):
+                raise NormalizedApiError(
+                    "make_order", "typed_request_required", definite_reject=True
+                )
+            request = symbol
+            if self._execution_session is not None:
+                self._execution_session.require_write("make_order", placement=True)
+            resolved_request, mode_guarded = self._begin_position_mode_placement(
+                exchange_name,
+                request,
+                resolve_mode=True,
+            )
+            assert resolved_request is not None
+            request = resolved_request
+            try:
+                return self._normalized_call(
+                    "make_order",
+                    exchange_name,
+                    request.symbol,
+                    lambda: self._make_order_typed(exchange_name, request),
+                    request=request,
+                )
+            finally:
+                if mode_guarded:
+                    self._end_position_mode_placement(exchange_name)
+        if self._execution_session is not None:
+            raise NormalizedApiError(
+                "make_order",
+                "session_requires_normalized_typed_request",
+                definite_reject=True,
+            )
+        _, mode_guarded = self._begin_position_mode_placement(exchange_name)
+        try:
+            if isinstance(symbol, OrderRequest):
+                return self._make_order_typed(exchange_name, symbol)
+            return self._make_order_legacy(
+                exchange_name,
+                symbol,
+                volume,
+                price,
+                order_type,
+                offset,
+                post_only,
+                client_order_id,
+                extra_data,
+                **kwargs,
+            )
+        finally:
+            if mode_guarded:
+                self._end_position_mode_placement(exchange_name)
 
     def _make_order_typed(self, exchange_name: str, request: OrderRequest) -> Any:
         return self._backend.make_order(exchange_name, request)
@@ -614,15 +2895,49 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param symbol: 交易对
         :param order_id: 订单ID
         """
+        if kwargs.pop("normalized", False):
+            request = (
+                symbol
+                if isinstance(symbol, CancelOrderRequest)
+                else CancelOrderRequest(
+                    symbol=symbol, account_id="legacy", order_id=order_id
+                )
+            )
+            return self._normalized_call(
+                "cancel_order",
+                exchange_name,
+                request.symbol,
+                lambda: self._cancel_order_raw(
+                    exchange_name, request, extra_data=extra_data, **kwargs
+                ),
+                request=request,
+            )
+        if self._execution_session is not None:
+            raise NormalizedApiError(
+                "cancel_order",
+                "session_requires_normalized_typed_request",
+                definite_reject=True,
+            )
+        return self._cancel_order_raw(
+            exchange_name, symbol, order_id, extra_data, **kwargs
+        )
+
+    def _cancel_order_raw(
+        self, exchange_name, symbol, order_id=None, extra_data=None, **kwargs
+    ):
         request = (
             symbol
             if isinstance(symbol, CancelOrderRequest)
-            else CancelOrderRequest(symbol=symbol, account_id="legacy", order_id=order_id)
+            else CancelOrderRequest(
+                symbol=symbol, account_id="legacy", order_id=order_id
+            )
         )
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("cancel_order", extra_data, kwargs)
             return self._backend.cancel_order(exchange_name, request)
-        return self._backend.cancel_order(exchange_name, request, extra_data=extra_data, **kwargs)
+        return self._backend.cancel_order(
+            exchange_name, request, extra_data=extra_data, **kwargs
+        )
 
     def cancel_all(
         self,
@@ -635,6 +2950,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
+        if self._execution_session is not None:
+            raise CapabilityNotSupportedError(
+                "cancel_all",
+                detail="execution session requires individually journaled cancel_order requests",
+            )
         request = (
             symbol
             if isinstance(symbol, CancelAllRequest)
@@ -643,7 +2963,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("cancel_all", extra_data, kwargs)
             return self._backend.cancel_all(exchange_name, request)
-        return self._backend.cancel_all(exchange_name, request, extra_data=extra_data, **kwargs)
+        return self._backend.cancel_all(
+            exchange_name, request, extra_data=extra_data, **kwargs
+        )
 
     def query_order(
         self,
@@ -658,23 +2980,57 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param symbol: 交易对
         :param order_id: 订单ID
         """
+        if kwargs.pop("normalized", False):
+            request = (
+                symbol
+                if isinstance(symbol, QueryOrderRequest)
+                else QueryOrderRequest(
+                    symbol=symbol, account_id="legacy", order_id=order_id
+                )
+            )
+            return self._normalized_call(
+                "query_order",
+                exchange_name,
+                request.symbol,
+                lambda: self.query_order(
+                    exchange_name, request, extra_data=extra_data, **kwargs
+                ),
+                request=request,
+            )
         request = (
             symbol
             if isinstance(symbol, QueryOrderRequest)
-            else QueryOrderRequest(symbol=symbol, account_id="legacy", order_id=order_id)
+            else QueryOrderRequest(
+                symbol=symbol, account_id="legacy", order_id=order_id
+            )
         )
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("query_order", extra_data, kwargs)
             return self._backend.query_order(exchange_name, request)
-        return self._backend.query_order(exchange_name, request, extra_data=extra_data, **kwargs)
+        return self._backend.query_order(
+            exchange_name, request, extra_data=extra_data, **kwargs
+        )
 
     def get_open_orders(
-        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+        self,
+        exchange_name: str,
+        symbol: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """查询挂单
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_open_orders",
+                exchange_name,
+                symbol,
+                lambda: self.get_open_orders(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_open_orders", extra_data, kwargs)
@@ -700,6 +3056,15 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         the unified facade thin so callers can pass through exchange-specific
         arguments such as ``limit``, ``count``, ``start_time`` or ``end_time``.
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_deals",
+                exchange_name,
+                symbol,
+                lambda: self.get_deals(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_deals", extra_data, kwargs)
@@ -730,17 +3095,32 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "get_trades",
                 detail="transport=zmq; no forwarding public-trades protocol is enabled",
             )
-        return self._get_feed(exchange_name).get_trades(symbol, extra_data=extra_data, **kwargs)
+        return self._get_feed(exchange_name).get_trades(
+            symbol, extra_data=extra_data, **kwargs
+        )
 
     # ── 账户查询（同步）────────────────────────────────────────────
 
     def get_balance(
-        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+        self,
+        exchange_name: str,
+        symbol: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """查询余额
         :param exchange_name: 交易所标识
         :param symbol: 币种 (None 表示全部)
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_balance",
+                exchange_name,
+                symbol,
+                lambda: self.get_balance(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_balance", extra_data, kwargs)
@@ -754,12 +3134,25 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
 
     def get_account(
-        self, exchange_name: str, symbol: str = "ALL", extra_data: Any = None, **kwargs: Any
+        self,
+        exchange_name: str,
+        symbol: str = "ALL",
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """查询账户信息
         :param exchange_name: 交易所标识
         :param symbol: 币种
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_account",
+                exchange_name,
+                symbol,
+                lambda: self.get_account(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_account", extra_data, kwargs)
@@ -773,12 +3166,25 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
 
     def get_position(
-        self, exchange_name: str, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
+        self,
+        exchange_name: str,
+        symbol: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
     ) -> Any:
         """查询持仓
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
+        if kwargs.pop("normalized", False):
+            return self._normalized_call(
+                "get_position",
+                exchange_name,
+                symbol,
+                lambda: self.get_position(
+                    exchange_name, symbol, extra_data=extra_data, **kwargs
+                ),
+            )
         consistency = self._pop_consistency(kwargs)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("get_position", extra_data, kwargs)
@@ -799,7 +3205,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         return Consistency(str(value))
 
     @staticmethod
-    def _reject_zmq_legacy_options(operation: str, extra_data: Any, kwargs: dict[str, Any]) -> None:
+    def _reject_zmq_legacy_options(
+        operation: str, extra_data: Any, kwargs: dict[str, Any]
+    ) -> None:
         """Do not silently drop feed-specific legacy options in ZMQ mode."""
         if extra_data is None and not kwargs:
             return
@@ -809,9 +3217,44 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         raise CapabilityNotSupportedError(
             operation,
             detail=(
-                "transport=zmq does not support feed-specific legacy options: " + ", ".join(names)
+                "transport=zmq does not support feed-specific legacy options: "
+                + ", ".join(names)
             ),
         )
+
+    @staticmethod
+    def _normalize_capability_operations(capabilities: Any) -> dict[str, bool]:
+        """Return deterministic, plain-string capability flags from feed metadata."""
+        if capabilities is None:
+            return {}
+
+        try:
+            as_dict = getattr(capabilities, "as_dict", None)
+        except Exception:
+            return {}
+        if callable(as_dict):
+            try:
+                capabilities = as_dict()
+            except Exception:
+                return {}
+
+        if isinstance(capabilities, Mapping):
+            entries = capabilities.items()
+        elif isinstance(capabilities, (set, frozenset)):
+            entries = ((capability, True) for capability in capabilities)
+        else:
+            return {}
+
+        operations: dict[str, bool] = {}
+        for capability, enabled in entries:
+            if isinstance(capability, str):
+                name = capability.value if hasattr(capability, "value") else capability
+                if not isinstance(name, str):
+                    continue
+            else:
+                continue
+            operations[name] = bool(enabled)
+        return dict(sorted(operations.items()))
 
     def get_capabilities(self, exchange_name: str) -> Any:
         """Return a read-only capability report for the given exchange."""
@@ -826,10 +3269,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         feed = self.exchange_feeds.get(exchange_name)
         if feed is None:
             return CapabilityReport(exchange_name=exchange_name, status="retired")
-        capabilities = getattr(feed, "capabilities", None)
-        operations: dict[str, bool] = {}
-        if capabilities is not None and hasattr(capabilities, "as_dict"):
-            operations = capabilities.as_dict()
+        try:
+            capabilities = getattr(feed, "capabilities", None)
+        except Exception:
+            capabilities = None
+        operations = self._normalize_capability_operations(capabilities)
         return CapabilityReport(
             exchange_name=exchange_name,
             status="loadable",
@@ -851,19 +3295,43 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
     # ── 异步接口（显式方法，替代动态 __getattr__ 代理）────────────────
 
+    @staticmethod
+    async def _await_legacy_async(operation, call, *args: Any, **kwargs: Any) -> Any:
+        """Await legacy adapters, rejecting fire-and-forget ``None`` results."""
+        result = call(*args, **kwargs)
+        result = await result if inspect.isawaitable(result) else result
+        if result is None:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="legacy async adapter returned no result",
+            )
+        return result
+
     async def async_get_tick(
         self, exchange_name: str, symbol: str, *args: Any, **kwargs: Any
     ) -> Any:
         if self.transport_mode is TransportMode.ZMQ:
             return self._backend.get_tick(exchange_name, symbol)
-        return await self._get_feed(exchange_name).async_get_tick(symbol, *args, **kwargs)
+        return await self._await_legacy_async(
+            "async_get_tick",
+            self._get_feed(exchange_name).async_get_tick,
+            symbol,
+            *args,
+            **kwargs,
+        )
 
     async def async_get_depth(
         self, exchange_name: str, symbol: str, count: int = 20, **kwargs: Any
     ) -> Any:
         if self.transport_mode is TransportMode.ZMQ:
             return self._backend.get_depth(exchange_name, symbol, count)
-        return await self._get_feed(exchange_name).async_get_depth(symbol, count=count, **kwargs)
+        return await self._await_legacy_async(
+            "async_get_depth",
+            self._get_feed(exchange_name).async_get_depth,
+            symbol,
+            count=count,
+            **kwargs,
+        )
 
     async def async_get_kline(
         self,
@@ -875,69 +3343,255 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     ) -> Any:
         if self.transport_mode is TransportMode.ZMQ:
             return self._backend.get_kline(exchange_name, symbol, period, count)
-        return await self._get_feed(exchange_name).async_get_kline(
-            symbol, period, count=count, **kwargs
+        return await self._await_legacy_async(
+            "async_get_kline",
+            self._get_feed(exchange_name).async_get_kline,
+            symbol,
+            period,
+            count=count,
+            **kwargs,
         )
 
-    async def async_make_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_make_order(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        if kwargs.pop("normalized", False):
+            if len(args) != 1 or not isinstance(args[0], OrderRequest) or kwargs:
+                raise NormalizedApiError(
+                    "async_make_order", "typed_request_required", definite_reject=True
+                )
+            request = args[0]
+            if self._execution_session is not None:
+                self._execution_session.require_write("make_order", placement=True)
+            resolved_request, mode_guarded = await asyncio.to_thread(
+                self._begin_position_mode_placement,
+                exchange_name,
+                request,
+                resolve_mode=True,
+            )
+            assert resolved_request is not None
+            request = resolved_request
+            try:
+                return await self._async_normalized_call(
+                    "make_order",
+                    exchange_name,
+                    request.symbol,
+                    lambda: self._async_backend_call(
+                        "make_order", exchange_name, request
+                    ),
+                    request=request,
+                )
+            finally:
+                if mode_guarded:
+                    await asyncio.shield(
+                        asyncio.to_thread(
+                            self._end_position_mode_placement,
+                            exchange_name,
+                        )
+                    )
+        if self._execution_session is not None:
+            raise NormalizedApiError(
+                "async_make_order",
+                "session_requires_normalized_typed_request",
+                definite_reject=True,
+            )
         if self.transport_mode is TransportMode.ZMQ:
             raise CapabilityNotSupportedError(
-                "async_make_order", detail="ZMQ order submission uses typed OrderRequest"
+                "async_make_order",
+                detail="ZMQ order submission uses typed OrderRequest",
             )
-        return await self._get_feed(exchange_name).async_make_order(*args, **kwargs)
+        _, mode_guarded = await asyncio.to_thread(
+            self._begin_position_mode_placement, exchange_name
+        )
+        try:
+            call = self._get_feed(exchange_name).async_make_order
+            if asyncio.iscoroutinefunction(call):
+                result = await call(*args, **kwargs)
+                if result is None:
+                    raise CapabilityNotSupportedError(
+                        "async_make_order",
+                        detail="legacy async adapter returned no result",
+                    )
+                return result
+            result = await asyncio.to_thread(call, *args, **kwargs)
+            result = await result if inspect.isawaitable(result) else result
+            if result is None:
+                raise CapabilityNotSupportedError(
+                    "async_make_order",
+                    detail="legacy async adapter returned no result",
+                )
+            return result
+        finally:
+            if mode_guarded:
+                await asyncio.shield(
+                    asyncio.to_thread(
+                        self._end_position_mode_placement,
+                        exchange_name,
+                    )
+                )
 
-    async def async_cancel_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_cancel_order(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        if kwargs.pop("normalized", False):
+            if len(args) != 1 or not isinstance(args[0], CancelOrderRequest) or kwargs:
+                raise NormalizedApiError(
+                    "async_cancel_order", "typed_request_required", definite_reject=True
+                )
+            request = args[0]
+            return await self._async_normalized_call(
+                "cancel_order",
+                exchange_name,
+                request.symbol,
+                lambda: self._async_backend_call(
+                    "cancel_order", exchange_name, request
+                ),
+                request=request,
+            )
+        if self._execution_session is not None:
+            raise NormalizedApiError(
+                "async_cancel_order",
+                "session_requires_normalized_typed_request",
+                definite_reject=True,
+            )
         if self.transport_mode is TransportMode.ZMQ:
             raise CapabilityNotSupportedError(
                 "async_cancel_order", detail="ZMQ cancel uses typed CancelOrderRequest"
             )
-        return await self._get_feed(exchange_name).async_cancel_order(*args, **kwargs)
+        call = self._get_feed(exchange_name).async_cancel_order
+        if asyncio.iscoroutinefunction(call):
+            result = await call(*args, **kwargs)
+            if result is None:
+                raise CapabilityNotSupportedError(
+                    "async_cancel_order",
+                    detail="legacy async adapter returned no result",
+                )
+            return result
+        result = await asyncio.to_thread(call, *args, **kwargs)
+        result = await result if inspect.isawaitable(result) else result
+        if result is None:
+            raise CapabilityNotSupportedError(
+                "async_cancel_order", detail="legacy async adapter returned no result"
+            )
+        return result
 
-    async def async_cancel_all(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_cancel_all(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        if self._execution_session is not None:
+            raise CapabilityNotSupportedError(
+                "async_cancel_all",
+                detail="execution session requires individually journaled cancel_order requests",
+            )
         if self.transport_mode is TransportMode.ZMQ:
             raise CapabilityNotSupportedError(
                 "async_cancel_all", detail="ZMQ cancel-all uses typed CancelAllRequest"
             )
-        return await self._get_feed(exchange_name).async_cancel_all(*args, **kwargs)
+        return await self._await_legacy_async(
+            "async_cancel_all",
+            self._get_feed(exchange_name).async_cancel_all,
+            *args,
+            **kwargs,
+        )
 
-    async def async_query_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_query_order(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        if kwargs.pop("normalized", False):
+            if len(args) != 1 or not isinstance(args[0], QueryOrderRequest) or kwargs:
+                raise NormalizedApiError(
+                    "async_query_order", "typed_request_required", definite_reject=True
+                )
+            request = args[0]
+            return await self._async_normalized_call(
+                "query_order",
+                exchange_name,
+                request.symbol,
+                lambda: self._async_backend_call("query_order", exchange_name, request),
+                request=request,
+            )
         if self.transport_mode is TransportMode.ZMQ:
             raise CapabilityNotSupportedError(
                 "async_query_order", detail="ZMQ query uses typed QueryOrderRequest"
             )
-        return await self._get_feed(exchange_name).async_query_order(*args, **kwargs)
+        call = self._get_feed(exchange_name).async_query_order
+        if asyncio.iscoroutinefunction(call):
+            result = await call(*args, **kwargs)
+            if result is None:
+                raise CapabilityNotSupportedError(
+                    "async_query_order",
+                    detail="legacy async adapter returned no result",
+                )
+            return result
+        result = await asyncio.to_thread(call, *args, **kwargs)
+        result = await result if inspect.isawaitable(result) else result
+        if result is None:
+            raise CapabilityNotSupportedError(
+                "async_query_order", detail="legacy async adapter returned no result"
+            )
+        return result
 
-    async def async_get_open_orders(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_get_open_orders(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
         if self.transport_mode is TransportMode.ZMQ:
             return self._backend.get_open_orders(
                 exchange_name, consistency=self._pop_consistency(kwargs)
             )
-        return await self._get_feed(exchange_name).async_get_open_orders(*args, **kwargs)
+        return await self._await_legacy_async(
+            "async_get_open_orders",
+            self._get_feed(exchange_name).async_get_open_orders,
+            *args,
+            **kwargs,
+        )
 
-    async def async_get_balance(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_get_balance(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
         if self.transport_mode is TransportMode.ZMQ:
             return self._backend.get_balance(
                 exchange_name, consistency=self._pop_consistency(kwargs)
             )
-        return await self._get_feed(exchange_name).async_get_balance(*args, **kwargs)
+        return await self._await_legacy_async(
+            "async_get_balance",
+            self._get_feed(exchange_name).async_get_balance,
+            *args,
+            **kwargs,
+        )
 
-    async def async_get_account(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_get_account(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
         if self.transport_mode is TransportMode.ZMQ:
             return self._backend.get_account(
                 exchange_name, consistency=self._pop_consistency(kwargs)
             )
-        return await self._get_feed(exchange_name).async_get_account(*args, **kwargs)
+        return await self._await_legacy_async(
+            "async_get_account",
+            self._get_feed(exchange_name).async_get_account,
+            *args,
+            **kwargs,
+        )
 
-    async def async_get_position(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+    async def async_get_position(
+        self, exchange_name: str, *args: Any, **kwargs: Any
+    ) -> Any:
         if self.transport_mode is TransportMode.ZMQ:
             return self._backend.get_position(
                 exchange_name, consistency=self._pop_consistency(kwargs)
             )
-        return await self._get_feed(exchange_name).async_get_position(*args, **kwargs)
+        return await self._await_legacy_async(
+            "async_get_position",
+            self._get_feed(exchange_name).async_get_position,
+            *args,
+            **kwargs,
+        )
 
     # ── 批量操作 ───────────────────────────────────────────────────
 
-    def get_all_ticks(self, symbol: str, extra_data: Any = None, **kwargs: Any) -> dict[str, Any]:
+    def get_all_ticks(
+        self, symbol: str, extra_data: Any = None, **kwargs: Any
+    ) -> dict[str, Any]:
         """从所有已连接的交易所获取行情
         :param symbol: 交易对
         :return: dict {exchange_name: ticker_data 或 Exception}
@@ -959,6 +3613,22 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         """从所有已连接的交易所查询余额
         :return: dict {exchange_name: balance_data 或 Exception}
         """
+        if kwargs.pop("normalized", False):
+            results = {}
+            for venue in self.list_exchanges():
+                currency = symbol or (
+                    self._execution_session.currency(venue)
+                    if self._execution_session is not None
+                    else None
+                )
+                results[venue] = self.get_account(
+                    venue,
+                    currency or "ALL",
+                    extra_data=extra_data,
+                    normalized=True,
+                    **kwargs,
+                )
+            return results
         results = {}
         for exchange_name in self.exchange_feeds:
             try:
@@ -966,9 +3636,38 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
             except Exception as e:
-                self.log(f"get_balance failed for {exchange_name}: {e}", level="warning")
+                self.log(
+                    f"get_balance failed for {exchange_name}: {e}", level="warning"
+                )
                 results[exchange_name] = e
         return results
+
+    def get_portfolio_balance(self, *, venue_balances=None) -> dict[str, Any]:
+        """Aggregate normalized accounts only when all values share a currency.
+
+        A supplied snapshot avoids issuing the same account requests twice.
+        No currency conversion or partial-success aggregation is implied.
+        """
+        from ._normalization import number
+
+        balances = (
+            self.get_all_balances(normalized=True)
+            if venue_balances is None
+            else venue_balances
+        )
+        currencies = {row.get("currency") for row in balances.values()}
+        if len(currencies) > 1 or (
+            None in currencies
+            and any(row.get("cash") or row.get("value") for row in balances.values())
+        ):
+            raise NormalizedApiError(
+                "get_portfolio_balance", "mixed_or_unknown_account_currencies"
+            )
+        return {
+            "cash": sum(number(row["cash"]) for row in balances.values()),
+            "value": sum(number(row["value"]) for row in balances.values()),
+            "currency": next(iter(currencies), None),
+        }
 
     def get_all_positions(
         self, symbol: str | None = None, extra_data: Any = None, **kwargs: Any
@@ -976,6 +3675,13 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         """从所有已连接的交易所查询持仓
         :return: dict {exchange_name: position_data 或 Exception}
         """
+        if kwargs.pop("normalized", False):
+            return {
+                venue: self.get_position(
+                    venue, symbol, extra_data=extra_data, normalized=True, **kwargs
+                )
+                for venue in self.list_exchanges()
+            }
         results = {}
         for exchange_name in self.exchange_feeds:
             try:
@@ -983,7 +3689,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     exchange_name, symbol, extra_data=extra_data, **kwargs
                 )
             except Exception as e:
-                self.log(f"get_position failed for {exchange_name}: {e}", level="warning")
+                self.log(
+                    f"get_position failed for {exchange_name}: {e}", level="warning"
+                )
                 results[exchange_name] = e
         return results
 

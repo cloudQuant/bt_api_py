@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from bt_api_py._contracts.errors import CapabilityNotSupportedError
 from bt_api_py._contracts.models import (
     CancelAllRequest,
     CancelOrderRequest,
@@ -110,6 +111,50 @@ def test_backend_preserves_typed_command_intent_and_status_reconciliation() -> N
     assert place_command.idempotency_key == "place-1"
     assert backend.get_command_status("SIM___SPOT", "command-1").status == "succeeded"
     assert backend.get_capabilities("SIM___SPOT")["get_command_status"] is True
+
+
+@pytest.mark.parametrize("exchange_name", ["BINANCE___SWAP", "OKX___SWAP"])
+def test_crypto_backend_rejects_unreconciled_order_commands_before_send(
+    exchange_name: str,
+) -> None:
+    backend = ZmqBtApiBackend(_config())
+    client = _CommandClient()
+    backend._client = client
+    order = OrderRequest(
+        symbol="BTCUSDT",
+        side=Side.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("0.001"),
+        price=Decimal("60000"),
+        account_id="acct-1",
+        client_order_id="client-1",
+    )
+    calls = (
+        lambda: backend.make_order(exchange_name, order),
+        lambda: backend.cancel_all(
+            exchange_name,
+            CancelAllRequest(account_id="acct-1", symbol="BTCUSDT"),
+        ),
+        lambda: backend.query_order(
+            exchange_name,
+            QueryOrderRequest(
+                symbol="BTCUSDT",
+                account_id="acct-1",
+                client_order_id="client-1",
+            ),
+        ),
+    )
+
+    capabilities = backend.get_capabilities(exchange_name)
+    assert capabilities["make_order"] is False
+    assert capabilities["query_order"] is False
+    assert capabilities["cancel_all"] is False
+    assert capabilities["cancel_order"] is True
+    for call in calls:
+        with pytest.raises(CapabilityNotSupportedError) as exc_info:
+            call()
+        assert exc_info.value.definite_reject is True
+    assert client.commands == []
 
 
 def test_backend_creates_and_reuses_clients_per_normalized_scope(

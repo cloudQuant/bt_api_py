@@ -26,8 +26,8 @@ def test_buy_limit_maps_side_and_type() -> None:
     result = map_order_request(_order())
     assert result["order_type"] == "buy-limit"
     assert result["symbol"] == "BTCUSDT"
-    assert result["vol"] == 0.001
-    assert result["price"] == 50000.0
+    assert result["vol"] == "0.001"
+    assert result["price"] == "50000"
 
 
 def test_sell_market_reduce_only_maps_offset_close() -> None:
