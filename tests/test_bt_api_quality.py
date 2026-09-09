@@ -17,6 +17,21 @@ class _DummyFeed:
         return {"args": args, "kwargs": kwargs}
 
 
+class _ResolvedCtpFeed:
+    ctp_environment = "simnow"
+    ctp_env_profile = "set2_7x24_vpn"
+    td_front = "tcp://fixture-td"
+    md_front = "tcp://fixture-md"
+
+    def get_environment_info(self):
+        return {
+            "environment": "demo",
+            "simulated": True,
+            "verified": True,
+            "profile": self.ctp_env_profile,
+        }
+
+
 def test_add_exchange_copies_params_before_storing_and_building(monkeypatch):
     captured: dict[str, object] = {}
 
@@ -53,6 +68,52 @@ def test_add_exchange_rolls_back_state_when_feed_creation_fails(monkeypatch):
     assert "FAIL___SPOT" not in api.exchange_kwargs
     assert "FAIL___SPOT" not in api.data_queues
     assert "FAIL___SPOT" not in api.exchange_feeds
+
+
+def test_add_exchange_pins_verified_ctp_auto_detected_fronts(monkeypatch):
+    monkeypatch.setattr(
+        "bt_api_py.bt_api.ExchangeRegistry.create_feed",
+        lambda *_args, **_kwargs: _ResolvedCtpFeed(),
+    )
+    monkeypatch.setattr(
+        "bt_api_py.bt_api._is_registered_ctp_simnow_pair",
+        lambda *_args: True,
+    )
+    api = BtApi(None, debug=False)
+
+    api.add_exchange("CTP___FUTURE", {"auto_detect_fronts": "true"})
+
+    assert api.exchange_kwargs["CTP___FUTURE"] == {
+        "auto_detect_fronts": "true",
+        "ctp_env_profile": "set2_7x24_vpn",
+        "td_front": "tcp://fixture-td",
+        "md_front": "tcp://fixture-md",
+    }
+
+
+def test_add_exchange_never_pins_unverified_ctp_fronts(monkeypatch):
+    class UnverifiedCtpFeed(_ResolvedCtpFeed):
+        ctp_env_profile = "custom_front_override"
+        td_front = "tcp://custom-td"
+        md_front = "tcp://custom-md"
+
+        def get_environment_info(self):
+            return {
+                "environment": "unknown",
+                "simulated": False,
+                "verified": False,
+                "profile": self.ctp_env_profile,
+            }
+
+    monkeypatch.setattr(
+        "bt_api_py.bt_api.ExchangeRegistry.create_feed",
+        lambda *_args, **_kwargs: UnverifiedCtpFeed(),
+    )
+    api = BtApi(None, debug=False)
+
+    api.add_exchange("CTP___FUTURE", {"auto_detect_fronts": True})
+
+    assert api.exchange_kwargs["CTP___FUTURE"] == {"auto_detect_fronts": True}
 
 
 def test_subscribe_passes_copied_params_and_topics_to_handler(monkeypatch):

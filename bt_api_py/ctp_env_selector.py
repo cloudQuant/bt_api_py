@@ -11,6 +11,7 @@ import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, time
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
@@ -233,7 +234,40 @@ def get_ctp_fronts(env: str = "", now: datetime | None = None) -> tuple[str, str
     return selected.td_front, selected.md_front, selected.env_name
 
 
-def apply_ctp_env() -> tuple[str, str, str]:
-    """Apply selected fronts to ``CTP_TD_FRONT`` and ``CTP_MD_FRONT``."""
+def apply_ctp_env(
+    *,
+    auto_detect_fronts: bool = False,
+    profile: str | None = None,
+    timeout: float = 1.5,
+    connector: Any = None,
+) -> tuple[str, str, str]:
+    """Apply CTP fronts, optionally probing the CTP plugin's frozen profiles.
 
-    return get_ctp_fronts()
+    ``auto_detect_fronts`` delegates to the installed ``bt_api_ctp`` plugin.
+    The plugin only probes complete, named SimNow pairs and returns an exact
+    verified profile; it never infers a route from the VPN's country or IP.
+    The selected profile is persisted alongside the fronts so a later CTP feed
+    can retain strict profile provenance.
+    """
+
+    if not auto_detect_fronts:
+        return get_ctp_fronts()
+    try:
+        from bt_api_ctp.ctp_env_selector import select_reachable_ctp_environment
+    except ImportError as exc:
+        raise RuntimeError(
+            "auto_detect_fronts requires the bt_api_ctp plugin to be installed"
+        ) from exc
+
+    kwargs: dict[str, Any] = {
+        "env": str(os.environ.get("CTP_ENV") or "auto"),
+        "profile": profile,
+        "timeout": timeout,
+    }
+    if connector is not None:
+        kwargs["connector"] = connector
+    selection = select_reachable_ctp_environment(**kwargs)
+    os.environ["CTP_TD_FRONT"] = selection.td_front
+    os.environ["CTP_MD_FRONT"] = selection.md_front
+    os.environ["CTP_ENV_PROFILE"] = selection.profile
+    return selection.td_front, selection.md_front, selection.profile

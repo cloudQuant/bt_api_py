@@ -104,6 +104,83 @@ _CRYPTO_CREDENTIAL_ALIASES = {
 }
 
 
+def _is_ctp_exchange(exchange_name: object) -> bool:
+    """Return whether an exchange name belongs to the CTP plugin."""
+
+    return str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP"
+
+
+def _auto_detect_fronts_enabled(value: Any) -> bool:
+    """Use the same accepted boolean spellings as the CTP plugin."""
+
+    return value is True or (
+        isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on"}
+    )
+
+
+def _is_registered_ctp_simnow_pair(td_front: str, md_front: str, profile: str) -> bool:
+    """Verify a CTP pair through the plugin's frozen profile registry."""
+
+    try:
+        from bt_api_ctp.ctp_env_selector import verify_official_simnow_profile
+    except Exception:
+        return False
+    try:
+        return bool(verify_official_simnow_profile(td_front, md_front, profile))
+    except Exception:
+        return False
+
+
+def _pin_verified_ctp_front_selection(
+    exchange_params: dict[str, Any],
+    feed: Any,
+) -> None:
+    """Persist one verified auto-selected CTP front pair for later streams.
+
+    A CTP request feed is created before the market and account streams. When
+    front auto-detection is enabled, retaining the request feed's verified
+    selection ensures all three streams use the same pair for this ``BtApi``
+    instance, even if network reachability changes between their construction.
+    Custom or incomplete selections are deliberately never promoted.
+    """
+
+    if not _auto_detect_fronts_enabled(exchange_params.get("auto_detect_fronts")):
+        return
+    if getattr(feed, "ctp_environment", None) != "simnow":
+        return
+    get_environment_info = getattr(feed, "get_environment_info", None)
+    if not callable(get_environment_info):
+        return
+    try:
+        environment_info = get_environment_info()
+    except Exception:
+        return
+    if (
+        not isinstance(environment_info, Mapping)
+        or environment_info.get("environment") != "demo"
+        or environment_info.get("verified") is not True
+    ):
+        return
+    profile = str(getattr(feed, "ctp_env_profile", "") or "").strip()
+    td_front = str(getattr(feed, "td_front", "") or "").strip()
+    md_front = str(getattr(feed, "md_front", "") or "").strip()
+    if (
+        not profile
+        or not td_front
+        or not md_front
+        or profile != str(environment_info.get("profile") or "").strip()
+        or not _is_registered_ctp_simnow_pair(td_front, md_front, profile)
+    ):
+        return
+    exchange_params.update(
+        {
+            "ctp_env_profile": profile,
+            "td_front": td_front,
+            "md_front": md_front,
+        }
+    )
+
+
 class _CtpPrivateIngressFence:
     """Linearization point shared by CTP private producers and recovery gates."""
 
@@ -2479,11 +2556,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 feed = ExchangeRegistry.create_feed(
                     exchange_name, producer_queue, **stored_exchange_params
                 )
-                if (
-                    session is not None
-                    and str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper()
-                    == "CTP"
-                ):
+                if _is_ctp_exchange(exchange_name):
+                    _pin_verified_ctp_front_selection(stored_exchange_params, feed)
+                if session is not None and _is_ctp_exchange(exchange_name):
                     self._configure_ctp_execution_gate(exchange_name, feed)
                 self.exchange_feeds[exchange_name] = feed
                 self._validate_required_environment(exchange_name)

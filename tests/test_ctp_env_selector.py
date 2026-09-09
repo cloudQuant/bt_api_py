@@ -1,6 +1,9 @@
+import os
+import sys
 from datetime import datetime
+from types import ModuleType, SimpleNamespace
 
-from bt_api_py.ctp_env_selector import get_ctp_fronts, select_ctp_fronts
+from bt_api_py.ctp_env_selector import apply_ctp_env, get_ctp_fronts, select_ctp_fronts
 
 
 def test_select_ctp_fronts_auto_uses_set1_during_regular_session(monkeypatch):
@@ -40,3 +43,33 @@ def test_get_ctp_fronts_keeps_tuple_api(monkeypatch):
     monkeypatch.setenv("CTP_SET2_MD_FRONT", "tcp://tuple-md")
 
     assert get_ctp_fronts(env="set2") == ("tcp://tuple-td", "tcp://tuple-md", "set2_7x24")
+
+
+def test_apply_ctp_env_auto_detect_pins_plugin_profile(monkeypatch):
+    captured = {}
+    selector = ModuleType("bt_api_ctp.ctp_env_selector")
+
+    def select_reachable_ctp_environment(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            td_front="tcp://fixture-td",
+            md_front="tcp://fixture-md",
+            profile="set2_7x24_vpn",
+        )
+
+    selector.select_reachable_ctp_environment = select_reachable_ctp_environment
+    package = ModuleType("bt_api_ctp")
+    monkeypatch.setitem(sys.modules, "bt_api_ctp", package)
+    monkeypatch.setitem(sys.modules, "bt_api_ctp.ctp_env_selector", selector)
+    monkeypatch.setenv("CTP_ENV", "set2")
+    monkeypatch.delenv("CTP_TD_FRONT", raising=False)
+    monkeypatch.delenv("CTP_MD_FRONT", raising=False)
+    monkeypatch.delenv("CTP_ENV_PROFILE", raising=False)
+
+    result = apply_ctp_env(auto_detect_fronts=True, timeout=0.25)
+
+    assert result == ("tcp://fixture-td", "tcp://fixture-md", "set2_7x24_vpn")
+    assert captured == {"env": "set2", "profile": None, "timeout": 0.25}
+    assert os.environ["CTP_TD_FRONT"] == "tcp://fixture-td"
+    assert os.environ["CTP_MD_FRONT"] == "tcp://fixture-md"
+    assert os.environ["CTP_ENV_PROFILE"] == "set2_7x24_vpn"

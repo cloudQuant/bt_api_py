@@ -7,7 +7,7 @@ name = "bt_api_py"
 version = "0.15.3"
 description = "Implement backtesting and trading of quantitative strategy"
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 requires-python = ">=3.11"
 authors = [
     {name = "cloudQuant", email = "yunjinqi@gmail.com"},
