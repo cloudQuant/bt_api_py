@@ -447,6 +447,9 @@ class OrderRequest:
     position_id: str | None = None
     position_mode: str | None = None
     exchange_id: str | None = None
+    execution_cycle_id: str | None = None
+    execution_role: str | None = None
+    strategy_identity_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol:
@@ -475,6 +478,31 @@ class OrderRequest:
             raise ValueError("account_id must be a non-empty string")
         if not self.client_order_id:
             raise ValueError("client_order_id must be a non-empty string")
+        if self.execution_cycle_id is not None and (
+            not isinstance(self.execution_cycle_id, str)
+            or not self.execution_cycle_id.strip()
+            or self.execution_cycle_id != self.execution_cycle_id.strip()
+            or len(self.execution_cycle_id) > 128
+        ):
+            raise ValueError(
+                "execution_cycle_id must be a bounded non-empty string or None"
+            )
+        if self.execution_role not in {None, "entry", "exit", "recovery_exit"}:
+            raise ValueError(
+                "execution_role must be entry, exit, recovery_exit or None"
+            )
+        if self.strategy_identity_sha256 is not None and (
+            not isinstance(self.strategy_identity_sha256, str)
+            or len(self.strategy_identity_sha256) != 64
+            or self.strategy_identity_sha256 != self.strategy_identity_sha256.lower()
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.strategy_identity_sha256
+            )
+        ):
+            raise ValueError(
+                "strategy_identity_sha256 must be a lowercase SHA-256 hex digest or None"
+            )
         if self.order_type is OrderType.LIMIT and self.price is None:
             raise ValueError("limit order requires a price")
         if self.order_type is OrderType.MARKET and self.price is not None:

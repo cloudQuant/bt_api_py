@@ -25,12 +25,25 @@ class DirectBackend:
     backward compatibility.
     """
 
-    def __init__(self, get_feed: Any, feeds: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        get_feed: Any,
+        feeds: dict[str, Any],
+        execution_capability: Any = None,
+    ) -> None:
         self._get_feed = get_feed
         self._feeds = feeds
+        self._execution_capability = execution_capability
 
     def _feed(self, exchange_name: str) -> Any:
         return self._get_feed(exchange_name)
+
+    def _execution_options(self, exchange_name: str) -> dict[str, Any]:
+        if str(exchange_name).partition("___")[0].upper() != "CTP":
+            return {}
+        capability = self._execution_capability
+        capability = capability() if callable(capability) else capability
+        return {"_execution_capability": capability} if capability is not None else {}
 
     def get_tick(
         self,
@@ -267,16 +280,21 @@ class DirectBackend:
 
     @staticmethod
     def _validate_order_units(exchange_name: str, request: OrderRequest) -> None:
-        if request.quantity_unit == "contracts" and exchange_name not in {
-            "OKX___SWAP",
-            "CTP___FUTURE",
-        }:
+        provider = str(exchange_name).partition("___")[0].upper()
+        if (
+            request.quantity_unit == "contracts"
+            and exchange_name
+            not in {
+                "OKX___SWAP",
+            }
+            and provider != "CTP"
+        ):
             raise CapabilityNotSupportedError(
                 "make_order",
                 detail="explicit contract units require a contract-based venue",
                 definite_reject=True,
             )
-        if request.quantity_unit == "lots" and exchange_name != "CTP___FUTURE":
+        if request.quantity_unit == "lots" and provider != "CTP":
             raise CapabilityNotSupportedError(
                 "make_order",
                 detail="lots require a supported lot-based backend",
@@ -291,7 +309,13 @@ class DirectBackend:
 
         mapper = get_venue_mapper(exchange_name)
         if mapper is not None:
-            return FeedAdapter(feed, mapper).make_order(request)
+            return FeedAdapter(
+                feed,
+                mapper,
+                execution_capability=self._execution_options(exchange_name).get(
+                    "_execution_capability"
+                ),
+            ).make_order(request)
         if any(
             value is not None
             for value in (
@@ -315,6 +339,7 @@ class DirectBackend:
             offset="close" if request.reduce_only else "open",
             post_only=request.time_in_force == "post_only",
             client_order_id=request.client_order_id,
+            **self._execution_options(exchange_name),
         )
 
     async def async_make_order(self, exchange_name: str, request: OrderRequest) -> Any:
@@ -326,7 +351,13 @@ class DirectBackend:
 
         mapper = get_venue_mapper(exchange_name)
         if mapper is not None:
-            return await FeedAdapter(feed, mapper).async_make_order(request)
+            return await FeedAdapter(
+                feed,
+                mapper,
+                execution_capability=self._execution_options(exchange_name).get(
+                    "_execution_capability"
+                ),
+            ).async_make_order(request)
         method = getattr(feed, "async_make_order", None)
         if not callable(method) or not inspect.iscoroutinefunction(method):
             return await asyncio.to_thread(self.make_order, exchange_name, request)
@@ -338,6 +369,7 @@ class DirectBackend:
             offset="close" if request.reduce_only else "open",
             post_only=request.time_in_force == "post_only",
             client_order_id=request.client_order_id,
+            **self._execution_options(exchange_name),
         )
 
     def cancel_order(
@@ -349,7 +381,7 @@ class DirectBackend:
         **kwargs: Any,
     ) -> Any:
         order_id = request.order_id or request.client_order_id
-        if exchange_name == "CTP___FUTURE":
+        if str(exchange_name).partition("___")[0].upper() == "CTP":
             order_id = request.order_id
             for key in ("exchange_id", "front_id", "session_id", "order_ref"):
                 value = getattr(request, key, None)
@@ -359,6 +391,7 @@ class DirectBackend:
                 kwargs.setdefault(
                     "order_ref", request.order_ref or request.client_order_id
                 )
+            kwargs.update(self._execution_options(exchange_name))
         if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
             order_id = request.order_id
             if order_id is None:
@@ -386,7 +419,7 @@ class DirectBackend:
                 **kwargs,
             )
         order_id = request.order_id or request.client_order_id
-        if exchange_name == "CTP___FUTURE":
+        if str(exchange_name).partition("___")[0].upper() == "CTP":
             order_id = request.order_id
             for key in ("exchange_id", "front_id", "session_id", "order_ref"):
                 value = getattr(request, key, None)
@@ -396,6 +429,7 @@ class DirectBackend:
                 kwargs.setdefault(
                     "order_ref", request.order_ref or request.client_order_id
                 )
+            kwargs.update(self._execution_options(exchange_name))
         if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
             order_id = request.order_id
             if order_id is None:
@@ -423,7 +457,7 @@ class DirectBackend:
         **kwargs: Any,
     ) -> Any:
         order_id = request.order_id or request.client_order_id
-        if exchange_name == "CTP___FUTURE":
+        if str(exchange_name).partition("___")[0].upper() == "CTP":
             order_id = request.order_id
             for key in ("exchange_id", "front_id", "session_id", "order_ref"):
                 value = getattr(request, key, None)
@@ -460,7 +494,7 @@ class DirectBackend:
                 **kwargs,
             )
         order_id = request.order_id or request.client_order_id
-        if exchange_name == "CTP___FUTURE":
+        if str(exchange_name).partition("___")[0].upper() == "CTP":
             order_id = request.order_id
             for key in ("exchange_id", "front_id", "session_id", "order_ref"):
                 value = getattr(request, key, None)

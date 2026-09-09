@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from bt_api_py import BtApi, InstrumentSpec, TransportMode
+from bt_api_py import BtApi, InstrumentSpec, NormalizedApiError, TransportMode
 from bt_api_py._contracts import CapabilityNotSupportedError
 from bt_api_py._execution_session import _ExecutionSession
 from bt_api_py._normalization import instrument_spec, normalize_event
@@ -35,6 +35,7 @@ def test_controlled_ctp_surface_remains_available_with_execution_session() -> No
             "auth_state": "authenticated",
             "login_state": "logged_in",
             "trading_ready": False,
+            "settlement_readback_verified": True,
             "account_fingerprint": "account-sha256",
             "request_counts": {"query_account": 1},
             "password": "must-not-escape",
@@ -48,6 +49,7 @@ def test_controlled_ctp_surface_remains_available_with_execution_session() -> No
         api.get_request_api(VENUE)
     state = api.get_ctp_session_state(VENUE)
     assert state["auth_state"] == "authenticated"
+    assert state["settlement_readback_verified"] is True
     assert state["account_fingerprint"] == "account-sha256"
     assert "password" not in state and "api" not in state
     assert api.query_ctp_result(VENUE, "account") is result
@@ -102,6 +104,43 @@ def test_explicit_settlement_actions_use_only_the_bounded_feed_methods() -> None
     assert api.verify_ctp_settlement(VENUE, timeout=4) == "proof"
     confirmed.assert_called_once_with(timeout=3)
     verified.assert_called_once_with(timeout=4)
+
+
+def test_managed_settlement_confirmation_injects_sdk_capability() -> None:
+    capability = object()
+    confirmed = Mock(return_value=True)
+    feed = SimpleNamespace(
+        confirm_settlement=confirmed,
+        get_execution_gate_state=lambda: {"managed": True, "armed": False},
+    )
+    api = _api(feed)
+    api._ctp_execution_capability = capability
+
+    assert api.confirm_ctp_settlement(VENUE, timeout=3) is True
+    confirmed.assert_called_once_with(
+        timeout=3,
+        _execution_capability=capability,
+    )
+
+
+@pytest.mark.parametrize("failure", ["missing_capability", "armed"])
+def test_managed_settlement_confirmation_fails_before_native_write(failure) -> None:
+    confirmed = Mock(return_value=True)
+    feed = SimpleNamespace(
+        confirm_settlement=confirmed,
+        get_execution_gate_state=lambda: {
+            "managed": True,
+            "armed": failure == "armed",
+        },
+    )
+    api = _api(feed)
+    api._ctp_execution_capability = (
+        None if failure == "missing_capability" else object()
+    )
+
+    with pytest.raises(NormalizedApiError):
+        api.confirm_ctp_settlement(VENUE)
+    confirmed.assert_not_called()
 
 
 def test_settlement_confirmation_query_runs_bounded_session_verification() -> None:

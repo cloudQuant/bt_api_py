@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import inspect
+import json
 import queue
 import threading
 import uuid
@@ -19,6 +20,8 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import wraps
+from pathlib import Path
 from typing import Any
 
 from bt_api_base.event_bus import EventBus
@@ -64,6 +67,30 @@ DATANAME_SEPARATOR = "___"
 _NORMALIZED_WRITE_OPERATIONS = frozenset(
     {"make_order", "cancel_order", "set_position_mode"}
 )
+_CTP_TRANSITION_LOCK_INIT = threading.Lock()
+_CTP_EXECUTION_RECOVERY_PUBLIC_FIELDS = (
+    "schema_version",
+    "status",
+    "recovery_required",
+    "can_arm_execution",
+    "can_arm_recovery",
+    "account_fingerprint",
+    "trading_day",
+    "instrument",
+    "connection_generation",
+    "strategy_id",
+    "execution_cycle_id",
+    "remote_position",
+    "owned_position",
+    "allowed_closes",
+    "allowed_cancels",
+    "allowed_actions",
+    "unknown_ids",
+    "evidence_errors",
+    "journal_sha256",
+    "fencing_epoch",
+    "recovery_token_sha256",
+)
 _CRYPTO_CREDENTIAL_ALIASES = {
     "OKX": {
         "public": ("public_key", "api_key"),
@@ -75,6 +102,109 @@ _CRYPTO_CREDENTIAL_ALIASES = {
         "secret": ("private_key", "secret_key", "api_secret"),
     },
 }
+
+
+class _CtpPrivateIngressFence:
+    """Linearization point shared by CTP private producers and recovery gates."""
+
+    def __init__(self) -> None:
+        self.lock = threading.RLock()
+        self.epoch = 0
+        self.pending = 0
+        self.active_writes = 0
+        self.revocation_pending = False
+        self.revocation_worker_active = False
+        self.revocation_teardown_required = False
+
+
+class _CtpPrivateIngressQueue:
+    """Write-only account-stream proxy which fences every private producer put."""
+
+    def __init__(
+        self,
+        target: queue.Queue[Any],
+        fence: _CtpPrivateIngressFence,
+        record_ingress: Any,
+        revoke_arm: Any,
+    ) -> None:
+        self.target = target
+        self.fence = fence
+        self._record_ingress = record_ingress
+        self._revoke_arm = revoke_arm
+
+    def _publish(self, item: Any, publisher: Any) -> None:
+        # Publish the epoch before waiting on the session mutex.  An arm which
+        # currently owns that mutex can still observe this producer attempt at
+        # its final fence and fail closed.
+        should_revoke = False
+        published = False
+        try:
+            with self.fence.lock:
+                self.fence.epoch += 1
+                self.fence.pending += 1
+                published = True
+                ordered_after_write = self.fence.active_writes > 0
+                publisher(item)
+            should_revoke = self._record_ingress(ordered_after_write) is True
+            if should_revoke:
+                self._revoke_arm()
+        finally:
+            with self.fence.lock:
+                if published:
+                    self.fence.pending -= 1
+
+    def put(self, item: Any, block: bool = True, timeout: float | None = None) -> None:
+        def publish(value: Any) -> None:
+            if timeout is None:
+                self.target.put(value, block=block)
+            else:
+                self.target.put(value, block=block, timeout=timeout)
+
+        self._publish(item, publish)
+
+    def append_normalized(self, item: Any, target: Any) -> None:
+        self._publish(item, target.append)
+
+    def put_nowait(self, item: Any) -> None:
+        self.put(item, block=False)
+
+    def qsize(self) -> int:
+        return self.target.qsize()
+
+    def empty(self) -> bool:
+        return self.target.empty()
+
+    def full(self) -> bool:
+        return self.target.full()
+
+
+def _serialized_ctp_execution_transition(method):
+    """Serialize public CTP gate/session transitions on one SDK instance."""
+
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        lock = getattr(self, "_ctp_execution_transition_lock", None)
+        if lock is None:
+            with _CTP_TRANSITION_LOCK_INIT:
+                lock = getattr(self, "_ctp_execution_transition_lock", None)
+                if lock is None:
+                    lock = threading.RLock()
+                    self._ctp_execution_transition_lock = lock
+        with lock:
+            return method(self, *args, **kwargs)
+
+    return wrapped
+
+
+def _canonical_ctp_account_fingerprint(value: Any) -> str:
+    """Map the native short hash to the public receipt identity."""
+    fingerprint = str(value or "").strip().lower()
+    digest = fingerprint.removeprefix("acct_")
+    if len(digest) != 16 or any(
+        character not in "0123456789abcdef" for character in digest
+    ):
+        return ""
+    return f"acct_{digest}"
 
 
 _reg_logger = get_logger("registry")
@@ -233,9 +363,18 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self._normalized_event_pending = defaultdict(deque)
         self._position_modes = {}
         self._position_mode_lock = threading.RLock()
+        self._ctp_execution_transition_lock = threading.RLock()
+        self._ctp_private_ingress_fences: dict[str, _CtpPrivateIngressFence] = {}
+        self._ctp_private_ingress_queues: dict[str, _CtpPrivateIngressQueue] = {}
         self._position_mode_reconcile_required: dict[str, str] = {}
         self._position_mode_active_placements: dict[str, int] = {}
         self._execution_session = None
+        # Managed CTP feeds receive this opaque, process-local capability before
+        # they are exposed through ``exchange_feeds``.  The backend resolves it
+        # lazily so configure_execution() also works before or after add_exchange().
+        self._ctp_execution_capability = (
+            object() if execution_config is not None else None
+        )
         self._instrument_cache = {}
         self._instrument_spec_cache: dict[tuple[str, str], InstrumentSpec] = {}
         self._event_metrics = defaultdict(
@@ -283,6 +422,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         from ._execution_session import _ExecutionSession, session_config
 
         config = session_config(execution_config)
+        if self._ctp_execution_capability is None:
+            self._ctp_execution_capability = object()
         if isinstance(_exchange_names, Mapping):
             exchange_settings = dict(_exchange_names)
         else:
@@ -355,6 +496,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             exchange_names=exchange_names,
             credential_fingerprints=credential_fingerprints,
         )
+        try:
+            for exchange_name, feed in self.exchange_feeds.items():
+                if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP":
+                    self._configure_ctp_execution_gate(exchange_name, feed)
+        except Exception:
+            self._execution_session.close()
+            self._execution_session = None
+            raise
         if config["market_data_only"]:
             for value in self.exchange_kwargs.values():
                 value["subscribe_account"] = False
@@ -396,13 +545,23 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "execution_session_required",
                 definite_reject=True,
             )
-        return session.execution_identity(exchange_name)
+        return {
+            **session.execution_identity(exchange_name),
+            "mode": self.transport_mode.value,
+        }
 
     def get_execution_summary(self) -> dict[str, Any]:
         """Read session execution evidence without touching a transport adapter."""
         if self._execution_session is None:
             return {
                 "session_enabled": False,
+                "armed": False,
+                "market_data_only": True,
+                "arm_managed": False,
+                "arm_revoked": False,
+                "revocation_reason": None,
+                "arm_proof_sha256": None,
+                "proof_sha256": None,
                 "submit_calls": None,
                 "unknown_ids": [],
                 "active_orders": None,
@@ -413,6 +572,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "signed_funding_cashflow": None,
                 "evidence_errors": [],
                 "trading_blocked": False,
+                "evidence_complete": False,
             }
         return {"session_enabled": True, **self._execution_session.summary()}
 
@@ -450,6 +610,787 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             reset_loss_latch=True,
         )
 
+    def _ctp_bound_query_records(
+        self,
+        session: Any,
+        exchange_name: str,
+        query_type: str,
+        *,
+        operation: str = "get_account_risk_snapshot",
+        read_only: bool = False,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Return complete CTP rows bound to one account/day/generation."""
+        evidence = self._ctp_bound_query_evidence(
+            session,
+            exchange_name,
+            query_type,
+            operation=operation,
+            read_only=read_only,
+        )
+        return list(evidence["records"]), evidence["account_fingerprint"]
+
+    def _ctp_bound_query_evidence(
+        self,
+        session: Any,
+        exchange_name: str,
+        query_type: str,
+        *,
+        operation: str,
+        read_only: bool,
+    ) -> dict[str, Any]:
+        """Return records plus terminal-packet evidence for one CTP request."""
+        guard = session.require_bound_read if read_only else session.require_write
+        guard(operation, venue=exchange_name)
+        identity = session.execution_identity(exchange_name)
+        expected_generation = identity.get("connection_generation")
+        expected_fingerprint = str(identity.get("account_id") or "")
+        expected_trading_day = str(identity.get("trading_day") or "")
+        try:
+            result = self.query_ctp_result(exchange_name, query_type)
+            records = result.records
+            request_id = result.request_id
+            result_fingerprint = _canonical_ctp_account_fingerprint(
+                result.account_fingerprint
+            )
+            valid = bool(
+                getattr(result, "request_type", None) == query_type
+                and type(request_id) is int
+                and request_id > 0
+                and getattr(result, "complete", None) is True
+                and getattr(result, "evidence_complete", None) is True
+                and getattr(result, "is_last_seen", None) is True
+                and getattr(result, "timed_out", None) is False
+                and getattr(result, "unsupported", None) is False
+                and getattr(result, "error_code", None) in (None, 0)
+                and getattr(result, "late_callback_count", None) == 0
+                and getattr(result, "connection_generation", None)
+                == expected_generation
+                and result_fingerprint == expected_fingerprint
+                and isinstance(records, tuple)
+            )
+        except Exception:
+            valid = False
+            records = ()
+            result_fingerprint = ""
+            request_id = None
+        guard(operation, venue=exchange_name)
+        if not valid:
+            raise NormalizedApiError(
+                operation,
+                f"ctp_{query_type}_query_incomplete",
+                definite_reject=True,
+            )
+        safe_rows = []
+        for record in records:
+            if not isinstance(record, Mapping):
+                raise NormalizedApiError(
+                    operation,
+                    f"ctp_{query_type}_records_invalid",
+                    definite_reject=True,
+                )
+            row = dict(record)
+            for key in ("AccountID", "InvestorID", "account_id"):
+                if key in row:
+                    row[key] = result_fingerprint
+            # QueryResult owns the terminal-packet/account binding.  Persist
+            # that verified envelope explicitly on every row so downstream
+            # recovery cannot infer identity from a missing native field.
+            row["account_id"] = result_fingerprint
+            row["trading_day"] = expected_trading_day
+            row["connection_generation"] = expected_generation
+            row["evidence_complete"] = True
+            safe_rows.append(row)
+        return {
+            "query_type": query_type,
+            "request_id": request_id,
+            "connection_generation": expected_generation,
+            "account_fingerprint": result_fingerprint,
+            "trading_day": expected_trading_day,
+            "records": tuple(safe_rows),
+        }
+
+    @staticmethod
+    def _canonical_ctp_recovery_rows(
+        records: tuple[dict[str, Any], ...],
+        *,
+        operation: str,
+    ) -> tuple[dict[str, Any], ...]:
+        try:
+            keyed = [
+                (
+                    json.dumps(
+                        row,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    ),
+                    row,
+                )
+                for row in records
+            ]
+        except (TypeError, ValueError):
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_records_not_canonical",
+                definite_reject=True,
+            ) from None
+        return tuple(dict(row) for _key, row in sorted(keyed, key=lambda item: item[0]))
+
+    def _ctp_private_ingress_fence(self, exchange_name: str) -> _CtpPrivateIngressFence:
+        fences = getattr(self, "_ctp_private_ingress_fences", None)
+        if not isinstance(fences, dict):
+            with _CTP_TRANSITION_LOCK_INIT:
+                fences = getattr(self, "_ctp_private_ingress_fences", None)
+                if not isinstance(fences, dict):
+                    fences = {}
+                    self._ctp_private_ingress_fences = fences
+        fence = fences.get(exchange_name)
+        if fence is None:
+            with _CTP_TRANSITION_LOCK_INIT:
+                fence = fences.get(exchange_name)
+                if fence is None:
+                    fence = _CtpPrivateIngressFence()
+                    fences[exchange_name] = fence
+        return fence
+
+    def _ctp_private_ingress_snapshot(self, exchange_name: str) -> tuple[int, int]:
+        fence = self._ctp_private_ingress_fence(exchange_name)
+        with fence.lock:
+            pending = fence.pending + int(fence.revocation_pending)
+            return fence.epoch, pending
+
+    def _ctp_write_ingress_lease(
+        self,
+        exchange_name: str,
+        operation: str,
+    ) -> tuple[Any, Any]:
+        """Order one CTP write before or after every started private ingress."""
+        fence = self._ctp_private_ingress_fence(exchange_name)
+        acquired = False
+
+        def acquire() -> None:
+            nonlocal acquired
+            with fence.lock:
+                if fence.pending or fence.revocation_pending:
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_private_event_pending",
+                        definite_reject=True,
+                    )
+                fence.active_writes += 1
+                acquired = True
+
+        def release() -> None:
+            nonlocal acquired
+            with fence.lock:
+                if acquired:
+                    fence.active_writes -= 1
+                    acquired = False
+
+        return acquire, release
+
+    def _record_ctp_private_ingress(
+        self,
+        exchange_name: str,
+        ordered_after_write: bool,
+    ) -> bool:
+        session = self._execution_session
+        if session is None:
+            return False
+        return (
+            session.note_private_ingress(
+                exchange_name,
+                ordered_after_write=ordered_after_write,
+            )
+            is True
+        )
+
+    def _revoke_ctp_arm_for_private_ingress(self, exchange_name: str) -> None:
+        """Close a just-armed native gate after pre-write private ingress."""
+        lock = getattr(self, "_ctp_execution_transition_lock", None)
+        if lock is None:
+            with _CTP_TRANSITION_LOCK_INIT:
+                lock = getattr(self, "_ctp_execution_transition_lock", None)
+                if lock is None:
+                    lock = threading.RLock()
+                    self._ctp_execution_transition_lock = lock
+
+        def disarm() -> None:
+            state = self._ctp_execution_gate_state(
+                exchange_name,
+                operation="ctp_private_ingress",
+            )
+            if state.get("armed") is True:
+                self._disarm_ctp_execution_gate(
+                    exchange_name,
+                    "execution_private_event_pending",
+                    operation="ctp_private_ingress",
+                )
+
+        if not lock.acquire(blocking=False):
+            self._defer_ctp_private_arm_revocation(exchange_name)
+            return
+        failed = False
+        try:
+            disarm()
+        except Exception:
+            failed = True
+        finally:
+            lock.release()
+        if failed:
+            self._defer_ctp_private_arm_revocation(
+                exchange_name,
+                teardown=True,
+            )
+
+    def _defer_ctp_private_arm_revocation(
+        self,
+        exchange_name: str,
+        *,
+        teardown: bool = False,
+    ) -> None:
+        """Finish native revocation off a callback thread after a transition."""
+        fence = self._ctp_private_ingress_fence(exchange_name)
+        with fence.lock:
+            fence.revocation_pending = True
+            fence.revocation_teardown_required = bool(
+                fence.revocation_teardown_required or teardown
+            )
+            if fence.revocation_worker_active:
+                return
+            fence.revocation_worker_active = True
+
+        def finish() -> None:
+            lock = self._ctp_execution_transition_lock
+            try:
+                with lock:
+                    with fence.lock:
+                        reset_required = fence.revocation_teardown_required
+                    if reset_required:
+                        self._reset_ctp_execution_stream(exchange_name)
+                        return
+                    try:
+                        state = self._ctp_execution_gate_state(
+                            exchange_name,
+                            operation="ctp_private_ingress",
+                        )
+                        if state.get("armed") is True:
+                            self._disarm_ctp_execution_gate(
+                                exchange_name,
+                                "execution_private_event_pending",
+                                operation="ctp_private_ingress",
+                            )
+                    except Exception:
+                        # Native disarm could not be proven. The separate worker
+                        # may safely stop/join the callback-producing stream.
+                        self._reset_ctp_execution_stream(exchange_name)
+            finally:
+                with fence.lock:
+                    fence.revocation_pending = False
+                    fence.revocation_worker_active = False
+                    fence.revocation_teardown_required = False
+
+        threading.Thread(
+            target=finish,
+            daemon=True,
+            name=f"btapi-ctp-private-revoke-{exchange_name}",
+        ).start()
+
+    def _ctp_private_stream_queue(
+        self,
+        exchange_name: str,
+        target: queue.Queue[Any],
+    ) -> _CtpPrivateIngressQueue:
+        queues = getattr(self, "_ctp_private_ingress_queues", None)
+        if not isinstance(queues, dict):
+            queues = {}
+            self._ctp_private_ingress_queues = queues
+        current = queues.get(exchange_name)
+        if isinstance(current, _CtpPrivateIngressQueue) and current.target is target:
+            return current
+        fence = self._ctp_private_ingress_fence(exchange_name)
+        current = _CtpPrivateIngressQueue(
+            target,
+            fence,
+            lambda ordered_after_write: self._record_ctp_private_ingress(
+                exchange_name,
+                ordered_after_write,
+            ),
+            lambda: self._revoke_ctp_arm_for_private_ingress(exchange_name),
+        )
+        queues[exchange_name] = current
+        return current
+
+    def _publish_private_event(
+        self,
+        exchange_name: str,
+        item: Any,
+        *,
+        normalized: bool = False,
+    ) -> None:
+        """Publish one private-lane item through the managed CTP ingress fence."""
+        source = self.data_queues.get(exchange_name)
+        if source is None:
+            return
+        session = self._execution_session
+        managed_ctp = bool(
+            session is not None
+            and str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP"
+        )
+        if not managed_ctp:
+            if normalized:
+                self._normalized_event_pending[exchange_name].append(item)
+            else:
+                source.put(item)
+            return
+        producer = self._ctp_private_stream_queue(exchange_name, source)
+        if normalized:
+            producer.append_normalized(
+                item,
+                self._normalized_event_pending[exchange_name],
+            )
+        else:
+            producer.put(item)
+
+    def _ingest_ctp_private_queue(
+        self,
+        session: Any,
+        exchange_name: str,
+        *,
+        operation: str,
+    ) -> int:
+        """Fence queued CTP order/trade events without dropping consumer delivery."""
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_private_queue_unavailable",
+                definite_reject=True,
+            )
+        source = self.data_queues.get(exchange_name)
+        if source is None or not callable(getattr(source, "qsize", None)):
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_private_queue_unavailable",
+                definite_reject=True,
+            )
+        if not hasattr(self, "_normalized_event_pending"):
+            self._normalized_event_pending = defaultdict(deque)
+        if not hasattr(self, "_event_metrics"):
+            self._event_metrics = defaultdict(int)
+        fence = self._ctp_private_ingress_fence(exchange_name)
+        events: list[dict[str, Any]] = []
+        with fence.lock:
+            normalized_pending = self._normalized_event_pending[exchange_name]
+            raw_budget = [source.qsize()]
+            while raw_budget[0] > 0 or normalized_pending:
+                before_budget = raw_budget[0]
+                before_pending = len(normalized_pending)
+                event = self._poll_event_raw(exchange_name, source_budget=raw_budget)
+                if event is not None:
+                    events.append(event)
+                    continue
+                if (
+                    raw_budget[0] == before_budget
+                    and len(normalized_pending) == before_pending
+                ):
+                    break
+        private_events = 0
+        for event in events:
+            if str(event.get("kind") or "").lower() in {"order", "trade"}:
+                private_events += 1
+                event = session.event(exchange_name, event)
+            if event is not None:
+                session.pending[exchange_name].append(event)
+        return private_events
+
+    def _ctp_recovery_query_round(
+        self,
+        session: Any,
+        exchange_name: str,
+        *,
+        operation: str,
+    ) -> dict[str, Any]:
+        """Run one complete account/position/order/trade recovery query set."""
+        identity = session.execution_identity(exchange_name)
+        expected_account = str(identity.get("account_id") or "")
+        expected_day = str(identity.get("trading_day") or "")
+        expected_generation = identity.get("connection_generation")
+        results = {
+            query_type: self._ctp_bound_query_evidence(
+                session,
+                exchange_name,
+                query_type,
+                operation=operation,
+                read_only=True,
+            )
+            for query_type in ("account", "positions", "orders", "trades")
+        }
+        request_ids = [result["request_id"] for result in results.values()]
+        if len(set(request_ids)) != len(request_ids):
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_query_id_reused",
+                definite_reject=True,
+            )
+        if len(results["account"]["records"]) != 1:
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_account_query_incomplete",
+                definite_reject=True,
+            )
+        for query_type, result in results.items():
+            if (
+                result["account_fingerprint"] != expected_account
+                or result["trading_day"] != expected_day
+                or result["connection_generation"] != expected_generation
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_recovery_query_identity_mismatch",
+                    definite_reject=True,
+                )
+            for row in result["records"]:
+                account_value = next(
+                    (
+                        row[name]
+                        for name in ("AccountID", "InvestorID", "account_id")
+                        if row.get(name) not in (None, "")
+                    ),
+                    None,
+                )
+                day_value = next(
+                    (
+                        row[name]
+                        for name in ("TradingDay", "trading_day")
+                        if row.get(name) not in (None, "")
+                    ),
+                    None,
+                )
+                if (
+                    str(account_value or "") != expected_account
+                    or str(day_value or "") != expected_day
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        f"ctp_recovery_{query_type}_row_identity_incomplete",
+                        definite_reject=True,
+                    )
+        account_snapshot = self._canonical_ctp_recovery_rows(
+            results["account"]["records"],
+            operation=operation,
+        )
+        snapshot = {
+            query_type: self._canonical_ctp_recovery_rows(
+                results[query_type]["records"],
+                operation=operation,
+            )
+            for query_type in ("positions", "orders", "trades")
+        }
+        full_snapshot = {"account": account_snapshot, **snapshot}
+        snapshot_json = json.dumps(
+            snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        account_snapshot_json = json.dumps(
+            account_snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        full_snapshot_json = json.dumps(
+            full_snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        return {
+            "snapshot": snapshot,
+            "full_snapshot": full_snapshot,
+            "request_ids": {
+                query_type: results[query_type]["request_id"]
+                for query_type in ("account", "positions", "orders", "trades")
+            },
+            "account_fingerprint": expected_account,
+            "trading_day": expected_day,
+            "connection_generation": expected_generation,
+            "snapshot_sha256": hashlib.sha256(
+                snapshot_json.encode("utf-8")
+            ).hexdigest(),
+            "account_snapshot_sha256": hashlib.sha256(
+                account_snapshot_json.encode("utf-8")
+            ).hexdigest(),
+            "full_snapshot_sha256": hashlib.sha256(
+                full_snapshot_json.encode("utf-8")
+            ).hexdigest(),
+        }
+
+    def _ctp_recovery_query_barrier(
+        self,
+        session: Any,
+        exchange_name: str,
+        *,
+        operation: str,
+        max_attempts: int = 3,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return two independent stable query rounds with an event fence."""
+        if type(max_attempts) is not int or max_attempts <= 0:
+            raise ValueError("max_attempts must be a positive integer")
+        last_second = {"positions": (), "orders": (), "trades": ()}
+        last_rounds: list[dict[str, Any]] = []
+        stable = False
+        attempt = 0
+        start_revision = middle_revision = end_revision = (
+            session.recovery_event_revision()
+        )
+        private_start_revision = private_end_revision = (
+            session.recovery_private_event_revision()
+        )
+        ingress_start_epoch, ingress_start_pending = self._ctp_private_ingress_snapshot(
+            exchange_name
+        )
+        ingress_end_epoch = ingress_start_epoch
+        ingress_end_pending = ingress_start_pending
+        ingress_start_revision = ingress_end_revision = (
+            session.recovery_private_ingress_revision()
+        )
+        for current_attempt in range(1, max_attempts + 1):
+            attempt = current_attempt
+            self._ingest_ctp_private_queue(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            start_revision = session.recovery_event_revision()
+            first = self._ctp_recovery_query_round(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            self._ingest_ctp_private_queue(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            middle_revision = session.recovery_event_revision()
+            second = self._ctp_recovery_query_round(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            self._ingest_ctp_private_queue(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            end_revision = session.recovery_event_revision()
+            private_end_revision = session.recovery_private_event_revision()
+            ingress_end_epoch, ingress_end_pending = self._ctp_private_ingress_snapshot(
+                exchange_name
+            )
+            ingress_end_revision = session.recovery_private_ingress_revision()
+            all_request_ids = [
+                request_id
+                for round_result in (first, second)
+                for request_id in round_result["request_ids"].values()
+            ]
+            unique_requests = len(set(all_request_ids)) == len(all_request_ids)
+            stable = bool(
+                unique_requests
+                and start_revision == middle_revision == end_revision
+                and private_start_revision == private_end_revision
+                and ingress_start_epoch == ingress_end_epoch
+                and ingress_start_pending == ingress_end_pending == 0
+                and ingress_start_revision == ingress_end_revision
+                and first["full_snapshot"] == second["full_snapshot"]
+            )
+            last_second = second["snapshot"]
+            last_rounds = [first, second]
+            if stable:
+                break
+        barrier_material = {
+            "schema_version": "bt-api-py.ctp-recovery-query-barrier.v1",
+            "stable": stable,
+            "attempts": attempt,
+            "event_revisions": {
+                "start": start_revision,
+                "middle": middle_revision,
+                "end": end_revision,
+            },
+            "private_event_revisions": {
+                "start": private_start_revision,
+                "end": private_end_revision,
+            },
+            "private_ingress_revisions": {
+                "start": ingress_start_revision,
+                "end": ingress_end_revision,
+            },
+            "private_ingress_epochs": {
+                "start": ingress_start_epoch,
+                "end": ingress_end_epoch,
+            },
+            "private_ingress_pending": {
+                "start": ingress_start_pending,
+                "end": ingress_end_pending,
+            },
+            "rounds": [
+                {
+                    "request_ids": dict(round_result["request_ids"]),
+                    "account_fingerprint": round_result["account_fingerprint"],
+                    "trading_day": round_result["trading_day"],
+                    "connection_generation": round_result["connection_generation"],
+                    "snapshot_sha256": round_result["snapshot_sha256"],
+                    "account_snapshot_sha256": round_result["account_snapshot_sha256"],
+                    "full_snapshot_sha256": round_result["full_snapshot_sha256"],
+                }
+                for round_result in last_rounds
+            ],
+        }
+        barrier_json = json.dumps(
+            barrier_material,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        barrier = {
+            **barrier_material,
+            "barrier_sha256": hashlib.sha256(barrier_json.encode("utf-8")).hexdigest(),
+        }
+        return last_second, barrier
+
+    @staticmethod
+    def _public_ctp_recovery_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+        """Detach the closed public recovery shape from SDK-owned mutable state."""
+        if not isinstance(plan, Mapping) or any(
+            field not in plan for field in _CTP_EXECUTION_RECOVERY_PUBLIC_FIELDS
+        ):
+            raise NormalizedApiError(
+                "prepare_execution_recovery",
+                "execution_recovery_plan_invalid",
+                definite_reject=True,
+            )
+        return {
+            field: deepcopy(plan[field])
+            for field in _CTP_EXECUTION_RECOVERY_PUBLIC_FIELDS
+        }
+
+    def _ctp_account_risk_observation(
+        self,
+        session: Any,
+        exchange_name: str,
+        *,
+        open_orders_known: bool,
+        open_orders_empty: bool,
+    ) -> dict[str, Any]:
+        from ._normalization import normalize_result
+
+        currency = session.config["account_currencies"].get(
+            exchange_name, session.config["account_currency"]
+        )
+        currency = str(currency or "").strip().upper()
+        if not currency:
+            raise NormalizedApiError(
+                "get_account_risk_snapshot",
+                "ctp_account_currency_missing",
+                definite_reject=True,
+            )
+        account_rows, fingerprint = self._ctp_bound_query_records(
+            session, exchange_name, "account"
+        )
+        position_rows, position_fingerprint = self._ctp_bound_query_records(
+            session, exchange_name, "positions"
+        )
+        if len(account_rows) != 1 or position_fingerprint != fingerprint:
+            raise NormalizedApiError(
+                "get_account_risk_snapshot",
+                "ctp_account_query_incomplete",
+                definite_reject=True,
+            )
+        account_row = {
+            **account_rows[0],
+            "currency": currency,
+            "account_id": fingerprint,
+        }
+        account = normalize_result(
+            "get_account", [account_row], exchange_name, currency
+        )
+        positions = normalize_result("get_position", position_rows, exchange_name, None)
+        if not isinstance(account, Mapping) or not isinstance(positions, list):
+            raise NormalizedApiError(
+                "get_account_risk_snapshot",
+                "ctp_account_risk_schema_invalid",
+                definite_reject=True,
+            )
+        quantities = []
+        for position in positions:
+            if (
+                not isinstance(position, Mapping)
+                or position.get("quantity_known") is not True
+                or "quantity" not in position
+            ):
+                raise NormalizedApiError(
+                    "get_account_risk_snapshot",
+                    "ctp_position_schema_invalid",
+                    definite_reject=True,
+                )
+            quantity = Decimal(str(position["quantity"]))
+            if not quantity.is_finite():
+                raise NormalizedApiError(
+                    "get_account_risk_snapshot",
+                    "ctp_position_schema_invalid",
+                    definite_reject=True,
+                )
+            quantities.append(quantity)
+        return {
+            "currency": currency,
+            "equity": account.get("equity", account.get("value")),
+            "positions_known": True,
+            "positions_flat": all(quantity == 0 for quantity in quantities),
+            "open_orders_known": open_orders_known,
+            "open_orders_empty": open_orders_empty,
+            "authenticated_account_id": fingerprint,
+        }
+
+    def _ctp_open_orders(
+        self, session: Any, exchange_name: str
+    ) -> list[dict[str, Any]]:
+        from ._normalization import normalize_result
+
+        rows, fingerprint = self._ctp_bound_query_records(
+            session, exchange_name, "orders"
+        )
+        active_rows = []
+        for row in rows:
+            status = str(row.get("OrderStatus", row.get("status", ""))).strip().lower()
+            if status in {
+                "0",
+                "2",
+                "4",
+                "5",
+                "filled",
+                "completed",
+                "canceled",
+                "cancelled",
+                "expired",
+                "rejected",
+            }:
+                continue
+            active_rows.append({**row, "account_id": fingerprint})
+        result = normalize_result("get_open_orders", active_rows, exchange_name, None)
+        if not isinstance(result, list):
+            raise NormalizedApiError(
+                "get_account_risk_snapshot",
+                "ctp_orders_records_invalid",
+                definite_reject=True,
+            )
+        return result
+
     def _collect_account_risk_snapshot(
         self,
         *,
@@ -476,10 +1417,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 )
         observations: dict[str, dict[str, Any]] = {}
         errors: dict[str, str] = {}
-        requires_open_order_proof = reset_loss_latch or (
-            initialize_baseline and session.requires_risk_baseline()
-        )
         risk_venues = session.risk_venues()
+        has_ctp = any(
+            str(venue).partition(DATANAME_SEPARATOR)[0].upper() == "CTP"
+            for venue in risk_venues
+        )
+        requires_open_order_proof = (
+            reset_loss_latch
+            or (initialize_baseline and session.requires_risk_baseline())
+            or has_ctp
+        )
 
         def strict_open_order_sweep(
             error_scope: str,
@@ -489,9 +1436,15 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             for sweep_venue in risk_venues:
                 error_key = f"{sweep_venue}:{error_scope}"
                 try:
-                    open_orders = self.get_open_orders(
-                        sweep_venue, None, normalized=True
-                    )
+                    if (
+                        str(sweep_venue).partition(DATANAME_SEPARATOR)[0].upper()
+                        == "CTP"
+                    ):
+                        open_orders = self._ctp_open_orders(session, sweep_venue)
+                    else:
+                        open_orders = self.get_open_orders(
+                            sweep_venue, None, normalized=True
+                        )
                     if not isinstance(open_orders, list):
                         raise ValueError("incomplete_open_order_evidence")
                     if open_orders:
@@ -519,11 +1472,15 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
             open_orders_empty = open_orders_known
             try:
-                account = self.get_account(
-                    venue,
-                    currency or "ALL",
-                    normalized=True,
-                )
+                if str(venue).partition(DATANAME_SEPARATOR)[0].upper() == "CTP":
+                    observations[venue] = self._ctp_account_risk_observation(
+                        session,
+                        venue,
+                        open_orders_known=open_orders_known,
+                        open_orders_empty=open_orders_empty,
+                    )
+                    continue
+                account = self.get_account(venue, currency or "ALL", normalized=True)
                 positions = self.get_position(venue, None, normalized=True)
                 if not isinstance(account, Mapping) or not isinstance(positions, list):
                     raise ValueError("incomplete_account_risk_evidence")
@@ -601,18 +1558,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             return
         self._private_reconcile_generations.add(key)
         self._event_metrics["private_reconcile_triggers"] += 1
-        source = self.data_queues.get(exchange_name)
-        if source is not None:
-            source.put(
-                {
-                    "kind": "reconcile",
-                    "exchange_name": exchange_name,
-                    "status": "required",
-                    "connection_generation": generation,
-                    "scopes": ("orders", "account", "positions", "trades"),
-                    "event_id": f"reconcile:{exchange_name}:{generation}:required",
-                }
-            )
+        self._publish_private_event(
+            exchange_name,
+            {
+                "kind": "reconcile",
+                "exchange_name": exchange_name,
+                "status": "required",
+                "connection_generation": generation,
+                "scopes": ("orders", "account", "positions", "trades"),
+                "event_id": f"reconcile:{exchange_name}:{generation}:required",
+            },
+        )
         threading.Thread(
             target=self.reconcile_private_state,
             args=(exchange_name,),
@@ -659,7 +1615,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                         # get_open_orders(normalized=True) already merged these
                         # rows into the execution session.
                         continue
-                    self._normalized_event_pending[exchange_name].append(event)
+                    self._publish_private_event(
+                        exchange_name,
+                        event,
+                        normalized=True,
+                    )
             except Exception as exc:
                 scopes[scope] = {
                     "status": "failed",
@@ -676,9 +1636,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             "failed_scopes": tuple(failed),
             "event_id": f"reconcile:{exchange_name}:{generation}:result",
         }
-        source = self.data_queues.get(exchange_name)
-        if source is not None:
-            source.put(result)
+        self._publish_private_event(exchange_name, result)
         return result
 
     async def async_reconcile_private_state(
@@ -854,7 +1812,30 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "cancel_order",
                 "query_order",
             }:
-                return session.invoke(operation, exchange_name, request, invoke)
+                acquire_write = release_write = None
+                if (
+                    operation in {"make_order", "cancel_order"}
+                    and str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper()
+                    == "CTP"
+                ):
+                    acquire_write, release_write = self._ctp_write_ingress_lease(
+                        exchange_name,
+                        operation,
+                    )
+                try:
+                    return session.invoke(
+                        operation,
+                        exchange_name,
+                        request,
+                        invoke,
+                        preauthorize=acquire_write,
+                    )
+                finally:
+                    if release_write is not None:
+                        release_write()
+                    self._sync_ctp_gate_after_session_invoke(
+                        session, exchange_name, operation
+                    )
             result = invoke()
             if session is not None:
                 if operation in {"get_account", "get_balance"} and isinstance(
@@ -937,12 +1918,29 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
         self._validate_required_environment(exchange_name, operation=operation)
         if session is not None:
-            return await session.async_invoke(
-                operation,
-                exchange_name,
-                request,
-                invoke,
-            )
+            acquire_write = release_write = None
+            if (
+                operation in {"make_order", "cancel_order"}
+                and str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP"
+            ):
+                acquire_write, release_write = self._ctp_write_ingress_lease(
+                    exchange_name,
+                    operation,
+                )
+            try:
+                return await session.async_invoke(
+                    operation,
+                    exchange_name,
+                    request,
+                    invoke,
+                    preauthorize=acquire_write,
+                )
+            finally:
+                if release_write is not None:
+                    release_write()
+                self._sync_ctp_gate_after_session_invoke(
+                    session, exchange_name, operation
+                )
         return await invoke()
 
     def _enrich_order_commission(self, exchange_name, order):
@@ -1253,7 +2251,76 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             return ZmqBtApiBackend(forwarding_config)
         from ._direct_backend import DirectBackend
 
-        return DirectBackend(self._get_feed, self.exchange_feeds)
+        return DirectBackend(
+            self._get_feed,
+            self.exchange_feeds,
+            execution_capability=lambda: getattr(
+                self, "_ctp_execution_capability", None
+            ),
+        )
+
+    def _configure_ctp_execution_gate(
+        self,
+        exchange_name: str,
+        feed: Any,
+    ) -> dict[str, Any]:
+        """Install the SDK-owned native guard before a managed feed is exposed."""
+        operation = "configure_execution"
+        capability = getattr(self, "_ctp_execution_capability", None)
+        method = getattr(feed, "configure_execution_gate", None)
+        state_reader = getattr(feed, "get_execution_gate_state", None)
+        if capability is None or not callable(method) or not callable(state_reader):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_unavailable",
+                definite_reject=True,
+            )
+        try:
+            configured = method(capability)
+            state = state_reader()
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_configuration_failed",
+                definite_reject=True,
+            ) from None
+        if (
+            not isinstance(configured, Mapping)
+            or not isinstance(state, Mapping)
+            or configured.get("managed") is not True
+            or state.get("managed") is not True
+            or configured.get("armed") is not False
+            or state.get("armed") is not False
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_not_closed",
+                definite_reject=True,
+            )
+        return dict(state)
+
+    def _sole_ctp_execution_venue(self, operation: str) -> tuple[Any, str]:
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                operation, "execution_session_required", definite_reject=True
+            )
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise CapabilityNotSupportedError(
+                operation,
+                detail="CTP execution authorization requires direct transport",
+                definite_reject=True,
+            )
+        exchange_names = tuple(self.list_exchanges())
+        if (
+            len(exchange_names) != 1
+            or str(exchange_names[0]).partition(DATANAME_SEPARATOR)[0].upper() != "CTP"
+            or set(session.exchange_names) != {exchange_names[0]}
+        ):
+            raise NormalizedApiError(
+                operation, "single_ctp_session_required", definite_reject=True
+            )
+        return session, exchange_names[0]
 
     def init_exchange(self, exchange_kwargs: dict[str, Any]) -> None:
         """根据 exchange_kwargs 初始化并添加交易所。
@@ -1395,17 +2462,37 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             self.data_queues[exchange_name] = data_queue
             self.exchange_kwargs[exchange_name] = stored_exchange_params
             self.log(f"adding exchange: {exchange_name}")
+            feed = None
             try:
+                producer_queue: Any = data_queue
+                if (
+                    session is not None
+                    and str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper()
+                    == "CTP"
+                ):
+                    # Install the producer fence before the request feed can cache
+                    # the queue handle. Consumers retain the raw target above.
+                    producer_queue = self._ctp_private_stream_queue(
+                        exchange_name,
+                        data_queue,
+                    )
                 feed = ExchangeRegistry.create_feed(
-                    exchange_name, data_queue, **stored_exchange_params
+                    exchange_name, producer_queue, **stored_exchange_params
                 )
+                if (
+                    session is not None
+                    and str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper()
+                    == "CTP"
+                ):
+                    self._configure_ctp_execution_gate(exchange_name, feed)
                 self.exchange_feeds[exchange_name] = feed
                 self._validate_required_environment(exchange_name)
                 fingerprint = credential_fingerprints.get(exchange_name)
                 if fingerprint is not None:
                     session.bind_credential_identity(exchange_name, fingerprint)
             except Exception:
-                feed = self.exchange_feeds.pop(exchange_name, None)
+                registered_feed = self.exchange_feeds.pop(exchange_name, None)
+                feed = registered_feed if registered_feed is not None else feed
                 if feed is not None:
                     with suppress(Exception):
                         feed.disconnect()
@@ -1445,6 +2532,858 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
         return self.get_request_api(exchange_name)
 
+    def _ctp_execution_runtime_identity(self) -> dict[str, str]:
+        """Return reproducible source-manifest and native-runtime identities."""
+        operation = "arm_execution_from_preflight"
+        try:
+            import bt_api_ctp
+
+            diagnostics_getter = getattr(bt_api_ctp, "get_ctp_native_diagnostics", None)
+            if not callable(diagnostics_getter):
+                raise ValueError("native diagnostics unavailable")
+            diagnostics = dict(diagnostics_getter())
+            native_path = Path(
+                str(diagnostics.get("loaded_module_path") or "")
+            ).resolve()
+            reported_native_sha256 = str(
+                diagnostics.get("loaded_module_sha256") or ""
+            ).lower()
+            package_path = Path(
+                str(getattr(bt_api_ctp, "__file__", "") or "")
+            ).resolve()
+            if (
+                diagnostics.get("native_loaded") is not True
+                or not native_path.is_file()
+                or not package_path.is_file()
+            ):
+                raise ValueError("loaded CTP runtime identity unavailable")
+            native_sha256 = hashlib.sha256(native_path.read_bytes()).hexdigest()
+            if not reported_native_sha256 or reported_native_sha256 != native_sha256:
+                raise ValueError("loaded CTP native hash is inconsistent")
+            package_root = package_path.parent
+            package_files = sorted(
+                (
+                    path
+                    for path in package_root.rglob("*.py")
+                    if "__pycache__" not in path.parts and path.is_file()
+                ),
+                key=lambda path: path.relative_to(package_root).as_posix(),
+            )
+            required = {
+                "__init__.py",
+                "ctp/client.py",
+                "feeds/live_ctp_feed.py",
+                "gateway/adapter.py",
+            }
+            relative_paths = {
+                path.relative_to(package_root).as_posix() for path in package_files
+            }
+            if not package_files or not required <= relative_paths:
+                raise ValueError("CTP package manifest is incomplete")
+            package_manifest = [
+                {
+                    "path": path.relative_to(package_root).as_posix(),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+                for path in package_files
+            ]
+            package_manifest_json = json.dumps(
+                package_manifest,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            package_sha256 = hashlib.sha256(
+                package_manifest_json.encode("utf-8")
+            ).hexdigest()
+            if (
+                diagnostics.get("ctp_package_manifest") != package_manifest
+                or str(diagnostics.get("ctp_package_sha256") or "").lower()
+                != package_sha256
+            ):
+                raise ValueError("reported CTP package manifest is inconsistent")
+            return {
+                "native_sha256": native_sha256,
+                "ctp_package_sha256": package_sha256,
+            }
+        except Exception:
+            raise NormalizedApiError(
+                operation, "ctp_runtime_identity_unavailable", definite_reject=True
+            ) from None
+
+    def _ctp_execution_arm_context(
+        self,
+        exchange_name: str,
+    ) -> dict[str, Any]:
+        """Read the non-network state that fences a CTP execution arm."""
+        operation = "arm_execution_from_preflight"
+        try:
+            runtime_identity = self._ctp_execution_runtime_identity()
+            state = self.get_ctp_session_state(exchange_name)
+            generation = state.get("connection_generation")
+            if type(generation) is not int or generation <= 0:
+                raise ValueError
+            if (
+                state.get("connected") is not True
+                or state.get("read_only_ready") is not True
+                or state.get("trading_ready") is not True
+                or state.get("auto_settlement_confirm") is not False
+                or str(state.get("auth_state") or "").strip().lower()
+                not in {"authenticated", "success", "logged_in"}
+                or str(state.get("login_state") or "").strip().lower()
+                not in {"logged_in", "ready"}
+                or str(state.get("settlement_state") or "").strip().lower()
+                not in {"confirmed", "ready"}
+                or state.get("settlement_readback_verified") is not True
+                or bool(state.get("last_error"))
+            ):
+                raise ValueError
+            account_fingerprint = _canonical_ctp_account_fingerprint(
+                state.get("account_fingerprint")
+            )
+            trading_day = str(state.get("trading_day") or "").strip()
+            environment_profile = str(state.get("environment_profile") or "").strip()
+            if not account_fingerprint or not trading_day or not environment_profile:
+                raise ValueError
+            return {
+                "account_fingerprint": account_fingerprint,
+                "trading_day": trading_day,
+                "connection_generation": generation,
+                "environment_profile": environment_profile,
+                "native_sha256": runtime_identity["native_sha256"],
+                "ctp_package_sha256": runtime_identity["ctp_package_sha256"],
+                "account_stream_ready": self._ctp_execution_stream_ready(exchange_name),
+            }
+        except NormalizedApiError:
+            raise
+        except Exception:
+            raise NormalizedApiError(
+                operation, "ctp_session_not_trading_ready", definite_reject=True
+            ) from None
+
+    def _ctp_execution_stream(self, exchange_name: str) -> Any:
+        streams = getattr(self, "_subscription_streams", None)
+        if not isinstance(streams, list):
+            return None
+        candidates = [
+            stream
+            for stream in streams
+            if str(getattr(stream, "stream_name", "")) == "ctp_trade_stream"
+        ]
+        return candidates[0] if len(candidates) == 1 else None
+
+    def _ctp_execution_stream_ready(self, exchange_name: str) -> bool:
+        flags = getattr(self, "_subscription_flags", None)
+        if (
+            not isinstance(flags, dict)
+            or flags.get(f"{exchange_name}_account") is not True
+        ):
+            return False
+        stream = self._ctp_execution_stream(exchange_name)
+        if stream is None or getattr(stream, "_running", None) is not True:
+            return False
+        state = getattr(stream, "state", None)
+        state_value = str(getattr(state, "value", state) or "").strip().lower()
+        if state_value != "authenticated":
+            return False
+        feed = self.exchange_feeds.get(exchange_name)
+        request_trader = getattr(feed, "trader_client", None)
+        stream_trader = getattr(stream, "trader_client", None)
+        if (
+            feed is None
+            or request_trader is None
+            or stream_trader is None
+            or stream_trader is not request_trader
+        ):
+            return False
+        state_reader = getattr(request_trader, "get_session_state", None)
+        feed_state_reader = getattr(feed, "get_session_state", None)
+        if not callable(state_reader) or not callable(feed_state_reader):
+            return False
+        try:
+            trader_state = state_reader()
+            feed_state = feed_state_reader()
+        except Exception:
+            return False
+        if not isinstance(trader_state, Mapping) or not isinstance(feed_state, Mapping):
+            return False
+        generation = feed_state.get("connection_generation")
+        account = _canonical_ctp_account_fingerprint(
+            feed_state.get("account_fingerprint")
+        )
+        trading_day = str(feed_state.get("trading_day") or "").strip()
+        return bool(
+            type(generation) is int
+            and generation > 0
+            and account
+            and trading_day
+            and feed_state.get("connected") is True
+            and feed_state.get("trading_ready") is True
+            and feed_state.get("settlement_readback_verified") is True
+            and request_trader is stream_trader
+            and trader_state.get("connected") is True
+            and trader_state.get("trading_ready") is True
+            and trader_state.get("settlement_readback_verified") is True
+            and str(trader_state.get("auth_state") or "").strip().lower()
+            in {"authenticated", "success", "logged_in"}
+            and str(trader_state.get("login_state") or "").strip().lower()
+            in {"logged_in", "ready"}
+            and str(trader_state.get("settlement_state") or "").strip().lower()
+            in {"confirmed", "ready"}
+            and trader_state.get("connection_generation") == generation
+            and _canonical_ctp_account_fingerprint(
+                trader_state.get("account_fingerprint")
+            )
+            == account
+            and str(trader_state.get("trading_day") or "").strip() == trading_day
+            and not trader_state.get("last_error")
+        )
+
+    def _ctp_execution_gate_state(
+        self,
+        exchange_name: str,
+        *,
+        operation: str,
+    ) -> dict[str, Any]:
+        feed = self.exchange_feeds.get(exchange_name)
+        reader = getattr(feed, "get_execution_gate_state", None)
+        if not callable(reader):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_unavailable",
+                definite_reject=True,
+            )
+        try:
+            state = reader()
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_state_unavailable",
+                definite_reject=True,
+            ) from None
+        if not isinstance(state, Mapping) or state.get("managed") is not True:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_not_managed",
+                definite_reject=True,
+            )
+        return dict(state)
+
+    def _arm_ctp_execution_gate(
+        self,
+        exchange_name: str,
+        proof: Mapping[str, Any],
+        *,
+        operation: str,
+    ) -> dict[str, Any]:
+        from ._execution_session import _canonical_ctp_instrument, _execution_arm_proof
+
+        normalized, proof_sha256 = _execution_arm_proof(proof)
+        feed = self.exchange_feeds.get(exchange_name)
+        capability = getattr(self, "_ctp_execution_capability", None)
+        method = getattr(feed, "arm_execution_gate", None)
+        if capability is None or not callable(method):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_unavailable",
+                definite_reject=True,
+            )
+        try:
+            method(capability, normalized)
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_arm_failed",
+                definite_reject=True,
+            ) from None
+        state = self._ctp_execution_gate_state(
+            exchange_name,
+            operation=operation,
+        )
+        if (
+            state.get("armed") is not True
+            or state.get("connection_generation") != normalized["connection_generation"]
+            or state.get("trading_day") != normalized["trading_day"]
+            or _canonical_ctp_instrument(state.get("instrument"))
+            != normalized["instrument"]
+            or state.get("proof_sha256") != proof_sha256
+            or state.get("environment_profile") != normalized["environment_profile"]
+        ):
+            with suppress(Exception):
+                self._disarm_ctp_execution_gate(
+                    exchange_name,
+                    "ctp_execution_gate_arm_state_mismatch",
+                    operation=operation,
+                )
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_arm_state_mismatch",
+                definite_reject=True,
+            )
+        return state
+
+    def _disarm_ctp_execution_gate(
+        self,
+        exchange_name: str,
+        reason: str,
+        *,
+        operation: str,
+    ) -> dict[str, Any]:
+        feed = self.exchange_feeds.get(exchange_name)
+        capability = getattr(self, "_ctp_execution_capability", None)
+        method = getattr(feed, "disarm_execution_gate", None)
+        if capability is None or not callable(method):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_unavailable",
+                definite_reject=True,
+            )
+        try:
+            method(capability, reason)
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_disarm_failed",
+                definite_reject=True,
+            ) from None
+        state = self._ctp_execution_gate_state(
+            exchange_name,
+            operation=operation,
+        )
+        if state.get("armed") is not False:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_disarm_failed",
+                definite_reject=True,
+            )
+        return state
+
+    def _reset_ctp_execution_stream(self, exchange_name: str) -> None:
+        """Stop every CTP account stream and leave the request feed read-only."""
+        streams = getattr(self, "_subscription_streams", None)
+        flags = getattr(self, "_subscription_flags", None)
+        if isinstance(streams, list):
+            for stream in tuple(streams):
+                if str(getattr(stream, "stream_name", "")) != "ctp_trade_stream":
+                    continue
+                streams.remove(stream)
+                with suppress(Exception):
+                    stream.stop()
+        if isinstance(flags, dict):
+            flags.pop(f"{exchange_name}_account", None)
+        exchange_params = self.exchange_kwargs.get(exchange_name)
+        if isinstance(exchange_params, dict):
+            exchange_params["subscribe_account"] = False
+
+    def _sync_ctp_gate_after_session_invoke(
+        self, session: Any, exchange_name: str, operation: str
+    ) -> None:
+        """Close the native gate before returning a session-level revocation."""
+        if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            return
+        lock = getattr(self, "_ctp_execution_transition_lock", None)
+        if lock is None:
+            with _CTP_TRANSITION_LOCK_INIT:
+                lock = getattr(self, "_ctp_execution_transition_lock", None)
+                if lock is None:
+                    lock = threading.RLock()
+                    self._ctp_execution_transition_lock = lock
+        with lock:
+            with session.mutex:
+                should_disarm = bool(
+                    session._arm_managed
+                    and session.config["market_data_only"]
+                    and session._arm_venue == exchange_name
+                )
+                reason = (
+                    session._arm_revoked_reason
+                    or "execution_recovery_action_requires_refresh"
+                )
+            if not should_disarm:
+                return
+            try:
+                self._disarm_ctp_execution_gate(
+                    exchange_name,
+                    reason,
+                    operation=operation,
+                )
+                if not self._ctp_execution_stream_ready(exchange_name):
+                    self._prepare_ctp_execution_stream(
+                        exchange_name,
+                        operation=operation,
+                    )
+            except Exception:
+                # An unproven native disarm cannot safely share its trader with
+                # a continuing account stream. Tear it down only on this path.
+                self._reset_ctp_execution_stream(exchange_name)
+                raise
+
+    def _prepare_ctp_execution_stream(
+        self,
+        exchange_name: str,
+        *,
+        operation: str = "arm_execution_from_preflight",
+    ) -> dict[str, Any]:
+        """Attach the account stream to the already connected request feed."""
+        exchange_params = self.exchange_kwargs.get(exchange_name)
+        if not isinstance(exchange_params, dict):
+            raise NormalizedApiError(
+                operation, "ctp_account_stream_unavailable", definite_reject=True
+            )
+        previous_subscribe_account = exchange_params.get("subscribe_account")
+        exchange_params["subscribe_account"] = True
+        token = {
+            "stream": None,
+            "created": False,
+            "previous_subscribe_account": previous_subscribe_account,
+        }
+        streams = getattr(self, "_subscription_streams", None)
+        flag = f"{exchange_name}_account"
+        flags = getattr(self, "_subscription_flags", None)
+        if not isinstance(streams, list) or not isinstance(flags, dict):
+            self._rollback_ctp_execution_stream(exchange_name, token)
+            raise NormalizedApiError(
+                operation, "ctp_account_stream_unavailable", definite_reject=True
+            )
+        data_queue = self.data_queues.get(exchange_name)
+        if data_queue is None:
+            self._rollback_ctp_execution_stream(exchange_name, token)
+            raise NormalizedApiError(
+                operation, "ctp_account_stream_unavailable", definite_reject=True
+            )
+        producer_queue = self._ctp_private_stream_queue(exchange_name, data_queue)
+        if flags.get(flag, False):
+            account_stream = self._ctp_execution_stream(exchange_name)
+            waiter = getattr(account_stream, "wait_connected", None)
+            if (
+                account_stream is not None
+                and getattr(account_stream, "data_queue", None) is producer_queue
+                and callable(waiter)
+            ):
+                try:
+                    if waiter(timeout=5.0) is True and self._ctp_execution_stream_ready(
+                        exchange_name
+                    ):
+                        return token
+                except Exception:
+                    pass
+            if account_stream is not None and account_stream in streams:
+                streams.remove(account_stream)
+                with suppress(Exception):
+                    account_stream.stop()
+            flags.pop(flag, None)
+        else:
+            # A failed earlier start may have appended a stream without its flag.
+            stale = [
+                stream
+                for stream in streams
+                if str(getattr(stream, "stream_name", "")) == "ctp_trade_stream"
+            ]
+            for stream in stale:
+                streams.remove(stream)
+                with suppress(Exception):
+                    stream.stop()
+        stream_class = ExchangeRegistry.get_stream_class(exchange_name, "account")
+        feed = self.exchange_feeds.get(exchange_name)
+        if stream_class is None or feed is None:
+            self._rollback_ctp_execution_stream(exchange_name, token)
+            raise NormalizedApiError(
+                operation, "ctp_account_stream_unavailable", definite_reject=True
+            )
+        stream = None
+        try:
+            stream_kwargs = self._copy_exchange_params(exchange_params)
+            stream_kwargs.update(
+                stream_name="ctp_trade_stream",
+                request_feed=feed,
+            )
+            stream = stream_class(producer_queue, **stream_kwargs)
+            token["stream"] = stream
+            token["created"] = True
+            stream.start()
+            waiter = getattr(stream, "wait_connected", None)
+            if not callable(waiter) or waiter(timeout=5.0) is not True:
+                raise RuntimeError("CTP account stream did not become ready")
+            streams.append(stream)
+            flags[flag] = True
+            if not self._ctp_execution_stream_ready(exchange_name):
+                raise RuntimeError("CTP account stream is not authenticated")
+            return token
+        except Exception:
+            if stream is not None:
+                with suppress(Exception):
+                    stream.stop()
+            self._rollback_ctp_execution_stream(exchange_name, token)
+            raise NormalizedApiError(
+                operation, "ctp_account_stream_unavailable", definite_reject=True
+            ) from None
+
+    def _rollback_ctp_execution_stream(
+        self,
+        exchange_name: str,
+        token: Mapping[str, Any],
+    ) -> None:
+        stream = token.get("stream")
+        streams = getattr(self, "_subscription_streams", None)
+        if stream is not None and token.get("created") is True:
+            if isinstance(streams, list) and stream in streams:
+                streams.remove(stream)
+            with suppress(Exception):
+                stream.stop()
+            getattr(self, "_subscription_flags", {}).pop(
+                f"{exchange_name}_account", None
+            )
+        exchange_params = self.exchange_kwargs.get(exchange_name)
+        if isinstance(exchange_params, dict):
+            previous = token.get("previous_subscribe_account")
+            if previous is None:
+                exchange_params.pop("subscribe_account", None)
+            else:
+                exchange_params["subscribe_account"] = previous
+
+    @_serialized_ctp_execution_transition
+    def arm_execution_from_preflight(self, proof: Mapping[str, Any]) -> dict[str, Any]:
+        """Atomically arm one direct CTP session from current read-only proof."""
+        operation = "arm_execution_from_preflight"
+        session, exchange_name = self._sole_ctp_execution_venue(operation)
+        private_event_revision = session.recovery_private_event_revision()
+        private_ingress_revision = session.recovery_private_ingress_revision()
+        private_ingress_epoch, private_ingress_pending = (
+            self._ctp_private_ingress_snapshot(exchange_name)
+        )
+        if private_ingress_pending:
+            raise NormalizedApiError(
+                operation,
+                "execution_recovery_required",
+                definite_reject=True,
+            )
+
+        def state_reader() -> dict[str, Any]:
+            return self._ctp_execution_arm_context(exchange_name)
+
+        def prepare_execution() -> None:
+            self._prepare_ctp_execution_stream(exchange_name)
+            self._ingest_ctp_private_queue(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            self._arm_ctp_execution_gate(
+                exchange_name,
+                proof,
+                operation=operation,
+            )
+
+        def rollback_execution() -> None:
+            with suppress(Exception):
+                self._disarm_ctp_execution_gate(
+                    exchange_name,
+                    "execution_arm_rollback",
+                    operation=operation,
+                )
+
+        try:
+            result = session.arm_from_preflight(
+                proof,
+                state_reader,
+                venue=exchange_name,
+                prepare_execution=prepare_execution,
+                rollback_execution=rollback_execution,
+                prepare_execution_outside_mutex=True,
+            )
+            self._ingest_ctp_private_queue(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            current_epoch, current_pending = self._ctp_private_ingress_snapshot(
+                exchange_name
+            )
+            private_fence_changed = bool(
+                current_epoch != private_ingress_epoch
+                or current_pending
+                or session.recovery_private_ingress_revision()
+                != private_ingress_revision
+                or session.recovery_private_event_revision() != private_event_revision
+            )
+            if private_fence_changed:
+                raise NormalizedApiError(
+                    operation,
+                    "execution_recovery_required",
+                    definite_reject=True,
+                )
+            return result
+        except Exception as exc:
+            code = str(getattr(exc, "code", "") or "execution_arm_rollback")
+            disarm_failed = False
+            try:
+                self._disarm_ctp_execution_gate(
+                    exchange_name,
+                    code,
+                    operation=operation,
+                )
+            except Exception:
+                disarm_failed = True
+            if disarm_failed or code != "execution_recovery_required":
+                self._reset_ctp_execution_stream(exchange_name)
+            with suppress(Exception):
+                reusable_read_only_rejections = {
+                    "execution_recovery_required",
+                    "execution_recovery_arm_required",
+                    "execution_recovery_completion_required",
+                    "execution_recovery_manual_intervention",
+                    "fresh_execution_preflight_required",
+                }
+                if code in reusable_read_only_rejections:
+                    session.pause_recovery()
+                else:
+                    generation = proof.get("connection_generation")
+                    session.disarm_execution(code, generation=generation)
+            raise
+
+    @_serialized_ctp_execution_transition
+    def prepare_execution_authorization(
+        self,
+        reason: str = "execution_authorization_prepared",
+    ) -> dict[str, Any]:
+        """Reset managed CTP to reusable read-only state before Stage A."""
+        operation = "prepare_execution_authorization"
+        session, exchange_name = self._sole_ctp_execution_venue(operation)
+        failure = None
+        try:
+            self._ctp_execution_gate_state(
+                exchange_name,
+                operation=operation,
+            )
+            self._disarm_ctp_execution_gate(
+                exchange_name,
+                reason,
+                operation=operation,
+            )
+        except Exception as exc:
+            failure = exc
+        finally:
+            self._reset_ctp_execution_stream(exchange_name)
+            result = session.prepare_execution_authorization(reason)
+        if failure is not None:
+            raise failure
+        return result
+
+    def _prepare_execution_recovery_plan(
+        self, session: Any, exchange_name: str
+    ) -> dict[str, Any]:
+        operation = "prepare_execution_recovery"
+        try:
+            self._prepare_ctp_execution_stream(exchange_name, operation=operation)
+            snapshot, barrier = self._ctp_recovery_query_barrier(
+                session, exchange_name, operation=operation
+            )
+            plan = session.build_recovery_plan(snapshot, barrier=barrier)
+        except Exception as exc:
+            code = str(getattr(exc, "code", "") or "recovery_query_failed")
+            plan = session.build_recovery_plan(
+                {"positions": (), "orders": (), "trades": ()},
+                barrier=None,
+                failure_reason=code,
+            )
+        return self._public_ctp_recovery_plan(plan)
+
+    @_serialized_ctp_execution_transition
+    def prepare_execution_recovery(self, *, proof: Mapping[str, Any]) -> dict[str, Any]:
+        """Issue an SDK-owned recovery plan from two fenced query rounds."""
+        operation = "prepare_execution_recovery"
+        session, exchange_name = self._sole_ctp_execution_venue(operation)
+
+        def state_reader() -> dict[str, Any]:
+            return self._ctp_execution_arm_context(exchange_name)
+
+        failure = None
+        try:
+            self._disarm_ctp_execution_gate(
+                exchange_name,
+                "execution_recovery_prepared",
+                operation=operation,
+            )
+        except Exception as exc:
+            failure = exc
+        finally:
+            # Revoke the SDK lease before any refreshed evidence is accepted.
+            # Stopping the account stream also tears down an uncertain native
+            # session if its gate could not return a trustworthy disarm state.
+            session.pause_recovery()
+            self._reset_ctp_execution_stream(exchange_name)
+        if failure is not None:
+            raise failure
+        session.prepare_recovery(proof, state_reader, venue=exchange_name)
+        return self._prepare_execution_recovery_plan(session, exchange_name)
+
+    @_serialized_ctp_execution_transition
+    def _arm_execution_recovery(
+        self,
+        *,
+        proof: Mapping[str, Any],
+        recovery_token_sha256: str,
+    ) -> dict[str, Any]:
+        operation = "arm_execution_recovery"
+        session, exchange_name = self._sole_ctp_execution_venue(operation)
+        private_event_revision = session.recovery_private_event_revision()
+        private_ingress_revision = session.recovery_private_ingress_revision()
+        private_ingress_epoch, private_ingress_pending = (
+            self._ctp_private_ingress_snapshot(exchange_name)
+        )
+        if private_ingress_pending:
+            raise NormalizedApiError(
+                operation,
+                "execution_recovery_required",
+                definite_reject=True,
+            )
+
+        def state_reader() -> dict[str, Any]:
+            return self._ctp_execution_arm_context(exchange_name)
+
+        def prepare_execution() -> None:
+            self._ingest_ctp_private_queue(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            self._arm_ctp_execution_gate(exchange_name, proof, operation=operation)
+
+        def rollback_execution() -> None:
+            self._disarm_ctp_execution_gate(
+                exchange_name,
+                "execution_recovery_arm_rollback",
+                operation=operation,
+            )
+
+        try:
+            self._prepare_ctp_execution_stream(exchange_name, operation=operation)
+            result = session.arm_recovery_from_preflight(
+                proof,
+                recovery_token_sha256,
+                state_reader,
+                venue=exchange_name,
+                prepare_execution=prepare_execution,
+                rollback_execution=rollback_execution,
+            )
+            self._ingest_ctp_private_queue(
+                session,
+                exchange_name,
+                operation=operation,
+            )
+            current_epoch, current_pending = self._ctp_private_ingress_snapshot(
+                exchange_name
+            )
+            private_fence_changed = bool(
+                current_epoch != private_ingress_epoch
+                or current_pending
+                or session.recovery_private_ingress_revision()
+                != private_ingress_revision
+                or session.recovery_private_event_revision() != private_event_revision
+            )
+            if private_fence_changed:
+                raise NormalizedApiError(
+                    operation,
+                    "execution_recovery_required",
+                    definite_reject=True,
+                )
+            return result
+        except Exception:
+            disarm_failed = False
+            try:
+                self._disarm_ctp_execution_gate(
+                    exchange_name,
+                    "execution_recovery_arm_failed",
+                    operation=operation,
+                )
+            except Exception:
+                disarm_failed = True
+            if disarm_failed:
+                self._reset_ctp_execution_stream(exchange_name)
+            session.pause_recovery()
+            raise
+
+    def arm_execution_recovery(
+        self,
+        *,
+        proof: Mapping[str, Any],
+        recovery_token_sha256: str,
+    ) -> dict[str, Any]:
+        """Arm one one-shot SDK plan while ordinary execution stays closed."""
+        return self._arm_execution_recovery(
+            proof=proof,
+            recovery_token_sha256=recovery_token_sha256,
+        )
+
+    @_serialized_ctp_execution_transition
+    def complete_execution_recovery(
+        self,
+        *,
+        recovery_token_sha256: str,
+    ) -> dict[str, Any]:
+        """Prove flatness with a fresh query barrier and revoke recovery writes."""
+        operation = "complete_execution_recovery"
+        session, exchange_name = self._sole_ctp_execution_venue(operation)
+        try:
+            snapshot, barrier = self._ctp_recovery_query_barrier(
+                session, exchange_name, operation=operation
+            )
+            result = session.complete_recovery(recovery_token_sha256, snapshot, barrier)
+            self._disarm_ctp_execution_gate(
+                exchange_name, "execution_recovery_completed", operation=operation
+            )
+        except Exception:
+            disarm_failed = False
+            try:
+                self._disarm_ctp_execution_gate(
+                    exchange_name,
+                    "execution_recovery_completion_failed",
+                    operation=operation,
+                )
+            except Exception:
+                disarm_failed = True
+            session.pause_recovery()
+            if disarm_failed:
+                self._reset_ctp_execution_stream(exchange_name)
+            raise
+        return result
+
+    @_serialized_ctp_execution_transition
+    def disarm_execution(self, reason: str = "execution_arm_revoked") -> dict[str, Any]:
+        """Idempotently revoke execution while retaining read-only CTP access."""
+        operation = "disarm_execution"
+        session, exchange_name = self._sole_ctp_execution_venue(operation)
+        generation = None
+        failure = None
+        try:
+            state = self._ctp_execution_gate_state(
+                exchange_name,
+                operation=operation,
+            )
+            generation = state.get("connection_generation")
+            self._disarm_ctp_execution_gate(
+                exchange_name,
+                reason,
+                operation=operation,
+            )
+        except Exception as exc:
+            failure = exc
+        if failure is not None:
+            self._reset_ctp_execution_stream(exchange_name)
+            raise failure
+        result = session.disarm_execution(reason, generation=generation)
+        try:
+            if not self._ctp_execution_stream_ready(exchange_name):
+                self._prepare_ctp_execution_stream(
+                    exchange_name,
+                    operation=operation,
+                )
+        except Exception:
+            self._reset_ctp_execution_stream(exchange_name)
+            raise
+        return result
+
     def get_ctp_session_state(
         self, exchange_name: str = "CTP___FUTURE"
     ) -> dict[str, Any]:
@@ -1470,6 +3409,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             "auth_state",
             "login_state",
             "settlement_state",
+            "settlement_readback_verified",
             "read_only_ready",
             "trading_ready",
             "ready",
@@ -1578,7 +3518,27 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             raise CapabilityNotSupportedError(
                 "confirm_ctp_settlement", detail="CTP feed cannot confirm settlement"
             )
-        return bool(method(timeout=timeout))
+        options: dict[str, Any] = {}
+        if self._execution_session is not None:
+            capability = getattr(self, "_ctp_execution_capability", None)
+            if capability is None:
+                raise NormalizedApiError(
+                    "confirm_ctp_settlement",
+                    "ctp_execution_gate_unavailable",
+                    definite_reject=True,
+                )
+            state = self._ctp_execution_gate_state(
+                exchange_name,
+                operation="confirm_ctp_settlement",
+            )
+            if state.get("armed") is not False:
+                raise NormalizedApiError(
+                    "confirm_ctp_settlement",
+                    "ctp_settlement_confirmation_requires_read_only",
+                    definite_reject=True,
+                )
+            options["_execution_capability"] = capability
+        return bool(method(timeout=timeout, **options))
 
     def get_data_queue(self, exchange_name: str) -> queue.Queue | None:
         """Get the data queue for the specified exchange.
@@ -1680,6 +3640,18 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             self._normalized_event_pending.clear()
             return
         errors: list[str] = []
+        if getattr(self, "_execution_session", None) is not None:
+            for exchange_name in tuple(self.exchange_feeds):
+                if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+                    continue
+                try:
+                    self._disarm_ctp_execution_gate(
+                        exchange_name,
+                        "execution_session_closed",
+                        operation="close",
+                    )
+                except Exception as exc:
+                    errors.append(f"{exchange_name} gate: {type(exc).__name__}: {exc}")
         remaining_streams: list[Any] = []
         for index, stream in enumerate(self._subscription_streams):
             stream_failed = False
@@ -2650,7 +4622,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 definite_reject=True,
             )
         if self._execution_session is not None:
-            self._execution_session.require_write(operation)
+            self._execution_session.require_write(operation, venue=exchange_name)
 
         with self._position_mode_lock:
             if self._position_mode_active_placements.get(exchange_name, 0):
@@ -2913,8 +4885,6 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "make_order", "typed_request_required", definite_reject=True
                 )
             request = symbol
-            if self._execution_session is not None:
-                self._execution_session.require_write("make_order", placement=True)
             resolved_request, mode_guarded = self._begin_position_mode_placement(
                 exchange_name,
                 request,
@@ -3496,8 +5466,6 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "async_make_order", "typed_request_required", definite_reject=True
                 )
             request = args[0]
-            if self._execution_session is not None:
-                self._execution_session.require_write("make_order", placement=True)
             resolved_request, mode_guarded = await asyncio.to_thread(
                 self._begin_position_mode_placement,
                 exchange_name,

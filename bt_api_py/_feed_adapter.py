@@ -13,11 +13,20 @@ from bt_api_py._venue_mappers import OrderMapper
 class FeedAdapter:
     """Routes a v1 ``OrderRequest`` through a venue mapper into a feed call."""
 
-    def __init__(self, feed: Any, mapper: OrderMapper) -> None:
+    def __init__(
+        self,
+        feed: Any,
+        mapper: OrderMapper,
+        *,
+        execution_capability: object | None = None,
+    ) -> None:
         self._feed = feed
         self._mapper = mapper
+        self._execution_capability = execution_capability
 
-    def _call_arguments(self, request: OrderRequest) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    def _call_arguments(
+        self, request: OrderRequest
+    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
         args = self._mapper(request)
         positional_keys = {
             "symbol",
@@ -28,7 +37,9 @@ class FeedAdapter:
             "post_only",
             "client_order_id",
         }
-        options = {key: value for key, value in args.items() if key not in positional_keys}
+        options = {
+            key: value for key, value in args.items() if key not in positional_keys
+        }
         positional = (
             args["symbol"],
             args["vol"],
@@ -40,6 +51,8 @@ class FeedAdapter:
             post_only=args["post_only"],
             client_order_id=args["client_order_id"],
         )
+        if self._execution_capability is not None:
+            options["_execution_capability"] = self._execution_capability
         return positional, options
 
     def make_order(self, request: OrderRequest) -> Any:

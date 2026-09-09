@@ -11,12 +11,14 @@ import hashlib
 import json
 import math
 import os
+import re
 import time
 import unicodedata
 import uuid
 from collections import defaultdict, deque
 from collections.abc import Mapping
 from contextlib import contextmanager, suppress
+from copy import deepcopy
 from dataclasses import asdict
 from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
@@ -39,9 +41,21 @@ _IDENTITY = (
     "quantity_unit",
     "position_mode",
     "trading_day",
+    "execution_cycle_id",
+    "execution_role",
+    "strategy_identity_sha256",
 )
 _LEDGER_SEMANTIC_IDENTITY = frozenset(
-    {"side", "position_side", "offset", "quantity_unit", "position_mode"}
+    {
+        "side",
+        "position_side",
+        "offset",
+        "quantity_unit",
+        "position_mode",
+        "execution_cycle_id",
+        "execution_role",
+        "strategy_identity_sha256",
+    }
 )
 _EXPLICIT_IDENTITY_FIELDS = "_explicit_identity_fields"
 _CONFIG = {
@@ -55,6 +69,7 @@ _CONFIG = {
     "account_ids": {},
     "required_environments": {},
     "strategy_id": "default",
+    "strategy_identity_sha256": None,
     "account_maximum_loss_bps": None,
     "account_risk_max_age_seconds": "2",
 }
@@ -66,6 +81,166 @@ _RISK_TRANSITION_EVENTS = {
     "risk_reset_prepared",
     "risk_reset_committed",
 }
+
+_EXECUTION_ARM_FIELDS = (
+    "account_fingerprint",
+    "trading_day",
+    "instrument",
+    "connection_generation",
+    "environment_profile",
+    "receipt_sha256",
+    "native_sha256",
+    "ctp_package_sha256",
+    "source_hashes_sha256",
+    "dependency_hashes_sha256",
+    "preflight_sha256",
+)
+_EXECUTION_ARM_CONTEXT_FIELDS = (
+    "account_fingerprint",
+    "trading_day",
+    "connection_generation",
+    "environment_profile",
+    "native_sha256",
+    "ctp_package_sha256",
+)
+_EXECUTION_ARM_HASH_FIELDS = (
+    "receipt_sha256",
+    "native_sha256",
+    "ctp_package_sha256",
+    "source_hashes_sha256",
+    "dependency_hashes_sha256",
+    "preflight_sha256",
+)
+_CTP_EXCHANGES = {"CFFEX", "CZCE", "DCE", "GFEX", "INE", "SHFE"}
+_CTP_EXCHANGE_ALIASES = {"ZCE": "CZCE"}
+_CTP_INSTRUMENT_RE = re.compile(r"^[A-Z]{1,3}[0-9]{3,4}$")
+_ARM_REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
+_EXECUTION_ROLES = frozenset({"entry", "exit", "recovery_exit"})
+_RECOVERY_POSITION_KEYS = (
+    "long_today",
+    "long_yesterday",
+    "short_today",
+    "short_yesterday",
+)
+
+
+def _canonical_ctp_exchange(value):
+    exchange = str(value or "").strip().upper()
+    exchange = _CTP_EXCHANGE_ALIASES.get(exchange, exchange)
+    return exchange if exchange in _CTP_EXCHANGES else ""
+
+
+def _canonical_ctp_instrument(value, exchange_id=None):
+    """Return ``EXCHANGE.INSTRUMENT`` for one strictly scoped CTP contract.
+
+    Public write requests may use either prefix/suffix notation or a bare
+    instrument paired with ``exchange_id``.  The arm proof itself must already
+    equal the returned canonical representation.  CZCE's four-digit alias is
+    collapsed to the native three-digit year/month representation.
+    """
+    text = str(value or "").strip().upper()
+    supplied_exchange = _canonical_ctp_exchange(exchange_id)
+    if not text or (exchange_id not in (None, "") and not supplied_exchange):
+        return ""
+    parts = text.split(".")
+    if len(parts) == 1:
+        exchange = supplied_exchange
+        instrument = parts[0]
+    elif len(parts) == 2:
+        first_exchange = _canonical_ctp_exchange(parts[0])
+        last_exchange = _canonical_ctp_exchange(parts[1])
+        if bool(first_exchange) == bool(last_exchange):
+            return ""
+        exchange = first_exchange or last_exchange
+        instrument = parts[1] if first_exchange else parts[0]
+        if supplied_exchange and supplied_exchange != exchange:
+            return ""
+    else:
+        return ""
+    if not exchange or not _CTP_INSTRUMENT_RE.fullmatch(instrument):
+        return ""
+    letters = instrument.rstrip("0123456789")
+    digits = instrument[len(letters) :]
+    if exchange == "CZCE" and len(digits) == 4:
+        digits = digits[-3:]
+    return f"{exchange}.{letters}{digits}"
+
+
+def _arm_revocation_reason(value):
+    reason = str(value or "execution_arm_revoked").strip().lower()
+    return reason if _ARM_REASON_RE.fullmatch(reason) else "execution_arm_revoked"
+
+
+def _execution_arm_proof(value):
+    """Validate and hash the closed Iteration 22 execution-arm contract."""
+    operation = "arm_execution_from_preflight"
+    if not isinstance(value, Mapping) or set(value) != set(_EXECUTION_ARM_FIELDS):
+        raise NormalizedApiError(
+            operation, "invalid_execution_arm_proof", definite_reject=True
+        )
+    proof = {field: value[field] for field in _EXECUTION_ARM_FIELDS}
+    for field in (
+        "account_fingerprint",
+        "trading_day",
+        "instrument",
+        "environment_profile",
+    ):
+        item = proof[field]
+        if not isinstance(item, str) or not item or item != item.strip():
+            raise NormalizedApiError(
+                operation, "invalid_execution_arm_proof", definite_reject=True
+            )
+    canonical_instrument = _canonical_ctp_instrument(proof["instrument"])
+    if not canonical_instrument or proof["instrument"] != canonical_instrument:
+        raise NormalizedApiError(
+            operation, "invalid_execution_arm_proof", definite_reject=True
+        )
+    account_fingerprint = proof["account_fingerprint"]
+    account_digest = account_fingerprint.removeprefix("acct_")
+    if (
+        account_fingerprint != account_fingerprint.lower()
+        or not account_fingerprint.startswith("acct_")
+        or len(account_digest) != 16
+        or any(char not in "0123456789abcdef" for char in account_digest)
+    ):
+        raise NormalizedApiError(
+            operation, "invalid_execution_arm_proof", definite_reject=True
+        )
+    generation = proof["connection_generation"]
+    if type(generation) is not int or generation <= 0:
+        raise NormalizedApiError(
+            operation, "invalid_execution_arm_proof", definite_reject=True
+        )
+    trading_day = proof["trading_day"]
+    try:
+        parsed_day = time.strptime(trading_day, "%Y%m%d")
+    except ValueError:
+        raise NormalizedApiError(
+            operation, "invalid_execution_arm_proof", definite_reject=True
+        ) from None
+    if time.strftime("%Y%m%d", parsed_day) != trading_day:
+        raise NormalizedApiError(
+            operation, "invalid_execution_arm_proof", definite_reject=True
+        )
+    for field in _EXECUTION_ARM_HASH_FIELDS:
+        digest = proof[field]
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or digest != digest.lower()
+            or any(char not in "0123456789abcdef" for char in digest)
+        ):
+            raise NormalizedApiError(
+                operation, "invalid_execution_arm_proof", definite_reject=True
+            )
+    encoded = json.dumps(
+        proof,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return proof, hashlib.sha256(encoded).hexdigest()
 
 
 def _normalize_label(value):
@@ -86,6 +261,9 @@ def _normalized_ledger_identity(identity):
     fingerprint = str(identity.get("credential_fingerprint") or "").lower()
     if fingerprint:
         result["credential_fingerprint"] = fingerprint
+    account_fingerprint = str(identity.get("account_fingerprint") or "").lower()
+    if account_fingerprint:
+        result["account_fingerprint"] = account_fingerprint
     return result
 
 
@@ -99,11 +277,17 @@ def _recorded_identity_matches(recorded, expected):
         return False
     recorded_fingerprint = recorded.get("credential_fingerprint")
     expected_fingerprint = expected.get("credential_fingerprint")
-    if recorded_fingerprint is None:
-        return True
-    if expected_fingerprint is None:
+    if recorded_fingerprint is not None and (
+        expected_fingerprint is None or recorded_fingerprint != expected_fingerprint
+    ):
         return False
-    return recorded_fingerprint == expected_fingerprint
+    recorded_account = recorded.get("account_fingerprint")
+    expected_account = expected.get("account_fingerprint")
+    if recorded_account is None:
+        return True
+    if expected_account is None:
+        return False
+    return recorded_account == expected_account
 
 
 def _identity_registry_digests(identity):
@@ -117,14 +301,18 @@ def _identity_registry_digests(identity):
     """
     core = _identity_core(identity)
     fingerprint = str(identity.get("credential_fingerprint") or "").lower()
-    materials = [
-        (
-            "credential" if fingerprint else "account",
-            core["provider"],
-            core["environment"],
-            fingerprint or core["account_id"],
-        )
-    ]
+    account_fingerprint = str(identity.get("account_fingerprint") or "").lower()
+    if account_fingerprint:
+        materials = [("ctp_account", core["provider"], account_fingerprint)]
+    else:
+        materials = [
+            (
+                "credential" if fingerprint else "account",
+                core["provider"],
+                core["environment"],
+                fingerprint or core["account_id"],
+            )
+        ]
     return tuple(
         hashlib.sha256("\0".join(material).encode("utf-8")).hexdigest()
         for material in materials
@@ -329,6 +517,14 @@ def session_config(config):
     if not isinstance(strategy_id, str) or not strategy_id.strip():
         raise NormalizedApiError("configure_execution", "invalid_execution_config")
     result["strategy_id"] = strategy_id.strip()
+    strategy_identity = result["strategy_identity_sha256"]
+    if strategy_identity is not None and (
+        not isinstance(strategy_identity, str)
+        or len(strategy_identity) != 64
+        or strategy_identity != strategy_identity.lower()
+        or any(character not in "0123456789abcdef" for character in strategy_identity)
+    ):
+        raise NormalizedApiError("configure_execution", "invalid_execution_config")
     maximum_loss_bps = result["account_maximum_loss_bps"]
     if maximum_loss_bps is not None:
         if result["require_order_journal"] is not True:
@@ -1177,6 +1373,30 @@ class _ExecutionSession:
         self._pending_loss_reset_id = None
         self._pending_loss_reset_at = None
         self._committed_loss_reset_id = None
+        self._arm_managed = False
+        self._arm_proof = None
+        self._arm_proof_sha256 = None
+        self._last_arm_proof_sha256 = None
+        self._arm_state_reader = None
+        self._arm_revoked_reason = None
+        self._arm_revoked_error_code = None
+        self._arm_revoked_generation = None
+        self._arm_venue = None
+        self._ctp_execution_identity = None
+        self._recovery_plan = None
+        self._recovery_mode = False
+        self._recovery_dispatch_in_progress = False
+        self._recovery_arm_capability = object()
+        self._recovery_refresh_in_progress = False
+        self._recovery_journal_error = None
+        self._recovery_used_tokens = set()
+        self._recovery_completed_preflight_sha256 = None
+        self._recovery_completed = False
+        self._recovery_event_revision = 0
+        self._recovery_private_event_revision = 0
+        self._recovery_private_ingress_revision = 0
+        self._arm_submit_calls = 0
+        self._arm_cancel_calls = 0
         self.closed = False
         try:
             if not self.config["market_data_only"]:
@@ -1236,8 +1456,14 @@ class _ExecutionSession:
             result[tuple(sorted(identity.items()))] = identity
         return list(result.values())
 
+    def _configured_execution_identities(self):
+        identities = list(self._configured_crypto_identities())
+        if isinstance(self._ctp_execution_identity, Mapping):
+            identities.append(dict(self._ctp_execution_identity))
+        return identities
+
     def _acquire_ledger_locks(self):
-        identities = self._configured_crypto_identities()
+        identities = self._configured_execution_identities()
         if not identities or self.path is None:
             return 0
         scopes = {}
@@ -1425,18 +1651,22 @@ class _ExecutionSession:
                         operation, "writer_lease_fenced", definite_reject=True
                     )
 
+    def _release_writer_leases(self):
+        handle, self.lock_file = self.lock_file, None
+        if handle is not None:
+            # Closing releases the OS advisory lock, including on a crash.
+            # Never unlink the inode: another process may be waiting on it.
+            handle.close()
+        ledger_handles, self.ledger_lock_files = self.ledger_lock_files, []
+        self.ledger_registry_digests.clear()
+        for ledger_handle in ledger_handles:
+            ledger_handle.close()
+
     def close(self):
         with self.mutex:
             self.closed = True
-            handle, self.lock_file = self.lock_file, None
-            if handle is not None:
-                # Closing releases the OS advisory lock, including on a crash.
-                # Never unlink the inode: another process may be waiting on it.
-                handle.close()
-            ledger_handles, self.ledger_lock_files = self.ledger_lock_files, []
-            self.ledger_registry_digests.clear()
-            for ledger_handle in ledger_handles:
-                ledger_handle.close()
+            self._arm_state_reader = None
+            self._release_writer_leases()
 
     def bind_credential_identity(self, venue, credential_fingerprint):
         """Bind a dynamically added crypto venue before any authenticated I/O."""
@@ -1583,6 +1813,28 @@ class _ExecutionSession:
                     raise NormalizedApiError(
                         "journal", "ledger_identity_mismatch", definite_reject=True
                     )
+            return identity
+        if provider == "CTP" and isinstance(self._ctp_execution_identity, Mapping):
+            if venue != self._arm_venue:
+                raise NormalizedApiError(
+                    "journal", "execution_arm_venue_mismatch", definite_reject=True
+                )
+            identity = dict(self._ctp_execution_identity)
+            supplied_account = account_id or row.get("account_id")
+            if (
+                supplied_account not in (None, "")
+                and _normalize_label(supplied_account) != identity["account_id"]
+            ):
+                raise NormalizedApiError(
+                    "journal", "authenticated_account_id_mismatch", definite_reject=True
+                )
+            embedded = row.get("ledger_identity")
+            if isinstance(embedded, dict) and not _recorded_identity_matches(
+                embedded, identity
+            ):
+                raise NormalizedApiError(
+                    "journal", "ledger_identity_mismatch", definite_reject=True
+                )
             return identity
         embedded = row.get("ledger_identity")
         if isinstance(embedded, dict):
@@ -1764,6 +2016,16 @@ class _ExecutionSession:
                 identity = self._identifier(state)
                 state.setdefault("recovery_ids", set()).add(identity)
                 if event == "intent":
+                    state["_intent_persisted"] = True
+                    state["strategy_id"] = row.get("strategy_id")
+                    state["strategy_identity_sha256"] = row.get(
+                        "strategy_identity_sha256"
+                    )
+                    state["execution_arm_proof_sha256"] = row.get(
+                        "execution_arm_proof_sha256"
+                    )
+                    state["connection_generation"] = row.get("connection_generation")
+                    state["fencing_epoch"] = row.get("fencing_epoch")
                     self.historical_unknown.add(identity)
                     state["terminal"] = False
                 elif event == "cancel_intent":
@@ -1799,12 +2061,14 @@ class _ExecutionSession:
                 "journal", "unreadable_journal", definite_reject=True
             ) from None
 
-    def _journal(self, event, row):
+    def _journal(self, event, row, *, allow_read_only=False):
         if self.closed:
             raise NormalizedApiError(
                 "journal", "execution_session_closed", definite_reject=True
             )
-        if self.path is None or self.config["market_data_only"]:
+        if self.path is None or (
+            self.config["market_data_only"] and not allow_read_only
+        ):
             return
         try:
             self._assert_writer_lease("journal")
@@ -1832,12 +2096,28 @@ class _ExecutionSession:
                     "owner_pid": self.owner_pid,
                     "fencing_epoch": self.fencing_epoch,
                     "strategy_id": self.config["strategy_id"],
+                    "strategy_identity_sha256": self.config["strategy_identity_sha256"],
+                    "execution_arm_proof_sha256": (
+                        self._arm_proof_sha256
+                        or (self._last_arm_proof_sha256 if allow_read_only else None)
+                    ),
+                    "connection_generation": (
+                        self._arm_proof.get("connection_generation")
+                        if isinstance(self._arm_proof, Mapping)
+                        else None
+                    ),
                     "ledger_identity": ledger_identity,
                     "event": event,
                     "timestamp": time.time(),
                 }
                 if ledger_identity is not None:
                     envelope["account_id"] = ledger_identity["account_id"]
+                if (
+                    venue
+                    and self._provider(venue) == "CTP"
+                    and isinstance(self._arm_proof, Mapping)
+                ):
+                    envelope["trading_day"] = self._arm_proof["trading_day"]
                 stream.write(json.dumps(envelope, allow_nan=False) + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -1890,30 +2170,1967 @@ class _ExecutionSession:
             raise ValueError("unknown risk transition")
         return transition_id
 
-    def require_write(self, operation, *, placement=False):
+    @staticmethod
+    def _arm_context_error(proof, context, *, require_account_stream=False):
+        if not isinstance(context, Mapping):
+            return "execution_arm_state_unavailable"
+        for field in _EXECUTION_ARM_CONTEXT_FIELDS:
+            if context.get(field) != proof[field]:
+                return f"execution_arm_{field}_mismatch"
+        if require_account_stream and context.get("account_stream_ready") is not True:
+            return "execution_arm_account_stream_unavailable"
+        return None
+
+    def _revoke_arm(self, reason, *, generation=None):
+        reason = _arm_revocation_reason(reason)
+        if generation is None and isinstance(self._arm_proof, Mapping):
+            generation = self._arm_proof.get("connection_generation")
+        if type(generation) is int and generation > 0:
+            self._arm_revoked_generation = max(
+                int(self._arm_revoked_generation or 0), generation
+            )
+        self.config["market_data_only"] = True
+        self._arm_proof_sha256 = None
+        self._arm_state_reader = None
+        self._recovery_mode = False
+        if self._arm_revoked_reason is None:
+            self._arm_revoked_reason = reason
+            self._arm_revoked_error_code = (
+                reason
+                if reason.startswith("execution_arm_")
+                else "execution_arm_revoked"
+            )
+
+    def disarm_execution(self, reason="execution_arm_revoked", *, generation=None):
+        """Revoke execution for the current CTP connection generation.
+
+        The first bounded reason is retained so repeated Store rollback calls
+        are idempotent and same-generation writes fail with a deterministic
+        code. A strictly newer connection generation still requires a fresh
+        proof and can be armed after a new read-only preflight.
+        """
+        with self.mutex:
+            self._arm_managed = True
+            self._revoke_arm(reason, generation=generation)
+            return {
+                "armed": False,
+                "market_data_only": True,
+                "reason": self._arm_revoked_reason,
+                "revocation_reason": self._arm_revoked_reason,
+                "revoked_generation": self._arm_revoked_generation,
+            }
+
+    def prepare_execution_authorization(
+        self, reason="execution_authorization_prepared"
+    ):
+        """Return to reusable read-only state before a fresh preflight.
+
+        Preparing a never-armed session is idempotent and does not create a
+        revocation fence. If an arm existed, its connection generation remains
+        fenced; only a proof from a strictly newer generation may supersede it.
+        """
+        with self.mutex:
+            if self.closed:
+                raise NormalizedApiError(
+                    "prepare_execution_authorization",
+                    "execution_session_closed",
+                    definite_reject=True,
+                )
+            normalized_reason = _arm_revocation_reason(reason)
+            prior_generation = (
+                self._arm_proof.get("connection_generation")
+                if isinstance(self._arm_proof, Mapping)
+                else None
+            )
+            had_arm = bool(
+                self._arm_proof_sha256 or not self.config["market_data_only"]
+            )
+            self._arm_managed = True
+            if had_arm:
+                self._revoke_arm(normalized_reason, generation=prior_generation)
+            else:
+                self.config["market_data_only"] = True
+                self._arm_proof_sha256 = None
+                self._arm_state_reader = None
+                self._recovery_mode = False
+                if self._arm_revoked_generation is None:
+                    self._arm_revoked_reason = None
+                    self._arm_revoked_error_code = None
+            return {
+                "prepared": True,
+                "armed": False,
+                "market_data_only": True,
+                "reusable": True,
+                "minimum_next_generation": (
+                    self._arm_revoked_generation + 1
+                    if self._arm_revoked_generation is not None
+                    else None
+                ),
+                "reason": normalized_reason,
+                "revoked_generation": self._arm_revoked_generation,
+            }
+
+    def _allow_new_generation_arm(self, normalized):
+        """Clear a prior generation fence only for a strictly newer proof."""
+        if self._arm_revoked_reason is None:
+            return
+        generation = normalized["connection_generation"]
+        revoked_generation = self._arm_revoked_generation
+        if revoked_generation is None or generation <= revoked_generation:
+            raise NormalizedApiError(
+                "arm_execution_from_preflight",
+                self._arm_revoked_error_code or "execution_arm_revoked",
+                definite_reject=True,
+            )
+        self._arm_revoked_reason = None
+        self._arm_revoked_error_code = None
+        self._arm_proof = None
+        self._arm_proof_sha256 = None
+        self._arm_state_reader = None
+
+    def _current_arm_error(self):
+        reader = self._arm_state_reader
+        proof = self._arm_proof
+        if not callable(reader) or not isinstance(proof, Mapping):
+            return "execution_arm_state_unavailable"
+        try:
+            context = reader()
+        except Exception as exc:
+            code = str(getattr(exc, "code", "") or "")
+            if code.startswith("execution_arm_"):
+                return code
+            return "execution_arm_state_unavailable"
+        return self._arm_context_error(proof, context, require_account_stream=True)
+
+    def _require_arm_scope(self, operation, venue, symbol, exchange_id):
+        if not self._arm_managed or self.config["market_data_only"]:
+            return
+        if venue != self._arm_venue:
+            raise NormalizedApiError(
+                operation, "execution_arm_venue_mismatch", definite_reject=True
+            )
+        expected = _canonical_ctp_instrument(self._arm_proof.get("instrument"))
+        observed = (
+            _canonical_ctp_instrument(symbol, exchange_id)
+            if _canonical_ctp_exchange(exchange_id)
+            else ""
+        )
+        if not expected or observed != expected:
+            raise NormalizedApiError(
+                operation, "execution_arm_instrument_mismatch", definite_reject=True
+            )
+
+    def _require_ctp_order_identity(self, operation, request):
+        """Require caller-owned strategy/cycle metadata on managed CTP orders."""
+        if not self._arm_managed or self._provider(self._arm_venue) != "CTP":
+            return
+        cycle_id = getattr(request, "execution_cycle_id", None)
+        role = getattr(request, "execution_role", None)
+        strategy_identity = getattr(request, "strategy_identity_sha256", None)
+        if (
+            not isinstance(cycle_id, str)
+            or not cycle_id
+            or role not in _EXECUTION_ROLES
+            or not self.config["strategy_identity_sha256"]
+            or strategy_identity != self.config["strategy_identity_sha256"]
+        ):
+            raise NormalizedApiError(
+                operation,
+                "execution_identity_missing_or_mismatch",
+                definite_reject=True,
+            )
+        closing = getattr(request, "offset", None) in {
+            "close",
+            "close_today",
+            "close_yesterday",
+        }
+        if (role == "entry") != (not closing):
+            raise NormalizedApiError(
+                operation, "execution_role_offset_mismatch", definite_reject=True
+            )
+        if role == "recovery_exit" and not self._recovery_mode:
+            raise NormalizedApiError(
+                operation, "execution_recovery_not_armed", definite_reject=True
+            )
+
+    @staticmethod
+    def _recovery_cancel_matches(request, allowed):
+        request_values = {
+            "client_order_id": request.client_order_id,
+            "order_id": request.order_id,
+            "order_ref": request.order_ref,
+            "front_id": request.front_id,
+            "session_id": request.session_id,
+        }
+        compared = False
+        for field, value in request_values.items():
+            if value in (None, ""):
+                continue
+            compared = True
+            expected = allowed.get(field)
+            if expected in (None, "") or str(value) != str(expected):
+                return False
+        return compared
+
+    def _require_recovery_action(self, operation, request, *, tracked=None):
+        """Return the one bounded recovery allowance consumed by this request."""
+        if not self._recovery_mode:
+            return None
+        plan = self._recovery_plan
+        if not isinstance(plan, Mapping) or plan.get("status") != "RECOVERABLE":
+            raise NormalizedApiError(
+                operation, "execution_recovery_plan_unavailable", definite_reject=True
+            )
+        if operation == "make_order":
+            self._require_ctp_order_identity(operation, request)
+            if request.execution_role != "recovery_exit":
+                raise NormalizedApiError(
+                    operation, "execution_recovery_open_forbidden", definite_reject=True
+                )
+            if plan.get("allowed_cancels"):
+                raise NormalizedApiError(
+                    operation,
+                    "execution_recovery_cancel_required",
+                    definite_reject=True,
+                )
+            for index, allowed in enumerate(plan.get("allowed_closes") or ()):
+                observed_instrument = _canonical_ctp_instrument(
+                    request.symbol, request.exchange_id
+                )
+                if (
+                    request.execution_cycle_id == allowed.get("execution_cycle_id")
+                    and observed_instrument
+                    == _canonical_ctp_instrument(
+                        allowed.get("symbol"), allowed.get("exchange_id")
+                    )
+                    and request.side.value == allowed.get("side")
+                    and request.position_side == allowed.get("position_side")
+                    and request.offset == allowed.get("offset")
+                    and request.quantity_unit == allowed.get("quantity_unit")
+                    and request.quantity <= Decimal(str(allowed.get("quantity") or "0"))
+                ):
+                    return ("close", index, format(request.quantity, "f"))
+            raise NormalizedApiError(
+                operation,
+                "execution_recovery_close_exceeds_proof",
+                definite_reject=True,
+            )
+        if operation == "cancel_order":
+            if tracked is None or tracked.get("execution_cycle_id") != plan.get(
+                "execution_cycle_id"
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "execution_recovery_foreign_cancel",
+                    definite_reject=True,
+                )
+            for index, allowed in enumerate(plan.get("allowed_cancels") or ()):
+                if self._recovery_cancel_matches(request, allowed):
+                    return ("cancel", index, None)
+            raise NormalizedApiError(
+                operation, "execution_recovery_foreign_cancel", definite_reject=True
+            )
+        raise NormalizedApiError(
+            operation, "execution_recovery_operation_forbidden", definite_reject=True
+        )
+
+    def _consume_recovery_action(self, allowance):
+        if allowance is None or not isinstance(self._recovery_plan, dict):
+            return
+        kind, index, quantity = allowance
+        key = "allowed_closes" if kind == "close" else "allowed_cancels"
+        values = list(self._recovery_plan.get(key) or ())
+        if not 0 <= index < len(values):
+            raise NormalizedApiError(
+                "execution_recovery",
+                "execution_recovery_plan_changed",
+                definite_reject=True,
+            )
+        if kind == "close":
+            remaining = Decimal(str(values[index]["quantity"])) - Decimal(quantity)
+            if remaining > 0:
+                values[index] = {**values[index], "quantity": format(remaining, "f")}
+            else:
+                values.pop(index)
+        else:
+            values.pop(index)
+        self._recovery_plan[key] = values
+
+    def _arm_load_state(self):
+        names = (
+            "orders",
+            "used_ids",
+            "reserved_ids",
+            "historical_unknown",
+            "pending",
+            "trade_ids",
+            "accounts",
+            "fencing_epoch",
+            "persistence_failed",
+            "risk_record",
+            "risk_error",
+            "risk_measurement_error",
+            "risk_transition_error",
+            "risk_check_in_progress",
+            "risk_last_verified_monotonic_ns",
+            "_journal_loss_state",
+            "_journal_loss_breached_at",
+            "_pending_loss_reset_id",
+            "_pending_loss_reset_at",
+            "_committed_loss_reset_id",
+        )
+        return {name: deepcopy(getattr(self, name)) for name in names}
+
+    def _restore_arm_load_state(self, state):
+        for name, value in state.items():
+            setattr(self, name, value)
+
+    def prepare_recovery(self, proof, state_reader, *, venue=None):
+        """Bind a new connection proof while keeping every write path closed."""
+        operation = "prepare_execution_recovery"
+        acquired_here = False
+        load_state = None
+        with self.mutex:
+            previous_identity = deepcopy(self._ctp_execution_identity)
+            previous_venue = self._arm_venue
+            try:
+                normalized, proof_sha256 = _execution_arm_proof(proof)
+                if self.closed:
+                    raise NormalizedApiError(
+                        operation, "execution_session_closed", definite_reject=True
+                    )
+                if not callable(state_reader):
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_arm_state_unavailable",
+                        definite_reject=True,
+                    )
+                if not self.config["strategy_identity_sha256"]:
+                    raise NormalizedApiError(
+                        operation,
+                        "strategy_identity_required",
+                        definite_reject=True,
+                    )
+                ctp_venues = tuple(
+                    item
+                    for item in self.exchange_names
+                    if self._provider(item) == "CTP"
+                )
+                arm_venue = str(
+                    venue or (ctp_venues[0] if len(ctp_venues) == 1 else "")
+                )
+                if (
+                    not arm_venue
+                    or self._provider(arm_venue) != "CTP"
+                    or set(self.exchange_names) != {arm_venue}
+                ):
+                    raise NormalizedApiError(
+                        operation, "single_ctp_session_required", definite_reject=True
+                    )
+                if not self.config["market_data_only"] and not self._recovery_mode:
+                    raise NormalizedApiError(
+                        operation, "execution_already_armed", definite_reject=True
+                    )
+                self._allow_new_generation_arm(normalized)
+                context = state_reader()
+                error = self._arm_context_error(normalized, context)
+                if error is not None:
+                    raise NormalizedApiError(operation, error, definite_reject=True)
+                if (
+                    self.config["require_order_journal"] is not True
+                    or self.path is None
+                ):
+                    raise NormalizedApiError(
+                        operation, "order_journal_required", definite_reject=True
+                    )
+                environment = (
+                    str(
+                        self.config["required_environments"].get(arm_venue)
+                        or normalized["environment_profile"]
+                    )
+                    .strip()
+                    .lower()
+                )
+                bound_identity = {
+                    "provider": "CTP",
+                    "environment": environment,
+                    "account_id": normalized["account_fingerprint"],
+                    "account_fingerprint": normalized["account_fingerprint"],
+                }
+                if previous_identity is not None and not _recorded_identity_matches(
+                    previous_identity, bound_identity
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_arm_account_fingerprint_mismatch",
+                        definite_reject=True,
+                    )
+                self._arm_venue = arm_venue
+                self._ctp_execution_identity = bound_identity
+                self._arm_managed = True
+                self.config["market_data_only"] = True
+                self._arm_proof_sha256 = None
+                self._arm_state_reader = None
+                self._recovery_mode = False
+                self._recovery_refresh_in_progress = True
+                self._recovery_plan = None
+                self._recovery_completed = False
+                self._recovery_journal_error = None
+
+                acquired_here = self.path is not None and self.lock_file is None
+                if acquired_here:
+                    load_state = self._arm_load_state()
+                    self._acquire_lock()
+                    context = state_reader()
+                    error = self._arm_context_error(normalized, context)
+                    if error is not None:
+                        raise NormalizedApiError(operation, error, definite_reject=True)
+                    try:
+                        self._load_journal()
+                    except NormalizedApiError as exc:
+                        if load_state is not None:
+                            acquired_epoch = self.fencing_epoch
+                            self._restore_arm_load_state(load_state)
+                            self.fencing_epoch = acquired_epoch
+                        self._recovery_journal_error = exc.code
+                    self._load_risk_state()
+
+                context = state_reader()
+                error = self._arm_context_error(normalized, context)
+                if error is not None:
+                    raise NormalizedApiError(operation, error, definite_reject=True)
+                self._arm_proof = normalized
+                self._last_arm_proof_sha256 = proof_sha256
+                self._arm_state_reader = state_reader
+                return {
+                    "prepared": True,
+                    "armed": False,
+                    "market_data_only": True,
+                    "proof_sha256": proof_sha256,
+                    "connection_generation": normalized["connection_generation"],
+                    "fencing_epoch": self.fencing_epoch,
+                }
+            except Exception:
+                self._recovery_refresh_in_progress = False
+                if acquired_here and self.lock_file is not None:
+                    self._release_writer_leases()
+                    if load_state is not None:
+                        self._restore_arm_load_state(load_state)
+                self._ctp_execution_identity = previous_identity
+                self._arm_venue = previous_venue
+                self.config["market_data_only"] = True
+                raise
+
+    def require_bound_read(self, operation, *, venue=None):
+        """Fence a recovery query without opening any execution capability."""
+        with self.mutex:
+            if self.closed:
+                raise NormalizedApiError(
+                    operation, "execution_session_closed", definite_reject=True
+                )
+            if (
+                not self._arm_managed
+                or not isinstance(self._arm_proof, Mapping)
+                or not callable(self._arm_state_reader)
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "execution_recovery_not_prepared",
+                    definite_reject=True,
+                )
+            if venue not in (None, self._arm_venue):
+                raise NormalizedApiError(
+                    operation, "execution_arm_venue_mismatch", definite_reject=True
+                )
+            try:
+                context = self._arm_state_reader()
+            except Exception:
+                raise NormalizedApiError(
+                    operation,
+                    "execution_arm_state_unavailable",
+                    definite_reject=True,
+                ) from None
+            error = self._arm_context_error(self._arm_proof, context)
+            if error is not None:
+                self._revoke_arm(
+                    error,
+                    generation=self._arm_proof.get("connection_generation"),
+                )
+                raise NormalizedApiError(operation, error, definite_reject=True)
+            self._assert_writer_lease(operation)
+
+    def recovery_event_revision(self):
+        """Return the process-local order/trade event fence for query barriers."""
+        with self.mutex:
+            return self._recovery_event_revision
+
+    def recovery_private_event_revision(self):
+        """Return the private-event fence used by SDK queue query barriers."""
+        with self.mutex:
+            return self._recovery_private_event_revision
+
+    def recovery_private_ingress_revision(self):
+        """Return the producer-side private queue ingress fence."""
+        with self.mutex:
+            return self._recovery_private_ingress_revision
+
+    def note_private_ingress(self, venue, ordered_after_write=False):
+        """Record a producer ingress and revoke a pre-write execution arm."""
+        with self.mutex:
+            self._recovery_private_ingress_revision += 1
+            should_revoke = bool(
+                self._arm_managed
+                and self._arm_venue == venue
+                and not self.config["market_data_only"]
+                and not ordered_after_write
+                and self.submit_calls == self._arm_submit_calls
+                and self.cancel_calls == self._arm_cancel_calls
+            )
+            if should_revoke:
+                # An order/trade callback before this arm has dispatched any
+                # write belongs to pre-arm state.  Close the SDK lease now;
+                # the queue owner closes the native gate under its transition lock.
+                self.config["market_data_only"] = True
+                self._arm_proof_sha256 = None
+                self._recovery_mode = False
+                self._recovery_refresh_in_progress = True
+            return should_revoke
+
+    @staticmethod
+    def _recovery_value(row, *names):
+        for name in names:
+            value = row.get(name)
+            if value not in (None, ""):
+                return value
+        return None
+
+    @classmethod
+    def _recovery_quantity(cls, row, *names):
+        value = cls._recovery_value(row, *names)
+        if isinstance(value, bool) or value in (None, ""):
+            raise ValueError("missing recovery quantity")
+        quantity = Decimal(str(value))
+        if (
+            not quantity.is_finite()
+            or quantity < 0
+            or quantity != quantity.to_integral_value()
+        ):
+            raise ValueError("invalid recovery quantity")
+        return quantity
+
+    @classmethod
+    def _recovery_row_instrument(cls, row):
+        symbol = cls._recovery_value(
+            row, "symbol", "instrument", "instrument_id", "InstrumentID"
+        )
+        exchange_id = cls._recovery_value(row, "exchange_id", "ExchangeID")
+        return _canonical_ctp_instrument(symbol, exchange_id)
+
+    @classmethod
+    def _recovery_row_side(cls, row, *, position=False):
+        names = (
+            ("position_side", "position_direction", "PosiDirection", "direction")
+            if position
+            else ("side", "direction", "Direction")
+        )
+        value = str(cls._recovery_value(row, *names) or "").strip().lower()
+        if position:
+            return {
+                "2": "long",
+                "3": "short",
+                "buy": "long",
+                "sell": "short",
+            }.get(value, value)
+        return {"0": "buy", "1": "sell"}.get(value, value)
+
+    @staticmethod
+    def _canonical_recovery_offset(value):
+        value = str(value or "").strip().lower().replace("-", "_")
+        return {
+            "0": "open",
+            "1": "close",
+            "3": "close_today",
+            "4": "close_yesterday",
+            "closetoday": "close_today",
+            "closeyesterday": "close_yesterday",
+        }.get(value, value)
+
+    @staticmethod
+    def _canonical_recovery_number(value):
+        value = Decimal(str(value))
+        text = format(value, "f")
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return "0" if text in {"", "-0"} else text
+
+    def _recovery_record_identity_error(self, row, *, proof=None):
+        proof = proof or self._arm_proof
+        if not isinstance(proof, Mapping):
+            return "recovery_proof_missing"
+        if row.get("schema_version") != _JOURNAL_SCHEMA_VERSION:
+            return "recovery_journal_schema_mismatch"
+        if row.get("strategy_id") != self.config["strategy_id"]:
+            return "recovery_strategy_id_mismatch"
+        strategy_identity = row.get("strategy_identity_sha256")
+        if strategy_identity != self.config["strategy_identity_sha256"]:
+            return "recovery_strategy_identity_mismatch"
+        if self._provider(row.get("exchange_name")) != "CTP":
+            return "recovery_venue_mismatch"
+        if row.get("account_id") != proof["account_fingerprint"]:
+            return "recovery_account_mismatch"
+        if str(row.get("trading_day") or "") != proof["trading_day"]:
+            return "recovery_trading_day_mismatch"
+        if self._recovery_row_instrument(row) != proof["instrument"]:
+            return "recovery_instrument_mismatch"
+        cycle_id = row.get("execution_cycle_id")
+        if not isinstance(cycle_id, str) or not cycle_id or len(cycle_id) > 128:
+            return "recovery_cycle_identity_missing"
+        if row.get("execution_role") not in _EXECUTION_ROLES:
+            return "recovery_execution_role_missing"
+        arm_hash = str(row.get("execution_arm_proof_sha256") or "")
+        if (
+            len(arm_hash) != 64
+            or arm_hash != arm_hash.lower()
+            or any(character not in "0123456789abcdef" for character in arm_hash)
+        ):
+            return "recovery_arm_proof_missing"
+        generation = row.get("connection_generation")
+        if (
+            type(generation) is not int
+            or generation <= 0
+            or generation > proof["connection_generation"]
+        ):
+            return "recovery_generation_invalid"
+        epoch = row.get("fencing_epoch")
+        if type(epoch) is not int or epoch <= 0 or epoch > self.fencing_epoch:
+            return "recovery_fencing_invalid"
+        embedded = row.get("ledger_identity")
+        if not isinstance(embedded, Mapping) or not _recorded_identity_matches(
+            embedded, self._ctp_execution_identity
+        ):
+            return "recovery_ledger_identity_mismatch"
+        return None
+
+    @staticmethod
+    def _is_prior_recovery_trading_day(value, current):
+        """Return whether ``value`` is one canonical trading day before ``current``."""
+        value = str(value or "")
+        current = str(current or "")
+        try:
+            parsed_value = time.strptime(value, "%Y%m%d")
+            parsed_current = time.strptime(current, "%Y%m%d")
+        except ValueError:
+            return False
+        return bool(
+            time.strftime("%Y%m%d", parsed_value) == value
+            and time.strftime("%Y%m%d", parsed_current) == current
+            and value < current
+        )
+
+    def _recovery_journal_records(
+        self,
+        *,
+        proof=None,
+        include_prior_trading_days=False,
+    ):
+        if self._recovery_journal_error:
+            return (), (), (self._recovery_journal_error,)
+        if self.path is None or not self.path.exists():
+            return (), (), ("recovery_journal_missing",)
+        intents = []
+        trades = []
+        errors = []
+        try:
+            lines = self.path.read_text(encoding="utf-8").splitlines()
+            for line in lines:
+                row = json.loads(line)
+                if not isinstance(row, dict):
+                    raise ValueError
+                event = row.get("event")
+                if event not in {
+                    "intent",
+                    "cancel_intent",
+                    "order_update",
+                    "trade",
+                    "trade_update",
+                }:
+                    continue
+                record_proof = proof
+                if include_prior_trading_days and isinstance(proof, Mapping):
+                    row_day = str(row.get("trading_day") or "")
+                    proof_day = str(proof.get("trading_day") or "")
+                    if self._is_prior_recovery_trading_day(row_day, proof_day):
+                        # Native connection generations are process-local.  A
+                        # prior day's positive generation must not be compared
+                        # with a fresh process's generation counter.
+                        record_proof = {
+                            **proof,
+                            "trading_day": row_day,
+                            "connection_generation": row.get("connection_generation"),
+                        }
+                error = self._recovery_record_identity_error(
+                    row,
+                    proof=record_proof,
+                )
+                if error is not None:
+                    errors.append(error)
+                    continue
+                if event == "intent":
+                    intents.append(row)
+                elif event == "trade":
+                    trades.append(row)
+        except Exception:
+            errors.append("unreadable_journal")
+        return tuple(intents), tuple(trades), tuple(sorted(set(errors)))
+
+    def _journal_requires_recovery(self, proof):
+        """Detect durable CTP exposure before any ordinary arm opens the gate."""
+        if self._recovery_completed and not self._recovery_plan_private_fence_current(
+            self._recovery_plan
+        ):
+            return True
+        if (
+            self.path is None
+            or not self.path.is_file()
+            or self.path.stat().st_size == 0
+        ):
+            return False
+        intents, trades, errors = self._recovery_journal_records(
+            proof=proof,
+            include_prior_trading_days=True,
+        )
+        if (
+            errors
+            or self.historical_unknown
+            or any(not state.get("terminal") for state in self.orders.values())
+        ):
+            return True
+        try:
+            for state in self.orders.values():
+                if not state.get("terminal"):
+                    continue
+                last_update = state.get("last_update") or {}
+                filled = self._recovery_quantity(last_update, "filled")
+                durable_fills = sum(
+                    (
+                        self._recovery_quantity(
+                            trade, "size", "quantity", "volume", "Volume"
+                        )
+                        for trade in trades
+                        if str(trade.get("trading_day") or "")
+                        == str(
+                            last_update.get("trading_day")
+                            or state.get("trading_day")
+                            or ""
+                        )
+                        and self._recovery_order_matches(state, trade)
+                    ),
+                    Decimal(0),
+                )
+                if filled != durable_fills:
+                    return True
+        except (InvalidOperation, TypeError, ValueError):
+            return True
+        intent_cycles = {
+            (str(intent.get("trading_day") or ""), intent.get("execution_cycle_id"))
+            for intent in intents
+        }
+        exposure = defaultdict(lambda: {"long": Decimal(0), "short": Decimal(0)})
+        try:
+            for trade in trades:
+                cycle = (
+                    str(trade.get("trading_day") or ""),
+                    trade["execution_cycle_id"],
+                )
+                if (
+                    cycle not in intent_cycles
+                    or sum(
+                        str(intent.get("trading_day") or "") == cycle[0]
+                        and intent.get("execution_cycle_id") == cycle[1]
+                        and self._recovery_order_matches(intent, trade)
+                        for intent in intents
+                    )
+                    != 1
+                ):
+                    return True
+                quantity = self._recovery_quantity(
+                    trade, "size", "quantity", "volume", "Volume"
+                )
+                side = self._recovery_row_side(trade)
+                offset = self._canonical_recovery_offset(
+                    self._recovery_value(trade, "offset", "trade_offset", "OffsetFlag")
+                )
+                role = trade["execution_role"]
+                if role == "entry" and offset == "open" and side in {"buy", "sell"}:
+                    exposure[cycle]["long" if side == "buy" else "short"] += quantity
+                    continue
+                if role not in {"exit", "recovery_exit"} or offset not in {
+                    "close",
+                    "close_today",
+                    "close_yesterday",
+                }:
+                    return True
+                position_side = self._recovery_row_side(trade, position=True)
+                if position_side not in {"long", "short"}:
+                    position_side = "long" if side == "sell" else "short"
+                if (position_side == "long" and side != "sell") or (
+                    position_side == "short" and side != "buy"
+                ):
+                    return True
+                exposure[cycle][position_side] -= quantity
+        except (InvalidOperation, KeyError, OSError, TypeError, ValueError):
+            return True
+        return any(
+            amount != 0
+            for cycle_exposure in exposure.values()
+            for amount in cycle_exposure.values()
+        )
+
+    @staticmethod
+    def _recovery_order_active(row):
+        status = (
+            str(
+                row.get("status")
+                or row.get("OrderStatus")
+                or row.get("order_status")
+                or ""
+            )
+            .strip()
+            .lower()
+        )
+        if status in {
+            "0",
+            "2",
+            "4",
+            "5",
+            "filled",
+            "completed",
+            "canceled",
+            "cancelled",
+            "expired",
+            "rejected",
+        }:
+            return False
+        remaining = _ExecutionSession._recovery_value(
+            row, "remaining", "VolumeTotal", "volume_total"
+        )
+        if remaining not in (None, ""):
+            try:
+                return Decimal(str(remaining)) > 0
+            except InvalidOperation:
+                return True
+        return True
+
+    @staticmethod
+    def _recovery_order_matches(left, right):
+        fields = (
+            ("client_order_id", "OrderRef", "order_ref"),
+            ("order_id", "OrderSysID", "venue_order_id"),
+        )
+        compared = False
+        for names in fields:
+            left_value = _ExecutionSession._recovery_value(left, *names)
+            right_value = _ExecutionSession._recovery_value(right, *names)
+            if left_value in (None, "") or right_value in (None, ""):
+                continue
+            compared = True
+            if str(left_value).strip() != str(right_value).strip():
+                return False
+        return compared
+
+    def _recovery_remote_identity_error(self, row):
+        proof = self._arm_proof
+        if not isinstance(proof, Mapping):
+            return "recovery_proof_missing"
+        account = self._recovery_value(row, "account_id", "AccountID", "InvestorID")
+        day = self._recovery_value(row, "trading_day", "TradingDay")
+        if str(account or "") != proof["account_fingerprint"]:
+            return "recovery_remote_account_missing_or_mismatch"
+        if str(day or "") != proof["trading_day"]:
+            return "recovery_remote_trading_day_missing_or_mismatch"
+        if row.get("connection_generation") != proof["connection_generation"]:
+            return "recovery_remote_generation_missing_or_mismatch"
+        if row.get("evidence_complete") is not True:
+            return "recovery_remote_evidence_incomplete"
+        if self._recovery_row_instrument(row) != proof["instrument"]:
+            return "recovery_remote_instrument_mismatch"
+        return None
+
+    def _recovery_active_order_matches_intent(self, intent, order):
+        if not self._recovery_order_matches(intent, order):
+            return False
+        try:
+            intent_side = self._recovery_row_side(intent)
+            order_side = self._recovery_row_side(order)
+            intent_offset = self._canonical_recovery_offset(
+                self._recovery_value(intent, "offset", "CombOffsetFlag")
+            )
+            order_offset = self._canonical_recovery_offset(
+                self._recovery_value(
+                    order,
+                    "offset",
+                    "CombOffsetFlag",
+                    "OffsetFlag",
+                )
+            )
+            intent_quantity = self._recovery_quantity(intent, "quantity", "size")
+            order_quantity = self._recovery_quantity(
+                order,
+                "quantity",
+                "size",
+                "VolumeTotalOriginal",
+                "volume_total_original",
+            )
+        except (InvalidOperation, TypeError, ValueError):
+            return False
+        hedge_flag = str(
+            self._recovery_value(order, "hedge_flag", "CombHedgeFlag", "HedgeFlag")
+            or ""
+        ).strip()
+        return bool(
+            intent_side in {"buy", "sell"}
+            and order_side == intent_side
+            and intent_offset
+            in {
+                "open",
+                "close",
+                "close_today",
+                "close_yesterday",
+            }
+            and order_offset == intent_offset
+            and intent_quantity == order_quantity
+            and hedge_flag == "1"
+        )
+
+    @classmethod
+    def _recovery_trade_key(cls, row):
+        return (
+            str(cls._recovery_value(row, "trading_day", "TradingDay") or ""),
+            cls._recovery_row_instrument(row),
+            str(cls._recovery_value(row, "trade_id", "TradeID") or ""),
+        )
+
+    def _recovery_barrier_errors(self, snapshot, barrier):
+        proof = self._arm_proof
+        if not isinstance(proof, Mapping) or not isinstance(barrier, Mapping):
+            return ["recovery_query_barrier_missing"]
+        if barrier.get("schema_version") != "bt-api-py.ctp-recovery-query-barrier.v1":
+            return ["recovery_query_barrier_schema_invalid"]
+        material = dict(barrier)
+        reported_hash = material.pop("barrier_sha256", None)
+        try:
+            expected_hash = hashlib.sha256(
+                json.dumps(
+                    material,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            snapshot_hash = hashlib.sha256(
+                json.dumps(
+                    snapshot,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+        except (TypeError, ValueError):
+            return ["recovery_query_barrier_not_canonical"]
+        errors = []
+        if reported_hash != expected_hash:
+            errors.append("recovery_query_barrier_hash_mismatch")
+        if barrier.get("stable") is not True:
+            errors.append("recovery_snapshot_not_stable")
+        rounds = barrier.get("rounds")
+        if not isinstance(rounds, (list, tuple)) or len(rounds) != 2:
+            errors.append("recovery_query_rounds_incomplete")
+            return errors
+        request_ids = []
+        account_hashes = []
+        full_hashes = []
+        for round_result in rounds:
+            if not isinstance(round_result, Mapping):
+                errors.append("recovery_query_round_invalid")
+                continue
+            ids = round_result.get("request_ids")
+            if not isinstance(ids, Mapping) or set(ids) != {
+                "account",
+                "positions",
+                "orders",
+                "trades",
+            }:
+                errors.append("recovery_query_ids_incomplete")
+                continue
+            request_ids.extend(ids.values())
+            account_hashes.append(round_result.get("account_snapshot_sha256"))
+            full_hashes.append(round_result.get("full_snapshot_sha256"))
+            if (
+                round_result.get("account_fingerprint") != proof["account_fingerprint"]
+                or round_result.get("trading_day") != proof["trading_day"]
+                or round_result.get("connection_generation")
+                != proof["connection_generation"]
+                or round_result.get("snapshot_sha256") != snapshot_hash
+            ):
+                errors.append("recovery_query_identity_mismatch")
+        if (
+            len(request_ids) != 8
+            or any(type(value) is not int or value <= 0 for value in request_ids)
+            or len(set(request_ids)) != 8
+        ):
+            errors.append("recovery_query_id_reused")
+
+        def valid_sha256(value):
+            return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value))
+
+        if (
+            len(account_hashes) != 2
+            or any(not valid_sha256(value) for value in account_hashes)
+            or len(set(account_hashes)) != 1
+            or len(full_hashes) != 2
+            or any(not valid_sha256(value) for value in full_hashes)
+            or len(set(full_hashes)) != 1
+        ):
+            errors.append("recovery_query_full_snapshot_not_stable")
+        revisions = barrier.get("event_revisions")
+        if (
+            not isinstance(revisions, Mapping)
+            or set(revisions) != {"start", "middle", "end"}
+            or any(type(value) is not int or value < 0 for value in revisions.values())
+            or len(set(revisions.values())) != 1
+            or revisions.get("end") != self._recovery_event_revision
+        ):
+            errors.append("recovery_event_fence_invalid")
+        private_revisions = barrier.get("private_event_revisions")
+        if (
+            not isinstance(private_revisions, Mapping)
+            or set(private_revisions) != {"start", "end"}
+            or any(
+                type(value) is not int or value < 0
+                for value in private_revisions.values()
+            )
+            or private_revisions.get("start") != private_revisions.get("end")
+            or private_revisions.get("end") != self._recovery_private_event_revision
+        ):
+            errors.append("recovery_private_event_fence_invalid")
+        ingress_revisions = barrier.get("private_ingress_revisions")
+        if (
+            not isinstance(ingress_revisions, Mapping)
+            or set(ingress_revisions) != {"start", "end"}
+            or any(
+                type(value) is not int or value < 0
+                for value in ingress_revisions.values()
+            )
+            or ingress_revisions.get("start") != ingress_revisions.get("end")
+            or ingress_revisions.get("end") != self._recovery_private_ingress_revision
+        ):
+            errors.append("recovery_private_ingress_fence_invalid")
+        ingress_epochs = barrier.get("private_ingress_epochs")
+        if (
+            not isinstance(ingress_epochs, Mapping)
+            or set(ingress_epochs) != {"start", "end"}
+            or any(
+                type(value) is not int or value < 0 for value in ingress_epochs.values()
+            )
+            or ingress_epochs.get("start") != ingress_epochs.get("end")
+        ):
+            errors.append("recovery_private_ingress_epoch_invalid")
+        ingress_pending = barrier.get("private_ingress_pending")
+        if (
+            not isinstance(ingress_pending, Mapping)
+            or set(ingress_pending) != {"start", "end"}
+            or any(type(value) is not int for value in ingress_pending.values())
+            or any(value != 0 for value in ingress_pending.values())
+        ):
+            errors.append("recovery_private_ingress_pending")
+        return errors
+
+    def _recovery_plan_private_fence_current(self, plan):
+        """Return whether no private order/trade event arrived after ``plan``."""
+        barrier = plan.get("query_barrier") if isinstance(plan, Mapping) else None
+        event_revisions = (
+            barrier.get("private_event_revisions")
+            if isinstance(barrier, Mapping)
+            else None
+        )
+        ingress_revisions = (
+            barrier.get("private_ingress_revisions")
+            if isinstance(barrier, Mapping)
+            else None
+        )
+        return bool(
+            isinstance(event_revisions, Mapping)
+            and type(event_revisions.get("end")) is int
+            and event_revisions.get("end") == self._recovery_private_event_revision
+            and isinstance(ingress_revisions, Mapping)
+            and type(ingress_revisions.get("end")) is int
+            and ingress_revisions.get("end") == self._recovery_private_ingress_revision
+        )
+
+    def build_recovery_plan(
+        self,
+        snapshot,
+        *,
+        stable=None,
+        barrier=None,
+        failure_reason=None,
+    ):
+        """Return the closed recovery decision derived only from SDK journal evidence."""
+        operation = "prepare_execution_recovery"
+        with self.mutex:
+            self.require_bound_read(operation, venue=self._arm_venue)
+            proof = self._arm_proof
+            proof_sha256 = self._last_arm_proof_sha256
+            zero = dict.fromkeys(_RECOVERY_POSITION_KEYS, "0")
+            remote_position = dict(zero)
+            owned_position = dict(zero)
+            reasons = []
+            if failure_reason not in (None, ""):
+                reason = str(failure_reason).strip().lower()
+                reasons.append(
+                    reason
+                    if _ARM_REASON_RE.fullmatch(reason)
+                    else "recovery_query_failed"
+                )
+            intents, journal_trades, journal_errors = self._recovery_journal_records()
+            reasons.extend(journal_errors)
+            journal_sha256 = None
+            if self.path is not None and self.path.is_file():
+                try:
+                    journal_sha256 = hashlib.sha256(self.path.read_bytes()).hexdigest()
+                except OSError:
+                    reasons.append("recovery_journal_unreadable")
+            if not isinstance(snapshot, Mapping) or set(snapshot) != {
+                "positions",
+                "orders",
+                "trades",
+            }:
+                reasons.append("recovery_snapshot_invalid")
+                positions = orders = trades = ()
+            else:
+                positions = snapshot["positions"]
+                orders = snapshot["orders"]
+                trades = snapshot["trades"]
+                if not all(
+                    isinstance(value, (list, tuple)) for value in snapshot.values()
+                ):
+                    reasons.append("recovery_snapshot_invalid")
+                    positions = orders = trades = ()
+            del stable  # Compatibility only; callers cannot self-certify stability.
+            reasons.extend(self._recovery_barrier_errors(snapshot, barrier))
+
+            frozen_position = {key: Decimal(0) for key in _RECOVERY_POSITION_KEYS}
+            frozen_by_side = {"long": Decimal(0), "short": Decimal(0)}
+            try:
+                for row in positions:
+                    if not isinstance(row, Mapping):
+                        raise ValueError
+                    quantity = self._recovery_quantity(
+                        row, "quantity", "position_volume", "Position", "volume", "size"
+                    )
+                    if quantity == 0:
+                        continue
+                    identity_error = self._recovery_remote_identity_error(row)
+                    if identity_error is not None:
+                        reasons.append(identity_error)
+                        continue
+                    side = self._recovery_row_side(row, position=True)
+                    if side not in {"long", "short"}:
+                        reasons.append("ambiguous_position_side")
+                        continue
+                    today_value = self._recovery_value(
+                        row, "today", "today_position", "TodayPosition"
+                    )
+                    yesterday_value = self._recovery_value(
+                        row, "yesterday", "yd_position", "YdPosition"
+                    )
+                    if today_value is None or yesterday_value is None:
+                        reasons.append("position_bucket_evidence_missing")
+                        continue
+                    today = self._recovery_quantity({"value": today_value}, "value")
+                    yesterday = self._recovery_quantity(
+                        {"value": yesterday_value}, "value"
+                    )
+                    if today < 0 or yesterday < 0 or today + yesterday != quantity:
+                        reasons.append("position_bucket_mismatch")
+                        continue
+                    remote_position[f"{side}_today"] = self._canonical_recovery_number(
+                        Decimal(remote_position[f"{side}_today"]) + today
+                    )
+                    remote_position[f"{side}_yesterday"] = (
+                        self._canonical_recovery_number(
+                            Decimal(remote_position[f"{side}_yesterday"]) + yesterday
+                        )
+                    )
+                    frozen_names = (
+                        ("long_frozen", "LongFrozen")
+                        if side == "long"
+                        else ("short_frozen", "ShortFrozen")
+                    )
+                    frozen_value = self._recovery_value(row, *frozen_names)
+                    if frozen_value is None:
+                        reasons.append("position_frozen_evidence_missing")
+                        continue
+                    frozen = self._recovery_quantity({"value": frozen_value}, "value")
+                    if frozen > quantity:
+                        reasons.append("position_frozen_exceeds_position")
+                    else:
+                        frozen_by_side[side] += frozen
+                    exchange = proof["instrument"].partition(".")[0]
+                    if frozen and today and yesterday and exchange in {"SHFE", "INE"}:
+                        # CTP exposes a side total here; without a dated frozen
+                        # bucket an automatic close cannot choose a safe offset.
+                        reasons.append("position_frozen_bucket_ambiguous")
+                    elif frozen:
+                        bucket = "today" if today else "yesterday"
+                        frozen_position[f"{side}_{bucket}"] += frozen
+            except (InvalidOperation, ValueError, TypeError):
+                reasons.append("ctp_position_schema_invalid")
+
+            intent_by_cycle = defaultdict(list)
+            intent_order_keys = set()
+            for intent in intents:
+                intent_by_cycle[intent["execution_cycle_id"]].append(intent)
+                client_identity = str(
+                    self._recovery_value(
+                        intent,
+                        "client_order_id",
+                        "order_ref",
+                        "OrderRef",
+                    )
+                    or ""
+                ).strip()
+                if not client_identity or client_identity in intent_order_keys:
+                    reasons.append("recovery_intent_identity_invalid")
+                intent_order_keys.add(client_identity)
+            journal_trade_by_key = {}
+            cycle_exposure = defaultdict(
+                lambda: {"long": Decimal(0), "short": Decimal(0)}
+            )
+            try:
+                for trade in journal_trades:
+                    key = self._recovery_trade_key(trade)
+                    if not key[2] or key in journal_trade_by_key:
+                        reasons.append("recovery_trade_identity_invalid")
+                        continue
+                    journal_trade_by_key[key] = trade
+                    quantity = self._recovery_quantity(
+                        trade, "size", "quantity", "volume", "Volume"
+                    )
+                    side = self._recovery_row_side(trade)
+                    offset = self._canonical_recovery_offset(
+                        self._recovery_value(
+                            trade, "offset", "trade_offset", "OffsetFlag"
+                        )
+                    )
+                    cycle = trade["execution_cycle_id"]
+                    role = trade["execution_role"]
+                    if side not in {"buy", "sell"}:
+                        reasons.append("recovery_trade_side_invalid")
+                    elif role == "entry" and offset == "open":
+                        cycle_exposure[cycle][
+                            "long" if side == "buy" else "short"
+                        ] += quantity
+                    elif role in {"exit", "recovery_exit"} and offset in {
+                        "close",
+                        "close_today",
+                        "close_yesterday",
+                    }:
+                        position_side = self._recovery_row_side(trade, position=True)
+                        if position_side not in {"long", "short"}:
+                            position_side = "long" if side == "sell" else "short"
+                        if (position_side == "long" and side != "sell") or (
+                            position_side == "short" and side != "buy"
+                        ):
+                            reasons.append("recovery_trade_close_direction_invalid")
+                        else:
+                            cycle_exposure[cycle][position_side] -= quantity
+                    else:
+                        reasons.append("recovery_trade_role_offset_invalid")
+            except (InvalidOperation, ValueError, TypeError, KeyError):
+                reasons.append("ctp_trade_schema_invalid")
+
+            remote_trade_keys = set()
+            for trade in trades:
+                if not isinstance(trade, Mapping):
+                    reasons.append("ctp_trade_schema_invalid")
+                    continue
+                identity_error = self._recovery_remote_identity_error(trade)
+                if identity_error is not None:
+                    reasons.append(identity_error)
+                    continue
+                key = self._recovery_trade_key(trade)
+                if not key[2] or key in remote_trade_keys:
+                    reasons.append("recovery_remote_trade_identity_invalid")
+                    continue
+                remote_trade_keys.add(key)
+                if key not in journal_trade_by_key:
+                    reasons.append("external_or_unowned_trade_present")
+            if set(journal_trade_by_key) != remote_trade_keys:
+                reasons.append("recovery_trade_ledger_mismatch")
+
+            active_orders = []
+            order_cycles = set()
+            for order in orders:
+                if not isinstance(order, Mapping):
+                    reasons.append("ctp_order_schema_invalid")
+                    continue
+                if not self._recovery_order_active(order):
+                    continue
+                identity_error = self._recovery_remote_identity_error(order)
+                if identity_error is not None:
+                    reasons.append(identity_error)
+                    continue
+                matches = [
+                    intent
+                    for intent in intents
+                    if self._recovery_active_order_matches_intent(intent, order)
+                ]
+                if len(matches) != 1:
+                    reasons.append("external_or_unowned_active_order")
+                    continue
+                intent = matches[0]
+                cycle = intent["execution_cycle_id"]
+                order_cycles.add(cycle)
+                active_orders.append((order, intent))
+
+            nonzero_cycles = {
+                cycle
+                for cycle, exposure in cycle_exposure.items()
+                if exposure["long"] != 0 or exposure["short"] != 0
+            }
+            cycles = nonzero_cycles | order_cycles
+            if len(cycles) > 1:
+                reasons.append("multiple_execution_cycles_present")
+            cycle_id = next(iter(cycles), None) if len(cycles) == 1 else None
+            if cycle_id is not None:
+                exposure = cycle_exposure[cycle_id]
+                if exposure["long"] < 0 or exposure["short"] < 0:
+                    reasons.append("recovery_owned_position_negative")
+                remote_long = Decimal(remote_position["long_today"]) + Decimal(
+                    remote_position["long_yesterday"]
+                )
+                remote_short = Decimal(remote_position["short_today"]) + Decimal(
+                    remote_position["short_yesterday"]
+                )
+                if exposure["long"] != remote_long or exposure["short"] != remote_short:
+                    reasons.append("recovery_owned_position_mismatch")
+                else:
+                    owned_position = dict(remote_position)
+            elif any(Decimal(value) != 0 for value in remote_position.values()):
+                reasons.append("unowned_position_present")
+
+            remote_long = Decimal(remote_position["long_today"]) + Decimal(
+                remote_position["long_yesterday"]
+            )
+            remote_short = Decimal(remote_position["short_today"]) + Decimal(
+                remote_position["short_yesterday"]
+            )
+            if remote_long > 0 and remote_short > 0:
+                reasons.append("dual_side_position_present")
+
+            allowed_cancels = []
+            for order, intent in active_orders:
+                allowed_cancels.append(
+                    {
+                        "execution_cycle_id": intent["execution_cycle_id"],
+                        "symbol": self._recovery_value(
+                            intent, "symbol", "InstrumentID", "instrument_id"
+                        ),
+                        "exchange_id": self._recovery_value(
+                            intent, "exchange_id", "ExchangeID"
+                        ),
+                        "client_order_id": self._recovery_value(
+                            order, "client_order_id", "OrderRef", "order_ref"
+                        ),
+                        "order_id": self._recovery_value(
+                            order, "order_id", "OrderSysID", "venue_order_id"
+                        ),
+                        "order_ref": self._recovery_value(
+                            order, "order_ref", "OrderRef", "client_order_id"
+                        ),
+                        "front_id": self._recovery_value(order, "front_id", "FrontID"),
+                        "session_id": self._recovery_value(
+                            order, "session_id", "SessionID"
+                        ),
+                    }
+                )
+            allowed_closes = []
+            if not allowed_cancels and cycle_id is not None and not reasons:
+                exchange_id, instrument_id = proof["instrument"].split(".", 1)
+                if exchange_id in {"SHFE", "INE"}:
+                    close_buckets = (
+                        ("long", "today", "close_today"),
+                        ("long", "yesterday", "close_yesterday"),
+                        ("short", "today", "close_today"),
+                        ("short", "yesterday", "close_yesterday"),
+                    )
+                    for position_side, bucket, offset in close_buckets:
+                        key = f"{position_side}_{bucket}"
+                        available = Decimal(remote_position[key]) - frozen_position[key]
+                        if available <= 0:
+                            continue
+                        allowed_closes.append(
+                            {
+                                "execution_cycle_id": cycle_id,
+                                "symbol": instrument_id,
+                                "exchange_id": exchange_id,
+                                "position_side": position_side,
+                                "side": "sell" if position_side == "long" else "buy",
+                                "offset": offset,
+                                "quantity": self._canonical_recovery_number(available),
+                                "quantity_unit": "contracts",
+                            }
+                        )
+                else:
+                    # CTP's exchange contract has dated close instructions only for
+                    # SHFE/INE. CZCE (Iteration 22) and the remaining exchanges use
+                    # the generic close flag while today/yesterday stays in evidence.
+                    for position_side, total in (
+                        ("long", remote_long),
+                        ("short", remote_short),
+                    ):
+                        available = total - frozen_by_side[position_side]
+                        if available <= 0:
+                            continue
+                        allowed_closes.append(
+                            {
+                                "execution_cycle_id": cycle_id,
+                                "symbol": instrument_id,
+                                "exchange_id": exchange_id,
+                                "position_side": position_side,
+                                "side": "sell" if position_side == "long" else "buy",
+                                "offset": "close",
+                                "quantity": self._canonical_recovery_number(available),
+                                "quantity_unit": "contracts",
+                            }
+                        )
+
+            if (
+                not reasons
+                and cycle_id is not None
+                and not allowed_cancels
+                and not allowed_closes
+                and (remote_long > 0 or remote_short > 0)
+            ):
+                reasons.append("recovery_no_safe_action")
+
+            if reasons:
+                status = "MANUAL_INTERVENTION"
+                allowed_cancels = []
+                allowed_closes = []
+                allowed_actions = []
+                cycle_id = None
+            elif (
+                cycle_id is None
+                and not active_orders
+                and remote_long == remote_short == 0
+            ):
+                status = "FLAT"
+                allowed_actions = ["complete"]
+            else:
+                status = "RECOVERABLE"
+                allowed_actions = []
+                if allowed_cancels:
+                    allowed_actions.append("cancel")
+                elif allowed_closes:
+                    allowed_actions.append("close")
+
+            material = {
+                "schema_version": "bt_api.execution-recovery.v1",
+                "status": status,
+                "recovery_required": status != "FLAT",
+                "can_arm_execution": status == "FLAT",
+                "can_arm_recovery": status == "RECOVERABLE",
+                "account_fingerprint": proof["account_fingerprint"],
+                "strategy_id": self.config["strategy_id"],
+                "strategy_identity_sha256": self.config["strategy_identity_sha256"],
+                "instrument": proof["instrument"],
+                "trading_day": proof["trading_day"],
+                "connection_generation": proof["connection_generation"],
+                "fencing_epoch": self.fencing_epoch,
+                "proof_sha256": proof_sha256,
+                "execution_cycle_id": cycle_id,
+                "remote_position": remote_position,
+                "owned_position": owned_position,
+                "allowed_closes": allowed_closes,
+                "allowed_cancels": allowed_cancels,
+                "allowed_actions": allowed_actions,
+                "unknown_ids": sorted(self._unknown_ids()) if reasons else [],
+                "evidence_errors": sorted(set(reasons)),
+                "journal_sha256": journal_sha256,
+                "query_barrier": deepcopy(barrier) if barrier is not None else None,
+            }
+            token = None
+            if status != "MANUAL_INTERVENTION":
+                token_material = {
+                    **material,
+                    "owner_token": self.owner_token,
+                    "nonce": uuid.uuid4().hex,
+                }
+                token = hashlib.sha256(
+                    json.dumps(
+                        token_material,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    ).encode("utf-8")
+                ).hexdigest()
+            plan = {**material, "recovery_token_sha256": token}
+            self._recovery_plan = deepcopy(plan)
+            self._recovery_refresh_in_progress = False
+            return deepcopy(plan)
+
+    def arm_recovery_from_preflight(
+        self,
+        proof,
+        recovery_token_sha256,
+        state_reader,
+        *,
+        venue=None,
+        prepare_execution=None,
+        rollback_execution=None,
+    ):
+        """Consume one recovery token and arm only its bounded exposure reduction."""
+        operation = "arm_execution_recovery"
+        normalized, proof_sha256 = _execution_arm_proof(proof)
+        with self.mutex:
+            plan = self._recovery_plan
+            if (
+                not isinstance(plan, Mapping)
+                or plan.get("status") != "RECOVERABLE"
+                or plan.get("proof_sha256") != proof_sha256
+                or self._arm_proof != normalized
+                or recovery_token_sha256 != plan.get("recovery_token_sha256")
+                or recovery_token_sha256 in self._recovery_used_tokens
+                or not self._recovery_plan_private_fence_current(plan)
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "invalid_or_consumed_recovery_token",
+                    definite_reject=True,
+                )
+            result = self._arm_from_preflight(
+                normalized,
+                state_reader,
+                venue=venue,
+                prepare_execution=prepare_execution,
+                rollback_execution=rollback_execution,
+                _recovery_capability=self._recovery_arm_capability,
+            )
+            self._recovery_used_tokens.add(recovery_token_sha256)
+            self._recovery_mode = True
+            return {
+                **result,
+                "recovery_only": True,
+                "recovery_token_sha256": recovery_token_sha256,
+                "execution_cycle_id": self._recovery_plan["execution_cycle_id"],
+            }
+
+    def complete_recovery(self, recovery_token_sha256, snapshot, barrier):
+        """Close recovery after the SDK-owned query barrier proves flatness."""
+        operation = "complete_execution_recovery"
+        with self.mutex:
+            plan = self._recovery_plan
+            if (
+                not isinstance(plan, Mapping)
+                or recovery_token_sha256 != plan.get("recovery_token_sha256")
+                or plan.get("status") == "MANUAL_INTERVENTION"
+                or not self._recovery_plan_private_fence_current(plan)
+            ):
+                raise NormalizedApiError(
+                    operation, "invalid_recovery_token", definite_reject=True
+                )
+            if (
+                plan.get("status") == "RECOVERABLE"
+                and recovery_token_sha256 not in self._recovery_used_tokens
+            ):
+                raise NormalizedApiError(
+                    operation, "recovery_token_not_armed", definite_reject=True
+                )
+            verified = self.build_recovery_plan(snapshot, barrier=barrier)
+            if verified.get("status") != "FLAT":
+                # Preserve the original token and recovery permissions on failure.
+                self._recovery_plan = dict(plan)
+                raise NormalizedApiError(
+                    operation, "execution_recovery_not_flat", definite_reject=True
+                )
+            # Stable account/order/trade/position absence is the only path that
+            # converts restart UNKNOWN intents into a durable terminal outcome.
+            for state in self.orders.values():
+                if state.get("terminal"):
+                    continue
+                update = self._unknown(state, "recovery_query_barrier")
+                update.update(
+                    status="reconciled_absent",
+                    filled="0",
+                    avg_price=None,
+                    execution_unknown=False,
+                    terminal_confirmed=True,
+                    recovery_query_barrier_sha256=barrier.get("barrier_sha256"),
+                )
+                self._record(
+                    state,
+                    update,
+                    origin="complete_execution_recovery",
+                    allow_read_only_journal=True,
+                )
+            self._recovery_completed_preflight_sha256 = self._arm_proof[
+                "preflight_sha256"
+            ]
+            self.config["market_data_only"] = True
+            self._arm_proof_sha256 = None
+            self._arm_proof = None
+            self._arm_state_reader = None
+            self._recovery_mode = False
+            self._recovery_refresh_in_progress = False
+            self._recovery_plan = verified
+            self._recovery_completed = True
+            return {
+                "completed": True,
+                "armed": False,
+                "market_data_only": True,
+                "recovery_only": False,
+                "requires_new_preflight": True,
+                "recovery_token_sha256": recovery_token_sha256,
+            }
+
+    def pause_recovery(self):
+        """Close recovery writes without fencing a same-generation refresh."""
+        with self.mutex:
+            self.config["market_data_only"] = True
+            self._arm_proof_sha256 = None
+            self._recovery_mode = False
+            self._recovery_refresh_in_progress = True
+
+    def arm_from_preflight(
+        self,
+        proof,
+        state_reader,
+        *,
+        venue=None,
+        prepare_execution=None,
+        rollback_execution=None,
+        prepare_execution_outside_mutex=False,
+    ):
+        """Atomically convert one read-only session to durable execution.
+
+        The caller supplies a local, non-network state reader for the active
+        CTP transport. The same reader remains attached to the session so every
+        later write rechecks the connection-bound fields before persistence or
+        transport dispatch.
+        """
+        return self._arm_from_preflight(
+            proof,
+            state_reader,
+            venue=venue,
+            prepare_execution=prepare_execution,
+            rollback_execution=rollback_execution,
+            prepare_execution_outside_mutex=prepare_execution_outside_mutex,
+        )
+
+    def _arm_from_preflight(
+        self,
+        proof,
+        state_reader,
+        *,
+        venue=None,
+        prepare_execution=None,
+        rollback_execution=None,
+        prepare_execution_outside_mutex=False,
+        _recovery_capability=None,
+    ):
+        recovery_arm = _recovery_capability is self._recovery_arm_capability
+        operation = "arm_execution_from_preflight"
+        prepared = False
+        acquired_here = False
+        load_state = None
+        with self.mutex:
+            previous_identity = deepcopy(self._ctp_execution_identity)
+            previous_venue = self._arm_venue
+            try:
+                normalized, proof_sha256 = _execution_arm_proof(proof)
+                if self.closed:
+                    raise NormalizedApiError(
+                        operation, "execution_session_closed", definite_reject=True
+                    )
+                if not callable(state_reader):
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_arm_state_unavailable",
+                        definite_reject=True,
+                    )
+                ctp_venues = tuple(
+                    item
+                    for item in self.exchange_names
+                    if self._provider(item) == "CTP"
+                )
+                arm_venue = str(
+                    venue or (ctp_venues[0] if len(ctp_venues) == 1 else "")
+                )
+                if (
+                    not arm_venue
+                    or self._provider(arm_venue) != "CTP"
+                    or set(self.exchange_names) != {arm_venue}
+                ):
+                    raise NormalizedApiError(
+                        operation, "single_ctp_session_required", definite_reject=True
+                    )
+                self._allow_new_generation_arm(normalized)
+                if (
+                    self._recovery_plan is not None
+                    and not self._recovery_completed
+                    and not recovery_arm
+                ):
+                    status = self._recovery_plan.get("status")
+                    code = {
+                        "RECOVERABLE": "execution_recovery_arm_required",
+                        "FLAT": "execution_recovery_completion_required",
+                    }.get(status, "execution_recovery_manual_intervention")
+                    raise NormalizedApiError(operation, code, definite_reject=True)
+                if (
+                    self._recovery_completed_preflight_sha256 is not None
+                    and normalized["preflight_sha256"]
+                    == self._recovery_completed_preflight_sha256
+                    and not recovery_arm
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "fresh_execution_preflight_required",
+                        definite_reject=True,
+                    )
+                if not self.config["market_data_only"]:
+                    if (
+                        self._arm_managed
+                        and self._arm_proof_sha256 == proof_sha256
+                        and self._arm_proof == normalized
+                    ):
+                        error = self._current_arm_error()
+                        if error is not None:
+                            self._revoke_arm(error)
+                            raise NormalizedApiError(
+                                operation, error, definite_reject=True
+                            )
+                        return {
+                            "armed": True,
+                            "market_data_only": False,
+                            "proof_sha256": proof_sha256,
+                        }
+                    raise NormalizedApiError(
+                        operation, "execution_already_armed", definite_reject=True
+                    )
+
+                context = state_reader()
+                error = self._arm_context_error(normalized, context)
+                if error is not None:
+                    raise NormalizedApiError(operation, error, definite_reject=True)
+                if (
+                    self.config["require_order_journal"] is not True
+                    or self.path is None
+                ):
+                    raise NormalizedApiError(
+                        operation, "order_journal_required", definite_reject=True
+                    )
+                if not self.config["strategy_identity_sha256"]:
+                    raise NormalizedApiError(
+                        operation,
+                        "strategy_identity_required",
+                        definite_reject=True,
+                    )
+
+                environment = (
+                    str(
+                        self.config["required_environments"].get(arm_venue)
+                        or normalized["environment_profile"]
+                    )
+                    .strip()
+                    .lower()
+                )
+                bound_identity = {
+                    "provider": "CTP",
+                    "environment": environment,
+                    "account_id": normalized["account_fingerprint"],
+                    "account_fingerprint": normalized["account_fingerprint"],
+                }
+                if previous_identity is not None and not _recorded_identity_matches(
+                    previous_identity, bound_identity
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_arm_account_fingerprint_mismatch",
+                        definite_reject=True,
+                    )
+                self._arm_venue = arm_venue
+                self._ctp_execution_identity = bound_identity
+
+                acquired_here = self.path is not None and self.lock_file is None
+                if acquired_here:
+                    load_state = self._arm_load_state()
+                    self._acquire_lock()
+                    context = state_reader()
+                    error = self._arm_context_error(normalized, context)
+                    if error is not None:
+                        raise NormalizedApiError(operation, error, definite_reject=True)
+                    self._load_journal()
+                    self._load_risk_state()
+                    load_error = self.risk_error or self.risk_transition_error
+                    if self.persistence_failed or load_error:
+                        raise NormalizedApiError(
+                            operation,
+                            load_error or "execution_persistence_failed",
+                            definite_reject=True,
+                        )
+
+                if not recovery_arm and self._journal_requires_recovery(normalized):
+                    # Crash recovery owns all uncertain orders and net durable
+                    # exposure.  Ordinary arming must fail before the native
+                    # execution gate is opened.
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_recovery_required",
+                        definite_reject=True,
+                    )
+
+                context = state_reader()
+                error = self._arm_context_error(normalized, context)
+                if error is not None:
+                    raise NormalizedApiError(operation, error, definite_reject=True)
+                if callable(prepare_execution):
+                    prepared = True
+                    if prepare_execution_outside_mutex:
+                        # Account-stream start/wait and any producer callback
+                        # must never run while the journal mutex is held.
+                        self.mutex.release()
+                        try:
+                            prepare_execution()
+                        finally:
+                            self.mutex.acquire()
+                    else:
+                        prepare_execution()
+                    context = state_reader()
+                    error = self._arm_context_error(
+                        normalized, context, require_account_stream=True
+                    )
+                    if error is not None:
+                        raise NormalizedApiError(operation, error, definite_reject=True)
+                else:
+                    error = self._arm_context_error(
+                        normalized, context, require_account_stream=True
+                    )
+                    if error is not None:
+                        raise NormalizedApiError(operation, error, definite_reject=True)
+
+                if not recovery_arm and self._journal_requires_recovery(normalized):
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_recovery_required",
+                        definite_reject=True,
+                    )
+
+                self._arm_managed = True
+                self._arm_proof = normalized
+                self._arm_proof_sha256 = proof_sha256
+                self._last_arm_proof_sha256 = proof_sha256
+                self._arm_state_reader = state_reader
+                self._arm_revoked_reason = None
+                self._arm_revoked_error_code = None
+                self._arm_submit_calls = self.submit_calls
+                self._arm_cancel_calls = self.cancel_calls
+                self.config["market_data_only"] = False
+                if not recovery_arm:
+                    self._recovery_plan = None
+                    self._recovery_completed = False
+                return {
+                    "armed": True,
+                    "market_data_only": False,
+                    "proof_sha256": proof_sha256,
+                }
+            except Exception as exc:
+                if prepared and callable(rollback_execution):
+                    with suppress(Exception):
+                        rollback_execution()
+                if acquired_here:
+                    self._release_writer_leases()
+                    if load_state is not None:
+                        self._restore_arm_load_state(load_state)
+                code = str(getattr(exc, "code", "") or "")
+                reusable_read_only_rejections = {
+                    "execution_recovery_required",
+                    "execution_recovery_arm_required",
+                    "execution_recovery_completion_required",
+                    "execution_recovery_manual_intervention",
+                    "fresh_execution_preflight_required",
+                }
+                if self._arm_managed and code not in reusable_read_only_rejections:
+                    self._revoke_arm(
+                        code or type(exc).__name__,
+                        generation=(
+                            normalized.get("connection_generation")
+                            if "normalized" in locals()
+                            else None
+                        ),
+                    )
+                elif not self._arm_managed:
+                    self._ctp_execution_identity = previous_identity
+                    self._arm_venue = previous_venue
+                    self.config["market_data_only"] = True
+                raise
+
+    def require_write(
+        self,
+        operation,
+        *,
+        placement=False,
+        venue=None,
+        recovery_action=False,
+    ):
         with self.mutex:
             code = None
             if self.closed:
                 code = "execution_session_closed"
-            elif self.config["market_data_only"]:
-                code = "market_data_only"
-            elif placement and (self.persistence_failed or self._unknown_ids()):
-                code = "unresolved_or_undurable_journal"
-            elif (
-                placement and self.config["require_order_journal"] and self.path is None
-            ):
-                code = "order_journal_required"
-            elif placement and self.config["account_maximum_loss_bps"] is not None:
-                if self.risk_record is None:
-                    code = "account_risk_baseline_required"
-                elif self.risk_record.get("loss_limit_breached") is not False:
-                    code = "account_maximum_loss_breached"
-                elif self.risk_transition_error:
-                    code = self.risk_transition_error
-                elif self.risk_measurement_error:
-                    code = self.risk_measurement_error
+            elif self._arm_managed:
+                if self._arm_revoked_reason is not None:
+                    code = self._arm_revoked_error_code or "execution_arm_revoked"
+                elif self.config["market_data_only"]:
+                    code = "market_data_only"
+                elif venue not in (None, self._arm_venue):
+                    code = "execution_arm_venue_mismatch"
                 else:
-                    code = self._risk_freshness_error()
+                    code = self._current_arm_error()
+                    if code is not None:
+                        self._revoke_arm(code)
+            if code is None:
+                if self.config["market_data_only"]:
+                    code = "market_data_only"
+                elif placement and (
+                    self.persistence_failed
+                    or (not recovery_action and self._unknown_ids())
+                ):
+                    code = "unresolved_or_undurable_journal"
+                elif (
+                    placement
+                    and self.config["require_order_journal"]
+                    and self.path is None
+                ):
+                    code = "order_journal_required"
+                elif (
+                    placement
+                    and not recovery_action
+                    and self.config["account_maximum_loss_bps"] is not None
+                ):
+                    if self.risk_record is None:
+                        code = "account_risk_baseline_required"
+                    elif self.risk_record.get("loss_limit_breached") is not False:
+                        code = "account_maximum_loss_breached"
+                    elif self.risk_transition_error:
+                        code = self.risk_transition_error
+                    elif self.risk_measurement_error:
+                        code = self.risk_measurement_error
+                    else:
+                        code = self._risk_freshness_error()
             if code:
                 raise NormalizedApiError(operation, code, definite_reject=True)
             self._assert_writer_lease(operation)
@@ -1922,34 +4139,63 @@ class _ExecutionSession:
         """Return the configured ledger identity for one authenticated venue."""
         with self.mutex:
             identity = self._ledger_identity(venue)
+            is_ctp = self._provider(venue) == "CTP" and bool(
+                identity.get("account_fingerprint")
+            )
+            account_alias = (
+                identity["account_id"]
+                if is_ctp
+                else self.config["account_ids"].get(venue)
+            )
             return {
                 **identity,
                 "exchange_name": venue,
-                "account_alias": self.config["account_ids"].get(venue),
+                "account_alias": account_alias,
                 "account_authority": (
-                    "credential_fingerprint"
-                    if identity.get("credential_fingerprint")
-                    else "declared_account_id"
+                    "account_fingerprint"
+                    if is_ctp
+                    else (
+                        "credential_fingerprint"
+                        if identity.get("credential_fingerprint")
+                        else "declared_account_id"
+                    )
                 ),
                 "physical_account_id_verified": False,
                 "credential_rotation_requires_reconciled_migration": bool(
                     identity.get("credential_fingerprint")
                 ),
                 "strategy_id": self.config["strategy_id"],
+                "strategy_identity_sha256": self.config["strategy_identity_sha256"],
+                "trading_day": (
+                    self._arm_proof.get("trading_day")
+                    if is_ctp and isinstance(self._arm_proof, Mapping)
+                    else None
+                ),
+                "connection_generation": (
+                    self._arm_proof.get("connection_generation")
+                    if is_ctp and isinstance(self._arm_proof, Mapping)
+                    else None
+                ),
+                "session_generation": (
+                    self._arm_proof.get("connection_generation")
+                    if is_ctp and isinstance(self._arm_proof, Mapping)
+                    else None
+                ),
                 "fencing_epoch": self.fencing_epoch,
                 "journal_path": str(self.path) if self.path is not None else None,
             }
 
     def risk_venues(self):
         """Return the authenticated venues covered by this execution ledger."""
-        return tuple(
-            sorted(
-                venue
-                for venue in set(self.exchange_names)
-                | set(self.config["required_environments"])
-                if self._provider(venue) in _CRYPTO_PROVIDERS
-            )
-        )
+        venues = {
+            venue
+            for venue in set(self.exchange_names)
+            | set(self.config["required_environments"])
+            if self._provider(venue) in _CRYPTO_PROVIDERS
+        }
+        if isinstance(self._ctp_execution_identity, Mapping) and self._arm_venue:
+            venues.add(self._arm_venue)
+        return tuple(sorted(venues))
 
     def requires_risk_baseline(self):
         """Return whether this ledger still needs its first durable risk baseline."""
@@ -2012,7 +4258,7 @@ class _ExecutionSession:
 
     def _risk_identities(self):
         return sorted(
-            self._configured_crypto_identities(),
+            self._configured_execution_identities(),
             key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")),
         )
 
@@ -2252,6 +4498,8 @@ class _ExecutionSession:
             now_wall = time.time()
             errors = dict(evidence_errors or {})
             expected_venues = self.risk_venues()
+            if not expected_venues:
+                errors.setdefault("venues", "account_risk_venues_missing")
             configured_loss_limit = self.config["account_maximum_loss_bps"]
             prior_record = dict(self.risk_record or {})
             prior_loss_breached = prior_record.get("loss_limit_breached") is True
@@ -2291,6 +4539,13 @@ class _ExecutionSession:
                 }
                 if row.get("positions_known") is not True:
                     errors.setdefault(venue, "positions_not_proven")
+                if self._provider(venue) == "CTP":
+                    expected_account_id = self._ledger_identity(venue)["account_id"]
+                    if (
+                        _normalize_label(normalized[venue]["authenticated_account_id"])
+                        != expected_account_id
+                    ):
+                        errors.setdefault(venue, "authenticated_account_id_mismatch")
 
             persisted_baseline = (
                 dict(prior_record.get("baseline_equity_by_venue") or {})
@@ -2641,7 +4896,7 @@ class _ExecutionSession:
 
     def new_client_order_id(self, venue, account_id=None, strategy_id=None):
         with self.mutex:
-            self.require_write("new_client_order_id", placement=True)
+            self.require_write("new_client_order_id", placement=True, venue=venue)
             identity = self._ledger_identity(venue, account_id)
             account_id = identity["account_id"]
             partition = strategy_id or self.config["strategy_id"]
@@ -2726,6 +4981,11 @@ class _ExecutionSession:
                 "size": row.get("size", row.get("quantity")),
                 "terminal": False,
                 "next_poll": 0.0,
+                "strategy_id": row.get("strategy_id"),
+                "strategy_identity_sha256": row.get("strategy_identity_sha256"),
+                "execution_arm_proof_sha256": row.get("execution_arm_proof_sha256"),
+                "connection_generation": row.get("connection_generation"),
+                "fencing_epoch": row.get("fencing_epoch"),
                 _EXPLICIT_IDENTITY_FIELDS: _explicit_identity_fields(row),
                 **{key: row[key] for key in _IDENTITY if row.get(key) is not None},
             }
@@ -2951,7 +5211,14 @@ class _ExecutionSession:
                     result[key] = previous[key]
         return result
 
-    def _record(self, state, update, *, origin=None):
+    def _record(
+        self,
+        state,
+        update,
+        *,
+        origin=None,
+        allow_read_only_journal=False,
+    ):
         state["next_poll"] = time.monotonic() + self.config["order_poll_interval"]
         try:
             self._journal(
@@ -2961,6 +5228,7 @@ class _ExecutionSession:
                     _EXPLICIT_IDENTITY_FIELDS: sorted(_explicit_identity_fields(state)),
                     "fee_unresolved": state.get("fee_unresolved", False),
                 },
+                allow_read_only=allow_read_only_journal,
             )
         except NormalizedApiError:
             update = {
@@ -2978,7 +5246,7 @@ class _ExecutionSession:
             self.historical_unknown.difference_update(state.get("recovery_ids", ()))
         return update
 
-    def _begin_invoke(self, operation, venue, request):
+    def _begin_invoke(self, operation, venue, request, *, preauthorize=None):
         """Persist intent and capture merge state before a transport call."""
         request_row = asdict(request)
         emergency_cancel = False
@@ -2988,7 +5256,26 @@ class _ExecutionSession:
                     operation, "execution_session_closed", definite_reject=True
                 )
             if operation == "make_order":
-                self.require_write(operation, placement=True)
+                self._require_arm_scope(
+                    operation, venue, request.symbol, request.exchange_id
+                )
+                self._require_ctp_order_identity(operation, request)
+                recovery_allowance = self._require_recovery_action(operation, request)
+                if (
+                    recovery_allowance is not None
+                    and self._recovery_dispatch_in_progress
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "execution_recovery_action_in_progress",
+                        definite_reject=True,
+                    )
+                self.require_write(
+                    operation,
+                    placement=True,
+                    venue=venue,
+                    recovery_action=recovery_allowance is not None,
+                )
                 client_key = self._client_key(
                     venue,
                     request.account_id,
@@ -3011,24 +5298,57 @@ class _ExecutionSession:
                     size=format(request.quantity, "f"),
                     exchange_name=venue,
                     client_id_reserved=True,
+                    strategy_id=self.config["strategy_id"],
                 )
+                if preauthorize is not None:
+                    preauthorize()
                 self._journal("intent", row)
+                self._consume_recovery_action(recovery_allowance)
                 self.used_ids.add(client_key)
                 self.reserved_ids.discard(client_key)
                 state = self._state(venue, row, create=True)
+                state["_intent_persisted"] = True
+                state["strategy_id"] = self.config["strategy_id"]
                 self.submit_calls += 1
             else:
+                recovery_allowance = None
+                if operation == "cancel_order":
+                    self.require_write(operation, venue=venue)
+                    self._require_arm_scope(
+                        operation, venue, request.symbol, request.exchange_id
+                    )
+                    if self._arm_managed:
+                        tracked = self._state(venue, request_row, create=False)
+                        if not any(tracked is item for item in self.orders.values()):
+                            raise NormalizedApiError(
+                                operation,
+                                "execution_arm_untracked_cancel",
+                                definite_reject=True,
+                            )
+                        recovery_allowance = self._require_recovery_action(
+                            operation, request, tracked=tracked
+                        )
+                        if (
+                            recovery_allowance is not None
+                            and self._recovery_dispatch_in_progress
+                        ):
+                            raise NormalizedApiError(
+                                operation,
+                                "execution_recovery_action_in_progress",
+                                definite_reject=True,
+                            )
                 state = self._state(
                     venue,
                     request_row,
                     create=operation == "cancel_order",
                 )
                 if operation == "cancel_order":
-                    self.require_write(operation)
                     emergency_cancel = bool(
                         self.persistence_failed
                         or (self.config["require_order_journal"] and self.path is None)
                     )
+                    if preauthorize is not None:
+                        preauthorize()
                     try:
                         self._journal(
                             "cancel_intent", self._identity(state, request_row)
@@ -3041,9 +5361,12 @@ class _ExecutionSession:
                         # exposure-reduction action. Its result remains marked
                         # degraded and the session stays trading-blocked.
                         emergency_cancel = True
+                    self._consume_recovery_action(recovery_allowance)
                     self.cancel_calls += 1
             state_is_tracked = any(state is tracked for tracked in self.orders.values())
             start_revision = state.get("_revision", 0)
+            if recovery_allowance is not None:
+                self._recovery_dispatch_in_progress = True
         return {
             "operation": operation,
             "venue": venue,
@@ -3052,6 +5375,7 @@ class _ExecutionSession:
             "state": state,
             "state_is_tracked": state_is_tracked,
             "start_revision": start_revision,
+            "recovery_action": recovery_allowance is not None,
         }
 
     def _finish_invoke(self, context, result, failure):
@@ -3063,6 +5387,7 @@ class _ExecutionSession:
         state = context["state"]
         state_is_tracked = context["state_is_tracked"]
         start_revision = context["start_revision"]
+        recovery_action = context["recovery_action"]
         with self.mutex:
             if operation == "query_order" and failure is not None:
                 raise failure
@@ -3109,6 +5434,8 @@ class _ExecutionSession:
                     operation == "make_order"
                     or (current and current.get("terminal_confirmed"))
                 ):
+                    if recovery_action:
+                        self.pause_recovery()
                     return dict(current)
                 update = self._unknown(
                     state, getattr(failure, "code", type(failure).__name__)
@@ -3125,39 +5452,80 @@ class _ExecutionSession:
             if operation == "cancel_order" and emergency_cancel:
                 update = {**update, "emergency_cancel": True, "journal_degraded": True}
             if current is not None and update == current:
+                if recovery_action and failure is not None:
+                    self.pause_recovery()
                 return dict(current)
-            return self._record(state, update, origin=operation)
+            recorded = self._record(state, update, origin=operation)
+            if recovery_action and (
+                failure is not None
+                or recorded.get("execution_unknown") is True
+                or str(recorded.get("status") or "").lower()
+                in {"error", "failed", "rejected"}
+            ):
+                # The allowance was consumed before transport dispatch.  A
+                # failed or unresolved action closes the SDK lease so callers
+                # must obtain a fresh two-round recovery plan before retrying.
+                self.pause_recovery()
+            return recorded
 
-    def invoke(self, operation, venue, request, call):
-        context = self._begin_invoke(operation, venue, request)
-        failure = None
-        result = None
+    def invoke(self, operation, venue, request, call, *, preauthorize=None):
+        context = self._begin_invoke(
+            operation,
+            venue,
+            request,
+            preauthorize=preauthorize,
+        )
         try:
-            result = call()
-        except Exception as exc:
-            failure = exc
-        return self._finish_invoke(context, result, failure)
+            failure = None
+            result = None
+            try:
+                result = call()
+            except Exception as exc:
+                failure = exc
+            return self._finish_invoke(context, result, failure)
+        finally:
+            if context["recovery_action"]:
+                with self.mutex:
+                    self._recovery_dispatch_in_progress = False
 
-    async def async_invoke(self, operation, venue, request, call):
+    async def async_invoke(
+        self,
+        operation,
+        venue,
+        request,
+        call,
+        *,
+        preauthorize=None,
+    ):
         """Await transport I/O while preserving the synchronous WAL semantics."""
-        context = self._begin_invoke(operation, venue, request)
-        failure = None
-        result = None
+        context = self._begin_invoke(
+            operation,
+            venue,
+            request,
+            preauthorize=preauthorize,
+        )
         try:
-            result = await call()
-        except asyncio.CancelledError as exc:
-            # Cancellation after a durable write does not prove that the venue
-            # did not receive the request. Persist the uncertain outcome before
-            # preserving asyncio cancellation semantics for the caller.
-            if operation != "query_order":
-                try:
-                    self._finish_invoke(context, None, exc)
-                except BaseException:
-                    self.persistence_failed = True
-            raise
-        except Exception as exc:
-            failure = exc
-        return self._finish_invoke(context, result, failure)
+            failure = None
+            result = None
+            try:
+                result = await call()
+            except asyncio.CancelledError as exc:
+                # Cancellation after a durable write does not prove that the venue
+                # did not receive the request. Persist the uncertain outcome before
+                # preserving asyncio cancellation semantics for the caller.
+                if operation != "query_order":
+                    try:
+                        self._finish_invoke(context, None, exc)
+                    except BaseException:
+                        self.persistence_failed = True
+                raise
+            except Exception as exc:
+                failure = exc
+            return self._finish_invoke(context, result, failure)
+        finally:
+            if context["recovery_action"]:
+                with self.mutex:
+                    self._recovery_dispatch_in_progress = False
 
     def event(self, venue, event):
         if self.closed:
@@ -3165,6 +5533,8 @@ class _ExecutionSession:
         if event.get("kind") not in {"order", "trade"}:
             return event
         with self.mutex:
+            self._recovery_event_revision += 1
+            self._recovery_private_event_revision += 1
             state = self._state(venue, event, create=True)
             if state.get("client_order_id"):
                 self.used_ids.add(
@@ -3325,6 +5695,10 @@ class _ExecutionSession:
                 evidence_errors.add(str(self.risk_measurement_error))
             if self.risk_transition_error:
                 evidence_errors.add(str(self.risk_transition_error))
+            if self._arm_revoked_reason:
+                evidence_errors.add(
+                    self._arm_revoked_error_code or "execution_arm_revoked"
+                )
             loss_limit_configured = self.config["account_maximum_loss_bps"] is not None
             risk_freshness_error = self._risk_freshness_error()
             if risk_freshness_error:
@@ -3336,7 +5710,37 @@ class _ExecutionSession:
                 evidence_errors.add("account_risk_baseline_required")
             if loss_limit_breached:
                 evidence_errors.add("account_maximum_loss_breached")
+            armed = bool(
+                self._arm_managed
+                and not self.config["market_data_only"]
+                and self._arm_proof_sha256
+                and self._arm_revoked_reason is None
+            )
+            arm_revoked = bool(self._arm_revoked_reason)
+            arm_generation = (
+                self._arm_proof.get("connection_generation")
+                if isinstance(self._arm_proof, Mapping)
+                else None
+            )
+            trading_blocked = bool(
+                self.persistence_failed
+                or self._unknown_ids()
+                or funding
+                or evidence_errors
+                or (self._arm_managed and self.config["market_data_only"])
+            )
             return {
+                "armed": armed,
+                "market_data_only": bool(self.config["market_data_only"]),
+                "arm_managed": self._arm_managed,
+                "arm_revoked": arm_revoked,
+                "revocation_reason": self._arm_revoked_reason,
+                "arm_proof_sha256": self._arm_proof_sha256,
+                "proof_sha256": self._arm_proof_sha256,
+                "last_arm_proof_sha256": self._last_arm_proof_sha256,
+                "generation": arm_generation,
+                "session_generation": arm_generation,
+                "fencing_epoch": self.fencing_epoch,
                 "submit_calls": self.submit_calls,
                 "cancel_calls": self.cancel_calls,
                 "unknown_ids": sorted(self._unknown_ids()),
@@ -3354,11 +5758,7 @@ class _ExecutionSession:
                 "evidence_errors": sorted(evidence_errors),
                 "loss_limit_bps": self.config["account_maximum_loss_bps"],
                 "loss_limit_breached": loss_limit_breached,
-                "trading_blocked": bool(
-                    self.persistence_failed
-                    or self._unknown_ids()
-                    or funding
-                    or evidence_errors
-                ),
+                "trading_blocked": trading_blocked,
+                "evidence_complete": not trading_blocked,
                 "reconciliation_errors": reconciliation_errors,
             }

@@ -2607,6 +2607,17 @@ def test_failed_query_of_untracked_order_does_not_create_or_poll_ghost_state(fac
     assert api._execution_session.orders == {}
     assert api.get_execution_summary() == {
         "session_enabled": True,
+        "armed": False,
+        "market_data_only": False,
+        "arm_managed": False,
+        "arm_revoked": False,
+        "revocation_reason": None,
+        "arm_proof_sha256": None,
+        "proof_sha256": None,
+        "last_arm_proof_sha256": None,
+        "generation": None,
+        "session_generation": None,
+        "fencing_epoch": 1,
         "submit_calls": 0,
         "cancel_calls": 0,
         "unknown_ids": [],
@@ -2620,6 +2631,7 @@ def test_failed_query_of_untracked_order_does_not_create_or_poll_ghost_state(fac
         "loss_limit_bps": None,
         "loss_limit_breached": False,
         "trading_blocked": False,
+        "evidence_complete": True,
         "reconciliation_errors": {},
     }
     assert api.poll_event(VENUE) is None

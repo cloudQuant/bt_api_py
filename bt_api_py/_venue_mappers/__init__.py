@@ -23,7 +23,10 @@ MAPPERS: dict[str, OrderMapper] = {
 
 def get_venue_mapper(exchange_name: str) -> OrderMapper | None:
     """Return the order mapper for ``exchange_name``, or ``None`` if unmapped."""
-    return MAPPERS.get(exchange_name)
+    mapper = MAPPERS.get(exchange_name)
+    if mapper is None and str(exchange_name).partition("___")[0].upper() == "CTP":
+        return _ctp_map
+    return mapper
 
 
 __all__ = ["MAPPERS", "get_venue_mapper"]
