@@ -20,12 +20,26 @@ from collections.abc import Mapping
 from contextlib import contextmanager, suppress
 from copy import deepcopy
 from dataclasses import asdict
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from threading import RLock
 
 from ._contracts.errors import NormalizedApiError
 from ._contracts.models import QueryOrderRequest
+from ._ctp_budget import (
+    BUDGET_MAX_CNY,
+    BUDGET_ORDINARY_MAX_CNY,
+    BUDGET_RECOVERY_HEADROOM_CNY,
+    BUDGET_SCHEMA_VERSION,
+    CtpBudgetError,
+    CtpBudgetReservation,
+    budget_evidence_digest,
+    evaluate_ctp_budget,
+    _is_budget_reservation,
+    _new_budget_reservation,
+)
+from ._ctp_execution_authorization import recovery_action_digest, recovery_plan_digest
 
 _TERMINAL = {"completed", "canceled", "expired", "rejected"}
 _STATUSES = _TERMINAL | {"submitted", "accepted", "partial"}
@@ -81,6 +95,24 @@ _RISK_TRANSITION_EVENTS = {
     "risk_reset_prepared",
     "risk_reset_committed",
 }
+_CTP_APPROVAL_EVENTS = {
+    "ctp_execution_approval_pre_authorized",
+    "ctp_execution_approval_revocation_snapshot",
+    "ctp_execution_approval_consumption_started",
+    "ctp_execution_approval_consumed",
+}
+_CTP_RECOVERY_EVENTS = {
+    "ctp_execution_recovery_arm_started",
+    "ctp_execution_recovery_arm_consumed",
+}
+_CTP_BUDGET_EVENTS = {
+    "ctp_budget_pnl_observed",
+    "ctp_budget_reservation_started",
+    "ctp_budget_reservation_committed",
+    "ctp_budget_reservation_transition",
+    "ctp_budget_action_started",
+}
+_CTP_AUTHORIZATION_EVENTS = _CTP_APPROVAL_EVENTS | _CTP_RECOVERY_EVENTS | _CTP_BUDGET_EVENTS
 
 _EXECUTION_ARM_FIELDS = (
     "account_fingerprint",
@@ -94,6 +126,12 @@ _EXECUTION_ARM_FIELDS = (
     "source_hashes_sha256",
     "dependency_hashes_sha256",
     "preflight_sha256",
+)
+_EXECUTION_ARM_BUNDLE_SCOPE_VERSION = "ctp-contract-bundle-v1"
+_EXECUTION_ARM_BUNDLE_FIELDS = (
+    *_EXECUTION_ARM_FIELDS,
+    "scope_version",
+    "authorized_instruments",
 )
 _EXECUTION_ARM_CONTEXT_FIELDS = (
     "account_fingerprint",
@@ -114,6 +152,7 @@ _EXECUTION_ARM_HASH_FIELDS = (
 _CTP_EXCHANGES = {"CFFEX", "CZCE", "DCE", "GFEX", "INE", "SHFE"}
 _CTP_EXCHANGE_ALIASES = {"ZCE": "CZCE"}
 _CTP_INSTRUMENT_RE = re.compile(r"^[A-Z]{1,3}[0-9]{3,4}$")
+_CTP_BUNDLE_INSTRUMENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$")
 _ARM_REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 _EXECUTION_ROLES = frozenset({"entry", "exit", "recovery_exit"})
 _RECOVERY_POSITION_KEYS = (
@@ -166,19 +205,122 @@ def _canonical_ctp_instrument(value, exchange_id=None):
     return f"{exchange}.{letters}{digits}"
 
 
+def _canonical_ctp_bundle_instrument(value, exchange_id=None):
+    """Return one exact raw CTP instrument identity for a V2 bundle proof.
+
+    Option ``InstrumentID`` values are exchange-native identifiers.  In
+    particular, DCE option IDs contain hyphens and are case-sensitive at this
+    authorization boundary (for example ``DCE.m2701-C-3400``).  This helper
+    deliberately does not apply the legacy CZCE alias conversion or uppercase
+    an instrument.  A bundle proof therefore authorizes exactly the raw IDs
+    that will reach the native CTP submit/cancel fields.
+    """
+    text = str(value or "").strip()
+    supplied_exchange = _canonical_ctp_exchange(exchange_id)
+    if not text or (exchange_id not in (None, "") and not supplied_exchange):
+        return ""
+    parts = text.split(".")
+    if len(parts) == 1:
+        exchange = supplied_exchange
+        instrument = parts[0]
+    elif len(parts) == 2:
+        first_exchange = _canonical_ctp_exchange(parts[0])
+        last_exchange = _canonical_ctp_exchange(parts[1])
+        if bool(first_exchange) == bool(last_exchange):
+            return ""
+        exchange = first_exchange or last_exchange
+        instrument = parts[1] if first_exchange else parts[0]
+        if supplied_exchange and supplied_exchange != exchange:
+            return ""
+    else:
+        return ""
+    if (
+        not exchange
+        or len(instrument) > 80
+        or not _CTP_BUNDLE_INSTRUMENT_RE.fullmatch(instrument)
+        or not any(character.isdigit() for character in instrument)
+    ):
+        return ""
+    return f"{exchange}.{instrument}"
+
+
+def _canonical_ctp_bundle_wire_instrument(value, exchange_id=None):
+    """Return a V2 identity only when native CTP fields need no rewriting.
+
+    Bundle proof parsing intentionally accepts familiar fully-qualified forms
+    while validating a signed proof or reading historical recovery rows.  A
+    submit/cancel request is different: ``CtpRequestDataFuture`` forwards its
+    ``symbol`` and ``exchange_id`` verbatim to ``InstrumentID`` and
+    ``ExchangeID``.  V2 therefore accepts only the exact bare native ID and
+    canonical exchange spelling that the proof authorizes.
+    """
+    if (
+        not isinstance(value, str)
+        or value != value.strip()
+        or "." in value
+        or not isinstance(exchange_id, str)
+        or exchange_id != exchange_id.strip()
+    ):
+        return ""
+    canonical = _canonical_ctp_bundle_instrument(value, exchange_id)
+    if not canonical:
+        return ""
+    exchange, instrument = canonical.split(".", 1)
+    return canonical if instrument == value and exchange == exchange_id else ""
+
+
+def _is_execution_arm_bundle(proof):
+    """Return whether a validated proof uses the exact V2 bundle contract."""
+    return bool(
+        isinstance(proof, Mapping)
+        and proof.get("scope_version") == _EXECUTION_ARM_BUNDLE_SCOPE_VERSION
+        and isinstance(proof.get("authorized_instruments"), (list, tuple))
+    )
+
+
+def _execution_arm_instruments(proof):
+    """Return the exact authorized CTP contracts for V1 or V2 proof state."""
+    if not isinstance(proof, Mapping):
+        return ()
+    if _is_execution_arm_bundle(proof):
+        return tuple(proof["authorized_instruments"])
+    instrument = proof.get("instrument")
+    return (instrument,) if isinstance(instrument, str) else ()
+
+
+def _canonical_ctp_execution_instrument(
+    proof, value, exchange_id=None, *, native_wire=False
+):
+    """Choose legacy or V2 parsing from the proof's closed scope.
+
+    ``native_wire`` is used only for outbound writes.  Recovery normalization
+    remains able to read canonical fully-qualified historical identifiers.
+    """
+    if _is_execution_arm_bundle(proof):
+        if native_wire:
+            return _canonical_ctp_bundle_wire_instrument(value, exchange_id)
+        return _canonical_ctp_bundle_instrument(value, exchange_id)
+    return _canonical_ctp_instrument(value, exchange_id)
+
+
 def _arm_revocation_reason(value):
     reason = str(value or "execution_arm_revoked").strip().lower()
     return reason if _ARM_REASON_RE.fullmatch(reason) else "execution_arm_revoked"
 
 
 def _execution_arm_proof(value):
-    """Validate and hash the closed Iteration 22 execution-arm contract."""
+    """Validate and hash the closed V1 or exact V2 CTP arm contract."""
     operation = "arm_execution_from_preflight"
-    if not isinstance(value, Mapping) or set(value) != set(_EXECUTION_ARM_FIELDS):
+    fields = set(value) if isinstance(value, Mapping) else set()
+    is_bundle = fields == set(_EXECUTION_ARM_BUNDLE_FIELDS)
+    if fields == set(_EXECUTION_ARM_FIELDS):
+        proof = {field: value[field] for field in _EXECUTION_ARM_FIELDS}
+    elif is_bundle:
+        proof = {field: value[field] for field in _EXECUTION_ARM_BUNDLE_FIELDS}
+    else:
         raise NormalizedApiError(
             operation, "invalid_execution_arm_proof", definite_reject=True
         )
-    proof = {field: value[field] for field in _EXECUTION_ARM_FIELDS}
     for field in (
         "account_fingerprint",
         "trading_day",
@@ -190,11 +332,43 @@ def _execution_arm_proof(value):
             raise NormalizedApiError(
                 operation, "invalid_execution_arm_proof", definite_reject=True
             )
-    canonical_instrument = _canonical_ctp_instrument(proof["instrument"])
+    canonical_instrument = (
+        _canonical_ctp_bundle_instrument(proof["instrument"])
+        if is_bundle
+        else _canonical_ctp_instrument(proof["instrument"])
+    )
     if not canonical_instrument or proof["instrument"] != canonical_instrument:
         raise NormalizedApiError(
             operation, "invalid_execution_arm_proof", definite_reject=True
         )
+    if is_bundle:
+        authorized = proof["authorized_instruments"]
+        if (
+            proof.get("scope_version") != _EXECUTION_ARM_BUNDLE_SCOPE_VERSION
+            or not isinstance(authorized, (list, tuple))
+            or not 2 <= len(authorized) <= 3
+            or any(not isinstance(item, str) for item in authorized)
+        ):
+            raise NormalizedApiError(
+                operation, "invalid_execution_arm_proof", definite_reject=True
+            )
+        canonical_authorized = tuple(
+            _canonical_ctp_bundle_instrument(item) for item in authorized
+        )
+        if (
+            any(not item for item in canonical_authorized)
+            or tuple(authorized) != canonical_authorized
+            or tuple(sorted(canonical_authorized)) != canonical_authorized
+            or len(set(canonical_authorized)) != len(canonical_authorized)
+            or len({item.partition(".")[0] for item in canonical_authorized}) != 1
+            or proof["instrument"] not in canonical_authorized
+        ):
+            raise NormalizedApiError(
+                operation, "invalid_execution_arm_proof", definite_reject=True
+            )
+        # Normalize tuples to a JSON-native list so the parent facade and
+        # native CTP gate always calculate the same proof digest.
+        proof["authorized_instruments"] = list(canonical_authorized)
     account_fingerprint = proof["account_fingerprint"]
     account_digest = account_fingerprint.removeprefix("acct_")
     if (
@@ -258,6 +432,13 @@ def _identity_core(identity):
 
 def _normalized_ledger_identity(identity):
     result = _identity_core(identity)
+    # CTP keeps the durable environment category (for example ``demo``)
+    # separate from the provider's verified front/profile.  Historical
+    # journals predate this field, so a missing recorded profile is treated as
+    # a one-way compatibility upgrade by ``_recorded_identity_matches``.
+    environment_profile = str(identity.get("environment_profile") or "").strip().lower()
+    if environment_profile:
+        result["environment_profile"] = environment_profile
     fingerprint = str(identity.get("credential_fingerprint") or "").lower()
     if fingerprint:
         result["credential_fingerprint"] = fingerprint
@@ -274,6 +455,12 @@ def _recorded_identity_matches(recorded, expected):
     recorded = _normalized_ledger_identity(recorded)
     expected = _normalized_ledger_identity(expected)
     if _identity_core(recorded) != _identity_core(expected):
+        return False
+    recorded_profile = recorded.get("environment_profile")
+    expected_profile = expected.get("environment_profile")
+    if recorded_profile is not None and (
+        expected_profile is None or recorded_profile != expected_profile
+    ):
         return False
     recorded_fingerprint = recorded.get("credential_fingerprint")
     expected_fingerprint = expected.get("credential_fingerprint")
@@ -1378,18 +1565,50 @@ class _ExecutionSession:
         self._arm_proof_sha256 = None
         self._last_arm_proof_sha256 = None
         self._arm_state_reader = None
+        self._ctp_execution_authorization_context = None
         self._arm_revoked_reason = None
         self._arm_revoked_error_code = None
         self._arm_revoked_generation = None
         self._arm_venue = None
         self._ctp_execution_identity = None
         self._recovery_plan = None
+        # U1b keeps an immutable signed-plan baseline and a separate expected
+        # remaining allowance.  The public plan is intentionally mutable as
+        # actions are consumed, but write guards must still verify that state
+        # against the original approval without re-enabling spent quantity.
+        self._recovery_authorized_plan = None
+        self._recovery_remaining_plan = None
         self._recovery_mode = False
         self._recovery_dispatch_in_progress = False
+        self._active_recovery_context = None
         self._recovery_arm_capability = object()
         self._recovery_refresh_in_progress = False
         self._recovery_journal_error = None
         self._recovery_used_tokens = set()
+        self._recovery_pending_tokens = set()
+        self._recovery_authorization_records = {}
+        self._recovery_write_guard = None
+        self._recovery_budget_owner = None
+        self._recovery_budget_request = None
+        self._recovery_budget_enforced = False
+        # O2 reservations use this session's existing journal and account
+        # registry.  The state is deliberately separate from the recovery
+        # approval marker but never from the execution ledger itself.
+        self._ctp_budget_context = None
+        self._ctp_budget_session_token = object()
+        self._ctp_budget_floor_min_pnl_cny = Decimal("0")
+        self._ctp_budget_pnl_versions = {}
+        self._ctp_budget_reservations = {}
+        self._ctp_budget_pending_reservations = set()
+        self._ctp_budget_uncertain_reservations = set()
+        self._ctp_budget_transition_ids = set()
+        self._ctp_budget_registry_commits = {}
+        self._ctp_budget_valuation_unknown = False
+        self._ctp_budget_frozen_reason = None
+        self._recovery_budget_capability = None
+        self._recovery_private_ingress_epoch_fence = None
+        self._recovery_private_ingress_revision_fence = None
+        self._recovery_private_event_revision_fence = None
         self._recovery_completed_preflight_sha256 = None
         self._recovery_completed = False
         self._recovery_event_revision = 0
@@ -1397,6 +1616,18 @@ class _ExecutionSession:
         self._recovery_private_ingress_revision = 0
         self._arm_submit_calls = 0
         self._arm_cancel_calls = 0
+        # U1a signed-approval state lives beside order/recovery journal state.
+        # It is intentionally not a second ledger: the same writer lease,
+        # fencing epoch, append, and fsync path are used for every transition.
+        self._ctp_approval_consumed_ids = set()
+        self._ctp_approval_consumed_nonces = set()
+        self._ctp_approval_pending_ids = set()
+        self._ctp_approval_pending_nonces = set()
+        self._ctp_approval_pre_authorized_ids = set()
+        self._ctp_approval_revocation_snapshot_version = 0
+        self._ctp_approval_revocation_snapshot_sha256 = None
+        self._ctp_approval_revoked_ids = set()
+        self._ctp_approval_revoked_nonces = set()
         self.closed = False
         try:
             if not self.config["market_data_only"]:
@@ -1515,7 +1746,8 @@ class _ExecutionSession:
                 )
                 + 1
             )
-            for digest, identity, handle, _manifest in acquired:
+            for digest, identity, handle, manifest in acquired:
+                preserved_budget_commits = manifest.get("ctp_budget_commits", [])
                 _write_locked_json(
                     handle,
                     {
@@ -1526,8 +1758,17 @@ class _ExecutionSession:
                         "owner_pid": self.owner_pid,
                         "fencing_epoch": epoch,
                         "registry_scope": digest,
+                        "ctp_budget_commits": preserved_budget_commits,
                     },
                 )
+                if isinstance(preserved_budget_commits, list):
+                    self._ctp_budget_registry_commits.update(
+                        {
+                            str(item.get("reservation_id")): dict(item)
+                            for item in preserved_budget_commits
+                            if isinstance(item, dict) and item.get("reservation_id")
+                        }
+                    )
             self.ledger_lock_files = [item[2] for item in acquired]
             self.ledger_registry_digests = {item[0] for item in acquired}
             return epoch
@@ -1608,6 +1849,1382 @@ class _ExecutionSession:
                 "execution_session_locked_or_unavailable",
                 definite_reject=True,
             ) from None
+
+    def _ensure_approval_writer(self):
+        """Acquire the existing journal writer for a signed-approval transition.
+
+        A market-data-only session normally avoids all writer state.  U1a may
+        still persist a read-only preauthorization or consume an approval, but
+        only when the caller configured the ordinary execution journal.  This
+        keeps the read-only mode fail-closed while making "persisted" mean an
+        actual leased, fsynced record rather than a memory-only flag.
+        """
+        with self.mutex:
+            if self.closed:
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "execution_session_closed",
+                    definite_reject=True,
+                )
+            if self.path is None or self.config["require_order_journal"] is not True:
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_durable_writer_required",
+                    definite_reject=True,
+                )
+            if self.lock_file is None or self.lock_file.closed:
+                self._acquire_lock()
+                self._load_journal()
+            self._assert_writer_lease("ctp_execution_approval")
+
+    def _attach_ctp_approval_registry_lease(self, identity):
+        """Attach the account-wide CTP lease to an already open journal."""
+        digest = _identity_registry_digests(identity)[0]
+        if digest in self.ledger_registry_digests:
+            return
+        handle = _lock_file(
+            _ledger_registry_root() / f"{digest}.lock",
+            "ctp_execution_approval",
+            "authenticated_account_execution_session_locked",
+        )
+        try:
+            manifest = _read_locked_json(handle, "ctp_execution_approval")
+            recorded = manifest.get("ledger_identity")
+            if recorded and not _recorded_identity_matches(recorded, identity):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ledger_registry_identity_mismatch",
+                    definite_reject=True,
+                )
+            active = manifest.get("active_journal")
+            if active and Path(active).resolve() != self.path and Path(active).exists():
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "authenticated_account_journal_conflict",
+                    definite_reject=True,
+                )
+            prior_epoch = int(manifest.get("fencing_epoch", 0))
+            preserved_budget_commits = manifest.get("ctp_budget_commits", [])
+            if not isinstance(preserved_budget_commits, list):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "unreadable_ledger_registry",
+                    definite_reject=True,
+                )
+            self._ctp_budget_registry_commits.update(
+                {
+                    str(item.get("reservation_id")): dict(item)
+                    for item in preserved_budget_commits
+                    if isinstance(item, dict) and item.get("reservation_id")
+                }
+            )
+            if prior_epoch >= self.fencing_epoch:
+                new_epoch = prior_epoch + 1
+                for existing in self.ledger_lock_files:
+                    existing_manifest = _read_locked_json(
+                        existing, "ctp_execution_approval"
+                    )
+                    existing_manifest.update(
+                        owner_token=self.owner_token,
+                        owner_pid=self.owner_pid,
+                        fencing_epoch=new_epoch,
+                    )
+                    _write_locked_json(existing, existing_manifest)
+                if self.lock_file is not None:
+                    _write_locked_json(
+                        self.lock_file,
+                        {
+                            "schema_version": _JOURNAL_SCHEMA_VERSION,
+                            "owner_token": self.owner_token,
+                            "owner_pid": self.owner_pid,
+                            "fencing_epoch": new_epoch,
+                            "journal": str(self.path),
+                            "ctp_budget_commits": _read_locked_json(
+                                self.lock_file, "ctp_execution_approval"
+                            ).get("ctp_budget_commits", []),
+                        },
+                    )
+                self.fencing_epoch = new_epoch
+            _write_locked_json(
+                handle,
+                {
+                    "schema_version": _JOURNAL_SCHEMA_VERSION,
+                    "ledger_identity": identity,
+                    "active_journal": str(self.path),
+                    "owner_token": self.owner_token,
+                    "owner_pid": self.owner_pid,
+                    "fencing_epoch": self.fencing_epoch,
+                    "registry_scope": digest,
+                    "ctp_budget_commits": preserved_budget_commits,
+                },
+            )
+        except Exception:
+            handle.close()
+            raise
+        self.ledger_lock_files.append(handle)
+        self.ledger_registry_digests.add(digest)
+
+    def bind_ctp_approval_identity(
+        self,
+        venue,
+        *,
+        account_fingerprint,
+        environment_profile,
+    ):
+        """Bind a collected CTP account before any approval journal write."""
+        operation = "ctp_execution_approval"
+        venue = str(venue or "").strip()
+        account_fingerprint = str(account_fingerprint or "").strip().lower()
+        environment_profile = str(environment_profile or "").strip().lower()
+        if (
+            self._provider(venue) != "CTP"
+            or not re.fullmatch(r"acct_[0-9a-f]{16}", account_fingerprint)
+            or not environment_profile
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_approval_identity_unavailable",
+                definite_reject=True,
+            )
+        environment_category = (
+            str(self.config["required_environments"].get(venue) or "demo")
+            .strip()
+            .lower()
+        )
+        identity = {
+            "provider": "CTP",
+            "environment": environment_category,
+            "environment_profile": environment_profile,
+            "account_id": account_fingerprint,
+            "account_fingerprint": account_fingerprint,
+        }
+        if environment_category != "demo":
+            raise NormalizedApiError(
+                operation,
+                "ctp_approval_environment_category_unavailable",
+                definite_reject=True,
+            )
+        with self.mutex:
+            if self.closed:
+                raise NormalizedApiError(
+                    operation, "execution_session_closed", definite_reject=True
+                )
+            if self.path is None or self.config["require_order_journal"] is not True:
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_approval_durable_writer_required",
+                    definite_reject=True,
+                )
+            current = self._ctp_execution_identity
+            if current is not None and (
+                not _recorded_identity_matches(current, identity)
+                or self._arm_venue not in (None, venue)
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_approval_identity_mismatch",
+                    definite_reject=True,
+                )
+            previous_identity = deepcopy(current)
+            previous_venue = self._arm_venue
+            self._ctp_execution_identity = identity
+            self._arm_venue = venue
+            try:
+                if self.lock_file is None or self.lock_file.closed:
+                    self._acquire_lock()
+                    self._load_journal()
+                else:
+                    self._attach_ctp_approval_registry_lease(identity)
+                self._assert_writer_lease(operation)
+            except Exception:
+                if previous_identity is None:
+                    self._release_writer_leases()
+                    self._ctp_execution_identity = None
+                    self._arm_venue = previous_venue
+                else:
+                    self._ctp_execution_identity = previous_identity
+                    self._arm_venue = previous_venue
+                raise
+
+    @staticmethod
+    def _approval_row_identity(row):
+        approval_id = row.get("approval_id")
+        nonce = row.get("nonce")
+        if (
+            not isinstance(approval_id, str)
+            or not approval_id
+            or not isinstance(nonce, str)
+            or not nonce
+        ):
+            raise ValueError("missing_approval_identity")
+        return approval_id, nonce
+
+    def _load_approval_journal_row(self, event, row):
+        """Restore U1a approval state from one existing-journal event."""
+        approval_id, nonce = self._approval_row_identity(row)
+        version = row.get("revocation_snapshot_version")
+        if isinstance(version, bool) or type(version) is not int or version <= 0:
+            raise ValueError("invalid_approval_revocation_version")
+        snapshot_hash = str(row.get("revocation_snapshot_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", snapshot_hash):
+            raise ValueError("missing_approval_revocation_snapshot")
+        snapshot_record = row.get("revocation_snapshot")
+        if not isinstance(snapshot_record, dict):
+            raise ValueError("missing_approval_revocation_snapshot")
+        try:
+            encoded_snapshot = json.dumps(
+                snapshot_record,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError):
+            raise ValueError("invalid_approval_revocation_snapshot") from None
+        if hashlib.sha256(encoded_snapshot).hexdigest() != snapshot_hash:
+            raise ValueError("approval_revocation_snapshot_hash_mismatch")
+        if snapshot_record.get("version") != version:
+            raise ValueError("invalid_approval_revocation_snapshot")
+        snapshot_revoked_ids = snapshot_record.get("revoked_approval_ids", [])
+        snapshot_revoked_nonces = snapshot_record.get("revoked_nonces", [])
+        if "revoked_approval_ids" in row and row["revoked_approval_ids"] != (
+            snapshot_revoked_ids
+        ):
+            raise ValueError("invalid_approval_revocation_snapshot")
+        if "revoked_nonces" in row and row["revoked_nonces"] != snapshot_revoked_nonces:
+            raise ValueError("invalid_approval_revocation_snapshot")
+        revoked_ids = snapshot_revoked_ids
+        revoked_nonces = snapshot_revoked_nonces
+        if not isinstance(revoked_ids, list) or not isinstance(revoked_nonces, list):
+            raise ValueError("invalid_approval_revocation_snapshot")
+        if any(
+            not isinstance(item, str) or not item
+            for item in (*revoked_ids, *revoked_nonces)
+        ):
+            raise ValueError("invalid_approval_revocation_snapshot")
+        if len(revoked_ids) != len(set(revoked_ids)) or revoked_ids != sorted(
+            revoked_ids
+        ):
+            raise ValueError("invalid_approval_revocation_snapshot")
+        if len(revoked_nonces) != len(set(revoked_nonces)) or revoked_nonces != sorted(
+            revoked_nonces
+        ):
+            raise ValueError("invalid_approval_revocation_snapshot")
+        if event == "ctp_execution_approval_revocation_snapshot":
+            if version < self._ctp_approval_revocation_snapshot_version:
+                raise ValueError("approval_revocation_version_rollback")
+            if (
+                version == self._ctp_approval_revocation_snapshot_version
+                and self._ctp_approval_revocation_snapshot_sha256
+                not in (None, snapshot_hash)
+            ):
+                raise ValueError("approval_revocation_snapshot_conflict")
+            self._ctp_approval_revocation_snapshot_version = version
+            self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
+            self._ctp_approval_revoked_ids.update(str(item) for item in revoked_ids)
+            self._ctp_approval_revoked_nonces.update(
+                str(item) for item in revoked_nonces
+            )
+            return
+        if event == "ctp_execution_approval_pre_authorized":
+            approval_hash = str(row.get("approval_sha256") or "")
+            if not re.fullmatch(r"[0-9a-f]{64}", approval_hash):
+                raise ValueError("missing_approval_hash")
+            self._validate_approval_payload_row(row, approval_hash)
+            if version < self._ctp_approval_revocation_snapshot_version:
+                raise ValueError("approval_revocation_version_rollback")
+            if approval_id in self._ctp_approval_pre_authorized_ids:
+                raise ValueError("duplicate_approval_preauthorization")
+            self._ctp_approval_pre_authorized_ids.add(approval_id)
+            self._ctp_approval_revocation_snapshot_version = max(
+                version, self._ctp_approval_revocation_snapshot_version
+            )
+            self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
+            self._ctp_approval_revoked_ids.update(revoked_ids)
+            self._ctp_approval_revoked_nonces.update(revoked_nonces)
+            return
+        approval_hash = str(row.get("approval_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", approval_hash):
+            raise ValueError("missing_approval_hash")
+        self._validate_approval_payload_row(row, approval_hash)
+        if event == "ctp_execution_approval_consumption_started":
+            if (
+                approval_id in self._ctp_approval_consumed_ids
+                or nonce in self._ctp_approval_consumed_nonces
+                or approval_id in self._ctp_approval_pending_ids
+                or nonce in self._ctp_approval_pending_nonces
+            ):
+                raise ValueError("duplicate_approval_consumption_start")
+            if version < self._ctp_approval_revocation_snapshot_version:
+                raise ValueError("approval_revocation_version_rollback")
+            self._ctp_approval_pending_ids.add(approval_id)
+            self._ctp_approval_pending_nonces.add(nonce)
+            self._ctp_approval_revocation_snapshot_version = version
+            self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
+            self._ctp_approval_revoked_ids.update(revoked_ids)
+            self._ctp_approval_revoked_nonces.update(revoked_nonces)
+            return
+        if approval_id in self._ctp_approval_consumed_ids:
+            raise ValueError("duplicate_approval_consumption")
+        if nonce in self._ctp_approval_consumed_nonces:
+            raise ValueError("duplicate_approval_nonce_consumption")
+        self._ctp_approval_consumed_ids.add(approval_id)
+        self._ctp_approval_consumed_nonces.add(nonce)
+        self._ctp_approval_pending_ids.discard(approval_id)
+        self._ctp_approval_pending_nonces.discard(nonce)
+        if version < self._ctp_approval_revocation_snapshot_version:
+            raise ValueError("approval_revocation_version_rollback")
+        self._ctp_approval_revocation_snapshot_version = version
+        self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
+        self._ctp_approval_revoked_ids.update(revoked_ids)
+        self._ctp_approval_revoked_nonces.update(revoked_nonces)
+
+    def _load_recovery_journal_row(self, event, row):
+        """Restore the durable one-shot recovery-arm fence.
+
+        Recovery arm events deliberately live in the existing execution
+        journal.  A pending start is as conservative as a consumed event: a
+        restart must never turn an uncertain native transition back into a
+        reusable plan token.
+        """
+
+        token = str(row.get("recovery_token_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", token):
+            raise ValueError("invalid_recovery_token")
+        approval_id, nonce = self._approval_row_identity(row)
+        plan_hash = str(row.get("recovery_plan_sha256") or "")
+        action_hash = str(row.get("recovery_action_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", plan_hash) or not re.fullmatch(
+            r"[0-9a-f]{64}", action_hash
+        ):
+            raise ValueError("invalid_recovery_binding")
+        payload = row.get("approval_payload")
+        approval_hash = str(row.get("approval_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", approval_hash):
+            raise ValueError("missing_recovery_approval_hash")
+        self._validate_approval_payload_row(row, approval_hash)
+        if not isinstance(payload, dict):  # defensive; validator already checks
+            raise ValueError("missing_recovery_approval_payload")
+        if (
+            payload.get("purpose") != "ctp_execution_recovery"
+            or payload.get("recovery_token_sha256") != token
+            or payload.get("recovery_plan_sha256") != plan_hash
+            or payload.get("recovery_action_sha256") != action_hash
+        ):
+            raise ValueError("recovery_approval_binding_mismatch")
+        record_key = (token, approval_id, nonce)
+        previous = self._recovery_authorization_records.get(token)
+        if previous is not None and previous != record_key:
+            raise ValueError("recovery_token_identity_conflict")
+        self._recovery_authorization_records[token] = record_key
+        if event == "ctp_execution_recovery_arm_started":
+            if (
+                token in self._recovery_used_tokens
+                or token in self._recovery_pending_tokens
+            ):
+                raise ValueError("duplicate_recovery_consumption_start")
+            self._recovery_pending_tokens.add(token)
+            return
+        if token not in self._recovery_pending_tokens:
+            raise ValueError("recovery_consumption_without_start")
+        self._recovery_pending_tokens.remove(token)
+        if token in self._recovery_used_tokens:
+            raise ValueError("duplicate_recovery_consumption")
+        self._recovery_used_tokens.add(token)
+
+    # ------------------------------------------------------------------
+    # O2 CTP path-budget state
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _budget_decimal(value, field, *, signed=False):
+        if isinstance(value, bool) or value is None:
+            raise ValueError(f"invalid_budget_{field}")
+        try:
+            parsed = value if isinstance(value, Decimal) else Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            raise ValueError(f"invalid_budget_{field}") from None
+        if not parsed.is_finite() or (not signed and parsed < 0):
+            raise ValueError(f"invalid_budget_{field}")
+        return parsed
+
+    @staticmethod
+    def _budget_registry_scope(account_fingerprint):
+        return hashlib.sha256(
+            "\0".join(("ctp_account", "CTP", str(account_fingerprint))).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
+    @staticmethod
+    def _budget_context_key(context):
+        return tuple(
+            (
+                context.get("account_fingerprint"),
+                context.get("trading_day"),
+                context.get("connection_generation"),
+                context.get("environment_profile"),
+            )
+        )
+
+    @staticmethod
+    def _budget_context_copy(context):
+        return deepcopy(dict(context))
+
+    @classmethod
+    def _budget_stringify(cls, value):
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, Mapping):
+            return {key: cls._budget_stringify(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return [cls._budget_stringify(item) for item in value]
+        return value
+
+    def _budget_read_registry_commits(self, account_fingerprint):
+        """Read only the account registry's durable commit fence.
+
+        This is metadata in the existing account writer registry, not a second
+        transaction ledger.  It lets a new journal reject a reservation ID
+        that was already committed by a closed journal for the same account.
+        """
+
+        scope = self._budget_registry_scope(account_fingerprint)
+        cached = self._ctp_budget_registry_commits
+        if cached:
+            return cached
+        path = _ledger_registry_root() / f"{scope}.lock"
+        try:
+            raw = path.read_bytes()
+            if raw == b"\0" or not raw:
+                return cached
+            manifest = json.loads(raw.decode("utf-8"))
+            commits = manifest.get("ctp_budget_commits", [])
+            if isinstance(commits, list):
+                cached.update(
+                    {
+                        str(item.get("reservation_id")): dict(item)
+                        for item in commits
+                        if isinstance(item, dict) and item.get("reservation_id")
+                    }
+                )
+        except (OSError, UnicodeDecodeError, TypeError, ValueError, json.JSONDecodeError):
+            # The writer lease acquisition will surface a malformed registry.
+            # Do not turn a read-only diagnostic into an authority source.
+            return cached
+        return cached
+
+    def _budget_registry_commit_locked(self, record):
+        reservation_id = str(record["reservation_id"])
+        expected = dict(record)
+        for handle in self.ledger_lock_files:
+            manifest = _read_locked_json(handle, "ctp_execution_budget")
+            commits = manifest.get("ctp_budget_commits", [])
+            if not isinstance(commits, list):
+                raise NormalizedApiError(
+                    "ctp_execution_budget",
+                    "unreadable_ledger_registry",
+                    definite_reject=True,
+                )
+            existing = next(
+                (
+                    item
+                    for item in commits
+                    if isinstance(item, dict)
+                    and str(item.get("reservation_id") or "") == reservation_id
+                ),
+                None,
+            )
+            if existing is not None:
+                if existing != expected:
+                    raise NormalizedApiError(
+                        "ctp_execution_budget",
+                        "budget_reservation_identity_conflict",
+                        definite_reject=True,
+                    )
+                continue
+            commits.append(expected)
+            commits.sort(key=lambda item: str(item.get("reservation_id") or ""))
+            manifest["ctp_budget_commits"] = commits
+            _write_locked_json(handle, manifest)
+        self._ctp_budget_registry_commits[reservation_id] = expected
+
+    def _budget_registry_commit_for_row(self, row):
+        reservation_id = str(row.get("reservation_id") or "")
+        if not reservation_id:
+            return None
+        account = row.get("account_fingerprint")
+        if not isinstance(account, str) or not account:
+            return None
+        self._budget_read_registry_commits(account)
+        return self._ctp_budget_registry_commits.get(reservation_id)
+
+    @classmethod
+    def _budget_row_state(cls, row, *, status):
+        context = row.get("context")
+        if not isinstance(context, dict):
+            raise ValueError("missing_budget_context")
+        reservation_id = row.get("reservation_id")
+        if not isinstance(reservation_id, str) or not reservation_id:
+            raise ValueError("missing_budget_reservation_id")
+        state = {
+            "reservation_id": reservation_id,
+            "mode": row.get("mode"),
+            "amount_cny": cls._budget_decimal(row.get("amount_cny"), "amount"),
+            "candidate_budget_cny": cls._budget_decimal(
+                row.get("candidate_budget_cny"), "candidate_budget"
+            ),
+            "ordinary_cap_cny": cls._budget_decimal(
+                row.get("ordinary_cap_cny"), "ordinary_cap"
+            ),
+            "ordinary_peak_cny": cls._budget_decimal(
+                row.get("ordinary_peak_cny"), "ordinary_peak"
+            ),
+            "recovery_increment_cny": cls._budget_decimal(
+                row.get("recovery_increment_cny"), "recovery_increment"
+            ),
+            "full_state_peak_cny": cls._budget_decimal(
+                row.get("full_state_peak_cny"), "full_state_peak"
+            ),
+            "available_required_cny": cls._budget_decimal(
+                row.get("available_required_cny"), "available_required"
+            ),
+            "remaining_unabsorbed_cny": cls._budget_decimal(
+                row.get("remaining_unabsorbed_cny", row.get("amount_cny")),
+                "remaining_unabsorbed",
+            ),
+            "source": row.get("source"),
+            "synthetic": bool(row.get("synthetic")),
+            "evidence_digest": str(row.get("evidence_digest") or ""),
+            "context": deepcopy(context),
+            "status": status,
+            "action_ids": set(),
+            "transition_ids": set(),
+            "transitions": [],
+            "expires_at": row.get("expires_at"),
+            "registry_scope": row.get("registry_scope"),
+        }
+        if not isinstance(state["mode"], str) or state["mode"] not in {
+            "ordinary",
+            "recovery",
+        }:
+            raise ValueError("invalid_budget_mode")
+        return state
+
+    def _load_budget_journal_row(self, event, row):
+        """Restore budget reservations from the existing execution journal."""
+
+        if event == "ctp_budget_pnl_observed":
+            version = row.get("pnl_version")
+            if not isinstance(version, str) or not version:
+                raise ValueError("missing_budget_pnl_version")
+            if row.get("valuation_unknown") is True:
+                self._ctp_budget_valuation_unknown = True
+                self._ctp_budget_pnl_versions.setdefault(version, None)
+                return
+            value = self._budget_decimal(
+                row.get("cumulative_pnl_cny"), "cumulative_pnl", signed=True
+            )
+            previous = self._ctp_budget_pnl_versions.get(version, "__missing__")
+            if previous != "__missing__" and previous != value:
+                raise ValueError("budget_pnl_version_conflict")
+            self._ctp_budget_pnl_versions[version] = value
+            self._ctp_budget_floor_min_pnl_cny = min(
+                self._ctp_budget_floor_min_pnl_cny, value, Decimal("0")
+            )
+            return
+
+        reservation_id = str(row.get("reservation_id") or "")
+        if not reservation_id:
+            raise ValueError("missing_budget_reservation_id")
+        if event == "ctp_budget_reservation_started":
+            if reservation_id in self._ctp_budget_reservations:
+                raise ValueError("duplicate_budget_reservation_start")
+            state = self._budget_row_state(row, status="pending")
+            state["reserved_amount_cny"] = state["amount_cny"]
+            self._ctp_budget_reservations[reservation_id] = state
+            if self._ctp_budget_context is None:
+                self._ctp_budget_context = deepcopy(state["context"])
+            self._ctp_budget_pending_reservations.add(reservation_id)
+            return
+        state = self._ctp_budget_reservations.get(reservation_id)
+        if state is None:
+            raise ValueError("budget_reservation_without_start")
+        if event == "ctp_budget_reservation_committed":
+            if state.get("status") != "pending":
+                raise ValueError("duplicate_budget_reservation_commit")
+            marker = self._budget_registry_commit_for_row(row)
+            if marker is None:
+                # A journal commit without the account-registry marker is an
+                # fsync-uncertain reservation.  Never turn it into capacity on
+                # restart; retain the bytes and freeze new reservations.
+                state["status"] = "uncertain"
+                self._ctp_budget_uncertain_reservations.add(reservation_id)
+                self._ctp_budget_frozen_reason = "budget_commit_uncertain"
+                return
+            expected_digest = str(marker.get("evidence_digest") or "")
+            if expected_digest != state.get("evidence_digest"):
+                raise ValueError("budget_registry_commit_mismatch")
+            state["status"] = "active"
+            self._ctp_budget_pending_reservations.discard(reservation_id)
+            return
+        if event == "ctp_budget_action_started":
+            action_id = row.get("action_id")
+            if not isinstance(action_id, str) or not action_id:
+                raise ValueError("missing_budget_action_id")
+            if action_id in state["action_ids"]:
+                raise ValueError("duplicate_budget_action")
+            state["action_ids"].add(action_id)
+            return
+        if event == "ctp_budget_reservation_transition":
+            transition_id = row.get("transition_id")
+            if not isinstance(transition_id, str) or not transition_id:
+                raise ValueError("missing_budget_transition_id")
+            if transition_id in state["transition_ids"]:
+                raise ValueError("duplicate_budget_transition")
+            state["transition_ids"].add(transition_id)
+            transition = str(row.get("transition") or "")
+            amount = self._budget_decimal(
+                row.get("amount_cny", 0), "transition_amount"
+            )
+            state["transitions"].append(
+                {"transition": transition, "amount_cny": amount, "transition_id": transition_id}
+            )
+            self._apply_budget_transition_state(state, transition, amount, row)
+            return
+        raise ValueError("unknown_budget_event")
+
+    def _budget_bound_context(self, evaluation, evidence, *, operation):
+        context = self._budget_context_copy(evaluation.context)
+        expected_strategy = self.config.get("strategy_id")
+        if context.get("strategy_id") != expected_strategy:
+            raise NormalizedApiError(
+                operation,
+                "budget_strategy_identity_mismatch",
+                definite_reject=True,
+            )
+        configured_identity = self.config.get("strategy_identity_sha256")
+        if configured_identity and context.get("strategy_identity_sha256") != configured_identity:
+            raise NormalizedApiError(
+                operation,
+                "budget_strategy_material_mismatch",
+                definite_reject=True,
+            )
+        source = evaluation.source
+        current_identity = self._ctp_execution_identity
+        if source != "synthetic_test":
+            # A caller supplied context is only a claim.  Production evidence
+            # must match an SDK-owned identity and, when armed, its exact live
+            # account/day/generation/profile proof.
+            if not isinstance(current_identity, Mapping):
+                raise NormalizedApiError(
+                    operation,
+                    "budget_runtime_identity_unavailable",
+                    definite_reject=True,
+                )
+            if any(
+                context.get(field) != current_identity.get(field)
+                for field in ("account_fingerprint", "environment_profile")
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "budget_account_identity_mismatch",
+                    definite_reject=True,
+                )
+            if not isinstance(self._arm_proof, Mapping):
+                raise NormalizedApiError(
+                    operation,
+                    "budget_runtime_generation_unavailable",
+                    definite_reject=True,
+                )
+            for field in (
+                "account_fingerprint",
+                "trading_day",
+                "connection_generation",
+                "environment_profile",
+            ):
+                if context.get(field) != self._arm_proof.get(field):
+                    raise NormalizedApiError(
+                        operation,
+                        "budget_runtime_context_mismatch",
+                        definite_reject=True,
+                    )
+            if evidence.get("account_available_authoritative") is not True:
+                raise NormalizedApiError(
+                    operation,
+                    "budget_account_source_unverified",
+                    definite_reject=True,
+                )
+            if evidence.get("seller_margin_source_verified") is not True:
+                raise NormalizedApiError(
+                    operation,
+                    "budget_seller_source_unverified",
+                    definite_reject=True,
+                )
+            if evidence.get("absorption_source_verified") is not True:
+                raise NormalizedApiError(
+                    operation,
+                    "budget_absorption_source_unverified",
+                    definite_reject=True,
+                )
+            if evidence.get("fresh_available_cny") is None:
+                raise NormalizedApiError(
+                    operation,
+                    "budget_available_source_unverified",
+                    definite_reject=True,
+                )
+        else:
+            # Synthetic evidence is intentionally isolated from native writes,
+            # but it still uses the account registry so durable tests exercise
+            # the same process-wide lease and journal path.
+            if current_identity is not None and any(
+                context.get(field) != current_identity.get(field)
+                for field in ("account_fingerprint", "environment_profile")
+                if current_identity.get(field) is not None
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "budget_account_identity_mismatch",
+                    definite_reject=True,
+                )
+        previous = self._ctp_budget_context
+        if previous is not None and self._budget_context_key(previous) != self._budget_context_key(context):
+            # A strictly newer connection generation of the same account
+            # lineage establishes a fresh budget context.  This mirrors the
+            # arming rule ("a strictly newer connection generation still
+            # requires a fresh proof"): without it, every post-restart
+            # recovery write would fail closed forever.  Reservations from
+            # the previous generation remain in the ledger and keep counting
+            # toward the active/uncertain totals until terminal, so this
+            # replacement cannot widen any cap or bypass a gate.
+            previous_generation = previous.get("connection_generation")
+            current_generation = context.get("connection_generation")
+            newer_generation = (
+                previous.get("account_fingerprint")
+                == context.get("account_fingerprint")
+                and previous.get("environment_profile")
+                == context.get("environment_profile")
+                and isinstance(previous_generation, int)
+                and isinstance(current_generation, int)
+                and not isinstance(previous_generation, bool)
+                and not isinstance(current_generation, bool)
+                and current_generation > previous_generation
+            )
+            if not newer_generation:
+                raise NormalizedApiError(
+                    operation,
+                    "budget_context_generation_mismatch",
+                    definite_reject=True,
+                )
+            self._ctp_budget_context = deepcopy(context)
+        return context
+
+    def _ensure_budget_writer_locked(self, context, *, operation):
+        if self.closed:
+            raise NormalizedApiError(operation, "execution_session_closed", definite_reject=True)
+        if self.path is None or self.config["require_order_journal"] is not True:
+            raise NormalizedApiError(
+                operation, "budget_durable_writer_required", definite_reject=True
+            )
+        if self._ctp_execution_identity is None:
+            identity = {
+                "provider": "CTP",
+                "environment": "demo",
+                "environment_profile": context["environment_profile"],
+                "account_id": context["account_fingerprint"],
+                "account_fingerprint": context["account_fingerprint"],
+            }
+            self._ctp_execution_identity = identity
+            self._arm_venue = self._arm_venue or "CTP___FUTURE"
+        if self.lock_file is None or self.lock_file.closed:
+            self._acquire_lock()
+            self._load_journal()
+        else:
+            digest = _identity_registry_digests(self._ctp_execution_identity)[0]
+            if digest not in self.ledger_registry_digests:
+                self._attach_ctp_approval_registry_lease(self._ctp_execution_identity)
+        self._assert_writer_lease(operation)
+        if self._ctp_budget_context is None:
+            self._ctp_budget_context = deepcopy(context)
+
+    def _observe_budget_pnl_locked(
+        self, evidence, context, *, operation, source=None, version=None
+    ):
+        values = evidence.get("historical_cumulative_pnl_cny")
+        if values is None and "historical_min_pnl_cny" in evidence:
+            values = [evidence.get("historical_min_pnl_cny")]
+        if values is None:
+            return
+        if not isinstance(values, (list, tuple)):
+            raise NormalizedApiError(operation, "budget_invalid_pnl", definite_reject=True)
+        version = version or evidence.get("pnl_version")
+        if not isinstance(version, str) or not version:
+            version = hashlib.sha256(
+                json.dumps(list(values), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+            ).hexdigest()
+        known = []
+        unknown = False
+        for value in values:
+            if value is None:
+                unknown = True
+                continue
+            known.append(self._budget_decimal(value, "cumulative_pnl", signed=True))
+        previous = self._ctp_budget_pnl_versions.get(version, "__missing__")
+        observed = None if unknown and not known else min(known, default=Decimal("0"))
+        if previous != "__missing__":
+            if previous != observed:
+                raise NormalizedApiError(
+                    operation, "budget_pnl_version_conflict", definite_reject=True
+                )
+            if unknown:
+                self._ctp_budget_valuation_unknown = True
+            return
+        row = {
+            "exchange_name": self._arm_venue or "CTP___FUTURE",
+            "account_fingerprint": context["account_fingerprint"],
+            "trading_day": context["trading_day"],
+            "connection_generation": context["connection_generation"],
+            "environment_profile": context["environment_profile"],
+            "candidate_id": context["candidate_id"],
+            "execution_cycle_id": context["execution_cycle_id"],
+            "pnl_version": version,
+            "valuation_unknown": unknown,
+            "source": source or evidence.get("source"),
+            "cumulative_pnl_cny": None if observed is None else format(observed, "f"),
+        }
+        self._journal("ctp_budget_pnl_observed", row, allow_read_only=True)
+        self._ctp_budget_pnl_versions[version] = observed
+        if observed is not None:
+            self._ctp_budget_floor_min_pnl_cny = min(
+                self._ctp_budget_floor_min_pnl_cny, observed, Decimal("0")
+            )
+        if unknown:
+            self._ctp_budget_valuation_unknown = True
+
+    def _budget_evidence_with_floor_locked(self, evidence):
+        enriched = deepcopy(dict(evidence))
+        values = enriched.get("historical_cumulative_pnl_cny")
+        if values is not None and isinstance(values, (list, tuple)):
+            values = list(values)
+        elif values is None and "historical_min_pnl_cny" in enriched:
+            values = [enriched["historical_min_pnl_cny"]]
+        if values is None:
+            values = []
+        if self._ctp_budget_floor_min_pnl_cny < 0:
+            values.append(format(self._ctp_budget_floor_min_pnl_cny, "f"))
+        if self._ctp_budget_valuation_unknown:
+            values.append(None)
+        if values:
+            enriched["historical_cumulative_pnl_cny"] = values
+        return enriched
+
+    def _budget_active_amounts_locked(self):
+        ordinary = Decimal("0")
+        total = Decimal("0")
+        for state in self._ctp_budget_reservations.values():
+            if state.get("status") not in {"active", "uncertain"}:
+                continue
+            amount = state.get("reserved_amount_cny", state.get("amount_cny", Decimal("0")))
+            if not isinstance(amount, Decimal):
+                amount = self._budget_decimal(amount, "reserved_amount")
+            total += amount
+            if state.get("mode") == "ordinary":
+                ordinary += amount
+        return ordinary, total
+
+    def _budget_candidate_limits_locked(self):
+        candidate = min(
+            BUDGET_MAX_CNY,
+            BUDGET_MAX_CNY + self._ctp_budget_floor_min_pnl_cny,
+        )
+        ordinary_cap = max(
+            Decimal("0"),
+            min(BUDGET_ORDINARY_MAX_CNY, candidate - BUDGET_RECOVERY_HEADROOM_CNY),
+        )
+        return candidate, ordinary_cap
+
+    def _budget_state_audit_locked(self, state):
+        return self._budget_stringify(
+            {
+                key: value
+                for key, value in state.items()
+                if key not in {"action_ids", "transition_ids"}
+            }
+        )
+
+    def _apply_budget_transition_state(self, state, transition, amount, row):
+        if transition in {"unknown", "late_fill"}:
+            state["status"] = "uncertain"
+            self._ctp_budget_uncertain_reservations.add(state["reservation_id"])
+            self._ctp_budget_frozen_reason = "budget_obligation_unknown"
+            return
+        if transition in {"paid", "confirmed_paid", "margin_paid"}:
+            state["paid_cny"] = state.get("paid_cny", Decimal("0")) + amount
+            return
+        if transition == "absorbed":
+            state["remaining_unabsorbed_cny"] = max(
+                Decimal("0"),
+                state.get("remaining_unabsorbed_cny", Decimal("0")) - amount,
+            )
+            state["absorbed_cny"] = state.get("absorbed_cny", Decimal("0")) + amount
+            state["reserved_amount_cny"] = max(
+                Decimal("0"),
+                state.get("reserved_amount_cny", state.get("amount_cny", Decimal("0")))
+                - amount,
+            )
+            if state["reserved_amount_cny"] == 0 and state.get("status") == "active":
+                state["status"] = "absorbed"
+            return
+        if transition == "released":
+            if row.get("terminated_unused") is not True:
+                raise ValueError("budget_release_unproven")
+            state["reserved_amount_cny"] = Decimal("0")
+            state["remaining_unabsorbed_cny"] = Decimal("0")
+            state["status"] = "released"
+            return
+        raise ValueError("unknown_budget_transition")
+
+    def _require_budget_reservation_locked(self, capability, *, operation, mode=None):
+        if not _is_budget_reservation(capability, owner=self) or capability._session_token is not self._ctp_budget_session_token:
+            raise NormalizedApiError(
+                operation, "ctp_budget_capability_invalid", definite_reject=True
+            )
+        state = self._ctp_budget_reservations.get(capability.reservation_id)
+        if state is None or state.get("status") not in {"active"}:
+            raise NormalizedApiError(
+                operation, "ctp_budget_capability_unavailable", definite_reject=True
+            )
+        if mode is not None and state.get("mode") != mode:
+            raise NormalizedApiError(
+                operation, "ctp_budget_purpose_mismatch", definite_reject=True
+            )
+        if state.get("synthetic"):
+            raise NormalizedApiError(
+                operation, "ctp_budget_synthetic_not_write_eligible", definite_reject=True
+            )
+        if self.persistence_failed or self._ctp_budget_frozen_reason:
+            raise NormalizedApiError(
+                operation, self._ctp_budget_frozen_reason or "persistence_failed", definite_reject=True
+            )
+        expires_at = state.get("expires_at")
+        if expires_at:
+            try:
+                expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+            except ValueError:
+                raise NormalizedApiError(
+                    operation, "budget_expiry_invalid", definite_reject=True
+                ) from None
+            if datetime.now(UTC) >= expiry:
+                raise NormalizedApiError(operation, "budget_expired", definite_reject=True)
+        return state
+
+    def _budget_context_matches_current_locked(self, state, *, operation):
+        context = state.get("context") or {}
+        if self._ctp_budget_context is not None and self._budget_context_key(context) != self._budget_context_key(self._ctp_budget_context):
+            raise NormalizedApiError(
+                operation, "budget_context_generation_mismatch", definite_reject=True
+            )
+        if isinstance(self._arm_proof, Mapping):
+            for field in (
+                "account_fingerprint",
+                "trading_day",
+                "connection_generation",
+                "environment_profile",
+            ):
+                if context.get(field) != self._arm_proof.get(field):
+                    raise NormalizedApiError(
+                        operation, "budget_runtime_context_mismatch", definite_reject=True
+                    )
+
+    def record_ctp_budget_pnl(
+        self,
+        cumulative_pnl_cny,
+        *,
+        version=None,
+        context=None,
+        source="synthetic_test",
+    ):
+        """Persist one attributed cumulative-PnL observation in the journal."""
+        operation = "record_ctp_budget_pnl"
+        if context is None:
+            context = self._ctp_budget_context
+        if not isinstance(context, Mapping):
+            raise NormalizedApiError(operation, "budget_context_required", definite_reject=True)
+        context = deepcopy(dict(context))
+        if source != "synthetic_test":
+            if not isinstance(self._ctp_execution_identity, Mapping):
+                raise NormalizedApiError(
+                    operation, "budget_runtime_identity_unavailable", definite_reject=True
+                )
+            if context.get("account_fingerprint") != self._ctp_execution_identity.get(
+                "account_fingerprint"
+            ):
+                raise NormalizedApiError(
+                    operation, "budget_account_identity_mismatch", definite_reject=True
+                )
+        with self.mutex:
+            self._ensure_budget_writer_locked(context, operation=operation)
+            evidence = {
+                "historical_cumulative_pnl_cny": [cumulative_pnl_cny],
+                "source": source,
+                "pnl_version": version,
+            }
+            self._observe_budget_pnl_locked(
+                evidence,
+                context,
+                operation=operation,
+                source=source,
+                version=version,
+            )
+            return self.ctp_budget_snapshot()
+
+    def reserve_ctp_execution_budget(
+        self,
+        evidence,
+        *,
+        mode="ordinary",
+        now=None,
+        reservation_id=None,
+    ):
+        """Atomically reserve one complete path budget using the existing WAL."""
+        operation = "reserve_ctp_execution_budget"
+        if not isinstance(evidence, dict):
+            raise NormalizedApiError(operation, "budget_invalid_evidence", definite_reject=True)
+        try:
+            initial = evaluate_ctp_budget(evidence, mode=mode, now=now)
+        except CtpBudgetError as exc:
+            raise NormalizedApiError(operation, exc.code, definite_reject=True) from None
+        with self.mutex:
+            context = self._budget_bound_context(initial, evidence, operation=operation)
+            self._ensure_budget_writer_locked(context, operation=operation)
+            self._observe_budget_pnl_locked(
+                evidence, context, operation=operation, source=initial.source
+            )
+            enriched = self._budget_evidence_with_floor_locked(evidence)
+            try:
+                evaluation = evaluate_ctp_budget(enriched, mode=mode, now=now)
+            except CtpBudgetError as exc:
+                raise NormalizedApiError(operation, exc.code, definite_reject=True) from None
+            if self._ctp_budget_frozen_reason:
+                raise NormalizedApiError(
+                    operation, self._ctp_budget_frozen_reason, definite_reject=True
+                )
+            if not evaluation.accepted:
+                reason = evaluation.reasons[0] if evaluation.reasons else "budget_rejected"
+                raise NormalizedApiError(operation, reason, definite_reject=True)
+            if mode != "ordinary" and mode != "recovery":
+                raise NormalizedApiError(operation, "budget_invalid_mode", definite_reject=True)
+            if mode == "recovery":
+                if initial.source == "synthetic_test":
+                    if evidence.get("recovery_authorized") is not True:
+                        raise NormalizedApiError(
+                            operation, "budget_recovery_authorization_missing", definite_reject=True
+                        )
+                elif not isinstance(self._recovery_plan, Mapping):
+                    raise NormalizedApiError(
+                        operation, "budget_recovery_authorization_missing", definite_reject=True
+                    )
+            reservation_id = reservation_id or evidence.get("reservation_id") or uuid.uuid4().hex
+            if not isinstance(reservation_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,256}", reservation_id):
+                raise NormalizedApiError(operation, "budget_invalid_reservation_id", definite_reject=True)
+            if (
+                reservation_id in self._ctp_budget_reservations
+                or reservation_id in self._ctp_budget_registry_commits
+            ):
+                raise NormalizedApiError(
+                    operation, "budget_reservation_already_used", definite_reject=True
+                )
+            ordinary_active, total_active = self._budget_active_amounts_locked()
+            amount = (
+                evaluation.ordinary_peak_cny
+                if mode == "ordinary"
+                else evaluation.full_state_peak_cny
+            )
+            candidate_budget, ordinary_cap = self._budget_candidate_limits_locked()
+            candidate_budget = min(candidate_budget, evaluation.candidate_budget_cny)
+            ordinary_cap = min(ordinary_cap, evaluation.ordinary_cap_cny)
+            if mode == "ordinary" and ordinary_active + amount > ordinary_cap:
+                raise NormalizedApiError(
+                    operation, "budget_ordinary_reservation_exceeded", definite_reject=True
+                )
+            if total_active + amount > candidate_budget:
+                raise NormalizedApiError(
+                    operation, "budget_total_reservation_exceeded", definite_reject=True
+                )
+            required = evaluation.available_required_cny
+            if evaluation.fresh_available_cny is not None:
+                required += total_active
+                if evaluation.fresh_available_cny < required:
+                    raise NormalizedApiError(
+                        operation, "budget_available_insufficient", definite_reject=True
+                    )
+            elif initial.source != "synthetic_test":
+                raise NormalizedApiError(
+                    operation, "budget_available_source_unverified", definite_reject=True
+                )
+            digest = budget_evidence_digest(evidence)
+            row = {
+                "exchange_name": self._arm_venue or "CTP___FUTURE",
+                "account_fingerprint": context["account_fingerprint"],
+                "trading_day": context["trading_day"],
+                "connection_generation": context["connection_generation"],
+                "environment_profile": context["environment_profile"],
+                "candidate_id": context["candidate_id"],
+                "strategy_id": context["strategy_id"],
+                "strategy_identity_sha256": context["strategy_identity_sha256"],
+                "execution_cycle_id": context["execution_cycle_id"],
+                "scope_version": context["scope_version"],
+                "reservation_id": reservation_id,
+                "mode": mode,
+                "amount_cny": format(amount, "f"),
+                "candidate_budget_cny": format(candidate_budget, "f"),
+                "ordinary_cap_cny": format(ordinary_cap, "f"),
+                "ordinary_peak_cny": format(evaluation.ordinary_peak_cny, "f"),
+                "recovery_increment_cny": format(evaluation.recovery_increment_cny, "f"),
+                "full_state_peak_cny": format(evaluation.full_state_peak_cny, "f"),
+                "available_required_cny": format(required, "f"),
+                "remaining_unabsorbed_cny": format(amount, "f"),
+                "source": initial.source,
+                "synthetic": initial.source == "synthetic_test",
+                "evidence_digest": digest,
+                "context": self._budget_context_copy(context),
+                "expires_at": evidence.get("expires_at"),
+                "registry_scope": self._budget_registry_scope(context["account_fingerprint"]),
+            }
+            self._ctp_budget_reservations[reservation_id] = self._budget_row_state(
+                row, status="pending"
+            )
+            self._ctp_budget_pending_reservations.add(reservation_id)
+            try:
+                self._journal("ctp_budget_reservation_started", row, allow_read_only=True)
+                self._journal(
+                    "ctp_budget_reservation_committed",
+                    row,
+                    allow_read_only=True,
+                )
+                self._budget_registry_commit_locked(
+                    {
+                        "reservation_id": reservation_id,
+                        "evidence_digest": digest,
+                        "amount_cny": row["amount_cny"],
+                        "mode": mode,
+                        "account_fingerprint": context["account_fingerprint"],
+                        "candidate_id": context["candidate_id"],
+                        "execution_cycle_id": context["execution_cycle_id"],
+                    }
+                )
+            except Exception:
+                self._ctp_budget_frozen_reason = "budget_persistence_uncertain"
+                self._ctp_budget_uncertain_reservations.add(reservation_id)
+                self.persistence_failed = True
+                raise
+            state = self._ctp_budget_reservations[reservation_id]
+            state["status"] = "active"
+            state["reserved_amount_cny"] = amount
+            state["remaining_unabsorbed_cny"] = amount
+            self._ctp_budget_pending_reservations.discard(reservation_id)
+            return _new_budget_reservation(
+                owner=self,
+                session_token=self._ctp_budget_session_token,
+                state={
+                    "reservation_id": reservation_id,
+                    "mode": mode,
+                    "amount_cny": amount,
+                    "candidate_id": context["candidate_id"],
+                    "execution_cycle_id": context["execution_cycle_id"],
+                    "synthetic": initial.source == "synthetic_test",
+                    "evidence_digest": digest,
+                },
+            )
+
+    # Short aliases keep the public surface discoverable without introducing
+    # another account or reservation owner.
+    reserve_ctp_budget = reserve_ctp_execution_budget
+
+    def attach_ctp_budget_reservation(self, capability, *, mode=None, operation="ctp_execution_budget"):
+        with self.mutex:
+            state = self._require_budget_reservation_locked(
+                capability, operation=operation, mode=mode
+            )
+            self._budget_context_matches_current_locked(state, operation=operation)
+            return capability
+
+    def bind_ctp_budget_action(self, capability, *, action_id, operation, request=None):
+        with self.mutex:
+            state = self._require_budget_reservation_locked(
+                capability, operation=operation
+            )
+            if not isinstance(action_id, str) or not action_id:
+                raise NormalizedApiError(
+                    operation, "budget_action_identity_required", definite_reject=True
+                )
+            if action_id in state["action_ids"]:
+                raise NormalizedApiError(
+                    operation, "budget_action_already_started", definite_reject=True
+                )
+            row = {
+                "exchange_name": self._arm_venue or "CTP___FUTURE",
+                "account_fingerprint": state["context"]["account_fingerprint"],
+                "trading_day": state["context"]["trading_day"],
+                "connection_generation": state["context"]["connection_generation"],
+                "environment_profile": state["context"]["environment_profile"],
+                "reservation_id": capability.reservation_id,
+                "action_id": action_id,
+                "operation": operation,
+                "request_digest": hashlib.sha256(
+                    json.dumps(self._budget_stringify(request or {}), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+                ).hexdigest(),
+            }
+            self._journal("ctp_budget_action_started", row, allow_read_only=True)
+            state["action_ids"].add(action_id)
+            return state
+
+    def finalize_budget_dispatch(self, context):
+        """Final bounded O2 check immediately before the lower transport call."""
+        if not isinstance(context, Mapping):
+            return
+        capability = context.get("budget_capability")
+        if capability is None:
+            return
+        operation = str(context.get("operation") or "ctp_budget_dispatch")
+        with self.mutex:
+            state = self._require_budget_reservation_locked(
+                capability, operation=operation
+            )
+            self._budget_context_matches_current_locked(state, operation=operation)
+            # No collector, hashing, file, or lock acquisition is allowed here.
+            # Only the already-captured context, bounded expiry, and durable
+            # state fence are compared at this final handoff.
+            if context.get("budget_evidence_digest") != state.get("evidence_digest"):
+                raise NormalizedApiError(
+                    operation, "budget_evidence_fence_mismatch", definite_reject=True
+                )
+
+    def transition_ctp_budget(
+        self,
+        capability,
+        transition,
+        *,
+        amount_cny=0,
+        transition_id=None,
+        evidence=None,
+        terminated_unused=False,
+    ):
+        """Persist an idempotent paid/absorbed/unknown/release transition."""
+        operation = "transition_ctp_budget"
+        evidence = dict(evidence or {})
+        if transition_id is None:
+            transition_id = hashlib.sha256(
+                json.dumps(
+                    {
+                        "reservation_id": getattr(capability, "reservation_id", None),
+                        "transition": transition,
+                        "amount_cny": str(amount_cny),
+                        "evidence": self._budget_stringify(evidence),
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode()
+            ).hexdigest()
+        if not isinstance(transition_id, str) or not transition_id:
+            raise NormalizedApiError(operation, "budget_transition_id_required", definite_reject=True)
+        with self.mutex:
+            state = self._require_budget_reservation_locked(capability, operation=operation)
+            if transition in {"absorbed", "released"}:
+                if transition == "absorbed" and evidence.get("absorption_source_verified") is not True:
+                    raise NormalizedApiError(
+                        operation, "budget_absorption_unproven", definite_reject=True
+                    )
+                if transition == "released" and terminated_unused is not True:
+                    raise NormalizedApiError(
+                        operation, "budget_release_unproven", definite_reject=True
+                    )
+            if transition in {"unknown", "late_fill"}:
+                amount_cny = state.get("reserved_amount_cny", state["amount_cny"])
+            amount = self._budget_decimal(amount_cny, "transition_amount")
+            prior = next(
+                (item for item in state["transitions"] if item.get("transition_id") == transition_id),
+                None,
+            )
+            if prior is not None:
+                if prior.get("transition") != transition or prior.get("amount_cny") != amount:
+                    raise NormalizedApiError(
+                        operation, "budget_transition_conflict", definite_reject=True
+                    )
+                return self._budget_state_audit_locked(state)
+            row = {
+                "exchange_name": self._arm_venue or "CTP___FUTURE",
+                "account_fingerprint": state["context"]["account_fingerprint"],
+                "trading_day": state["context"]["trading_day"],
+                "connection_generation": state["context"]["connection_generation"],
+                "environment_profile": state["context"]["environment_profile"],
+                "reservation_id": capability.reservation_id,
+                "transition_id": transition_id,
+                "transition": transition,
+                "amount_cny": format(amount, "f"),
+                "terminated_unused": bool(terminated_unused),
+                "evidence": self._budget_stringify(evidence),
+            }
+            self._journal("ctp_budget_reservation_transition", row, allow_read_only=True)
+            state["transition_ids"].add(transition_id)
+            state["transitions"].append(
+                {"transition": transition, "amount_cny": amount, "transition_id": transition_id}
+            )
+            self._apply_budget_transition_state(state, transition, amount, row)
+            return self._budget_state_audit_locked(state)
+
+    update_ctp_budget_obligation = transition_ctp_budget
+
+    def ctp_budget_snapshot(self):
+        with self.mutex:
+            candidate, ordinary_cap = self._budget_candidate_limits_locked()
+            ordinary_reserved, total_reserved = self._budget_active_amounts_locked()
+            active = [
+                self._budget_state_audit_locked(state)
+                for state in self._ctp_budget_reservations.values()
+                if state.get("status") in {"active", "uncertain", "pending"}
+            ]
+            return {
+                "schema_version": BUDGET_SCHEMA_VERSION,
+                "candidate_budget_cny": format(candidate, "f"),
+                "ordinary_cap_cny": format(ordinary_cap, "f"),
+                "historical_min_pnl_cny": format(self._ctp_budget_floor_min_pnl_cny, "f"),
+                "valuation_unknown": self._ctp_budget_valuation_unknown,
+                "ordinary_reserved_cny": format(ordinary_reserved, "f"),
+                "total_reserved_cny": format(total_reserved, "f"),
+                "pending_reservations": sorted(self._ctp_budget_pending_reservations),
+                "uncertain_reservations": sorted(self._ctp_budget_uncertain_reservations),
+                "frozen_reason": self._ctp_budget_frozen_reason,
+                "production_status": (
+                    "PRODUCTION_BLOCKED_SELLER_OR_ACCOUNT_SOURCE"
+                    if self._ctp_budget_context is None
+                    else "BOUND_SYNTHETIC_OR_RUNTIME_CONTEXT"
+                ),
+                "reservations": active,
+            }
+
+    @staticmethod
+    def _validate_approval_payload_row(row, approval_hash):
+        payload = row.get("approval_payload")
+        if not isinstance(payload, dict):
+            raise ValueError("missing_approval_payload")
+        try:
+            encoded = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError):
+            raise ValueError("invalid_approval_payload") from None
+        if hashlib.sha256(encoded).hexdigest() != approval_hash:
+            raise ValueError("approval_hash_mismatch")
+        for field_name, expected in payload.items():
+            if field_name in {"schema_version", "algorithm"}:
+                continue
+            if row.get(field_name) != expected:
+                raise ValueError("approval_payload_row_mismatch")
 
     def _assert_writer_lease(self, operation="journal"):
         # Buffered file objects carry a shared cursor.  Keep every seek/read of
@@ -1910,6 +3527,7 @@ class _ExecutionSession:
                     "trade",
                     "trade_update",
                     *_RISK_TRANSITION_EVENTS,
+                    *_CTP_AUTHORIZATION_EVENTS,
                 }:
                     raise ValueError("unknown_journal_record")
                 embedded_identity = row.get("ledger_identity")
@@ -1919,7 +3537,9 @@ class _ExecutionSession:
                     else self._provider(row.get("exchange_name"))
                 )
                 if (
-                    provider in _CRYPTO_PROVIDERS or event in _RISK_TRANSITION_EVENTS
+                    provider in _CRYPTO_PROVIDERS
+                    or event in _RISK_TRANSITION_EVENTS
+                    or event in _CTP_AUTHORIZATION_EVENTS
                 ) and int(row.get("schema_version", 0) or 0) >= _JOURNAL_SCHEMA_VERSION:
                     row_epoch = int(row.get("fencing_epoch", -1))
                     row_owner = str(row.get("owner_token") or "")
@@ -1969,6 +3589,15 @@ class _ExecutionSession:
                         self._committed_loss_reset_id = transition_id
                         self._pending_loss_reset_id = None
                         self._pending_loss_reset_at = None
+                    continue
+                if event in _CTP_APPROVAL_EVENTS:
+                    self._load_approval_journal_row(event, row)
+                    continue
+                if event in _CTP_RECOVERY_EVENTS:
+                    self._load_recovery_journal_row(event, row)
+                    continue
+                if event in _CTP_BUDGET_EVENTS:
+                    self._load_budget_journal_row(event, row)
                     continue
                 if event == "client_id_reservation":
                     client_id = str(row.get("client_order_id") or "")
@@ -2095,16 +3724,28 @@ class _ExecutionSession:
                     "owner_token": self.owner_token,
                     "owner_pid": self.owner_pid,
                     "fencing_epoch": self.fencing_epoch,
-                    "strategy_id": self.config["strategy_id"],
-                    "strategy_identity_sha256": self.config["strategy_identity_sha256"],
+                    "strategy_id": (
+                        row.get("strategy_id")
+                        if event in _CTP_AUTHORIZATION_EVENTS
+                        else self.config["strategy_id"]
+                    ),
+                    "strategy_identity_sha256": (
+                        row.get("strategy_identity_sha256")
+                        if event in _CTP_AUTHORIZATION_EVENTS
+                        else self.config["strategy_identity_sha256"]
+                    ),
                     "execution_arm_proof_sha256": (
                         self._arm_proof_sha256
                         or (self._last_arm_proof_sha256 if allow_read_only else None)
                     ),
                     "connection_generation": (
-                        self._arm_proof.get("connection_generation")
-                        if isinstance(self._arm_proof, Mapping)
-                        else None
+                        row.get("connection_generation")
+                        if event in _CTP_AUTHORIZATION_EVENTS
+                        else (
+                            self._arm_proof.get("connection_generation")
+                            if isinstance(self._arm_proof, Mapping)
+                            else None
+                        )
                     ),
                     "ledger_identity": ledger_identity,
                     "event": event,
@@ -2115,6 +3756,7 @@ class _ExecutionSession:
                 if (
                     venue
                     and self._provider(venue) == "CTP"
+                    and event not in _CTP_AUTHORIZATION_EVENTS
                     and isinstance(self._arm_proof, Mapping)
                 ):
                     envelope["trading_day"] = self._arm_proof["trading_day"]
@@ -2135,6 +3777,293 @@ class _ExecutionSession:
             raise NormalizedApiError(
                 "journal", "persistence_failed", definite_reject=True
             ) from None
+
+    @staticmethod
+    def _approval_snapshot_from_record(record):
+        snapshot = record.get("revocation_snapshot")
+        if not isinstance(snapshot, dict):
+            raise NormalizedApiError(
+                "ctp_execution_approval",
+                "ctp_approval_revocation_snapshot_required",
+                definite_reject=True,
+            )
+        version = snapshot.get("version")
+        if isinstance(version, bool) or type(version) is not int or version <= 0:
+            raise NormalizedApiError(
+                "ctp_execution_approval",
+                "ctp_approval_invalid_revocation_version",
+                definite_reject=True,
+            )
+        snapshot_hash = str(record.get("revocation_snapshot_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", snapshot_hash):
+            raise NormalizedApiError(
+                "ctp_execution_approval",
+                "ctp_approval_revocation_snapshot_required",
+                definite_reject=True,
+            )
+        return snapshot, version, snapshot_hash
+
+    def _append_approval_revocation_snapshot(
+        self, record, snapshot, version, snapshot_hash
+    ):
+        current = self._ctp_approval_revocation_snapshot_version
+        if version < current:
+            raise NormalizedApiError(
+                "ctp_execution_approval",
+                "ctp_approval_revocation_version_rollback",
+                definite_reject=True,
+            )
+        if version == current:
+            if self._ctp_approval_revocation_snapshot_sha256 not in (
+                None,
+                snapshot_hash,
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revocation_snapshot_conflict",
+                    definite_reject=True,
+                )
+            return
+        row = {
+            "approval_id": str(record.get("approval_id") or f"revocation-{version}"),
+            "nonce": str(record.get("nonce") or f"revocation-{version}"),
+            "approval_sha256": record.get("approval_sha256"),
+            "trust_root_sha256": record.get("trust_root_sha256"),
+            "revocation_snapshot_version": version,
+            "revocation_snapshot_sha256": snapshot_hash,
+            "revocation_snapshot": dict(snapshot),
+            "approval_payload": record.get("approval_payload"),
+            "revoked_approval_ids": list(snapshot.get("revoked_approval_ids", [])),
+            "revoked_nonces": list(snapshot.get("revoked_nonces", [])),
+            "exchange_name": record.get("exchange_name", "CTP___FUTURE"),
+            "account_fingerprint": record.get("account_fingerprint"),
+            "trading_day": record.get("trading_day"),
+            "connection_generation": record.get("connection_generation"),
+            "environment_profile": record.get("environment_profile"),
+            "strategy_id": record.get("strategy_id"),
+            "strategy_identity_sha256": record.get("strategy_identity_sha256"),
+        }
+        self._journal(
+            "ctp_execution_approval_revocation_snapshot",
+            row,
+            allow_read_only=True,
+        )
+        self._ctp_approval_revocation_snapshot_version = version
+        self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
+        self._ctp_approval_revoked_ids.update(row["revoked_approval_ids"])
+        self._ctp_approval_revoked_nonces.update(row["revoked_nonces"])
+
+    def record_ctp_execution_approval_preauthorization(
+        self, record, *, transition_guard=None
+    ):
+        """Persist a verified read-only preauthorization without consuming it."""
+        with self.mutex:
+            self._ensure_approval_writer()
+            if transition_guard is not None:
+                record = transition_guard("post_lease", record)
+            approval_id, nonce = self._approval_row_identity(record)
+            if approval_id in self._ctp_approval_pre_authorized_ids:
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_already_preauthorized",
+                    definite_reject=True,
+                )
+            if (
+                approval_id in self._ctp_approval_consumed_ids
+                or nonce in self._ctp_approval_consumed_nonces
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_already_consumed",
+                    definite_reject=True,
+                )
+            if (
+                approval_id in self._ctp_approval_revoked_ids
+                or nonce in self._ctp_approval_revoked_nonces
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revoked",
+                    definite_reject=True,
+                )
+            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(
+                record
+            )
+            if approval_id in snapshot.get(
+                "revoked_approval_ids", []
+            ) or nonce in snapshot.get("revoked_nonces", []):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revoked",
+                    definite_reject=True,
+                )
+            if version < self._ctp_approval_revocation_snapshot_version:
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revocation_version_rollback",
+                    definite_reject=True,
+                )
+            if (
+                version == self._ctp_approval_revocation_snapshot_version
+                and self._ctp_approval_revocation_snapshot_sha256
+                not in (None, snapshot_hash)
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revocation_snapshot_conflict",
+                    definite_reject=True,
+                )
+            self._journal(
+                "ctp_execution_approval_pre_authorized",
+                record,
+                allow_read_only=True,
+            )
+            self._ctp_approval_pre_authorized_ids.add(approval_id)
+            self._ctp_approval_revocation_snapshot_version = max(
+                version, self._ctp_approval_revocation_snapshot_version
+            )
+            self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
+            self._ctp_approval_revoked_ids.update(
+                snapshot.get("revoked_approval_ids", [])
+            )
+            self._ctp_approval_revoked_nonces.update(snapshot.get("revoked_nonces", []))
+            if transition_guard is not None:
+                transition_guard("post_commit", record)
+            return {
+                "approval_id": approval_id,
+                "nonce": nonce,
+                "pre_authorized": True,
+                "market_data_only": bool(self.config["market_data_only"]),
+                "revocation_snapshot_version": version,
+            }
+
+    def consume_ctp_execution_approval(self, record, *, transition_guard=None):
+        """Durably consume one approval id/nonce before returning a capability."""
+        with self.mutex:
+            if self.persistence_failed:
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_consumption_uncertain",
+                    definite_reject=True,
+                )
+            self._ensure_approval_writer()
+            if transition_guard is not None:
+                record = transition_guard("post_lease", record)
+            approval_id, nonce = self._approval_row_identity(record)
+            if (
+                approval_id in self._ctp_approval_consumed_ids
+                or nonce in self._ctp_approval_consumed_nonces
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_already_consumed",
+                    definite_reject=True,
+                )
+            if (
+                approval_id in self._ctp_approval_pending_ids
+                or nonce in self._ctp_approval_pending_nonces
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_consumption_uncertain",
+                    definite_reject=True,
+                )
+            if (
+                approval_id in self._ctp_approval_revoked_ids
+                or nonce in self._ctp_approval_revoked_nonces
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revoked",
+                    definite_reject=True,
+                )
+            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(
+                record
+            )
+            if approval_id in snapshot.get(
+                "revoked_approval_ids", []
+            ) or nonce in snapshot.get("revoked_nonces", []):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revoked",
+                    definite_reject=True,
+                )
+            if version < self._ctp_approval_revocation_snapshot_version:
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revocation_version_rollback",
+                    definite_reject=True,
+                )
+            if (
+                version == self._ctp_approval_revocation_snapshot_version
+                and self._ctp_approval_revocation_snapshot_sha256
+                not in (None, snapshot_hash)
+            ):
+                raise NormalizedApiError(
+                    "ctp_execution_approval",
+                    "ctp_approval_revocation_snapshot_conflict",
+                    definite_reject=True,
+                )
+            # Start and completion records carry the complete trusted snapshot.
+            # If completion fails after the start is durable, restart recovery
+            # sees the pending nonce and refuses reuse.
+            # Set the in-memory fence before the first write as well: a
+            # completion failure (or an injected writer error) must be
+            # conservative even when the process remains alive.
+            self._ctp_approval_pending_ids.add(approval_id)
+            self._ctp_approval_pending_nonces.add(nonce)
+            self._journal(
+                "ctp_execution_approval_consumption_started",
+                record,
+                allow_read_only=True,
+            )
+            # The explicit writer lease above makes this a durable journal
+            # operation even for market-data-only sessions.  The event is
+            # written before the in-memory consumed sets are changed.
+            self._journal(
+                "ctp_execution_approval_consumed",
+                record,
+                allow_read_only=True,
+            )
+            self._ctp_approval_consumed_ids.add(approval_id)
+            self._ctp_approval_consumed_nonces.add(nonce)
+            self._ctp_approval_pending_ids.discard(approval_id)
+            self._ctp_approval_pending_nonces.discard(nonce)
+            self._ctp_approval_revocation_snapshot_version = max(
+                version, self._ctp_approval_revocation_snapshot_version
+            )
+            self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
+            self._ctp_approval_revoked_ids.update(
+                snapshot.get("revoked_approval_ids", [])
+            )
+            self._ctp_approval_revoked_nonces.update(snapshot.get("revoked_nonces", []))
+            if transition_guard is not None:
+                transition_guard("post_commit", record)
+            return {
+                "approval_id": approval_id,
+                "nonce": nonce,
+                "consumed": True,
+                "revocation_snapshot_version": version,
+                "market_data_only": bool(self.config["market_data_only"]),
+            }
+
+    def record_ctp_execution_approval_revocation_snapshot(self, record):
+        """Persist a newer trusted revocation snapshot in the existing journal."""
+        with self.mutex:
+            self._ensure_approval_writer()
+            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(
+                record
+            )
+            previous = self._ctp_approval_revocation_snapshot_version
+            self._append_approval_revocation_snapshot(
+                record, snapshot, version, snapshot_hash
+            )
+            return {
+                "revocation_snapshot_version": self._ctp_approval_revocation_snapshot_version,
+                "updated": version > previous,
+                "revoked_approval_ids": sorted(self._ctp_approval_revoked_ids),
+                "revoked_nonces": sorted(self._ctp_approval_revoked_nonces),
+            }
 
     def _journal_risk_transition(self, event, transition_id=None):
         """Append and apply one fenced account-loss transition."""
@@ -2192,7 +4121,17 @@ class _ExecutionSession:
         self.config["market_data_only"] = True
         self._arm_proof_sha256 = None
         self._arm_state_reader = None
+        self._ctp_execution_authorization_context = None
         self._recovery_mode = False
+        self._recovery_authorized_plan = None
+        self._recovery_remaining_plan = None
+        self._recovery_write_guard = None
+        self._recovery_budget_request = None
+        self._recovery_budget_enforced = False
+        self._recovery_budget_capability = None
+        self._recovery_private_ingress_epoch_fence = None
+        self._recovery_private_ingress_revision_fence = None
+        self._recovery_private_event_revision_fence = None
         if self._arm_revoked_reason is None:
             self._arm_revoked_reason = reason
             self._arm_revoked_error_code = (
@@ -2252,6 +4191,7 @@ class _ExecutionSession:
                 self.config["market_data_only"] = True
                 self._arm_proof_sha256 = None
                 self._arm_state_reader = None
+                self._ctp_execution_authorization_context = None
                 self._recovery_mode = False
                 if self._arm_revoked_generation is None:
                     self._arm_revoked_reason = None
@@ -2287,6 +4227,7 @@ class _ExecutionSession:
         self._arm_proof = None
         self._arm_proof_sha256 = None
         self._arm_state_reader = None
+        self._ctp_execution_authorization_context = None
 
     def _current_arm_error(self):
         reader = self._arm_state_reader
@@ -2309,13 +4250,14 @@ class _ExecutionSession:
             raise NormalizedApiError(
                 operation, "execution_arm_venue_mismatch", definite_reject=True
             )
-        expected = _canonical_ctp_instrument(self._arm_proof.get("instrument"))
-        observed = (
-            _canonical_ctp_instrument(symbol, exchange_id)
-            if _canonical_ctp_exchange(exchange_id)
-            else ""
+        expected = _execution_arm_instruments(self._arm_proof)
+        observed = _canonical_ctp_execution_instrument(
+            self._arm_proof,
+            symbol,
+            exchange_id,
+            native_wire=True,
         )
-        if not expected or observed != expected:
+        if not expected or observed not in expected:
             raise NormalizedApiError(
                 operation, "execution_arm_instrument_mismatch", definite_reject=True
             )
@@ -2339,6 +4281,16 @@ class _ExecutionSession:
                 "execution_identity_missing_or_mismatch",
                 definite_reject=True,
             )
+        authorization = self._ctp_execution_authorization_context
+        if authorization is not None and (
+            strategy_identity != authorization.get("strategy_identity_sha256")
+            or cycle_id != authorization.get("execution_cycle_id")
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_authorization_identity_mismatch",
+                definite_reject=True,
+            )
         closing = getattr(request, "offset", None) in {
             "close",
             "close_today",
@@ -2353,8 +4305,19 @@ class _ExecutionSession:
                 operation, "execution_recovery_not_armed", definite_reject=True
             )
 
-    @staticmethod
-    def _recovery_cancel_matches(request, allowed):
+    def _recovery_cancel_matches(self, request, allowed):
+        observed_instrument = _canonical_ctp_execution_instrument(
+            self._arm_proof,
+            request.symbol,
+            request.exchange_id,
+        )
+        expected_instrument = _canonical_ctp_execution_instrument(
+            self._arm_proof,
+            allowed.get("symbol"),
+            allowed.get("exchange_id"),
+        )
+        if not observed_instrument or observed_instrument != expected_instrument:
+            return False
         request_values = {
             "client_order_id": request.client_order_id,
             "order_id": request.order_id,
@@ -2394,14 +4357,18 @@ class _ExecutionSession:
                     definite_reject=True,
                 )
             for index, allowed in enumerate(plan.get("allowed_closes") or ()):
-                observed_instrument = _canonical_ctp_instrument(
-                    request.symbol, request.exchange_id
+                observed_instrument = _canonical_ctp_execution_instrument(
+                    self._arm_proof,
+                    request.symbol,
+                    request.exchange_id,
                 )
                 if (
                     request.execution_cycle_id == allowed.get("execution_cycle_id")
                     and observed_instrument
-                    == _canonical_ctp_instrument(
-                        allowed.get("symbol"), allowed.get("exchange_id")
+                    == _canonical_ctp_execution_instrument(
+                        self._arm_proof,
+                        allowed.get("symbol"),
+                        allowed.get("exchange_id"),
                     )
                     and request.side.value == allowed.get("side")
                     and request.position_side == allowed.get("position_side")
@@ -2446,15 +4413,37 @@ class _ExecutionSession:
                 "execution_recovery_plan_changed",
                 definite_reject=True,
             )
-        if kind == "close":
-            remaining = Decimal(str(values[index]["quantity"])) - Decimal(quantity)
-            if remaining > 0:
-                values[index] = {**values[index], "quantity": format(remaining, "f")}
+
+        expected_plan = self._recovery_remaining_plan
+        expected_values = None
+        if expected_plan is not None:
+            expected_values = list(expected_plan.get(key) or ())
+            if expected_values != values or not 0 <= index < len(expected_values):
+                raise NormalizedApiError(
+                    "execution_recovery",
+                    "execution_recovery_plan_changed",
+                    definite_reject=True,
+                )
+
+        def consume(values_to_update):
+            if kind == "close":
+                remaining = Decimal(str(values_to_update[index]["quantity"])) - Decimal(
+                    quantity
+                )
+                if remaining > 0:
+                    values_to_update[index] = {
+                        **values_to_update[index],
+                        "quantity": format(remaining, "f"),
+                    }
+                else:
+                    values_to_update.pop(index)
             else:
-                values.pop(index)
-        else:
-            values.pop(index)
-        self._recovery_plan[key] = values
+                values_to_update.pop(index)
+            return values_to_update
+
+        self._recovery_plan[key] = consume(values)
+        if expected_plan is not None:
+            expected_plan[key] = consume(expected_values)
 
     def _arm_load_state(self):
         names = (
@@ -2544,16 +4533,14 @@ class _ExecutionSession:
                         operation, "order_journal_required", definite_reject=True
                     )
                 environment = (
-                    str(
-                        self.config["required_environments"].get(arm_venue)
-                        or normalized["environment_profile"]
-                    )
+                    str(self.config["required_environments"].get(arm_venue) or "demo")
                     .strip()
                     .lower()
                 )
                 bound_identity = {
                     "provider": "CTP",
                     "environment": environment,
+                    "environment_profile": normalized["environment_profile"],
                     "account_id": normalized["account_fingerprint"],
                     "account_fingerprint": normalized["account_fingerprint"],
                 }
@@ -2574,6 +4561,8 @@ class _ExecutionSession:
                 self._recovery_mode = False
                 self._recovery_refresh_in_progress = True
                 self._recovery_plan = None
+                self._recovery_authorized_plan = None
+                self._recovery_remaining_plan = None
                 self._recovery_completed = False
                 self._recovery_journal_error = None
 
@@ -2719,12 +4708,12 @@ class _ExecutionSession:
         return quantity
 
     @classmethod
-    def _recovery_row_instrument(cls, row):
+    def _recovery_row_instrument(cls, row, *, proof=None):
         symbol = cls._recovery_value(
             row, "symbol", "instrument", "instrument_id", "InstrumentID"
         )
         exchange_id = cls._recovery_value(row, "exchange_id", "ExchangeID")
-        return _canonical_ctp_instrument(symbol, exchange_id)
+        return _canonical_ctp_execution_instrument(proof, symbol, exchange_id)
 
     @classmethod
     def _recovery_row_side(cls, row, *, position=False):
@@ -2780,7 +4769,9 @@ class _ExecutionSession:
             return "recovery_account_mismatch"
         if str(row.get("trading_day") or "") != proof["trading_day"]:
             return "recovery_trading_day_mismatch"
-        if self._recovery_row_instrument(row) != proof["instrument"]:
+        if self._recovery_row_instrument(
+            row, proof=proof
+        ) not in _execution_arm_instruments(proof):
             return "recovery_instrument_mismatch"
         cycle_id = row.get("execution_cycle_id")
         if not isinstance(cycle_id, str) or not cycle_id or len(cycle_id) > 128:
@@ -2931,22 +4922,26 @@ class _ExecutionSession:
                     return True
         except (InvalidOperation, TypeError, ValueError):
             return True
-        intent_cycles = {
-            (str(intent.get("trading_day") or ""), intent.get("execution_cycle_id"))
-            for intent in intents
-        }
+        bundle_scope = _is_execution_arm_bundle(proof)
+
+        def cycle_key(row):
+            key = (
+                str(row.get("trading_day") or ""),
+                row.get("execution_cycle_id"),
+            )
+            if bundle_scope:
+                return (*key, self._recovery_row_instrument(row, proof=proof))
+            return key
+
+        intent_cycles = {cycle_key(intent) for intent in intents}
         exposure = defaultdict(lambda: {"long": Decimal(0), "short": Decimal(0)})
         try:
             for trade in trades:
-                cycle = (
-                    str(trade.get("trading_day") or ""),
-                    trade["execution_cycle_id"],
-                )
+                cycle = cycle_key(trade)
                 if (
                     cycle not in intent_cycles
                     or sum(
-                        str(intent.get("trading_day") or "") == cycle[0]
-                        and intent.get("execution_cycle_id") == cycle[1]
+                        cycle_key(intent) == cycle
                         and self._recovery_order_matches(intent, trade)
                         for intent in intents
                     )
@@ -3052,11 +5047,18 @@ class _ExecutionSession:
             return "recovery_remote_generation_missing_or_mismatch"
         if row.get("evidence_complete") is not True:
             return "recovery_remote_evidence_incomplete"
-        if self._recovery_row_instrument(row) != proof["instrument"]:
+        if self._recovery_row_instrument(
+            row, proof=proof
+        ) not in _execution_arm_instruments(proof):
             return "recovery_remote_instrument_mismatch"
         return None
 
     def _recovery_active_order_matches_intent(self, intent, order):
+        proof = self._arm_proof
+        if self._recovery_row_instrument(
+            intent, proof=proof
+        ) != self._recovery_row_instrument(order, proof=proof):
+            return False
         if not self._recovery_order_matches(intent, order):
             return False
         try:
@@ -3102,12 +5104,11 @@ class _ExecutionSession:
             and hedge_flag == "1"
         )
 
-    @classmethod
-    def _recovery_trade_key(cls, row):
+    def _recovery_trade_key(self, row):
         return (
-            str(cls._recovery_value(row, "trading_day", "TradingDay") or ""),
-            cls._recovery_row_instrument(row),
-            str(cls._recovery_value(row, "trade_id", "TradeID") or ""),
+            str(self._recovery_value(row, "trading_day", "TradingDay") or ""),
+            self._recovery_row_instrument(row, proof=self._arm_proof),
+            str(self._recovery_value(row, "trade_id", "TradeID") or ""),
         )
 
     def _recovery_barrier_errors(self, snapshot, barrier):
@@ -3269,6 +5270,462 @@ class _ExecutionSession:
             and ingress_revisions.get("end") == self._recovery_private_ingress_revision
         )
 
+    def _build_bundle_recovery_plan(
+        self,
+        snapshot,
+        *,
+        stable=None,
+        barrier=None,
+        failure_reason=None,
+    ):
+        """Build a fail-closed recovery plan with C/P/F exposure kept per leg.
+
+        This is intentionally separate from the Iteration 22 single-contract
+        planner below.  V1 output and matching semantics stay byte-for-byte
+        compatible, while V2 never nets a future, call, and put into one
+        position bucket.  Any journal or remote row outside the signed bundle
+        is evidence for manual intervention rather than silently ignored.
+        """
+        proof = self._arm_proof
+        proof_sha256 = self._last_arm_proof_sha256
+        instruments = _execution_arm_instruments(proof)
+        zero = dict.fromkeys(_RECOVERY_POSITION_KEYS, "0")
+        remote_by_instrument = {instrument: dict(zero) for instrument in instruments}
+        owned_by_instrument = {instrument: dict(zero) for instrument in instruments}
+        frozen_position = {
+            instrument: {key: Decimal(0) for key in _RECOVERY_POSITION_KEYS}
+            for instrument in instruments
+        }
+        frozen_by_side = {
+            instrument: {"long": Decimal(0), "short": Decimal(0)}
+            for instrument in instruments
+        }
+        reasons = []
+        if failure_reason not in (None, ""):
+            reason = str(failure_reason).strip().lower()
+            reasons.append(
+                reason if _ARM_REASON_RE.fullmatch(reason) else "recovery_query_failed"
+            )
+        intents, journal_trades, journal_errors = self._recovery_journal_records()
+        reasons.extend(journal_errors)
+        journal_sha256 = None
+        if self.path is not None and self.path.is_file():
+            try:
+                journal_sha256 = hashlib.sha256(self.path.read_bytes()).hexdigest()
+            except OSError:
+                reasons.append("recovery_journal_unreadable")
+        if not isinstance(snapshot, Mapping) or set(snapshot) != {
+            "positions",
+            "orders",
+            "trades",
+        }:
+            reasons.append("recovery_snapshot_invalid")
+            positions = orders = trades = ()
+        else:
+            positions = snapshot["positions"]
+            orders = snapshot["orders"]
+            trades = snapshot["trades"]
+            if not all(isinstance(value, (list, tuple)) for value in snapshot.values()):
+                reasons.append("recovery_snapshot_invalid")
+                positions = orders = trades = ()
+        del stable  # Callers cannot self-certify a stable recovery snapshot.
+        reasons.extend(self._recovery_barrier_errors(snapshot, barrier))
+
+        try:
+            for row in positions:
+                if not isinstance(row, Mapping):
+                    raise ValueError
+                identity_error = self._recovery_remote_identity_error(row)
+                if identity_error is not None:
+                    reasons.append(identity_error)
+                    continue
+                instrument = self._recovery_row_instrument(row, proof=proof)
+                quantity = self._recovery_quantity(
+                    row, "quantity", "position_volume", "Position", "volume", "size"
+                )
+                if quantity == 0:
+                    continue
+                side = self._recovery_row_side(row, position=True)
+                if side not in {"long", "short"}:
+                    reasons.append("ambiguous_position_side")
+                    continue
+                today_value = self._recovery_value(
+                    row, "today", "today_position", "TodayPosition"
+                )
+                yesterday_value = self._recovery_value(
+                    row, "yesterday", "yd_position", "YdPosition"
+                )
+                if today_value is None or yesterday_value is None:
+                    reasons.append("position_bucket_evidence_missing")
+                    continue
+                today = self._recovery_quantity({"value": today_value}, "value")
+                yesterday = self._recovery_quantity({"value": yesterday_value}, "value")
+                if today < 0 or yesterday < 0 or today + yesterday != quantity:
+                    reasons.append("position_bucket_mismatch")
+                    continue
+                current = remote_by_instrument[instrument]
+                current[f"{side}_today"] = self._canonical_recovery_number(
+                    Decimal(current[f"{side}_today"]) + today
+                )
+                current[f"{side}_yesterday"] = self._canonical_recovery_number(
+                    Decimal(current[f"{side}_yesterday"]) + yesterday
+                )
+                frozen_names = (
+                    ("long_frozen", "LongFrozen")
+                    if side == "long"
+                    else ("short_frozen", "ShortFrozen")
+                )
+                frozen_value = self._recovery_value(row, *frozen_names)
+                if frozen_value is None:
+                    reasons.append("position_frozen_evidence_missing")
+                    continue
+                frozen = self._recovery_quantity({"value": frozen_value}, "value")
+                if frozen > quantity:
+                    reasons.append("position_frozen_exceeds_position")
+                    continue
+                frozen_by_side[instrument][side] += frozen
+                exchange = instrument.partition(".")[0]
+                if frozen and today and yesterday and exchange in {"SHFE", "INE"}:
+                    reasons.append("position_frozen_bucket_ambiguous")
+                elif frozen:
+                    bucket = "today" if today else "yesterday"
+                    frozen_position[instrument][f"{side}_{bucket}"] += frozen
+        except (InvalidOperation, ValueError, TypeError):
+            reasons.append("ctp_position_schema_invalid")
+
+        intent_order_keys = set()
+        for intent in intents:
+            client_identity = str(
+                self._recovery_value(intent, "client_order_id", "order_ref", "OrderRef")
+                or ""
+            ).strip()
+            if not client_identity or client_identity in intent_order_keys:
+                reasons.append("recovery_intent_identity_invalid")
+            intent_order_keys.add(client_identity)
+
+        journal_trade_by_key = {}
+        cycle_exposure = defaultdict(
+            lambda: {
+                instrument: {"long": Decimal(0), "short": Decimal(0)}
+                for instrument in instruments
+            }
+        )
+        try:
+            for trade in journal_trades:
+                key = self._recovery_trade_key(trade)
+                instrument = key[1]
+                if not key[2] or key in journal_trade_by_key:
+                    reasons.append("recovery_trade_identity_invalid")
+                    continue
+                matches = [
+                    intent
+                    for intent in intents
+                    if self._recovery_row_instrument(intent, proof=proof) == instrument
+                    and self._recovery_order_matches(intent, trade)
+                ]
+                if len(matches) != 1:
+                    reasons.append("recovery_trade_intent_mismatch")
+                    continue
+                journal_trade_by_key[key] = trade
+                quantity = self._recovery_quantity(
+                    trade, "size", "quantity", "volume", "Volume"
+                )
+                side = self._recovery_row_side(trade)
+                offset = self._canonical_recovery_offset(
+                    self._recovery_value(trade, "offset", "trade_offset", "OffsetFlag")
+                )
+                cycle = trade["execution_cycle_id"]
+                role = trade["execution_role"]
+                if side not in {"buy", "sell"}:
+                    reasons.append("recovery_trade_side_invalid")
+                elif role == "entry" and offset == "open":
+                    cycle_exposure[cycle][instrument][
+                        "long" if side == "buy" else "short"
+                    ] += quantity
+                elif role in {"exit", "recovery_exit"} and offset in {
+                    "close",
+                    "close_today",
+                    "close_yesterday",
+                }:
+                    position_side = self._recovery_row_side(trade, position=True)
+                    if position_side not in {"long", "short"}:
+                        position_side = "long" if side == "sell" else "short"
+                    if (position_side == "long" and side != "sell") or (
+                        position_side == "short" and side != "buy"
+                    ):
+                        reasons.append("recovery_trade_close_direction_invalid")
+                    else:
+                        cycle_exposure[cycle][instrument][position_side] -= quantity
+                else:
+                    reasons.append("recovery_trade_role_offset_invalid")
+        except (InvalidOperation, ValueError, TypeError, KeyError):
+            reasons.append("ctp_trade_schema_invalid")
+
+        remote_trade_keys = set()
+        for trade in trades:
+            if not isinstance(trade, Mapping):
+                reasons.append("ctp_trade_schema_invalid")
+                continue
+            identity_error = self._recovery_remote_identity_error(trade)
+            if identity_error is not None:
+                reasons.append(identity_error)
+                continue
+            key = self._recovery_trade_key(trade)
+            if not key[2] or key in remote_trade_keys:
+                reasons.append("recovery_remote_trade_identity_invalid")
+                continue
+            remote_trade_keys.add(key)
+            if key not in journal_trade_by_key:
+                reasons.append("external_or_unowned_trade_present")
+        if set(journal_trade_by_key) != remote_trade_keys:
+            reasons.append("recovery_trade_ledger_mismatch")
+
+        active_orders = []
+        order_cycles = set()
+        for order in orders:
+            if not isinstance(order, Mapping):
+                reasons.append("ctp_order_schema_invalid")
+                continue
+            identity_error = self._recovery_remote_identity_error(order)
+            if identity_error is not None:
+                reasons.append(identity_error)
+                continue
+            if not self._recovery_order_active(order):
+                continue
+            instrument = self._recovery_row_instrument(order, proof=proof)
+            matches = [
+                intent
+                for intent in intents
+                if self._recovery_row_instrument(intent, proof=proof) == instrument
+                and self._recovery_active_order_matches_intent(intent, order)
+            ]
+            if len(matches) != 1:
+                reasons.append("external_or_unowned_active_order")
+                continue
+            intent = matches[0]
+            cycle = intent["execution_cycle_id"]
+            order_cycles.add(cycle)
+            active_orders.append((order, intent))
+
+        nonzero_cycles = {
+            cycle
+            for cycle, per_instrument in cycle_exposure.items()
+            if any(
+                amount != 0
+                for exposure in per_instrument.values()
+                for amount in exposure.values()
+            )
+        }
+        cycles = nonzero_cycles | order_cycles
+        if len(cycles) > 1:
+            reasons.append("multiple_execution_cycles_present")
+        cycle_id = next(iter(cycles), None) if len(cycles) == 1 else None
+        if cycle_id is not None:
+            for instrument in instruments:
+                exposure = cycle_exposure[cycle_id][instrument]
+                if exposure["long"] < 0 or exposure["short"] < 0:
+                    reasons.append("recovery_owned_position_negative")
+                    continue
+                remote = remote_by_instrument[instrument]
+                remote_long = Decimal(remote["long_today"]) + Decimal(
+                    remote["long_yesterday"]
+                )
+                remote_short = Decimal(remote["short_today"]) + Decimal(
+                    remote["short_yesterday"]
+                )
+                if exposure["long"] != remote_long or exposure["short"] != remote_short:
+                    reasons.append("recovery_owned_position_mismatch")
+                else:
+                    owned_by_instrument[instrument] = dict(remote)
+        elif any(
+            Decimal(value) != 0
+            for position in remote_by_instrument.values()
+            for value in position.values()
+        ):
+            reasons.append("unowned_position_present")
+
+        for position in remote_by_instrument.values():
+            remote_long = Decimal(position["long_today"]) + Decimal(
+                position["long_yesterday"]
+            )
+            remote_short = Decimal(position["short_today"]) + Decimal(
+                position["short_yesterday"]
+            )
+            if remote_long > 0 and remote_short > 0:
+                reasons.append("dual_side_position_present")
+
+        allowed_cancels = []
+        for order, intent in active_orders:
+            allowed_cancels.append(
+                {
+                    "execution_cycle_id": intent["execution_cycle_id"],
+                    "symbol": self._recovery_value(
+                        intent, "symbol", "InstrumentID", "instrument_id"
+                    ),
+                    "exchange_id": self._recovery_value(
+                        intent, "exchange_id", "ExchangeID"
+                    ),
+                    "client_order_id": self._recovery_value(
+                        order, "client_order_id", "OrderRef", "order_ref"
+                    ),
+                    "order_id": self._recovery_value(
+                        order, "order_id", "OrderSysID", "venue_order_id"
+                    ),
+                    "order_ref": self._recovery_value(
+                        order, "order_ref", "OrderRef", "client_order_id"
+                    ),
+                    "front_id": self._recovery_value(order, "front_id", "FrontID"),
+                    "session_id": self._recovery_value(
+                        order, "session_id", "SessionID"
+                    ),
+                }
+            )
+
+        allowed_closes = []
+        if not allowed_cancels and cycle_id is not None and not reasons:
+            for canonical_instrument in instruments:
+                exchange_id, instrument_id = canonical_instrument.split(".", 1)
+                remote = remote_by_instrument[canonical_instrument]
+                remote_long = Decimal(remote["long_today"]) + Decimal(
+                    remote["long_yesterday"]
+                )
+                remote_short = Decimal(remote["short_today"]) + Decimal(
+                    remote["short_yesterday"]
+                )
+                if exchange_id in {"SHFE", "INE"}:
+                    close_buckets = (
+                        ("long", "today", "close_today"),
+                        ("long", "yesterday", "close_yesterday"),
+                        ("short", "today", "close_today"),
+                        ("short", "yesterday", "close_yesterday"),
+                    )
+                    for position_side, bucket, offset in close_buckets:
+                        key = f"{position_side}_{bucket}"
+                        available = (
+                            Decimal(remote[key])
+                            - frozen_position[canonical_instrument][key]
+                        )
+                        if available <= 0:
+                            continue
+                        allowed_closes.append(
+                            {
+                                "execution_cycle_id": cycle_id,
+                                "symbol": instrument_id,
+                                "exchange_id": exchange_id,
+                                "position_side": position_side,
+                                "side": "sell" if position_side == "long" else "buy",
+                                "offset": offset,
+                                "quantity": self._canonical_recovery_number(available),
+                                "quantity_unit": "contracts",
+                            }
+                        )
+                else:
+                    for position_side, total in (
+                        ("long", remote_long),
+                        ("short", remote_short),
+                    ):
+                        available = (
+                            total - frozen_by_side[canonical_instrument][position_side]
+                        )
+                        if available <= 0:
+                            continue
+                        allowed_closes.append(
+                            {
+                                "execution_cycle_id": cycle_id,
+                                "symbol": instrument_id,
+                                "exchange_id": exchange_id,
+                                "position_side": position_side,
+                                "side": "sell" if position_side == "long" else "buy",
+                                "offset": "close",
+                                "quantity": self._canonical_recovery_number(available),
+                                "quantity_unit": "contracts",
+                            }
+                        )
+
+        any_remote_position = any(
+            Decimal(value) != 0
+            for position in remote_by_instrument.values()
+            for value in position.values()
+        )
+        if (
+            not reasons
+            and cycle_id is not None
+            and not allowed_cancels
+            and not allowed_closes
+            and any_remote_position
+        ):
+            reasons.append("recovery_no_safe_action")
+
+        if reasons:
+            status = "MANUAL_INTERVENTION"
+            allowed_cancels = []
+            allowed_closes = []
+            allowed_actions = []
+            cycle_id = None
+        elif cycle_id is None and not active_orders and not any_remote_position:
+            status = "FLAT"
+            allowed_actions = ["complete"]
+        else:
+            status = "RECOVERABLE"
+            allowed_actions = []
+            if allowed_cancels:
+                allowed_actions.append("cancel")
+            elif allowed_closes:
+                allowed_actions.append("close")
+
+        primary = proof["instrument"]
+        material = {
+            "schema_version": "bt_api.execution-recovery.v1",
+            "status": status,
+            "recovery_required": status != "FLAT",
+            "can_arm_execution": status == "FLAT",
+            "can_arm_recovery": status == "RECOVERABLE",
+            "account_fingerprint": proof["account_fingerprint"],
+            "strategy_id": self.config["strategy_id"],
+            "strategy_identity_sha256": self.config["strategy_identity_sha256"],
+            "instrument": primary,
+            "scope_version": proof["scope_version"],
+            "authorized_instruments": list(instruments),
+            "trading_day": proof["trading_day"],
+            "connection_generation": proof["connection_generation"],
+            "fencing_epoch": self.fencing_epoch,
+            "proof_sha256": proof_sha256,
+            "execution_cycle_id": cycle_id,
+            # Retain the V1-shaped primary-leg fields for callers that only
+            # display a primary contract; all recovery decisions use the maps.
+            "remote_position": remote_by_instrument[primary],
+            "owned_position": owned_by_instrument[primary],
+            "remote_positions_by_instrument": remote_by_instrument,
+            "owned_positions_by_instrument": owned_by_instrument,
+            "allowed_closes": allowed_closes,
+            "allowed_cancels": allowed_cancels,
+            "allowed_actions": allowed_actions,
+            "unknown_ids": sorted(self._unknown_ids()) if reasons else [],
+            "evidence_errors": sorted(set(reasons)),
+            "journal_sha256": journal_sha256,
+            "query_barrier": deepcopy(barrier) if barrier is not None else None,
+        }
+        token = None
+        if status != "MANUAL_INTERVENTION":
+            token_material = {
+                **material,
+                "owner_token": self.owner_token,
+                "nonce": uuid.uuid4().hex,
+            }
+            token = hashlib.sha256(
+                json.dumps(
+                    token_material,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+        plan = {**material, "recovery_token_sha256": token}
+        self._recovery_plan = deepcopy(plan)
+        self._recovery_refresh_in_progress = False
+        return deepcopy(plan)
+
     def build_recovery_plan(
         self,
         snapshot,
@@ -3281,6 +5738,13 @@ class _ExecutionSession:
         operation = "prepare_execution_recovery"
         with self.mutex:
             self.require_bound_read(operation, venue=self._arm_venue)
+            if _is_execution_arm_bundle(self._arm_proof):
+                return self._build_bundle_recovery_plan(
+                    snapshot,
+                    stable=stable,
+                    barrier=barrier,
+                    failure_reason=failure_reason,
+                )
             proof = self._arm_proof
             proof_sha256 = self._last_arm_proof_sha256
             zero = dict.fromkeys(_RECOVERY_POSITION_KEYS, "0")
@@ -3693,6 +6157,10 @@ class _ExecutionSession:
         venue=None,
         prepare_execution=None,
         rollback_execution=None,
+        authorization_context=None,
+        recovery_authorization_record=None,
+        commit_validator=None,
+        budget_capability=None,
     ):
         """Consume one recovery token and arm only its bounded exposure reduction."""
         operation = "arm_execution_recovery"
@@ -3713,6 +6181,106 @@ class _ExecutionSession:
                     "invalid_or_consumed_recovery_token",
                     definite_reject=True,
                 )
+            durable_recovery = recovery_authorization_record is not None
+            recovery_record = None
+            if durable_recovery:
+                if self.persistence_failed:
+                    raise NormalizedApiError(
+                        operation,
+                        "ctp_recovery_consumption_uncertain",
+                        definite_reject=True,
+                    )
+                self._ensure_approval_writer()
+                if (
+                    recovery_token_sha256 in self._recovery_used_tokens
+                    or recovery_token_sha256 in self._recovery_pending_tokens
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "invalid_or_consumed_recovery_token",
+                        definite_reject=True,
+                    )
+                if not isinstance(recovery_authorization_record, Mapping):
+                    raise NormalizedApiError(
+                        operation,
+                        "ctp_execution_authorization_required",
+                        definite_reject=True,
+                    )
+                recovery_record = dict(recovery_authorization_record)
+                if (
+                    recovery_record.get("recovery_token_sha256")
+                    != recovery_token_sha256
+                    or recovery_record.get("recovery_plan_sha256")
+                    != recovery_plan_digest(plan)
+                    or recovery_record.get("recovery_action_sha256")
+                    != recovery_action_digest(
+                        list(recovery_record.get("recovery_actions") or ())
+                    )
+                    or recovery_record.get("purpose") != "ctp_execution_recovery"
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "ctp_recovery_plan_mismatch",
+                        definite_reject=True,
+                    )
+                recovery_record["exchange_name"] = venue or self._arm_venue
+                self._recovery_pending_tokens.add(recovery_token_sha256)
+                self._recovery_authorization_records[recovery_token_sha256] = (
+                    recovery_token_sha256,
+                    str(recovery_record.get("approval_id") or ""),
+                    str(recovery_record.get("nonce") or ""),
+                )
+                self._journal(
+                    "ctp_execution_recovery_arm_started",
+                    recovery_record,
+                    allow_read_only=True,
+                )
+                self._recovery_budget_request = {
+                    field: recovery_record.get(field)
+                    for field in (
+                        "approval_id",
+                        "nonce",
+                        "candidate_id",
+                        "strategy_id",
+                        "strategy_identity_sha256",
+                        "execution_cycle_id",
+                        "account_fingerprint",
+                        "trading_day",
+                        "connection_generation",
+                        "environment_profile",
+                        "recovery_scope_version",
+                        "recovery_plan_sha256",
+                        "recovery_action_sha256",
+                        "recovery_token_sha256",
+                        "expires_at",
+                        "budget_policy_id",
+                        "budget_limit",
+                        "future_reservation_id",
+                    )
+                }
+                self._recovery_budget_enforced = True
+            # The public/facade CTP path always supplies its opaque-token
+            # identity context.  Keep this low-level session primitive usable
+            # for existing internal recovery reconciliation tests, which do
+            # not own a native CTP authority boundary themselves.
+            if authorization_context is not None and (
+                not isinstance(authorization_context, Mapping)
+                or authorization_context.get("strategy_identity_sha256")
+                != self.config["strategy_identity_sha256"]
+                or authorization_context.get("execution_cycle_id")
+                != plan.get("execution_cycle_id")
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_execution_authorization_identity_mismatch",
+                    definite_reject=True,
+                )
+            if budget_capability is not None:
+                self._require_budget_reservation_locked(
+                    budget_capability,
+                    operation=operation,
+                    mode="recovery",
+                )
             result = self._arm_from_preflight(
                 normalized,
                 state_reader,
@@ -3720,9 +6288,39 @@ class _ExecutionSession:
                 prepare_execution=prepare_execution,
                 rollback_execution=rollback_execution,
                 _recovery_capability=self._recovery_arm_capability,
+                authorization_context=authorization_context,
             )
-            self._recovery_used_tokens.add(recovery_token_sha256)
+            if durable_recovery:
+                self._journal(
+                    "ctp_execution_recovery_arm_consumed",
+                    recovery_record,
+                    allow_read_only=True,
+                )
+                # The consumed row is now durable.  Revalidate the live
+                # account/material fence before this method can return an
+                # armed result; a collector may have observed a generation or
+                # source change while the journal fsync was in progress.
+                self._recovery_used_tokens.add(recovery_token_sha256)
+                if commit_validator is not None:
+                    if not callable(commit_validator):
+                        raise NormalizedApiError(
+                            operation,
+                            "ctp_recovery_commit_validator_unavailable",
+                            definite_reject=True,
+                        )
+                    try:
+                        commit_validator()
+                    except Exception:
+                        # A durable consumed nonce is never refunded, even
+                        # when the post-commit validation rejects the arm.
+                        self._recovery_pending_tokens.discard(recovery_token_sha256)
+                        raise
+                self._recovery_pending_tokens.discard(recovery_token_sha256)
+            else:
+                self._recovery_used_tokens.add(recovery_token_sha256)
             self._recovery_mode = True
+            if budget_capability is not None:
+                self._recovery_budget_capability = budget_capability
             return {
                 **result,
                 "recovery_only": True,
@@ -3804,7 +6402,156 @@ class _ExecutionSession:
             self.config["market_data_only"] = True
             self._arm_proof_sha256 = None
             self._recovery_mode = False
+            self._recovery_authorized_plan = None
+            self._recovery_remaining_plan = None
             self._recovery_refresh_in_progress = True
+            self._recovery_write_guard = None
+            self._recovery_budget_request = None
+            self._recovery_budget_enforced = False
+            self._recovery_budget_capability = None
+            self._recovery_private_ingress_epoch_fence = None
+            self._recovery_private_ingress_revision_fence = None
+            self._recovery_private_event_revision_fence = None
+
+    def _set_recovery_authorized_plan(self, plan):
+        """Set the ephemeral baseline for one signed recovery arm."""
+        if not isinstance(plan, Mapping):
+            raise ValueError("recovery authorization plan required")
+        with self.mutex:
+            baseline = deepcopy(dict(plan))
+            self._recovery_authorized_plan = baseline
+            self._recovery_remaining_plan = deepcopy(baseline)
+
+    def _recovery_authorized_plan_state(self):
+        """Return detached baseline/remaining recovery plans for a write guard."""
+        with self.mutex:
+            return (
+                deepcopy(self._recovery_authorized_plan),
+                deepcopy(self._recovery_remaining_plan),
+            )
+
+    def set_recovery_write_guard(self, guard):
+        """Attach the SDK-owned current authorization check for recovery writes."""
+        with self.mutex:
+            if guard is not None and not callable(guard):
+                raise TypeError("recovery write guard must be callable")
+            self._recovery_write_guard = guard
+
+    def finalize_recovery_dispatch(self, context):
+        """Recheck a consumed recovery allowance immediately before transport.
+
+        ``_begin_invoke`` has already appended and fsynced the intent (or
+        cancel intent) when this hook runs.  Keeping the hook on the session
+        makes the final check part of the same journal-owned transition and
+        leaves ordinary, non-recovery calls unchanged.
+        """
+
+        if not isinstance(context, Mapping) or not context.get("recovery_action"):
+            return
+        operation = context.get("operation")
+        with self.mutex:
+            if (
+                context.get("_async_handoff")
+                and self._active_recovery_context is not context
+            ):
+                self._revoke_arm("ctp_recovery_authorization_invalid")
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_recovery_authorization_invalid",
+                    definite_reject=True,
+                )
+            # Async transports may queue the SDK-controlled worker after the
+            # first session hook.  The handoff callback uses this same method
+            # at the worker boundary; ordinary calls must remain untouched.
+            if not self._recovery_dispatch_in_progress:
+                return
+            if self._recovery_mode and self._recovery_write_guard is None:
+                # V1/private recovery arms predate the signed public lease and
+                # retain their existing allowance checks in ``require_write``.
+                return
+            if not self._recovery_mode or not callable(self._recovery_write_guard):
+                self._revoke_arm("ctp_recovery_authorization_invalid")
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_recovery_authorization_invalid",
+                    definite_reject=True,
+                )
+            try:
+                self._recovery_write_guard(
+                    operation,
+                    placement=operation == "make_order",
+                    recovery_action=True,
+                )
+            except NormalizedApiError as exc:
+                self._revoke_arm(exc.code)
+                raise
+            except Exception:
+                self._revoke_arm("ctp_recovery_authorization_invalid")
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_recovery_authorization_invalid",
+                    definite_reject=True,
+                ) from None
+
+    def finalize_dispatch(self, context):
+        """Run the accepted U1b recovery gate and the bounded O2 gate."""
+        self.finalize_recovery_dispatch(context)
+        self.finalize_budget_dispatch(context)
+
+    def set_recovery_ingress_fence(self, epoch, ingress_revision, event_revision):
+        """Remember the private-event fence established by the native arm."""
+
+        with self.mutex:
+            if any(
+                isinstance(value, bool) or type(value) is not int or value < 0
+                for value in (epoch, ingress_revision, event_revision)
+            ):
+                raise ValueError("invalid recovery ingress fence")
+            self._recovery_private_ingress_epoch_fence = epoch
+            self._recovery_private_ingress_revision_fence = ingress_revision
+            self._recovery_private_event_revision_fence = event_revision
+
+    def _require_recovery_budget_capability(self, operation):
+        """Require an O2-owned opaque reservation before a recovery write."""
+        if self._recovery_budget_capability is not None:
+            return self._require_budget_reservation_locked(
+                self._recovery_budget_capability,
+                operation=operation,
+                mode="recovery",
+            )
+        owner = self._recovery_budget_owner
+        if not callable(owner):
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_budget_capability_missing",
+                definite_reject=True,
+            )
+        request = self._recovery_budget_request
+        if not isinstance(request, dict) or any(
+            value in (None, "") for value in request.values()
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_budget_capability_missing",
+                definite_reject=True,
+            )
+        try:
+            capability = owner(operation=operation, **dict(request))
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_budget_capability_invalid",
+                definite_reject=True,
+            ) from None
+        # A future O2 owner must return its own opaque capability.  Mappings,
+        # booleans, and caller supplied reservation IDs are never evidence.
+        if capability is None or isinstance(capability, (Mapping, bool, str, bytes)):
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_budget_capability_invalid",
+                definite_reject=True,
+            )
+        return capability
 
     def arm_from_preflight(
         self,
@@ -3815,6 +6562,7 @@ class _ExecutionSession:
         prepare_execution=None,
         rollback_execution=None,
         prepare_execution_outside_mutex=False,
+        authorization_context=None,
     ):
         """Atomically convert one read-only session to durable execution.
 
@@ -3830,6 +6578,7 @@ class _ExecutionSession:
             prepare_execution=prepare_execution,
             rollback_execution=rollback_execution,
             prepare_execution_outside_mutex=prepare_execution_outside_mutex,
+            authorization_context=authorization_context,
         )
 
     def _arm_from_preflight(
@@ -3842,6 +6591,7 @@ class _ExecutionSession:
         rollback_execution=None,
         prepare_execution_outside_mutex=False,
         _recovery_capability=None,
+        authorization_context=None,
     ):
         recovery_arm = _recovery_capability is self._recovery_arm_capability
         operation = "arm_execution_from_preflight"
@@ -3853,6 +6603,22 @@ class _ExecutionSession:
             previous_venue = self._arm_venue
             try:
                 normalized, proof_sha256 = _execution_arm_proof(proof)
+                if authorization_context is not None and (
+                    not isinstance(authorization_context, Mapping)
+                    or set(authorization_context)
+                    != {"strategy_identity_sha256", "execution_cycle_id"}
+                    or authorization_context.get("strategy_identity_sha256")
+                    != self.config["strategy_identity_sha256"]
+                    or not isinstance(
+                        authorization_context.get("execution_cycle_id"), str
+                    )
+                    or not authorization_context["execution_cycle_id"]
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "ctp_execution_authorization_identity_mismatch",
+                        definite_reject=True,
+                    )
                 if self.closed:
                     raise NormalizedApiError(
                         operation, "execution_session_closed", definite_reject=True
@@ -3942,16 +6708,14 @@ class _ExecutionSession:
                     )
 
                 environment = (
-                    str(
-                        self.config["required_environments"].get(arm_venue)
-                        or normalized["environment_profile"]
-                    )
+                    str(self.config["required_environments"].get(arm_venue) or "demo")
                     .strip()
                     .lower()
                 )
                 bound_identity = {
                     "provider": "CTP",
                     "environment": environment,
+                    "environment_profile": normalized["environment_profile"],
                     "account_id": normalized["account_fingerprint"],
                     "account_fingerprint": normalized["account_fingerprint"],
                 }
@@ -4035,6 +6799,11 @@ class _ExecutionSession:
                 self._arm_proof_sha256 = proof_sha256
                 self._last_arm_proof_sha256 = proof_sha256
                 self._arm_state_reader = state_reader
+                self._ctp_execution_authorization_context = (
+                    dict(authorization_context)
+                    if authorization_context is not None
+                    else None
+                )
                 self._arm_revoked_reason = None
                 self._arm_revoked_error_code = None
                 self._arm_submit_calls = self.submit_calls
@@ -4131,6 +6900,34 @@ class _ExecutionSession:
                         code = self.risk_measurement_error
                     else:
                         code = self._risk_freshness_error()
+            if (
+                code is None
+                and self._recovery_mode
+                and callable(self._recovery_write_guard)
+            ):
+                try:
+                    self._recovery_write_guard(
+                        operation,
+                        placement=placement,
+                        recovery_action=recovery_action,
+                    )
+                except NormalizedApiError as exc:
+                    self._revoke_arm(exc.code)
+                    raise
+                except Exception:
+                    self._revoke_arm("ctp_recovery_authorization_invalid")
+                    raise NormalizedApiError(
+                        operation,
+                        "ctp_recovery_authorization_invalid",
+                        definite_reject=True,
+                    ) from None
+            if (
+                code is None
+                and self._recovery_mode
+                and self._recovery_budget_enforced
+                and placement
+            ):
+                self._require_recovery_budget_capability(operation)
             if code:
                 raise NormalizedApiError(operation, code, definite_reject=True)
             self._assert_writer_lease(operation)
@@ -5246,10 +8043,20 @@ class _ExecutionSession:
             self.historical_unknown.difference_update(state.get("recovery_ids", ()))
         return update
 
-    def _begin_invoke(self, operation, venue, request, *, preauthorize=None):
+    def _begin_invoke(
+        self,
+        operation,
+        venue,
+        request,
+        *,
+        preauthorize=None,
+        budget_capability=None,
+    ):
         """Persist intent and capture merge state before a transport call."""
         request_row = asdict(request)
         emergency_cancel = False
+        budget_action_id = None
+        budget_state = None
         with self.mutex:
             if self.closed:
                 raise NormalizedApiError(
@@ -5276,6 +8083,17 @@ class _ExecutionSession:
                     venue=venue,
                     recovery_action=recovery_allowance is not None,
                 )
+                if self._provider(venue) == "CTP" and self._arm_managed:
+                    if budget_capability is None and recovery_allowance is not None:
+                        budget_capability = self._recovery_budget_capability
+                    budget_state = self._require_budget_reservation_locked(
+                        budget_capability,
+                        operation=operation,
+                        mode=("recovery" if recovery_allowance is not None else "ordinary"),
+                    )
+                    self._budget_context_matches_current_locked(
+                        budget_state, operation=operation
+                    )
                 client_key = self._client_key(
                     venue,
                     request.account_id,
@@ -5303,6 +8121,14 @@ class _ExecutionSession:
                 if preauthorize is not None:
                     preauthorize()
                 self._journal("intent", row)
+                if budget_state is not None:
+                    budget_action_id = f"order:{request.client_order_id}"
+                    self.bind_ctp_budget_action(
+                        budget_capability,
+                        action_id=budget_action_id,
+                        operation=operation,
+                        request=row,
+                    )
                 self._consume_recovery_action(recovery_allowance)
                 self.used_ids.add(client_key)
                 self.reserved_ids.discard(client_key)
@@ -5337,6 +8163,24 @@ class _ExecutionSession:
                                 "execution_recovery_action_in_progress",
                                 definite_reject=True,
                             )
+                        if recovery_allowance is not None:
+                            self.require_write(
+                                operation,
+                                placement=True,
+                                venue=venue,
+                                recovery_action=True,
+                            )
+                    if self._provider(venue) == "CTP" and self._arm_managed:
+                        if budget_capability is None and recovery_allowance is not None:
+                            budget_capability = self._recovery_budget_capability
+                        budget_state = self._require_budget_reservation_locked(
+                            budget_capability,
+                            operation=operation,
+                            mode=("recovery" if recovery_allowance is not None else "ordinary"),
+                        )
+                        self._budget_context_matches_current_locked(
+                            budget_state, operation=operation
+                        )
                 state = self._state(
                     venue,
                     request_row,
@@ -5353,6 +8197,14 @@ class _ExecutionSession:
                         self._journal(
                             "cancel_intent", self._identity(state, request_row)
                         )
+                        if budget_state is not None:
+                            budget_action_id = f"cancel:{request.order_id or request.client_order_id or request.symbol}"
+                            self.bind_ctp_budget_action(
+                                budget_capability,
+                                action_id=budget_action_id,
+                                operation=operation,
+                                request=request_row,
+                            )
                     except NormalizedApiError as exc:
                         if exc.code != "persistence_failed":
                             raise
@@ -5376,6 +8228,11 @@ class _ExecutionSession:
             "state_is_tracked": state_is_tracked,
             "start_revision": start_revision,
             "recovery_action": recovery_allowance is not None,
+            "budget_capability": budget_capability,
+            "budget_evidence_digest": (
+                budget_state.get("evidence_digest") if budget_state is not None else None
+            ),
+            "budget_action_id": budget_action_id,
         }
 
     def _finish_invoke(self, context, result, failure):
@@ -5468,17 +8325,30 @@ class _ExecutionSession:
                 self.pause_recovery()
             return recorded
 
-    def invoke(self, operation, venue, request, call, *, preauthorize=None):
+    def invoke(
+        self,
+        operation,
+        venue,
+        request,
+        call,
+        *,
+        preauthorize=None,
+        pre_dispatch=None,
+        budget_capability=None,
+    ):
         context = self._begin_invoke(
             operation,
             venue,
             request,
             preauthorize=preauthorize,
+            budget_capability=budget_capability,
         )
         try:
             failure = None
             result = None
             try:
+                if pre_dispatch is not None:
+                    pre_dispatch(context)
                 result = call()
             except Exception as exc:
                 failure = exc
@@ -5496,6 +8366,9 @@ class _ExecutionSession:
         call,
         *,
         preauthorize=None,
+        pre_dispatch=None,
+        on_context=None,
+        budget_capability=None,
     ):
         """Await transport I/O while preserving the synchronous WAL semantics."""
         context = self._begin_invoke(
@@ -5503,11 +8376,19 @@ class _ExecutionSession:
             venue,
             request,
             preauthorize=preauthorize,
+            budget_capability=budget_capability,
         )
+        if context["recovery_action"]:
+            with self.mutex:
+                self._active_recovery_context = context
         try:
             failure = None
             result = None
             try:
+                if on_context is not None:
+                    on_context(context)
+                if pre_dispatch is not None:
+                    pre_dispatch(context)
                 result = await call()
             except asyncio.CancelledError as exc:
                 # Cancellation after a durable write does not prove that the venue
@@ -5525,6 +8406,8 @@ class _ExecutionSession:
         finally:
             if context["recovery_action"]:
                 with self.mutex:
+                    if self._active_recovery_context is context:
+                        self._active_recovery_context = None
                     self._recovery_dispatch_in_progress = False
 
     def event(self, venue, event):
@@ -5761,4 +8644,5 @@ class _ExecutionSession:
                 "trading_blocked": trading_blocked,
                 "evidence_complete": not trading_blocked,
                 "reconciliation_errors": reconciliation_errors,
+                "ctp_budget": self.ctp_budget_snapshot(),
             }

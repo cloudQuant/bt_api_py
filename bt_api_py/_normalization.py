@@ -14,7 +14,7 @@ import os
 import re
 import socket
 import time
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -1119,6 +1119,27 @@ def _base(exchange_name, row, symbol=None):
     }
 
 
+def _is_ctp_quote_v2(row) -> bool:
+    return str(pick(row, "schema_version", default="") or "") == "ctp.quote.v2"
+
+
+def _ctp_quote_v2_seconds(value):
+    """Parse explicit Quote V2 timestamps without substituting local time."""
+
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return seconds(text)
+        except (TypeError, ValueError):
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                return None
+            return parsed.timestamp()
+    return seconds(value)
+
+
 def _unit(exchange_name, row):
     return pick(
         row,
@@ -1136,10 +1157,14 @@ def _unit(exchange_name, row):
 
 
 def _timestamps(row):
+    ctp_quote_v2 = _is_ctp_quote_v2(row)
     freshness = row.get("freshness") or {}
-    exchange_time = seconds(
-        pick(
-            row,
+    if not isinstance(freshness, dict):
+        freshness = {}
+    exchange_time_names = (
+        ("event_time_utc", "event_time")
+        if ctp_quote_v2
+        else (
             "exchange_time",
             "timestamp",
             "server_time",
@@ -1150,22 +1175,45 @@ def _timestamps(row):
             "event_time",
             "event_time_utc",
             "timestamp_ms",
-            default=freshness.get("observed_at"),
         )
     )
-    received_wall = (
-        seconds(
+    received_time_names = (
+        ("recv_time_utc", "received_wall_time", "receive_time")
+        if ctp_quote_v2
+        else (
+            "received_wall_time",
+            "local_time",
+            "local_update_time",
+            "receive_time",
+            "recv_time_utc",
+        )
+    )
+    timestamp_parser = _ctp_quote_v2_seconds if ctp_quote_v2 else seconds
+    try:
+        exchange_time = timestamp_parser(
             pick(
                 row,
-                "received_wall_time",
-                "local_time",
-                "local_update_time",
-                "receive_time",
-                "recv_time_utc",
+                *exchange_time_names,
+                default=freshness.get("observed_at"),
             )
         )
-        or time.time()
-    )
+    except (TypeError, ValueError):
+        if not ctp_quote_v2:
+            raise
+        exchange_time = None
+    try:
+        received_wall = timestamp_parser(
+            pick(
+                row,
+                *received_time_names,
+            )
+        )
+    except (TypeError, ValueError):
+        if not ctp_quote_v2:
+            raise
+        received_wall = None
+    if received_wall is None and not ctp_quote_v2:
+        received_wall = time.time()
     received_monotonic = pick(
         row,
         "received_monotonic_ns",
@@ -1174,9 +1222,14 @@ def _timestamps(row):
         "recv_monotonic_ns",
     )
     if received_monotonic in (None, ""):
-        received_monotonic = time.monotonic_ns()
+        received_monotonic = 0 if ctp_quote_v2 else time.monotonic_ns()
     else:
-        received_monotonic = int(received_monotonic)
+        try:
+            received_monotonic = int(received_monotonic)
+        except (TypeError, ValueError):
+            if not ctp_quote_v2:
+                raise
+            received_monotonic = 0
     stale = bool(pick(row, "stale", default=freshness.get("stale", False)))
     stale_reason = pick(row, "stale_reason", default=freshness.get("stale_reason"))
     return {
@@ -1185,11 +1238,460 @@ def _timestamps(row):
         "exchange_time": exchange_time,
         "received_wall_time": received_wall,
         "received_monotonic_ns": received_monotonic,
-        "clock_domain_id": str(pick(row, "clock_domain_id", default=CLOCK_DOMAIN_ID)),
-        "source": str(pick(row, "source", default="exchange")),
+        "clock_domain_id": str(
+            pick(
+                row, "clock_domain_id", default="" if ctp_quote_v2 else CLOCK_DOMAIN_ID
+            )
+        ),
+        "source": str(
+            pick(row, "source", default="unknown" if ctp_quote_v2 else "exchange")
+        ),
         "stale": stale,
         "stale_reason": stale_reason,
     }
+
+
+_CTP_QUOTE_V2_CONTINUITY = frozenset(
+    {
+        "continuous",
+        "snapshot",
+        "duplicate",
+        "out_of_order",
+        "gap",
+        "checksum_failed",
+        "unverified",
+    }
+)
+
+
+def _ctp_quote_v2_number(row, *names, positive=False):
+    try:
+        value = number(pick(row, *names, default=None))
+    except (TypeError, ValueError):
+        return None
+    if value is None or (positive and value <= 0) or (not positive and value < 0):
+        return None
+    return value
+
+
+def _ctp_quote_v2_nonnegative_int(row, *names) -> int:
+    value = pick(row, *names, default=0)
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return result if result >= 0 else 0
+
+
+def _ctp_quote_v2_text(row, *names, default="") -> str:
+    value = pick(row, *names, default=default)
+    return str(value or "").strip()
+
+
+_CTP_QUOTE_V2_UNTRUSTED_IDENTITIES = frozenset(
+    {
+        "",
+        "-",
+        "--",
+        "unknown",
+        "unverified",
+        "unset",
+        "none",
+        "null",
+        "n/a",
+        "na",
+        "unavailable",
+        "undefined",
+        "missing",
+        "pending",
+        "tbd",
+        "default",
+        "placeholder",
+    }
+)
+_CTP_QUOTE_V2_PARENT_ATTESTATION_SEAL = object()
+
+
+def _ctp_quote_v2_trusted_text(value) -> str:
+    """Return a provenance identity only when it is explicit and meaningful."""
+
+    text = str(value or "").strip()
+    return "" if text.casefold() in _CTP_QUOTE_V2_UNTRUSTED_IDENTITIES else text
+
+
+@dataclass(frozen=True)
+class _CtpQuoteV2ParentAttestation:
+    """Opaque evidence issued only by the parent direct-CTP ingress path."""
+
+    _seal: object
+    exchange_name: str
+    symbol: str
+    transport: str
+    registered_subscription: bool
+    session_ready: bool
+    source: str
+    rules_hash: str
+    clock_domain_id: str
+    connection_generation: int
+    subscription_epoch: int
+    session_generation: int
+    cohort_now_monotonic_ns: int
+    cohort_now_epoch: float
+    cohort_now_receive_clock_error_ms: float
+    cohort_now_receive_clock_quality: str
+    cohort_now_freshness_verified: bool
+
+
+def _issue_ctp_quote_v2_parent_attestation(
+    *,
+    exchange_name,
+    symbol,
+    source,
+    rules_hash,
+    clock_domain_id,
+    connection_generation,
+    subscription_epoch,
+    session_generation,
+    cohort_now_monotonic_ns,
+    cohort_now_epoch,
+    cohort_now_receive_clock_error_ms,
+    cohort_now_receive_clock_quality,
+    cohort_now_freshness_verified,
+):
+    """Create a sealed V2 attestation after parent-owned registration checks.
+
+    This is intentionally private.  A transport payload never supplies this
+    object: ``BtApi`` issues it only after it has matched the native container
+    to a registered direct CTP market stream and an active read-only session.
+    """
+
+    exchange = str(exchange_name or "").strip()
+    instrument = str(symbol or "").strip()
+    trusted_source = _ctp_quote_v2_trusted_text(source)
+    trusted_rules = _ctp_quote_v2_trusted_text(rules_hash)
+    trusted_clock_domain = _ctp_quote_v2_trusted_text(clock_domain_id)
+    try:
+        md_generation = int(connection_generation)
+        epoch = int(subscription_epoch)
+        session_epoch = int(session_generation)
+        now_monotonic = int(cohort_now_monotonic_ns)
+        now_epoch = float(cohort_now_epoch)
+        now_error = float(cohort_now_receive_clock_error_ms)
+    except (TypeError, ValueError):
+        return None
+    if (
+        isinstance(connection_generation, bool)
+        or isinstance(subscription_epoch, bool)
+        or isinstance(session_generation, bool)
+        or isinstance(cohort_now_monotonic_ns, bool)
+        or isinstance(cohort_now_epoch, bool)
+        or isinstance(cohort_now_receive_clock_error_ms, bool)
+        or not exchange
+        or not instrument
+        or not trusted_source
+        or not trusted_rules
+        or not trusted_clock_domain
+        or md_generation <= 0
+        or epoch <= 0
+        or session_epoch <= 0
+        or now_monotonic <= 0
+        or not math.isfinite(now_epoch)
+        or not math.isfinite(now_error)
+        or now_error < 0
+        or str(cohort_now_receive_clock_quality or "").strip().lower() != "verified"
+        or cohort_now_freshness_verified is not True
+    ):
+        return None
+    return _CtpQuoteV2ParentAttestation(
+        _CTP_QUOTE_V2_PARENT_ATTESTATION_SEAL,
+        exchange,
+        instrument,
+        "direct",
+        True,
+        True,
+        trusted_source,
+        trusted_rules,
+        trusted_clock_domain,
+        md_generation,
+        epoch,
+        session_epoch,
+        now_monotonic,
+        now_epoch,
+        now_error,
+        "verified",
+        True,
+    )
+
+
+def _ctp_quote_v2_parent_attestation_matches(
+    attestation,
+    *,
+    exchange_name,
+    symbol,
+    source,
+    rules_hash,
+    clock_domain_id,
+    connection_generation,
+    subscription_epoch,
+) -> bool:
+    """Reject V2 eligibility unless the parent-issued evidence matches exactly."""
+
+    if (
+        type(attestation) is not _CtpQuoteV2ParentAttestation
+        or attestation._seal is not _CTP_QUOTE_V2_PARENT_ATTESTATION_SEAL
+        or attestation.transport != "direct"
+        or attestation.registered_subscription is not True
+        or attestation.session_ready is not True
+        or attestation.session_generation <= 0
+        or attestation.cohort_now_monotonic_ns <= 0
+        or not math.isfinite(attestation.cohort_now_epoch)
+        or not math.isfinite(attestation.cohort_now_receive_clock_error_ms)
+        or attestation.cohort_now_receive_clock_error_ms < 0
+        or attestation.cohort_now_receive_clock_quality != "verified"
+        or attestation.cohort_now_freshness_verified is not True
+    ):
+        return False
+    try:
+        md_generation = int(connection_generation)
+        epoch = int(subscription_epoch)
+    except (TypeError, ValueError):
+        return False
+    if isinstance(connection_generation, bool) or isinstance(subscription_epoch, bool):
+        return False
+    return (
+        str(exchange_name or "").strip() == attestation.exchange_name
+        and str(symbol or "").strip() == attestation.symbol
+        and _ctp_quote_v2_trusted_text(source) == attestation.source
+        and _ctp_quote_v2_trusted_text(rules_hash) == attestation.rules_hash
+        and _ctp_quote_v2_trusted_text(clock_domain_id) == attestation.clock_domain_id
+        and md_generation > 0
+        and md_generation == attestation.connection_generation
+        and epoch > 0
+        and epoch == attestation.subscription_epoch
+    )
+
+
+def _ctp_quote_v2_asset_type(value) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"future", "futures", "future_contract", "fut"}:
+        return "future"
+    if text in {"option", "options", "option_contract", "opt"}:
+        return "option"
+    return "unknown"
+
+
+def _ctp_quote_v2_quality_flags(row) -> tuple[str, ...]:
+    value = row.get("quality_flags", ())
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        return ("INVALID_QUALITY_FLAGS",)
+    return tuple(str(flag) for flag in value)
+
+
+def _ctp_quote_v2_day_is_valid(value: str) -> bool:
+    return len(value) == 8 and value.isdigit()
+
+
+def _ctp_quote_v2_fields(
+    row,
+    timestamps,
+    *,
+    exchange_name="",
+    symbol="",
+    parent_attestation=None,
+):
+    """Normalize quote V2 evidence without turning unknown evidence into trust.
+
+    The gateway is expected to have checked the native CTP quote.  This second
+    boundary deliberately rechecks every fact used by an execution decision,
+    so a hand-built gateway/ZMQ payload cannot promote itself to eligible.
+    """
+
+    bid = _ctp_quote_v2_number(row, "bid_price", "bid", "BidPrice1", positive=True)
+    ask = _ctp_quote_v2_number(row, "ask_price", "ask", "AskPrice1", positive=True)
+    last = _ctp_quote_v2_number(
+        row, "last_price", "price", "last", "LastPrice", positive=True
+    )
+    bid_size = _ctp_quote_v2_number(row, "bid_volume", "bid_size", "BidVolume1")
+    ask_size = _ctp_quote_v2_number(row, "ask_volume", "ask_size", "AskVolume1")
+    lower_limit = _ctp_quote_v2_number(
+        row, "lower_limit_price", "lower_limit", "LowerLimitPrice", positive=True
+    )
+    upper_limit = _ctp_quote_v2_number(
+        row, "upper_limit_price", "upper_limit", "UpperLimitPrice", positive=True
+    )
+    source_error = _ctp_quote_v2_number(row, "source_clock_error_ms")
+    receive_error = _ctp_quote_v2_number(row, "receive_clock_error_ms")
+    cumulative_volume = _ctp_quote_v2_number(
+        row, "cum_volume", "cumulative_volume", "Volume"
+    )
+    delta_volume = _ctp_quote_v2_number(row, "delta_volume", "volume")
+    volume_semantics = _ctp_quote_v2_text(row, "volume_semantics").lower()
+    volume_complete = pick(row, "volume_complete", default=False) is True
+    volume_quality = _ctp_quote_v2_text(
+        row, "volume_quality", default="unknown"
+    ).upper()
+    continuity_status = _ctp_quote_v2_text(
+        row, "continuity_status", default="gap"
+    ).lower()
+    if continuity_status not in _CTP_QUOTE_V2_CONTINUITY:
+        continuity_status = "gap"
+    quality_flags = _ctp_quote_v2_quality_flags(row)
+    trading_day = _ctp_quote_v2_text(row, "trading_day", "TradingDay")
+    action_day = _ctp_quote_v2_text(row, "action_day", "ActionDay")
+    event_time_source = _ctp_quote_v2_text(
+        row, "event_time_source", default="unresolved"
+    ).lower()
+    source_clock_quality = _ctp_quote_v2_text(
+        row, "source_clock_quality", default="unknown"
+    ).lower()
+    receive_clock_quality = _ctp_quote_v2_text(
+        row, "receive_clock_quality", default="unknown"
+    ).lower()
+    source = _ctp_quote_v2_text(row, "source", default="unknown") or "unknown"
+    rules_hash = _ctp_quote_v2_text(row, "rules_hash")
+    clock_domain_id = _ctp_quote_v2_text(row, "clock_domain_id")
+    # Do not infer futures from a legacy ``CTP___FUTURE`` venue suffix: one
+    # CTP market stream can carry future and option legs together.
+    asset_type = _ctp_quote_v2_asset_type(
+        pick(row, "asset_type", "market_type", default="")
+    )
+    # Product identity is additive diagnostic evidence from the native CTP
+    # adapter.  It is intentionally not eligible to self-attest a payload;
+    # execution eligibility below still requires the sealed parent proof.
+    product_class = _ctp_quote_v2_text(row, "product_class", "ProductClass") or None
+    contract_type = (
+        _ctp_quote_v2_text(row, "contract_type", "ContractType", default="unknown")
+        or "unknown"
+    )
+    option_type = _ctp_quote_v2_text(row, "option_type", "OptionsType") or None
+    underlying_instrument = (
+        _ctp_quote_v2_text(row, "underlying_instrument", "UnderlyingInstrID") or None
+    )
+    strike_price = _ctp_quote_v2_number(
+        row, "strike_price", "StrikePrice", positive=True
+    )
+    connection_generation = _ctp_quote_v2_nonnegative_int(row, "connection_generation")
+    ingest_seq = _ctp_quote_v2_nonnegative_int(row, "ingest_seq")
+    subscription_epoch = _ctp_quote_v2_nonnegative_int(row, "subscription_epoch")
+    event_time = timestamps["exchange_time"]
+    receive_time = timestamps["received_wall_time"]
+    timing_causal = (
+        event_time is not None
+        and receive_time is not None
+        and source_error is not None
+        and receive_error is not None
+        and event_time <= receive_time + (source_error + receive_error) / 1000
+    )
+    evidence_complete = (
+        asset_type in {"future", "option"}
+        and volume_semantics == "delta"
+        and volume_complete
+        and volume_quality == "CONTINUOUS"
+        and continuity_status == "continuous"
+        and not quality_flags
+        and bid is not None
+        and ask is not None
+        and last is not None
+        and bid_size is not None
+        and ask_size is not None
+        and bid_size > 0
+        and ask_size > 0
+        and bid <= ask
+        and lower_limit is not None
+        and upper_limit is not None
+        and lower_limit < upper_limit
+        and all(lower_limit <= price <= upper_limit for price in (bid, ask, last))
+        and _ctp_quote_v2_day_is_valid(trading_day)
+        and _ctp_quote_v2_day_is_valid(action_day)
+        and event_time_source == "action_day"
+        and bool(_ctp_quote_v2_trusted_text(rules_hash))
+        and bool(_ctp_quote_v2_trusted_text(clock_domain_id))
+        and bool(_ctp_quote_v2_trusted_text(source))
+        and connection_generation > 0
+        and ingest_seq > 0
+        and subscription_epoch > 0
+        and source_clock_quality == "verified"
+        and receive_clock_quality == "verified"
+        and pick(row, "freshness_verified", default=False) is True
+        and timestamps["stale"] is False
+        and timing_causal
+    )
+    parent_attested = _ctp_quote_v2_parent_attestation_matches(
+        parent_attestation,
+        exchange_name=exchange_name,
+        symbol=symbol,
+        source=source,
+        rules_hash=rules_hash,
+        clock_domain_id=clock_domain_id,
+        connection_generation=connection_generation,
+        subscription_epoch=subscription_epoch,
+    )
+    execution_eligible = evidence_complete and parent_attested
+    result = {
+        "asset_type": asset_type,
+        "product_class": product_class,
+        "contract_type": contract_type,
+        "option_type": option_type,
+        "underlying_instrument": underlying_instrument,
+        "strike_price": strike_price,
+        "price": last,
+        "last_price": last,
+        "bid_price": bid,
+        "ask_price": ask,
+        "bid_volume": bid_size,
+        "ask_volume": ask_size,
+        "schema_version": "ctp.quote.v2",
+        "volume_semantics": volume_semantics,
+        "volume": delta_volume if volume_semantics == "delta" else None,
+        "cum_volume": cumulative_volume,
+        "cumulative_volume": cumulative_volume,
+        "delta_volume": delta_volume,
+        "volume_complete": volume_complete,
+        "volume_quality": volume_quality or "UNKNOWN",
+        "continuity_status": continuity_status,
+        "quality_flags": quality_flags,
+        "lower_limit_price": lower_limit,
+        "upper_limit_price": upper_limit,
+        "trading_day": trading_day,
+        "action_day": action_day,
+        "event_time_utc": event_time,
+        "recv_time_utc": receive_time,
+        "recv_monotonic_ns": _ctp_quote_v2_nonnegative_int(
+            row, "recv_monotonic_ns", "received_monotonic_ns"
+        ),
+        "connection_generation": connection_generation,
+        "ingest_seq": ingest_seq,
+        "subscription_epoch": subscription_epoch,
+        "rules_hash": rules_hash,
+        "clock_domain_id": clock_domain_id,
+        "source": source,
+        "event_time_source": event_time_source or "unresolved",
+        "source_clock_quality": source_clock_quality or "unknown",
+        "receive_clock_quality": receive_clock_quality or "unknown",
+        "source_clock_error_ms": source_error,
+        "receive_clock_error_ms": receive_error,
+        "freshness_verified": pick(row, "freshness_verified", default=False) is True,
+        # Do not accept a payload's own eligibility flag.  The parent transport
+        # must have issued a sealed attestation bound to the same stream,
+        # subscription epoch, provenance identities, and read-only session.
+        "execution_eligible": execution_eligible,
+    }
+    if execution_eligible:
+        result.update(
+            cohort_now_monotonic_ns=parent_attestation.cohort_now_monotonic_ns,
+            cohort_now_epoch=parent_attestation.cohort_now_epoch,
+            cohort_now_clock_domain_id=parent_attestation.clock_domain_id,
+            cohort_now_receive_clock_error_ms=(
+                parent_attestation.cohort_now_receive_clock_error_ms
+            ),
+            cohort_now_receive_clock_quality=(
+                parent_attestation.cohort_now_receive_clock_quality
+            ),
+            cohort_now_freshness_verified=(
+                parent_attestation.cohort_now_freshness_verified
+            ),
+        )
+    return result
 
 
 def _event_id(event, row):
@@ -1949,7 +2451,14 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
     raise CapabilityNotSupportedError(operation, detail="no normalized result mapper")
 
 
-def normalize_event(item, exchange_name, *, kind=None, symbol=None):
+def normalize_event(
+    item,
+    exchange_name,
+    *,
+    kind=None,
+    symbol=None,
+    _ctp_quote_v2_parent_attestation=None,
+):
     row = _dict(item)
     if isinstance(row.get("payload"), dict):
         row = {**row, **row["payload"]}
@@ -2061,55 +2570,72 @@ def normalize_event(item, exchange_name, *, kind=None, symbol=None):
             continuity_status=continuity_status,
         )
     elif kind == "tick":
-        bid = number(pick(row, "bid_price", "bid", "BidPrice1"))
-        ask = number(pick(row, "ask_price", "ask", "AskPrice1"))
-        price = number(pick(row, "price", "last_price", "last", "LastPrice"))
-        if not price and bid and ask:
-            price = (bid + ask) / 2
-        volume_semantics = str(pick(row, "volume_semantics", default="") or "")
-        delta_volume = number(
-            pick(
-                row,
-                "delta_volume",
-                default=pick(row, "volume", "last_volume", "Volume"),
-            )
-        )
-        cumulative_volume = number(
-            pick(row, "cum_volume", "cumulative_volume", "Volume")
-        )
-        result.update(
-            price=price,
-            bid_price=bid,
-            ask_price=ask,
-            volume=(
-                delta_volume
-                if volume_semantics == "delta"
-                else number(pick(row, "volume", "last_volume", "Volume"))
-            ),
-        )
-        if pick(row, "schema_version") not in (None, ""):
+        if _is_ctp_quote_v2(row):
             result.update(
-                schema_version=str(pick(row, "schema_version")),
-                volume_semantics=volume_semantics,
-                cum_volume=cumulative_volume,
-                cumulative_volume=cumulative_volume,
-                delta_volume=delta_volume,
-                volume_complete=bool(pick(row, "volume_complete", default=False)),
-                volume_quality=str(pick(row, "volume_quality", default="") or ""),
-                trading_day=str(
-                    pick(row, "trading_day", "TradingDay", default="") or ""
-                ),
-                action_day=str(pick(row, "action_day", "ActionDay", default="") or ""),
-                event_time_utc=seconds(pick(row, "event_time_utc")),
-                recv_time_utc=seconds(pick(row, "recv_time_utc")),
-                recv_monotonic_ns=int(pick(row, "recv_monotonic_ns", default=0) or 0),
-                connection_generation=int(
-                    pick(row, "connection_generation", default=0) or 0
-                ),
-                ingest_seq=int(pick(row, "ingest_seq", default=0) or 0),
-                quality_flags=tuple(pick(row, "quality_flags", default=()) or ()),
-                event_time_source=str(pick(row, "event_time_source", default="") or ""),
+                _ctp_quote_v2_fields(
+                    row,
+                    result,
+                    exchange_name=exchange_name,
+                    symbol=result["symbol"],
+                    parent_attestation=_ctp_quote_v2_parent_attestation,
+                )
             )
+        else:
+            bid = number(pick(row, "bid_price", "bid", "BidPrice1"))
+            ask = number(pick(row, "ask_price", "ask", "AskPrice1"))
+            price = number(pick(row, "price", "last_price", "last", "LastPrice"))
+            if not price and bid and ask:
+                price = (bid + ask) / 2
+            volume_semantics = str(pick(row, "volume_semantics", default="") or "")
+            delta_volume = number(
+                pick(
+                    row,
+                    "delta_volume",
+                    default=pick(row, "volume", "last_volume", "Volume"),
+                )
+            )
+            cumulative_volume = number(
+                pick(row, "cum_volume", "cumulative_volume", "Volume")
+            )
+            result.update(
+                price=price,
+                bid_price=bid,
+                ask_price=ask,
+                volume=(
+                    delta_volume
+                    if volume_semantics == "delta"
+                    else number(pick(row, "volume", "last_volume", "Volume"))
+                ),
+            )
+            if pick(row, "schema_version") not in (None, ""):
+                result.update(
+                    schema_version=str(pick(row, "schema_version")),
+                    volume_semantics=volume_semantics,
+                    cum_volume=cumulative_volume,
+                    cumulative_volume=cumulative_volume,
+                    delta_volume=delta_volume,
+                    volume_complete=bool(pick(row, "volume_complete", default=False)),
+                    volume_quality=str(pick(row, "volume_quality", default="") or ""),
+                    trading_day=str(
+                        pick(row, "trading_day", "TradingDay", default="") or ""
+                    ),
+                    action_day=str(
+                        pick(row, "action_day", "ActionDay", default="") or ""
+                    ),
+                    event_time_utc=seconds(pick(row, "event_time_utc")),
+                    recv_time_utc=seconds(pick(row, "recv_time_utc")),
+                    recv_monotonic_ns=int(
+                        pick(row, "recv_monotonic_ns", default=0) or 0
+                    ),
+                    connection_generation=int(
+                        pick(row, "connection_generation", default=0) or 0
+                    ),
+                    ingest_seq=int(pick(row, "ingest_seq", default=0) or 0),
+                    quality_flags=tuple(pick(row, "quality_flags", default=()) or ()),
+                    event_time_source=str(
+                        pick(row, "event_time_source", default="") or ""
+                    ),
+                )
     elif kind == "bar":
         result.update(
             {
