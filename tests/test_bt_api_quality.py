@@ -85,6 +85,8 @@ def test_add_exchange_pins_verified_ctp_auto_detected_fronts(monkeypatch):
 
     assert api.exchange_kwargs["CTP___FUTURE"] == {
         "auto_detect_fronts": "true",
+        # CTP always logs in with explicit settlement confirmation only.
+        "auto_settlement_confirm": False,
         "ctp_env_profile": "set2_7x24_vpn",
         "td_front": "tcp://fixture-td",
         "md_front": "tcp://fixture-md",
@@ -113,7 +115,12 @@ def test_add_exchange_never_pins_unverified_ctp_fronts(monkeypatch):
 
     api.add_exchange("CTP___FUTURE", {"auto_detect_fronts": True})
 
-    assert api.exchange_kwargs["CTP___FUTURE"] == {"auto_detect_fronts": True}
+    assert api.exchange_kwargs["CTP___FUTURE"] == {
+        "auto_detect_fronts": True,
+        # Unverified fronts are never pinned; explicit-settlement default
+        # still applies.
+        "auto_settlement_confirm": False,
+    }
 
 
 def test_subscribe_passes_copied_params_and_topics_to_handler(monkeypatch):
