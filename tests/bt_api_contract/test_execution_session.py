@@ -2480,6 +2480,20 @@ def test_failed_query_of_untracked_order_does_not_create_or_poll_ghost_state(fac
         "trading_blocked": False,
         "evidence_complete": True,
         "reconciliation_errors": {},
+        "ctp_budget": {
+            "schema_version": "ctp-execution-budget-v1",
+            "candidate_budget_cny": "10000",
+            "ordinary_cap_cny": "8000",
+            "historical_min_pnl_cny": "0",
+            "valuation_unknown": False,
+            "ordinary_reserved_cny": "0",
+            "total_reserved_cny": "0",
+            "pending_reservations": [],
+            "uncertain_reservations": [],
+            "frozen_reason": None,
+            "production_status": "PRODUCTION_BLOCKED_SELLER_OR_ACCOUNT_SOURCE",
+            "reservations": [],
+        },
     }
     assert api.poll_event(VENUE) is None
     assert len(api._backend.queried) == 1

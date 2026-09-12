@@ -21,6 +21,7 @@ from bt_api_py import (
     OrderRequest,
     TransportMode,
 )
+from bt_api_py import bt_api as bt_api_module
 from bt_api_py._contracts import CapabilityNotSupportedError
 from bt_api_py._contracts.models import OrderType, Side
 from bt_api_py._execution_session import _ExecutionSession
@@ -32,6 +33,8 @@ ACCOUNT_FINGERPRINT = f"acct_{ACCOUNT_DIGEST}"
 TRADING_DAY = "20260909"
 PROFILE = "simnow_demo"
 STRATEGY_IDENTITY = "7" * 64
+BUNDLE_SCOPE_VERSION = "ctp-contract-bundle-v1"
+BUNDLE_INSTRUMENTS = ["CZCE.SA701", "CZCE.SA701C1080", "CZCE.SA701P1080"]
 
 
 def _proof(**changes):
@@ -48,6 +51,16 @@ def _proof(**changes):
         "dependency_hashes_sha256": "5" * 64,
         "preflight_sha256": "6" * 64,
     }
+    result.update(changes)
+    return result
+
+
+def _bundle_proof(**changes):
+    result = _proof(
+        instrument=BUNDLE_INSTRUMENTS[0],
+        scope_version=BUNDLE_SCOPE_VERSION,
+        authorized_instruments=list(BUNDLE_INSTRUMENTS),
+    )
     result.update(changes)
     return result
 
@@ -86,6 +99,87 @@ def _session(tmp_path, *, risk=False, journal=True, require_journal=True):
     )
 
 
+def _budget_evidence(session, proof_value):
+    """Build a minimal write-eligible CTP path-budget evidence package.
+
+    The O2 enforcement requires an armed CTP ``make_order`` to carry an
+    ``sdk_runtime`` sourced reservation.  The evidence below mirrors what the
+    SDK runtime collector produces for the managed SimNow chain; the session
+    still re-validates it against its own arm proof, so nothing is bypassed.
+    """
+    raw_scope = list(proof_value.get("authorized_instruments") or [])
+    if not raw_scope:
+        raw_scope = [proof_value["instrument"]]
+    if len(raw_scope) < 2:
+        # Budget evidence mandates a 2-3 leg authorized scope; for single
+        # instrument (V1) arming derive a deterministic companion option leg.
+        exchange, symbol = raw_scope[0].split(".", 1)
+        raw_scope.append(f"{exchange}.{symbol}C1080")
+    instruments = [
+        dict(zip(("exchange_id", "instrument_id"), item.split(".", 1), strict=True))
+        for item in raw_scope
+    ]
+    budget_context = {
+        "account_fingerprint": proof_value["account_fingerprint"],
+        "trading_day": proof_value["trading_day"],
+        "connection_generation": proof_value["connection_generation"],
+        "environment_profile": proof_value["environment_profile"],
+        "candidate_id": "iter22-budget-test",
+        "strategy_id": session.config.get("strategy_id") or "iter22-midfreq",
+        "strategy_identity_sha256": session.config.get("strategy_identity_sha256")
+        or STRATEGY_IDENTITY,
+        "execution_cycle_id": "budget-cycle",
+        "scope_version": "test-budget-scope-v1",
+        "authorized_instruments": [dict(item) for item in instruments],
+        "primary_instrument": dict(instruments[0]),
+    }
+    costs = {
+        "future_gross_margin": "1",
+        "seller_option_gross_margin": "1",
+        "paid_long_premium": "1",
+        "fees_financing": "1",
+        "stress_cash_loss": "1",
+        "unresolved_reserve": "1",
+    }
+    states = [
+        {
+            "state_id": kind,
+            "state_kind": kind,
+            "context": dict(budget_context),
+            "costs": dict(costs),
+        }
+        for kind in ("prefix", "partial", "unknown", "cancel", "late_fill")
+    ]
+    states.append(
+        {
+            "state_id": "recovery",
+            "state_kind": "recovery",
+            "non_overlapping": True,
+            "recovery_increment_cny": "2",
+            "context": dict(budget_context),
+            "costs": dict(costs),
+        }
+    )
+    return {
+        "schema_version": "ctp-execution-budget-v1",
+        "source": "sdk_runtime",
+        "source_version": "test-collector-v1",
+        "money_unit": "CNY",
+        **budget_context,
+        "reachable_states": states,
+        "fresh_available_cny": "100000",
+        "account_available_authoritative": True,
+        "seller_margin_source_verified": True,
+        "absorption_source_verified": True,
+    }
+
+
+def _reserve_budget(session, proof_value, *, mode="ordinary"):
+    return session.reserve_ctp_execution_budget(
+        _budget_evidence(session, proof_value), mode=mode
+    )
+
+
 def _ready_state(**changes):
     state = {
         "connected": True,
@@ -111,12 +205,16 @@ class _ManagedFeed:
         self._session_state = session_state
         self.trader_client = SimpleNamespace(get_session_state=lambda: dict(self._session_state))
         self._capability = None
+        self._settlement_authorizations = set()
+        self.settlement_calls = []
         self._gate_state = {
             "managed": True,
             "armed": False,
             "connection_generation": None,
             "trading_day": None,
             "instrument": None,
+            "scope_version": None,
+            "authorized_instruments": None,
             "environment_profile": None,
             "proof_sha256": None,
             "revocation_reason": None,
@@ -125,15 +223,33 @@ class _ManagedFeed:
     def get_session_state(self):
         return dict(self._session_state)
 
+    def get_environment_info(self):
+        return {
+            "environment": "demo",
+            "verified": True,
+            "profile": PROFILE,
+        }
+
     def configure_execution_gate(self, capability):
         if self._capability not in (None, capability):
             raise RuntimeError("different capability")
         self._capability = capability
         return self.get_execution_gate_state()
 
-    def arm_execution_gate(self, capability, proof):
+    def _issue_execution_authorization_for_core(
+        self,
+        capability,
+        proof,
+        **_kwargs,
+    ):
         if capability is not self._capability:
             raise RuntimeError("wrong capability")
+        return {"proof": dict(proof)}
+
+    def arm_execution_gate(self, capability, authorization):
+        if capability is not self._capability:
+            raise RuntimeError("wrong capability")
+        proof = authorization["proof"]
         proof_sha256 = hashlib.sha256(
             json.dumps(
                 proof,
@@ -149,11 +265,39 @@ class _ManagedFeed:
             "connection_generation": proof["connection_generation"],
             "trading_day": proof["trading_day"],
             "instrument": proof["instrument"],
+            "scope_version": proof.get("scope_version"),
+            "authorized_instruments": (
+                list(proof["authorized_instruments"])
+                if "authorized_instruments" in proof
+                else None
+            ),
             "environment_profile": proof["environment_profile"],
             "proof_sha256": proof_sha256,
             "revocation_reason": None,
         }
         return self.get_execution_gate_state()
+
+    def _issue_settlement_authorization_for_core(self, capability):
+        if capability is not self._capability:
+            raise RuntimeError("wrong capability")
+        authorization = object()
+        self._settlement_authorizations.add(authorization)
+        return authorization
+
+    def confirm_settlement(
+        self,
+        *,
+        timeout,
+        _execution_capability,
+        _settlement_authorization,
+    ):
+        if _execution_capability is not self._capability:
+            raise RuntimeError("wrong capability")
+        if _settlement_authorization not in self._settlement_authorizations:
+            raise RuntimeError("wrong settlement authorization")
+        self._settlement_authorizations.remove(_settlement_authorization)
+        self.settlement_calls.append(timeout)
+        return True
 
     def disarm_execution_gate(self, capability, reason="execution_arm_revoked"):
         if capability is not self._capability:
@@ -163,6 +307,8 @@ class _ManagedFeed:
             connection_generation=None,
             trading_day=None,
             instrument=None,
+            scope_version=None,
+            authorized_instruments=None,
             environment_profile=None,
             proof_sha256=None,
             revocation_reason=reason,
@@ -192,6 +338,18 @@ def _api_for_arm(tmp_path, *, state=None, risk=False):
         "ctp_package_sha256": "3" * 64,
     }
     return api, session, session_state
+
+
+def _authorization(api, proof=None, *, cycle="controlled-test-cycle"):
+    return api._issue_ctp_execution_authorization_for_test(
+        proof or _proof(),
+        _test_authority=bt_api_module._issue_ctp_controlled_test_authority_for_core(),
+        execution_cycle_id=cycle,
+    )
+
+
+def _arm(api, proof=None, *, cycle="controlled-test-cycle"):
+    return api.arm_execution_from_preflight(_authorization(api, proof, cycle=cycle))
 
 
 class _AccountStream:
@@ -330,18 +488,17 @@ def test_public_arm_uses_raw_native_account_identity_and_is_idempotent(monkeypat
     ).hexdigest()
 
     try:
-        first = api.arm_execution_from_preflight(proof)
-        second = api.arm_execution_from_preflight(dict(proof))
+        first_authorization = _authorization(api, proof)
+        first = api.arm_execution_from_preflight(first_authorization)
+        with pytest.raises(NormalizedApiError) as reused:
+            api.arm_execution_from_preflight(first_authorization)
 
-        assert (
-            first
-            == second
-            == {
-                "armed": True,
-                "market_data_only": False,
-                "proof_sha256": expected_hash,
-            }
-        )
+        assert first == {
+            "armed": True,
+            "market_data_only": False,
+            "proof_sha256": expected_hash,
+        }
+        assert reused.value.code == "ctp_execution_authorization_required"
         assert session.config["market_data_only"] is False
         assert session.lock_file is not None
         assert len(_AccountStream.instances) == 1
@@ -352,6 +509,260 @@ def test_public_arm_uses_raw_native_account_identity_and_is_idempotent(monkeypat
         assert stream.wait_timeouts == [5.0]
         assert stream.kwargs["request_feed"] is api.exchange_feeds[VENUE]
         assert api._subscription_flags[f"{VENUE}_account"] is True
+    finally:
+        session.close()
+
+
+def test_public_state_hash_mapping_cannot_self_authorize_ctp_arm(tmp_path):
+    """State returned by public CTP reads is evidence, never arm authority."""
+
+    api, session, _state = _api_for_arm(tmp_path)
+    try:
+        public_state = api.get_ctp_session_state(VENUE)
+        forged = _proof(
+            account_fingerprint=f"acct_{public_state['account_fingerprint']}",
+            trading_day=public_state["trading_day"],
+            connection_generation=public_state["connection_generation"],
+            environment_profile=public_state["environment_profile"],
+        )
+
+        with pytest.raises(NormalizedApiError) as raised:
+            api.arm_execution_from_preflight(forged)
+
+        assert raised.value.code == "ctp_execution_authorization_required"
+        assert api.exchange_feeds[VENUE].get_execution_gate_state()["armed"] is False
+        assert session.config["market_data_only"] is True
+    finally:
+        session.close()
+
+
+def test_private_controlled_issuer_rejects_forged_test_authority(tmp_path):
+    api, session, _state = _api_for_arm(tmp_path)
+    try:
+        with pytest.raises(NormalizedApiError) as raised:
+            api._issue_ctp_execution_authorization_for_test(
+                _proof(),
+                _test_authority=object(),
+            )
+
+        assert raised.value.code == "ctp_execution_authorization_required"
+        assert api.exchange_feeds[VENUE].get_execution_gate_state()["armed"] is False
+    finally:
+        session.close()
+
+
+def test_prepare_execution_authorization_invalidates_unconsumed_arm_grant(tmp_path):
+    api, session, _state = _api_for_arm(tmp_path)
+    try:
+        authorization = _authorization(api)
+        api.prepare_execution_authorization()
+
+        with pytest.raises(NormalizedApiError) as raised:
+            api.arm_execution_from_preflight(authorization)
+
+        assert raised.value.code == "ctp_execution_authorization_preflight_invalidated"
+        assert api.exchange_feeds[VENUE].get_execution_gate_state()["armed"] is False
+        assert session.config["market_data_only"] is True
+    finally:
+        session.close()
+
+
+def test_generation_change_consumes_and_rejects_pending_arm_grant(tmp_path):
+    api, session, state = _api_for_arm(tmp_path)
+    try:
+        authorization = _authorization(api)
+        state["connection_generation"] = 4
+
+        with pytest.raises(NormalizedApiError) as changed:
+            api.arm_execution_from_preflight(authorization)
+        with pytest.raises(NormalizedApiError) as reused:
+            api.arm_execution_from_preflight(authorization)
+
+        assert changed.value.code == "ctp_execution_authorization_context_mismatch"
+        assert reused.value.code == "ctp_execution_authorization_required"
+        assert api.exchange_feeds[VENUE].get_execution_gate_state()["armed"] is False
+    finally:
+        session.close()
+
+
+def test_controlled_settlement_token_invalidates_unconsumed_arm_grant(tmp_path):
+    api, session, _state = _api_for_arm(tmp_path)
+    try:
+        pending_arm = _authorization(api)
+        session.config["market_data_only"] = False
+        with pytest.raises(NormalizedApiError) as forged:
+            api._issue_ctp_settlement_authorization_for_test(_test_authority=object())
+        assert forged.value.code == "ctp_settlement_authorization_required"
+
+        settlement = api._issue_ctp_settlement_authorization_for_test(
+            _test_authority=bt_api_module._issue_ctp_controlled_test_authority_for_core()
+        )
+        assert api._confirm_ctp_settlement_for_core(settlement, timeout=0.25) is True
+        assert api.exchange_feeds[VENUE].settlement_calls == [0.25]
+
+        with pytest.raises(NormalizedApiError) as raised:
+            api.arm_execution_from_preflight(pending_arm)
+
+        assert raised.value.code == "ctp_execution_authorization_preflight_invalidated"
+        assert session.config["market_data_only"] is True
+    finally:
+        session.close()
+
+
+def test_private_ingress_revocation_invalidates_sibling_arm_grant(
+    monkeypatch, tmp_path
+):
+    _install_account_stream(monkeypatch)
+    api, session, _state = _api_for_arm(tmp_path)
+    try:
+        first = _authorization(api)
+        sibling = _authorization(api)
+        api.arm_execution_from_preflight(first)
+
+        api._revoke_ctp_arm_for_private_ingress(VENUE)
+        with pytest.raises(NormalizedApiError) as raised:
+            api.arm_execution_from_preflight(sibling)
+
+        assert raised.value.code == "ctp_execution_authorization_preflight_invalidated"
+        assert api.exchange_feeds[VENUE].get_execution_gate_state()["armed"] is False
+    finally:
+        session.close()
+
+
+def test_public_arm_verifies_exact_v2_bundle_scope(monkeypatch, tmp_path):
+    _install_account_stream(monkeypatch)
+    api, session, _state = _api_for_arm(tmp_path)
+    proof = _bundle_proof()
+    try:
+        result = _arm(api, proof)
+
+        assert result["armed"] is True
+        gate = api.exchange_feeds[VENUE].get_execution_gate_state()
+        assert gate["scope_version"] == BUNDLE_SCOPE_VERSION
+        assert gate["authorized_instruments"] == BUNDLE_INSTRUMENTS
+    finally:
+        session.close()
+
+
+def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(tmp_path):
+    session = _session(tmp_path)
+    transport = Mock(return_value={"status": "accepted", "order_id": "SYS1"})
+    try:
+        bundle = _bundle_proof()
+        _arm_direct(session, proof=bundle, context=_context(bundle))
+
+        for index, symbol in enumerate(BUNDLE_INSTRUMENTS, start=1):
+            session.invoke(
+                "make_order",
+                VENUE,
+                _order(
+                    symbol.split(".", 1)[1],
+                    client_order_id=f"00000000000{index}",
+                ),
+                transport,
+                budget_capability=_reserve_budget(session, bundle),
+            )
+        submit_calls = session.submit_calls
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke(
+                "make_order",
+                VENUE,
+                _order("SA701C1100", client_order_id="000000000099"),
+                transport,
+            )
+
+        assert raised.value.code == "execution_arm_instrument_mismatch"
+        assert session.submit_calls == submit_calls == 3
+        assert transport.call_count == 3
+    finally:
+        session.close()
+
+
+def test_v2_bundle_accepts_native_dce_option_spelling_and_rejects_case_changes(
+    tmp_path,
+):
+    instruments = ["DCE.m2701", "DCE.m2701-C-3400"]
+    proof = _proof(
+        instrument=instruments[0],
+        scope_version=BUNDLE_SCOPE_VERSION,
+        authorized_instruments=instruments,
+    )
+    session = _session(tmp_path)
+    transport = Mock(return_value={"status": "accepted", "order_id": "SYS1"})
+    try:
+        _arm_direct(session, proof=proof, context=_context(proof))
+        session.invoke(
+            "make_order",
+            VENUE,
+            _order("m2701-C-3400", exchange_id="DCE"),
+            transport,
+            budget_capability=_reserve_budget(session, proof),
+        )
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke(
+                "make_order",
+                VENUE,
+                _order(
+                    "M2701-C-3400",
+                    exchange_id="DCE",
+                    client_order_id="000000000002",
+                ),
+                transport,
+            )
+        assert raised.value.code == "execution_arm_instrument_mismatch"
+        assert transport.call_count == 1
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("operation", ("make_order", "cancel_order"))
+@pytest.mark.parametrize(
+    ("symbol", "exchange_id"),
+    (
+        (" m2701-C-3400", "DCE"),
+        ("m2701-C-3400 ", "DCE"),
+        ("DCE.m2701-C-3400", "DCE"),
+        ("m2701-C-3400.DCE", "DCE"),
+        ("m2701-C-3400", " dce"),
+        ("m2701-C-3400", "dce"),
+        ("m2701-C-3400", "DCE "),
+        ("m2701-C-3400", None),
+    ),
+)
+def test_v2_bundle_rejects_rewritten_native_wire_fields_before_journal_or_transport(
+    tmp_path, operation, symbol, exchange_id
+):
+    """A V2 proof must bind the exact fields sent to the CTP native API."""
+    instruments = ["DCE.m2701", "DCE.m2701-C-3400"]
+    proof = _proof(
+        instrument=instruments[0],
+        scope_version=BUNDLE_SCOPE_VERSION,
+        authorized_instruments=instruments,
+    )
+    session = _session(tmp_path)
+    transport = Mock(return_value={"status": "accepted", "order_id": "SYS1"})
+    try:
+        _arm_direct(session, proof=proof, context=_context(proof))
+        if operation == "make_order":
+            request = _order(symbol, exchange_id=exchange_id)
+        else:
+            request = CancelOrderRequest(
+                symbol=symbol,
+                account_id=ACCOUNT_FINGERPRINT,
+                client_order_id="000000000001",
+                order_id="SYS1",
+                exchange_id=exchange_id,
+            )
+
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke(operation, VENUE, request, transport)
+
+        assert raised.value.code == "execution_arm_instrument_mismatch"
+        assert session.submit_calls == 0
+        assert session.cancel_calls == 0
+        assert session.orders == {}
+        assert not session.path.exists()
+        transport.assert_not_called()
     finally:
         session.close()
 
@@ -379,7 +790,7 @@ def test_concurrent_disarm_cannot_be_undone_after_session_arm(monkeypatch, tmp_p
 
     def run_arm():
         try:
-            arm_result.append(api.arm_execution_from_preflight(_proof()))
+            arm_result.append(_arm(api))
         except Exception as exc:  # pragma: no cover - asserted below
             arm_errors.append(exc)
 
@@ -453,6 +864,16 @@ def test_concurrent_disarm_cannot_be_undone_after_session_arm(monkeypatch, tmp_p
         _proof(instrument="ZCE.SA609"),
         _proof(instrument="CZCE.SA2609"),
         _proof(instrument="DCE.SA-609"),
+        _bundle_proof(authorized_instruments=BUNDLE_INSTRUMENTS[:1]),
+        _bundle_proof(authorized_instruments=BUNDLE_INSTRUMENTS + ["CZCE.SA701P1100"]),
+        _bundle_proof(authorized_instruments=list(reversed(BUNDLE_INSTRUMENTS))),
+        _bundle_proof(
+            authorized_instruments=["CZCE.SA701", "DCE.m2701-C-3400"],
+        ),
+        _bundle_proof(
+            instrument="CZCE.SA701C1100",
+            authorized_instruments=BUNDLE_INSTRUMENTS,
+        ),
     ],
 )
 def test_malformed_proof_fails_without_leaving_read_only(tmp_path, proof):
@@ -501,8 +922,8 @@ def test_public_arm_rejects_proof_that_mismatches_loaded_runtime_identity(tmp_pa
     api, session, _state = _api_for_arm(tmp_path)
     try:
         with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_from_preflight(_proof(**{field: "9" * 64}))
-        assert raised.value.code == f"execution_arm_{field}_mismatch"
+            _arm(api, _proof(**{field: "9" * 64}))
+        assert raised.value.code == "ctp_execution_authorization_context_mismatch"
         assert session.config["market_data_only"] is True
         assert session.lock_file is None
         assert api._subscription_streams == []
@@ -520,7 +941,7 @@ def test_public_arm_requires_current_settlement_query_readback(tmp_path, verifie
     api, session, _state = _api_for_arm(tmp_path, state=state)
     try:
         with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_from_preflight(_proof())
+            _arm(api)
         assert raised.value.code == "ctp_session_not_trading_ready"
         assert session.config["market_data_only"] is True
         assert session.lock_file is None
@@ -713,7 +1134,12 @@ def test_armed_placement_still_runs_account_risk_guards(
         session.close()
 
 
-def _order(symbol, client_order_id="000000000001", exchange_id="CZCE"):
+def _order(
+    symbol,
+    client_order_id="000000000001",
+    exchange_id="CZCE",
+    cycle="cycle-1",
+):
     return OrderRequest(
         symbol=symbol,
         side=Side.BUY,
@@ -726,7 +1152,7 @@ def _order(symbol, client_order_id="000000000001", exchange_id="CZCE"):
         quantity_unit="lots",
         offset="open",
         exchange_id=exchange_id,
-        execution_cycle_id="cycle-1",
+        execution_cycle_id=cycle,
         execution_role="entry",
         strategy_identity_sha256=STRATEGY_IDENTITY,
     )
@@ -750,6 +1176,27 @@ def test_cross_instrument_order_rejects_before_journal_or_transport(tmp_path):
         assert session.submit_calls == 0
         assert session.orders == {}
         assert not session.path.exists()
+        transport.assert_not_called()
+    finally:
+        session.close()
+
+
+def test_opaque_arm_grant_binds_the_authorized_strategy_cycle(monkeypatch, tmp_path):
+    _install_account_stream(monkeypatch)
+    api, session, _state = _api_for_arm(tmp_path)
+    transport = Mock(return_value=_order_update())
+    try:
+        _arm(api, cycle="authorized-cycle")
+
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke(
+                "make_order",
+                VENUE,
+                _order("SA609.CZCE", cycle="different-cycle"),
+                transport,
+            )
+
+        assert raised.value.code == "ctp_execution_authorization_identity_mismatch"
         transport.assert_not_called()
     finally:
         session.close()
@@ -806,7 +1253,7 @@ def test_account_stream_start_and_stop_join_private_producer_outside_session_loc
     )
     try:
         with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_from_preflight(_proof())
+            _arm(api)
         assert raised.value.code == "ctp_execution_gate_arm_failed"
         stream = JoiningProducerStream.instances[0]
         assert stream.producer_blocked is False
@@ -821,13 +1268,15 @@ def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(tmp_
     session = _session(tmp_path)
     transport = Mock(return_value=_order_update())
     try:
-        _arm_direct(session)
+        proof = _proof()
+        _arm_direct(session, proof=proof)
 
         result = session.invoke(
             "make_order",
             VENUE,
             _order("SA609.CZCE"),
             transport,
+            budget_capability=_reserve_budget(session, proof),
         )
 
         assert result["status"] == "accepted"
@@ -835,7 +1284,13 @@ def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(tmp_
         assert session.submit_calls == 1
         transport.assert_called_once_with()
         rows = [json.loads(line) for line in session.path.read_text().splitlines()]
-        assert [row["event"] for row in rows] == ["intent", "order_update"]
+        assert [row["event"] for row in rows] == [
+            "ctp_budget_reservation_started",
+            "ctp_budget_reservation_committed",
+            "intent",
+            "ctp_budget_action_started",
+            "order_update",
+        ]
     finally:
         session.close()
 
@@ -845,8 +1300,15 @@ def test_armed_tracked_same_instrument_cancel_remains_available(tmp_path):
     place = Mock(return_value=_order_update())
     cancel = Mock(return_value=_order_update(status="canceled", terminal=True))
     try:
-        _arm_direct(session)
-        session.invoke("make_order", VENUE, _order("SA609.CZCE"), place)
+        proof = _proof()
+        _arm_direct(session, proof=proof)
+        session.invoke(
+            "make_order",
+            VENUE,
+            _order("SA609.CZCE"),
+            place,
+            budget_capability=_reserve_budget(session, proof),
+        )
         request = CancelOrderRequest(
             symbol="SA609.CZCE",
             account_id=ACCOUNT_FINGERPRINT,
@@ -855,7 +1317,13 @@ def test_armed_tracked_same_instrument_cancel_remains_available(tmp_path):
             exchange_id="CZCE",
         )
 
-        result = session.invoke("cancel_order", VENUE, request, cancel)
+        result = session.invoke(
+            "cancel_order",
+            VENUE,
+            request,
+            cancel,
+            budget_capability=_reserve_budget(session, proof),
+        )
 
         assert result["status"] == "canceled"
         assert result["terminal_confirmed"] is True
@@ -863,9 +1331,15 @@ def test_armed_tracked_same_instrument_cancel_remains_available(tmp_path):
         cancel.assert_called_once_with()
         rows = [json.loads(line) for line in session.path.read_text().splitlines()]
         assert [row["event"] for row in rows] == [
+            "ctp_budget_reservation_started",
+            "ctp_budget_reservation_committed",
             "intent",
+            "ctp_budget_action_started",
             "order_update",
+            "ctp_budget_reservation_started",
+            "ctp_budget_reservation_committed",
             "cancel_intent",
+            "ctp_budget_action_started",
             "order_update",
         ]
     finally:
@@ -907,7 +1381,7 @@ def test_empty_subscription_list_creates_and_waits_for_account_stream(monkeypatc
     _install_account_stream(monkeypatch)
     api, session, _state = _api_for_arm(tmp_path)
     try:
-        result = api.arm_execution_from_preflight(_proof())
+        result = _arm(api)
         assert result["armed"] is True
         assert len(api._subscription_streams) == 1
         assert _AccountStream.instances[0].wait_timeouts == [5.0]
@@ -920,7 +1394,7 @@ def test_armed_ctp_does_not_expand_account_level_or_bulk_write_capabilities(monk
     api, session, _state = _api_for_arm(tmp_path)
     api._backend = Mock()
     try:
-        api.arm_execution_from_preflight(_proof())
+        _arm(api)
 
         with pytest.raises(CapabilityNotSupportedError):
             api.set_position_mode(VENUE, "net", normalized=True)
@@ -951,7 +1425,7 @@ def test_missing_account_stream_dependency_rolls_back_and_stays_read_only(
         )
     try:
         with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_from_preflight(_proof())
+            _arm(api)
         assert raised.value.code == "ctp_account_stream_unavailable"
         assert session.config["market_data_only"] is True
         assert session.lock_file is None
@@ -986,7 +1460,7 @@ def test_account_stream_wait_failure_rolls_back_and_stays_read_only(monkeypatch,
     api, session, _state = _api_for_arm(tmp_path)
     try:
         with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_from_preflight(_proof())
+            _arm(api)
         assert raised.value.code == "ctp_account_stream_unavailable"
         assert session.config["market_data_only"] is True
         assert session.lock_file is None
@@ -1008,7 +1482,7 @@ def test_account_stream_without_lifecycle_proof_rolls_back_and_stays_read_only(
     api, session, _state = _api_for_arm(tmp_path)
     try:
         with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_from_preflight(_proof())
+            _arm(api)
         assert raised.value.code == "ctp_account_stream_unavailable"
         assert session.config["market_data_only"] is True
         assert session.lock_file is None

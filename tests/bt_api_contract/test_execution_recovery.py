@@ -21,6 +21,7 @@ from bt_api_py import (
     OrderRequest,
     TransportMode,
 )
+from bt_api_py import bt_api as bt_api_module
 from bt_api_py._contracts.models import OrderType, Side
 from bt_api_py._direct_backend import DirectBackend
 from bt_api_py._execution_session import _ExecutionSession
@@ -31,6 +32,15 @@ ACCOUNT = "acct_0123456789abcdef"
 TRADING_DAY = "20260909"
 STRATEGY_IDENTITY = "7" * 64
 CYCLE = "cycle-iter22"
+BUNDLE_SCOPE_VERSION = "ctp-contract-bundle-v1"
+BUNDLE_INSTRUMENTS = ["CZCE.SA701", "CZCE.SA701C1080", "CZCE.SA701P1080"]
+
+
+class _RecoveryNativeAuthorization:
+    """Fixture-only opaque counterpart to the native feed grant."""
+
+    def __init__(self, proof):
+        self.proof = dict(proof)
 
 
 class ManagedRecoveryFeed:
@@ -51,20 +61,40 @@ class ManagedRecoveryFeed:
         }
         self.trader_client = SimpleNamespace(get_session_state=lambda: dict(self.state))
         self.capability = None
-        self.gate = {"managed": True, "armed": False}
+        self.gate = {
+            "managed": True,
+            "armed": False,
+            "scope_version": None,
+            "authorized_instruments": None,
+        }
         self.arm_calls = []
         self.disarm_calls = []
 
     def get_session_state(self):
         return dict(self.state)
 
+    def get_environment_info(self):
+        return {
+            "environment": "demo",
+            "verified": True,
+            "profile": "simnow_demo",
+        }
+
     def configure_execution_gate(self, capability):
         self.capability = capability
         return dict(self.gate)
 
-    def arm_execution_gate(self, capability, arm_proof):
+    def _issue_execution_authorization_for_core(self, capability, proof, **_kwargs):
         if capability is not self.capability:
             raise RuntimeError("wrong capability")
+        return _RecoveryNativeAuthorization(proof)
+
+    def arm_execution_gate(self, capability, authorization):
+        if capability is not self.capability:
+            raise RuntimeError("wrong capability")
+        if type(authorization) is not _RecoveryNativeAuthorization:
+            raise RuntimeError("opaque authorization required")
+        arm_proof = authorization.proof
         self.arm_calls.append(dict(arm_proof))
         self.gate = {
             "managed": True,
@@ -72,6 +102,12 @@ class ManagedRecoveryFeed:
             "connection_generation": arm_proof["connection_generation"],
             "trading_day": arm_proof["trading_day"],
             "instrument": arm_proof["instrument"],
+            "scope_version": arm_proof.get("scope_version"),
+            "authorized_instruments": (
+                list(arm_proof["authorized_instruments"])
+                if "authorized_instruments" in arm_proof
+                else None
+            ),
             "environment_profile": arm_proof["environment_profile"],
             "proof_sha256": canonical_sha256(arm_proof),
             "revocation_reason": None,
@@ -82,7 +118,13 @@ class ManagedRecoveryFeed:
         if capability is not self.capability:
             raise RuntimeError("wrong capability")
         self.disarm_calls.append(reason)
-        self.gate = {"managed": True, "armed": False, "revocation_reason": reason}
+        self.gate = {
+            "managed": True,
+            "armed": False,
+            "scope_version": None,
+            "authorized_instruments": None,
+            "revocation_reason": reason,
+        }
         return dict(self.gate)
 
     def get_execution_gate_state(self):
@@ -128,6 +170,17 @@ def proof(generation=3, **changes):
     return value
 
 
+def bundle_proof(generation=3, **changes):
+    value = proof(
+        generation,
+        instrument=BUNDLE_INSTRUMENTS[0],
+        scope_version=BUNDLE_SCOPE_VERSION,
+        authorized_instruments=list(BUNDLE_INSTRUMENTS),
+    )
+    value.update(changes)
+    return value
+
+
 def context(value):
     return {
         "account_fingerprint": value["account_fingerprint"],
@@ -152,6 +205,84 @@ def make_session(path, *, strategy_identity=STRATEGY_IDENTITY):
             "strategy_identity_sha256": strategy_identity,
         },
         exchange_names=(VENUE,),
+    )
+
+
+def _budget_evidence(session, proof_value):
+    """Build a minimal write-eligible CTP path-budget evidence package.
+
+    Mirrors what the SDK runtime collector produces for the managed SimNow
+    chain; the session still re-validates the evidence against its own arm
+    proof, writer lease and journal, so the O2 gate itself is not bypassed.
+    """
+    raw_scope = list(proof_value.get("authorized_instruments") or [])
+    if not raw_scope:
+        raw_scope = [proof_value["instrument"]]
+    if len(raw_scope) < 2:
+        exchange, symbol = raw_scope[0].split(".", 1)
+        raw_scope.append(f"{exchange}.{symbol}C1080")
+    instruments = [
+        dict(zip(("exchange_id", "instrument_id"), item.split(".", 1), strict=True))
+        for item in raw_scope
+    ]
+    budget_context = {
+        "account_fingerprint": proof_value["account_fingerprint"],
+        "trading_day": proof_value["trading_day"],
+        "connection_generation": proof_value["connection_generation"],
+        "environment_profile": proof_value["environment_profile"],
+        "candidate_id": "iter22-budget-test",
+        "strategy_id": session.config.get("strategy_id") or "iter22-midfreq",
+        "strategy_identity_sha256": session.config.get("strategy_identity_sha256")
+        or STRATEGY_IDENTITY,
+        "execution_cycle_id": "budget-cycle",
+        "scope_version": "test-budget-scope-v1",
+        "authorized_instruments": [dict(item) for item in instruments],
+        "primary_instrument": dict(instruments[0]),
+    }
+    costs = {
+        "future_gross_margin": "1",
+        "seller_option_gross_margin": "1",
+        "paid_long_premium": "1",
+        "fees_financing": "1",
+        "stress_cash_loss": "1",
+        "unresolved_reserve": "1",
+    }
+    states = [
+        {
+            "state_id": kind,
+            "state_kind": kind,
+            "context": dict(budget_context),
+            "costs": dict(costs),
+        }
+        for kind in ("prefix", "partial", "unknown", "cancel", "late_fill")
+    ]
+    states.append(
+        {
+            "state_id": "recovery",
+            "state_kind": "recovery",
+            "non_overlapping": True,
+            "recovery_increment_cny": "2",
+            "context": dict(budget_context),
+            "costs": dict(costs),
+        }
+    )
+    return {
+        "schema_version": "ctp-execution-budget-v1",
+        "source": "sdk_runtime",
+        "source_version": "test-collector-v1",
+        "money_unit": "CNY",
+        **budget_context,
+        "reachable_states": states,
+        "fresh_available_cny": "100000",
+        "account_available_authoritative": True,
+        "seller_margin_source_verified": True,
+        "absorption_source_verified": True,
+    }
+
+
+def _reserve_budget(session, proof_value, *, mode="ordinary"):
+    return session.reserve_ctp_execution_budget(
+        _budget_evidence(session, proof_value), mode=mode
     )
 
 
@@ -182,6 +313,102 @@ def order_request(
         execution_role=role,
         strategy_identity_sha256=STRATEGY_IDENTITY,
     )
+
+
+def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE):
+    exchange_id, symbol = instrument.split(".", 1)
+    return OrderRequest(
+        symbol=symbol,
+        side=Side.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("2"),
+        account_id=ACCOUNT,
+        client_order_id=client_order_id,
+        price=Decimal("1500"),
+        time_in_force="GFD",
+        quantity_unit="contracts",
+        position_side="long",
+        offset="open",
+        exchange_id=exchange_id,
+        execution_cycle_id=cycle,
+        execution_role="entry",
+        strategy_identity_sha256=STRATEGY_IDENTITY,
+    )
+
+
+def bundle_order_update(instrument, *, client_order_id, order_id, terminal=False):
+    exchange_id, symbol = instrument.split(".", 1)
+    return {
+        "kind": "order",
+        "symbol": symbol,
+        "account_id": ACCOUNT,
+        "client_order_id": client_order_id,
+        "order_id": order_id,
+        "exchange_id": exchange_id,
+        "side": "buy",
+        "position_side": "long",
+        "offset": "open",
+        "quantity_unit": "contracts",
+        "status": "completed" if terminal else "accepted",
+        "filled": "2" if terminal else "0",
+        "avg_price": "1500" if terminal else None,
+        "terminal_confirmed": terminal,
+        "trading_day": TRADING_DAY,
+    }
+
+
+def bundle_trade_update(instrument, *, client_order_id, order_id, trade_id):
+    exchange_id, symbol = instrument.split(".", 1)
+    return {
+        "kind": "trade",
+        "symbol": symbol,
+        "account_id": ACCOUNT,
+        "client_order_id": client_order_id,
+        "order_id": order_id,
+        "exchange_id": exchange_id,
+        "side": "buy",
+        "position_side": "long",
+        "offset": "open",
+        "quantity_unit": "contracts",
+        "size": "2",
+        "price": "1500",
+        "trade_id": trade_id,
+        "trading_day": TRADING_DAY,
+    }
+
+
+def bundle_remote_trade(instrument, *, trade_id):
+    exchange_id, symbol = instrument.split(".", 1)
+    return {
+        "AccountID": ACCOUNT,
+        "TradingDay": TRADING_DAY,
+        "InstrumentID": symbol,
+        "ExchangeID": exchange_id,
+        "Direction": "0",
+        "OffsetFlag": "0",
+        "Volume": "2",
+        "TradeID": trade_id,
+        "connection_generation": 4,
+        "evidence_complete": True,
+    }
+
+
+def bundle_position(instrument, *, quantity="2", frozen="0"):
+    exchange_id, symbol = instrument.split(".", 1)
+    return {
+        "AccountID": ACCOUNT,
+        "TradingDay": TRADING_DAY,
+        "InstrumentID": symbol,
+        "ExchangeID": exchange_id,
+        "PosiDirection": "2",
+        "Position": quantity,
+        "TodayPosition": quantity,
+        "YdPosition": "0",
+        "LongFrozen": frozen,
+        "ShortFrozen": quantity,
+        "connection_generation": 4,
+        "evidence_complete": True,
+    }
 
 
 def order_update(
@@ -428,6 +655,18 @@ def public_recovery_api(path):
     return api, session, feed
 
 
+def _test_authority():
+    return bt_api_module._issue_ctp_controlled_test_authority_for_core()
+
+
+def _recovery_authorization(api, current_proof, *, cycle=CYCLE):
+    return api._issue_ctp_execution_authorization_for_test(
+        current_proof,
+        _test_authority=_test_authority(),
+        execution_cycle_id=cycle,
+    )
+
+
 def public_order_api(session, backend):
     api = object.__new__(BtApi)
     api.transport_mode = TransportMode.DIRECT
@@ -451,7 +690,13 @@ def public_recovery_order_api(session, backend):
     api._subscription_flags = {f"{VENUE}_account": True}
     api._ctp_execution_capability = object()
     feed.configure_execution_gate(api._ctp_execution_capability)
-    feed.arm_execution_gate(api._ctp_execution_capability, session._arm_proof)
+    feed.arm_execution_gate(
+        api._ctp_execution_capability,
+        feed._issue_execution_authorization_for_core(
+            api._ctp_execution_capability,
+            session._arm_proof,
+        ),
+    )
     return api, feed, stream
 
 
@@ -472,7 +717,13 @@ def write_crashed_journal(path, *, exposure=None, active=False, uncertain=False)
         return order_update(side=side)
 
     try:
-        session.invoke("make_order", VENUE, request, submit)
+        session.invoke(
+            "make_order",
+            VENUE,
+            request,
+            submit,
+            budget_capability=_reserve_budget(session, old_proof),
+        )
     except NormalizedApiError:
         if not uncertain:
             raise
@@ -504,6 +755,54 @@ def prepare_from_journal(path, *, new_proof=None, strategy_identity=STRATEGY_IDE
     return session, current_proof
 
 
+def write_bundle_crashed_journal(path, *, instruments=BUNDLE_INSTRUMENTS[:2]):
+    old_proof = bundle_proof(3)
+    session = make_session(path)
+    session.arm_from_preflight(old_proof, lambda: context(old_proof))
+    try:
+        for index, instrument in enumerate(instruments, start=1):
+            client_order_id = f"0000000000{index:02d}"
+            order_id = f"SYS{index}"
+            trade_id = f"TRADE{index}"
+            request = bundle_order_request(
+                instrument,
+                client_order_id=client_order_id,
+            )
+            session.invoke(
+                "make_order",
+                VENUE,
+                request,
+                lambda instrument=instrument, client_order_id=client_order_id, order_id=order_id: (
+                    bundle_order_update(
+                        instrument,
+                        client_order_id=client_order_id,
+                        order_id=order_id,
+                    )
+                ),
+                budget_capability=_reserve_budget(session, old_proof),
+            )
+            session.event(
+                VENUE,
+                bundle_trade_update(
+                    instrument,
+                    client_order_id=client_order_id,
+                    order_id=order_id,
+                    trade_id=trade_id,
+                ),
+            )
+            session.event(
+                VENUE,
+                bundle_order_update(
+                    instrument,
+                    client_order_id=client_order_id,
+                    order_id=order_id,
+                    terminal=True,
+                ),
+            )
+    finally:
+        session.close()
+
+
 def breached_recovery_session(path):
     write_crashed_journal(path, exposure="long")
     session, current_proof = prepare_from_journal(path)
@@ -516,10 +815,96 @@ def breached_recovery_session(path):
         current_proof,
         plan["recovery_token_sha256"],
         lambda: context(current_proof),
+        budget_capability=_reserve_budget(session, current_proof, mode="recovery"),
     )
     session.config["account_maximum_loss_bps"] = Decimal("10")
     session.risk_record = {"loss_limit_breached": True}
     return session
+
+
+def test_v2_bundle_recovery_keeps_future_and_option_exposure_per_leg(tmp_path):
+    path = tmp_path / "bundle-orders.jsonl"
+    tracked = BUNDLE_INSTRUMENTS[:2]
+    write_bundle_crashed_journal(path, instruments=tracked)
+    current_proof = bundle_proof(4)
+    session, _proof_value = prepare_from_journal(path, new_proof=current_proof)
+    current = snapshot(
+        positions=[bundle_position(instrument) for instrument in tracked],
+        trades=[
+            bundle_remote_trade(instrument, trade_id=f"TRADE{index}")
+            for index, instrument in enumerate(tracked, start=1)
+        ],
+    )
+    try:
+        plan = session.build_recovery_plan(current, barrier=barrier(session, current))
+
+        assert plan["status"] == "RECOVERABLE"
+        assert plan["authorized_instruments"] == BUNDLE_INSTRUMENTS
+        assert plan["execution_cycle_id"] == CYCLE
+        assert plan["remote_positions_by_instrument"] == {
+            BUNDLE_INSTRUMENTS[0]: {
+                "long_today": "2",
+                "long_yesterday": "0",
+                "short_today": "0",
+                "short_yesterday": "0",
+            },
+            BUNDLE_INSTRUMENTS[1]: {
+                "long_today": "2",
+                "long_yesterday": "0",
+                "short_today": "0",
+                "short_yesterday": "0",
+            },
+            BUNDLE_INSTRUMENTS[2]: {
+                "long_today": "0",
+                "long_yesterday": "0",
+                "short_today": "0",
+                "short_yesterday": "0",
+            },
+        }
+        assert plan["allowed_closes"] == [
+            {
+                "execution_cycle_id": CYCLE,
+                "symbol": "SA701",
+                "exchange_id": "CZCE",
+                "position_side": "long",
+                "side": "sell",
+                "offset": "close",
+                "quantity": "2",
+                "quantity_unit": "contracts",
+            },
+            {
+                "execution_cycle_id": CYCLE,
+                "symbol": "SA701C1080",
+                "exchange_id": "CZCE",
+                "position_side": "long",
+                "side": "sell",
+                "offset": "close",
+                "quantity": "2",
+                "quantity_unit": "contracts",
+            },
+        ]
+    finally:
+        session.close()
+
+
+def test_v2_bundle_recovery_requires_manual_intervention_for_unknown_leg(tmp_path):
+    path = tmp_path / "bundle-orders.jsonl"
+    write_bundle_crashed_journal(path)
+    current_proof = bundle_proof(4)
+    session, _proof_value = prepare_from_journal(path, new_proof=current_proof)
+    current = snapshot(
+        positions=[bundle_position("CZCE.SA701P1100")],
+    )
+    try:
+        plan = session.build_recovery_plan(current, barrier=barrier(session, current))
+
+        assert plan["status"] == "MANUAL_INTERVENTION"
+        assert plan["allowed_actions"] == []
+        assert plan["allowed_closes"] == []
+        assert plan["recovery_token_sha256"] is None
+        assert "recovery_remote_instrument_mismatch" in plan["evidence_errors"]
+    finally:
+        session.close()
 
 
 def test_caller_stable_flag_cannot_bypass_sdk_query_barrier(tmp_path):
@@ -626,6 +1011,7 @@ def test_czce_recovery_uses_side_frozen_and_generic_close(
             current_proof,
             plan["recovery_token_sha256"],
             lambda: context(current_proof),
+            budget_capability=_reserve_budget(session, current_proof, mode="recovery"),
         )
         assert set(armed) == {
             "armed",
@@ -665,16 +1051,19 @@ def test_concurrent_ordinary_arm_cannot_borrow_recovery_capability(tmp_path):
 
         def recover():
             try:
-                results.put(
-                    (
-                        "recovery",
-                        session.arm_recovery_from_preflight(
-                            current_proof,
-                            plan["recovery_token_sha256"],
-                            lambda: context(current_proof),
-                        ),
+                    results.put(
+                        (
+                            "recovery",
+                            session.arm_recovery_from_preflight(
+                                current_proof,
+                                plan["recovery_token_sha256"],
+                                lambda: context(current_proof),
+                                budget_capability=_reserve_budget(
+                                    session, current_proof, mode="recovery"
+                                ),
+                            ),
+                        )
                     )
-                )
             except Exception as exc:  # pragma: no cover - assertion reports it
                 results.put(("recovery_error", exc))
 
@@ -723,6 +1112,11 @@ def test_public_recovery_arm_then_concurrent_disarm_finishes_read_only(tmp_path)
     current = snapshot(orders=[active_order()])
     plan = session.build_recovery_plan(current, barrier=barrier(session, current))
     api._ctp_execution_arm_context = lambda _venue: context(current_proof)
+    authorization = _recovery_authorization(
+        api,
+        current_proof,
+        cycle=plan["execution_cycle_id"],
+    )
     original_arm = session.arm_recovery_from_preflight
     session_armed = threading.Event()
     release_arm_return = threading.Event()
@@ -740,8 +1134,8 @@ def test_public_recovery_arm_then_concurrent_disarm_finishes_read_only(tmp_path)
     def run_arm():
         try:
             arm_result.put(
-                api.arm_execution_recovery(
-                    proof=current_proof,
+                api._arm_execution_recovery(
+                    authorization=authorization,
                     recovery_token_sha256=plan["recovery_token_sha256"],
                 )
             )
@@ -842,6 +1236,7 @@ def test_recovery_close_blocks_open_reverse_wrong_cycle_and_oversize(tmp_path):
             current_proof,
             plan["recovery_token_sha256"],
             lambda: context(current_proof),
+            budget_capability=_reserve_budget(session, current_proof, mode="recovery"),
         )
         rejected = (
             order_request(client_order_id="000000000002"),
@@ -1002,7 +1397,10 @@ def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path)
         old_token = plan["recovery_token_sha256"]
         assert plan["allowed_actions"] == ["cancel"]
         session.arm_recovery_from_preflight(
-            current_proof, old_token, lambda: context(current_proof)
+            current_proof,
+            old_token,
+            lambda: context(current_proof),
+            budget_capability=_reserve_budget(session, current_proof, mode="recovery"),
         )
         session.invoke("cancel_order", VENUE, cancel, transport)
         with pytest.raises(NormalizedApiError) as raised:
@@ -1044,6 +1442,7 @@ def test_failed_recovery_transport_consumes_action_and_pauses_lease(tmp_path):
             current_proof,
             plan["recovery_token_sha256"],
             lambda: context(current_proof),
+            budget_capability=_reserve_budget(session, current_proof, mode="recovery"),
         )
         result = session.invoke("cancel_order", VENUE, cancel, failed)
         assert result["execution_unknown"] is True
@@ -1327,7 +1726,13 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
-    writer.invoke("make_order", VENUE, order_request(), lambda: order_update())
+    writer.invoke(
+        "make_order",
+        VENUE,
+        order_request(),
+        lambda: order_update(),
+        budget_capability=_reserve_budget(writer, old_proof),
+    )
     writer.event(VENUE, trade_update())
     writer.event(
         VENUE,
@@ -1351,6 +1756,7 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
             offset="close",
             position_side="long",
         ),
+        budget_capability=_reserve_budget(writer, old_proof),
     )
     writer.event(
         VENUE,
@@ -1479,7 +1885,13 @@ def test_ordinary_arm_rejects_terminal_fill_without_durable_trade(tmp_path):
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
-    writer.invoke("make_order", VENUE, order_request(), lambda: order_update())
+    writer.invoke(
+        "make_order",
+        VENUE,
+        order_request(),
+        lambda: order_update(),
+        budget_capability=_reserve_budget(writer, old_proof),
+    )
     writer.event(
         VENUE,
         order_update(status="completed", terminal=True),
@@ -1572,6 +1984,26 @@ def test_public_recovery_report_is_exact_and_complete_runs_new_barrier(tmp_path)
         session.close()
 
 
+def test_public_v2_bundle_recovery_report_preserves_scope_and_per_leg_maps(tmp_path):
+    """The public report must retain the C/P/F recovery evidence V2 needs."""
+    path = tmp_path / "bundle-orders.jsonl"
+    api, session, _feed = public_recovery_api(path)
+    results = iter(query_rounds("100", "100", first_id=1))
+    api.query_ctp_result = lambda _venue, _query_type: next(results)
+    current_proof = bundle_proof(4)
+    try:
+        report = api.prepare_execution_recovery(proof=current_proof)
+
+        assert report["scope_version"] == BUNDLE_SCOPE_VERSION
+        assert report["authorized_instruments"] == BUNDLE_INSTRUMENTS
+        assert set(report["remote_positions_by_instrument"]) == set(BUNDLE_INSTRUMENTS)
+        assert set(report["owned_positions_by_instrument"]) == set(BUNDLE_INSTRUMENTS)
+        report["authorized_instruments"].clear()
+        assert session._recovery_plan["authorized_instruments"] == BUNDLE_INSTRUMENTS
+    finally:
+        session.close()
+
+
 def test_public_recovery_can_reuse_generation_after_ordinary_arm_requires_recovery(
     tmp_path,
 ):
@@ -1583,7 +2015,7 @@ def test_public_recovery_can_reuse_generation_after_ordinary_arm_requires_recove
     try:
         with pytest.raises(NormalizedApiError) as raised:
             api.arm_execution_from_preflight(current_proof)
-        assert raised.value.code == "execution_recovery_required"
+        assert raised.value.code == "ctp_execution_authorization_required"
         assert session.config["market_data_only"] is True
         assert session._arm_revoked_reason is None
         assert feed.get_execution_gate_state()["armed"] is False
@@ -1641,6 +2073,11 @@ def test_recovery_arm_rejects_ingress_started_after_final_queue_drain(tmp_path, 
     )
     assert report["status"] == "RECOVERABLE"
     api._ctp_execution_arm_context = lambda _venue: context(current_proof)
+    authorization = _recovery_authorization(
+        api,
+        current_proof,
+        cycle=report["execution_cycle_id"],
+    )
 
     producer_queue = api._ctp_private_stream_queue(
         VENUE,
@@ -1689,8 +2126,8 @@ def test_recovery_arm_rejects_ingress_started_after_final_queue_drain(tmp_path, 
     producer.start()
     try:
         with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_recovery(
-                proof=current_proof,
+            api._arm_execution_recovery(
+                authorization=authorization,
                 recovery_token_sha256=report["recovery_token_sha256"],
             )
         assert raised.value.code == "execution_recovery_required"
@@ -1823,7 +2260,7 @@ def test_private_event_after_flat_completion_blocks_fresh_ordinary_arm(tmp_path)
         api._ctp_execution_arm_context = lambda _venue: context(fresh)
         with pytest.raises(NormalizedApiError) as raised:
             api.arm_execution_from_preflight(fresh)
-        assert raised.value.code == "execution_recovery_required"
+        assert raised.value.code == "ctp_execution_authorization_required"
         assert session.config["market_data_only"] is True
         assert feed.get_execution_gate_state()["armed"] is False
     finally:
