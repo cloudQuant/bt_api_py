@@ -28,6 +28,14 @@ def test_artifact_subprocess_env_excludes_parent_coverage_hooks(monkeypatch) -> 
     assert environment["PYTHONPATH"] == "/tmp/package"
 
 
+def test_artifact_subprocess_env_does_not_inherit_parent_pythonpath(monkeypatch) -> None:
+    monkeypatch.setenv("PYTHONPATH", "/tmp/parent-package")
+
+    environment = _artifact_subprocess_env()
+
+    assert "PYTHONPATH" not in environment
+
+
 def _write_package(
     root: Path,
     name: str,

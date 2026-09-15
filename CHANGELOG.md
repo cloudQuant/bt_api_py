@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-09-15
+
 ### Fixed
 - Fix deprecated `logger.warn()` → `logger.warning()` across 80+ files
 - Fix MEXC WebSocket `_setup_logger` indentation error in `market_wss_base.py` and `account_wss_base.py`
@@ -18,9 +20,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CI: MyPy type checking now fails CI on errors (was `continue-on-error`)
 - CI: Bandit security scan now fails CI on findings (was `continue-on-error`)
 - Add pytest timeout (30s per test) to prevent hanging tests
+- Require `bt_api_ctp>=2.0.2,<3.0` for the `core-reference` bundle
 
 ### Added
 - `CHANGELOG.md` — this file
+- Gateway runtime integration coverage for unknown execution events and the
+  cross-package CTP bridge
 
 ## [0.15.0] - 2025-01-01
 

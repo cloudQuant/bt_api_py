@@ -116,18 +116,22 @@ def _artifact_subprocess_env(environment: Mapping[str, str] | None = None) -> di
     """Build an environment for an artifact-first external process.
 
     These phases create isolated virtual environments and test installed
-    artifacts.  They must not participate in a parent pytest-cov session:
-    inherited coverage hooks create empty statement-only shards outside this
+    artifacts.  They must not participate in a parent pytest-cov session or
+    inherit a caller's ``PYTHONPATH``: both can make an installed-artifact
+    validation accidentally import the repository or an unrelated package.
+    Inherited coverage hooks create empty statement-only shards outside this
     repository's branch-coverage configuration, which prevents report
     combination after the parent test run completes.
     """
 
+    explicit_environment = dict(environment or {})
     env = os.environ.copy()
-    if environment:
-        env.update(environment)
+    env.update(explicit_environment)
     for key in tuple(env):
         if key.startswith("COV_CORE_") or key in {"COVERAGE_FILE", "COVERAGE_PROCESS_START"}:
             env.pop(key, None)
+    if "PYTHONPATH" not in explicit_environment:
+        env.pop("PYTHONPATH", None)
     return env
 
 

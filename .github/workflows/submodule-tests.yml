@@ -63,7 +63,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: submodule-validation-pr-${{ github.event.pull_request.number }}
-          path: submodule-artifacts/
+          # Keep the durable phase evidence, not the disposable virtualenvs
+          # and wheel build directories.  Uploading those transient files can
+          # exhaust the artifact action's Node heap on diagnostic runs.
+          path: |
+            submodule-artifacts/**/submodule-validation.json
+            submodule-artifacts/**/submodule-validation.junit.xml
+            submodule-artifacts/**/submodule-validation.md
+            submodule-artifacts/**/logs/**
           if-no-files-found: error
           retention-days: 30
 
@@ -122,7 +129,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: submodule-validation-diagnostic-${{ github.run_id }}
-          path: submodule-artifacts/
+          # Retain reports and logs while excluding transient venvs and wheels.
+          path: |
+            submodule-artifacts/**/submodule-validation.json
+            submodule-artifacts/**/submodule-validation.junit.xml
+            submodule-artifacts/**/submodule-validation.md
+            submodule-artifacts/**/logs/**
           if-no-files-found: error
           retention-days: 30
 
