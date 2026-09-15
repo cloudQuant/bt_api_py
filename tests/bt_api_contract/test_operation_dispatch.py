@@ -279,7 +279,7 @@ async def test_zmq_async_surface_and_reconciliation_stay_on_the_backend() -> Non
 @pytest.mark.asyncio
 async def test_direct_legacy_async_reads_reject_plain_def_returning_none() -> None:
     class LegacyFeed:
-        calls = []
+        calls: list[Any] = []
 
         def __getattr__(self, name):
             if not name.startswith("async_get_"):

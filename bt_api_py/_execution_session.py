@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
 from threading import RLock
+from typing import Any, Protocol, cast
 
 from ._contracts.errors import NormalizedApiError
 from ._contracts.models import QueryOrderRequest
@@ -39,6 +40,15 @@ from ._ctp_budget import (
     evaluate_ctp_budget,
 )
 from ._ctp_execution_authorization import recovery_action_digest, recovery_plan_digest
+
+
+class _WindowsLocker(Protocol):
+    """The Windows-only portion of ``msvcrt`` used for journal locks."""
+
+    LK_NBLCK: int
+
+    def locking(self, fd: int, mode: int, nbytes: int) -> None: ...
+
 
 _TERMINAL = {"completed", "canceled", "expired", "rejected"}
 _STATUSES = _TERMINAL | {"submitted", "accepted", "partial"}
@@ -71,7 +81,7 @@ _LEDGER_SEMANTIC_IDENTITY = frozenset(
     }
 )
 _EXPLICIT_IDENTITY_FIELDS = "_explicit_identity_fields"
-_CONFIG = {
+_CONFIG: dict[str, Any] = {
     "order_journal": None,
     "account_risk_state": None,
     "require_order_journal": True,
@@ -522,7 +532,8 @@ def _lock_file(path, operation, code):
             if os.fstat(fd).st_size == 0:
                 handle.write(b"\0")
             handle.seek(0)
-            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            windows_locker = cast("_WindowsLocker", msvcrt)
+            windows_locker.locking(fd, windows_locker.LK_NBLCK, 1)
         else:
             import fcntl
 
@@ -771,7 +782,8 @@ def _lock_existing_journal(path):
             if os.fstat(fd).st_size == 0:
                 handle.write(b"\0")
             handle.seek(0)
-            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            windows_locker = cast("_WindowsLocker", msvcrt)
+            windows_locker.locking(fd, windows_locker.LK_NBLCK, 1)
         else:
             import fcntl
 
@@ -1609,7 +1621,7 @@ class _ExecutionSession:
         identities = self._configured_execution_identities()
         if not identities or self.path is None:
             return 0
-        scopes = {}
+        scopes: dict[str, dict[str, Any]] = {}
         for identity in identities:
             for digest in _identity_registry_digests(identity):
                 previous = scopes.get(digest)
@@ -3394,7 +3406,7 @@ class _ExecutionSession:
         if self.path is None or not self.path.exists():
             return
         try:
-            epoch_owners = {}
+            epoch_owners: dict[int, str] = {}
             previous_epoch = -1
             for line in self.path.read_text().splitlines():
                 row = json.loads(line)
@@ -4741,7 +4753,9 @@ class _ExecutionSession:
             return key
 
         intent_cycles = {cycle_key(intent) for intent in intents}
-        exposure = defaultdict(lambda: {"long": Decimal(0), "short": Decimal(0)})
+        exposure: defaultdict[Any, dict[str, Decimal]] = defaultdict(
+            lambda: {"long": Decimal(0), "short": Decimal(0)}
+        )
         try:
             for trade in trades:
                 cycle = cycle_key(trade)
@@ -4945,7 +4959,7 @@ class _ExecutionSession:
         if not isinstance(rounds, (list, tuple)) or len(rounds) != 2:
             errors.append("recovery_query_rounds_incomplete")
             return errors
-        request_ids = []
+        request_ids: list[Any] = []
         account_hashes = []
         full_hashes = []
         for round_result in rounds:
@@ -5112,7 +5126,7 @@ class _ExecutionSession:
         reasons.extend(self._recovery_barrier_errors(snapshot, barrier))
 
         try:
-            for row in positions:
+            for row in positions:  # type: Mapping[str, Any]
                 if not isinstance(row, Mapping):
                     raise ValueError
                 identity_error = self._recovery_remote_identity_error(row)
@@ -5181,7 +5195,7 @@ class _ExecutionSession:
             intent_order_keys.add(client_identity)
 
         journal_trade_by_key = {}
-        cycle_exposure = defaultdict(
+        cycle_exposure: defaultdict[Any, dict[str, dict[str, Decimal]]] = defaultdict(
             lambda: {
                 instrument: {"long": Decimal(0), "short": Decimal(0)} for instrument in instruments
             }
@@ -5256,7 +5270,7 @@ class _ExecutionSession:
 
         active_orders = []
         order_cycles = set()
-        for order in orders:
+        for order in orders:  # type: Mapping[str, Any]
             if not isinstance(order, Mapping):
                 reasons.append("ctp_order_schema_invalid")
                 continue
@@ -5537,7 +5551,7 @@ class _ExecutionSession:
             frozen_position = {key: Decimal(0) for key in _RECOVERY_POSITION_KEYS}
             frozen_by_side = {"long": Decimal(0), "short": Decimal(0)}
             try:
-                for row in positions:
+                for row in positions:  # type: Mapping[str, Any]
                     if not isinstance(row, Mapping):
                         raise ValueError
                     quantity = self._recovery_quantity(
@@ -5615,7 +5629,9 @@ class _ExecutionSession:
                     reasons.append("recovery_intent_identity_invalid")
                 intent_order_keys.add(client_identity)
             journal_trade_by_key = {}
-            cycle_exposure = defaultdict(lambda: {"long": Decimal(0), "short": Decimal(0)})
+            cycle_exposure: defaultdict[Any, dict[str, Decimal]] = defaultdict(
+                lambda: {"long": Decimal(0), "short": Decimal(0)}
+            )
             try:
                 for trade in journal_trades:
                     key = self._recovery_trade_key(trade)
@@ -5676,7 +5692,7 @@ class _ExecutionSession:
 
             active_orders = []
             order_cycles = set()
-            for order in orders:
+            for order in orders:  # type: Mapping[str, Any]
                 if not isinstance(order, Mapping):
                     reasons.append("ctp_order_schema_invalid")
                     continue
@@ -6170,7 +6186,7 @@ class _ExecutionSession:
 
         if not isinstance(context, Mapping) or not context.get("recovery_action"):
             return
-        operation = context.get("operation")
+        operation = cast("str", context.get("operation"))
         with self.mutex:
             if context.get("_async_handoff") and self._active_recovery_context is not context:
                 self._revoke_arm("ctp_recovery_authorization_invalid")
@@ -7107,7 +7123,11 @@ class _ExecutionSession:
                 else:
                     errors.update(commit_errors)
                 if errors:
-                    baseline = dict(persisted_baseline) if baseline_reset else None
+                    baseline = (
+                        dict(cast("Mapping[str, Any]", persisted_baseline))
+                        if baseline_reset
+                        else None
+                    )
                     baseline_contract_valid = False
                     current_evidence_complete = False
                     if baseline is not None:

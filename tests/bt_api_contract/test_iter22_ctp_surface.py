@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -415,14 +416,8 @@ def _parent_attested_ctp_api(
 ) -> BtApi:
     """Create the parent-owned stream/session records required by V2 ingress."""
 
-    stream_epoch = (
-        payload["subscription_epoch"] if stream_epoch is None else stream_epoch
-    )
-    session = (
-        {"read_only_ready": True, "connection_generation": 9}
-        if session is None
-        else session
-    )
+    stream_epoch = payload["subscription_epoch"] if stream_epoch is None else stream_epoch
+    session = {"read_only_ready": True, "connection_generation": 9} if session is None else session
     metadata = (
         {
             "subscription_epoch": stream_epoch,
@@ -444,9 +439,7 @@ def _parent_attested_ctp_api(
     api._ctp_market_ingress_seal = object()
     api._ctp_market_ingress_queues = {}
     market_queue = api._ctp_market_stream_ingress_queue(VENUE, source)
-    api.exchange_feeds = {
-        VENUE: SimpleNamespace(get_session_state=lambda: dict(session))
-    }
+    api.exchange_feeds = {VENUE: SimpleNamespace(get_session_state=lambda: dict(session))}
     api._subscription_streams = [
         SimpleNamespace(
             stream_name="ctp_market_stream",
@@ -514,7 +507,7 @@ def test_quote_v2_normalizer_keeps_cpf_identity_untrusted() -> None:
 
 def test_btapi_direct_ctp_native_ingress_rejects_receiptless_native_ticker() -> None:
     payload = _complete_ctp_quote_v2_payload(execution_eligible=False)
-    source = queue.Queue()
+    source = queue.Queue[Any]()
     api = _parent_attested_ctp_api(source, payload)
     _publish_ctp_market_ingress(api, _native_ctp_quote_v2(payload))
 
@@ -535,7 +528,7 @@ def test_ctp_subscribe_rejects_all_favorable_public_quote_metadata(
     monkeypatch,
 ) -> None:
     payload = _complete_ctp_quote_v2_payload(execution_eligible=False)
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     api = BtApi(debug=False)
     api.data_queues[VENUE] = source
     public_metadata = {
@@ -593,7 +586,7 @@ def test_ctp_subscribe_rejects_all_favorable_public_quote_metadata(
             }
         ],
     )
-    producer = captured["data_queue"]
+    producer = cast("Any", captured["data_queue"])
     assert producer is not source
     assert captured["params"]["quote_v2_metadata"] == public_metadata
     assert captured["topics"][0]["quote_v2"] == public_metadata
@@ -617,7 +610,7 @@ def test_btapi_registered_ctp_queue_rejects_forged_mapping() -> None:
         cohort_now_receive_clock_quality="verified",
         cohort_now_freshness_verified=True,
     )
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     source.put(dict(payload))
 
     event = _parent_attested_ctp_api(source, payload)._poll_event_raw(VENUE)
@@ -648,7 +641,7 @@ def test_btapi_parent_attestation_rejects_forged_native_ticker_type() -> None:
             "get_all_data": lambda _self: dict(payload),
         },
     )
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     api = _parent_attested_ctp_api(source, payload)
     _publish_ctp_market_ingress(api, forged_type())
 
@@ -663,7 +656,7 @@ def test_btapi_parent_attestation_rejects_forged_native_ticker_type() -> None:
 
 def test_public_ctp_queue_cannot_attest_a_manually_constructed_native_ticker() -> None:
     payload = _complete_ctp_quote_v2_payload()
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     api = _parent_attested_ctp_api(source, payload)
 
     public_queue = api.get_data_queue(VENUE)
@@ -688,7 +681,7 @@ def test_public_ctp_queue_cannot_attest_a_manually_constructed_native_ticker() -
 
 def test_btapi_put_ticker_rejects_ctp_queue_injection_before_dispatch() -> None:
     api = BtApi(debug=False)
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     delivered: list[object] = []
     api.data_queues[VENUE] = source
     api.event_bus.on("ticker", delivered.append)
@@ -705,7 +698,7 @@ def test_btapi_put_ticker_rejects_ctp_queue_injection_before_dispatch() -> None:
 @pytest.mark.parametrize("field", ("source", "rules_hash", "clock_domain_id"))
 def test_btapi_parent_attestation_rejects_unknown_v2_provenance(field: str) -> None:
     payload = _complete_ctp_quote_v2_payload(**{field: "unknown"})
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     api = _parent_attested_ctp_api(source, payload)
     _publish_ctp_market_ingress(api, _native_ctp_quote_v2(payload))
 
@@ -719,7 +712,7 @@ def test_btapi_parent_attestation_rejects_unknown_v2_provenance(field: str) -> N
 
 def test_btapi_parent_attestation_rejects_unready_session_or_stale_epoch() -> None:
     payload = _complete_ctp_quote_v2_payload()
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     api = _parent_attested_ctp_api(
         source,
         payload,
@@ -731,7 +724,7 @@ def test_btapi_parent_attestation_rejects_unready_session_or_stale_epoch() -> No
     assert event["execution_eligible"] is False
     assert "cohort_now_monotonic_ns" not in event
 
-    source = queue.Queue()
+    source = queue.Queue[Any]()
     api = _parent_attested_ctp_api(
         source,
         payload,
@@ -750,7 +743,7 @@ def test_btapi_parent_attestation_rejects_adapter_shaped_unknown_payload() -> No
         rules_hash="unknown",
         clock_domain_id="unknown",
     )
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     source.put(_AdapterShapedQuoteV2(payload))
 
     event = _parent_attested_ctp_api(source, payload)._poll_event_raw(VENUE)
@@ -765,7 +758,7 @@ def test_btapi_parent_attestation_rejects_adapter_shaped_unknown_payload() -> No
 
 def test_btapi_parent_attestation_omits_cohort_now_for_stale_native_quote() -> None:
     payload = _complete_ctp_quote_v2_payload(stale=True)
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     api = _parent_attested_ctp_api(source, payload)
     _publish_ctp_market_ingress(api, _native_ctp_quote_v2(payload))
 
@@ -853,7 +846,7 @@ def test_quote_v2_timezone_free_timestamps_stay_unverified() -> None:
 
 
 def test_btapi_poll_event_preserves_quote_v2_contract() -> None:
-    source = queue.Queue()
+    source: queue.Queue[Any] = queue.Queue()
     source.put(
         {
             "kind": "tick",

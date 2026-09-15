@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -23,13 +24,13 @@ SCHEMA = "ctp-execution-approval-v1"
 ALGORITHM = "Ed25519"
 KEY_ID = "operator-test-1"
 FIXED_PUBLIC_KEY_B64 = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
-FIXED_SIGNATURE_B64 = "TwiANcyIexBY9hl7zaPjEXEvWy5jLUX048sPwV9kWL5kQpuSUrexNuWbljub_G0QeGYzdIkSDZFZbhRVAJiyCQ"
+FIXED_SIGNATURE_B64 = (
+    "TwiANcyIexBY9hl7zaPjEXEvWy5jLUX048sPwV9kWL5kQpuSUrexNuWbljub_G0QeGYzdIkSDZFZbhRVAJiyCQ"
+)
 
 
 def _iso(value: datetime) -> str:
-    return (
-        value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
-    )
+    return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def _context() -> dict:
@@ -101,9 +102,7 @@ def _signed_artifact(payload, private_key) -> bytes:
             "schema_version": SCHEMA,
             "algorithm": ALGORITHM,
             "payload": payload,
-            "signature": base64.urlsafe_b64encode(signature)
-            .decode("ascii")
-            .rstrip("="),
+            "signature": base64.urlsafe_b64encode(signature).decode("ascii").rstrip("="),
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -120,9 +119,7 @@ def signing_material():
         "schema_version": "ctp-execution-trust-root-v1",
         "keys": {
             KEY_ID: {
-                "public_key": base64.urlsafe_b64encode(public_key)
-                .decode("ascii")
-                .rstrip("="),
+                "public_key": base64.urlsafe_b64encode(public_key).decode("ascii").rstrip("="),
                 "role": "independent_operator",
                 "purposes": ["ctp_execution_approval"],
                 "not_before": _iso(datetime.now(UTC) - timedelta(minutes=1)),
@@ -153,9 +150,9 @@ def test_positive_verification_binds_complete_context(signing_material):
     )
     assert result.approval_id == "approval-u1a-1"
     assert result.payload["connection_generation"] == 7
-    assert [
-        dict(item) for item in result.payload["authorized_instruments"]
-    ] == _context()["authorized_instruments"]
+    assert [dict(item) for item in result.payload["authorized_instruments"]] == _context()[
+        "authorized_instruments"
+    ]
 
 
 def test_non_synthetic_context_cannot_self_assert_runtime_identity(signing_material):
@@ -175,9 +172,7 @@ def test_non_synthetic_context_cannot_self_assert_runtime_identity(signing_mater
     assert raised.value.code == "ctp_approval_context_untrusted"
 
 
-def test_runtime_context_builder_seals_and_recomputes_identity(
-    monkeypatch, signing_material
-):
+def test_runtime_context_builder_seals_and_recomputes_identity(monkeypatch, signing_material):
     from bt_api_py import BtApi
     from bt_api_py._ctp_execution_authorization import CtpExecutionApprovalContext
 
@@ -242,9 +237,7 @@ def test_runtime_context_builder_seals_and_recomputes_identity(
     assert values["connection_generation"] == 9
     assert values["account_fingerprint"] == "acct_1234567890abcdef"
     private_key, root = signing_material
-    payload = _payload(
-        **{field: value for field, value in values.items() if field != "source"}
-    )
+    payload = _payload(**{field: value for field, value in values.items() if field != "source"})
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(payload, private_key), trust_root=root, context=context
     )
@@ -397,9 +390,7 @@ def test_tampered_or_wrong_purpose_artifact_is_rejected(signing_material, change
         ("future_reservation_id", "other-reservation"),
     ],
 )
-def test_every_context_binding_is_compared_to_the_signed_payload(
-    signing_material, field, value
-):
+def test_every_context_binding_is_compared_to_the_signed_payload(signing_material, field, value):
     private_key, root = signing_material
     from bt_api_py._ctp_execution_authorization import verify_ctp_execution_approval
 
@@ -557,9 +548,7 @@ def test_same_journal_allows_one_durable_redemption_then_rejects_restart_replay(
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
-    capability = api.redeem_ctp_execution_approval(
-        verified, trust_root=root, context=_context()
-    )
+    capability = api.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
     assert capability.approval_id == verified.approval_id
     assert api.get_execution_summary()["market_data_only"] is True
     api.close()
@@ -571,9 +560,7 @@ def test_same_journal_allows_one_durable_redemption_then_rejects_restart_replay(
         }
     )
     with pytest.raises(NormalizedApiError) as raised:
-        recovered.redeem_ctp_execution_approval(
-            verified, trust_root=root, context=_context()
-        )
+        recovered.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
     assert raised.value.code == "ctp_approval_already_consumed"
     recovered.close()
 
@@ -597,9 +584,7 @@ def test_public_redeem_can_verify_a_signed_artifact_in_one_explicit_step(
     api.close()
 
 
-def test_two_threads_cannot_double_spend_same_approval(
-    signing_material, tmp_path: Path
-):
+def test_two_threads_cannot_double_spend_same_approval(signing_material, tmp_path: Path):
     private_key, root = signing_material
     api = BtApi(
         execution_config={
@@ -613,9 +598,7 @@ def test_two_threads_cannot_double_spend_same_approval(
 
     def redeem():
         try:
-            api.redeem_ctp_execution_approval(
-                verified, trust_root=root, context=_context()
-            )
+            api.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
             return "ok"
         except NormalizedApiError as exc:
             return exc.code
@@ -627,17 +610,11 @@ def test_two_threads_cannot_double_spend_same_approval(
     api.close()
 
 
-def test_two_api_instances_cannot_double_spend_same_journal_nonce(
-    signing_material, tmp_path: Path
-):
+def test_two_api_instances_cannot_double_spend_same_journal_nonce(signing_material, tmp_path: Path):
     private_key, root = signing_material
     journal = tmp_path / "two-api.jsonl"
-    first = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
-    second = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    first = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    second = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     artifact = _signed_artifact(_payload(), private_key)
     verified = [
         api.verify_ctp_execution_approval(artifact, trust_root=root, context=_context())
@@ -646,9 +623,7 @@ def test_two_api_instances_cannot_double_spend_same_journal_nonce(
 
     def redeem(api, approval):
         try:
-            return api.redeem_ctp_execution_approval(
-                approval, trust_root=root, context=_context()
-            )
+            return api.redeem_ctp_execution_approval(approval, trust_root=root, context=_context())
         except NormalizedApiError as exc:
             return exc
 
@@ -660,13 +635,7 @@ def test_two_api_instances_cannot_double_spend_same_journal_nonce(
                 verified,
             )
         )
-    assert (
-        sum(
-            type(result).__name__ == "CtpExecutionApprovalCapability"
-            for result in results
-        )
-        == 1
-    )
+    assert sum(type(result).__name__ == "CtpExecutionApprovalCapability" for result in results) == 1
     failures = [result for result in results if isinstance(result, NormalizedApiError)]
     assert len(failures) == 1
     assert failures[0].code in {
@@ -682,15 +651,11 @@ def test_read_only_preauthorization_is_really_persisted_and_generation_is_not_ov
 ):
     private_key, root = signing_material
     journal = tmp_path / "readonly.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
-    api.preauthorize_ctp_execution_approval(
-        verified, trust_root=root, context=_context()
-    )
+    api.preauthorize_ctp_execution_approval(verified, trust_root=root, context=_context())
     row = json.loads(journal.read_text().splitlines()[-1])
     assert row["event"] == "ctp_execution_approval_pre_authorized"
     assert row["connection_generation"] == 7
@@ -719,9 +684,7 @@ def test_revocation_snapshot_version_is_fenced_by_the_same_journal(
 ):
     private_key, root = signing_material
     journal = tmp_path / "revocations.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": False, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
     first = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -733,25 +696,19 @@ def test_revocation_snapshot_version_is_fenced_by_the_same_journal(
     newer_payload = _payload(
         approval_id="approval-u1a-2", nonce="nonce-u1a-2", revocation_snapshot_version=4
     )
-    newer = BtApi(
-        execution_config={"market_data_only": False, "order_journal": str(journal)}
-    )
+    newer = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
     verified_newer = newer.verify_ctp_execution_approval(
         _signed_artifact(newer_payload, private_key),
         trust_root=newer_root,
         context=_context(),
     )
-    newer.redeem_ctp_execution_approval(
-        verified_newer, trust_root=newer_root, context=_context()
-    )
+    newer.redeem_ctp_execution_approval(verified_newer, trust_root=newer_root, context=_context())
     newer.close()
 
     # A restart must retain the higher durable snapshot version.  Replaying
     # an otherwise valid artifact against an older operator snapshot is a
     # rollback, even though its Ed25519 signature still verifies.
-    old = BtApi(
-        execution_config={"market_data_only": False, "order_journal": str(journal)}
-    )
+    old = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
     with pytest.raises(NormalizedApiError) as raised:
         old.redeem_ctp_execution_approval(first, trust_root=root, context=_context())
     assert raised.value.code in {
@@ -769,9 +726,7 @@ def test_fsync_failure_never_returns_a_consumable_capability(
     from bt_api_py import _execution_session as session_module
 
     journal = tmp_path / "fsync.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": False, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -794,9 +749,7 @@ def test_consumption_started_fences_restart_after_completion_failure(
 ):
     private_key, root = signing_material
     journal = tmp_path / "pending.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -805,9 +758,7 @@ def test_consumption_started_fences_restart_after_completion_failure(
 
     def fail_completion(event, row, **kwargs):
         if event == "ctp_execution_approval_consumed":
-            raise NormalizedApiError(
-                "journal", "persistence_failed", definite_reject=True
-            )
+            raise NormalizedApiError("journal", "persistence_failed", definite_reject=True)
         return original_journal(event, row, **kwargs)
 
     monkeypatch.setattr(session, "_journal", fail_completion)
@@ -818,13 +769,9 @@ def test_consumption_started_fences_restart_after_completion_failure(
     assert raised.value.code == "ctp_approval_consumption_uncertain"
     api.close()
 
-    recovered = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     with pytest.raises(NormalizedApiError) as raised:
-        recovered.redeem_ctp_execution_approval(
-            verified, trust_root=root, context=_context()
-        )
+        recovered.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
     assert raised.value.code == "ctp_approval_consumption_uncertain"
     recovered.close()
 
@@ -834,9 +781,7 @@ def test_journal_approval_payload_tampering_is_rejected_after_restart(
 ):
     private_key, root = signing_material
     journal = tmp_path / "tampered.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -846,16 +791,10 @@ def test_journal_approval_payload_tampering_is_rejected_after_restart(
     for row in rows:
         if row["event"] == "ctp_execution_approval_consumed":
             row["connection_generation"] = 999
-    journal.write_text(
-        "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
-    )
-    recovered = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    journal.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
+    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     with pytest.raises(NormalizedApiError) as raised:
-        recovered.redeem_ctp_execution_approval(
-            verified, trust_root=root, context=_context()
-        )
+        recovered.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
     assert raised.value.code == "unreadable_journal"
     recovered.close()
 
@@ -863,9 +802,7 @@ def test_journal_approval_payload_tampering_is_rejected_after_restart(
 def test_torn_approval_tail_is_rejected_after_restart(signing_material, tmp_path: Path):
     private_key, root = signing_material
     journal = tmp_path / "torn.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": False, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -874,20 +811,14 @@ def test_torn_approval_tail_is_rejected_after_restart(signing_material, tmp_path
     with journal.open("ab") as stream:
         stream.write(b'{"event":"ctp_execution_approval_consumed"')
     with pytest.raises(NormalizedApiError) as raised:
-        BtApi(
-            execution_config={"market_data_only": False, "order_journal": str(journal)}
-        )
+        BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
     assert raised.value.code == "unreadable_journal"
 
 
-def test_public_revocation_snapshot_uses_the_same_journal(
-    signing_material, tmp_path: Path
-):
+def test_public_revocation_snapshot_uses_the_same_journal(signing_material, tmp_path: Path):
     _private_key, root = signing_material
     journal = tmp_path / "revocation-only.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     result = api.record_ctp_execution_approval_revocation_snapshot(trust_root=root)
     assert result["revocation_snapshot_version"] == 3
     assert result["updated"] is True
@@ -896,9 +827,7 @@ def test_public_revocation_snapshot_uses_the_same_journal(
     )
     api.close()
 
-    recovered = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     same = recovered.record_ctp_execution_approval_revocation_snapshot(trust_root=root)
     assert same["updated"] is False
     recovered.close()
@@ -913,7 +842,7 @@ def test_public_api_does_not_accept_mapping_as_opaque_redeem(tmp_path: Path):
     )
     with pytest.raises(NormalizedApiError) as raised:
         api.redeem_ctp_execution_approval(
-            {"approval_id": "approval-u1a-1"}, trust_root={}, context={}
+            cast("Any", {"approval_id": "approval-u1a-1"}), trust_root={}, context={}
         )
     assert raised.value.code in {
         "BLOCKED_OPERATOR_TRUST_ROOT",
@@ -926,7 +855,7 @@ def test_verified_result_constructor_is_not_a_public_approval_issuer():
     from bt_api_py import CtpExecutionApproval
 
     with pytest.raises(TypeError):
-        CtpExecutionApproval(
+        cast("Any", CtpExecutionApproval)(
             payload={},
             payload_sha256="0" * 64,
             trust_root_sha256="0" * 64,
@@ -941,9 +870,7 @@ def test_session_rejects_unwritable_journal_before_returning_capability(
     private_key, root = signing_material
     journal = tmp_path / "directory"
     journal.mkdir()
-    api = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -1157,11 +1084,7 @@ def test_runtime_change_during_lease_commit_is_rejected_before_approval_event(
 
     def change_at_lease_fsync(fd):
         nonlocal mutated
-        if (
-            not mutated
-            and lock_path.exists()
-            and os.fstat(fd).st_ino == lock_path.stat().st_ino
-        ):
+        if not mutated and lock_path.exists() and os.fstat(fd).st_ino == lock_path.stat().st_ino:
             mutated = True
             if mutation == "generation":
                 feed.state["connection_generation"] = 8
@@ -1176,11 +1099,7 @@ def test_runtime_change_during_lease_commit_is_rejected_before_approval_event(
     assert raised.value.code == "ctp_approval_context_mismatch"
     assert mutated is True
     if journal.exists():
-        events = [
-            json.loads(line)["event"]
-            for line in journal.read_text().splitlines()
-            if line
-        ]
+        events = [json.loads(line)["event"] for line in journal.read_text().splitlines() if line]
         assert not {
             "ctp_execution_approval_pre_authorized",
             "ctp_execution_approval_consumption_started",
@@ -1205,14 +1124,8 @@ def test_runtime_change_during_consumed_commit_is_rejected_after_durable_fence(
 
     def change_at_consumed_fsync(fd):
         nonlocal observed
-        if (
-            not observed
-            and journal.exists()
-            and os.fstat(fd).st_ino == journal.stat().st_ino
-        ):
-            rows = [
-                json.loads(line) for line in journal.read_text().splitlines() if line
-            ]
+        if not observed and journal.exists() and os.fstat(fd).st_ino == journal.stat().st_ino:
+            rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
             if rows and rows[-1]["event"] == "ctp_execution_approval_consumed":
                 observed = True
                 feed.state["connection_generation"] = 8
@@ -1247,14 +1160,8 @@ def test_consumed_fsync_failure_stays_permanently_uncertain_in_process(
 
     def fail_after_consumed_flush(fd):
         nonlocal injected
-        if (
-            not injected
-            and journal.exists()
-            and os.fstat(fd).st_ino == journal.stat().st_ino
-        ):
-            rows = [
-                json.loads(line) for line in journal.read_text().splitlines() if line
-            ]
+        if not injected and journal.exists() and os.fstat(fd).st_ino == journal.stat().st_ino:
+            rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
             if rows and rows[-1].get("event") == "ctp_execution_approval_consumed":
                 injected = True
                 raise OSError("synthetic fsync failure after consumed row flush")
@@ -1296,9 +1203,7 @@ def test_newer_snapshot_cannot_forget_prior_revocation_before_preauthorization(
 ):
     private_key, root = signing_material
     journal = tmp_path / "revocation-monotonic.jsonl"
-    api = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     api.record_ctp_execution_approval_revocation_snapshot(
         trust_root=_root_with_revocations(root, 4, approval_ids=("revoked-a",))
     )
@@ -1320,14 +1225,10 @@ def test_newer_snapshot_cannot_forget_prior_revocation_before_preauthorization(
     api.close()
 
 
-def test_nested_revocation_in_preauthorization_survives_restart(
-    signing_material, tmp_path: Path
-):
+def test_nested_revocation_in_preauthorization_survives_restart(signing_material, tmp_path: Path):
     private_key, root = signing_material
     journal = tmp_path / "revocation-nested.jsonl"
-    first = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    first = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     first.preauthorize_ctp_execution_approval(
         _signed_artifact(
             _payload(
@@ -1341,9 +1242,7 @@ def test_nested_revocation_in_preauthorization_survives_restart(
     )
     first.close()
 
-    recovered = BtApi(
-        execution_config={"market_data_only": True, "order_journal": str(journal)}
-    )
+    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
     proof = _signed_artifact(
         _payload(
             approval_id="revoked-b",

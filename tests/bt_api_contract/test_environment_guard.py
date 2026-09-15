@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -64,10 +65,10 @@ class Feed:
 
 class Backend:
     def __init__(self) -> None:
-        self.placed = []
-        self.queried = []
-        self.canceled = []
-        self.open_orders = []
+        self.placed: list[Any] = []
+        self.queried: list[Any] = []
+        self.canceled: list[Any] = []
+        self.open_orders: list[Any] = []
 
     def make_order(self, venue, request):
         self.placed.append((venue, request))
@@ -126,7 +127,7 @@ def direct_factory(monkeypatch, tmp_path):
         "bt_api_py.bt_api.ExchangeRegistry.create_feed", Mock(side_effect=create_feed)
     )
 
-    clients = []
+    clients: list[Any] = []
 
     def make(exchange_kwargs, *, required=None, journal=True, market_data_only=False):
         exchange_kwargs = {venue: dict(parameters) for venue, parameters in exchange_kwargs.items()}

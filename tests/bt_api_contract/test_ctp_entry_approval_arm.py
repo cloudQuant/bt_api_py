@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from collections import Counter
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal  # noqa: F401  (parity with sibling fixtures)
 
@@ -26,14 +25,13 @@ from .test_execution_arming import (
     STRATEGY_IDENTITY,
     TRADING_DAY,
     VENUE,
-    _ManagedFeed,
     _install_account_stream,
+    _ManagedFeed,
     _ready_state,
     _session,
 )
 from .test_execution_recovery import (
     CYCLE,
-    bundle_proof,
 )
 
 ENTRY_SCHEMA = "ctp-execution-entry-approval-v1"
@@ -49,9 +47,7 @@ def signing_material():
         "schema_version": "ctp-execution-trust-root-v1",
         "keys": {
             "operator-entry-1": {
-                "public_key": base64.urlsafe_b64encode(public_key)
-                .decode("ascii")
-                .rstrip("="),
+                "public_key": base64.urlsafe_b64encode(public_key).decode("ascii").rstrip("="),
                 "role": "independent_operator",
                 "purposes": [ENTRY_PURPOSE, "ctp_execution_recovery"],
                 "not_before": _iso(datetime.now(UTC) - timedelta(minutes=1)),
@@ -81,9 +77,7 @@ def _entry_payload(now=None, **changes):
             "execution_cycle_id": CYCLE,
             "authorized_instruments": [
                 {"exchange_id": exchange, "instrument_id": instrument}
-                for exchange, instrument in (
-                    item.split(".", 1) for item in BUNDLE_INSTRUMENTS
-                )
+                for exchange, instrument in (item.split(".", 1) for item in BUNDLE_INSTRUMENTS)
             ],
             "primary_instrument": {"exchange_id": "CZCE", "instrument_id": "SA701"},
             "account_fingerprint": ACCOUNT_FINGERPRINT,
@@ -145,9 +139,7 @@ def _signed_entry_artifact(payload, private_key) -> bytes:
             "schema_version": ENTRY_SCHEMA,
             "algorithm": "Ed25519",
             "payload": payload,
-            "signature": base64.urlsafe_b64encode(signature)
-            .decode("ascii")
-            .rstrip("="),
+            "signature": base64.urlsafe_b64encode(signature).decode("ascii").rstrip("="),
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -164,8 +156,8 @@ def _entry_fixture(
     payload_changes=None,
 ):
     from bt_api_py import _execution_session as session_module
-    from bt_api_py.bt_api import BtApi
     from bt_api_py._contracts import TransportMode
+    from bt_api_py.bt_api import BtApi
 
     private_key, root = signing_material
     monkeypatch.setattr(
@@ -224,17 +216,13 @@ def test_entry_approval_artifact_verifies_with_entry_schema(
     try:
         assert capability.purpose == ENTRY_PURPOSE
         assert capability.schema_version == ENTRY_SCHEMA
-        bound_instruments = [
-            dict(item) for item in capability.bindings["authorized_instruments"]
-        ]
+        bound_instruments = [dict(item) for item in capability.bindings["authorized_instruments"]]
         assert bound_instruments == payload["authorized_instruments"]
     finally:
         _session.close()
 
 
-def test_arm_execution_from_approval_arms_v2_bundle(
-    monkeypatch, tmp_path, signing_material
-):
+def test_arm_execution_from_approval_arms_v2_bundle(monkeypatch, tmp_path, signing_material):
     _install_account_stream(monkeypatch)
     api, session, feed, capability, payload = _entry_fixture(
         monkeypatch, tmp_path, signing_material, "arm-entry"
@@ -299,9 +287,7 @@ def test_arm_from_approval_rejects_plain_mapping_and_foreign_objects(
         session.close()
 
 
-def test_arm_from_approval_rejects_runtime_material_drift(
-    monkeypatch, tmp_path, signing_material
-):
+def test_arm_from_approval_rejects_runtime_material_drift(monkeypatch, tmp_path, signing_material):
     api, session, _feed, capability, _payload = _entry_fixture(
         monkeypatch,
         tmp_path,
@@ -325,9 +311,7 @@ def test_arm_from_approval_rejects_runtime_material_drift(
         session.close()
 
 
-def test_arm_from_approval_rejects_context_mismatch(
-    monkeypatch, tmp_path, signing_material
-):
+def test_arm_from_approval_rejects_context_mismatch(monkeypatch, tmp_path, signing_material):
     api, session, _feed, capability, _payload = _entry_fixture(
         monkeypatch,
         tmp_path,
@@ -345,15 +329,13 @@ def test_arm_from_approval_rejects_context_mismatch(
         session.close()
 
 
-def test_arm_from_approval_rejects_base_schema_capability(
-    monkeypatch, tmp_path, signing_material
-):
+def test_arm_from_approval_rejects_base_schema_capability(monkeypatch, tmp_path, signing_material):
     """A base-schema ordinary approval stays audit-only and cannot arm."""
 
     private_key, root = signing_material
     from bt_api_py import _execution_session as session_module
-    from bt_api_py.bt_api import BtApi
     from bt_api_py._contracts import TransportMode
+    from bt_api_py.bt_api import BtApi
 
     monkeypatch.setattr(
         session_module,
@@ -478,9 +460,7 @@ def test_confirm_ctp_settlement_from_approval_rejects_plain_capability_missing(
         session.close()
 
 
-def test_arm_from_approval_rejects_expired_capability(
-    monkeypatch, tmp_path, signing_material
-):
+def test_arm_from_approval_rejects_expired_capability(monkeypatch, tmp_path, signing_material):
     api, session, _feed, capability, _payload = _entry_fixture(
         monkeypatch,
         tmp_path,

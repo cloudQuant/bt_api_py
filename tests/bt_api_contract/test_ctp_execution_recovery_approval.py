@@ -56,9 +56,7 @@ def signing_material():
         "schema_version": "ctp-execution-trust-root-v1",
         "keys": {
             "operator-test-1": {
-                "public_key": base64.urlsafe_b64encode(public_key)
-                .decode("ascii")
-                .rstrip("="),
+                "public_key": base64.urlsafe_b64encode(public_key).decode("ascii").rstrip("="),
                 "role": "independent_operator",
                 "purposes": ["ctp_execution_approval", RECOVERY_PURPOSE],
                 "not_before": _iso(datetime.now(UTC) - timedelta(minutes=1)),
@@ -153,9 +151,7 @@ def _signed_recovery_artifact(payload, private_key):
             "schema_version": RECOVERY_SCHEMA,
             "algorithm": "Ed25519",
             "payload": payload,
-            "signature": base64.urlsafe_b64encode(signature)
-            .decode("ascii")
-            .rstrip("="),
+            "signature": base64.urlsafe_b64encode(signature).decode("ascii").rstrip("="),
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -207,9 +203,7 @@ def _public_bundle_recovery_fixture(monkeypatch, tmp_path, signing_material, nam
             "execution_cycle_id": CYCLE,
             "authorized_instruments": [
                 {"exchange_id": exchange, "instrument_id": instrument}
-                for exchange, instrument in (
-                    item.split(".", 1) for item in BUNDLE_INSTRUMENTS
-                )
+                for exchange, instrument in (item.split(".", 1) for item in BUNDLE_INSTRUMENTS)
             ],
             "primary_instrument": {"exchange_id": "CZCE", "instrument_id": "SA701"},
             "account_fingerprint": ACCOUNT,
@@ -252,9 +246,7 @@ def _public_bundle_recovery_fixture(monkeypatch, tmp_path, signing_material, nam
         }
         for index, allowed in enumerate(plan["allowed_closes"])
     ]
-    payload["recovery_action_sha256"] = recovery_action_digest(
-        payload["recovery_actions"]
-    )
+    payload["recovery_action_sha256"] = recovery_action_digest(payload["recovery_actions"])
     payload["approval_id"] = f"approval-u1b-{name}"
     payload["nonce"] = f"nonce-u1b-{name}"
     artifact = _signed_recovery_artifact(payload, private_key)
@@ -428,9 +420,7 @@ def test_public_recovery_arm_reaches_core_and_budget_stays_blocked(
             "execution_cycle_id": CYCLE,
             "authorized_instruments": [
                 {"exchange_id": exchange, "instrument_id": instrument}
-                for exchange, instrument in (
-                    item.split(".", 1) for item in BUNDLE_INSTRUMENTS
-                )
+                for exchange, instrument in (item.split(".", 1) for item in BUNDLE_INSTRUMENTS)
             ],
             "primary_instrument": {"exchange_id": "CZCE", "instrument_id": "SA701"},
             "account_fingerprint": ACCOUNT,
@@ -473,9 +463,7 @@ def test_public_recovery_arm_reaches_core_and_budget_stays_blocked(
         }
         for index, allowed in enumerate(plan["allowed_closes"])
     ]
-    payload["recovery_action_sha256"] = recovery_action_digest(
-        payload["recovery_actions"]
-    )
+    payload["recovery_action_sha256"] = recovery_action_digest(payload["recovery_actions"])
     payload["approval_id"] = "approval-u1b-arm"
     payload["nonce"] = "nonce-u1b-arm"
     artifact = _signed_recovery_artifact(payload, private_key)
@@ -507,8 +495,7 @@ def test_public_recovery_arm_reaches_core_and_budget_stays_blocked(
         assert result["recovery_only"] is True
         assert feed.get_execution_gate_state()["armed"] is True
         assert any(
-            "ctp_execution_recovery_arm_consumed" in line
-            for line in path.read_text().splitlines()
+            "ctp_execution_recovery_arm_consumed" in line for line in path.read_text().splitlines()
         )
         with pytest.raises(NormalizedApiError) as raised:
             session.require_write(
@@ -522,9 +509,7 @@ def test_public_recovery_arm_reaches_core_and_budget_stays_blocked(
         session.close()
 
 
-def test_legacy_demo_category_accepts_a_verified_distinct_demo_profile(
-    monkeypatch, tmp_path
-):
+def test_legacy_demo_category_accepts_a_verified_distinct_demo_profile(monkeypatch, tmp_path):
     """A legacy journal's durable category must not be confused with profile."""
 
     from bt_api_py import _execution_session as session_module
@@ -552,10 +537,7 @@ def test_legacy_demo_category_accepts_a_verified_distinct_demo_profile(
             environment_profile="astra_synthetic_demo",
         )
         assert session._ctp_execution_identity["environment"] == "demo"
-        assert (
-            session._ctp_execution_identity["environment_profile"]
-            == "astra_synthetic_demo"
-        )
+        assert session._ctp_execution_identity["environment_profile"] == "astra_synthetic_demo"
     finally:
         session.close()
 
@@ -583,10 +565,8 @@ def test_redeemed_capability_keeps_the_sealed_material_collector(
 def test_recovery_consumed_commit_rechecks_generation_before_return(
     monkeypatch, signing_material, tmp_path
 ):
-    api, session, feed, journal, plan, capability, session_module = (
-        _public_bundle_recovery_fixture(
-            monkeypatch, tmp_path, signing_material, "consumed-generation"
-        )
+    api, session, feed, journal, plan, capability, session_module = _public_bundle_recovery_fixture(
+        monkeypatch, tmp_path, signing_material, "consumed-generation"
     )
     original_fsync = os.fsync
     observed = False
@@ -594,9 +574,7 @@ def test_recovery_consumed_commit_rechecks_generation_before_return(
     def mutate_after_consumed_row(fd):
         nonlocal observed
         if not observed and journal.exists():
-            rows = [
-                json.loads(line) for line in journal.read_text().splitlines() if line
-            ]
+            rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
             if rows and rows[-1].get("event") == "ctp_execution_recovery_arm_consumed":
                 observed = True
                 feed.state["connection_generation"] = 5
@@ -663,9 +641,7 @@ def test_dispatch_guard_runs_after_durable_intent_and_blocks_lower_transport(
     def final_guard(context):
         rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
         guard_observations.append((context["operation"], rows[-1]["event"]))
-        raise NormalizedApiError(
-            context["operation"], "ctp_approval_expired", definite_reject=True
-        )
+        raise NormalizedApiError(context["operation"], "ctp_approval_expired", definite_reject=True)
 
     try:
         result = session.invoke(
@@ -701,9 +677,7 @@ def test_async_dispatch_guard_runs_before_lower_transport(tmp_path):
         rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
         assert context["operation"] == "make_order"
         assert rows[-1]["event"] == "intent"
-        raise NormalizedApiError(
-            context["operation"], "ctp_approval_expired", definite_reject=True
-        )
+        raise NormalizedApiError(context["operation"], "ctp_approval_expired", definite_reject=True)
 
     async def lower():
         lower_calls.append(request.client_order_id)
@@ -734,9 +708,7 @@ def test_async_direct_worker_handoff_runs_inside_worker_before_lower_call():
     events = []
     feed = object()
     backend = DirectBackend(lambda _venue: feed, {VENUE: feed})
-    backend.make_order = lambda *_args, **_kwargs: events.append(
-        ("lower", threading.get_ident())
-    )
+    backend.make_order = lambda *_args, **_kwargs: events.append(("lower", threading.get_ident()))
     api = object.__new__(BtApi)
     api._backend = backend
     loop_thread = threading.get_ident()
@@ -783,9 +755,7 @@ def test_cancel_dispatch_guard_runs_after_cancel_intent(tmp_path):
         rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
         assert context["operation"] == "cancel_order"
         assert rows[-1]["event"] == "cancel_intent"
-        raise NormalizedApiError(
-            context["operation"], "ctp_approval_expired", definite_reject=True
-        )
+        raise NormalizedApiError(context["operation"], "ctp_approval_expired", definite_reject=True)
 
     try:
         result = session.invoke(
@@ -806,10 +776,8 @@ def test_final_recovery_gate_accepts_precollected_context_without_late_io(
 ):
     """The bounded handoff gate must not recollect native material after its inputs are ready."""
 
-    api, session, feed, _path, plan, capability, _session_module = (
-        _public_bundle_recovery_fixture(
-            monkeypatch, tmp_path, signing_material, "precollected-final-gate"
-        )
+    api, session, feed, _path, plan, capability, _session_module = _public_bundle_recovery_fixture(
+        monkeypatch, tmp_path, signing_material, "precollected-final-gate"
     )
     try:
         api.arm_execution_recovery(

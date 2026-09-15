@@ -10,6 +10,7 @@ import threading
 import time
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -175,9 +176,7 @@ def _budget_evidence(session, proof_value):
 
 
 def _reserve_budget(session, proof_value, *, mode="ordinary"):
-    return session.reserve_ctp_execution_budget(
-        _budget_evidence(session, proof_value), mode=mode
-    )
+    return session.reserve_ctp_execution_budget(_budget_evidence(session, proof_value), mode=mode)
 
 
 def _ready_state(**changes):
@@ -267,9 +266,7 @@ class _ManagedFeed:
             "instrument": proof["instrument"],
             "scope_version": proof.get("scope_version"),
             "authorized_instruments": (
-                list(proof["authorized_instruments"])
-                if "authorized_instruments" in proof
-                else None
+                list(proof["authorized_instruments"]) if "authorized_instruments" in proof else None
             ),
             "environment_profile": proof["environment_profile"],
             "proof_sha256": proof_sha256,
@@ -353,7 +350,7 @@ def _arm(api, proof=None, *, cycle="controlled-test-cycle"):
 
 
 class _AccountStream:
-    instances = []
+    instances: list[Any] = []
     connected = True
 
     def __init__(self, data_queue, **kwargs):
@@ -384,7 +381,7 @@ class _AccountStream:
 
 
 class _AccountStreamWithoutLifecycleProof:
-    instances = []
+    instances: list[Any] = []
 
     def __init__(self, _data_queue, **kwargs):
         self.stream_name = kwargs["stream_name"]
@@ -609,9 +606,7 @@ def test_controlled_settlement_token_invalidates_unconsumed_arm_grant(tmp_path):
         session.close()
 
 
-def test_private_ingress_revocation_invalidates_sibling_arm_grant(
-    monkeypatch, tmp_path
-):
+def test_private_ingress_revocation_invalidates_sibling_arm_grant(monkeypatch, tmp_path):
     _install_account_stream(monkeypatch)
     api, session, _state = _api_for_arm(tmp_path)
     try:

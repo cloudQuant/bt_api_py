@@ -5,7 +5,27 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.ci.submodule_validation import package_names_for_profile, run_validation
+from scripts.ci.submodule_validation import (
+    _artifact_subprocess_env,
+    package_names_for_profile,
+    run_validation,
+)
+
+
+def test_artifact_subprocess_env_excludes_parent_coverage_hooks(monkeypatch) -> None:
+    monkeypatch.setenv("COV_CORE_SOURCE", "bt_api_py")
+    monkeypatch.setenv("COVERAGE_FILE", "/tmp/parent-coverage")
+    monkeypatch.setenv("COVERAGE_PROCESS_START", "/tmp/coveragerc")
+
+    environment = _artifact_subprocess_env(
+        {"COV_CORE_CONFIG": "/tmp/child-coveragerc", "PYTHONPATH": "/tmp/package"}
+    )
+
+    assert "COV_CORE_SOURCE" not in environment
+    assert "COV_CORE_CONFIG" not in environment
+    assert "COVERAGE_FILE" not in environment
+    assert "COVERAGE_PROCESS_START" not in environment
+    assert environment["PYTHONPATH"] == "/tmp/package"
 
 
 def _write_package(

@@ -23,7 +23,7 @@ from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from math import isfinite
 from types import MappingProxyType
-from typing import Any
+from typing import Any, NoReturn
 
 SCHEMA_VERSION = "ctp_close_plan.v1"
 PLANNER_CAPABILITY = "STRUCTURAL_ONLY"
@@ -114,7 +114,7 @@ class CtpClosePlanError(ValueError):
         super().__init__(f"{code}: {message or code}")
 
 
-def _error(code: str, message: str | None = None) -> None:
+def _error(code: str, message: str | None = None) -> NoReturn:
     raise CtpClosePlanError(code, message)
 
 
@@ -1796,7 +1796,7 @@ def build_ctp_close_plan(
         plan_sha = sha256(canonical_ctp_close_plan_json(digest_payload)).hexdigest()
     except CtpClosePlanError as exc:
         _error("O3B_CANONICAL_VALUE_INVALID", str(exc))
-    actions = tuple(
+    close_actions = tuple(
         _make_action(
             raw,
             sha256(f"{plan_sha}:{index}".encode()).hexdigest(),
@@ -1814,7 +1814,7 @@ def build_ctp_close_plan(
         request_binding=request_binding,
         effective_expiry=effective_expiry,
         limits=limits,
-        actions=actions,
+        actions=close_actions,
         fee_roles_required=tuple(fee_roles),
         plan_sha256=plan_sha,
     )

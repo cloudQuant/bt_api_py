@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from queue import Queue
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -426,7 +427,7 @@ def test_okx_fee_error_50016_is_redacted_parameter_failure(api):
     ],
 )
 def test_available_funding_snapshot_rejects_invalid_contract_boundaries(overrides, error):
-    values = {
+    values: dict[str, Any] = {
         "exchange_name": "BINANCE___SWAP",
         "symbol": "BTCUSDT",
         "rate": Decimal("0.0001"),

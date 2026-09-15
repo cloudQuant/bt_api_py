@@ -14,7 +14,7 @@ from dataclasses import dataclass, fields
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, ROUND_DOWN, Decimal, InvalidOperation
 from math import gcd
-from typing import Any
+from typing import Any, cast
 
 from ._contracts.models import FeeSchedule, Freshness, FundingSnapshot, InstrumentSpec
 
@@ -88,6 +88,8 @@ def coerce_funding_snapshot(
             )
         else:
             raise CrossVenueValueError("funding_freshness_missing")
+        raw_value = value.get("raw")
+        raw = cast("Mapping[str, Any]", raw_value) if isinstance(raw_value, Mapping) else {}
         try:
             snapshot = FundingSnapshot(
                 exchange_name=str(value.get("exchange_name") or ""),
@@ -103,7 +105,7 @@ def coerce_funding_snapshot(
                 freshness=freshness,
                 available=value.get("available") is True,
                 unavailable_reason=value.get("unavailable_reason"),
-                raw=value.get("raw") if isinstance(value.get("raw"), Mapping) else {},
+                raw=raw,
             )
         except (TypeError, ValueError) as exc:
             raise CrossVenueValueError(str(exc) or "funding_snapshot_invalid") from exc
@@ -228,26 +230,31 @@ class CrossVenueLeg:
             raise CrossVenueValueError("instrument_spec_source_missing")
         if not instrument.linear:
             raise CrossVenueValueError("cross_venue_leg_requires_linear_contract")
-        required = (
-            instrument.price_tick,
-            instrument.quantity_step,
-            instrument.min_quantity,
-            instrument.min_notional,
-        )
+        price_tick = instrument.price_tick
+        quantity_step = instrument.quantity_step
+        minimum_quantity = instrument.min_quantity
+        minimum_notional = instrument.min_notional
+        required = (price_tick, quantity_step, minimum_quantity, minimum_notional)
         if any(value is None for value in required):
             raise CrossVenueValueError("instrument_spec_missing_execution_rules")
+        assert price_tick is not None
+        assert quantity_step is not None
+        assert minimum_quantity is not None
+        assert minimum_notional is not None
         try:
             multiplier = instrument.native_to_base_quantity(Decimal(1))
         except (TypeError, ValueError) as exc:
             raise CrossVenueValueError("instrument_spec_invalid_quantity_conversion") from exc
         return cls(
             multiplier=multiplier,
-            quantity_step=instrument.quantity_step,
-            minimum_quantity=instrument.min_quantity,
-            minimum_notional=instrument.min_notional,
-            price_tick=instrument.price_tick,
-            taker_fee=taker_fee,
-            funding_interval_seconds=funding_interval_seconds,
+            quantity_step=quantity_step,
+            minimum_quantity=minimum_quantity,
+            minimum_notional=minimum_notional,
+            price_tick=price_tick,
+            taker_fee=decimal_value(taker_fee, "taker_fee"),
+            funding_interval_seconds=decimal_value(
+                funding_interval_seconds, "funding_interval_seconds"
+            ),
         )
 
     @classmethod

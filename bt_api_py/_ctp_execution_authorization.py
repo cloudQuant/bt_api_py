@@ -16,16 +16,17 @@ fallback crypto implementation.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import json
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
-from typing import Any
+from typing import Any, NoReturn
 
 from ._contracts.errors import NormalizedApiError
 
@@ -182,7 +183,7 @@ class _DuplicateJsonKeyError(ValueError):
     pass
 
 
-def _reject(operation: str, code: str) -> None:
+def _reject(operation: str, code: str) -> NoReturn:
     raise NormalizedApiError(operation, code, definite_reject=True)
 
 
@@ -311,7 +312,7 @@ def _decode_signature(value: Any) -> bytes:
     )
     try:
         result = base64.urlsafe_b64decode(text + "==")
-    except (ValueError, base64.binascii.Error):
+    except (ValueError, binascii.Error):
         _reject(APPROVAL_OPERATION, "ctp_approval_invalid_signature_encoding")
     if len(result) != 64:
         _reject(APPROVAL_OPERATION, "ctp_approval_invalid_signature_encoding")
@@ -596,7 +597,7 @@ def _normalize_recovery_action(value: Any) -> dict[str, Any]:
     }
 
 
-def _recovery_action_digest_value(actions: list[Mapping[str, Any]]) -> str:
+def _recovery_action_digest_value(actions: Sequence[Mapping[str, Any]]) -> str:
     return hashlib.sha256(_canonical_json(_jsonable(actions))).hexdigest()
 
 
@@ -830,7 +831,7 @@ def _decode_public_key(value: Any) -> bytes:
         _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
     try:
         key = base64.urlsafe_b64decode(text + "=")
-    except (ValueError, base64.binascii.Error):
+    except (ValueError, binascii.Error):
         _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
     if len(key) != 32:
         _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")

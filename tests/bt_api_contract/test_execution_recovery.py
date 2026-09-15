@@ -10,6 +10,7 @@ import threading
 from collections import Counter, deque
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -281,9 +282,7 @@ def _budget_evidence(session, proof_value):
 
 
 def _reserve_budget(session, proof_value, *, mode="ordinary"):
-    return session.reserve_ctp_execution_budget(
-        _budget_evidence(session, proof_value), mode=mode
-    )
+    return session.reserve_ctp_execution_budget(_budget_evidence(session, proof_value), mode=mode)
 
 
 def order_request(
@@ -1034,7 +1033,7 @@ def test_concurrent_ordinary_arm_cannot_borrow_recovery_capability(tmp_path):
     recovery_entered = threading.Event()
     ordinary_entered = threading.Event()
     release_recovery = threading.Event()
-    results = queue.Queue()
+    results: queue.Queue[Any] = queue.Queue()
     try:
         plan = session.build_recovery_plan(current, barrier=barrier(session, current))
         original_arm = session._arm_from_preflight
@@ -1051,19 +1050,19 @@ def test_concurrent_ordinary_arm_cannot_borrow_recovery_capability(tmp_path):
 
         def recover():
             try:
-                    results.put(
-                        (
-                            "recovery",
-                            session.arm_recovery_from_preflight(
-                                current_proof,
-                                plan["recovery_token_sha256"],
-                                lambda: context(current_proof),
-                                budget_capability=_reserve_budget(
-                                    session, current_proof, mode="recovery"
-                                ),
+                results.put(
+                    (
+                        "recovery",
+                        session.arm_recovery_from_preflight(
+                            current_proof,
+                            plan["recovery_token_sha256"],
+                            lambda: context(current_proof),
+                            budget_capability=_reserve_budget(
+                                session, current_proof, mode="recovery"
                             ),
-                        )
+                        ),
                     )
+                )
             except Exception as exc:  # pragma: no cover - assertion reports it
                 results.put(("recovery_error", exc))
 
@@ -1120,8 +1119,8 @@ def test_public_recovery_arm_then_concurrent_disarm_finishes_read_only(tmp_path)
     original_arm = session.arm_recovery_from_preflight
     session_armed = threading.Event()
     release_arm_return = threading.Event()
-    arm_result = queue.Queue()
-    disarm_result = queue.Queue()
+    arm_result: queue.Queue[Any] = queue.Queue()
+    disarm_result: queue.Queue[Any] = queue.Queue()
 
     def blocked_arm(*args, **kwargs):
         result = original_arm(*args, **kwargs)
@@ -1460,7 +1459,7 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
     entered = threading.Event()
     release = threading.Event()
-    owner_result = queue.Queue()
+    owner_result: queue.Queue[Any] = queue.Queue()
     owner = order_request(
         side=Side.SELL,
         quantity="1",

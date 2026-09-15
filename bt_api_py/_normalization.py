@@ -18,6 +18,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum
+from typing import Any, cast
 
 from bt_api_base.exceptions import InvalidOrderError
 
@@ -943,7 +944,7 @@ def _dict(item):
     if isinstance(item, dict):
         return dict(item)
     if is_dataclass(item):
-        result = asdict(item)
+        result = asdict(cast("Any", item))
         raw = result.pop("raw", {})
         if "fill_id" in result and raw and not any(key in raw for key in ("fee", "commission")):
             result.pop("fee", None)
@@ -2042,7 +2043,7 @@ def account_permissions(result, exchange_name):
 
 def order(row, exchange_name, symbol=None, request=None, operation="query_order"):
     result = _base(exchange_name, row, symbol)
-    req = asdict(request) if is_dataclass(request) else (request or {})
+    req = asdict(cast("Any", request)) if is_dataclass(request) else (request or {})
     ack_payload = row.get("payload")
     if isinstance(ack_payload, dict):
         row = {**row, **ack_payload}

@@ -12,6 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from queue import Queue
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -100,8 +101,8 @@ class Backend:
                 ]
             },
         }
-        self.position_results = {VENUE: [], BINANCE_VENUE: []}
-        self.open_order_results = {VENUE: [], BINANCE_VENUE: []}
+        self.position_results: dict[str, list[Any]] = {VENUE: [], BINANCE_VENUE: []}
+        self.open_order_results: dict[str, list[Any]] = {VENUE: [], BINANCE_VENUE: []}
         self.open_orders_queried = []
 
     @staticmethod
@@ -155,7 +156,7 @@ def factory(monkeypatch, tmp_path):
             },
         ),
     )
-    clients = []
+    clients: list[Any] = []
 
     def make(path=None, *, config=None, legacy=False):
         settings = {

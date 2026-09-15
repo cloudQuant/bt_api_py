@@ -57,7 +57,7 @@ def test_apply_ctp_env_auto_detect_pins_plugin_profile(monkeypatch):
             profile="set2_7x24_vpn",
         )
 
-    selector.select_reachable_ctp_environment = select_reachable_ctp_environment
+    selector.__dict__["select_reachable_ctp_environment"] = select_reachable_ctp_environment
     package = ModuleType("bt_api_ctp")
     monkeypatch.setitem(sys.modules, "bt_api_ctp", package)
     monkeypatch.setitem(sys.modules, "bt_api_ctp.ctp_env_selector", selector)

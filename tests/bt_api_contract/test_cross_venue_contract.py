@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -44,8 +45,8 @@ def _instrument() -> InstrumentSpec:
     )
 
 
-def _fees(**overrides) -> FeeSchedule:
-    values = {
+def _fees(**overrides: Any) -> FeeSchedule:
+    values: dict[str, Any] = {
         "exchange_name": "OKX___SWAP",
         "symbol": "BTC-USDT-SWAP",
         "account_id": "demo-account",
@@ -59,9 +60,9 @@ def _fees(**overrides) -> FeeSchedule:
     return FeeSchedule(**values)
 
 
-def _funding(**overrides) -> FundingSnapshot:
+def _funding(**overrides: Any) -> FundingSnapshot:
     freshness = _freshness()
-    values = {
+    values: dict[str, Any] = {
         "exchange_name": "OKX___SWAP",
         "symbol": "BTC-USDT-SWAP",
         "rate": Decimal("0.0001"),

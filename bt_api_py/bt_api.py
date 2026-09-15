@@ -17,7 +17,7 @@ import time
 import uuid
 import warnings
 from collections import defaultdict, deque
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import replace
@@ -632,11 +632,13 @@ class _CtpMarketConsumerQueue:
         self.target.join()
 
 
-def _serialized_ctp_execution_transition(method):
+def _serialized_ctp_execution_transition(
+    method: Callable[..., Any],
+) -> Callable[..., Any]:
     """Serialize public CTP gate/session transitions on one SDK instance."""
 
     @wraps(method)
-    def wrapped(self, *args, **kwargs):
+    def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
         lock = getattr(self, "_ctp_execution_transition_lock", None)
         if lock is None:
             with _CTP_TRANSITION_LOCK_INIT:
@@ -743,7 +745,7 @@ def _dependency_source_manifest_digest() -> str:
                 continue
             file_manifest = []
             for relative in sorted(files, key=lambda item: str(item)):
-                path = Path(distribution.locate_file(relative))
+                path = Path(str(distribution.locate_file(relative)))
                 if not path.is_file():
                     raise ValueError("dependency_file_unavailable")
                 file_manifest.append(
@@ -763,7 +765,7 @@ def _dependency_source_manifest_digest() -> str:
 _reg_logger = get_logger("registry")
 
 
-def _credential_alias_value(parameters, aliases):
+def _credential_alias_value(parameters: Mapping[str, Any], aliases: tuple[str, ...]) -> str | None:
     supplied = []
     for alias in aliases:
         if alias not in parameters or parameters[alias] is None:
@@ -785,7 +787,11 @@ def _credential_alias_value(parameters, aliases):
     return supplied[0] if supplied else None
 
 
-def _execution_credential_fingerprints(settings, config, transport_mode):
+def _execution_credential_fingerprints(
+    settings: Mapping[str, Any] | None,
+    config: Mapping[str, Any],
+    transport_mode: TransportMode,
+) -> dict[str, str]:
     """Preflight private credentials and return hashes of public identifiers only."""
     if config["market_data_only"] or transport_mode is not TransportMode.DIRECT:
         return {}
@@ -884,7 +890,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         debug: bool = True,
         event_bus: EventBus | None = None,
         *,
-        transport_mode: TransportMode = TransportMode.DIRECT,
+        transport_mode: TransportMode | str = TransportMode.DIRECT,
         forwarding_config: ForwardingConfig | None = None,
         execution_config: dict[str, Any] | None = None,
     ) -> None:
@@ -910,8 +916,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self.event_bus = event_bus or EventBus()
         self._subscription_flags = {}
         self._subscription_streams: list[Any] = []
-        self._normalized_event_pending = defaultdict(deque)
-        self._position_modes = {}
+        self._normalized_event_pending: defaultdict[str, deque[Any]] = defaultdict(deque)
+        self._position_modes: dict[str, str] = {}
         self._position_mode_lock = threading.RLock()
         self._ctp_execution_transition_lock = threading.RLock()
         self._ctp_private_ingress_fences: dict[str, _CtpPrivateIngressFence] = {}
@@ -921,7 +927,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self._ctp_market_consumer_queues: dict[str, _CtpMarketConsumerQueue] = {}
         self._position_mode_reconcile_required: dict[str, str] = {}
         self._position_mode_active_placements: dict[str, int] = {}
-        self._execution_session = None
+        self._execution_session: Any | None = None
         # Managed CTP feeds receive this opaque, process-local capability before
         # they are exposed through ``exchange_feeds``.  The backend resolves it
         # lazily so configure_execution() also works before or after add_exchange().
@@ -930,7 +936,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         # settlement and explicit preflight resets, including when a contract
         # test uses a lightweight native-feed double.
         self._ctp_execution_authorization_epoch = 0
-        self._instrument_cache = {}
+        self._instrument_cache: dict[tuple[str, str | None], Any] = {}
         self._instrument_spec_cache: dict[tuple[str, str], InstrumentSpec] = {}
         self._event_metrics = defaultdict(
             int,
@@ -1063,7 +1069,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP":
                     self._configure_ctp_execution_gate(exchange_name, feed)
         except Exception:
-            self._execution_session.close()
+            session = self._execution_session
+            if session is not None:
+                session.close()
             self._execution_session = None
             raise
         if config["market_data_only"]:
@@ -1073,7 +1081,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             try:
                 self._validate_required_environments()
             except Exception:
-                self._execution_session.close()
+                session = self._execution_session
+                if session is not None:
+                    session.close()
                 self._execution_session = None
                 raise
 
@@ -2395,18 +2405,18 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
     def _normalized_call(
         self,
-        operation,
-        exchange_name,
-        symbol,
-        call,
+        operation: str,
+        exchange_name: str,
+        symbol: str | None,
+        call: Callable[[], Any],
         *,
-        request=None,
-        budget_capability=None,
-    ):
+        request: Any = None,
+        budget_capability: Any = None,
+    ) -> Any:
         """Opt-in SDK result contract; never expose credentials in normalized errors."""
         from ._normalization import normalize_error, normalize_result
 
-        def invoke():
+        def invoke() -> Any:
             failure = None
             try:
                 result = call()
@@ -2543,7 +2553,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             pre_dispatch,
         )
 
-    def _async_sync_worker_method(self, operation: str, args: tuple[Any, ...]):
+    def _async_sync_worker_method(
+        self, operation: str, args: tuple[Any, ...]
+    ) -> Callable[..., Any] | None:
         """Find a DirectBackend sync twin when its async method will queue it."""
 
         backend_type = type(self._backend)
@@ -2572,7 +2584,12 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         return sync_method if callable(sync_method) else None
 
     @staticmethod
-    def _run_async_backend_worker(method, args, kwargs, pre_dispatch):
+    def _run_async_backend_worker(
+        method: Callable[..., Any],
+        args: tuple[Any, ...],
+        kwargs: Mapping[str, Any],
+        pre_dispatch: Callable[[], None] | None,
+    ) -> Any:
         """Run the final recovery gate immediately before a worker call."""
 
         if pre_dispatch is not None:
@@ -2602,7 +2619,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
         def final_handoff() -> None:
             context = handoff_context.get("context")
-            if context is None:
+            if context is None or session is None:
                 return
             # Keep the exact context object so the session can reject a worker
             # that outlives a cancelled async invocation instead of silently
@@ -2610,7 +2627,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             context["_async_handoff"] = True
             session.finalize_dispatch(context)
 
-        def bind_handoff_context(context) -> None:
+        def bind_handoff_context(context: Any) -> None:
             handoff_context["context"] = context
 
         async def invoke() -> Any:
@@ -2670,7 +2687,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 self._sync_ctp_gate_after_session_invoke(session, exchange_name, operation)
         return await invoke()
 
-    def _enrich_order_commission(self, exchange_name, order):
+    def _enrich_order_commission(self, exchange_name: str, order: dict[str, Any]) -> None:
         """Attach actual fees only when fills fully reconcile a terminal order.
 
         Fees remain denominated in commission_currency; consumers must compare
@@ -3431,7 +3448,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 operation="add_exchange",
             )
             session = self._execution_session
-            credential_fingerprints = (
+            credential_fingerprints: dict[str, str] = (
                 _execution_credential_fingerprints(
                     {exchange_name: stored_exchange_params},
                     session.config,
@@ -3467,7 +3484,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 self.exchange_feeds[exchange_name] = feed
                 self._validate_required_environment(exchange_name)
                 fingerprint = credential_fingerprints.get(exchange_name)
-                if fingerprint is not None:
+                if fingerprint is not None and session is not None:
                     session.bind_credential_identity(exchange_name, fingerprint)
             except Exception:
                 registered_feed = self.exchange_feeds.pop(exchange_name, None)
@@ -4088,7 +4105,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     ):
                         return token
                 except Exception:
-                    pass
+                    self.log(
+                        "CTP account stream readiness probe failed; recreating stream",
+                        level="warning",
+                    )
             if account_stream is not None and account_stream in streams:
                 streams.remove(account_stream)
                 with suppress(Exception):
@@ -4312,7 +4332,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 definite_reject=True,
             ) from None
 
-        def refresh_context():
+        def refresh_context() -> CtpExecutionApprovalContext:
             return self.build_ctp_execution_approval_context(
                 context_seed,
                 exchange_name=exchange_name,
@@ -4452,7 +4472,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     definite_reject=True,
                 )
 
-    def _latch_ctp_recovery_failure(self, session, error: BaseException) -> None:
+    def _latch_ctp_recovery_failure(self, session: Any, error: BaseException) -> None:
         """Fence the current generation after a recovery authority failure."""
 
         reason = str(getattr(error, "code", "") or type(error).__name__)
@@ -4494,8 +4514,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         *,
         trust_root: Mapping[str, Any] | None,
         context: Mapping[str, Any] | CtpExecutionApprovalContext,
-        transition,
-    ):
+        transition: Callable[..., Any],
+    ) -> tuple[CtpExecutionApproval, Any]:
         """Run one approval transition under the session's commit fence.
 
         The initial verification is only a cheap admission check.  The
@@ -4524,7 +4544,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
             self._bind_ctp_approval_identity(current_context)
 
-            def transition_guard(stage, record):
+            def transition_guard(stage: str, record: Any) -> Any:
                 nonlocal current_context, current_approval
                 current_context = self._refresh_ctp_execution_approval_context(context)
                 current_approval = self._revalidate_ctp_execution_approval(
@@ -4740,7 +4760,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
 
     @staticmethod
-    def _ctp_recovery_action_plan_matches(approval, plan) -> bool:
+    def _ctp_recovery_action_plan_matches(
+        approval: CtpExecutionApproval, plan: Mapping[str, Any]
+    ) -> bool:
         """Match every signed recovery action to the current plan allowance."""
 
         payload = approval.payload
@@ -4800,7 +4822,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         return True
 
     @staticmethod
-    def _ctp_recovery_remaining_plan_matches(current, expected) -> bool:
+    def _ctp_recovery_remaining_plan_matches(
+        current: Mapping[str, Any], expected: Mapping[str, Any]
+    ) -> bool:
         """Ensure consumed recovery allowances cannot be restored or borrowed."""
 
         if not isinstance(current, Mapping) or not isinstance(expected, Mapping):
@@ -4811,7 +4835,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         if any(current[field] != expected[field] for field in current if field not in mutable):
             return False
 
-        def close_rows_fit(current_rows, expected_rows):
+        def close_rows_fit(current_rows: Any, expected_rows: Any) -> bool:
             if not isinstance(current_rows, (list, tuple)) or not isinstance(
                 expected_rows, (list, tuple)
             ):
@@ -4872,7 +4896,13 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             remaining_cancels.pop(index)
         return True
 
-    def _ctp_recovery_approval_proof(self, approval, *, exchange_name, session):
+    def _ctp_recovery_approval_proof(
+        self,
+        approval: CtpExecutionApproval,
+        *,
+        exchange_name: str,
+        session: Any,
+    ) -> dict[str, Any]:
         """Turn signed recovery material into the existing core proof shape."""
 
         from ._execution_session import _execution_arm_proof
@@ -5329,7 +5359,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         approval_capability: CtpExecutionApprovalCapability,
         recovery_token_sha256: str,
         *,
-        session,
+        session: Any,
         exchange_name: str,
         operation: str,
         runtime_python: Mapping[str, Any],
@@ -5435,7 +5465,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
         if (
             not isinstance(recovery_plan, Mapping)
-            or recovery_plan.get("status") != "RECOVERABLE"
+            or not isinstance(authorized_plan, Mapping)
+            or not isinstance(remaining_plan, Mapping)
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_recovery_plan_unavailable",
+                definite_reject=True,
+            )
+        if (
+            recovery_plan.get("status") != "RECOVERABLE"
             or recovery_plan.get("recovery_token_sha256") != recovery_token_sha256
             or session.config.get("strategy_id") != approval_capability.bindings.get("strategy_id")
             or session.config.get("strategy_identity_sha256")
@@ -6046,7 +6085,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         """
 
         operation = "arm_execution_recovery"
-        if proof is not None or authorization is None:
+        if proof is not None or type(authorization) is not CtpExecutionApprovalCapability:
             raise NormalizedApiError(
                 operation,
                 "ctp_execution_authorization_required",
@@ -6059,8 +6098,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 mode="recovery",
                 operation=operation,
             )
+        approval_capability = authorization
         internal = self._prepare_ctp_recovery_arm_authorization(
-            authorization,
+            approval_capability,
             recovery_token_sha256,
         )
         return self._arm_execution_recovery(
@@ -7560,14 +7600,18 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "position_mode_reconcile_required",
                     definite_reject=True,
                 )
-            if resolve_mode and request is None:
-                raise TypeError("normalized placement requires an OrderRequest")
-            if resolve_mode and request.position_mode is None:
+            if resolve_mode:
+                if request is None:
+                    raise TypeError("normalized placement requires an OrderRequest")
+                resolved_request: OrderRequest = request
+            else:
+                resolved_request = request
+            if resolve_mode and resolved_request.position_mode is None:
                 self._validate_required_environment(exchange_name, operation="get_position_mode")
                 mode = self._position_modes.get(exchange_name)
                 if mode is None:
                     mode = self.get_position_mode(exchange_name, normalized=True)["position_mode"]
-                request = replace(request, position_mode=mode)
+                request = replace(resolved_request, position_mode=mode)
             self._position_mode_active_placements[exchange_name] = (
                 self._position_mode_active_placements.get(exchange_name, 0) + 1
             )
@@ -7785,12 +7829,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         try:
             account_config = self._backend.get_account_config(exchange_name, extra_data=options())
             if exchange_name == "OKX___SWAP":
-                from ._venue_mappers.okx import normalize_order_readiness
+                from ._venue_mappers.okx import (
+                    normalize_order_readiness as normalize_okx_order_readiness,
+                )
 
                 account_instruments = self._backend.get_account_instruments(
                     exchange_name, symbol, extra_data=options()
                 )
-                snapshot = normalize_order_readiness(
+                snapshot = normalize_okx_order_readiness(
                     exchange_name,
                     symbol,
                     quantity_native,
@@ -7813,7 +7859,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     margin_mode=margin_mode,
                     extra_data=options(),
                 )
-                return normalize_order_readiness(
+                return normalize_okx_order_readiness(
                     exchange_name,
                     symbol,
                     quantity_native,
@@ -7825,7 +7871,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     max_size=max_size,
                 )
 
-            from ._venue_mappers.binance import normalize_order_readiness
+            from ._venue_mappers.binance import (
+                normalize_order_readiness as normalize_binance_order_readiness,
+            )
 
             exchange_info = self._backend.get_exchange_info(
                 exchange_name, symbol, extra_data=options()
@@ -7843,7 +7891,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             position_mode_info = optional_read(
                 "get_position_mode", exchange_name, extra_data=options()
             )
-            initial = normalize_order_readiness(
+            initial = normalize_binance_order_readiness(
                 exchange_name,
                 symbol,
                 quantity_native,
@@ -7872,7 +7920,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 margin_mode=margin_mode,
                 extra_data=options(),
             )
-            return normalize_order_readiness(
+            return normalize_binance_order_readiness(
                 exchange_name,
                 symbol,
                 quantity_native,
@@ -8059,7 +8107,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
         return self._cancel_order_raw(exchange_name, symbol, order_id, extra_data, **kwargs)
 
-    def _cancel_order_raw(self, exchange_name, symbol, order_id=None, extra_data=None, **kwargs):
+    def _cancel_order_raw(
+        self,
+        exchange_name: str,
+        symbol: str | CancelOrderRequest,
+        order_id: str | None = None,
+        extra_data: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         request = (
             symbol
             if isinstance(symbol, CancelOrderRequest)
@@ -8404,7 +8459,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
     # ── 异步接口（显式方法，替代动态 __getattr__ 代理）────────────────
 
     @staticmethod
-    async def _await_legacy_async(operation, call, *args: Any, **kwargs: Any) -> Any:
+    async def _await_legacy_async(
+        operation: str, call: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> Any:
         """Await legacy adapters, rejecting fire-and-forget ``None`` results."""
         result = call(*args, **kwargs)
         result = await result if inspect.isawaitable(result) else result
@@ -8740,7 +8797,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 results[exchange_name] = e
         return results
 
-    def get_portfolio_balance(self, *, venue_balances=None) -> dict[str, Any]:
+    def get_portfolio_balance(
+        self, *, venue_balances: Mapping[str, Mapping[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """Aggregate normalized accounts only when all values share a currency.
 
         A supplied snapshot avoids issuing the same account requests twice.

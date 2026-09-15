@@ -1,6 +1,7 @@
 """Protect paired futures order semantics at the public BtApi boundary."""
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -17,8 +18,8 @@ from bt_api_py._contracts.models import (
 from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
 
 
-def order(**changes):
-    values = {
+def order(**changes: Any) -> OrderRequest:
+    values: dict[str, Any] = {
         "symbol": "BTC-USDT-SWAP",
         "side": Side.SELL,
         "order_type": OrderType.LIMIT,

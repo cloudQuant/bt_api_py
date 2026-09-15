@@ -62,6 +62,8 @@ def _position_mode(value: Any) -> str | None:
     if value in (False, "false", "FALSE"):
         return "net"
     text = str(value).lower() if value not in (None, "") else None
+    if text is None:
+        return None
     return {
         "both": "net",
         "one_way": "net",
@@ -71,6 +73,8 @@ def _position_mode(value: Any) -> str | None:
 
 def _margin_mode(value: Any) -> str | None:
     text = str(value).lower() if value not in (None, "") else None
+    if text is None:
+        return None
     return {"crossed": "cross", "cross_margin": "cross"}.get(text, text)
 
 

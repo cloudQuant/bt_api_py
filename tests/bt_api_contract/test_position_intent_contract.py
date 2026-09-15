@@ -1,6 +1,7 @@
 """Public SDK preserves position intent and native order identities."""
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from bt_api_base.exceptions import InvalidOrderError
@@ -34,8 +35,8 @@ def api(monkeypatch):
     return api
 
 
-def order(**changes):
-    fields = {
+def order(**changes: Any) -> OrderRequest:
+    fields: dict[str, Any] = {
         "symbol": "BTCUSDT",
         "side": Side.BUY,
         "order_type": OrderType.LIMIT,

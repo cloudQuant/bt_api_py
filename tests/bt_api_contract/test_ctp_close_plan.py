@@ -596,10 +596,7 @@ def test_g17_canonical_digest_action_ids_and_deep_immutability():
     plan = _call(SHFE_MIXED, request)
     same = _call(SHFE_MIXED, deepcopy(request), monotonic=102_000_000_000)
     assert plan.plan_sha256 == same.plan_sha256
-    assert (
-        plan.actions[0]["action_id"]
-        == sha256(f"{plan.plan_sha256}:0".encode()).hexdigest()
-    )
+    assert plan.actions[0]["action_id"] == sha256(f"{plan.plan_sha256}:0".encode()).hexdigest()
     with pytest.raises(TypeError):
         plan.actions[0]["quantity"] = 99
     with pytest.raises(TypeError):
@@ -774,9 +771,7 @@ def test_cp03_all_account_scope_and_global_raw_identity_are_required():
             }
         },
     )
-    evidence["records"] = tuple(
-        {**row, "InvestorID": "OTHER"} for row in evidence["records"]
-    )
+    evidence["records"] = tuple({**row, "InvestorID": "OTHER"} for row in evidence["records"])
     _assert_code(
         lambda: _call_evidence(
             evidence,
@@ -807,9 +802,7 @@ def test_cp03_typed_field_values_must_agree_with_frozen_raw_record():
     [(True, None), (False, "O3B_POSITION_EVIDENCE_INCOMPLETE")],
     ids=["same-scope-ready-true", "same-scope-ready-false"],
 )
-def test_cp03_source_readiness_is_consistent_before_scope_proof(
-    read_only_ready, expected_error
-):
+def test_cp03_source_readiness_is_consistent_before_scope_proof(read_only_ready, expected_error):
     evidence = _evidence(
         SHFE_MIXED,
         query_envelope={
