@@ -239,6 +239,9 @@ skips = [
 
 [project.optional-dependencies]
 dev = [
+    "build>=1.0.0",
+    "wheel",
+    "cython",
     "types-PyYAML>=6.0",
     "types-pytz>=2023.3",
     "types-requests>=2.31.0",

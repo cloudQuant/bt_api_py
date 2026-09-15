@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Require `bt_api_ctp>=2.0.2,<3.0` for the `core-reference` bundle
 - Install the unpublished `bt_api_okx` core-reference adapter from an immutable
   public source archive in CI without placing a direct URL in PyPI metadata
+- Declare the `build`, `wheel`, and `cython` toolchain in the development extra
+  because resource-contract tests invoke `python -m build --no-isolation`
 
 ### Added
 - `CHANGELOG.md` — this file

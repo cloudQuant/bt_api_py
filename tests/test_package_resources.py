@@ -61,6 +61,20 @@ def test_core_reference_ci_supplement_uses_an_immutable_public_okx_source() -> N
     ) in okx_requirement
 
 
+def test_dev_extra_declares_no_isolation_build_toolchain() -> None:
+    """The full suite invokes ``python -m build --no-isolation`` directly."""
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as config_file:
+        config = tomllib.load(config_file)
+
+    build_system_requirements = config["build-system"]["requires"]
+    dev_dependencies = config["project"]["optional-dependencies"]["dev"]
+    project_dependencies = config["project"]["dependencies"]
+
+    assert {"setuptools>=64", "wheel", "cython", "numpy"}.issubset(build_system_requirements)
+    assert {"build>=1.0.0", "setuptools>=83.0.0", "wheel", "cython"}.issubset(dev_dependencies)
+    assert "numpy>=1.26.0" in project_dependencies
+
+
 def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Path) -> None:
     dist_dir = tmp_path / "dist"
     build = subprocess.run(
