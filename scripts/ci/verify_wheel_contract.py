@@ -132,7 +132,9 @@ def _isolated_install_probe(wheel: Path) -> tuple[str, dict[str, Any], dict[str,
                 "install",
                 "--disable-pip-version-check",
                 "--force-reinstall",
-                "--no-deps",
+                # This is an installed-package probe.  Resolve the wheel's
+                # declared runtime dependencies instead of relying on whatever
+                # happens to be present in the runner's system site-packages.
                 str(wheel),
             ],
             cwd=temp_root,
