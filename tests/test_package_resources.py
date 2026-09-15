@@ -96,6 +96,12 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
     )
 
     assert "scripts/ci/verify_wheel_contract.py" in tests_workflow
+    tests_data = yaml.safe_load(tests_workflow)
+    full_suite_steps = tests_data["jobs"]["full-suite"]["steps"]
+    full_suite_install = next(
+        step for step in full_suite_steps if step.get("name") == "Install package + dev deps"
+    )
+    assert '".[dev,security,core-reference]"' in full_suite_install["run"]
     assert "bt_api_py.doctor --bundle core-reference --format json" in publish_workflow
 
     publish_data = yaml.safe_load(publish_workflow)

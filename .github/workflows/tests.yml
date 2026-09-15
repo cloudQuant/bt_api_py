@@ -103,7 +103,8 @@ jobs:
       - name: Install package + dev deps
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,security]"
+          # Unmarked contract cases exercise the declared reference adapters.
+          pip install -e ".[dev,security,core-reference]"
 
       - name: Run baseline suite with coverage gate
         env:
