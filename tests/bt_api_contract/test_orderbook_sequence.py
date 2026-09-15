@@ -4,8 +4,9 @@ Exchanges attach continuity identifiers to depth updates (Binance ``u`` /
 ``lastUpdateId``, OKX l2 ``checksum`` sequences). Dropping them made it
 impossible for consumers to detect dropped or out-of-order books. The
 normalized orderbook event must expose a ``sequence`` when the venue
-container preserved one. Missing sequence evidence remains ``None`` and is
-never presented as a continuous sequence zero.
+container retains the native update field in its raw payload. Missing sequence
+evidence remains ``None`` and is never presented as a continuous sequence
+zero.
 """
 
 from __future__ import annotations
@@ -72,7 +73,7 @@ def test_zero_previous_sequence_is_a_delta_without_claiming_continuity():
     assert event["continuity_status"] == "unverified"
 
 
-def test_binance_wss_container_preserves_final_update_id():
+def test_binance_wss_raw_payload_preserves_final_update_id():
     raw = json.dumps(
         {
             "s": "BTCUSDT",
@@ -84,14 +85,17 @@ def test_binance_wss_container_preserves_final_update_id():
     )
     book = BinanceWssOrderBookData(raw, "BTCUSDT", "SWAP")
 
-    assert book.init_data().get_all_data()["sequence_id"] == 777
+    # Public bt_api_binance does not promise a synthetic sequence_id in its
+    # common aggregate view, but it retains the native websocket payload that
+    # the framework's normalizer consumes.
+    assert book.init_data().order_book_data["u"] == 777
 
     event = normalize_event(book, "BINANCE___SWAP", kind="orderbook", symbol="BTCUSDT")
 
     assert event["sequence"] == 777
 
 
-def test_binance_rest_container_preserves_last_update_id():
+def test_binance_rest_raw_payload_preserves_last_update_id():
     raw = json.dumps(
         {
             "lastUpdateId": 9001,
@@ -101,7 +105,7 @@ def test_binance_rest_container_preserves_last_update_id():
     )
     book = BinanceRequestOrderBookData(raw, "BTCUSDT", "SWAP")
 
-    assert book.init_data().get_all_data()["sequence_id"] == 9001
+    assert book.init_data().order_book_data["lastUpdateId"] == 9001
 
     event = normalize_event(book, "BINANCE___SWAP", kind="orderbook", symbol="BTCUSDT")
 

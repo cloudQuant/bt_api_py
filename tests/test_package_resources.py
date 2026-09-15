@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import tomllib
 import zipfile
 from importlib.resources import files
 from pathlib import Path
@@ -39,6 +40,25 @@ def test_source_root_does_not_define_a_second_bundle_catalog() -> None:
     repository_root = Path(__file__).resolve().parents[1]
 
     assert not (repository_root / "configs" / "exchange-bundles.toml").exists()
+
+
+def test_core_reference_ci_supplement_uses_an_immutable_public_okx_source() -> None:
+    """Keep unpublished adapters out of PyPI metadata and reproducible in CI."""
+    with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as config_file:
+        config = tomllib.load(config_file)
+
+    dependencies = config["project"]["optional-dependencies"]["core-reference"]
+    assert not any(item.startswith("bt_api_okx") for item in dependencies)
+
+    okx_requirement = (REPOSITORY_ROOT / "requirements-ci-core-reference.txt").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "bt_api_okx @ "
+        "https://github.com/cloudQuant/bt_api_okx/archive/"
+        "d407ba69f40f775f4d6aa4d07c9a96f94ddb5263.tar.gz"
+    ) in okx_requirement
 
 
 def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Path) -> None:
@@ -102,6 +122,7 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
         step for step in full_suite_steps if step.get("name") == "Install package + dev deps"
     )
     assert '".[dev,security,core-reference]"' in full_suite_install["run"]
+    assert "requirements-ci-core-reference.txt" in full_suite_install["run"]
     assert "bt_api_py.doctor --bundle core-reference --format json" in publish_workflow
 
     publish_data = yaml.safe_load(publish_workflow)

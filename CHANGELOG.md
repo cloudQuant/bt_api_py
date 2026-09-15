@@ -21,6 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CI: Bandit security scan now fails CI on findings (was `continue-on-error`)
 - Add pytest timeout (30s per test) to prevent hanging tests
 - Require `bt_api_ctp>=2.0.2,<3.0` for the `core-reference` bundle
+- Install the unpublished `bt_api_okx` core-reference adapter from an immutable
+  public source archive in CI without placing a direct URL in PyPI metadata
 
 ### Added
 - `CHANGELOG.md` — this file

@@ -1,0 +1,4 @@
+# CI-only supplements for the core-reference catalog.
+# bt_api_okx is not published to PyPI, so it must stay outside package metadata
+# and use a reproducible public source archive for the full-suite environment.
+bt_api_okx @ https://github.com/cloudQuant/bt_api_okx/archive/d407ba69f40f775f4d6aa4d07c9a96f94ddb5263.tar.gz
