@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   public source archive in CI without placing a direct URL in PyPI metadata
 - Declare the `build`, `wheel`, and `cython` toolchain in the development extra
   because resource-contract tests invoke `python -m build --no-isolation`
+- Validate the TestPyPI smoke install against the complete core-reference
+  bundle, including the immutable CI-only OKX adapter, doctor contract, and
+  real root/plugin imports
 
 ### Added
 - `CHANGELOG.md` — this file

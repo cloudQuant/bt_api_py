@@ -131,25 +131,58 @@ jobs:
 
   smoke-install-testpypi:
     if: github.event_name == 'workflow_dispatch'
-    needs: [publish-testpypi]
+    needs: [build, publish-testpypi]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
       - name: Install candidate in a fresh virtualenv and smoke test
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
+          test -n "$VERSION"
           echo "smoke-installing bt_api_py==$VERSION from TestPyPI"
           python3 -m venv .venv-smoke
           ./.venv-smoke/bin/pip install --upgrade pip
           ./.venv-smoke/bin/pip install \
             --index-url https://test.pypi.org/simple/ \
             --extra-index-url https://pypi.org/simple/ \
-            "bt_api_py==$VERSION"
+            -r requirements-ci-core-reference.txt \
+            "bt_api_py[core-reference]==$VERSION"
           ./.venv-smoke/bin/python -c "import bt_api_py; print('smoke OK:', bt_api_py.__version__)"
-          ./.venv-smoke/bin/python -m bt_api_py.doctor --bundle core-reference --format json
+
+      - name: Validate core-reference doctor contract
+        run: |
+          ./.venv-smoke/bin/python -m bt_api_py.doctor --bundle core-reference --format json > doctor-core-reference.json
+          ./.venv-smoke/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("doctor-core-reference.json").read_text(encoding="utf-8"))
+          assert payload["name"] == "core-reference", payload
+          venues = {venue["plugin"]: venue for venue in payload["venues"]}
+          required = {"binance", "okx", "ctp"}
+          assert required.issubset(venues), venues
+          for plugin in required:
+              venue = venues[plugin]
+              assert venue["installed"] is True, venue
+              assert venue["version_ok"] is True, venue
+              assert venue["entry_point"] is True, venue
+          import importlib
+
+          for module_name in ("bt_api_py", "bt_api_binance", "bt_api_okx", "bt_api_ctp"):
+              importlib.import_module(module_name)
+          print("core-reference doctor contract passed")
+          PY
 
   publish-pypi:
     if: github.event_name == 'release'

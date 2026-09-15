@@ -153,6 +153,40 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
     assert "--receipt dist-meta/wheel-contract-receipt.json" in wheel_contract_run
     assert "+" not in wheel_contract_run
 
+    smoke_job = publish_data["jobs"]["smoke-install-testpypi"]
+    assert smoke_job["needs"] == ["build", "publish-testpypi"]
+    smoke_steps = smoke_job["steps"]
+    assert smoke_steps[0]["uses"] == "actions/checkout@v6"
+    assert smoke_steps[0]["with"]["ref"] == "${{ inputs.expected_sha }}"
+
+    smoke_install = next(
+        step
+        for step in smoke_steps
+        if step.get("name") == "Install candidate in a fresh virtualenv and smoke test"
+    )
+    smoke_install_run = smoke_install["run"]
+    assert "needs.build.outputs.version" in smoke_install["env"]["VERSION"]
+    assert 'test -n "$VERSION"' in smoke_install_run
+    assert '"bt_api_py[core-reference]==$VERSION"' in smoke_install_run
+    assert "-r requirements-ci-core-reference.txt" in smoke_install_run
+    assert "--index-url https://test.pypi.org/simple/" in smoke_install_run
+    assert "--extra-index-url https://pypi.org/simple/" in smoke_install_run
+
+    doctor_contract = next(
+        step
+        for step in smoke_steps
+        if step.get("name") == "Validate core-reference doctor contract"
+    )
+    doctor_contract_run = doctor_contract["run"]
+    assert "doctor-core-reference.json" in doctor_contract_run
+    assert "json.loads" in doctor_contract_run
+    assert 'required = {"binance", "okx", "ctp"}' in doctor_contract_run
+    for field in ("installed", "version_ok", "entry_point"):
+        assert f'venue["{field}"] is True' in doctor_contract_run
+    assert "importlib.import_module" in doctor_contract_run
+    for module_name in ("bt_api_py", "bt_api_binance", "bt_api_okx", "bt_api_ctp"):
+        assert f'"{module_name}"' in doctor_contract_run
+
 
 def test_built_wheel_contains_catalog_but_not_bytecode(tmp_path: Path) -> None:
     dist_dir = tmp_path / "dist"
