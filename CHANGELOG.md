@@ -28,6 +28,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Validate the TestPyPI smoke install against the complete core-reference
   bundle, including the immutable CI-only OKX adapter, doctor contract, and
   real root/plugin imports
+- Run TestPyPI smoke checks outside the source workspace and assert the root
+  package originates from the installed distribution
 
 ### Added
 - `CHANGELOG.md` — this file

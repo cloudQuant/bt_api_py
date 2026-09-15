@@ -165,10 +165,11 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
         if step.get("name") == "Install candidate in a fresh virtualenv and smoke test"
     )
     smoke_install_run = smoke_install["run"]
+    assert smoke_install["working-directory"] == "${{ runner.temp }}"
     assert "needs.build.outputs.version" in smoke_install["env"]["VERSION"]
     assert 'test -n "$VERSION"' in smoke_install_run
     assert '"bt_api_py[core-reference]==$VERSION"' in smoke_install_run
-    assert "-r requirements-ci-core-reference.txt" in smoke_install_run
+    assert '-r "$GITHUB_WORKSPACE/requirements-ci-core-reference.txt"' in smoke_install_run
     assert "--index-url https://test.pypi.org/simple/" in smoke_install_run
     assert "--extra-index-url https://pypi.org/simple/" in smoke_install_run
 
@@ -178,12 +179,16 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
         if step.get("name") == "Validate core-reference doctor contract"
     )
     doctor_contract_run = doctor_contract["run"]
+    assert doctor_contract["working-directory"] == "${{ runner.temp }}"
     assert "doctor-core-reference.json" in doctor_contract_run
     assert "json.loads" in doctor_contract_run
     assert 'required = {"binance", "okx", "ctp"}' in doctor_contract_run
     for field in ("installed", "version_ok", "entry_point"):
         assert f'venue["{field}"] is True' in doctor_contract_run
     assert "importlib.import_module" in doctor_contract_run
+    assert "bt_api_py.__file__" in doctor_contract_run
+    assert 'os.environ["GITHUB_WORKSPACE"]' in doctor_contract_run
+    assert "not package_file.is_relative_to(workspace)" in doctor_contract_run
     for module_name in ("bt_api_py", "bt_api_binance", "bt_api_okx", "bt_api_ctp"):
         assert f'"{module_name}"' in doctor_contract_run
 
