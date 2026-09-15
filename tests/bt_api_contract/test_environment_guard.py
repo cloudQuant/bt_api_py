@@ -45,17 +45,13 @@ class Feed:
             values["simulated_trading"] = simulated
         self._params = SimpleNamespace(**values)
         self.api_region = (
-            "global"
-            if exchange_name.startswith("OKX___") and api_region is None
-            else api_region
+            "global" if exchange_name.startswith("OKX___") and api_region is None else api_region
         )
         self.disconnect = Mock()
 
     def get_environment_info(self):
         environment = str(self._params.environment).strip().lower()
-        simulated = getattr(
-            self._params, "simulated_trading", environment != "production"
-        )
+        simulated = getattr(self._params, "simulated_trading", environment != "production")
         proof = {
             "environment": environment,
             "simulated": simulated,
@@ -115,9 +111,7 @@ def direct_factory(monkeypatch, tmp_path):
 
     def create_feed(exchange_name, data_queue, **kwargs):
         del data_queue
-        environment = kwargs.pop(
-            "resolved_environment", kwargs.get("environment", "production")
-        )
+        environment = kwargs.pop("resolved_environment", kwargs.get("environment", "production"))
         simulated = kwargs.pop("resolved_simulated", None)
         feed = Feed(
             exchange_name,
@@ -135,9 +129,7 @@ def direct_factory(monkeypatch, tmp_path):
     clients = []
 
     def make(exchange_kwargs, *, required=None, journal=True, market_data_only=False):
-        exchange_kwargs = {
-            venue: dict(parameters) for venue, parameters in exchange_kwargs.items()
-        }
+        exchange_kwargs = {venue: dict(parameters) for venue, parameters in exchange_kwargs.items()}
         for venue, parameters in exchange_kwargs.items():
             if venue.startswith("OKX___"):
                 parameters.setdefault("api_key", "fixture-okx-public")
@@ -329,9 +321,7 @@ def test_order_environment_is_rechecked_before_intent_and_dispatch(direct_factor
         "https://demo-fapi.binance.com/api",
     ],
 )
-def test_endpoint_drift_is_rejected_before_intent_and_dispatch(
-    direct_factory, rest_url
-):
+def test_endpoint_drift_is_rejected_before_intent_and_dispatch(direct_factory, rest_url):
     make, feeds = direct_factory
     api = make(
         {BINANCE: {"resolved_environment": "demo", "resolved_simulated": True}},
@@ -582,9 +572,7 @@ def test_configured_venue_without_requirement_fails_closed(direct_factory):
     assert excinfo.value.definite_reject is True
 
 
-def test_crypto_execution_derives_account_authority_from_credentials(
-    direct_factory, tmp_path
-):
+def test_crypto_execution_derives_account_authority_from_credentials(direct_factory, tmp_path):
     del direct_factory
     api = BtApi(
         {

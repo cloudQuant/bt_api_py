@@ -109,9 +109,7 @@ def _ready_state(**changes):
 class _ManagedFeed:
     def __init__(self, session_state):
         self._session_state = session_state
-        self.trader_client = SimpleNamespace(
-            get_session_state=lambda: dict(self._session_state)
-        )
+        self.trader_client = SimpleNamespace(get_session_state=lambda: dict(self._session_state))
         self._capability = None
         self._gate_state = {
             "managed": True,
@@ -258,9 +256,7 @@ def _install_account_stream(monkeypatch):
     monkeypatch.setattr(
         "bt_api_py.bt_api.ExchangeRegistry.get_stream_class",
         lambda exchange_name, stream_type: (
-            _AccountStream
-            if (exchange_name, stream_type) == (VENUE, "account")
-            else None
+            _AccountStream if (exchange_name, stream_type) == (VENUE, "account") else None
         ),
     )
 
@@ -319,9 +315,7 @@ def _arm_direct(session, proof=None, context=None):
     return session.arm_from_preflight(proof, lambda: dict(context))
 
 
-def test_public_arm_uses_raw_native_account_identity_and_is_idempotent(
-    monkeypatch, tmp_path
-):
+def test_public_arm_uses_raw_native_account_identity_and_is_idempotent(monkeypatch, tmp_path):
     _install_account_stream(monkeypatch)
     api, session, _state = _api_for_arm(tmp_path)
     proof = _proof()
@@ -503,9 +497,7 @@ def test_arm_rejects_current_session_mismatch(tmp_path, field, value, code):
 
 
 @pytest.mark.parametrize("field", ["native_sha256", "ctp_package_sha256"])
-def test_public_arm_rejects_proof_that_mismatches_loaded_runtime_identity(
-    tmp_path, field
-):
+def test_public_arm_rejects_proof_that_mismatches_loaded_runtime_identity(tmp_path, field):
     api, session, _state = _api_for_arm(tmp_path)
     try:
         with pytest.raises(NormalizedApiError) as raised:
@@ -538,9 +530,7 @@ def test_public_arm_requires_current_settlement_query_readback(tmp_path, verifie
         session.close()
 
 
-def test_runtime_identity_hashes_the_actual_loaded_native_and_package_files(
-    monkeypatch, tmp_path
-):
+def test_runtime_identity_hashes_the_actual_loaded_native_and_package_files(monkeypatch, tmp_path):
     native_path = tmp_path / "_ctp_native.so"
     package_root = tmp_path / "bt_api_ctp"
     package_path = package_root / "__init__.py"
@@ -589,9 +579,7 @@ def test_runtime_identity_hashes_the_actual_loaded_native_and_package_files(
     }
 
 
-def test_runtime_identity_rejects_diagnostics_not_matching_loaded_file(
-    monkeypatch, tmp_path
-):
+def test_runtime_identity_rejects_diagnostics_not_matching_loaded_file(monkeypatch, tmp_path):
     native_path = tmp_path / "_ctp_native.so"
     package_path = tmp_path / "__init__.py"
     native_path.write_bytes(b"loaded-native-binary")
@@ -675,9 +663,7 @@ def test_arm_requires_a_durable_order_journal_even_if_config_disables_it(tmp_pat
         ("missing_journal", "order_journal_required"),
     ],
 )
-def test_armed_placement_still_runs_existing_journal_guards(
-    tmp_path, mutation, expected_code
-):
+def test_armed_placement_still_runs_existing_journal_guards(tmp_path, mutation, expected_code):
     session = _session(tmp_path)
     try:
         _arm_direct(session)
@@ -811,9 +797,7 @@ def test_account_stream_start_and_stop_join_private_producer_outside_session_loc
     monkeypatch.setattr(
         "bt_api_py.bt_api.ExchangeRegistry.get_stream_class",
         lambda exchange_name, stream_type: (
-            JoiningProducerStream
-            if (exchange_name, stream_type) == (VENUE, "account")
-            else None
+            JoiningProducerStream if (exchange_name, stream_type) == (VENUE, "account") else None
         ),
     )
     api, session, _state = _api_for_arm(tmp_path)
@@ -919,9 +903,7 @@ def test_armed_cancel_rejects_untracked_and_cross_instrument_orders(tmp_path):
         session.close()
 
 
-def test_empty_subscription_list_creates_and_waits_for_account_stream(
-    monkeypatch, tmp_path
-):
+def test_empty_subscription_list_creates_and_waits_for_account_stream(monkeypatch, tmp_path):
     _install_account_stream(monkeypatch)
     api, session, _state = _api_for_arm(tmp_path)
     try:
@@ -933,9 +915,7 @@ def test_empty_subscription_list_creates_and_waits_for_account_stream(
         session.close()
 
 
-def test_armed_ctp_does_not_expand_account_level_or_bulk_write_capabilities(
-    monkeypatch, tmp_path
-):
+def test_armed_ctp_does_not_expand_account_level_or_bulk_write_capabilities(monkeypatch, tmp_path):
     _install_account_stream(monkeypatch)
     api, session, _state = _api_for_arm(tmp_path)
     api._backend = Mock()
@@ -1000,9 +980,7 @@ def test_missing_account_stream_feed_rolls_back_without_changing_read_only_mode(
         session.close()
 
 
-def test_account_stream_wait_failure_rolls_back_and_stays_read_only(
-    monkeypatch, tmp_path
-):
+def test_account_stream_wait_failure_rolls_back_and_stays_read_only(monkeypatch, tmp_path):
     _install_account_stream(monkeypatch)
     _AccountStream.connected = False
     api, session, _state = _api_for_arm(tmp_path)

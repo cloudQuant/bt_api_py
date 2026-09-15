@@ -586,9 +586,7 @@ def test_flat_plan_requires_explicit_completion_and_fresh_preflight(tmp_path):
             session.arm_from_preflight(current_proof, lambda: context(current_proof))
         assert raised.value.code == "fresh_execution_preflight_required"
         fresh = proof(4, preflight_sha256="8" * 64)
-        assert (
-            session.arm_from_preflight(fresh, lambda: context(fresh))["armed"] is True
-        )
+        assert session.arm_from_preflight(fresh, lambda: context(fresh))["armed"] is True
     finally:
         session.close()
 
@@ -685,9 +683,7 @@ def test_concurrent_ordinary_arm_cannot_borrow_recovery_capability(tmp_path):
                 results.put(
                     (
                         "ordinary",
-                        session.arm_from_preflight(
-                            current_proof, lambda: context(current_proof)
-                        ),
+                        session.arm_from_preflight(current_proof, lambda: context(current_proof)),
                     )
                 )
             except Exception as exc:
@@ -1021,9 +1017,7 @@ def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path)
             venue=VENUE,
         )
         empty = snapshot()
-        refreshed = session.build_recovery_plan(
-            empty, barrier=barrier(session, empty, first_id=21)
-        )
+        refreshed = session.build_recovery_plan(empty, barrier=barrier(session, empty, first_id=21))
         assert refreshed["status"] == "FLAT"
         assert refreshed["recovery_token_sha256"] != old_token
     finally:
@@ -1115,9 +1109,7 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
         assert sync_error.value.code == "execution_recovery_action_in_progress"
 
         with pytest.raises(NormalizedApiError) as async_error:
-            asyncio.run(
-                session.async_invoke("make_order", VENUE, contender, async_transport)
-            )
+            asyncio.run(session.async_invoke("make_order", VENUE, contender, async_transport))
         assert async_error.value.code == "execution_recovery_action_in_progress"
         async_transport.assert_not_awaited()
 
@@ -1302,9 +1294,7 @@ def test_pending_private_ingress_blocks_write_before_transport(tmp_path):
     "journal_kind",
     ["unknown", "active", "exposure"],
 )
-def test_ordinary_arm_rejects_restart_journal_before_native_gate(
-    tmp_path, journal_kind
-):
+def test_ordinary_arm_rejects_restart_journal_before_native_gate(tmp_path, journal_kind):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(
         path,
@@ -1459,9 +1449,7 @@ def test_old_day_reconciled_absent_cycle_does_not_block_new_day(tmp_path):
 
 
 @pytest.mark.parametrize("journal_kind", ["active", "unknown", "exposure"])
-def test_old_day_unresolved_unknown_or_exposed_cycle_remains_fail_closed(
-    tmp_path, journal_kind
-):
+def test_old_day_unresolved_unknown_or_exposed_cycle_remains_fail_closed(tmp_path, journal_kind):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(
         path,
@@ -1636,9 +1624,7 @@ def test_public_barrier_retries_account_drift_and_event_revision(tmp_path):
 
 
 @pytest.mark.parametrize("channel", ["account_stream", "reconcile_pending"])
-def test_recovery_arm_rejects_ingress_started_after_final_queue_drain(
-    tmp_path, channel
-):
+def test_recovery_arm_rejects_ingress_started_after_final_queue_drain(tmp_path, channel):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, active=True)
     api, session, feed = public_recovery_api(path)
@@ -1748,9 +1734,7 @@ def test_recovery_arm_rejects_ingress_started_after_final_queue_drain(
         ),
     ],
 )
-def test_public_barrier_accounts_for_private_queue_events(
-    tmp_path, arrival, private_event
-):
+def test_public_barrier_accounts_for_private_queue_events(tmp_path, arrival, private_event):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, uncertain=True)
     api, session, _feed = public_recovery_api(path)
@@ -1804,9 +1788,7 @@ def test_private_event_after_flat_plan_revokes_completion_eligibility(tmp_path):
         complete_results = iter(query_rounds("100", "100", first_id=9))
         api.query_ctp_result = lambda _venue, _query_type: next(complete_results)
         with pytest.raises(NormalizedApiError) as raised:
-            api.complete_execution_recovery(
-                recovery_token_sha256=report["recovery_token_sha256"]
-            )
+            api.complete_execution_recovery(recovery_token_sha256=report["recovery_token_sha256"])
         assert raised.value.code == "invalid_recovery_token"
         assert session.config["market_data_only"] is True
         assert feed.get_execution_gate_state()["armed"] is False
@@ -1826,9 +1808,7 @@ def test_private_event_after_flat_completion_blocks_fresh_ordinary_arm(tmp_path)
 
         complete_results = iter(query_rounds("100", "100", first_id=9))
         api.query_ctp_result = lambda _venue, _query_type: next(complete_results)
-        api.complete_execution_recovery(
-            recovery_token_sha256=report["recovery_token_sha256"]
-        )
+        api.complete_execution_recovery(recovery_token_sha256=report["recovery_token_sha256"])
 
         api.data_queues[VENUE].put(
             order_update(
@@ -1908,9 +1888,7 @@ def test_prepare_authorization_is_reusable_before_first_arm(tmp_path):
         assert prepared["reusable"] is True
         assert prepared["minimum_next_generation"] is None
         assert (
-            session.arm_from_preflight(current_proof, lambda: context(current_proof))[
-                "armed"
-            ]
+            session.arm_from_preflight(current_proof, lambda: context(current_proof))["armed"]
             is True
         )
     finally:
@@ -1923,16 +1901,11 @@ def test_prepare_authorization_fences_old_generation_but_allows_new_proof(tmp_pa
     new_proof = proof(4, preflight_sha256="8" * 64)
     try:
         session.arm_from_preflight(old_proof, lambda: context(old_proof))
-        prepared = session.prepare_execution_authorization(
-            "execution_authorization_reconfigured"
-        )
+        prepared = session.prepare_execution_authorization("execution_authorization_reconfigured")
         assert prepared["minimum_next_generation"] == 4
         with pytest.raises(NormalizedApiError) as raised:
             session.arm_from_preflight(old_proof, lambda: context(old_proof))
         assert raised.value.code == "execution_arm_revoked"
-        assert (
-            session.arm_from_preflight(new_proof, lambda: context(new_proof))["armed"]
-            is True
-        )
+        assert session.arm_from_preflight(new_proof, lambda: context(new_proof))["armed"] is True
     finally:
         session.close()

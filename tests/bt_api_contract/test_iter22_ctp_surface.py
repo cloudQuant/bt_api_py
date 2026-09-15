@@ -134,9 +134,7 @@ def test_managed_settlement_confirmation_fails_before_native_write(failure) -> N
         },
     )
     api = _api(feed)
-    api._ctp_execution_capability = (
-        None if failure == "missing_capability" else object()
-    )
+    api._ctp_execution_capability = None if failure == "missing_capability" else object()
 
     with pytest.raises(NormalizedApiError):
         api.confirm_ctp_settlement(VENUE)

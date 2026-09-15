@@ -24,9 +24,7 @@ SYMBOL = "BTC-USDT-SWAP"
         ("CTP___FUTURE", "51008"),
     ],
 )
-def test_unknown_numeric_write_response_defaults_to_execution_unknown(
-    exchange_name, code
-):
+def test_unknown_numeric_write_response_defaults_to_execution_unknown(exchange_name, code):
     with pytest.raises(NormalizedApiError) as captured:
         check_response(
             {"code": code, "msg": "credential-bearing vendor detail"},
@@ -147,13 +145,9 @@ def execution_api(monkeypatch, tmp_path):
     )
 
 
-def test_unknown_numeric_submit_stays_nonterminal_and_blocks_resubmission(
-    monkeypatch, tmp_path
-):
+def test_unknown_numeric_submit_stays_nonterminal_and_blocks_resubmission(monkeypatch, tmp_path):
     api = execution_api(monkeypatch, tmp_path)
-    backend = ResponseBackend(
-        NormalizedApiError("make_order", "50120", definite_reject=True)
-    )
+    backend = ResponseBackend(NormalizedApiError("make_order", "50120", definite_reject=True))
     api._backend = backend
     try:
         update = api.make_order(OKX, request("123456789012"), normalized=True)

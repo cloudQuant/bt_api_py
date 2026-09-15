@@ -64,9 +64,7 @@ def test_binance_preserves_native_position_mode_boolean(api):
 
 @pytest.mark.parametrize("can_trade", [True, False])
 def test_binance_normalized_account_config_uses_one_consistent_snapshot(api, can_trade):
-    account_config = Mock(
-        return_value={"dualSidePosition": True, "canTrade": can_trade}
-    )
+    account_config = Mock(return_value={"dualSidePosition": True, "canTrade": can_trade})
     api.exchange_feeds["BINANCE___SWAP"] = SimpleNamespace(get_account_config=account_config)
 
     result = api.get_account_config("BINANCE___SWAP", normalized=True)
@@ -210,9 +208,7 @@ def _okx_readiness_feed(*, instruments=None, leverage=None, maximum=None):
 
 def _binance_readiness_feed(*, symbol_config=None):
     return SimpleNamespace(
-        get_account_config=Mock(
-            return_value={"canTrade": True, "dualSidePosition": True}
-        ),
+        get_account_config=Mock(return_value={"canTrade": True, "dualSidePosition": True}),
         get_position_mode=Mock(return_value={"dualSidePosition": True}),
         get_exchange_info=Mock(
             return_value={
@@ -368,9 +364,7 @@ def test_okx_readiness_combines_only_read_operations(api):
         },
     }
     feed.get_config.assert_called_once_with(extra_data=None)
-    feed.get_account_instruments.assert_called_once_with(
-        "BTC-USDT-SWAP", extra_data=None
-    )
+    feed.get_account_instruments.assert_called_once_with("BTC-USDT-SWAP", extra_data=None)
     feed.get_leverage_info.assert_called_once_with(
         "BTC-USDT-SWAP", margin_mode="cross", extra_data=None
     )
@@ -463,9 +457,7 @@ def test_okx_readiness_never_accepts_invalid_native_quantity(api, quantity):
 
 def test_okx_readiness_missing_account_instrument_is_definite_and_short_circuits(api):
     feed = _okx_readiness_feed(instruments=[])
-    feed.get_leverage_info.side_effect = AssertionError(
-        "must stop at missing instrument"
-    )
+    feed.get_leverage_info.side_effect = AssertionError("must stop at missing instrument")
     feed.get_max_size.side_effect = AssertionError("must stop at missing instrument")
     api.exchange_feeds["OKX___SWAP"] = feed
 
@@ -480,9 +472,7 @@ def test_okx_readiness_missing_account_instrument_is_definite_and_short_circuits
 
 
 def test_okx_readiness_maximum_native_size_is_checked_for_both_sides(api):
-    feed = _okx_readiness_feed(
-        maximum=[{"instId": "BTC-USDT-SWAP", "maxBuy": "1", "maxSell": "4"}]
-    )
+    feed = _okx_readiness_feed(maximum=[{"instId": "BTC-USDT-SWAP", "maxBuy": "1", "maxSell": "4"}])
     api.exchange_feeds["OKX___SWAP"] = feed
 
     result = api.get_order_readiness("OKX___SWAP", "BTC-USDT-SWAP", 2)

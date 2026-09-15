@@ -425,9 +425,7 @@ def test_okx_fee_error_50016_is_redacted_parameter_failure(api):
         ({"settlement_interval_seconds": 0}, "settlement_interval_seconds must be > 0"),
     ],
 )
-def test_available_funding_snapshot_rejects_invalid_contract_boundaries(
-    overrides, error
-):
+def test_available_funding_snapshot_rejects_invalid_contract_boundaries(overrides, error):
     values = {
         "exchange_name": "BINANCE___SWAP",
         "symbol": "BTCUSDT",
@@ -581,9 +579,7 @@ def test_binance_premium_index_selects_exact_symbol_from_out_of_order_rows(api):
 )
 def test_binance_premium_index_requires_one_exact_symbol_row(api, premium):
     venue = "BINANCE___SWAP"
-    api.exchange_feeds[venue] = SimpleNamespace(
-        get_funding_rate=Mock(return_value=premium)
-    )
+    api.exchange_feeds[venue] = SimpleNamespace(get_funding_rate=Mock(return_value=premium))
 
     snapshot = api.get_funding_snapshot(venue, "BTCUSDT")
 
@@ -683,9 +679,7 @@ def test_binance_never_invents_interval_when_schedule_evidence_is_missing(api):
                 "received_wall_time": 1_700_000_000_000,
             }
         ),
-        get_funding_info=Mock(
-            return_value=[{"symbol": "ETHUSDT", "fundingIntervalHours": 8}]
-        ),
+        get_funding_info=Mock(return_value=[{"symbol": "ETHUSDT", "fundingIntervalHours": 8}]),
         get_history_funding_rate=Mock(return_value=[]),
     )
 
@@ -698,9 +692,7 @@ def test_binance_never_invents_interval_when_schedule_evidence_is_missing(api):
 
 def test_binance_invalid_adjusted_interval_fails_closed_without_history_fallback(api):
     venue = "BINANCE___SWAP"
-    history = Mock(
-        side_effect=AssertionError("invalid explicit schedule must fail closed")
-    )
+    history = Mock(side_effect=AssertionError("invalid explicit schedule must fail closed"))
     api.exchange_feeds[venue] = SimpleNamespace(
         get_funding_rate=Mock(
             return_value={
@@ -710,9 +702,7 @@ def test_binance_invalid_adjusted_interval_fails_closed_without_history_fallback
                 "received_wall_time": 1_700_000_000_000,
             }
         ),
-        get_funding_info=Mock(
-            return_value=[{"symbol": "BTCUSDT", "fundingIntervalHours": 0}]
-        ),
+        get_funding_info=Mock(return_value=[{"symbol": "BTCUSDT", "fundingIntervalHours": 0}]),
         get_history_funding_rate=history,
     )
 
@@ -767,9 +757,7 @@ def test_binance_invalid_adjusted_interval_fails_closed_without_history_fallback
         ),
     ],
 )
-def test_incomplete_or_expired_funding_normalizes_to_typed_unavailable(
-    api, row, reason
-):
+def test_incomplete_or_expired_funding_normalizes_to_typed_unavailable(api, row, reason):
     venue = "BINANCE___SWAP"
     api.exchange_feeds[venue] = SimpleNamespace(get_funding_rate=Mock(return_value=row))
 
@@ -802,9 +790,7 @@ def test_fee_and_funding_read_failures_are_explicit_unavailable(api):
 def test_funding_api_error_response_is_a_transport_failure_not_a_changed_schedule(api):
     venue = "OKX___SWAP"
     api.exchange_feeds[venue] = SimpleNamespace(
-        get_funding_rate=Mock(
-            return_value={"code": "50011", "msg": "fixture upstream throttled"}
-        )
+        get_funding_rate=Mock(return_value={"code": "50011", "msg": "fixture upstream throttled"})
     )
 
     funding = api.get_funding_snapshot(venue, "BTC-USDT-SWAP")
@@ -818,9 +804,7 @@ def test_funding_api_error_response_is_a_transport_failure_not_a_changed_schedul
 
 def test_malformed_funding_container_fails_closed_as_payload_invalid(api):
     venue = "BINANCE___SWAP"
-    api.exchange_feeds[venue] = SimpleNamespace(
-        get_funding_rate=Mock(return_value=object())
-    )
+    api.exchange_feeds[venue] = SimpleNamespace(get_funding_rate=Mock(return_value=object()))
 
     funding = api.get_funding_snapshot(venue, "BTCUSDT")
 

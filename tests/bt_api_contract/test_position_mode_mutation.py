@@ -89,9 +89,7 @@ def test_verified_mode_change_maps_native_value_and_updates_cache(
     setter = Mock(return_value=ack_response)
     reader = Mock(return_value=read_response)
     read_name = "get_config" if exchange.startswith("OKX___") else "get_position_mode"
-    api.exchange_feeds[exchange] = SimpleNamespace(
-        **{setter_name: setter, read_name: reader}
-    )
+    api.exchange_feeds[exchange] = SimpleNamespace(**{setter_name: setter, read_name: reader})
 
     result = api.set_position_mode(
         exchange,
@@ -153,9 +151,7 @@ def test_other_venues_remain_explicitly_unsupported(api, exchange):
 
 
 def test_native_reject_does_not_read_back_or_replace_cached_mode(api):
-    setter = Mock(
-        return_value={"code": "51000", "msg": "signature=PRIVATE", "data": []}
-    )
+    setter = Mock(return_value={"code": "51000", "msg": "signature=PRIVATE", "data": []})
     reader = Mock(side_effect=AssertionError("rejected write must not read back"))
     api.exchange_feeds["OKX___SWAP"] = SimpleNamespace(
         set_position_mode=setter,
@@ -212,9 +208,7 @@ def test_write_timeout_is_unknown_and_does_not_read_back_or_update_cache(api):
         ),
     ],
 )
-def test_unverified_ack_never_reports_success_or_updates_cache(
-    api, reader, expected_code
-):
+def test_unverified_ack_never_reports_success_or_updates_cache(api, reader, expected_code):
     api.exchange_feeds["BINANCE___SWAP"] = SimpleNamespace(
         change_position_mode=Mock(return_value={"code": 200, "msg": "success"}),
         get_position_mode=reader,
@@ -251,9 +245,7 @@ def test_unknown_mode_blocks_every_public_crypto_placement(api, placement_path):
     )
     api.exchange_feeds[exchange] = SimpleNamespace(
         change_position_mode=Mock(side_effect=TimeoutError("signature=PRIVATE")),
-        get_position_mode=Mock(
-            side_effect=AssertionError("unknown write must not read back")
-        ),
+        get_position_mode=Mock(side_effect=AssertionError("unknown write must not read back")),
         async_make_order=legacy_async_order,
     )
     api._position_modes[exchange] = "net"
@@ -299,9 +291,7 @@ def test_unknown_mode_blocks_every_public_crypto_placement(api, placement_path):
 
 
 @pytest.mark.parametrize("read_operation", ["get_position_mode", "get_account_config"])
-def test_fresh_verified_mode_read_clears_latch_and_restores_placement(
-    api, read_operation
-):
+def test_fresh_verified_mode_read_clears_latch_and_restores_placement(api, read_operation):
     exchange = "BINANCE___SWAP"
     position_reader = Mock(return_value={"dualSidePosition": False})
     account_reader = Mock(return_value={"dualSidePosition": True, "canTrade": True})
@@ -327,9 +317,7 @@ def test_fresh_verified_mode_read_clears_latch_and_restores_placement(
     assert api._position_modes[exchange] == "dual_side"
     assert exchange not in api._position_mode_reconcile_required
 
-    api._backend.make_order = Mock(
-        return_value={"orderId": 123, "clientOrderId": "123456789012"}
-    )
+    api._backend.make_order = Mock(return_value={"orderId": 123, "clientOrderId": "123456789012"})
     api._enrich_order_commission = Mock()
     result = api.make_order(exchange, order_request(), normalized=True)
 
@@ -347,9 +335,7 @@ def test_fresh_verified_mode_read_clears_latch_and_restores_placement(
         "legacy_async",
     ],
 )
-def test_every_inflight_public_crypto_placement_blocks_mode_mutation(
-    api, placement_path
-):
+def test_every_inflight_public_crypto_placement_blocks_mode_mutation(api, placement_path):
     exchange = "BINANCE___SWAP"
     setter = Mock(return_value={"code": 200, "msg": "success"})
     reader = Mock(return_value={"dualSidePosition": False})

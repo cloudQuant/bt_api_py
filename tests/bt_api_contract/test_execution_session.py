@@ -32,9 +32,7 @@ from bt_api_py._contracts.models import OrderType, Side
 VENUE = "OKX___SWAP"
 BINANCE_VENUE = "BINANCE___SWAP"
 SYMBOL = "BTC-USDT-SWAP"
-MIGRATION_FINGERPRINT = hashlib.sha256(
-    b"bt-api-py\0OKX\0fixture-okx-public"
-).hexdigest()
+MIGRATION_FINGERPRINT = hashlib.sha256(b"bt-api-py\0OKX\0fixture-okx-public").hexdigest()
 
 
 def credential_settings(venue):
@@ -218,9 +216,7 @@ def test_execution_identity_is_sdk_owned_and_account_scoped(factory, tmp_path):
     assert account_id not in identity["account_id"]
 
 
-def test_account_risk_baseline_is_provider_queried_durable_and_reopens(
-    factory, tmp_path
-):
+def test_account_risk_baseline_is_provider_queried_durable_and_reopens(factory, tmp_path):
     path = tmp_path / "risk-orders.jsonl"
     first = factory(path)
 
@@ -285,8 +281,7 @@ def test_first_account_risk_baseline_rechecks_open_orders_at_commit(factory):
     assert snapshot["durable"] is False
     assert snapshot["trading_blocked"] is True
     assert (
-        snapshot["evidence_errors"][f"{VENUE}:baseline_commit_open_orders"]
-        == "open_orders_present"
+        snapshot["evidence_errors"][f"{VENUE}:baseline_commit_open_orders"] == "open_orders_present"
     )
     assert not api._execution_session.risk_path.exists()
     assert api._backend.open_orders_queried == [
@@ -361,9 +356,7 @@ def test_first_account_risk_baseline_requires_no_local_active_or_unknown_orders(
 
 def test_account_risk_never_initializes_from_nonflat_or_incomplete_evidence(factory):
     api = factory()
-    api._backend.position_results[VENUE] = [
-        {"instId": SYMBOL, "pos": "1", "posSide": "long"}
-    ]
+    api._backend.position_results[VENUE] = [{"instId": SYMBOL, "pos": "1", "posSide": "long"}]
 
     nonflat = api.get_account_risk_snapshot(initialize_baseline=True)
     assert nonflat["evidence_complete"] is False
@@ -408,23 +401,16 @@ def test_account_risk_equity_never_round_trips_through_binary_float(factory):
 
 def test_account_maximum_loss_boundary_uses_exact_decimal_comparison(factory):
     api = factory(config={"account_maximum_loss_bps": "1"})
-    assert (
-        api.get_account_risk_snapshot(initialize_baseline=True)["loss_limit_breached"]
-        is False
-    )
+    assert api.get_account_risk_snapshot(initialize_baseline=True)["loss_limit_breached"] is False
 
     just_inside = "99.9700000000000000000000000000000000000001"
-    api._backend.account_results[VENUE]["details"][0].update(
-        availEq=just_inside, eq=just_inside
-    )
+    api._backend.account_results[VENUE]["details"][0].update(availEq=just_inside, eq=just_inside)
     safe = api.get_account_risk_snapshot()
     assert safe["loss_limit_breached"] is False
     assert Decimal(safe["loss_amount"]) < Decimal(safe["loss_limit_amount"])
 
     just_outside = "99.9699999999999999999999999999999999999999"
-    api._backend.account_results[VENUE]["details"][0].update(
-        availEq=just_outside, eq=just_outside
-    )
+    api._backend.account_results[VENUE]["details"][0].update(availEq=just_outside, eq=just_outside)
     breached = api.get_account_risk_snapshot()
     assert breached["loss_limit_breached"] is True
     assert Decimal(breached["loss_amount"]) > Decimal(breached["loss_limit_amount"])
@@ -456,10 +442,7 @@ def test_account_maximum_loss_latches_across_recovery_restart_and_requires_safe_
     first = factory(path, config=config)
 
     assert first.get_execution_summary()["trading_blocked"] is True
-    assert (
-        "account_risk_baseline_required"
-        in first.get_execution_summary()["evidence_errors"]
-    )
+    assert "account_risk_baseline_required" in first.get_execution_summary()["evidence_errors"]
     with pytest.raises(NormalizedApiError, match="account_risk_baseline_required"):
         first.make_order(VENUE, request(), normalized=True)
 
@@ -519,18 +502,13 @@ def test_account_maximum_loss_reset_fails_closed_until_remote_state_is_flat_and_
     factory,
 ):
     api = factory(config={"account_maximum_loss_bps": "50"})
-    assert (
-        api.get_account_risk_snapshot(initialize_baseline=True)["loss_limit_breached"]
-        is False
-    )
+    assert api.get_account_risk_snapshot(initialize_baseline=True)["loss_limit_breached"] is False
     api._backend.account_results[VENUE]["details"][0].update(availEq="90", eq="90")
     breached = api.get_account_risk_snapshot()
     assert breached["loss_limit_breached"] is True
     persisted = api._execution_session.risk_path.read_text()
 
-    api._backend.position_results[VENUE] = [
-        {"instId": SYMBOL, "pos": "1", "posSide": "long"}
-    ]
+    api._backend.position_results[VENUE] = [{"instId": SYMBOL, "pos": "1", "posSide": "long"}]
     nonflat = api.reset_account_maximum_loss_latch()
     assert nonflat["loss_limit_breached"] is True
     assert nonflat["trading_blocked"] is True
@@ -542,9 +520,7 @@ def test_account_maximum_loss_reset_fails_closed_until_remote_state_is_flat_and_
     open_order = api.reset_account_maximum_loss_latch()
     assert open_order["loss_limit_breached"] is True
     assert open_order["trading_blocked"] is True
-    assert (
-        open_order["evidence_errors"][f"{VENUE}:open_orders"] == "open_orders_present"
-    )
+    assert open_order["evidence_errors"][f"{VENUE}:open_orders"] == "open_orders_present"
     assert api._execution_session.risk_path.read_text() == persisted
 
 
@@ -554,10 +530,7 @@ def test_breach_during_active_order_is_persisted_and_remains_blocked_after_resta
     path = tmp_path / "active-loss-latch.jsonl"
     config = {"account_maximum_loss_bps": "100"}
     first = factory(path, config=config)
-    assert (
-        first.get_account_risk_snapshot(initialize_baseline=True)["loss_limit_breached"]
-        is False
-    )
+    assert first.get_account_risk_snapshot(initialize_baseline=True)["loss_limit_breached"] is False
     assert first.make_order(VENUE, request(), normalized=True)["status"] == "accepted"
     first._backend.account_results[VENUE]["details"][0].update(availEq="90", eq="90")
 
@@ -656,10 +629,7 @@ def test_account_risk_snapshot_ttl_blocks_until_a_successful_refresh(factory):
 
     refreshed = api.get_account_risk_snapshot()
     assert refreshed["durable"] is True
-    assert (
-        "account_risk_snapshot_stale"
-        not in api.get_execution_summary()["evidence_errors"]
-    )
+    assert "account_risk_snapshot_stale" not in api.get_execution_summary()["evidence_errors"]
     assert api.make_order(VENUE, request(), normalized=True)["status"] == "accepted"
 
 
@@ -674,9 +644,7 @@ def test_reopened_loss_guard_requires_a_current_process_refresh(factory, tmp_pat
     summary = second.get_execution_summary()
     assert summary["trading_blocked"] is True
     assert "account_risk_snapshot_refresh_required" in summary["evidence_errors"]
-    with pytest.raises(
-        NormalizedApiError, match="account_risk_snapshot_refresh_required"
-    ):
+    with pytest.raises(NormalizedApiError, match="account_risk_snapshot_refresh_required"):
         second.make_order(VENUE, request(), normalized=True)
 
     assert second.get_account_risk_snapshot()["durable"] is True
@@ -701,16 +669,12 @@ def test_unexpected_risk_collection_failure_remains_fail_closed(factory, monkeyp
     with pytest.raises(NormalizedApiError, match="account_risk_evidence_incomplete"):
         api.make_order(VENUE, request(), normalized=True)
 
-    monkeypatch.setattr(
-        api._execution_session, "account_risk_snapshot", original_snapshot
-    )
+    monkeypatch.setattr(api._execution_session, "account_risk_snapshot", original_snapshot)
     assert api.get_account_risk_snapshot()["durable"] is True
     assert api.make_order(VENUE, request(), normalized=True)["status"] == "accepted"
 
 
-def test_uncertain_reset_replace_remains_latched_across_restart(
-    factory, monkeypatch, tmp_path
-):
+def test_uncertain_reset_replace_remains_latched_across_restart(factory, monkeypatch, tmp_path):
     path = tmp_path / "uncertain-loss-reset.jsonl"
     config = {"account_maximum_loss_bps": "100"}
     first = factory(path, config=config)
@@ -722,15 +686,11 @@ def test_uncertain_reset_replace_remains_latched_across_restart(
     def fail_directory_fsync(_path):
         raise OSError("directory fsync failed")
 
-    monkeypatch.setattr(
-        execution_session_module, "_fsync_directory", fail_directory_fsync
-    )
+    monkeypatch.setattr(execution_session_module, "_fsync_directory", fail_directory_fsync)
     failed = first.reset_account_maximum_loss_latch()
     assert failed["loss_limit_breached"] is True
     assert failed["trading_blocked"] is True
-    monkeypatch.setattr(
-        execution_session_module, "_fsync_directory", original_fsync_directory
-    )
+    monkeypatch.setattr(execution_session_module, "_fsync_directory", original_fsync_directory)
     first.close()
 
     second = factory(path, config=config)
@@ -744,9 +704,7 @@ def test_uncertain_reset_replace_remains_latched_across_restart(
     assert reset["trading_blocked"] is False
 
 
-def test_risk_json_cannot_clear_a_journaled_breach_without_explicit_reset(
-    factory, tmp_path
-):
+def test_risk_json_cannot_clear_a_journaled_breach_without_explicit_reset(factory, tmp_path):
     path = tmp_path / "tampered-loss-latch.jsonl"
     config = {"account_maximum_loss_bps": "100"}
     first = factory(path, config=config)
@@ -779,9 +737,7 @@ def test_risk_json_cannot_clear_a_journaled_breach_without_explicit_reset(
     "maximum_loss_bps",
     [False, True, 0, -1, "NaN", "Infinity", "", object()],
 )
-def test_execution_config_rejects_invalid_account_maximum_loss(
-    factory, maximum_loss_bps
-):
+def test_execution_config_rejects_invalid_account_maximum_loss(factory, maximum_loss_bps):
     with pytest.raises(NormalizedApiError, match="invalid_execution_config"):
         factory(config={"account_maximum_loss_bps": maximum_loss_bps})
 
@@ -790,9 +746,7 @@ def test_execution_config_rejects_invalid_account_maximum_loss(
     "max_age_seconds",
     [False, True, 0, -1, "0.0000000001", "NaN", "Infinity", "", object()],
 )
-def test_execution_config_rejects_invalid_account_risk_max_age(
-    factory, max_age_seconds
-):
+def test_execution_config_rejects_invalid_account_risk_max_age(factory, max_age_seconds):
     with pytest.raises(NormalizedApiError, match="invalid_execution_config"):
         factory(config={"account_risk_max_age_seconds": max_age_seconds})
 
@@ -829,12 +783,8 @@ def test_account_risk_identity_tamper_blocks_execution_after_restart(factory, tm
         second.make_order(VENUE, request(), normalized=True)
 
 
-@pytest.mark.parametrize(
-    "tamper", ["venue", "currency", "equity", "noncanonical_equity"]
-)
-def test_account_risk_baseline_contract_tamper_never_loads_or_rewrites(
-    factory, tmp_path, tamper
-):
+@pytest.mark.parametrize("tamper", ["venue", "currency", "equity", "noncanonical_equity"])
+def test_account_risk_baseline_contract_tamper_never_loads_or_rewrites(factory, tmp_path, tamper):
     path = tmp_path / f"risk-{tamper}.jsonl"
     first = factory(path)
     assert first.get_account_risk_snapshot(initialize_baseline=True)["durable"]
@@ -842,9 +792,9 @@ def test_account_risk_baseline_contract_tamper_never_loads_or_rewrites(
     first.close()
     record = json.loads(risk_path.read_text())
     if tamper == "venue":
-        record["baseline_equity_by_venue"]["OTHER___SWAP"] = record[
-            "baseline_equity_by_venue"
-        ].pop(VENUE)
+        record["baseline_equity_by_venue"]["OTHER___SWAP"] = record["baseline_equity_by_venue"].pop(
+            VENUE
+        )
     elif tamper == "currency":
         record["baseline_equity_by_venue"][VENUE]["currency"] = "BTC"
     elif tamper == "equity":
@@ -880,9 +830,7 @@ def test_malformed_position_row_cannot_prove_account_is_flat(factory):
 
 def test_boolean_position_quantity_cannot_prove_account_is_flat(factory):
     api = factory()
-    api._backend.position_results[VENUE] = [
-        {"instId": SYMBOL, "pos": False, "posSide": "long"}
-    ]
+    api._backend.position_results[VENUE] = [{"instId": SYMBOL, "pos": False, "posSide": "long"}]
 
     snapshot = api.get_account_risk_snapshot(initialize_baseline=True)
 
@@ -893,9 +841,7 @@ def test_boolean_position_quantity_cannot_prove_account_is_flat(factory):
     assert VENUE in snapshot["evidence_errors"]
 
 
-def test_persisted_active_order_blocks_existing_baseline_after_restart(
-    factory, tmp_path
-):
+def test_persisted_active_order_blocks_existing_baseline_after_restart(factory, tmp_path):
     path = tmp_path / "risk-active-restart.jsonl"
     first = factory(path)
     assert first.get_account_risk_snapshot(initialize_baseline=True)["durable"]
@@ -993,9 +939,7 @@ def test_typed_order_intent_is_fsynced_before_dispatch_and_preserves_units(facto
 
     def dispatch(venue, req):
         row = json.loads(api._execution_session.path.read_text().splitlines()[0])
-        assert (
-            row["event"] == "intent" and row["client_order_id"] == req.client_order_id
-        )
+        assert row["event"] == "intent" and row["client_order_id"] == req.client_order_id
         assert row["quantity"] == "2" and row["quantity_unit"] == "native"
         assert row["time_in_force"] == "IOC" and row["reduce_only"] is True
         assert "bt_order_ref" not in row and "data_name" not in row
@@ -1017,9 +961,7 @@ def test_allocated_ids_are_reserved_not_prematurely_used(factory, monkeypatch):
     assert len(api._backend.placed) == 1
 
 
-def test_allocated_id_is_durable_before_return_and_survives_restart(
-    factory, monkeypatch, tmp_path
-):
+def test_allocated_id_is_durable_before_return_and_survives_restart(factory, monkeypatch, tmp_path):
     path = tmp_path / "reserved.jsonl"
     first = factory(path, config={"strategy_id": "alpha-a"})
     monkeypatch.setattr("bt_api_py._execution_session.time.time_ns", lambda: 123)
@@ -1071,9 +1013,7 @@ def test_same_account_cannot_open_a_second_journal(factory, tmp_path):
 
 
 def test_crypto_account_alias_is_nfkc_casefolded_but_never_authoritative(factory):
-    api = factory(
-        config={"account_ids": {VENUE: "  ＤｅＭｏ－Ａ  ", BINANCE_VENUE: "binance"}}
-    )
+    api = factory(config={"account_ids": {VENUE: "  ＤｅＭｏ－Ａ  ", BINANCE_VENUE: "binance"}})
     result = api.make_order(
         VENUE,
         request(account_id="demo-a"),
@@ -1096,9 +1036,7 @@ def test_sdk_default_journal_is_shared_across_strategy_partitions(factory):
 def test_forked_process_identity_cannot_write_parent_lease(factory, monkeypatch):
     api = factory()
     before = (
-        api._execution_session.path.read_bytes()
-        if api._execution_session.path.exists()
-        else b""
+        api._execution_session.path.read_bytes() if api._execution_session.path.exists() else b""
     )
     monkeypatch.setattr(
         "bt_api_py._execution_session.os.getpid",
@@ -1107,9 +1045,7 @@ def test_forked_process_identity_cannot_write_parent_lease(factory, monkeypatch)
     with pytest.raises(NormalizedApiError, match="execution_session_forked_process"):
         api.new_client_order_id(VENUE)
     after = (
-        api._execution_session.path.read_bytes()
-        if api._execution_session.path.exists()
-        else b""
+        api._execution_session.path.read_bytes() if api._execution_session.path.exists() else b""
     )
     assert after == before
 
@@ -1167,10 +1103,7 @@ def test_legacy_journal_migration_claims_and_quarantines_before_atomic_cutover(
     assert not destination.with_suffix(destination.suffix + ".lock").exists()
     quarantine = destination.with_suffix(destination.suffix + ".quarantine")
     assert "unclaimed_identity" in quarantine.read_text()
-    assert (
-        json.loads((tmp_path / "legacy.jsonl.freeze").read_text())["status"]
-        == "BLOCKED"
-    )
+    assert json.loads((tmp_path / "legacy.jsonl.freeze").read_text())["status"] == "BLOCKED"
 
 
 def test_journal_migration_requires_remote_reconcile_and_atomically_cuts_over(
@@ -1248,10 +1181,7 @@ def test_journal_migration_requires_remote_reconcile_and_atomically_cuts_over(
         _exchange_names={VENUE: credential_settings(VENUE)},
     )
     try:
-        assert (
-            reopened.get_execution_identity(VENUE)["account_id"]
-            == migrated["account_id"]
-        )
+        assert reopened.get_execution_identity(VENUE)["account_id"] == migrated["account_id"]
     finally:
         reopened.close()
     with pytest.raises(NormalizedApiError, match="journal_frozen_for_cutover"):
@@ -1297,14 +1227,10 @@ def test_migration_detects_raw_concurrent_append_after_reconcile(monkeypatch, tm
 
     def reconcile(**manifest):
         with source.open("a") as stream:
-            stream.write(
-                json.dumps({"event": "intent", "client_order_id": "late"}) + "\n"
-            )
+            stream.write(json.dumps({"event": "intent", "client_order_id": "late"}) + "\n")
         return {"verified": True, "unknown_ids": [], **manifest}
 
-    report = migrate_execution_journal(
-        source, destination, claims, remote_reconcile=reconcile
-    )
+    report = migrate_execution_journal(source, destination, claims, remote_reconcile=reconcile)
     assert report["status"] == "BLOCKED"
     assert report["reason"] == "source_changed_while_frozen"
     assert not destination.exists()
@@ -1352,26 +1278,16 @@ def test_prepared_migration_recovers_after_crash_and_retries(monkeypatch, tmp_pa
         lambda *_args: (_ for _ in ()).throw(SimulatedCrash()),
     )
     with pytest.raises(SimulatedCrash):
-        migrate_execution_journal(
-            source, destination, claims, remote_reconcile=reconcile
-        )
-    transaction = destination.with_suffix(
-        destination.suffix + ".cutover.transaction.json"
-    )
+        migrate_execution_journal(source, destination, claims, remote_reconcile=reconcile)
+    transaction = destination.with_suffix(destination.suffix + ".cutover.transaction.json")
     assert json.loads(transaction.read_text())["status"] == "PREPARED"
 
-    monkeypatch.setattr(
-        execution_session_module, "_publish_no_replace", original_publish
-    )
-    report = migrate_execution_journal(
-        source, destination, claims, remote_reconcile=reconcile
-    )
+    monkeypatch.setattr(execution_session_module, "_publish_no_replace", original_publish)
+    report = migrate_execution_journal(source, destination, claims, remote_reconcile=reconcile)
     assert report["status"] == "COMPLETE"
     assert destination.is_file()
     assert json.loads(transaction.read_text())["status"] == "COMMITTED"
-    recovered = migrate_execution_journal(
-        source, destination, claims, remote_reconcile=reconcile
-    )
+    recovered = migrate_execution_journal(source, destination, claims, remote_reconcile=reconcile)
     assert recovered["status"] == "COMPLETE"
 
 
@@ -1380,11 +1296,7 @@ def test_prepared_migration_recovers_after_crash_and_retries(monkeypatch, tmp_pa
 )
 def test_configured_session_has_no_unmanaged_public_write_escape(factory, operation):
     api = factory()
-    args = (
-        (VENUE,)
-        if operation in {"cancel_all", "get_request_api"}
-        else (VENUE, request())
-    )
+    args = (VENUE,) if operation in {"cancel_all", "get_request_api"} else (VENUE, request())
     with pytest.raises((NormalizedApiError, CapabilityNotSupportedError)):
         getattr(api, operation)(*args)
     assert not api._backend.placed and not api._backend.canceled
@@ -1413,9 +1325,7 @@ def test_normalized_async_execution_reuses_sync_session_and_is_nonblocking(facto
     api._backend.make_order = slow_place
 
     async def scenario():
-        task = asyncio.create_task(
-            api.async_make_order(VENUE, request(), normalized=True)
-        )
+        task = asyncio.create_task(api.async_make_order(VENUE, request(), normalized=True))
         while not entered.is_set():
             await asyncio.sleep(0)
         # The event loop continues while the synchronous venue adapter owns
@@ -1427,10 +1337,7 @@ def test_normalized_async_execution_reuses_sync_session_and_is_nonblocking(facto
 
     result = asyncio.run(scenario())
     assert result["status"] == "accepted"
-    rows = [
-        json.loads(line)
-        for line in api._execution_session.path.read_text().splitlines()
-    ]
+    rows = [json.loads(line) for line in api._execution_session.path.read_text().splitlines()]
     assert rows[0]["event"] == "intent"
     assert rows[0]["schema_version"] == 2
     assert rows[0]["owner_token"]
@@ -1454,9 +1361,7 @@ def test_async_order_cancellation_persists_unknown_before_reraising(factory):
             await never.wait()
 
         api._backend.async_make_order = place
-        task = asyncio.create_task(
-            api.async_make_order(VENUE, request(), normalized=True)
-        )
+        task = asyncio.create_task(api.async_make_order(VENUE, request(), normalized=True))
         await entered.wait()
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -1464,10 +1369,7 @@ def test_async_order_cancellation_persists_unknown_before_reraising(factory):
 
     asyncio.run(scenario())
 
-    rows = [
-        json.loads(line)
-        for line in api._execution_session.path.read_text().splitlines()
-    ]
+    rows = [json.loads(line) for line in api._execution_session.path.read_text().splitlines()]
     assert [row["event"] for row in rows] == ["intent", "order_update"]
     assert rows[-1]["execution_unknown"] is True
     assert rows[-1]["error_code"] == "CancelledError"
@@ -1492,9 +1394,7 @@ def test_async_cancel_cancellation_persists_unknown_before_reraising(factory):
             account_id=VENUE,
             client_order_id=request().client_order_id,
         )
-        task = asyncio.create_task(
-            api.async_cancel_order(VENUE, cancel_request, normalized=True)
-        )
+        task = asyncio.create_task(api.async_cancel_order(VENUE, cancel_request, normalized=True))
         await entered.wait()
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -1502,10 +1402,7 @@ def test_async_cancel_cancellation_persists_unknown_before_reraising(factory):
 
     asyncio.run(scenario())
 
-    rows = [
-        json.loads(line)
-        for line in api._execution_session.path.read_text().splitlines()
-    ]
+    rows = [json.loads(line) for line in api._execution_session.path.read_text().splitlines()]
     assert [row["event"] for row in rows[-2:]] == ["cancel_intent", "order_update"]
     assert rows[-1]["execution_unknown"] is True
     assert rows[-1]["terminal_confirmed"] is False
@@ -1513,9 +1410,7 @@ def test_async_cancel_cancellation_persists_unknown_before_reraising(factory):
     assert api.get_execution_summary()["trading_blocked"] is True
 
 
-def test_normalized_async_execution_awaits_real_backend_coroutines(
-    monkeypatch, tmp_path
-):
+def test_normalized_async_execution_awaits_real_backend_coroutines(monkeypatch, tmp_path):
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
 
     class CoroutineFeed:
@@ -1610,9 +1505,7 @@ def test_normalized_async_execution_awaits_real_backend_coroutines(
     )
     try:
         assert (
-            asyncio.run(api.async_make_order(venue, order_request, normalized=True))[
-                "status"
-            ]
+            asyncio.run(api.async_make_order(venue, order_request, normalized=True))["status"]
             == "accepted"
         )
         assert (
@@ -1620,9 +1513,7 @@ def test_normalized_async_execution_awaits_real_backend_coroutines(
             == "accepted"
         )
         assert (
-            asyncio.run(api.async_cancel_order(venue, cancel, normalized=True))[
-                "status"
-            ]
+            asyncio.run(api.async_cancel_order(venue, cancel, normalized=True))["status"]
             == "canceled"
         )
     finally:
@@ -1650,10 +1541,7 @@ def test_async_query_and_cancel_remain_available_while_new_placements_are_blocke
         account_id=VENUE,
         client_order_id=request().client_order_id,
     )
-    assert (
-        asyncio.run(api.async_query_order(VENUE, query, normalized=True))["status"]
-        == "accepted"
-    )
+    assert asyncio.run(api.async_query_order(VENUE, query, normalized=True))["status"] == "accepted"
     cancel = CancelOrderRequest(
         symbol=SYMBOL,
         account_id=VENUE,
@@ -1704,9 +1592,7 @@ def test_wal_failure_after_send_keeps_unknown_and_blocks_followup(factory, monke
     assert len(api._backend.placed) == 1
 
 
-def test_persistence_failure_still_dispatches_degraded_emergency_cancel(
-    factory, monkeypatch
-):
+def test_persistence_failure_still_dispatches_degraded_emergency_cancel(factory, monkeypatch):
     api = factory()
     file_calls = 0
     original = os.fsync
@@ -1748,9 +1634,7 @@ def test_persistence_failure_still_dispatches_degraded_emergency_cancel(
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX directory fsync contract")
-def test_first_journal_creation_fsyncs_file_before_parent_directory(
-    factory, monkeypatch
-):
+def test_first_journal_creation_fsyncs_file_before_parent_directory(factory, monkeypatch):
     api = factory()
     calls = []
     original = os.fsync
@@ -1844,8 +1728,7 @@ def test_cancel_ack_without_status_remains_unknown_until_query(factory):
     )
     assert result["execution_unknown"] and not result["terminal_confirmed"]
     assert [
-        json.loads(x)["event"]
-        for x in api._execution_session.path.read_text().splitlines()
+        json.loads(x)["event"] for x in api._execution_session.path.read_text().splitlines()
     ] == ["intent", "order_update", "cancel_intent", "order_update"]
 
 
@@ -2070,9 +1953,7 @@ def test_commission_is_bookable_only_in_account_currency(factory, currency):
     )
     update = api.make_order(VENUE, request(), normalized=True)
     if currency == "USDT":
-        assert (
-            update["commission_normalized"] and update["cumulative_commission"] == 0.8
-        )
+        assert update["commission_normalized"] and update["cumulative_commission"] == 0.8
     else:
         assert "cumulative_commission" not in update
         assert update["unbooked_cumulative_commission"] == 0.8
@@ -2080,9 +1961,7 @@ def test_commission_is_bookable_only_in_account_currency(factory, currency):
 
 
 @pytest.mark.parametrize("fee", [0.25, -0.25])
-def test_trade_fee_cost_or_rebate_has_one_canonical_sign_and_is_deduplicated(
-    factory, fee
-):
+def test_trade_fee_cost_or_rebate_has_one_canonical_sign_and_is_deduplicated(factory, fee):
     api = factory()
     api.make_order(VENUE, request(), normalized=True)
     event = {
@@ -2118,9 +1997,7 @@ def test_trade_journal_failure_does_not_hide_real_fill(factory, monkeypatch):
             "price": 60001,
         }
     )
-    monkeypatch.setattr(
-        "bt_api_py._execution_session.os.fsync", Mock(side_effect=OSError())
-    )
+    monkeypatch.setattr("bt_api_py._execution_session.os.fsync", Mock(side_effect=OSError()))
     assert api.poll_event(VENUE)["journal_error"]
     assert api.poll_event(VENUE)["kind"] == "trade"
     assert api.get_execution_summary()["trading_blocked"]
@@ -2160,9 +2037,7 @@ def test_poll_events_delivers_existing_session_pending_before_raw_market(factory
     assert events[1]["sequence"] == 10
 
 
-def test_poll_events_keeps_journal_uncertainty_immediately_before_real_fill(
-    factory, monkeypatch
-):
+def test_poll_events_keeps_journal_uncertainty_immediately_before_real_fill(factory, monkeypatch):
     api = factory()
     api.make_order(VENUE, request(), normalized=True)
     api.data_queues[VENUE].put(
@@ -2176,9 +2051,7 @@ def test_poll_events_keeps_journal_uncertainty_immediately_before_real_fill(
             "price": 60001,
         }
     )
-    monkeypatch.setattr(
-        "bt_api_py._execution_session.os.fsync", Mock(side_effect=OSError())
-    )
+    monkeypatch.setattr("bt_api_py._execution_session.os.fsync", Mock(side_effect=OSError()))
 
     events = api.poll_events(VENUE, max_raw_items=1)
 
@@ -2188,14 +2061,10 @@ def test_poll_events_keeps_journal_uncertainty_immediately_before_real_fill(
     assert api.get_execution_summary()["trading_blocked"]
 
 
-def test_same_journal_lock_then_restart_reconciles_unknown_and_keeps_used_ids(
-    factory, tmp_path
-):
+def test_same_journal_lock_then_restart_reconciles_unknown_and_keeps_used_ids(factory, tmp_path):
     path = tmp_path / "shared.jsonl"
     first = factory(path)
-    with pytest.raises(
-        NormalizedApiError, match="session_locked|locked_or_unavailable"
-    ):
+    with pytest.raises(NormalizedApiError, match="session_locked|locked_or_unavailable"):
         factory(path)
     first._backend.place_result = TimeoutError()
     first.make_order(VENUE, request(), normalized=True)
@@ -2210,9 +2079,7 @@ def test_same_journal_lock_then_restart_reconciles_unknown_and_keeps_used_ids(
         second.make_order(VENUE, request(), normalized=True)
 
 
-def test_old_journal_terminal_history_preserves_ids_and_discards_engine_fields(
-    factory, tmp_path
-):
+def test_old_journal_terminal_history_preserves_ids_and_discards_engine_fields(factory, tmp_path):
     path = tmp_path / "old.jsonl"
     identity = {
         "symbol": SYMBOL,
@@ -2244,9 +2111,7 @@ def test_old_journal_terminal_history_preserves_ids_and_discards_engine_fields(
         api.make_order(VENUE, request("old"), normalized=True)
 
 
-def test_order_id_only_cancel_survives_restart_without_inventing_client_id(
-    factory, tmp_path
-):
+def test_order_id_only_cancel_survives_restart_without_inventing_client_id(factory, tmp_path):
     path = tmp_path / "cancel-recovery.jsonl"
     first = factory(path)
     first._backend.cancel_result = TimeoutError()
@@ -2255,14 +2120,10 @@ def test_order_id_only_cancel_survives_restart_without_inventing_client_id(
         CancelOrderRequest(symbol=SYMBOL, account_id=VENUE, order_id="native-id"),
         normalized=True,
     )
-    assert first.get_execution_summary()["unknown_ids"] == [
-        f"{VENUE}:{SYMBOL}::order:native-id"
-    ]
+    assert first.get_execution_summary()["unknown_ids"] == [f"{VENUE}:{SYMBOL}::order:native-id"]
     first.close()
     second = factory(path)
-    assert second.get_execution_summary()["unknown_ids"] == [
-        f"{VENUE}:{SYMBOL}::order:native-id"
-    ]
+    assert second.get_execution_summary()["unknown_ids"] == [f"{VENUE}:{SYMBOL}::order:native-id"]
     second._backend.query_result = {
         "symbol": SYMBOL,
         "order_id": "native-id",
@@ -2276,9 +2137,7 @@ def test_order_id_only_cancel_survives_restart_without_inventing_client_id(
     assert not second.get_execution_summary()["trading_blocked"]
 
 
-def test_failed_journal_load_releases_lock_and_public_only_does_not_lock(
-    factory, tmp_path
-):
+def test_failed_journal_load_releases_lock_and_public_only_does_not_lock(factory, tmp_path):
     path = tmp_path / "corrupt.jsonl"
     path.write_text("not json")
     with pytest.raises(NormalizedApiError, match="unreadable_journal"):
@@ -2297,9 +2156,7 @@ def test_close_error_releases_lock_and_old_session_cannot_write(factory, tmp_pat
     path = tmp_path / "close.jsonl"
     first = factory(path)
     first.make_order(VENUE, request(), normalized=True)
-    first.exchange_feeds[VENUE].disconnect = Mock(
-        side_effect=RuntimeError("close failed")
-    )
+    first.exchange_feeds[VENUE].disconnect = Mock(side_effect=RuntimeError("close failed"))
     with pytest.raises(NormalizedApiError):
         first.close()
     second = factory(path)
@@ -2389,8 +2246,7 @@ def test_unsupported_query_keeps_unknown_visible_without_retrying_placement(fact
     summary = api.get_execution_summary()
     assert summary["unknown_ids"] and summary["trading_blocked"]
     assert (
-        summary["reconciliation_errors"][request().client_order_id]
-        == "CapabilityNotSupportedError"
+        summary["reconciliation_errors"][request().client_order_id] == "CapabilityNotSupportedError"
     )
     assert summary["evidence_errors"] == [
         f"{request().client_order_id}:CapabilityNotSupportedError"
@@ -2462,9 +2318,7 @@ def test_process_lock_blocks_another_process_and_crash_releases_it(factory, tmp_
     assert api.get_execution_summary()["submit_calls"] == 0
 
 
-def test_restart_restores_later_native_order_references_and_trade_ids(
-    factory, tmp_path
-):
+def test_restart_restores_later_native_order_references_and_trade_ids(factory, tmp_path):
     path = tmp_path / "ctp-recovery.jsonl"
     venue = "CTP___FUTURE"
     base = {
@@ -2553,18 +2407,11 @@ def test_identical_exchange_order_ids_never_merge_across_venues(factory):
         }
     )
     result = api.poll_event(second)
-    assert (
-        result["exchange_name"] == second and result["client_order_id"] == "elsewhere"
-    )
-    assert (
-        api._execution_session.orders[(VENUE, request().client_order_id)]["terminal"]
-        is False
-    )
+    assert result["exchange_name"] == second and result["client_order_id"] == "elsewhere"
+    assert api._execution_session.orders[(VENUE, request().client_order_id)]["terminal"] is False
 
 
-def test_identical_native_ids_are_scoped_by_symbol_in_query_and_journal_recovery(
-    factory, tmp_path
-):
+def test_identical_native_ids_are_scoped_by_symbol_in_query_and_journal_recovery(factory, tmp_path):
     path = tmp_path / "symbol-scoped.jsonl"
     api = factory(path)
     for symbol, price in [(SYMBOL, 60000), ("ETH-USDT-SWAP", 3000)]:
@@ -2709,10 +2556,7 @@ def test_successful_query_updates_existing_state_without_duplicating_it(factory)
 
     assert len(api._execution_session.orders) == 1
     assert next(iter(api._execution_session.orders.values())) is state
-    assert (
-        result["terminal_confirmed"]
-        and api.get_execution_summary()["active_orders"] == 0
-    )
+    assert result["terminal_confirmed"] and api.get_execution_summary()["active_orders"] == 0
 
 
 def test_native_ids_include_known_exchange_and_unscoped_collision_is_rejected(factory):
@@ -2755,9 +2599,7 @@ def test_native_ids_include_known_exchange_and_unscoped_collision_is_rejected(fa
 def test_bound_order_identity_cannot_be_overwritten_by_query_reply(factory, changed):
     api = factory()
     api.make_order(VENUE, request(), normalized=True)
-    api._backend.query_result = response(
-        status="filled", filled=2, avg_price=60000, **changed
-    )
+    api._backend.query_result = response(status="filled", filled=2, avg_price=60000, **changed)
     result = api.query_order(
         VENUE,
         QueryOrderRequest(
@@ -2765,10 +2607,7 @@ def test_bound_order_identity_cannot_be_overwritten_by_query_reply(factory, chan
         ),
         normalized=True,
     )
-    assert (
-        result["execution_unknown"]
-        and result["error_code"] == "order_identity_mismatch"
-    )
+    assert result["execution_unknown"] and result["error_code"] == "order_identity_mismatch"
     assert result["symbol"] == SYMBOL and result["order_id"] == "123"
     assert result["client_order_id"] == request().client_order_id
     assert api.get_execution_summary()["trading_blocked"]
@@ -2793,9 +2632,7 @@ def test_bound_position_intent_cannot_be_overwritten_by_query_reply(factory, cha
     }
     api.make_order(VENUE, request(**bound), normalized=True)
     state = next(iter(api._execution_session.orders.values()))
-    api._backend.query_result = response(
-        status="filled", filled=2, avg_price=60000, **changed
-    )
+    api._backend.query_result = response(status="filled", filled=2, avg_price=60000, **changed)
 
     result = api.query_order(
         VENUE,
@@ -2875,8 +2712,7 @@ def test_trade_with_opposite_intent_side_is_not_booked_and_reconciles(factory):
     assert result["side"] == state["side"] == "buy"
     assert (VENUE, SYMBOL, "wrong-side-trade") not in api._execution_session.trade_ids
     journal_events = [
-        json.loads(line)["event"]
-        for line in api._execution_session.path.read_text().splitlines()
+        json.loads(line)["event"] for line in api._execution_session.path.read_text().splitlines()
     ]
     assert "trade" not in journal_events and "trade_update" not in journal_events
     due(api)
@@ -2929,9 +2765,7 @@ def test_order_update_cannot_overwrite_bound_position_intent(factory, changed):
         {"quantity_unit": "base"},
     ],
 )
-def test_trade_cannot_overwrite_bound_position_intent_or_enter_journal(
-    factory, changed
-):
+def test_trade_cannot_overwrite_bound_position_intent_or_enter_journal(factory, changed):
     api = factory()
     bound = {
         "position_side": "long",
@@ -2969,8 +2803,7 @@ def test_trade_cannot_overwrite_bound_position_intent_or_enter_journal(
         "wrong-position-intent",
     ) not in api._execution_session.trade_ids
     journal_events = [
-        json.loads(line)["event"]
-        for line in api._execution_session.path.read_text().splitlines()
+        json.loads(line)["event"] for line in api._execution_session.path.read_text().splitlines()
     ]
     assert "trade" not in journal_events and "trade_update" not in journal_events
 
@@ -3106,13 +2939,9 @@ def test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent(
     from bt_api_py.forwarding.schema import CommandAck, OrderCommand
 
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    runtime = GatewayRuntime(
-        GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="demo")
-    )
+    runtime = GatewayRuntime(GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="demo"))
     method = (
-        Mock(side_effect=result)
-        if isinstance(result, Exception)
-        else Mock(return_value=result)
+        Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
     )
     runtime.adapter = SimpleNamespace(place_order=method)
 
