@@ -19,7 +19,6 @@ from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 from typing import Any
 
-
 BUDGET_SCHEMA_VERSION = "ctp-execution-budget-v1"
 BUDGET_MONEY_UNIT = "CNY"
 BUDGET_MAX_CNY = Decimal("10000")
@@ -172,9 +171,7 @@ def _normalize_context(evidence: Mapping[str, Any]) -> dict[str, Any]:
     )
     result["strategy_identity_sha256"] = strategy_identity
     result["scope_version"] = _string(evidence.get("scope_version"), field="scope_version")
-    result["authorized_instruments"] = _instrument_list(
-        evidence.get("authorized_instruments")
-    )
+    result["authorized_instruments"] = _instrument_list(evidence.get("authorized_instruments"))
     primary = _instrument(evidence.get("primary_instrument"))
     if primary not in result["authorized_instruments"]:
         raise CtpBudgetError("budget_primary_scope_mismatch", "primary_instrument")
@@ -183,10 +180,7 @@ def _normalize_context(evidence: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _context_matches(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
-    for field in _CONTEXT_FIELDS:
-        if left.get(field) != right.get(field):
-            return False
-    return True
+    return all(left.get(field) == right.get(field) for field in _CONTEXT_FIELDS)
 
 
 def _state_context(state: Mapping[str, Any], context: Mapping[str, Any]) -> bool:
@@ -234,7 +228,11 @@ def _parse_pnl_minimum(evidence: Mapping[str, Any]) -> tuple[Decimal, bool, tupl
         if explicit is None:
             return Decimal(0), False, ()
         return _signed_decimal(explicit, field="historical_min_pnl_cny"), False, ()
-    if not isinstance(values, Sequence) or isinstance(values, (str, bytes, bytearray)) or not values:
+    if (
+        not isinstance(values, Sequence)
+        or isinstance(values, (str, bytes, bytearray))
+        or not values
+    ):
         raise CtpBudgetError("budget_invalid_pnl", "historical_cumulative_pnl_cny")
     parsed: list[Decimal] = []
     for value in values:
@@ -416,7 +414,9 @@ def evaluate_ctp_budget(
         min_pnl, pnl_unknown, pnl_reasons = Decimal(0), True, ()
     reasons.extend(pnl_reasons)
     candidate_budget = _budget_from_pnl(min_pnl)
-    ordinary_cap = max(Decimal(0), min(BUDGET_ORDINARY_MAX_CNY, candidate_budget - BUDGET_RECOVERY_HEADROOM_CNY))
+    ordinary_cap = max(
+        Decimal(0), min(BUDGET_ORDINARY_MAX_CNY, candidate_budget - BUDGET_RECOVERY_HEADROOM_CNY)
+    )
     ordinary_peak = max(ordinary_values, default=Decimal(0))
     recovery_increment = max(recovery_values, default=Decimal(0))
     full_state = ordinary_peak + recovery_increment
@@ -520,17 +520,26 @@ def evaluate_ctp_budget_numbers(
         ],
         "primary_instrument": {"exchange_id": "SYNTH", "instrument_id": "LEG1"},
     }
-    min_pnl = min((
-        _signed_decimal(item, field="historical_cumulative_pnl_cny")
-        for item in historical_cumulative_pnl_cny
-        if item is not None
-    ), default=Decimal(0))
-    candidate_budget = _budget_from_pnl(min(Decimal(0), min_pnl))
-    ordinary_cap = max(Decimal(0), min(BUDGET_ORDINARY_MAX_CNY, candidate_budget - BUDGET_RECOVERY_HEADROOM_CNY))
-    required = _decimal(remaining_unabsorbed_new_obligation_cny, field="remaining_unabsorbed_new_obligation_cny") + _decimal(
-        unallocated_recovery_headroom_cny, field="unallocated_recovery_headroom_cny"
+    min_pnl = min(
+        (
+            _signed_decimal(item, field="historical_cumulative_pnl_cny")
+            for item in historical_cumulative_pnl_cny
+            if item is not None
+        ),
+        default=Decimal(0),
     )
-    available = None if fresh_available_cny is None else _decimal(fresh_available_cny, field="fresh_available_cny")
+    candidate_budget = _budget_from_pnl(min(Decimal(0), min_pnl))
+    ordinary_cap = max(
+        Decimal(0), min(BUDGET_ORDINARY_MAX_CNY, candidate_budget - BUDGET_RECOVERY_HEADROOM_CNY)
+    )
+    required = _decimal(
+        remaining_unabsorbed_new_obligation_cny, field="remaining_unabsorbed_new_obligation_cny"
+    ) + _decimal(unallocated_recovery_headroom_cny, field="unallocated_recovery_headroom_cny")
+    available = (
+        None
+        if fresh_available_cny is None
+        else _decimal(fresh_available_cny, field="fresh_available_cny")
+    )
     reasons: list[str] = []
     if mode not in {"ordinary", "recovery"}:
         raise CtpBudgetError("budget_invalid_mode")

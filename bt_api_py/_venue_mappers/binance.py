@@ -120,14 +120,10 @@ def normalize_order_readiness(
         spec_error = str(getattr(exc, "code", type(exc).__name__))
 
     user_symbol = _matching_row(symbol_config, symbol)
-    configured_margin_mode = _margin_mode(
-        pick(user_symbol, "margin_mode", "marginType")
-    )
+    configured_margin_mode = _margin_mode(pick(user_symbol, "margin_mode", "marginType"))
     leverage = _native_decimal(pick(user_symbol, "leverage"))
     maximum = spec.max_quantity if spec is not None else None
-    max_notional = _native_decimal(
-        pick(user_symbol, "max_notional", "maxNotionalValue")
-    )
+    max_notional = _native_decimal(pick(user_symbol, "max_notional", "maxNotionalValue"))
 
     leverage_by_side: dict[str, float] = {}
     leverage_rows = rows(leverage_info, "get_order_readiness") if leverage_info is not None else []
@@ -179,10 +175,7 @@ def normalize_order_readiness(
         None
         if actual_position_mode not in {"net", "dual_side"}
         else expected_mode_valid
-        and (
-            expected_position_mode is None
-            or actual_position_mode == expected_position_mode
-        )
+        and (expected_position_mode is None or actual_position_mode == expected_position_mode)
     )
     instrument_status = spec.status.lower() if spec is not None else None
     instrument_live = (

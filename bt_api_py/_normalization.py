@@ -239,13 +239,9 @@ def _datetime_from_seconds(value):
 
 def _freshness(row, *, source="exchange", stale=False, reason=None):
     observed = _datetime_from_seconds(
-        pick(
-            row, "received_wall_time", "local_time", "local_update_time", "receive_time"
-        )
+        pick(row, "received_wall_time", "local_time", "local_update_time", "receive_time")
     ) or datetime.now(UTC)
-    return Freshness(
-        source=source, observed_at=observed, stale=stale, stale_reason=reason
-    )
+    return Freshness(source=source, observed_at=observed, stale=stale, stale_reason=reason)
 
 
 def _fingerprint(values):
@@ -266,9 +262,7 @@ def instrument_spec(result, exchange_name, symbol):
     row = candidates[0]
     venue = exchange_name.partition("___")[0]
     filters = {
-        item.get("filterType"): item
-        for item in row.get("filters", [])
-        if isinstance(item, dict)
+        item.get("filterType"): item for item in row.get("filters", []) if isinstance(item, dict)
     }
     lot = filters.get("LOT_SIZE") or filters.get("MARKET_LOT_SIZE") or {}
     price_filter = filters.get("PRICE_FILTER") or {}
@@ -276,9 +270,7 @@ def instrument_spec(result, exchange_name, symbol):
     if venue == "OKX":
         required = {
             "contract_value": pick(row, "ctVal", "contract_value"),
-            "contract_multiplier": pick(
-                row, "ctMult", "contract_multiplier", default="1"
-            ),
+            "contract_multiplier": pick(row, "ctMult", "contract_multiplier", default="1"),
             "price_tick": pick(row, "tickSz", "price_tick"),
             "quantity_step": pick(row, "lotSz", "quantity_step"),
             "min_quantity": pick(row, "minSz", "min_quantity"),
@@ -296,10 +288,7 @@ def instrument_spec(result, exchange_name, symbol):
         max_quantity_raw = pick(row, "max_quantity", default=lot.get("maxQty"))
         quantity_unit = "base"
     elif venue == "CTP":
-        if (
-            row.get("metadata_complete") is not True
-            or row.get("evidence_complete") is not True
-        ):
+        if row.get("metadata_complete") is not True or row.get("evidence_complete") is not True:
             raise NormalizedApiError("get_instrument_spec", "ctp_metadata_incomplete")
         required = {
             "contract_value": pick(row, "contract_value", "volume_multiple"),
@@ -375,18 +364,14 @@ def instrument_spec(result, exchange_name, symbol):
         min_notional = Decimal("0")
     else:
         min_notional = None
-    max_quantity = (
-        decimal_number(max_quantity_raw) if max_quantity_raw not in (None, "") else None
-    )
+    max_quantity = decimal_number(max_quantity_raw) if max_quantity_raw not in (None, "") else None
     if max_quantity is not None and max_quantity <= 0:
         raise NormalizedApiError("get_instrument_spec", "invalid_max_quantity_rule")
     return InstrumentSpec(
         exchange_name=exchange_name,
         symbol=symbol,
         asset_type=str(
-            pick(
-                row, "asset_type", "instType", default=exchange_name.partition("___")[2]
-            )
+            pick(row, "asset_type", "instType", default=exchange_name.partition("___")[2])
         ).lower(),
         base_currency=base,
         quote_currency=quote,
@@ -432,9 +417,7 @@ def _okx_fee_instrument_id(symbol, asset_type):
 
 
 def _compact_instrument_id(value):
-    return "".join(
-        character for character in str(value or "").upper() if character.isalnum()
-    )
+    return "".join(character for character in str(value or "").upper() if character.isalnum())
 
 
 def okx_fee_scope(result, exchange_name, symbol):
@@ -451,25 +434,16 @@ def okx_fee_scope(result, exchange_name, symbol):
     source = rows(result, "get_fee_instrument_metadata", exchange_name=exchange_name)
     matches = []
     for row in source:
-        row_inst_id = str(
-            pick(row, "instId", "symbol", "symbol_name", default="")
-        ).strip()
+        row_inst_id = str(pick(row, "instId", "symbol", "symbol_name", default="")).strip()
         row_asset_type = _okx_fee_asset_type(
             pick(row, "instType", "asset_type", default=asset_type)
         )
-        if (
-            row_asset_type == asset_type
-            and _compact_instrument_id(row_inst_id) == expected_compact
-        ):
+        if row_asset_type == asset_type and _compact_instrument_id(row_inst_id) == expected_compact:
             matches.append((row, row_inst_id))
     if not matches:
-        raise NormalizedApiError(
-            "get_fee_schedule", "fee_instrument_metadata_not_found"
-        )
+        raise NormalizedApiError("get_fee_schedule", "fee_instrument_metadata_not_found")
     if len(matches) != 1:
-        raise NormalizedApiError(
-            "get_fee_schedule", "fee_instrument_metadata_ambiguous"
-        )
+        raise NormalizedApiError("get_fee_schedule", "fee_instrument_metadata_ambiguous")
     row, inst_id = matches[0]
     group_id_value = pick(row, "groupId", "group_id")
     group_id = str(group_id_value).strip() if group_id_value not in (None, "") else None
@@ -481,9 +455,7 @@ def okx_fee_scope(result, exchange_name, symbol):
         "currency": pick(row, "settleCcy", "quoteCcy", "fee_currency"),
     }
     if asset_type in _OKX_DERIVATIVE_FEE_TYPES:
-        inst_family = str(
-            pick(row, "instFamily", "underlying_symbol_name", default="")
-        ).strip()
+        inst_family = str(pick(row, "instFamily", "underlying_symbol_name", default="")).strip()
         if not inst_family:
             raise NormalizedApiError("get_fee_schedule", "fee_inst_family_missing")
         scope["inst_family"] = inst_family
@@ -542,8 +514,7 @@ def fee_schedule(
         typed_rows = [
             row
             for row in source
-            if _okx_fee_asset_type(pick(row, "instType", default=asset_type))
-            == asset_type
+            if _okx_fee_asset_type(pick(row, "instType", default=asset_type)) == asset_type
         ]
         if not typed_rows:
             return _unavailable_fee_schedule(
@@ -576,8 +547,7 @@ def fee_schedule(
             group_matches = [
                 group
                 for group in fee_groups
-                if str(group.get("groupId", "")).strip()
-                == str(expected_group_id).strip()
+                if str(group.get("groupId", "")).strip() == str(expected_group_id).strip()
             ]
         else:
             group_matches = fee_groups
@@ -614,9 +584,7 @@ def fee_schedule(
         )
 
     if native_maker in (None, "") or native_taker in (None, ""):
-        return _unavailable_fee_schedule(
-            exchange_name, symbol, account_id, row, "fee_rate_missing"
-        )
+        return _unavailable_fee_schedule(exchange_name, symbol, account_id, row, "fee_rate_missing")
 
     raw = {
         "selected_group_id": selected_group_id,
@@ -648,9 +616,7 @@ def fee_schedule(
             )
 
     if maker_rate is None or taker_rate is None:
-        return _unavailable_fee_schedule(
-            exchange_name, symbol, account_id, row, "fee_rate_missing"
-        )
+        return _unavailable_fee_schedule(exchange_name, symbol, account_id, row, "fee_rate_missing")
     return FeeSchedule(
         exchange_name=exchange_name,
         symbol=symbol,
@@ -934,19 +900,13 @@ def normalize_error(exc, operation, *, exchange_name=None, write=False):
     if isinstance(exc, CapabilityNotSupportedError):
         return _detach_error(exc)
     if isinstance(exc, InvalidOrderError):
-        return _detach_error(
-            NormalizedApiError(operation, "invalid_order", definite_reject=write)
-        )
+        return _detach_error(NormalizedApiError(operation, "invalid_order", definite_reject=write))
     exchange_name = (
-        exchange_name
-        or getattr(exc, "venue", None)
-        or getattr(exc, "exchange_name", None)
+        exchange_name or getattr(exc, "venue", None) or getattr(exc, "exchange_name", None)
     )
     context = getattr(exc, "context", {})
     raw = context.get("raw_response") if isinstance(context, dict) else None
-    translated = _response_error(
-        raw, operation, exchange_name=exchange_name, write=write
-    )
+    translated = _response_error(raw, operation, exchange_name=exchange_name, write=write)
     if translated is not None:
         return _detach_error(translated)
     raw_code = getattr(exc, "code", None)
@@ -962,9 +922,7 @@ def normalize_error(exc, operation, *, exchange_name=None, write=False):
     # A Python exception after entering a write may follow actual acceptance.
     # Known parameter validation is handled before that boundary, not inferred.
     return _detach_error(
-        NormalizedApiError(
-            operation, _safe_code(type(exc).__name__), execution_unknown=write
-        )
+        NormalizedApiError(operation, _safe_code(type(exc).__name__), execution_unknown=write)
     )
 
 
@@ -975,11 +933,7 @@ def check_response(raw, operation, *, exchange_name=None, write=False):
 
 
 def _native(result):
-    raw = (
-        result.get_input_data()
-        if callable(getattr(result, "get_input_data", None))
-        else result
-    )
+    raw = result.get_input_data() if callable(getattr(result, "get_input_data", None)) else result
     if isinstance(raw, (str, bytes)):
         raw = json.loads(raw)
     return raw
@@ -991,11 +945,7 @@ def _dict(item):
     if is_dataclass(item):
         result = asdict(item)
         raw = result.pop("raw", {})
-        if (
-            "fill_id" in result
-            and raw
-            and not any(key in raw for key in ("fee", "commission"))
-        ):
+        if "fill_id" in result and raw and not any(key in raw for key in ("fee", "commission")):
             result.pop("fee", None)
         return {**(raw if isinstance(raw, dict) else {}), **result}
     initializer = getattr(item, "init_data", None)
@@ -1056,32 +1006,22 @@ def _raw_rows(raw):
 def rows(result, operation, *, exchange_name=None, write=False):
     raw = _native(result)
     if isinstance(raw, BaseException):
-        raise normalize_error(
-            raw, operation, exchange_name=exchange_name, write=write
-        ) from None
+        raise normalize_error(raw, operation, exchange_name=exchange_name, write=write) from None
     check_response(raw, operation, exchange_name=exchange_name, write=write)
     native_rows = _raw_rows(raw)
     getter = getattr(result, "get_data", None)
     if callable(getter):
         try:
             normalized = getter()
-            normalized = (
-                normalized if isinstance(normalized, (tuple, list)) else [normalized]
-            )
-            mapped = [
-                _dict(row) for item in normalized for row in _raw_rows(_dict(item))
-            ]
+            normalized = normalized if isinstance(normalized, (tuple, list)) else [normalized]
+            mapped = [_dict(row) for item in normalized for row in _raw_rows(_dict(item))]
             if mapped:
                 # Keep missing native fields locally for vendor-only values.
                 if len(mapped) == len(native_rows):
                     return [
                         {
                             **(dict(native) if isinstance(native, dict) else {}),
-                            **{
-                                key: value
-                                for key, value in item.items()
-                                if value is not None
-                            },
+                            **{key: value for key, value in item.items() if value is not None},
                         }
                         for native, item in zip(native_rows, mapped, strict=True)
                     ]
@@ -1099,9 +1039,7 @@ def _base(exchange_name, row, symbol=None):
     return {
         "exchange_name": exchange_name,
         "exchange": exchange,
-        "asset_type": str(
-            pick(row, "asset_type", "market_type", default=asset)
-        ).lower(),
+        "asset_type": str(pick(row, "asset_type", "market_type", default=asset)).lower(),
         "symbol": str(
             pick(
                 row,
@@ -1239,13 +1177,9 @@ def _timestamps(row):
         "received_wall_time": received_wall,
         "received_monotonic_ns": received_monotonic,
         "clock_domain_id": str(
-            pick(
-                row, "clock_domain_id", default="" if ctp_quote_v2 else CLOCK_DOMAIN_ID
-            )
+            pick(row, "clock_domain_id", default="" if ctp_quote_v2 else CLOCK_DOMAIN_ID)
         ),
-        "source": str(
-            pick(row, "source", default="unknown" if ctp_quote_v2 else "exchange")
-        ),
+        "source": str(pick(row, "source", default="unknown" if ctp_quote_v2 else "exchange")),
         "stale": stale,
         "stale_reason": stale_reason,
     }
@@ -1508,9 +1442,7 @@ def _ctp_quote_v2_fields(
 
     bid = _ctp_quote_v2_number(row, "bid_price", "bid", "BidPrice1", positive=True)
     ask = _ctp_quote_v2_number(row, "ask_price", "ask", "AskPrice1", positive=True)
-    last = _ctp_quote_v2_number(
-        row, "last_price", "price", "last", "LastPrice", positive=True
-    )
+    last = _ctp_quote_v2_number(row, "last_price", "price", "last", "LastPrice", positive=True)
     bid_size = _ctp_quote_v2_number(row, "bid_volume", "bid_size", "BidVolume1")
     ask_size = _ctp_quote_v2_number(row, "ask_volume", "ask_size", "AskVolume1")
     lower_limit = _ctp_quote_v2_number(
@@ -1521,26 +1453,18 @@ def _ctp_quote_v2_fields(
     )
     source_error = _ctp_quote_v2_number(row, "source_clock_error_ms")
     receive_error = _ctp_quote_v2_number(row, "receive_clock_error_ms")
-    cumulative_volume = _ctp_quote_v2_number(
-        row, "cum_volume", "cumulative_volume", "Volume"
-    )
+    cumulative_volume = _ctp_quote_v2_number(row, "cum_volume", "cumulative_volume", "Volume")
     delta_volume = _ctp_quote_v2_number(row, "delta_volume", "volume")
     volume_semantics = _ctp_quote_v2_text(row, "volume_semantics").lower()
     volume_complete = pick(row, "volume_complete", default=False) is True
-    volume_quality = _ctp_quote_v2_text(
-        row, "volume_quality", default="unknown"
-    ).upper()
-    continuity_status = _ctp_quote_v2_text(
-        row, "continuity_status", default="gap"
-    ).lower()
+    volume_quality = _ctp_quote_v2_text(row, "volume_quality", default="unknown").upper()
+    continuity_status = _ctp_quote_v2_text(row, "continuity_status", default="gap").lower()
     if continuity_status not in _CTP_QUOTE_V2_CONTINUITY:
         continuity_status = "gap"
     quality_flags = _ctp_quote_v2_quality_flags(row)
     trading_day = _ctp_quote_v2_text(row, "trading_day", "TradingDay")
     action_day = _ctp_quote_v2_text(row, "action_day", "ActionDay")
-    event_time_source = _ctp_quote_v2_text(
-        row, "event_time_source", default="unresolved"
-    ).lower()
+    event_time_source = _ctp_quote_v2_text(row, "event_time_source", default="unresolved").lower()
     source_clock_quality = _ctp_quote_v2_text(
         row, "source_clock_quality", default="unknown"
     ).lower()
@@ -1552,24 +1476,19 @@ def _ctp_quote_v2_fields(
     clock_domain_id = _ctp_quote_v2_text(row, "clock_domain_id")
     # Do not infer futures from a legacy ``CTP___FUTURE`` venue suffix: one
     # CTP market stream can carry future and option legs together.
-    asset_type = _ctp_quote_v2_asset_type(
-        pick(row, "asset_type", "market_type", default="")
-    )
+    asset_type = _ctp_quote_v2_asset_type(pick(row, "asset_type", "market_type", default=""))
     # Product identity is additive diagnostic evidence from the native CTP
     # adapter.  It is intentionally not eligible to self-attest a payload;
     # execution eligibility below still requires the sealed parent proof.
     product_class = _ctp_quote_v2_text(row, "product_class", "ProductClass") or None
     contract_type = (
-        _ctp_quote_v2_text(row, "contract_type", "ContractType", default="unknown")
-        or "unknown"
+        _ctp_quote_v2_text(row, "contract_type", "ContractType", default="unknown") or "unknown"
     )
     option_type = _ctp_quote_v2_text(row, "option_type", "OptionsType") or None
     underlying_instrument = (
         _ctp_quote_v2_text(row, "underlying_instrument", "UnderlyingInstrID") or None
     )
-    strike_price = _ctp_quote_v2_number(
-        row, "strike_price", "StrikePrice", positive=True
-    )
+    strike_price = _ctp_quote_v2_number(row, "strike_price", "StrikePrice", positive=True)
     connection_generation = _ctp_quote_v2_nonnegative_int(row, "connection_generation")
     ingest_seq = _ctp_quote_v2_nonnegative_int(row, "ingest_seq")
     subscription_epoch = _ctp_quote_v2_nonnegative_int(row, "subscription_epoch")
@@ -1684,12 +1603,8 @@ def _ctp_quote_v2_fields(
             cohort_now_receive_clock_error_ms=(
                 parent_attestation.cohort_now_receive_clock_error_ms
             ),
-            cohort_now_receive_clock_quality=(
-                parent_attestation.cohort_now_receive_clock_quality
-            ),
-            cohort_now_freshness_verified=(
-                parent_attestation.cohort_now_freshness_verified
-            ),
+            cohort_now_receive_clock_quality=(parent_attestation.cohort_now_receive_clock_quality),
+            cohort_now_freshness_verified=(parent_attestation.cohort_now_freshness_verified),
         )
     return result
 
@@ -1737,9 +1652,7 @@ def _finish_event(event, row):
         "E",
         "T",
     )
-    event.setdefault(
-        "raw_audit_fields", {name: row[name] for name in audit_names if name in row}
-    )
+    event.setdefault("raw_audit_fields", {name: row[name] for name in audit_names if name in row})
     event.setdefault("event_id", _event_id(event, row))
     event.setdefault("coalesced_count", int(pick(row, "coalesced_count", default=0)))
     return event
@@ -1750,9 +1663,7 @@ def metadata(row, exchange_name, symbol=None):
     filters = {item["filterType"]: item for item in row.get("filters", [])}
     lot = filters.get("LOT_SIZE", {})
     floor = filters.get("MIN_NOTIONAL", filters.get("NOTIONAL", {}))
-    multiplier = number(
-        pick(row, "multiplier", "contract_size", "VolumeMultiple", "ctVal")
-    )
+    multiplier = number(pick(row, "multiplier", "contract_size", "VolumeMultiple", "ctVal"))
     if multiplier is not None and row.get("ctVal") not in (None, ""):
         multiplier *= number(row.get("ctMult"), 1)
     if multiplier is None and exchange_name.startswith("BINANCE___"):
@@ -1816,12 +1727,12 @@ def metadata(row, exchange_name, symbol=None):
             default=(
                 row.get("ctType") == "linear"
                 if "ctType" in row
-                else True if row.get("contractType") == "PERPETUAL" else None
+                else True
+                if row.get("contractType") == "PERPETUAL"
+                else None
             ),
         ),
-        margin_rate=number(
-            pick(row, "margin_rate", "LongMarginRatio", "long_margin_rate")
-        ),
+        margin_rate=number(pick(row, "margin_rate", "LongMarginRatio", "long_margin_rate")),
         commission_rate=number(pick(row, "commission_rate", "taker_commission_rate")),
         exchange_id=pick(row, "exchange_id", "ExchangeID"),
     )
@@ -1865,9 +1776,7 @@ def balance_rows(source, exchange_name):
                 "free",
             )
         )
-        value = decimal_number(
-            pick(row, "Balance", "equity", "eq", "marginBalance", "value")
-        )
+        value = decimal_number(pick(row, "Balance", "equity", "eq", "marginBalance", "value"))
         if value is None:
             wallet = decimal_number(
                 pick(
@@ -1892,9 +1801,7 @@ def balance_rows(source, exchange_name):
                 "available_cash": cash,
                 "equity": value,
                 "margin_used": decimal_number(
-                    pick(
-                        row, "margin_used", "used_margin", "initialMargin", "CurrMargin"
-                    )
+                    pick(row, "margin_used", "used_margin", "initialMargin", "CurrMargin")
                 ),
                 "account_id": pick(row, "account_id", "AccountID"),
             }
@@ -1918,11 +1825,7 @@ def account(source, exchange_name, currency=None):
             selected = [row for row in selected if row["currency"] == "USDT"]
         else:
             raise ValueError("multiple_account_currencies_require_selection")
-    if (
-        len(selected) != 1
-        or selected[0]["cash"] is None
-        or selected[0]["value"] is None
-    ):
+    if len(selected) != 1 or selected[0]["cash"] is None or selected[0]["value"] is None:
         raise ValueError("incomplete_account_snapshot")
     return {**selected[0], **_combined_trading_permissions(source)}
 
@@ -1985,16 +1888,10 @@ def position(row, exchange_name, symbol=None):
                 "price_open",
             )
         ),
-        today=number(
-            pick(row, "today", "today_position", "today_volume", "TodayPosition")
-        ),
-        yesterday=number(
-            pick(row, "yesterday", "yesterday_position", "yd_position", "YdPosition")
-        ),
+        today=number(pick(row, "today", "today_position", "today_volume", "TodayPosition")),
+        yesterday=number(pick(row, "yesterday", "yesterday_position", "yd_position", "YdPosition")),
         multiplier=number(
-            pick(
-                row, "multiplier", "contract_size", "volume_multiple", "VolumeMultiple"
-            )
+            pick(row, "multiplier", "contract_size", "volume_multiple", "VolumeMultiple")
         ),
         offset=pick(row, "offset"),
         exchange_id=pick(row, "exchange_id", "ExchangeID"),
@@ -2074,9 +1971,7 @@ def _explicit_execution_identity_fields(row):
     fields = set()
     if supplied(row, "side", "order_side", "trade_side", "S") or supplied(nested, "S"):
         fields.add("side")
-    if supplied(row, "position_side", "posSide", "positionSide", "ps") or supplied(
-        nested, "ps"
-    ):
+    if supplied(row, "position_side", "posSide", "positionSide", "ps") or supplied(nested, "ps"):
         fields.add("position_side")
     if supplied(row, "offset", "order_offset", "trade_offset"):
         fields.add("offset")
@@ -2104,14 +1999,18 @@ def _trading_permissions(row):
     explicit = (
         True
         if explicit is True or explicit == "true"
-        else False if explicit is False or explicit == "false" else None
+        else False
+        if explicit is False or explicit == "false"
+        else None
     )
     # Account trading disabled or an API key with read-only permissions both
     # prohibit execution, even if the other permission source allows it.
     can_trade = (
         False
         if explicit is False or permission_allows is False
-        else True if explicit is True or permission_allows is True else None
+        else True
+        if explicit is True or permission_allows is True
+        else None
     )
     return {"can_trade": can_trade, "trading_permissions": permissions}
 
@@ -2122,11 +2021,7 @@ def _combined_trading_permissions(source):
     values = [row["can_trade"] for row in snapshots]
     can_trade = False if False in values else True if True in values else None
     permissions = sorted(
-        {
-            permission
-            for row in snapshots
-            for permission in (row["trading_permissions"] or ())
-        }
+        {permission for row in snapshots for permission in (row["trading_permissions"] or ())}
     )
     return {
         "can_trade": can_trade,
@@ -2152,9 +2047,7 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
     if isinstance(ack_payload, dict):
         row = {**row, **ack_payload}
     raw_status = (
-        str(pick(row, "status", "order_status", "state", default=""))
-        .lower()
-        .replace("-", "_")
+        str(pick(row, "status", "order_status", "state", default="")).lower().replace("-", "_")
     )
     status = _STATUS.get(raw_status, "unknown")
     order_id = pick(
@@ -2243,12 +2136,8 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
         execution_unknown=unknown,
         terminal_confirmed=not unknown and status in _TERMINAL,
         definite_reject=not unknown and status == "rejected",
-        order_ref=pick(
-            row, "order_ref", "OrderRef", default=req.get("order_ref") or client_id
-        ),
-        exchange_id=pick(
-            row, "exchange_id", "ExchangeID", default=req.get("exchange_id")
-        ),
+        order_ref=pick(row, "order_ref", "OrderRef", default=req.get("order_ref") or client_id),
+        exchange_id=pick(row, "exchange_id", "ExchangeID", default=req.get("exchange_id")),
         front_id=pick(row, "front_id", "FrontID", default=req.get("front_id")),
         session_id=pick(row, "session_id", "SessionID", default=req.get("session_id")),
         account_id=pick(
@@ -2258,9 +2147,7 @@ def order(row, exchange_name, symbol=None, request=None, operation="query_order"
             "InvestorID",
             default=req.get("account_id"),
         ),
-        trading_day=pick(
-            row, "trading_day", "TradingDay", default=req.get("trading_day")
-        ),
+        trading_day=pick(row, "trading_day", "TradingDay", default=req.get("trading_day")),
         fee_currency=pick(row, "fee_currency", "feeCcy", "commissionAsset"),
         commission_currency=pick(
             row, "commission_currency", "fee_currency", "feeCcy", "commissionAsset"
@@ -2330,9 +2217,7 @@ def trade(row, exchange_name, symbol=None):
         account_id=pick(row, "account_id", "AccountID", "InvestorID"),
         trading_day=pick(row, "trading_day", "TradingDay"),
         fee=number(pick(row, "fee", "trade_fee", "commission")),
-        fee_currency=pick(
-            row, "fee_currency", "trade_fee_symbol", "commissionAsset", "feeCcy"
-        ),
+        fee_currency=pick(row, "fee_currency", "trade_fee_symbol", "commissionAsset", "feeCcy"),
         **_timestamps(row),
     )
     result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row)
@@ -2365,9 +2250,7 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
         row = source[0]
         return {
             **_base(exchange_name, row, symbol),
-            "rate": number(
-                pick(row, "funding_rate", "fundingRate", "lastFundingRate", "rate")
-            ),
+            "rate": number(pick(row, "funding_rate", "fundingRate", "lastFundingRate", "rate")),
             "next_funding_time": seconds(
                 pick(
                     row,
@@ -2398,9 +2281,7 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
         row = source[0]
         mode = _position_mode_value(row)
         if mode not in {"net", "dual_side"}:
-            raise CapabilityNotSupportedError(
-                operation, detail="position mode is unavailable"
-            )
+            raise CapabilityNotSupportedError(operation, detail="position mode is unavailable")
         return {
             "exchange_name": exchange_name,
             "position_mode": mode,
@@ -2435,17 +2316,12 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
     if operation == "get_deals":
         return [trade(row, exchange_name, symbol) for row in source]
     if operation == "get_kline":
-        return [
-            normalize_event(row, exchange_name, kind="bar", symbol=symbol)
-            for row in source
-        ]
+        return [normalize_event(row, exchange_name, kind="bar", symbol=symbol) for row in source]
     if operation in {"get_tick", "get_depth"}:
         return normalize_event(
             source[0],
             exchange_name,
-            kind={"get_tick": "tick", "get_depth": "orderbook", "get_kline": "bar"}[
-                operation
-            ],
+            kind={"get_tick": "tick", "get_depth": "orderbook", "get_kline": "bar"}[operation],
             symbol=symbol,
         )
     raise CapabilityNotSupportedError(operation, detail="no normalized result mapper")
@@ -2462,10 +2338,7 @@ def normalize_event(
     row = _dict(item)
     if isinstance(row.get("payload"), dict):
         row = {**row, **row["payload"]}
-    kind = (
-        kind
-        or str(pick(row, "kind", "event_type", "event", "type", default="")).lower()
-    )
+    kind = kind or str(pick(row, "kind", "event_type", "event", "type", default="")).lower()
     kind = {
         "orderbookevent": "orderbook",
         "order_book": "orderbook",
@@ -2527,16 +2400,10 @@ def normalize_event(
                 )
             return [(number(level[0]), number(level[1])) for level in values]
 
-        raw_sequence = pick(
-            row, "sequence", "sequence_id", "update_id", "lastUpdateId", "u"
-        )
-        raw_previous = pick(
-            row, "previous_sequence", "prev_sequence", "prevSeqId", "pu"
-        )
+        raw_sequence = pick(row, "sequence", "sequence_id", "update_id", "lastUpdateId", "u")
+        raw_previous = pick(row, "previous_sequence", "prev_sequence", "prevSeqId", "pu")
         sequence = int(raw_sequence) if raw_sequence not in (None, "") else None
-        previous_sequence = (
-            int(raw_previous) if raw_previous not in (None, "") else None
-        )
+        previous_sequence = int(raw_previous) if raw_previous not in (None, "") else None
         action = str(pick(row, "snapshot_or_delta", "action", default="")).lower()
         snapshot_or_delta = (
             "delta"
@@ -2594,9 +2461,7 @@ def normalize_event(
                     default=pick(row, "volume", "last_volume", "Volume"),
                 )
             )
-            cumulative_volume = number(
-                pick(row, "cum_volume", "cumulative_volume", "Volume")
-            )
+            cumulative_volume = number(pick(row, "cum_volume", "cumulative_volume", "Volume"))
             result.update(
                 price=price,
                 bid_price=bid,
@@ -2616,25 +2481,15 @@ def normalize_event(
                     delta_volume=delta_volume,
                     volume_complete=bool(pick(row, "volume_complete", default=False)),
                     volume_quality=str(pick(row, "volume_quality", default="") or ""),
-                    trading_day=str(
-                        pick(row, "trading_day", "TradingDay", default="") or ""
-                    ),
-                    action_day=str(
-                        pick(row, "action_day", "ActionDay", default="") or ""
-                    ),
+                    trading_day=str(pick(row, "trading_day", "TradingDay", default="") or ""),
+                    action_day=str(pick(row, "action_day", "ActionDay", default="") or ""),
                     event_time_utc=seconds(pick(row, "event_time_utc")),
                     recv_time_utc=seconds(pick(row, "recv_time_utc")),
-                    recv_monotonic_ns=int(
-                        pick(row, "recv_monotonic_ns", default=0) or 0
-                    ),
-                    connection_generation=int(
-                        pick(row, "connection_generation", default=0) or 0
-                    ),
+                    recv_monotonic_ns=int(pick(row, "recv_monotonic_ns", default=0) or 0),
+                    connection_generation=int(pick(row, "connection_generation", default=0) or 0),
                     ingest_seq=int(pick(row, "ingest_seq", default=0) or 0),
                     quality_flags=tuple(pick(row, "quality_flags", default=()) or ()),
-                    event_time_source=str(
-                        pick(row, "event_time_source", default="") or ""
-                    ),
+                    event_time_source=str(pick(row, "event_time_source", default="") or ""),
                 )
     elif kind == "bar":
         result.update(
@@ -2646,9 +2501,7 @@ def normalize_event(
     elif kind == "reconcile":
         result.update(
             status=pick(row, "status", default="required"),
-            connection_generation=int(
-                pick(row, "connection_generation", default=0) or 0
-            ),
+            connection_generation=int(pick(row, "connection_generation", default=0) or 0),
             scopes=row.get("scopes"),
             failed_scopes=tuple(row.get("failed_scopes") or ()),
         )

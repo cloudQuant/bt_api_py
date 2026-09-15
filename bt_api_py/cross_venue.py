@@ -68,9 +68,7 @@ def coerce_funding_snapshot(
     elif isinstance(value, Mapping):
         interval = value.get("settlement_interval_seconds")
         if value.get("available") is True and (
-            isinstance(interval, bool)
-            or not isinstance(interval, int)
-            or interval <= 0
+            isinstance(interval, bool) or not isinstance(interval, int) or interval <= 0
         ):
             raise CrossVenueValueError("funding_interval_invalid")
         freshness_value = value.get("freshness")
@@ -225,9 +223,7 @@ class CrossVenueLeg:
                 "instrument_spec_unavailable:" + str(instrument.unavailable_reason or "unknown")
             )
         if instrument.freshness.stale:
-            raise CrossVenueValueError(
-                instrument.freshness.stale_reason or "instrument_spec_stale"
-            )
+            raise CrossVenueValueError(instrument.freshness.stale_reason or "instrument_spec_stale")
         if not instrument.source:
             raise CrossVenueValueError("instrument_spec_source_missing")
         if not instrument.linear:
@@ -288,9 +284,7 @@ class CrossVenueLeg:
             if not funding.available or funding.settlement_interval_seconds is None:
                 raise CrossVenueValueError(funding.unavailable_reason or "funding_unavailable")
             if funding.freshness.stale:
-                raise CrossVenueValueError(
-                    funding.freshness.stale_reason or "funding_stale"
-                )
+                raise CrossVenueValueError(funding.freshness.stale_reason or "funding_stale")
             if not funding.source:
                 raise CrossVenueValueError("funding_source_missing")
             if funding.exchange_name != instrument.exchange_name:

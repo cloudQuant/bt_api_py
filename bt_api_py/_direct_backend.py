@@ -54,9 +54,7 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        return self._feed(exchange_name).get_tick(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._feed(exchange_name).get_tick(symbol, extra_data=extra_data, **kwargs)
 
     def get_depth(
         self,
@@ -96,9 +94,7 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        return self._feed(exchange_name).get_account(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._feed(exchange_name).get_account(symbol, extra_data=extra_data, **kwargs)
 
     def get_balance(
         self,
@@ -109,9 +105,7 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        return self._feed(exchange_name).get_balance(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._feed(exchange_name).get_balance(symbol, extra_data=extra_data, **kwargs)
 
     def get_position(
         self,
@@ -122,9 +116,7 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        return self._feed(exchange_name).get_position(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._feed(exchange_name).get_position(symbol, extra_data=extra_data, **kwargs)
 
     def get_open_orders(
         self,
@@ -135,9 +127,7 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        return self._feed(exchange_name).get_open_orders(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._feed(exchange_name).get_open_orders(symbol, extra_data=extra_data, **kwargs)
 
     def get_deals(
         self,
@@ -148,9 +138,7 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        return self._feed(exchange_name).get_deals(
-            symbol, extra_data=extra_data, **kwargs
-        )
+        return self._feed(exchange_name).get_deals(symbol, extra_data=extra_data, **kwargs)
 
     def _read_method(self, exchange_name: str, operation: str, *aliases: str) -> Any:
         feed = self._feed(exchange_name)
@@ -388,9 +376,7 @@ class DirectBackend:
                 if value is not None:
                     kwargs[key] = value
             if order_id is None:
-                kwargs.setdefault(
-                    "order_ref", request.order_ref or request.client_order_id
-                )
+                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
             kwargs.update(self._execution_options(exchange_name))
         if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
             order_id = request.order_id
@@ -426,9 +412,7 @@ class DirectBackend:
                 if value is not None:
                     kwargs[key] = value
             if order_id is None:
-                kwargs.setdefault(
-                    "order_ref", request.order_ref or request.client_order_id
-                )
+                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
             kwargs.update(self._execution_options(exchange_name))
         if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
             order_id = request.order_id
@@ -444,9 +428,7 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        return self._feed(exchange_name).cancel_all(
-            request.symbol, extra_data=extra_data, **kwargs
-        )
+        return self._feed(exchange_name).cancel_all(request.symbol, extra_data=extra_data, **kwargs)
 
     def query_order(
         self,
@@ -464,9 +446,7 @@ class DirectBackend:
                 if value is not None:
                     kwargs[key] = value
             if order_id is None:
-                kwargs.setdefault(
-                    "order_ref", request.order_ref or request.client_order_id
-                )
+                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
         if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
             order_id = request.order_id
             if order_id is None:
@@ -501,9 +481,7 @@ class DirectBackend:
                 if value is not None:
                     kwargs[key] = value
             if order_id is None:
-                kwargs.setdefault(
-                    "order_ref", request.order_ref or request.client_order_id
-                )
+                kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
         if exchange_name.split("___")[0] in {"OKX", "BINANCE"}:
             order_id = request.order_id
             if order_id is None:

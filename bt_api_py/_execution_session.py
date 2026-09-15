@@ -33,11 +33,10 @@ from ._ctp_budget import (
     BUDGET_RECOVERY_HEADROOM_CNY,
     BUDGET_SCHEMA_VERSION,
     CtpBudgetError,
-    CtpBudgetReservation,
-    budget_evidence_digest,
-    evaluate_ctp_budget,
     _is_budget_reservation,
     _new_budget_reservation,
+    budget_evidence_digest,
+    evaluate_ctp_budget,
 )
 from ._ctp_execution_authorization import recovery_action_digest, recovery_plan_digest
 
@@ -288,9 +287,7 @@ def _execution_arm_instruments(proof):
     return (instrument,) if isinstance(instrument, str) else ()
 
 
-def _canonical_ctp_execution_instrument(
-    proof, value, exchange_id=None, *, native_wire=False
-):
+def _canonical_ctp_execution_instrument(proof, value, exchange_id=None, *, native_wire=False):
     """Choose legacy or V2 parsing from the proof's closed scope.
 
     ``native_wire`` is used only for outbound writes.  Recovery normalization
@@ -318,9 +315,7 @@ def _execution_arm_proof(value):
     elif is_bundle:
         proof = {field: value[field] for field in _EXECUTION_ARM_BUNDLE_FIELDS}
     else:
-        raise NormalizedApiError(
-            operation, "invalid_execution_arm_proof", definite_reject=True
-        )
+        raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
     for field in (
         "account_fingerprint",
         "trading_day",
@@ -329,18 +324,14 @@ def _execution_arm_proof(value):
     ):
         item = proof[field]
         if not isinstance(item, str) or not item or item != item.strip():
-            raise NormalizedApiError(
-                operation, "invalid_execution_arm_proof", definite_reject=True
-            )
+            raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
     canonical_instrument = (
         _canonical_ctp_bundle_instrument(proof["instrument"])
         if is_bundle
         else _canonical_ctp_instrument(proof["instrument"])
     )
     if not canonical_instrument or proof["instrument"] != canonical_instrument:
-        raise NormalizedApiError(
-            operation, "invalid_execution_arm_proof", definite_reject=True
-        )
+        raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
     if is_bundle:
         authorized = proof["authorized_instruments"]
         if (
@@ -349,12 +340,8 @@ def _execution_arm_proof(value):
             or not 2 <= len(authorized) <= 3
             or any(not isinstance(item, str) for item in authorized)
         ):
-            raise NormalizedApiError(
-                operation, "invalid_execution_arm_proof", definite_reject=True
-            )
-        canonical_authorized = tuple(
-            _canonical_ctp_bundle_instrument(item) for item in authorized
-        )
+            raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
+        canonical_authorized = tuple(_canonical_ctp_bundle_instrument(item) for item in authorized)
         if (
             any(not item for item in canonical_authorized)
             or tuple(authorized) != canonical_authorized
@@ -363,9 +350,7 @@ def _execution_arm_proof(value):
             or len({item.partition(".")[0] for item in canonical_authorized}) != 1
             or proof["instrument"] not in canonical_authorized
         ):
-            raise NormalizedApiError(
-                operation, "invalid_execution_arm_proof", definite_reject=True
-            )
+            raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
         # Normalize tuples to a JSON-native list so the parent facade and
         # native CTP gate always calculate the same proof digest.
         proof["authorized_instruments"] = list(canonical_authorized)
@@ -377,14 +362,10 @@ def _execution_arm_proof(value):
         or len(account_digest) != 16
         or any(char not in "0123456789abcdef" for char in account_digest)
     ):
-        raise NormalizedApiError(
-            operation, "invalid_execution_arm_proof", definite_reject=True
-        )
+        raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
     generation = proof["connection_generation"]
     if type(generation) is not int or generation <= 0:
-        raise NormalizedApiError(
-            operation, "invalid_execution_arm_proof", definite_reject=True
-        )
+        raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
     trading_day = proof["trading_day"]
     try:
         parsed_day = time.strptime(trading_day, "%Y%m%d")
@@ -393,9 +374,7 @@ def _execution_arm_proof(value):
             operation, "invalid_execution_arm_proof", definite_reject=True
         ) from None
     if time.strftime("%Y%m%d", parsed_day) != trading_day:
-        raise NormalizedApiError(
-            operation, "invalid_execution_arm_proof", definite_reject=True
-        )
+        raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
     for field in _EXECUTION_ARM_HASH_FIELDS:
         digest = proof[field]
         if (
@@ -404,9 +383,7 @@ def _execution_arm_proof(value):
             or digest != digest.lower()
             or any(char not in "0123456789abcdef" for char in digest)
         ):
-            raise NormalizedApiError(
-                operation, "invalid_execution_arm_proof", definite_reject=True
-            )
+            raise NormalizedApiError(operation, "invalid_execution_arm_proof", definite_reject=True)
     encoded = json.dumps(
         proof,
         ensure_ascii=False,
@@ -501,8 +478,7 @@ def _identity_registry_digests(identity):
             )
         ]
     return tuple(
-        hashlib.sha256("\0".join(material).encode("utf-8")).hexdigest()
-        for material in materials
+        hashlib.sha256("\0".join(material).encode("utf-8")).hexdigest() for material in materials
     )
 
 
@@ -524,18 +500,14 @@ def _credential_account_id(provider, fingerprint):
 def _default_journal_path(identities):
     """Return one strategy-independent path for a configured identity bundle."""
     normalized = [_normalized_ledger_identity(identity) for identity in identities]
-    normalized.sort(
-        key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"))
-    )
+    normalized.sort(key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
     material = json.dumps(
         normalized,
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
     digest = hashlib.sha256(material).hexdigest()
-    return (
-        _ledger_registry_root().parent / "execution-journals" / f"{digest}.jsonl"
-    ).resolve()
+    return (_ledger_registry_root().parent / "execution-journals" / f"{digest}.jsonl").resolve()
 
 
 def _lock_file(path, operation, code):
@@ -635,9 +607,7 @@ def _explicit_identity_fields(row):
     """Return semantic fields backed by this row rather than mapper defaults."""
     fields = row.get(_EXPLICIT_IDENTITY_FIELDS)
     if fields is None:
-        return {
-            key for key in _LEDGER_SEMANTIC_IDENTITY if row.get(key) not in (None, "")
-        }
+        return {key for key in _LEDGER_SEMANTIC_IDENTITY if row.get(key) not in (None, "")}
     if not isinstance(fields, (list, tuple, set, frozenset)):
         return set()
     return {str(key) for key in fields if key in _LEDGER_SEMANTIC_IDENTITY}
@@ -647,10 +617,7 @@ def session_config(config):
     if not isinstance(config, dict) or set(config) - set(_CONFIG):
         raise NormalizedApiError("configure_execution", "invalid_execution_config")
     result = {**_CONFIG, **config}
-    if any(
-        type(result[key]) is not bool
-        for key in ("market_data_only", "require_order_journal")
-    ):
+    if any(type(result[key]) is not bool for key in ("market_data_only", "require_order_journal")):
         raise NormalizedApiError("configure_execution", "invalid_execution_config")
     result["account_currencies"] = dict(result["account_currencies"] or {})
     account_ids = result["account_ids"]
@@ -658,11 +625,7 @@ def session_config(config):
         raise NormalizedApiError("configure_execution", "invalid_execution_config")
     normalized_accounts = {}
     for venue, account_id in account_ids.items():
-        if (
-            not isinstance(venue, str)
-            or not venue.strip()
-            or not isinstance(account_id, str)
-        ):
+        if not isinstance(venue, str) or not venue.strip() or not isinstance(account_id, str):
             raise NormalizedApiError("configure_execution", "invalid_execution_config")
         normalized_venue = venue.strip()
         normalized_account = (
@@ -721,9 +684,7 @@ def session_config(config):
         try:
             maximum_loss_bps = Decimal(str(maximum_loss_bps))
         except (InvalidOperation, TypeError, ValueError):
-            raise NormalizedApiError(
-                "configure_execution", "invalid_execution_config"
-            ) from None
+            raise NormalizedApiError("configure_execution", "invalid_execution_config") from None
         if not maximum_loss_bps.is_finite() or maximum_loss_bps <= 0:
             raise NormalizedApiError("configure_execution", "invalid_execution_config")
         # Decimal.normalize() applies the ambient decimal context and can round
@@ -739,9 +700,7 @@ def session_config(config):
     try:
         risk_max_age = Decimal(str(risk_max_age))
     except (InvalidOperation, TypeError, ValueError):
-        raise NormalizedApiError(
-            "configure_execution", "invalid_execution_config"
-        ) from None
+        raise NormalizedApiError("configure_execution", "invalid_execution_config") from None
     if (
         not risk_max_age.is_finite()
         or risk_max_age <= 0
@@ -761,15 +720,11 @@ def session_config(config):
 
 def _claim_identity(value):
     if not isinstance(value, dict):
-        raise NormalizedApiError(
-            "migrate_journal", "invalid_claim", definite_reject=True
-        )
+        raise NormalizedApiError("migrate_journal", "invalid_claim", definite_reject=True)
     provider = str(value.get("provider") or "").upper()
     environment = str(value.get("environment") or "").lower()
     account_id = _normalize_label(value.get("account_id"))
-    strategy_id = unicodedata.normalize(
-        "NFKC", str(value.get("strategy_id") or "default")
-    ).strip()
+    strategy_id = unicodedata.normalize("NFKC", str(value.get("strategy_id") or "default")).strip()
     credential_fingerprint = str(value.get("credential_fingerprint") or "").lower()
     if (
         not provider
@@ -780,15 +735,11 @@ def _claim_identity(value):
             credential_fingerprint
             and (
                 len(credential_fingerprint) != 64
-                or any(
-                    char not in "0123456789abcdef" for char in credential_fingerprint
-                )
+                or any(char not in "0123456789abcdef" for char in credential_fingerprint)
             )
         )
     ):
-        raise NormalizedApiError(
-            "migrate_journal", "invalid_claim", definite_reject=True
-        )
+        raise NormalizedApiError("migrate_journal", "invalid_claim", definite_reject=True)
     if provider in _CRYPTO_PROVIDERS and not credential_fingerprint:
         raise NormalizedApiError(
             "migrate_journal", "credential_fingerprint_required", definite_reject=True
@@ -845,9 +796,7 @@ def _atomic_write_jsonl(path, records):
             stream.flush()
             os.fsync(stream.fileno())
         if path.exists():
-            raise NormalizedApiError(
-                "migrate_journal", "destination_exists", definite_reject=True
-            )
+            raise NormalizedApiError("migrate_journal", "destination_exists", definite_reject=True)
         os.replace(temporary, path)
         if os.name != "nt":
             directory_fd = os.open(
@@ -875,9 +824,7 @@ def _atomic_write_json(path, value):
             os.fsync(stream.fileno())
         os.replace(temporary, path)
         if os.name != "nt":
-            directory_fd = os.open(
-                path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-            )
+            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
             try:
                 os.fsync(directory_fd)
             finally:
@@ -1059,8 +1006,7 @@ def _recover_migration_transaction(source, destination):
     try:
         destination_is_authority = bool(destination.exists()) and all(
             Path(str(manifest.get("active_journal") or "")).resolve() == destination
-            and int(manifest.get("fencing_epoch", -1))
-            == int(transaction["destination_epoch"])
+            and int(manifest.get("fencing_epoch", -1)) == int(transaction["destination_epoch"])
             for _digest, _handle, manifest in registry_leases
         )
         if transaction["status"] == "COMMITTED" or destination_is_authority:
@@ -1073,10 +1019,7 @@ def _recover_migration_transaction(source, destination):
             destination_records = [
                 json.loads(line) for line in destination.read_text().splitlines()
             ]
-            if (
-                _migration_records_hash(destination_records)
-                != transaction["destination_hash"]
-            ):
+            if _migration_records_hash(destination_records) != transaction["destination_hash"]:
                 raise NormalizedApiError(
                     "migrate_journal",
                     "committed_destination_hash_mismatch",
@@ -1084,9 +1027,7 @@ def _recover_migration_transaction(source, destination):
                 )
             transaction["status"] = "COMMITTED"
             _atomic_write_json(transaction_path, transaction)
-            receipt = _complete_migration_files(
-                transaction, transaction.get("remote_reconcile")
-            )
+            receipt = _complete_migration_files(transaction, transaction.get("remote_reconcile"))
             return _migration_report(transaction, receipt)
 
         previous = transaction.get("previous_manifests") or {}
@@ -1141,12 +1082,8 @@ def migrate_execution_journal(
             "migrate_journal", "invalid_source_or_destination", definite_reject=True
         )
     if not isinstance(claims, dict):
-        raise NormalizedApiError(
-            "migrate_journal", "invalid_claim", definite_reject=True
-        )
-    normalized_claims = {
-        str(key): _claim_identity(value) for key, value in claims.items()
-    }
+        raise NormalizedApiError("migrate_journal", "invalid_claim", definite_reject=True)
+    normalized_claims = {str(key): _claim_identity(value) for key, value in claims.items()}
     source_lease = _lock_existing_journal(source)
     registry_leases = []
     staging = None
@@ -1161,16 +1098,12 @@ def migrate_execution_journal(
         source_hash = hashlib.sha256(source_bytes).hexdigest()
         try:
             source_epoch = int(
-                _read_locked_json(source_lease, "migrate_journal").get(
-                    "fencing_epoch", 0
-                )
+                _read_locked_json(source_lease, "migrate_journal").get("fencing_epoch", 0)
             )
         except NormalizedApiError:
             raise
         claims_hash = hashlib.sha256(
-            json.dumps(
-                normalized_claims, sort_keys=True, separators=(",", ":")
-            ).encode()
+            json.dumps(normalized_claims, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
         freeze_record = {
             "schema_version": _JOURNAL_SCHEMA_VERSION,
@@ -1184,9 +1117,7 @@ def migrate_execution_journal(
         }
         _atomic_write_json(freeze, freeze_record)
 
-        for line_number, line in enumerate(
-            source_bytes.decode("utf-8").splitlines(), 1
-        ):
+        for line_number, line in enumerate(source_bytes.decode("utf-8").splitlines(), 1):
             try:
                 row = json.loads(line)
                 if not isinstance(row, dict) or not row.get("event"):
@@ -1213,13 +1144,8 @@ def migrate_execution_journal(
                     embedded, ledger_identity
                 ):
                     raise ValueError("embedded_identity_mismatch")
-                row_provider = (
-                    str(row.get("exchange_name") or "").partition("___")[0].upper()
-                )
-                if (
-                    row_provider in _CRYPTO_PROVIDERS
-                    and row_provider != identity["provider"]
-                ):
+                row_provider = str(row.get("exchange_name") or "").partition("___")[0].upper()
+                if row_provider in _CRYPTO_PROVIDERS and row_provider != identity["provider"]:
                     raise ValueError("claim_provider_mismatch")
                 migrated.append(
                     {
@@ -1265,9 +1191,7 @@ def migrate_execution_journal(
             for row in migrated
         }
         if len(identities) != 1:
-            freeze_record.update(
-                status="BLOCKED", reason="single_ledger_identity_required"
-            )
+            freeze_record.update(status="BLOCKED", reason="single_ledger_identity_required")
             _atomic_write_json(freeze, freeze_record)
             return _migration_blocked(
                 migration_id,
@@ -1341,9 +1265,7 @@ def migrate_execution_journal(
                 and Path(active).resolve() not in {source, destination}
                 and Path(active).exists()
             ):
-                freeze_record.update(
-                    status="BLOCKED", reason="ledger_has_other_authority"
-                )
+                freeze_record.update(status="BLOCKED", reason="ledger_has_other_authority")
                 _atomic_write_json(freeze, freeze_record)
                 return _migration_blocked(
                     migration_id,
@@ -1371,10 +1293,7 @@ def migrate_execution_journal(
         destination_epoch = (
             max(
                 source_epoch,
-                *(
-                    int(manifest.get("fencing_epoch", 0))
-                    for _d, _h, manifest in registry_leases
-                ),
+                *(int(manifest.get("fencing_epoch", 0)) for _d, _h, manifest in registry_leases),
             )
             + 1
         )
@@ -1393,10 +1312,7 @@ def migrate_execution_journal(
         staging = destination.with_name(f".{destination.name}.{migration_id}.validated")
         _atomic_write_jsonl(staging, finalized)
         validated = [json.loads(line) for line in staging.read_text().splitlines()]
-        if (
-            validated != finalized
-            or _migration_records_hash(validated) != destination_hash
-        ):
+        if validated != finalized or _migration_records_hash(validated) != destination_hash:
             raise NormalizedApiError(
                 "migrate_journal", "staging_validation_failed", definite_reject=True
             )
@@ -1512,11 +1428,7 @@ class _ExecutionSession:
             str(venue).strip(): str(fingerprint).lower()
             for venue, fingerprint in dict(credential_fingerprints or {}).items()
         }
-        identities = (
-            []
-            if self.config["market_data_only"]
-            else self._configured_crypto_identities()
-        )
+        identities = [] if self.config["market_data_only"] else self._configured_crypto_identities()
         if (
             not self.config["market_data_only"]
             and self.config["require_order_journal"]
@@ -1728,11 +1640,7 @@ class _ExecutionSession:
                         definite_reject=True,
                     )
                 active = manifest.get("active_journal")
-                if (
-                    active
-                    and Path(active).resolve() != self.path
-                    and Path(active).exists()
-                ):
+                if active and Path(active).resolve() != self.path and Path(active).exists():
                     raise NormalizedApiError(
                         "journal",
                         "authenticated_account_journal_conflict",
@@ -1921,9 +1829,7 @@ class _ExecutionSession:
             if prior_epoch >= self.fencing_epoch:
                 new_epoch = prior_epoch + 1
                 for existing in self.ledger_lock_files:
-                    existing_manifest = _read_locked_json(
-                        existing, "ctp_execution_approval"
-                    )
+                    existing_manifest = _read_locked_json(existing, "ctp_execution_approval")
                     existing_manifest.update(
                         owner_token=self.owner_token,
                         owner_pid=self.owner_pid,
@@ -1987,9 +1893,7 @@ class _ExecutionSession:
                 definite_reject=True,
             )
         environment_category = (
-            str(self.config["required_environments"].get(venue) or "demo")
-            .strip()
-            .lower()
+            str(self.config["required_environments"].get(venue) or "demo").strip().lower()
         )
         identity = {
             "provider": "CTP",
@@ -2087,9 +1991,7 @@ class _ExecutionSession:
             raise ValueError("invalid_approval_revocation_snapshot")
         snapshot_revoked_ids = snapshot_record.get("revoked_approval_ids", [])
         snapshot_revoked_nonces = snapshot_record.get("revoked_nonces", [])
-        if "revoked_approval_ids" in row and row["revoked_approval_ids"] != (
-            snapshot_revoked_ids
-        ):
+        if "revoked_approval_ids" in row and row["revoked_approval_ids"] != (snapshot_revoked_ids):
             raise ValueError("invalid_approval_revocation_snapshot")
         if "revoked_nonces" in row and row["revoked_nonces"] != snapshot_revoked_nonces:
             raise ValueError("invalid_approval_revocation_snapshot")
@@ -2097,14 +1999,9 @@ class _ExecutionSession:
         revoked_nonces = snapshot_revoked_nonces
         if not isinstance(revoked_ids, list) or not isinstance(revoked_nonces, list):
             raise ValueError("invalid_approval_revocation_snapshot")
-        if any(
-            not isinstance(item, str) or not item
-            for item in (*revoked_ids, *revoked_nonces)
-        ):
+        if any(not isinstance(item, str) or not item for item in (*revoked_ids, *revoked_nonces)):
             raise ValueError("invalid_approval_revocation_snapshot")
-        if len(revoked_ids) != len(set(revoked_ids)) or revoked_ids != sorted(
-            revoked_ids
-        ):
+        if len(revoked_ids) != len(set(revoked_ids)) or revoked_ids != sorted(revoked_ids):
             raise ValueError("invalid_approval_revocation_snapshot")
         if len(revoked_nonces) != len(set(revoked_nonces)) or revoked_nonces != sorted(
             revoked_nonces
@@ -2115,16 +2012,13 @@ class _ExecutionSession:
                 raise ValueError("approval_revocation_version_rollback")
             if (
                 version == self._ctp_approval_revocation_snapshot_version
-                and self._ctp_approval_revocation_snapshot_sha256
-                not in (None, snapshot_hash)
+                and self._ctp_approval_revocation_snapshot_sha256 not in (None, snapshot_hash)
             ):
                 raise ValueError("approval_revocation_snapshot_conflict")
             self._ctp_approval_revocation_snapshot_version = version
             self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
             self._ctp_approval_revoked_ids.update(str(item) for item in revoked_ids)
-            self._ctp_approval_revoked_nonces.update(
-                str(item) for item in revoked_nonces
-            )
+            self._ctp_approval_revoked_nonces.update(str(item) for item in revoked_nonces)
             return
         if event == "ctp_execution_approval_pre_authorized":
             approval_hash = str(row.get("approval_sha256") or "")
@@ -2218,10 +2112,7 @@ class _ExecutionSession:
             raise ValueError("recovery_token_identity_conflict")
         self._recovery_authorization_records[token] = record_key
         if event == "ctp_execution_recovery_arm_started":
-            if (
-                token in self._recovery_used_tokens
-                or token in self._recovery_pending_tokens
-            ):
+            if token in self._recovery_used_tokens or token in self._recovery_pending_tokens:
                 raise ValueError("duplicate_recovery_consumption_start")
             self._recovery_pending_tokens.add(token)
             return
@@ -2250,20 +2141,16 @@ class _ExecutionSession:
     @staticmethod
     def _budget_registry_scope(account_fingerprint):
         return hashlib.sha256(
-            "\0".join(("ctp_account", "CTP", str(account_fingerprint))).encode(
-                "utf-8"
-            )
+            "\0".join(("ctp_account", "CTP", str(account_fingerprint))).encode("utf-8")
         ).hexdigest()
 
     @staticmethod
     def _budget_context_key(context):
-        return tuple(
-            (
-                context.get("account_fingerprint"),
-                context.get("trading_day"),
-                context.get("connection_generation"),
-                context.get("environment_profile"),
-            )
+        return (
+            context.get("account_fingerprint"),
+            context.get("trading_day"),
+            context.get("connection_generation"),
+            context.get("environment_profile"),
         )
 
     @staticmethod
@@ -2373,12 +2260,8 @@ class _ExecutionSession:
             "candidate_budget_cny": cls._budget_decimal(
                 row.get("candidate_budget_cny"), "candidate_budget"
             ),
-            "ordinary_cap_cny": cls._budget_decimal(
-                row.get("ordinary_cap_cny"), "ordinary_cap"
-            ),
-            "ordinary_peak_cny": cls._budget_decimal(
-                row.get("ordinary_peak_cny"), "ordinary_peak"
-            ),
+            "ordinary_cap_cny": cls._budget_decimal(row.get("ordinary_cap_cny"), "ordinary_cap"),
+            "ordinary_peak_cny": cls._budget_decimal(row.get("ordinary_peak_cny"), "ordinary_peak"),
             "recovery_increment_cny": cls._budget_decimal(
                 row.get("recovery_increment_cny"), "recovery_increment"
             ),
@@ -2483,9 +2366,7 @@ class _ExecutionSession:
                 raise ValueError("duplicate_budget_transition")
             state["transition_ids"].add(transition_id)
             transition = str(row.get("transition") or "")
-            amount = self._budget_decimal(
-                row.get("amount_cny", 0), "transition_amount"
-            )
+            amount = self._budget_decimal(row.get("amount_cny", 0), "transition_amount")
             state["transitions"].append(
                 {"transition": transition, "amount_cny": amount, "transition_id": transition_id}
             )
@@ -2587,7 +2468,9 @@ class _ExecutionSession:
                     definite_reject=True,
                 )
         previous = self._ctp_budget_context
-        if previous is not None and self._budget_context_key(previous) != self._budget_context_key(context):
+        if previous is not None and self._budget_context_key(previous) != self._budget_context_key(
+            context
+        ):
             # A strictly newer connection generation of the same account
             # lineage establishes a fresh budget context.  This mirrors the
             # arming rule ("a strictly newer connection generation still
@@ -2599,10 +2482,8 @@ class _ExecutionSession:
             previous_generation = previous.get("connection_generation")
             current_generation = context.get("connection_generation")
             newer_generation = (
-                previous.get("account_fingerprint")
-                == context.get("account_fingerprint")
-                and previous.get("environment_profile")
-                == context.get("environment_profile")
+                previous.get("account_fingerprint") == context.get("account_fingerprint")
+                and previous.get("environment_profile") == context.get("environment_profile")
                 and isinstance(previous_generation, int)
                 and isinstance(current_generation, int)
                 and not isinstance(previous_generation, bool)
@@ -2659,7 +2540,9 @@ class _ExecutionSession:
         version = version or evidence.get("pnl_version")
         if not isinstance(version, str) or not version:
             version = hashlib.sha256(
-                json.dumps(list(values), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+                json.dumps(
+                    list(values), sort_keys=True, separators=(",", ":"), allow_nan=False
+                ).encode()
             ).hexdigest()
         known = []
         unknown = False
@@ -2768,8 +2651,7 @@ class _ExecutionSession:
             state["absorbed_cny"] = state.get("absorbed_cny", Decimal("0")) + amount
             state["reserved_amount_cny"] = max(
                 Decimal("0"),
-                state.get("reserved_amount_cny", state.get("amount_cny", Decimal("0")))
-                - amount,
+                state.get("reserved_amount_cny", state.get("amount_cny", Decimal("0"))) - amount,
             )
             if state["reserved_amount_cny"] == 0 and state.get("status") == "active":
                 state["status"] = "absorbed"
@@ -2784,7 +2666,10 @@ class _ExecutionSession:
         raise ValueError("unknown_budget_transition")
 
     def _require_budget_reservation_locked(self, capability, *, operation, mode=None):
-        if not _is_budget_reservation(capability, owner=self) or capability._session_token is not self._ctp_budget_session_token:
+        if (
+            not _is_budget_reservation(capability, owner=self)
+            or capability._session_token is not self._ctp_budget_session_token
+        ):
             raise NormalizedApiError(
                 operation, "ctp_budget_capability_invalid", definite_reject=True
             )
@@ -2794,16 +2679,16 @@ class _ExecutionSession:
                 operation, "ctp_budget_capability_unavailable", definite_reject=True
             )
         if mode is not None and state.get("mode") != mode:
-            raise NormalizedApiError(
-                operation, "ctp_budget_purpose_mismatch", definite_reject=True
-            )
+            raise NormalizedApiError(operation, "ctp_budget_purpose_mismatch", definite_reject=True)
         if state.get("synthetic"):
             raise NormalizedApiError(
                 operation, "ctp_budget_synthetic_not_write_eligible", definite_reject=True
             )
         if self.persistence_failed or self._ctp_budget_frozen_reason:
             raise NormalizedApiError(
-                operation, self._ctp_budget_frozen_reason or "persistence_failed", definite_reject=True
+                operation,
+                self._ctp_budget_frozen_reason or "persistence_failed",
+                definite_reject=True,
             )
         expires_at = state.get("expires_at")
         if expires_at:
@@ -2819,7 +2704,9 @@ class _ExecutionSession:
 
     def _budget_context_matches_current_locked(self, state, *, operation):
         context = state.get("context") or {}
-        if self._ctp_budget_context is not None and self._budget_context_key(context) != self._budget_context_key(self._ctp_budget_context):
+        if self._ctp_budget_context is not None and self._budget_context_key(
+            context
+        ) != self._budget_context_key(self._ctp_budget_context):
             raise NormalizedApiError(
                 operation, "budget_context_generation_mismatch", definite_reject=True
             )
@@ -2924,8 +2811,12 @@ class _ExecutionSession:
                         operation, "budget_recovery_authorization_missing", definite_reject=True
                     )
             reservation_id = reservation_id or evidence.get("reservation_id") or uuid.uuid4().hex
-            if not isinstance(reservation_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,256}", reservation_id):
-                raise NormalizedApiError(operation, "budget_invalid_reservation_id", definite_reject=True)
+            if not isinstance(reservation_id, str) or not re.fullmatch(
+                r"[A-Za-z0-9_.:-]{1,256}", reservation_id
+            ):
+                raise NormalizedApiError(
+                    operation, "budget_invalid_reservation_id", definite_reject=True
+                )
             if (
                 reservation_id in self._ctp_budget_reservations
                 or reservation_id in self._ctp_budget_registry_commits
@@ -3040,7 +2931,9 @@ class _ExecutionSession:
     # another account or reservation owner.
     reserve_ctp_budget = reserve_ctp_execution_budget
 
-    def attach_ctp_budget_reservation(self, capability, *, mode=None, operation="ctp_execution_budget"):
+    def attach_ctp_budget_reservation(
+        self, capability, *, mode=None, operation="ctp_execution_budget"
+    ):
         with self.mutex:
             state = self._require_budget_reservation_locked(
                 capability, operation=operation, mode=mode
@@ -3050,9 +2943,7 @@ class _ExecutionSession:
 
     def bind_ctp_budget_action(self, capability, *, action_id, operation, request=None):
         with self.mutex:
-            state = self._require_budget_reservation_locked(
-                capability, operation=operation
-            )
+            state = self._require_budget_reservation_locked(capability, operation=operation)
             if not isinstance(action_id, str) or not action_id:
                 raise NormalizedApiError(
                     operation, "budget_action_identity_required", definite_reject=True
@@ -3071,7 +2962,12 @@ class _ExecutionSession:
                 "action_id": action_id,
                 "operation": operation,
                 "request_digest": hashlib.sha256(
-                    json.dumps(self._budget_stringify(request or {}), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+                    json.dumps(
+                        self._budget_stringify(request or {}),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    ).encode()
                 ).hexdigest(),
             }
             self._journal("ctp_budget_action_started", row, allow_read_only=True)
@@ -3087,9 +2983,7 @@ class _ExecutionSession:
             return
         operation = str(context.get("operation") or "ctp_budget_dispatch")
         with self.mutex:
-            state = self._require_budget_reservation_locked(
-                capability, operation=operation
-            )
+            state = self._require_budget_reservation_locked(capability, operation=operation)
             self._budget_context_matches_current_locked(state, operation=operation)
             # No collector, hashing, file, or lock acquisition is allowed here.
             # Only the already-captured context, bounded expiry, and durable
@@ -3127,11 +3021,16 @@ class _ExecutionSession:
                 ).encode()
             ).hexdigest()
         if not isinstance(transition_id, str) or not transition_id:
-            raise NormalizedApiError(operation, "budget_transition_id_required", definite_reject=True)
+            raise NormalizedApiError(
+                operation, "budget_transition_id_required", definite_reject=True
+            )
         with self.mutex:
             state = self._require_budget_reservation_locked(capability, operation=operation)
             if transition in {"absorbed", "released"}:
-                if transition == "absorbed" and evidence.get("absorption_source_verified") is not True:
+                if (
+                    transition == "absorbed"
+                    and evidence.get("absorption_source_verified") is not True
+                ):
                     raise NormalizedApiError(
                         operation, "budget_absorption_unproven", definite_reject=True
                     )
@@ -3143,7 +3042,11 @@ class _ExecutionSession:
                 amount_cny = state.get("reserved_amount_cny", state["amount_cny"])
             amount = self._budget_decimal(amount_cny, "transition_amount")
             prior = next(
-                (item for item in state["transitions"] if item.get("transition_id") == transition_id),
+                (
+                    item
+                    for item in state["transitions"]
+                    if item.get("transition_id") == transition_id
+                ),
                 None,
             )
             if prior is not None:
@@ -3239,34 +3142,25 @@ class _ExecutionSession:
             if self.path is None:
                 return
             if self.lock_file is None or self.lock_file.closed:
-                raise NormalizedApiError(
-                    operation, "writer_lease_lost", definite_reject=True
-                )
+                raise NormalizedApiError(operation, "writer_lease_lost", definite_reject=True)
             lease = _read_locked_json(self.lock_file, operation)
             if (
                 lease.get("owner_token") != self.owner_token
                 or int(lease.get("fencing_epoch", -1)) != self.fencing_epoch
                 or int(lease.get("owner_pid", self.owner_pid)) != self.owner_pid
             ):
-                raise NormalizedApiError(
-                    operation, "writer_lease_fenced", definite_reject=True
-                )
+                raise NormalizedApiError(operation, "writer_lease_fenced", definite_reject=True)
             for handle in self.ledger_lock_files:
                 if handle.closed:
-                    raise NormalizedApiError(
-                        operation, "writer_lease_lost", definite_reject=True
-                    )
+                    raise NormalizedApiError(operation, "writer_lease_lost", definite_reject=True)
                 manifest = _read_locked_json(handle, operation)
                 if (
                     manifest.get("owner_token") != self.owner_token
                     or int(manifest.get("fencing_epoch", -1)) != self.fencing_epoch
                     or int(manifest.get("owner_pid", self.owner_pid)) != self.owner_pid
-                    or Path(str(manifest.get("active_journal") or "")).resolve()
-                    != self.path
+                    or Path(str(manifest.get("active_journal") or "")).resolve() != self.path
                 ):
-                    raise NormalizedApiError(
-                        operation, "writer_lease_fenced", definite_reject=True
-                    )
+                    raise NormalizedApiError(operation, "writer_lease_fenced", definite_reject=True)
 
     def _release_writer_leases(self):
         handle, self.lock_file = self.lock_file, None
@@ -3288,9 +3182,7 @@ class _ExecutionSession:
     def bind_credential_identity(self, venue, credential_fingerprint):
         """Bind a dynamically added crypto venue before any authenticated I/O."""
         fingerprint = str(credential_fingerprint or "").lower()
-        if len(fingerprint) != 64 or any(
-            char not in "0123456789abcdef" for char in fingerprint
-        ):
+        if len(fingerprint) != 64 or any(char not in "0123456789abcdef" for char in fingerprint):
             raise NormalizedApiError(
                 "configure_execution",
                 "invalid_credential_fingerprint",
@@ -3316,9 +3208,7 @@ class _ExecutionSession:
             identity = {
                 "provider": self._provider(venue),
                 "environment": self.config["required_environments"][venue],
-                "account_id": _credential_account_id(
-                    self._provider(venue), fingerprint
-                ),
+                "account_id": _credential_account_id(self._provider(venue), fingerprint),
                 "credential_fingerprint": fingerprint,
             }
             credential_digest = _identity_registry_digests(identity)[0]
@@ -3341,11 +3231,7 @@ class _ExecutionSession:
                         definite_reject=True,
                     )
                 active = manifest.get("active_journal")
-                if (
-                    active
-                    and Path(active).resolve() != self.path
-                    and Path(active).exists()
-                ):
+                if active and Path(active).resolve() != self.path and Path(active).exists():
                     raise NormalizedApiError(
                         "configure_execution",
                         "authenticated_account_journal_conflict",
@@ -3355,9 +3241,7 @@ class _ExecutionSession:
                 if prior_epoch >= self.fencing_epoch:
                     new_epoch = prior_epoch + 1
                     for existing in self.ledger_lock_files:
-                        existing_manifest = _read_locked_json(
-                            existing, "configure_execution"
-                        )
+                        existing_manifest = _read_locked_json(existing, "configure_execution")
                         existing_manifest.update(
                             owner_token=self.owner_token,
                             owner_pid=self.owner_pid,
@@ -3446,9 +3330,7 @@ class _ExecutionSession:
                     "journal", "authenticated_account_id_mismatch", definite_reject=True
                 )
             embedded = row.get("ledger_identity")
-            if isinstance(embedded, dict) and not _recorded_identity_matches(
-                embedded, identity
-            ):
+            if isinstance(embedded, dict) and not _recorded_identity_matches(embedded, identity):
                 raise NormalizedApiError(
                     "journal", "ledger_identity_mismatch", definite_reject=True
                 )
@@ -3478,9 +3360,7 @@ class _ExecutionSession:
             or ""
         )
         if not provider or not ledger_account:
-            raise NormalizedApiError(
-                "journal", "missing_ledger_identity", definite_reject=True
-            )
+            raise NormalizedApiError("journal", "missing_ledger_identity", definite_reject=True)
         return {
             "provider": provider,
             "environment": environment,
@@ -3548,19 +3428,13 @@ class _ExecutionSession:
                         or not row_owner
                         or row_epoch < previous_epoch
                         or row_epoch > self.fencing_epoch
-                        or (
-                            row_epoch in epoch_owners
-                            and epoch_owners[row_epoch] != row_owner
-                        )
+                        or (row_epoch in epoch_owners and epoch_owners[row_epoch] != row_owner)
                     ):
                         raise ValueError("invalid_journal_fencing")
                     epoch_owners[row_epoch] = row_owner
                     previous_epoch = row_epoch
                 if event in _RISK_TRANSITION_EVENTS:
-                    if (
-                        row.get("loss_limit_bps")
-                        != self.config["account_maximum_loss_bps"]
-                    ):
+                    if row.get("loss_limit_bps") != self.config["account_maximum_loss_bps"]:
                         raise ValueError("risk transition limit mismatch")
                     transition_time = row.get("transition_time")
                     if (
@@ -3617,9 +3491,7 @@ class _ExecutionSession:
                     self.trade_ids.add(self._trade_key(row.get("exchange_name"), row))
                 client_id = str(row.get("client_order_id") or "")
                 venue = row.get("exchange_name")
-                if not client_id and not (
-                    row.get("order_id") or row.get("venue_order_id")
-                ):
+                if not client_id and not (row.get("order_id") or row.get("venue_order_id")):
                     if event in {"intent", "cancel_intent", "order_update"}:
                         raise ValueError("missing_order_identity")
                     continue
@@ -3647,12 +3519,8 @@ class _ExecutionSession:
                 if event == "intent":
                     state["_intent_persisted"] = True
                     state["strategy_id"] = row.get("strategy_id")
-                    state["strategy_identity_sha256"] = row.get(
-                        "strategy_identity_sha256"
-                    )
-                    state["execution_arm_proof_sha256"] = row.get(
-                        "execution_arm_proof_sha256"
-                    )
+                    state["strategy_identity_sha256"] = row.get("strategy_identity_sha256")
+                    state["execution_arm_proof_sha256"] = row.get("execution_arm_proof_sha256")
                     state["connection_generation"] = row.get("connection_generation")
                     state["fencing_epoch"] = row.get("fencing_epoch")
                     self.historical_unknown.add(identity)
@@ -3682,9 +3550,7 @@ class _ExecutionSession:
             for state in self.orders.values():
                 if not state.get("terminal"):
                     self.historical_unknown.add(self._identifier(state))
-                    state["last_update"] = self._unknown(
-                        state, "restart_reconciliation"
-                    )
+                    state["last_update"] = self._unknown(state, "restart_reconciliation")
         except Exception:
             raise NormalizedApiError(
                 "journal", "unreadable_journal", definite_reject=True
@@ -3692,12 +3558,8 @@ class _ExecutionSession:
 
     def _journal(self, event, row, *, allow_read_only=False):
         if self.closed:
-            raise NormalizedApiError(
-                "journal", "execution_session_closed", definite_reject=True
-            )
-        if self.path is None or (
-            self.config["market_data_only"] and not allow_read_only
-        ):
+            raise NormalizedApiError("journal", "execution_session_closed", definite_reject=True)
+        if self.path is None or (self.config["market_data_only"] and not allow_read_only):
             return
         try:
             self._assert_writer_lease("journal")
@@ -3714,9 +3576,7 @@ class _ExecutionSession:
             with os.fdopen(fd, "a") as stream:
                 venue = row.get("exchange_name")
                 ledger_identity = (
-                    self._ledger_identity(venue, row.get("account_id"), row)
-                    if venue
-                    else None
+                    self._ledger_identity(venue, row.get("account_id"), row) if venue else None
                 )
                 envelope = {
                     **row,
@@ -3803,9 +3663,7 @@ class _ExecutionSession:
             )
         return snapshot, version, snapshot_hash
 
-    def _append_approval_revocation_snapshot(
-        self, record, snapshot, version, snapshot_hash
-    ):
+    def _append_approval_revocation_snapshot(self, record, snapshot, version, snapshot_hash):
         current = self._ctp_approval_revocation_snapshot_version
         if version < current:
             raise NormalizedApiError(
@@ -3853,9 +3711,7 @@ class _ExecutionSession:
         self._ctp_approval_revoked_ids.update(row["revoked_approval_ids"])
         self._ctp_approval_revoked_nonces.update(row["revoked_nonces"])
 
-    def record_ctp_execution_approval_preauthorization(
-        self, record, *, transition_guard=None
-    ):
+    def record_ctp_execution_approval_preauthorization(self, record, *, transition_guard=None):
         """Persist a verified read-only preauthorization without consuming it."""
         with self.mutex:
             self._ensure_approval_writer()
@@ -3886,12 +3742,10 @@ class _ExecutionSession:
                     "ctp_approval_revoked",
                     definite_reject=True,
                 )
-            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(
-                record
-            )
-            if approval_id in snapshot.get(
-                "revoked_approval_ids", []
-            ) or nonce in snapshot.get("revoked_nonces", []):
+            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(record)
+            if approval_id in snapshot.get("revoked_approval_ids", []) or nonce in snapshot.get(
+                "revoked_nonces", []
+            ):
                 raise NormalizedApiError(
                     "ctp_execution_approval",
                     "ctp_approval_revoked",
@@ -3905,8 +3759,7 @@ class _ExecutionSession:
                 )
             if (
                 version == self._ctp_approval_revocation_snapshot_version
-                and self._ctp_approval_revocation_snapshot_sha256
-                not in (None, snapshot_hash)
+                and self._ctp_approval_revocation_snapshot_sha256 not in (None, snapshot_hash)
             ):
                 raise NormalizedApiError(
                     "ctp_execution_approval",
@@ -3923,9 +3776,7 @@ class _ExecutionSession:
                 version, self._ctp_approval_revocation_snapshot_version
             )
             self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
-            self._ctp_approval_revoked_ids.update(
-                snapshot.get("revoked_approval_ids", [])
-            )
+            self._ctp_approval_revoked_ids.update(snapshot.get("revoked_approval_ids", []))
             self._ctp_approval_revoked_nonces.update(snapshot.get("revoked_nonces", []))
             if transition_guard is not None:
                 transition_guard("post_commit", record)
@@ -3977,12 +3828,10 @@ class _ExecutionSession:
                     "ctp_approval_revoked",
                     definite_reject=True,
                 )
-            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(
-                record
-            )
-            if approval_id in snapshot.get(
-                "revoked_approval_ids", []
-            ) or nonce in snapshot.get("revoked_nonces", []):
+            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(record)
+            if approval_id in snapshot.get("revoked_approval_ids", []) or nonce in snapshot.get(
+                "revoked_nonces", []
+            ):
                 raise NormalizedApiError(
                     "ctp_execution_approval",
                     "ctp_approval_revoked",
@@ -3996,8 +3845,7 @@ class _ExecutionSession:
                 )
             if (
                 version == self._ctp_approval_revocation_snapshot_version
-                and self._ctp_approval_revocation_snapshot_sha256
-                not in (None, snapshot_hash)
+                and self._ctp_approval_revocation_snapshot_sha256 not in (None, snapshot_hash)
             ):
                 raise NormalizedApiError(
                     "ctp_execution_approval",
@@ -4033,9 +3881,7 @@ class _ExecutionSession:
                 version, self._ctp_approval_revocation_snapshot_version
             )
             self._ctp_approval_revocation_snapshot_sha256 = snapshot_hash
-            self._ctp_approval_revoked_ids.update(
-                snapshot.get("revoked_approval_ids", [])
-            )
+            self._ctp_approval_revoked_ids.update(snapshot.get("revoked_approval_ids", []))
             self._ctp_approval_revoked_nonces.update(snapshot.get("revoked_nonces", []))
             if transition_guard is not None:
                 transition_guard("post_commit", record)
@@ -4051,13 +3897,9 @@ class _ExecutionSession:
         """Persist a newer trusted revocation snapshot in the existing journal."""
         with self.mutex:
             self._ensure_approval_writer()
-            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(
-                record
-            )
+            snapshot, version, snapshot_hash = self._approval_snapshot_from_record(record)
             previous = self._ctp_approval_revocation_snapshot_version
-            self._append_approval_revocation_snapshot(
-                record, snapshot, version, snapshot_hash
-            )
+            self._append_approval_revocation_snapshot(record, snapshot, version, snapshot_hash)
             return {
                 "revocation_snapshot_version": self._ctp_approval_revocation_snapshot_version,
                 "updated": version > previous,
@@ -4115,9 +3957,7 @@ class _ExecutionSession:
         if generation is None and isinstance(self._arm_proof, Mapping):
             generation = self._arm_proof.get("connection_generation")
         if type(generation) is int and generation > 0:
-            self._arm_revoked_generation = max(
-                int(self._arm_revoked_generation or 0), generation
-            )
+            self._arm_revoked_generation = max(int(self._arm_revoked_generation or 0), generation)
         self.config["market_data_only"] = True
         self._arm_proof_sha256 = None
         self._arm_state_reader = None
@@ -4135,9 +3975,7 @@ class _ExecutionSession:
         if self._arm_revoked_reason is None:
             self._arm_revoked_reason = reason
             self._arm_revoked_error_code = (
-                reason
-                if reason.startswith("execution_arm_")
-                else "execution_arm_revoked"
+                reason if reason.startswith("execution_arm_") else "execution_arm_revoked"
             )
 
     def disarm_execution(self, reason="execution_arm_revoked", *, generation=None):
@@ -4159,9 +3997,7 @@ class _ExecutionSession:
                 "revoked_generation": self._arm_revoked_generation,
             }
 
-    def prepare_execution_authorization(
-        self, reason="execution_authorization_prepared"
-    ):
+    def prepare_execution_authorization(self, reason="execution_authorization_prepared"):
         """Return to reusable read-only state before a fresh preflight.
 
         Preparing a never-armed session is idempotent and does not create a
@@ -4181,9 +4017,7 @@ class _ExecutionSession:
                 if isinstance(self._arm_proof, Mapping)
                 else None
             )
-            had_arm = bool(
-                self._arm_proof_sha256 or not self.config["market_data_only"]
-            )
+            had_arm = bool(self._arm_proof_sha256 or not self.config["market_data_only"])
             self._arm_managed = True
             if had_arm:
                 self._revoke_arm(normalized_reason, generation=prior_generation)
@@ -4427,9 +4261,7 @@ class _ExecutionSession:
 
         def consume(values_to_update):
             if kind == "close":
-                remaining = Decimal(str(values_to_update[index]["quantity"])) - Decimal(
-                    quantity
-                )
+                remaining = Decimal(str(values_to_update[index]["quantity"])) - Decimal(quantity)
                 if remaining > 0:
                     values_to_update[index] = {
                         **values_to_update[index],
@@ -4501,13 +4333,9 @@ class _ExecutionSession:
                         definite_reject=True,
                     )
                 ctp_venues = tuple(
-                    item
-                    for item in self.exchange_names
-                    if self._provider(item) == "CTP"
+                    item for item in self.exchange_names if self._provider(item) == "CTP"
                 )
-                arm_venue = str(
-                    venue or (ctp_venues[0] if len(ctp_venues) == 1 else "")
-                )
+                arm_venue = str(venue or (ctp_venues[0] if len(ctp_venues) == 1 else ""))
                 if (
                     not arm_venue
                     or self._provider(arm_venue) != "CTP"
@@ -4525,10 +4353,7 @@ class _ExecutionSession:
                 error = self._arm_context_error(normalized, context)
                 if error is not None:
                     raise NormalizedApiError(operation, error, definite_reject=True)
-                if (
-                    self.config["require_order_journal"] is not True
-                    or self.path is None
-                ):
+                if self.config["require_order_journal"] is not True or self.path is None:
                     raise NormalizedApiError(
                         operation, "order_journal_required", definite_reject=True
                     )
@@ -4699,19 +4524,13 @@ class _ExecutionSession:
         if isinstance(value, bool) or value in (None, ""):
             raise ValueError("missing recovery quantity")
         quantity = Decimal(str(value))
-        if (
-            not quantity.is_finite()
-            or quantity < 0
-            or quantity != quantity.to_integral_value()
-        ):
+        if not quantity.is_finite() or quantity < 0 or quantity != quantity.to_integral_value():
             raise ValueError("invalid recovery quantity")
         return quantity
 
     @classmethod
     def _recovery_row_instrument(cls, row, *, proof=None):
-        symbol = cls._recovery_value(
-            row, "symbol", "instrument", "instrument_id", "InstrumentID"
-        )
+        symbol = cls._recovery_value(row, "symbol", "instrument", "instrument_id", "InstrumentID")
         exchange_id = cls._recovery_value(row, "exchange_id", "ExchangeID")
         return _canonical_ctp_execution_instrument(proof, symbol, exchange_id)
 
@@ -4769,9 +4588,7 @@ class _ExecutionSession:
             return "recovery_account_mismatch"
         if str(row.get("trading_day") or "") != proof["trading_day"]:
             return "recovery_trading_day_mismatch"
-        if self._recovery_row_instrument(
-            row, proof=proof
-        ) not in _execution_arm_instruments(proof):
+        if self._recovery_row_instrument(row, proof=proof) not in _execution_arm_instruments(proof):
             return "recovery_instrument_mismatch"
         cycle_id = row.get("execution_cycle_id")
         if not isinstance(cycle_id, str) or not cycle_id or len(cycle_id) > 128:
@@ -4880,11 +4697,7 @@ class _ExecutionSession:
             self._recovery_plan
         ):
             return True
-        if (
-            self.path is None
-            or not self.path.is_file()
-            or self.path.stat().st_size == 0
-        ):
+        if self.path is None or not self.path.is_file() or self.path.stat().st_size == 0:
             return False
         intents, trades, errors = self._recovery_journal_records(
             proof=proof,
@@ -4904,16 +4717,10 @@ class _ExecutionSession:
                 filled = self._recovery_quantity(last_update, "filled")
                 durable_fills = sum(
                     (
-                        self._recovery_quantity(
-                            trade, "size", "quantity", "volume", "Volume"
-                        )
+                        self._recovery_quantity(trade, "size", "quantity", "volume", "Volume")
                         for trade in trades
                         if str(trade.get("trading_day") or "")
-                        == str(
-                            last_update.get("trading_day")
-                            or state.get("trading_day")
-                            or ""
-                        )
+                        == str(last_update.get("trading_day") or state.get("trading_day") or "")
                         and self._recovery_order_matches(state, trade)
                     ),
                     Decimal(0),
@@ -4941,16 +4748,13 @@ class _ExecutionSession:
                 if (
                     cycle not in intent_cycles
                     or sum(
-                        cycle_key(intent) == cycle
-                        and self._recovery_order_matches(intent, trade)
+                        cycle_key(intent) == cycle and self._recovery_order_matches(intent, trade)
                         for intent in intents
                     )
                     != 1
                 ):
                     return True
-                quantity = self._recovery_quantity(
-                    trade, "size", "quantity", "volume", "Volume"
-                )
+                quantity = self._recovery_quantity(trade, "size", "quantity", "volume", "Volume")
                 side = self._recovery_row_side(trade)
                 offset = self._canonical_recovery_offset(
                     self._recovery_value(trade, "offset", "trade_offset", "OffsetFlag")
@@ -4984,12 +4788,7 @@ class _ExecutionSession:
     @staticmethod
     def _recovery_order_active(row):
         status = (
-            str(
-                row.get("status")
-                or row.get("OrderStatus")
-                or row.get("order_status")
-                or ""
-            )
+            str(row.get("status") or row.get("OrderStatus") or row.get("order_status") or "")
             .strip()
             .lower()
         )
@@ -5047,17 +4846,15 @@ class _ExecutionSession:
             return "recovery_remote_generation_missing_or_mismatch"
         if row.get("evidence_complete") is not True:
             return "recovery_remote_evidence_incomplete"
-        if self._recovery_row_instrument(
-            row, proof=proof
-        ) not in _execution_arm_instruments(proof):
+        if self._recovery_row_instrument(row, proof=proof) not in _execution_arm_instruments(proof):
             return "recovery_remote_instrument_mismatch"
         return None
 
     def _recovery_active_order_matches_intent(self, intent, order):
         proof = self._arm_proof
-        if self._recovery_row_instrument(
-            intent, proof=proof
-        ) != self._recovery_row_instrument(order, proof=proof):
+        if self._recovery_row_instrument(intent, proof=proof) != self._recovery_row_instrument(
+            order, proof=proof
+        ):
             return False
         if not self._recovery_order_matches(intent, order):
             return False
@@ -5086,8 +4883,7 @@ class _ExecutionSession:
         except (InvalidOperation, TypeError, ValueError):
             return False
         hedge_flag = str(
-            self._recovery_value(order, "hedge_flag", "CombHedgeFlag", "HedgeFlag")
-            or ""
+            self._recovery_value(order, "hedge_flag", "CombHedgeFlag", "HedgeFlag") or ""
         ).strip()
         return bool(
             intent_side in {"buy", "sell"}
@@ -5171,8 +4967,7 @@ class _ExecutionSession:
             if (
                 round_result.get("account_fingerprint") != proof["account_fingerprint"]
                 or round_result.get("trading_day") != proof["trading_day"]
-                or round_result.get("connection_generation")
-                != proof["connection_generation"]
+                or round_result.get("connection_generation") != proof["connection_generation"]
                 or round_result.get("snapshot_sha256") != snapshot_hash
             ):
                 errors.append("recovery_query_identity_mismatch")
@@ -5208,10 +5003,7 @@ class _ExecutionSession:
         if (
             not isinstance(private_revisions, Mapping)
             or set(private_revisions) != {"start", "end"}
-            or any(
-                type(value) is not int or value < 0
-                for value in private_revisions.values()
-            )
+            or any(type(value) is not int or value < 0 for value in private_revisions.values())
             or private_revisions.get("start") != private_revisions.get("end")
             or private_revisions.get("end") != self._recovery_private_event_revision
         ):
@@ -5220,10 +5012,7 @@ class _ExecutionSession:
         if (
             not isinstance(ingress_revisions, Mapping)
             or set(ingress_revisions) != {"start", "end"}
-            or any(
-                type(value) is not int or value < 0
-                for value in ingress_revisions.values()
-            )
+            or any(type(value) is not int or value < 0 for value in ingress_revisions.values())
             or ingress_revisions.get("start") != ingress_revisions.get("end")
             or ingress_revisions.get("end") != self._recovery_private_ingress_revision
         ):
@@ -5232,9 +5021,7 @@ class _ExecutionSession:
         if (
             not isinstance(ingress_epochs, Mapping)
             or set(ingress_epochs) != {"start", "end"}
-            or any(
-                type(value) is not int or value < 0 for value in ingress_epochs.values()
-            )
+            or any(type(value) is not int or value < 0 for value in ingress_epochs.values())
             or ingress_epochs.get("start") != ingress_epochs.get("end")
         ):
             errors.append("recovery_private_ingress_epoch_invalid")
@@ -5252,14 +5039,10 @@ class _ExecutionSession:
         """Return whether no private order/trade event arrived after ``plan``."""
         barrier = plan.get("query_barrier") if isinstance(plan, Mapping) else None
         event_revisions = (
-            barrier.get("private_event_revisions")
-            if isinstance(barrier, Mapping)
-            else None
+            barrier.get("private_event_revisions") if isinstance(barrier, Mapping) else None
         )
         ingress_revisions = (
-            barrier.get("private_ingress_revisions")
-            if isinstance(barrier, Mapping)
-            else None
+            barrier.get("private_ingress_revisions") if isinstance(barrier, Mapping) else None
         )
         return bool(
             isinstance(event_revisions, Mapping)
@@ -5297,15 +5080,12 @@ class _ExecutionSession:
             for instrument in instruments
         }
         frozen_by_side = {
-            instrument: {"long": Decimal(0), "short": Decimal(0)}
-            for instrument in instruments
+            instrument: {"long": Decimal(0), "short": Decimal(0)} for instrument in instruments
         }
         reasons = []
         if failure_reason not in (None, ""):
             reason = str(failure_reason).strip().lower()
-            reasons.append(
-                reason if _ARM_REASON_RE.fullmatch(reason) else "recovery_query_failed"
-            )
+            reasons.append(reason if _ARM_REASON_RE.fullmatch(reason) else "recovery_query_failed")
         intents, journal_trades, journal_errors = self._recovery_journal_records()
         reasons.extend(journal_errors)
         journal_sha256 = None
@@ -5349,9 +5129,7 @@ class _ExecutionSession:
                 if side not in {"long", "short"}:
                     reasons.append("ambiguous_position_side")
                     continue
-                today_value = self._recovery_value(
-                    row, "today", "today_position", "TodayPosition"
-                )
+                today_value = self._recovery_value(row, "today", "today_position", "TodayPosition")
                 yesterday_value = self._recovery_value(
                     row, "yesterday", "yd_position", "YdPosition"
                 )
@@ -5396,8 +5174,7 @@ class _ExecutionSession:
         intent_order_keys = set()
         for intent in intents:
             client_identity = str(
-                self._recovery_value(intent, "client_order_id", "order_ref", "OrderRef")
-                or ""
+                self._recovery_value(intent, "client_order_id", "order_ref", "OrderRef") or ""
             ).strip()
             if not client_identity or client_identity in intent_order_keys:
                 reasons.append("recovery_intent_identity_invalid")
@@ -5406,8 +5183,7 @@ class _ExecutionSession:
         journal_trade_by_key = {}
         cycle_exposure = defaultdict(
             lambda: {
-                instrument: {"long": Decimal(0), "short": Decimal(0)}
-                for instrument in instruments
+                instrument: {"long": Decimal(0), "short": Decimal(0)} for instrument in instruments
             }
         )
         try:
@@ -5427,9 +5203,7 @@ class _ExecutionSession:
                     reasons.append("recovery_trade_intent_mismatch")
                     continue
                 journal_trade_by_key[key] = trade
-                quantity = self._recovery_quantity(
-                    trade, "size", "quantity", "volume", "Volume"
-                )
+                quantity = self._recovery_quantity(trade, "size", "quantity", "volume", "Volume")
                 side = self._recovery_row_side(trade)
                 offset = self._canonical_recovery_offset(
                     self._recovery_value(trade, "offset", "trade_offset", "OffsetFlag")
@@ -5439,9 +5213,9 @@ class _ExecutionSession:
                 if side not in {"buy", "sell"}:
                     reasons.append("recovery_trade_side_invalid")
                 elif role == "entry" and offset == "open":
-                    cycle_exposure[cycle][instrument][
-                        "long" if side == "buy" else "short"
-                    ] += quantity
+                    cycle_exposure[cycle][instrument]["long" if side == "buy" else "short"] += (
+                        quantity
+                    )
                 elif role in {"exit", "recovery_exit"} and offset in {
                     "close",
                     "close_today",
@@ -5511,9 +5285,7 @@ class _ExecutionSession:
             cycle
             for cycle, per_instrument in cycle_exposure.items()
             if any(
-                amount != 0
-                for exposure in per_instrument.values()
-                for amount in exposure.values()
+                amount != 0 for exposure in per_instrument.values() for amount in exposure.values()
             )
         }
         cycles = nonzero_cycles | order_cycles
@@ -5527,12 +5299,8 @@ class _ExecutionSession:
                     reasons.append("recovery_owned_position_negative")
                     continue
                 remote = remote_by_instrument[instrument]
-                remote_long = Decimal(remote["long_today"]) + Decimal(
-                    remote["long_yesterday"]
-                )
-                remote_short = Decimal(remote["short_today"]) + Decimal(
-                    remote["short_yesterday"]
-                )
+                remote_long = Decimal(remote["long_today"]) + Decimal(remote["long_yesterday"])
+                remote_short = Decimal(remote["short_today"]) + Decimal(remote["short_yesterday"])
                 if exposure["long"] != remote_long or exposure["short"] != remote_short:
                     reasons.append("recovery_owned_position_mismatch")
                 else:
@@ -5545,12 +5313,8 @@ class _ExecutionSession:
             reasons.append("unowned_position_present")
 
         for position in remote_by_instrument.values():
-            remote_long = Decimal(position["long_today"]) + Decimal(
-                position["long_yesterday"]
-            )
-            remote_short = Decimal(position["short_today"]) + Decimal(
-                position["short_yesterday"]
-            )
+            remote_long = Decimal(position["long_today"]) + Decimal(position["long_yesterday"])
+            remote_short = Decimal(position["short_today"]) + Decimal(position["short_yesterday"])
             if remote_long > 0 and remote_short > 0:
                 reasons.append("dual_side_position_present")
 
@@ -5562,9 +5326,7 @@ class _ExecutionSession:
                     "symbol": self._recovery_value(
                         intent, "symbol", "InstrumentID", "instrument_id"
                     ),
-                    "exchange_id": self._recovery_value(
-                        intent, "exchange_id", "ExchangeID"
-                    ),
+                    "exchange_id": self._recovery_value(intent, "exchange_id", "ExchangeID"),
                     "client_order_id": self._recovery_value(
                         order, "client_order_id", "OrderRef", "order_ref"
                     ),
@@ -5575,9 +5337,7 @@ class _ExecutionSession:
                         order, "order_ref", "OrderRef", "client_order_id"
                     ),
                     "front_id": self._recovery_value(order, "front_id", "FrontID"),
-                    "session_id": self._recovery_value(
-                        order, "session_id", "SessionID"
-                    ),
+                    "session_id": self._recovery_value(order, "session_id", "SessionID"),
                 }
             )
 
@@ -5586,12 +5346,8 @@ class _ExecutionSession:
             for canonical_instrument in instruments:
                 exchange_id, instrument_id = canonical_instrument.split(".", 1)
                 remote = remote_by_instrument[canonical_instrument]
-                remote_long = Decimal(remote["long_today"]) + Decimal(
-                    remote["long_yesterday"]
-                )
-                remote_short = Decimal(remote["short_today"]) + Decimal(
-                    remote["short_yesterday"]
-                )
+                remote_long = Decimal(remote["long_today"]) + Decimal(remote["long_yesterday"])
+                remote_short = Decimal(remote["short_today"]) + Decimal(remote["short_yesterday"])
                 if exchange_id in {"SHFE", "INE"}:
                     close_buckets = (
                         ("long", "today", "close_today"),
@@ -5602,8 +5358,7 @@ class _ExecutionSession:
                     for position_side, bucket, offset in close_buckets:
                         key = f"{position_side}_{bucket}"
                         available = (
-                            Decimal(remote[key])
-                            - frozen_position[canonical_instrument][key]
+                            Decimal(remote[key]) - frozen_position[canonical_instrument][key]
                         )
                         if available <= 0:
                             continue
@@ -5624,9 +5379,7 @@ class _ExecutionSession:
                         ("long", remote_long),
                         ("short", remote_short),
                     ):
-                        available = (
-                            total - frozen_by_side[canonical_instrument][position_side]
-                        )
+                        available = total - frozen_by_side[canonical_instrument][position_side]
                         if available <= 0:
                             continue
                         allowed_closes.append(
@@ -5754,9 +5507,7 @@ class _ExecutionSession:
             if failure_reason not in (None, ""):
                 reason = str(failure_reason).strip().lower()
                 reasons.append(
-                    reason
-                    if _ARM_REASON_RE.fullmatch(reason)
-                    else "recovery_query_failed"
+                    reason if _ARM_REASON_RE.fullmatch(reason) else "recovery_query_failed"
                 )
             intents, journal_trades, journal_errors = self._recovery_journal_records()
             reasons.extend(journal_errors)
@@ -5777,9 +5528,7 @@ class _ExecutionSession:
                 positions = snapshot["positions"]
                 orders = snapshot["orders"]
                 trades = snapshot["trades"]
-                if not all(
-                    isinstance(value, (list, tuple)) for value in snapshot.values()
-                ):
+                if not all(isinstance(value, (list, tuple)) for value in snapshot.values()):
                     reasons.append("recovery_snapshot_invalid")
                     positions = orders = trades = ()
             del stable  # Compatibility only; callers cannot self-certify stability.
@@ -5814,19 +5563,15 @@ class _ExecutionSession:
                         reasons.append("position_bucket_evidence_missing")
                         continue
                     today = self._recovery_quantity({"value": today_value}, "value")
-                    yesterday = self._recovery_quantity(
-                        {"value": yesterday_value}, "value"
-                    )
+                    yesterday = self._recovery_quantity({"value": yesterday_value}, "value")
                     if today < 0 or yesterday < 0 or today + yesterday != quantity:
                         reasons.append("position_bucket_mismatch")
                         continue
                     remote_position[f"{side}_today"] = self._canonical_recovery_number(
                         Decimal(remote_position[f"{side}_today"]) + today
                     )
-                    remote_position[f"{side}_yesterday"] = (
-                        self._canonical_recovery_number(
-                            Decimal(remote_position[f"{side}_yesterday"]) + yesterday
-                        )
+                    remote_position[f"{side}_yesterday"] = self._canonical_recovery_number(
+                        Decimal(remote_position[f"{side}_yesterday"]) + yesterday
                     )
                     frozen_names = (
                         ("long_frozen", "LongFrozen")
@@ -5870,9 +5615,7 @@ class _ExecutionSession:
                     reasons.append("recovery_intent_identity_invalid")
                 intent_order_keys.add(client_identity)
             journal_trade_by_key = {}
-            cycle_exposure = defaultdict(
-                lambda: {"long": Decimal(0), "short": Decimal(0)}
-            )
+            cycle_exposure = defaultdict(lambda: {"long": Decimal(0), "short": Decimal(0)})
             try:
                 for trade in journal_trades:
                     key = self._recovery_trade_key(trade)
@@ -5885,18 +5628,14 @@ class _ExecutionSession:
                     )
                     side = self._recovery_row_side(trade)
                     offset = self._canonical_recovery_offset(
-                        self._recovery_value(
-                            trade, "offset", "trade_offset", "OffsetFlag"
-                        )
+                        self._recovery_value(trade, "offset", "trade_offset", "OffsetFlag")
                     )
                     cycle = trade["execution_cycle_id"]
                     role = trade["execution_role"]
                     if side not in {"buy", "sell"}:
                         reasons.append("recovery_trade_side_invalid")
                     elif role == "entry" and offset == "open":
-                        cycle_exposure[cycle][
-                            "long" if side == "buy" else "short"
-                        ] += quantity
+                        cycle_exposure[cycle]["long" if side == "buy" else "short"] += quantity
                     elif role in {"exit", "recovery_exit"} and offset in {
                         "close",
                         "close_today",
@@ -6003,9 +5742,7 @@ class _ExecutionSession:
                         "symbol": self._recovery_value(
                             intent, "symbol", "InstrumentID", "instrument_id"
                         ),
-                        "exchange_id": self._recovery_value(
-                            intent, "exchange_id", "ExchangeID"
-                        ),
+                        "exchange_id": self._recovery_value(intent, "exchange_id", "ExchangeID"),
                         "client_order_id": self._recovery_value(
                             order, "client_order_id", "OrderRef", "order_ref"
                         ),
@@ -6016,9 +5753,7 @@ class _ExecutionSession:
                             order, "order_ref", "OrderRef", "client_order_id"
                         ),
                         "front_id": self._recovery_value(order, "front_id", "FrontID"),
-                        "session_id": self._recovery_value(
-                            order, "session_id", "SessionID"
-                        ),
+                        "session_id": self._recovery_value(order, "session_id", "SessionID"),
                     }
                 )
             allowed_closes = []
@@ -6087,11 +5822,7 @@ class _ExecutionSession:
                 allowed_closes = []
                 allowed_actions = []
                 cycle_id = None
-            elif (
-                cycle_id is None
-                and not active_orders
-                and remote_long == remote_short == 0
-            ):
+            elif cycle_id is None and not active_orders and remote_long == remote_short == 0:
                 status = "FLAT"
                 allowed_actions = ["complete"]
             else:
@@ -6208,14 +5939,10 @@ class _ExecutionSession:
                     )
                 recovery_record = dict(recovery_authorization_record)
                 if (
-                    recovery_record.get("recovery_token_sha256")
-                    != recovery_token_sha256
-                    or recovery_record.get("recovery_plan_sha256")
-                    != recovery_plan_digest(plan)
+                    recovery_record.get("recovery_token_sha256") != recovery_token_sha256
+                    or recovery_record.get("recovery_plan_sha256") != recovery_plan_digest(plan)
                     or recovery_record.get("recovery_action_sha256")
-                    != recovery_action_digest(
-                        list(recovery_record.get("recovery_actions") or ())
-                    )
+                    != recovery_action_digest(list(recovery_record.get("recovery_actions") or ()))
                     or recovery_record.get("purpose") != "ctp_execution_recovery"
                 ):
                     raise NormalizedApiError(
@@ -6267,8 +5994,7 @@ class _ExecutionSession:
                 not isinstance(authorization_context, Mapping)
                 or authorization_context.get("strategy_identity_sha256")
                 != self.config["strategy_identity_sha256"]
-                or authorization_context.get("execution_cycle_id")
-                != plan.get("execution_cycle_id")
+                or authorization_context.get("execution_cycle_id") != plan.get("execution_cycle_id")
             ):
                 raise NormalizedApiError(
                     operation,
@@ -6339,9 +6065,7 @@ class _ExecutionSession:
                 or plan.get("status") == "MANUAL_INTERVENTION"
                 or not self._recovery_plan_private_fence_current(plan)
             ):
-                raise NormalizedApiError(
-                    operation, "invalid_recovery_token", definite_reject=True
-                )
+                raise NormalizedApiError(operation, "invalid_recovery_token", definite_reject=True)
             if (
                 plan.get("status") == "RECOVERABLE"
                 and recovery_token_sha256 not in self._recovery_used_tokens
@@ -6376,9 +6100,7 @@ class _ExecutionSession:
                     origin="complete_execution_recovery",
                     allow_read_only_journal=True,
                 )
-            self._recovery_completed_preflight_sha256 = self._arm_proof[
-                "preflight_sha256"
-            ]
+            self._recovery_completed_preflight_sha256 = self._arm_proof["preflight_sha256"]
             self.config["market_data_only"] = True
             self._arm_proof_sha256 = None
             self._arm_proof = None
@@ -6450,10 +6172,7 @@ class _ExecutionSession:
             return
         operation = context.get("operation")
         with self.mutex:
-            if (
-                context.get("_async_handoff")
-                and self._active_recovery_context is not context
-            ):
+            if context.get("_async_handoff") and self._active_recovery_context is not context:
                 self._revoke_arm("ctp_recovery_authorization_invalid")
                 raise NormalizedApiError(
                     operation,
@@ -6527,9 +6246,7 @@ class _ExecutionSession:
                 definite_reject=True,
             )
         request = self._recovery_budget_request
-        if not isinstance(request, dict) or any(
-            value in (None, "") for value in request.values()
-        ):
+        if not isinstance(request, dict) or any(value in (None, "") for value in request.values()):
             raise NormalizedApiError(
                 operation,
                 "ctp_recovery_budget_capability_missing",
@@ -6609,9 +6326,7 @@ class _ExecutionSession:
                     != {"strategy_identity_sha256", "execution_cycle_id"}
                     or authorization_context.get("strategy_identity_sha256")
                     != self.config["strategy_identity_sha256"]
-                    or not isinstance(
-                        authorization_context.get("execution_cycle_id"), str
-                    )
+                    or not isinstance(authorization_context.get("execution_cycle_id"), str)
                     or not authorization_context["execution_cycle_id"]
                 ):
                     raise NormalizedApiError(
@@ -6630,13 +6345,9 @@ class _ExecutionSession:
                         definite_reject=True,
                     )
                 ctp_venues = tuple(
-                    item
-                    for item in self.exchange_names
-                    if self._provider(item) == "CTP"
+                    item for item in self.exchange_names if self._provider(item) == "CTP"
                 )
-                arm_venue = str(
-                    venue or (ctp_venues[0] if len(ctp_venues) == 1 else "")
-                )
+                arm_venue = str(venue or (ctp_venues[0] if len(ctp_venues) == 1 else ""))
                 if (
                     not arm_venue
                     or self._provider(arm_venue) != "CTP"
@@ -6659,8 +6370,7 @@ class _ExecutionSession:
                     raise NormalizedApiError(operation, code, definite_reject=True)
                 if (
                     self._recovery_completed_preflight_sha256 is not None
-                    and normalized["preflight_sha256"]
-                    == self._recovery_completed_preflight_sha256
+                    and normalized["preflight_sha256"] == self._recovery_completed_preflight_sha256
                     and not recovery_arm
                 ):
                     raise NormalizedApiError(
@@ -6677,9 +6387,7 @@ class _ExecutionSession:
                         error = self._current_arm_error()
                         if error is not None:
                             self._revoke_arm(error)
-                            raise NormalizedApiError(
-                                operation, error, definite_reject=True
-                            )
+                            raise NormalizedApiError(operation, error, definite_reject=True)
                         return {
                             "armed": True,
                             "market_data_only": False,
@@ -6693,10 +6401,7 @@ class _ExecutionSession:
                 error = self._arm_context_error(normalized, context)
                 if error is not None:
                     raise NormalizedApiError(operation, error, definite_reject=True)
-                if (
-                    self.config["require_order_journal"] is not True
-                    or self.path is None
-                ):
+                if self.config["require_order_journal"] is not True or self.path is None:
                     raise NormalizedApiError(
                         operation, "order_journal_required", definite_reject=True
                     )
@@ -6800,9 +6505,7 @@ class _ExecutionSession:
                 self._last_arm_proof_sha256 = proof_sha256
                 self._arm_state_reader = state_reader
                 self._ctp_execution_authorization_context = (
-                    dict(authorization_context)
-                    if authorization_context is not None
-                    else None
+                    dict(authorization_context) if authorization_context is not None else None
                 )
                 self._arm_revoked_reason = None
                 self._arm_revoked_error_code = None
@@ -6875,15 +6578,10 @@ class _ExecutionSession:
                 if self.config["market_data_only"]:
                     code = "market_data_only"
                 elif placement and (
-                    self.persistence_failed
-                    or (not recovery_action and self._unknown_ids())
+                    self.persistence_failed or (not recovery_action and self._unknown_ids())
                 ):
                     code = "unresolved_or_undurable_journal"
-                elif (
-                    placement
-                    and self.config["require_order_journal"]
-                    and self.path is None
-                ):
+                elif placement and self.config["require_order_journal"] and self.path is None:
                     code = "order_journal_required"
                 elif (
                     placement
@@ -6900,11 +6598,7 @@ class _ExecutionSession:
                         code = self.risk_measurement_error
                     else:
                         code = self._risk_freshness_error()
-            if (
-                code is None
-                and self._recovery_mode
-                and callable(self._recovery_write_guard)
-            ):
+            if code is None and self._recovery_mode and callable(self._recovery_write_guard):
                 try:
                     self._recovery_write_guard(
                         operation,
@@ -6936,13 +6630,9 @@ class _ExecutionSession:
         """Return the configured ledger identity for one authenticated venue."""
         with self.mutex:
             identity = self._ledger_identity(venue)
-            is_ctp = self._provider(venue) == "CTP" and bool(
-                identity.get("account_fingerprint")
-            )
+            is_ctp = self._provider(venue) == "CTP" and bool(identity.get("account_fingerprint"))
             account_alias = (
-                identity["account_id"]
-                if is_ctp
-                else self.config["account_ids"].get(venue)
+                identity["account_id"] if is_ctp else self.config["account_ids"].get(venue)
             )
             return {
                 **identity,
@@ -6986,8 +6676,7 @@ class _ExecutionSession:
         """Return the authenticated venues covered by this execution ledger."""
         venues = {
             venue
-            for venue in set(self.exchange_names)
-            | set(self.config["required_environments"])
+            for venue in set(self.exchange_names) | set(self.config["required_environments"])
             if self._provider(venue) in _CRYPTO_PROVIDERS
         }
         if isinstance(self._ctp_execution_identity, Mapping) and self._arm_venue:
@@ -7000,9 +6689,7 @@ class _ExecutionSession:
             return self.risk_record is None
 
     def _risk_max_age_ns(self):
-        return int(
-            Decimal(self.config["account_risk_max_age_seconds"]) * Decimal("1000000000")
-        )
+        return int(Decimal(self.config["account_risk_max_age_seconds"]) * Decimal("1000000000"))
 
     def _risk_freshness_error(self, now_monotonic_ns=None):
         """Return the current placement blocker for an unverified risk snapshot."""
@@ -7060,9 +6747,7 @@ class _ExecutionSession:
         )
 
     def _configured_risk_currency(self, venue):
-        currency = self.config["account_currencies"].get(
-            venue, self.config["account_currency"]
-        )
+        currency = self.config["account_currencies"].get(venue, self.config["account_currency"])
         return str(currency).strip().upper() if currency not in (None, "") else None
 
     def _validated_risk_baseline(self, baseline, expected_venues):
@@ -7185,8 +6870,7 @@ class _ExecutionSession:
                     self._journal_loss_state == "breached"
                     or (
                         self._journal_loss_state == "reset"
-                        and value.get("last_loss_reset_id")
-                        != self._committed_loss_reset_id
+                        and value.get("last_loss_reset_id") != self._committed_loss_reset_id
                     )
                 ):
                     transition_mismatch = "account_loss_transition_mismatch"
@@ -7235,12 +6919,9 @@ class _ExecutionSession:
     def _decimal_work_precision(*values):
         """Return enough precision for exact finite sums/products plus a ratio."""
         decimals = [
-            value if isinstance(value, Decimal) else Decimal(str(value))
-            for value in values
+            value if isinstance(value, Decimal) else Decimal(str(value)) for value in values
         ]
-        integer_digits = max(
-            (max(value.adjusted() + 1, 1) for value in decimals), default=1
-        )
+        integer_digits = max((max(value.adjusted() + 1, 1) for value in decimals), default=1)
         fractional_digits = max(
             (max(-value.as_tuple().exponent, 0) for value in decimals), default=0
         )
@@ -7256,12 +6937,8 @@ class _ExecutionSession:
             )
         self._assert_writer_lease("get_account_risk_snapshot")
         self.risk_path.parent.mkdir(parents=True, exist_ok=True)
-        staging = self.risk_path.with_name(
-            f".{self.risk_path.name}.{self.owner_token}.tmp"
-        )
-        payload = json.dumps(
-            value, sort_keys=True, separators=(",", ":"), allow_nan=False
-        )
+        staging = self.risk_path.with_name(f".{self.risk_path.name}.{self.owner_token}.tmp")
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
         fd = os.open(staging, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -7345,13 +7022,9 @@ class _ExecutionSession:
                         errors.setdefault(venue, "authenticated_account_id_mismatch")
 
             persisted_baseline = (
-                dict(prior_record.get("baseline_equity_by_venue") or {})
-                if prior_record
-                else None
+                dict(prior_record.get("baseline_equity_by_venue") or {}) if prior_record else None
             )
-            baseline = (
-                dict(persisted_baseline) if persisted_baseline is not None else None
-            )
+            baseline = dict(persisted_baseline) if persisted_baseline is not None else None
             baseline_created = False
             baseline_reset = False
             if (baseline is None and initialize_baseline) or reset_loss_latch:
@@ -7363,9 +7036,7 @@ class _ExecutionSession:
                     elif not row["open_orders_empty"]:
                         errors.setdefault(error_key, "open_orders_present")
 
-            current_evidence_complete = not errors and set(normalized) == set(
-                expected_venues
-            )
+            current_evidence_complete = not errors and set(normalized) == set(expected_venues)
             safe_to_replace_baseline = (
                 current_evidence_complete
                 and all(row["positions_flat"] for row in normalized.values())
@@ -7390,9 +7061,7 @@ class _ExecutionSession:
 
             if reset_loss_latch:
                 if configured_loss_limit is None:
-                    errors.setdefault(
-                        "loss_reset", "account_maximum_loss_limit_disabled"
-                    )
+                    errors.setdefault("loss_reset", "account_maximum_loss_limit_disabled")
                 elif not prior_loss_breached:
                     errors.setdefault("loss_reset", "account_maximum_loss_not_breached")
                 elif baseline is None:
@@ -7421,16 +7090,12 @@ class _ExecutionSession:
                     errors.setdefault("baseline", "baseline_contract_mismatch")
                     baseline = None
                 else:
-                    baseline_contract_valid = set(current) == set(
-                        expected_venues
-                    ) and all(
+                    baseline_contract_valid = set(current) == set(expected_venues) and all(
                         current[venue]["currency"] == baseline[venue]["currency"]
                         for venue in expected_venues
                     )
                     if not baseline_contract_valid:
-                        errors.setdefault(
-                            "baseline", "baseline_current_contract_mismatch"
-                        )
+                        errors.setdefault("baseline", "baseline_current_contract_mismatch")
 
             if baseline_created or baseline_reset:
                 try:
@@ -7438,9 +7103,7 @@ class _ExecutionSession:
                     if not isinstance(commit_errors, Mapping):
                         raise ValueError("baseline commit check result missing")
                 except Exception:
-                    errors.setdefault(
-                        "baseline_commit", "open_orders_commit_sweep_not_proven"
-                    )
+                    errors.setdefault("baseline_commit", "open_orders_commit_sweep_not_proven")
                 else:
                     errors.update(commit_errors)
                 if errors:
@@ -7449,44 +7112,30 @@ class _ExecutionSession:
                     current_evidence_complete = False
                     if baseline is not None:
                         try:
-                            baseline = self._validated_risk_baseline(
-                                baseline, expected_venues
-                            )
+                            baseline = self._validated_risk_baseline(baseline, expected_venues)
                         except (NormalizedApiError, TypeError, ValueError):
                             baseline = None
                         else:
-                            baseline_contract_valid = set(current) == set(
-                                expected_venues
-                            ) and all(
-                                current[venue]["currency"]
-                                == baseline[venue]["currency"]
+                            baseline_contract_valid = set(current) == set(expected_venues) and all(
+                                current[venue]["currency"] == baseline[venue]["currency"]
                                 for venue in expected_venues
                             )
 
             unknown_ids = self._unknown_ids()
-            active_execution = any(
-                not state["terminal"] for state in self.orders.values()
-            )
+            active_execution = any(not state["terminal"] for state in self.orders.values())
             currencies = {row["currency"] for row in current.values()}
-            aggregate_currency = (
-                next(iter(currencies)) if len(currencies) == 1 else None
-            )
+            aggregate_currency = next(iter(currencies)) if len(currencies) == 1 else None
             aggregate_baseline = aggregate_current = None
             if (
                 aggregate_currency
                 and baseline
                 and set(baseline) == set(current)
-                and all(
-                    row.get("currency") == aggregate_currency
-                    for row in baseline.values()
-                )
+                and all(row.get("currency") == aggregate_currency for row in baseline.values())
             ):
                 baseline_values = [Decimal(row["equity"]) for row in baseline.values()]
                 current_values = [Decimal(row["equity"]) for row in current.values()]
                 with localcontext() as context:
-                    context.prec = self._decimal_work_precision(
-                        *baseline_values, *current_values
-                    )
+                    context.prec = self._decimal_work_precision(*baseline_values, *current_values)
                     baseline_total = sum(baseline_values, Decimal("0"))
                     current_total = sum(current_values, Decimal("0"))
                 aggregate_baseline = self._canonical_equity(baseline_total)
@@ -7496,21 +7145,15 @@ class _ExecutionSession:
             loss_breached_at = prior_breached_at if loss_limit_breached else None
             loss_amount = loss_limit_amount = loss_bps_observed = None
             peak_loss_bps = (
-                prior_record.get("peak_loss_bps")
-                if configured_loss_limit is not None
-                else None
+                prior_record.get("peak_loss_bps") if configured_loss_limit is not None else None
             )
             loss_measurement_complete = configured_loss_limit is None
             if configured_loss_limit is not None:
                 if aggregate_baseline is None or aggregate_current is None:
-                    errors.setdefault(
-                        "account_maximum_loss", "aggregate_equity_not_comparable"
-                    )
+                    errors.setdefault("account_maximum_loss", "aggregate_equity_not_comparable")
                     current_evidence_complete = False
                 elif Decimal(aggregate_baseline) <= 0:
-                    errors.setdefault(
-                        "account_maximum_loss", "nonpositive_account_risk_baseline"
-                    )
+                    errors.setdefault("account_maximum_loss", "nonpositive_account_risk_baseline")
                     current_evidence_complete = False
                 else:
                     baseline_decimal = Decimal(aggregate_baseline)
@@ -7535,9 +7178,7 @@ class _ExecutionSession:
                             prior_peak,
                             Decimal("10000"),
                         )
-                        current_loss = max(
-                            baseline_decimal - current_decimal, Decimal("0")
-                        )
+                        current_loss = max(baseline_decimal - current_decimal, Decimal("0"))
                         scaled_loss = current_loss * Decimal("10000")
                         scaled_limit = baseline_decimal * limit_decimal
                         current_loss_bps = scaled_loss / baseline_decimal
@@ -7546,9 +7187,7 @@ class _ExecutionSession:
                     loss_amount = self._canonical_equity(current_loss)
                     loss_limit_amount = self._canonical_equity(limit_amount)
                     loss_bps_observed = self._canonical_equity(current_loss_bps)
-                    peak_loss_bps = self._canonical_equity(
-                        max(prior_peak, current_loss_bps)
-                    )
+                    peak_loss_bps = self._canonical_equity(max(prior_peak, current_loss_bps))
                     loss_limit_breached = bool(prior_loss_breached or breached_now)
                     if loss_limit_breached:
                         loss_breached_at = prior_breached_at or now_wall
@@ -7639,9 +7278,7 @@ class _ExecutionSession:
                 "journal_path": str(self.path) if self.path else None,
             }
             newly_breached = bool(loss_limit_breached and not was_loss_breached)
-            successful_reset = bool(
-                baseline_reset and not errors and not loss_limit_breached
-            )
+            successful_reset = bool(baseline_reset and not errors and not loss_limit_breached)
             should_persist = bool(evidence_complete or newly_breached)
             if baseline is not None and should_persist and not self.risk_error:
                 reset_id = None
@@ -7666,9 +7303,7 @@ class _ExecutionSession:
                         # A reset is not observable until both the state replace
                         # and its fenced commit receipt are durable.
                         result.update(
-                            baseline_equity_by_venue=prior_record.get(
-                                "baseline_equity_by_venue"
-                            ),
+                            baseline_equity_by_venue=prior_record.get("baseline_equity_by_venue"),
                             baseline_equity=prior_record.get("baseline_equity"),
                             loss_limit_breached=True,
                             loss_breached_at=prior_record.get("loss_breached_at"),
@@ -7681,9 +7316,7 @@ class _ExecutionSession:
                     result.update(
                         durable=False,
                         trading_blocked=True,
-                        blocked_reasons=sorted(
-                            set(result["blocked_reasons"] + [self.risk_error])
-                        ),
+                        blocked_reasons=sorted(set(result["blocked_reasons"] + [self.risk_error])),
                     )
                 else:
                     if successful_reset:
@@ -7728,9 +7361,7 @@ class _ExecutionSession:
 
     def _state(self, venue, row, *, create=False):
         client_id = str(row.get("client_order_id") or row.get("order_ref") or "")
-        account_id = self._ledger_identity(venue, row.get("account_id"), row)[
-            "account_id"
-        ]
+        account_id = self._ledger_identity(venue, row.get("account_id"), row)["account_id"]
         key = (venue, client_id)
         state = self.orders.get(key) if client_id else None
         if state is None and client_id:
@@ -7914,11 +7545,7 @@ class _ExecutionSession:
         field = "fee" if trade else "cumulative_commission"
         currency = result.get("commission_currency") or result.get("fee_currency")
         value = result.get(field)
-        if (
-            value is not None
-            and self.currency(state["exchange_name"]) == currency
-            and currency
-        ):
+        if value is not None and self.currency(state["exchange_name"]) == currency and currency:
             result[field] = _number(value)
             result["commission_currency"] = currency
             result["commission_normalized"] = True
@@ -7928,9 +7555,7 @@ class _ExecutionSession:
                 result["commission"] = result.pop("fee")
         else:
             if value is not None:
-                result[
-                    "unbooked_fee" if trade else "unbooked_cumulative_commission"
-                ] = value
+                result["unbooked_fee" if trade else "unbooked_cumulative_commission"] = value
                 result.pop(field, None)
             result["commission_source"] = "unresolved"
             result["fee_in_account_currency"] = False
@@ -7964,8 +7589,7 @@ class _ExecutionSession:
                 and status in _NONTERMINAL_PROGRESS
                 and previous.get("status") in _NONTERMINAL_PROGRESS
                 and filled == previous_filled
-                and _NONTERMINAL_PROGRESS[status]
-                < _NONTERMINAL_PROGRESS[previous["status"]]
+                and _NONTERMINAL_PROGRESS[status] < _NONTERMINAL_PROGRESS[previous["status"]]
             )
         ):
             return dict(previous)
@@ -8063,15 +7687,10 @@ class _ExecutionSession:
                     operation, "execution_session_closed", definite_reject=True
                 )
             if operation == "make_order":
-                self._require_arm_scope(
-                    operation, venue, request.symbol, request.exchange_id
-                )
+                self._require_arm_scope(operation, venue, request.symbol, request.exchange_id)
                 self._require_ctp_order_identity(operation, request)
                 recovery_allowance = self._require_recovery_action(operation, request)
-                if (
-                    recovery_allowance is not None
-                    and self._recovery_dispatch_in_progress
-                ):
+                if recovery_allowance is not None and self._recovery_dispatch_in_progress:
                     raise NormalizedApiError(
                         operation,
                         "execution_recovery_action_in_progress",
@@ -8091,9 +7710,7 @@ class _ExecutionSession:
                         operation=operation,
                         mode=("recovery" if recovery_allowance is not None else "ordinary"),
                     )
-                    self._budget_context_matches_current_locked(
-                        budget_state, operation=operation
-                    )
+                    self._budget_context_matches_current_locked(budget_state, operation=operation)
                 client_key = self._client_key(
                     venue,
                     request.account_id,
@@ -8108,11 +7725,7 @@ class _ExecutionSession:
                     side=request.side.value,
                     order_type=request.order_type.value,
                     quantity=format(request.quantity, "f"),
-                    price=(
-                        format(request.price, "f")
-                        if request.price is not None
-                        else None
-                    ),
+                    price=(format(request.price, "f") if request.price is not None else None),
                     size=format(request.quantity, "f"),
                     exchange_name=venue,
                     client_id_reserved=True,
@@ -8140,9 +7753,7 @@ class _ExecutionSession:
                 recovery_allowance = None
                 if operation == "cancel_order":
                     self.require_write(operation, venue=venue)
-                    self._require_arm_scope(
-                        operation, venue, request.symbol, request.exchange_id
-                    )
+                    self._require_arm_scope(operation, venue, request.symbol, request.exchange_id)
                     if self._arm_managed:
                         tracked = self._state(venue, request_row, create=False)
                         if not any(tracked is item for item in self.orders.values()):
@@ -8154,10 +7765,7 @@ class _ExecutionSession:
                         recovery_allowance = self._require_recovery_action(
                             operation, request, tracked=tracked
                         )
-                        if (
-                            recovery_allowance is not None
-                            and self._recovery_dispatch_in_progress
-                        ):
+                        if recovery_allowance is not None and self._recovery_dispatch_in_progress:
                             raise NormalizedApiError(
                                 operation,
                                 "execution_recovery_action_in_progress",
@@ -8194,9 +7802,7 @@ class _ExecutionSession:
                     if preauthorize is not None:
                         preauthorize()
                     try:
-                        self._journal(
-                            "cancel_intent", self._identity(state, request_row)
-                        )
+                        self._journal("cancel_intent", self._identity(state, request_row))
                         if budget_state is not None:
                             budget_action_id = f"cancel:{request.order_id or request.client_order_id or request.symbol}"
                             self.bind_ctp_budget_action(
@@ -8288,18 +7894,13 @@ class _ExecutionSession:
                 # only a terminal stream update resolves the cancel outcome.
                 changed_during_call = state.get("_revision", 0) > start_revision
                 if changed_during_call and (
-                    operation == "make_order"
-                    or (current and current.get("terminal_confirmed"))
+                    operation == "make_order" or (current and current.get("terminal_confirmed"))
                 ):
                     if recovery_action:
                         self.pause_recovery()
                     return dict(current)
-                update = self._unknown(
-                    state, getattr(failure, "code", type(failure).__name__)
-                )
-                if operation == "make_order" and getattr(
-                    failure, "definite_reject", False
-                ):
+                update = self._unknown(state, getattr(failure, "code", type(failure).__name__))
+                if operation == "make_order" and getattr(failure, "definite_reject", False):
                     update.update(
                         status="rejected",
                         execution_unknown=False,
@@ -8316,8 +7917,7 @@ class _ExecutionSession:
             if recovery_action and (
                 failure is not None
                 or recorded.get("execution_unknown") is True
-                or str(recorded.get("status") or "").lower()
-                in {"error", "failed", "rejected"}
+                or str(recorded.get("status") or "").lower() in {"error", "failed", "rejected"}
             ):
                 # The allowance was consumed before transport dispatch.  A
                 # failed or unresolved action closes the SDK lease so callers
@@ -8430,13 +8030,9 @@ class _ExecutionSession:
                 )
             conflict_code = self._identity_conflict_code(state, event)
             if conflict_code is not None:
-                return self._record(
-                    state, self._unknown(state, conflict_code), origin="event"
-                )
+                return self._record(state, self._unknown(state, conflict_code), origin="event")
             if event["kind"] == "order":
-                return self._record(
-                    state, self._order_update(state, event), origin="event"
-                )
+                return self._record(state, self._order_update(state, event), origin="event")
             trade_key = self._trade_key(venue, event)
             if event.get("trade_id") and trade_key in self.trade_ids:
                 return None
@@ -8448,9 +8044,7 @@ class _ExecutionSession:
                     "trade",
                     {
                         **update,
-                        _EXPLICIT_IDENTITY_FIELDS: sorted(
-                            _explicit_identity_fields(state)
-                        ),
+                        _EXPLICIT_IDENTITY_FIELDS: sorted(_explicit_identity_fields(state)),
                     },
                 )
             except NormalizedApiError:
@@ -8514,9 +8108,7 @@ class _ExecutionSession:
                 if failure is not None:
                     # Missing orders and unsupported remote queries never prove
                     # rejection and cannot release a historical unknown intent.
-                    state["reconciliation_error"] = getattr(
-                        failure, "code", type(failure).__name__
-                    )
+                    state["reconciliation_error"] = getattr(failure, "code", type(failure).__name__)
                 elif completed:
                     current = state.get("last_update")
                     if (
@@ -8527,9 +8119,7 @@ class _ExecutionSession:
                         self.pending[venue].append(dict(current))
                     state.pop("reconciliation_error", None)
                 state["_poll_inflight"] = False
-                state["next_poll"] = (
-                    time.monotonic() + self.config["order_poll_interval"]
-                )
+                state["next_poll"] = time.monotonic() + self.config["order_poll_interval"]
 
     @staticmethod
     def _identifier(state):
@@ -8548,11 +8138,7 @@ class _ExecutionSession:
     def summary(self):
         with self.mutex:
             fees = sorted(
-                {
-                    self._identifier(s)
-                    for s in self.orders.values()
-                    if s.get("fee_unresolved")
-                }
+                {self._identifier(s) for s in self.orders.values() if s.get("fee_unresolved")}
             )
             funding = sorted(
                 {
@@ -8567,8 +8153,7 @@ class _ExecutionSession:
                 if state.get("reconciliation_error")
             }
             evidence_errors = {
-                f"{identifier}:{error}"
-                for identifier, error in reconciliation_errors.items()
+                f"{identifier}:{error}" for identifier, error in reconciliation_errors.items()
             }
             if self.persistence_failed:
                 evidence_errors.add("execution_persistence_failed")
@@ -8579,9 +8164,7 @@ class _ExecutionSession:
             if self.risk_transition_error:
                 evidence_errors.add(str(self.risk_transition_error))
             if self._arm_revoked_reason:
-                evidence_errors.add(
-                    self._arm_revoked_error_code or "execution_arm_revoked"
-                )
+                evidence_errors.add(self._arm_revoked_error_code or "execution_arm_revoked")
             loss_limit_configured = self.config["account_maximum_loss_bps"] is not None
             risk_freshness_error = self._risk_freshness_error()
             if risk_freshness_error:

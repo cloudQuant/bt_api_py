@@ -42,9 +42,7 @@ class Freshness:
     stale_reason: str | None = None
 
 
-def _require_decimal(
-    name: str, value: Decimal | None, *, positive: bool = False
-) -> None:
+def _require_decimal(name: str, value: Decimal | None, *, positive: bool = False) -> None:
     """Validate Decimal contract fields without accepting implicit float coercion."""
     if value is None:
         return
@@ -111,12 +109,8 @@ class InstrumentSpec:
         _require_decimal("min_notional", self.min_notional)
         if self.min_notional is not None and self.min_notional < 0:
             raise ValueError("min_notional must be >= 0")
-        if self.available and (
-            not self.raw_rule_fingerprint or self.unavailable_reason
-        ):
-            raise ValueError(
-                "available InstrumentSpec requires a fingerprint and no reason"
-            )
+        if self.available and (not self.raw_rule_fingerprint or self.unavailable_reason):
+            raise ValueError("available InstrumentSpec requires a fingerprint and no reason")
         if not self.available and not self.unavailable_reason:
             raise ValueError("unavailable InstrumentSpec requires unavailable_reason")
 
@@ -193,9 +187,7 @@ class InstrumentSpec:
         units = (price / self.price_tick).to_integral_value(rounding=mode)
         return units * self.price_tick
 
-    def validate_order_quantity(
-        self, qty: Decimal, price: Decimal | None = None
-    ) -> None:
+    def validate_order_quantity(self, qty: Decimal, price: Decimal | None = None) -> None:
         self._require_available()
         qty = self._decimal("qty", qty)
         if qty <= 0:
@@ -270,30 +262,21 @@ class FundingSnapshot:
             or not isinstance(self.settlement_interval_seconds, int)
         ):
             raise TypeError("settlement_interval_seconds must be an int or None")
-        if (
-            self.settlement_interval_seconds is not None
-            and self.settlement_interval_seconds <= 0
-        ):
+        if self.settlement_interval_seconds is not None and self.settlement_interval_seconds <= 0:
             raise ValueError("settlement_interval_seconds must be > 0")
         if self.available and (
             self.rate is None
             or self.next_funding_time is None
             or self.settlement_interval_seconds is None
         ):
-            raise ValueError(
-                "available FundingSnapshot requires a complete funding schedule"
-            )
+            raise ValueError("available FundingSnapshot requires a complete funding schedule")
         if self.available:
             if self.freshness.observed_at.utcoffset() is None:
                 raise ValueError("freshness.observed_at must be timezone-aware")
             if self.freshness.stale:
-                raise ValueError(
-                    "available FundingSnapshot requires non-stale freshness"
-                )
+                raise ValueError("available FundingSnapshot requires non-stale freshness")
             if self.next_funding_time <= self.freshness.observed_at:
-                raise ValueError(
-                    "next_funding_time must be strictly after freshness.observed_at"
-                )
+                raise ValueError("next_funding_time must be strictly after freshness.observed_at")
         if not self.available and not self.unavailable_reason:
             raise ValueError("unavailable FundingSnapshot requires unavailable_reason")
 
@@ -363,8 +346,7 @@ class TradingReadiness:
             self.available
             and self.can_trade is True
             and not self.blocked_reasons
-            and str(self.instrument_status or "").lower()
-            in {"live", "trading", "enabled"}
+            and str(self.instrument_status or "").lower() in {"live", "trading", "enabled"}
         )
 
     @property
@@ -469,9 +451,7 @@ class OrderRequest:
         if self.quantity_unit not in {"base", "contracts", "lots", "native"}:
             raise ValueError("quantity_unit must be base, contracts, lots or native")
         if self.offset not in {None, "open", "close", "close_today", "close_yesterday"}:
-            raise ValueError(
-                "offset must be open, close, close_today or close_yesterday"
-            )
+            raise ValueError("offset must be open, close, close_today or close_yesterday")
         if self.position_mode not in {None, "net", "dual_side"}:
             raise ValueError("position_mode must be net or dual_side")
         if not self.account_id:
@@ -484,20 +464,15 @@ class OrderRequest:
             or self.execution_cycle_id != self.execution_cycle_id.strip()
             or len(self.execution_cycle_id) > 128
         ):
-            raise ValueError(
-                "execution_cycle_id must be a bounded non-empty string or None"
-            )
+            raise ValueError("execution_cycle_id must be a bounded non-empty string or None")
         if self.execution_role not in {None, "entry", "exit", "recovery_exit"}:
-            raise ValueError(
-                "execution_role must be entry, exit, recovery_exit or None"
-            )
+            raise ValueError("execution_role must be entry, exit, recovery_exit or None")
         if self.strategy_identity_sha256 is not None and (
             not isinstance(self.strategy_identity_sha256, str)
             or len(self.strategy_identity_sha256) != 64
             or self.strategy_identity_sha256 != self.strategy_identity_sha256.lower()
             or any(
-                character not in "0123456789abcdef"
-                for character in self.strategy_identity_sha256
+                character not in "0123456789abcdef" for character in self.strategy_identity_sha256
             )
         ):
             raise ValueError(

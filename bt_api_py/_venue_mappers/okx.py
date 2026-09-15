@@ -94,12 +94,8 @@ def normalize_order_readiness(
     ]
     instrument = matching_instruments[0] if matching_instruments else {}
     instrument_state = pick(instrument, "instrument_state", "symbol_status", "state")
-    instrument_state = (
-        str(instrument_state).lower() if instrument_state not in (None, "") else None
-    )
-    lot_size = _native_decimal(
-        pick(instrument, "lot_size", "order_size_step", "lotSz")
-    )
+    instrument_state = str(instrument_state).lower() if instrument_state not in (None, "") else None
+    lot_size = _native_decimal(pick(instrument, "lot_size", "order_size_step", "lotSz"))
     min_size = _native_decimal(pick(instrument, "min_size", "minSz"))
 
     expected_mode_valid = expected_position_mode in {None, "net", "dual_side"}
@@ -107,15 +103,10 @@ def normalize_order_readiness(
         None
         if actual_position_mode not in {"net", "dual_side"}
         else expected_mode_valid
-        and (
-            expected_position_mode is None
-            or expected_position_mode == actual_position_mode
-        )
+        and (expected_position_mode is None or expected_position_mode == actual_position_mode)
     )
     account_level_ready = (
-        True
-        if account_level in {"2", "3", "4"}
-        else False if account_level == "1" else None
+        True if account_level in {"2", "3", "4"} else False if account_level == "1" else None
     )
 
     leverage_by_side: dict[str, float] = {}
@@ -135,9 +126,7 @@ def normalize_order_readiness(
             leverage = number(pick(row, "leverage", "lever"))
             if side in {"long", "short", "net"} and leverage is not None:
                 leverage_by_side[side] = leverage
-        needed_sides = (
-            {"long", "short"} if actual_position_mode == "dual_side" else {"net"}
-        )
+        needed_sides = {"long", "short"} if actual_position_mode == "dual_side" else {"net"}
         leverage_ready = needed_sides <= leverage_by_side.keys()
 
     max_buy = None
@@ -147,9 +136,7 @@ def normalize_order_readiness(
     if max_size is not None:
         max_rows = rows(max_size, "get_order_readiness")
         matching_max = [
-            row
-            for row in max_rows
-            if pick(row, "symbol", "instId") in (None, "", symbol)
+            row for row in max_rows if pick(row, "symbol", "instId") in (None, "", symbol)
         ]
         maximum = matching_max[0] if matching_max else {}
         max_buy_value = _native_decimal(pick(maximum, "max_buy", "maxBuy"))
@@ -157,12 +144,8 @@ def normalize_order_readiness(
         max_buy = float(max_buy_value) if max_buy_value is not None else None
         max_sell = float(max_sell_value) if max_sell_value is not None else None
         if requested is not None and requested > 0:
-            max_buy_ready = (
-                max_buy_value >= requested if max_buy_value is not None else None
-            )
-            max_sell_ready = (
-                max_sell_value >= requested if max_sell_value is not None else None
-            )
+            max_buy_ready = max_buy_value >= requested if max_buy_value is not None else None
+            max_sell_ready = max_sell_value >= requested if max_sell_value is not None else None
 
     quantity_ready = requested is not None and requested > 0
     min_size_ready: bool | None = None
@@ -259,9 +242,7 @@ def normalize_order_readiness(
         "execution_unproven": True,
         "exchange_name": exchange_name,
         "symbol": symbol,
-        "requested_quantity_native": (
-            float(requested) if requested is not None else None
-        ),
+        "requested_quantity_native": (float(requested) if requested is not None else None),
         "quantity_unit": "native_contracts",
         "margin_mode": margin_mode,
         "position_mode": actual_position_mode,

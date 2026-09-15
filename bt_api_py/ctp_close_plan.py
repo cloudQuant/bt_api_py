@@ -40,9 +40,7 @@ _HEDGE_VALUES = frozenset(("1", "2", "3"))
 _POSITION_DATES = frozenset(("1", "2"))
 _SPLIT_POLICY_ID = "SYNTHETIC-SPLIT-v1"
 _GENERIC_POLICY_ID = "SYNTHETIC-GENERIC-v1"
-_POLICY_SOURCE_SHA256 = (
-    "ec5dfea45f52e85a484332a2cd7890cedf9d8369946cbcb07b7c203c24d8d15a"
-)
+_POLICY_SOURCE_SHA256 = "ec5dfea45f52e85a484332a2cd7890cedf9d8369946cbcb07b7c203c24d8d15a"
 _SPLIT_EXCHANGES = frozenset(("SHFE", "INE"))
 _GENERIC_EXCHANGES = frozenset(("CZCE", "DCE"))
 _KNOWN_EXCHANGES = _SPLIT_EXCHANGES | _GENERIC_EXCHANGES
@@ -159,9 +157,7 @@ def _strict_text(value: Any, field: str) -> str:
     return value
 
 
-def _strict_metadata_text(
-    value: Any, field: str, code: str = "O3B_REQUEST_INVALID"
-) -> str:
+def _strict_metadata_text(value: Any, field: str, code: str = "O3B_REQUEST_INVALID") -> str:
     if type(value) is not str or not value or value != value.strip() or "\x00" in value:
         _error(code, f"{field} requires exact nonempty text")
     return value
@@ -174,11 +170,7 @@ def _strict_hex(value: Any, field: str, code: str = "O3B_REQUEST_INVALID") -> st
 
 
 def _strict_int(value: Any, field: str, *, positive: bool = False) -> int:
-    if (
-        type(value) is not int
-        or (positive and value <= 0)
-        or (not positive and value < 0)
-    ):
+    if type(value) is not int or (positive and value <= 0) or (not positive and value < 0):
         _error("O3B_QUANTITY_INVALID", f"{field} requires an exact integer")
     return value
 
@@ -209,9 +201,7 @@ def _parse_utc(value: Any, field: str, code: str = "O3B_CLOCK_INVALID") -> datet
 
 
 def _format_utc(value: datetime) -> str:
-    return (
-        value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
-    )
+    return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 def _clock_ns(value: Any, field: str, *, seconds: bool = False) -> int:
@@ -265,11 +255,7 @@ def _snapshot(value: Any) -> Any:
         return MappingProxyType(copied)
     if type(value) is list or type(value) is tuple:
         return tuple(_snapshot(item) for item in value)
-    if (
-        type(value) in (str, int, float, bool)
-        or value is None
-        or isinstance(value, datetime)
-    ):
+    if type(value) in (str, int, float, bool) or value is None or isinstance(value, datetime):
         return value
     if type(value) is Decimal:
         return value
@@ -385,9 +371,7 @@ def _scalar_matches_raw(raw: Any, typed: Any, *, numeric: bool) -> bool:
         except (InvalidOperation, ValueError, TypeError):
             return False
         return (
-            raw_decimal.is_finite()
-            and typed_decimal.is_finite()
-            and raw_decimal == typed_decimal
+            raw_decimal.is_finite() and typed_decimal.is_finite() and raw_decimal == typed_decimal
         )
     return type(raw) is type(typed) and raw == typed
 
@@ -419,9 +403,7 @@ def _validate_typed_fields(raw: Mapping[str, Any], fields: Mapping[str, Any]) ->
             _error("O3B_POSITION_ROW_INVALID", f"invalid typed field state: {key}")
         raw_present = key in raw
         if present != raw_present:
-            _error(
-                "O3B_POSITION_ROW_INVALID", f"typed presence differs from raw: {key}"
-            )
+            _error("O3B_POSITION_ROW_INVALID", f"typed presence differs from raw: {key}")
         if not raw_present:
             if state != "missing":
                 _error(
@@ -430,9 +412,7 @@ def _validate_typed_fields(raw: Mapping[str, Any], fields: Mapping[str, Any]) ->
                 )
             continue
         if state != "value":
-            _error(
-                "O3B_POSITION_ROW_INVALID", f"raw field is not typed as value: {key}"
-            )
+            _error("O3B_POSITION_ROW_INVALID", f"raw field is not typed as value: {key}")
         raw_value = _read(field, ("raw_value",), default=_MISSING)
         typed_value = _read(field, ("value",), default=_MISSING)
         if raw_value is _MISSING or typed_value is _MISSING:
@@ -472,15 +452,10 @@ def _parse_row(
     if not _valid_day(text_values["TradingDay"]):
         _error("O3B_POSITION_ROW_INVALID", "invalid trading day")
     if text_values["TradingDay"] != trading_day:
-        _error(
-            "O3B_CURRENT_SCOPE_MISMATCH", "row trading day differs from current scope"
-        )
+        _error("O3B_CURRENT_SCOPE_MISMATCH", "row trading day differs from current scope")
     if text_values["ExchangeID"] not in _KNOWN_EXCHANGES:
         _error("O3B_POLICY_INVALID_OR_MISMATCH", "unknown row exchange")
-    if (
-        supported_exchanges is not None
-        and text_values["ExchangeID"] not in supported_exchanges
-    ):
+    if supported_exchanges is not None and text_values["ExchangeID"] not in supported_exchanges:
         _error("O3B_POLICY_INVALID_OR_MISMATCH", "row exchange is outside policy")
 
     quantities: dict[str, int] = {}
@@ -520,9 +495,7 @@ def _parse_row(
 def _validate_freeze(rows: Sequence[_PositionRow]) -> None:
     for row in rows:
         if row.raw["LongFrozen"] or row.raw["ShortFrozen"]:
-            _error(
-                "O3B_FROZEN_ALLOCATION_UNPROVEN", "ordinary frozen quantity is nonzero"
-            )
+            _error("O3B_FROZEN_ALLOCATION_UNPROVEN", "ordinary frozen quantity is nonzero")
         if any(row.raw[name] for name in _ZERO_FREEZE_FIELDS[2:]):
             _error(
                 "O3B_SPECIAL_POSITION_UNSUPPORTED",
@@ -554,9 +527,7 @@ def _normalize_policy_deadline(policy: dict[str, Any]) -> None:
     policy.pop("expires_monotonic", None)
 
 
-def _profile_material_matches(
-    policy: Mapping[str, Any], name: str, expected: Any
-) -> bool:
+def _profile_material_matches(policy: Mapping[str, Any], name: str, expected: Any) -> bool:
     actual = policy.get(name, _MISSING)
     if actual is _MISSING:
         return False
@@ -567,9 +538,7 @@ def _profile_material_matches(
     return type(actual) is type(expected) and actual == expected
 
 
-def _require_profile_material(
-    policy: Mapping[str, Any], expected: Mapping[str, Any]
-) -> None:
+def _require_profile_material(policy: Mapping[str, Any], expected: Mapping[str, Any]) -> None:
     for name, value in expected.items():
         if not _profile_material_matches(policy, name, value):
             _error(
@@ -619,20 +588,14 @@ def _validate_policy(policy: Any) -> tuple[dict[str, Any], str, frozenset[str]]:
     policy_id = _read_consistent(policy, ("policy_id",), "policy_id")
     version_a = policy.get("policy_version", _MISSING)
     version_b = policy.get("version", _MISSING)
-    if (
-        version_a is not _MISSING
-        and version_b is not _MISSING
-        and version_a != version_b
-    ):
+    if version_a is not _MISSING and version_b is not _MISSING and version_a != version_b:
         _error("O3B_POLICY_INVALID_OR_MISMATCH", "conflicting policy versions")
     version = version_a if version_a is not _MISSING else version_b
     if version is _MISSING:
         _error("O3B_POLICY_INVALID_OR_MISMATCH", "policy version")
     policy.pop("policy_version", None)
     status = _read_consistent(policy, ("status",), "policy status")
-    verified = _read_consistent(
-        policy, ("execution_policy_verified",), "policy verification"
-    )
+    verified = _read_consistent(policy, ("execution_policy_verified",), "policy verification")
     source_sha_a = policy.get("policy_source_sha256", _MISSING)
     source_sha_b = policy.get("source_document_sha256", _MISSING)
     if (
@@ -655,9 +618,7 @@ def _validate_policy(policy: Any) -> tuple[dict[str, Any], str, frozenset[str]]:
     applicability = _read_consistent(
         policy, ("real_full_ctp_applicability",), "policy applicability"
     )
-    if type(zero_fields) not in (list, tuple) or any(
-        type(item) is not str for item in zero_fields
-    ):
+    if type(zero_fields) not in (list, tuple) or any(type(item) is not str for item in zero_fields):
         _error("O3B_POLICY_INVALID_OR_MISMATCH", "required freeze fields are invalid")
     if (
         policy_id not in {_SPLIT_POLICY_ID, _GENERIC_POLICY_ID}
@@ -674,9 +635,7 @@ def _validate_policy(policy: Any) -> tuple[dict[str, Any], str, frozenset[str]]:
         or any(type(item) is not str for item in exchanges)
         or set(zero_fields) != set(_ZERO_FREEZE_FIELDS)
     ):
-        _error(
-            "O3B_POLICY_INVALID_OR_MISMATCH", "unsupported or incomplete policy profile"
-        )
+        _error("O3B_POLICY_INVALID_OR_MISMATCH", "unsupported or incomplete policy profile")
     if row_model == "split_by_position_date":
         if policy_id != _SPLIT_POLICY_ID or set(exchanges) != set(_SPLIT_EXCHANGES):
             _error("O3B_POLICY_INVALID_OR_MISMATCH", "split policy identity mismatch")
@@ -691,9 +650,7 @@ def _validate_policy(policy: Any) -> tuple[dict[str, Any], str, frozenset[str]]:
             "close_today": "3",
             "close_yesterday": "4",
         }:
-            _error(
-                "O3B_POLICY_INVALID_OR_MISMATCH", "split wire offsets are incomplete"
-            )
+            _error("O3B_POLICY_INVALID_OR_MISMATCH", "split wire offsets are incomplete")
     else:
         if policy_id != _GENERIC_POLICY_ID or set(exchanges) != set(_GENERIC_EXCHANGES):
             _error("O3B_POLICY_INVALID_OR_MISMATCH", "generic policy identity mismatch")
@@ -702,9 +659,7 @@ def _validate_policy(policy: Any) -> tuple[dict[str, Any], str, frozenset[str]]:
         if not isinstance(offsets, Mapping) or dict(offsets) != {"generic": "close"}:
             _error("O3B_POLICY_INVALID_OR_MISMATCH", "generic offsets are incomplete")
         if not isinstance(wires, Mapping) or dict(wires) != {"close": "1"}:
-            _error(
-                "O3B_POLICY_INVALID_OR_MISMATCH", "generic wire offset is incomplete"
-            )
+            _error("O3B_POLICY_INVALID_OR_MISMATCH", "generic wire offset is incomplete")
     common_profile = {
         "document_family": "CTPIIMini",
         "document_version": "1.4",
@@ -780,10 +735,7 @@ def _validate_context(evidence: Any, context: Any) -> dict[str, Any]:
         _strict_metadata_text(context[name], name, "O3B_CURRENT_SCOPE_MISMATCH")
     if not _valid_day(context["trading_day"]):
         _error("O3B_CURRENT_SCOPE_MISMATCH", "invalid current trading day")
-    if (
-        type(context["connection_generation"]) is not int
-        or context["connection_generation"] <= 0
-    ):
+    if type(context["connection_generation"]) is not int or context["connection_generation"] <= 0:
         _error("O3B_CURRENT_SCOPE_MISMATCH", "invalid connection generation")
     context["evidence_source_hash"] = _strict_hex(
         context["evidence_source_hash"],
@@ -802,18 +754,12 @@ def _validate_context(evidence: Any, context: Any) -> dict[str, Any]:
     evidence_hash = _read(evidence, ("source_hash",), default=_MISSING)
     if evidence_hash is _MISSING:
         _error("O3B_REQUIRED_FIELD_MISSING", "evidence source_hash")
-    evidence_hash = _strict_hex(
-        evidence_hash, "source_hash", "O3B_CURRENT_SCOPE_MISMATCH"
-    )
+    evidence_hash = _strict_hex(evidence_hash, "source_hash", "O3B_CURRENT_SCOPE_MISMATCH")
     if evidence_hash != context["evidence_source_hash"]:
-        _error(
-            "O3B_CURRENT_SCOPE_MISMATCH", "source digest differs from current context"
-        )
+        _error("O3B_CURRENT_SCOPE_MISMATCH", "source digest differs from current context")
     evidence_clock = _read(evidence, ("clock_domain_id",), default=_MISSING)
     if evidence_clock is not _MISSING and evidence_clock != context["clock_domain_id"]:
-        _error(
-            "O3B_CURRENT_SCOPE_MISMATCH", "clock domain differs from current context"
-        )
+        _error("O3B_CURRENT_SCOPE_MISMATCH", "clock domain differs from current context")
     return context
 
 
@@ -854,9 +800,7 @@ def _validate_source_status(
     """Reject explicit negative source facts before any scope proof is used."""
 
     for source in sources:
-        for names in (
-            ("read_only_ready", "is_read_only_ready", "query_read_only_ready"),
-        ):
+        for names in (("read_only_ready", "is_read_only_ready", "query_read_only_ready"),):
             ready = _read(source, names, default=_MISSING)
             if ready is _MISSING:
                 continue
@@ -969,9 +913,7 @@ def _extract_evidence(
 
     request_type = _read(evidence, ("request_type",), default="positions")
     if request_type != "positions":
-        _error(
-            "O3B_CURRENT_SCOPE_MISMATCH", "position planner requires positions query"
-        )
+        _error("O3B_CURRENT_SCOPE_MISMATCH", "position planner requires positions query")
     request_id = _read(evidence, ("query_request_id", "request_id"), default=_MISSING)
     if request_id is _MISSING or type(request_id) is not int or request_id <= 0:
         _error("O3B_REQUIRED_FIELD_MISSING", "query request id")
@@ -988,13 +930,8 @@ def _extract_evidence(
         or generation <= 0
     ):
         _error("O3B_CURRENT_SCOPE_MISMATCH", "evidence scope has invalid types")
-    if (
-        account != context["account_fingerprint"]
-        or generation != context["connection_generation"]
-    ):
-        _error(
-            "O3B_CURRENT_SCOPE_MISMATCH", "evidence scope differs from current context"
-        )
+    if account != context["account_fingerprint"] or generation != context["connection_generation"]:
+        _error("O3B_CURRENT_SCOPE_MISMATCH", "evidence scope differs from current context")
     if trading_day != context["trading_day"]:
         _error(
             "O3B_CURRENT_SCOPE_MISMATCH",
@@ -1022,9 +959,7 @@ def _extract_evidence(
             _error("O3B_POSITION_EVIDENCE_INCOMPLETE", f"query {name}")
 
     completed = _read(evidence, ("completed_at_utc", "completed_utc"), default=_MISSING)
-    source_expiry = _read(
-        evidence, ("expires_at_utc", "source_expiry_utc"), default=_MISSING
-    )
+    source_expiry = _read(evidence, ("expires_at_utc", "source_expiry_utc"), default=_MISSING)
     if completed is _MISSING or source_expiry is _MISSING:
         _error("O3B_REQUIRED_FIELD_MISSING", "query clock timestamps")
     completed = _parse_utc(completed, "query completion")
@@ -1048,25 +983,17 @@ def _extract_evidence(
         _error("O3B_CLOCK_INVALID", "query expiry must follow completion")
     utc_ttl = (source_expiry - completed).total_seconds()
     mono_ttl = (source_expiry_mono - completed_mono) / 1_000_000_000
-    if (
-        not isfinite(utc_ttl)
-        or not isfinite(mono_ttl)
-        or abs(utc_ttl - mono_ttl) > 1e-6
-    ):
+    if not isfinite(utc_ttl) or not isfinite(mono_ttl) or abs(utc_ttl - mono_ttl) > 1e-6:
         _error("O3B_CLOCK_INVALID", "query clock domains are not paired")
     if utc_ttl > MAX_SOURCE_TTL_SECONDS + 1e-6:
         _error("O3B_CLOCK_INVALID", "query source expiry exceeds issuer bound")
 
     status_sources = _source_status_sources(evidence, envelope)
-    _validate_source_status(
-        status_sources, completed=completed, completed_mono=completed_mono
-    )
+    _validate_source_status(status_sources, completed=completed, completed_mono=completed_mono)
 
     if envelope is not _MISSING:
         if not isinstance(envelope, Mapping):
-            _error(
-                "O3B_POSITION_EVIDENCE_INCOMPLETE", "query envelope is not a mapping"
-            )
+            _error("O3B_POSITION_EVIDENCE_INCOMPLETE", "query envelope is not a mapping")
         for names, expected in (
             (("request_id", "query_request_id"), request_id),
             (("account_fingerprint",), account),
@@ -1074,9 +1001,7 @@ def _extract_evidence(
         ):
             actual = _read(envelope, names, default=_MISSING)
             if actual is not _MISSING and actual != expected:
-                _error(
-                    "O3B_CURRENT_SCOPE_MISMATCH", "query envelope differs from evidence"
-                )
+                _error("O3B_CURRENT_SCOPE_MISMATCH", "query envelope differs from evidence")
         nested_scope = _read(envelope, ("session_scope",), default=_MISSING)
         if nested_scope is not _MISSING and isinstance(nested_scope, Mapping):
             for name in ("account_fingerprint", "connection_generation", "trading_day"):
@@ -1135,9 +1060,7 @@ def _extract_evidence(
                 )
             )
             ready = session_scope.get("read_only_ready", _MISSING)
-            all_account_scope_proved = scope_matches and (
-                ready is _MISSING or ready is True
-            )
+            all_account_scope_proved = scope_matches and (ready is _MISSING or ready is True)
     if not all_account_scope_proved:
         _error(
             "O3B_POSITION_EVIDENCE_INCOMPLETE",
@@ -1151,9 +1074,7 @@ def _extract_evidence(
         _collect_declared_account_identity(
             declared_account, envelope.get("session_scope", _MISSING)
         )
-        _collect_declared_account_identity(
-            declared_account, envelope.get("query_source", _MISSING)
-        )
+        _collect_declared_account_identity(declared_account, envelope.get("query_source", _MISSING))
 
     parsed_rows: list[_PositionRow] = []
     for row in records:
@@ -1176,13 +1097,9 @@ def _extract_evidence(
         identities.add(row.identity)
     for rows_for_account in (parsed_rows,):
         if rows_for_account:
-            brokers = {
-                row.raw["BrokerID"] for row in rows_for_account if "BrokerID" in row.raw
-            }
+            brokers = {row.raw["BrokerID"] for row in rows_for_account if "BrokerID" in row.raw}
             investors = {
-                row.raw["InvestorID"]
-                for row in rows_for_account
-                if "InvestorID" in row.raw
+                row.raw["InvestorID"] for row in rows_for_account if "InvestorID" in row.raw
             }
             if len(brokers) > 1 or len(investors) > 1:
                 _error(
@@ -1221,13 +1138,9 @@ def _normalize_request(request: Any, context: Mapping[str, Any]) -> dict[str, An
     candidate_id = _strict_metadata_text(
         request.get("candidate_id", _MISSING), "candidate_id", "O3B_REQUEST_INVALID"
     )
-    candidate_sha = _strict_hex(
-        request.get("candidate_sha256", _MISSING), "candidate_sha256"
-    )
+    candidate_sha = _strict_hex(request.get("candidate_sha256", _MISSING), "candidate_sha256")
     cycle_id = _strict_metadata_text(request.get("cycle_id", _MISSING), "cycle_id")
-    role = _strict_metadata_text(
-        request.get("execution_role", _MISSING), "execution_role"
-    )
+    role = _strict_metadata_text(request.get("execution_role", _MISSING), "execution_role")
     if role not in {"exit", "recovery_exit"}:
         _error("O3B_EXECUTION_ROLE_INVALID")
     request_expiry = _parse_utc(
@@ -1241,11 +1154,7 @@ def _normalize_request(request: Any, context: Mapping[str, Any]) -> dict[str, An
     )
     priority_a = request.get("priority", _MISSING)
     priority_b = request.get("allocation_priority", _MISSING)
-    if (
-        priority_a is not _MISSING
-        and priority_b is not _MISSING
-        and priority_a != priority_b
-    ):
+    if priority_a is not _MISSING and priority_b is not _MISSING and priority_a != priority_b:
         _error("O3B_REQUEST_INVALID", "conflicting split allocation priorities")
     priority = (
         priority_a
@@ -1356,11 +1265,7 @@ def _request_digest(request: Mapping[str, Any]) -> str:
 def _policy_digest(policy: Mapping[str, Any]) -> str:
     supplied_a = policy.get("policy_sha256", _MISSING)
     supplied_b = policy.get("policy_digest", _MISSING)
-    if (
-        supplied_a is not _MISSING
-        and supplied_b is not _MISSING
-        and supplied_a != supplied_b
-    ):
+    if supplied_a is not _MISSING and supplied_b is not _MISSING and supplied_a != supplied_b:
         _error("O3B_POLICY_INVALID_OR_MISMATCH", "conflicting policy digests")
     supplied = supplied_a if supplied_a is not _MISSING else supplied_b
     if supplied is not _MISSING:
@@ -1636,9 +1541,7 @@ def _split_actions(
         leg["HedgeFlag"],
     )
     matches = [
-        row
-        for row in rows
-        if (row.instrument, row.exchange, row.direction, row.hedge) == target
+        row for row in rows if (row.instrument, row.exchange, row.direction, row.hedge) == target
     ]
     if not matches:
         if not rows:
@@ -1657,9 +1560,7 @@ def _split_actions(
     quantity = leg["quantity"]
     available = sum(row.position for row in matches)
     if quantity > available:
-        _error(
-            "O3B_CLOSE_EXCEEDS_POSITION", "requested quantity exceeds current position"
-        )
+        _error("O3B_CLOSE_EXCEEDS_POSITION", "requested quantity exceeds current position")
     order = ("2", "1") if request["priority"] == "yesterday_first" else ("1", "2")
     actions: list[dict[str, Any]] = []
     remaining = quantity
@@ -1715,9 +1616,7 @@ def _generic_actions(
         leg["HedgeFlag"],
     )
     matches = [
-        row
-        for row in rows
-        if (row.instrument, row.exchange, row.direction, row.hedge) == target
+        row for row in rows if (row.instrument, row.exchange, row.direction, row.hedge) == target
     ]
     if not matches:
         if not rows:
@@ -1735,9 +1634,7 @@ def _generic_actions(
     history = total - today
     quantity = leg["quantity"]
     if quantity > total:
-        _error(
-            "O3B_CLOSE_EXCEEDS_POSITION", "requested quantity exceeds current position"
-        )
+        _error("O3B_CLOSE_EXCEEDS_POSITION", "requested quantity exceeds current position")
     today_min = max(0, quantity - history)
     today_max = min(quantity, today)
     age_request = request["generic_age_request"]
@@ -1793,9 +1690,7 @@ def build_ctp_close_plan(
     validated_context = _validate_context(evidence, current_context)
     validated_policy, row_model, supported_exchanges = _validate_policy(policy)
     if validated_context["native_profile"] != validated_policy["native_profile"]:
-        _error(
-            "O3B_CURRENT_SCOPE_MISMATCH", "context native profile differs from policy"
-        )
+        _error("O3B_CURRENT_SCOPE_MISMATCH", "context native profile differs from policy")
     evidence_meta, rows = _extract_evidence(
         evidence, validated_context, supported_exchanges, row_model
     )

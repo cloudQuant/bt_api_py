@@ -24,9 +24,7 @@ class FeedAdapter:
         self._mapper = mapper
         self._execution_capability = execution_capability
 
-    def _call_arguments(
-        self, request: OrderRequest
-    ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    def _call_arguments(self, request: OrderRequest) -> tuple[tuple[Any, ...], dict[str, Any]]:
         args = self._mapper(request)
         positional_keys = {
             "symbol",
@@ -37,9 +35,7 @@ class FeedAdapter:
             "post_only",
             "client_order_id",
         }
-        options = {
-            key: value for key, value in args.items() if key not in positional_keys
-        }
+        options = {key: value for key, value in args.items() if key not in positional_keys}
         positional = (
             args["symbol"],
             args["vol"],
