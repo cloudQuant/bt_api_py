@@ -24,6 +24,9 @@ bt_api_py/ctp/_ctp*.dylib
 # CTP flow data directories (created at runtime)
 ctp_flow_*/
 
+# Local CTP collector run config (may hold account fields; never commit)
+collector.yaml
+
 # Distribution / packaging
 .Python
 build/
