@@ -93,6 +93,22 @@ snapshot = api.get_tick("SIM___SPOT", "BTC-USDT", consistency=Consistency.CACHE_
 
 `LIVE` waits for a post-call event within the configured timeout. `CACHE_OK` only returns a bounded, explicitly stale snapshot; cache misses and timeouts use different domain errors. ZMQ public trades are not part of the current forwarding protocol and fail explicitly instead of falling back to a local Feed.
 
+## Historical tick collection (CTP)
+
+The `bt_api_ctp` plugin ships a whole-market tick collector that persists every
+depth snapshot to Parquet for backtesting: one file per instrument under
+`<data_root>/<trading_day>/<exchange>/<instrument_id>.parquet`, plus a per-day
+`report.json` with row counts and in-session gaps. It is driven by an external
+scheduler (cron/systemd/launchd units included) and exits by itself at the close:
+
+```bash
+python -m bt_api_ctp.collector --config collector.yaml --until-close --wait-open
+```
+
+Reading the data and the deployment checklist:
+[`bt_api/bt_api_ctp/README.md`](bt_api/bt_api_ctp/README.md) and
+[`bt_api/bt_api_ctp/deploy/collector/README.md`](bt_api/bt_api_ctp/deploy/collector/README.md).
+
 ## Support status
 
 <!-- BEGIN GENERATED:EXCHANGE_SUPPORT_OVERVIEW -->
