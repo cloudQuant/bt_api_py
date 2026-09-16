@@ -12,16 +12,14 @@
 ### ✅ P3-T1: 生产代码真实错误修复第一批
 - 修复了 4 个文件的 lint 错误
   - `bitget_account.py`: 添加了缺失的 `BitgetBalanceData` 导入
-  - `upbit_balance.py`: 修复了未定义的 `currency` 变量
   - `zip_file`: 修复了异常处理链和导入顺序
-  - `upbit_ticker.py`: 将裸 except 改为具体异常
 - **验收结果**: 所有文件通过 ruff check
 
 - **耗时**: ~1 小时
 
 - **影响范围**: 
   - 4个生产代码文件
-  - 2个容器测试文件 (bitget_balance_test.py, upbit_balance_test.py)
+  - 1个容器测试文件 (bitget_balance_test.py)
 
 ### ✅ P3-T2: network/live 测试边界补标
 - 给 27 个调用 `read_account_config()` 的测试文件添加了 `pytestmark = [pytest.mark.integration, pytest.mark.network]`
@@ -40,7 +38,6 @@
   - `test_okx_swap_req_account_config.py`: 84 个
   - `test_hyperliquid_integration.py`: 60 个
   - `test_live_ib_web_request_data.py`: 38 个
-  - `test_gemini_integration.py`: 45 个
 - **验收结果**: 所有文件 print 数量降为 0,语法正确
 - **耗时**: ~2 小时
 - **影响范围**: 

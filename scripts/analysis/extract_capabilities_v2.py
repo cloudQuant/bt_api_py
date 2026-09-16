@@ -79,28 +79,8 @@ def extract_capabilities_from_file(file_path: Path) -> tuple[str, list[str]]:
         # 移除 _FEED.PY 后缀
         exchange_name = exchange_name.replace("_FEED.PY", "")
         # 特殊处理一些名称
-        if exchange_name == "BTC_MARKETS":
-            exchange_name = "BTC_MARKETS"
-        elif exchange_name == "MERCADO_BITCOIN":
-            exchange_name = "MERCADO_BITCOIN"
-        elif exchange_name == "INDEPENDENT_RESERVE":
-            exchange_name = "INDEPENDENT_RESERVE"
-        elif exchange_name == "LOCALBITCOINS":
-            exchange_name = "LOCALBITCOINS"
-        elif exchange_name == "COINCHECK":
-            exchange_name = "COINCHECK"
-        elif exchange_name == "COINDCX":
-            exchange_name = "COINDCX"
-        elif exchange_name == "COINSPOT":
-            exchange_name = "COINSPOT"
-        elif exchange_name == "COINSWITCH":
-            exchange_name = "COINSWITCH"
-        elif exchange_name == "COW_SWAP":
+        if exchange_name == "COW_SWAP":
             exchange_name = "COW_SWAP"
-        elif exchange_name == "CRYPTOCOM":
-            exchange_name = "CRYPTOCOM"
-        elif exchange_name == "SATOSHITANGO":
-            exchange_name = "SATOSHITANGO"
 
     return f"{exchange_name}___{asset_type}", capabilities
 

@@ -1,7 +1,7 @@
 <!-- BEGIN GENERATED:EXCHANGE_SUPPORT_STATUS -->
 # 交易所实现状态
 
-**最后更新：** 2026-04-06  
+**最后更新：** 2026-09-16  
 **版本：** 0.15
 
 本文档由 `docs/data/exchange_support_matrix.json` 生成，用于统一 README、文档首页和状态页的交易所支持口径。
@@ -29,32 +29,24 @@
 | **Bitget** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 45 通过 | 建议补 WebSocket 覆盖后再提升状态 |
 | **Kraken** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 46 通过 | 建议补 WebSocket 覆盖后再提升状态 |
 | **Gate.io** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 56 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **Upbit** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 101 通过 (4 skip) | 建议补 WebSocket 覆盖后再提升状态 |
-| **Crypto.com** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 97 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **HitBTC** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 103 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
-| **Phemex** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 65 通过 (5 skip) | 建议补 WebSocket 覆盖后再提升状态 |
-| **Gemini** | CEX | REST 已实现，WebSocket 待继续补齐 | ✅ 20 通过 | 建议补 WebSocket 覆盖后再提升状态 |
-| **KuCoin** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 16 失败 / 47 通过 | mock 目标路径问题 |
 | **MEXC** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 11 失败 / 42 通过 | mock 目标路径问题 |
-| **Bitfinex** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 13 失败 / 43 通过 | mock 目标路径问题 |
 | **Coinbase** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 19 失败 / 45 通过 | 部分 import 路径变更 |
 | **Hyperliquid** | DEX | 实现存在，但当前仓库测试资产不足以提升到完整支持 | ⚠️ 待补验证 | 当前仓库缺少可执行的 Hyperliquid 测试文件 |
 | **dYdX** | DEX | 实现存在，但当前仓库测试资产不足以提升到完整支持 | ⚠️ 待补验证 | 当前仓库缺少可执行的 dYdX 测试文件 |
-| **BYDFi** | CEX | REST 已实现，仍需补稳定性验证 | ⚠️ 1 失败 / 17 通过 | JSON 解析 bug |
 
 ## 📋 已注册（基础框架就绪）
 
-- 数量：40+
-- 说明：其余交易所已完成注册或基础框架接入，但还需要继续补实现、测试或文档后，再提升对外状态。
+- 数量：1
+- 说明：MT5 已完成注册或基础框架接入，但还需要继续补实现、测试或文档后，再提升对外状态。
 
 ## 📈 统计总览
 
 | 状态 | 数量 | 说明 |
 | -------- | -------- | -------- |
 | ✅ 完整支持 | 4 | REST、WebSocket 和测试资产均已具备 |
-| 🔧 已实现 API | 17 | 已有实现，但仍需继续验证、补测试或补 WebSocket 能力 |
-| 📋 已注册 | 40+ | 已注册或基础框架接入，等待继续完善 |
-| 总计 | 73+ | 当前仓库对外声明支持的交易所总量 |
+| 🔧 已实现 API | 9 | 已有实现，但仍需继续验证、补测试或补 WebSocket 能力 |
+| 📋 已注册 | 1 | 已注册或基础框架接入，等待继续完善 |
+| 总计 | 14 | 当前仓库对外声明支持的交易所总量（不含 bt_api_base） |
 
 ## 维护说明
 

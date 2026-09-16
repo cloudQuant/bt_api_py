@@ -63,17 +63,10 @@
 #### 待改进文件按模块分布:
 
 ##### bt_api_py/containers/exchanges (7 个文件)
-- bt_api_py/containers/exchanges/bitfinex_exchange_data.py (23 issues)
-- bt_api_py/containers/exchanges/bitvavo_exchange_data.py (6 issues)
-- bt_api_py/containers/exchanges/coinone_exchange_data.py (18 issues)
-- bt_api_py/containers/exchanges/foxbit_exchange_data.py (3 issues)
-- bt_api_py/containers/exchanges/korbit_exchange_data.py (21 issues)
 - ... 还有 2 个文件
 
 ##### bt_api_py/containers/tickers (7 个文件)
 - bt_api_py/containers/tickers/bigone_ticker.py (8 issues)
-- bt_api_py/containers/tickers/bitmart_ticker.py (10 issues)
-- bt_api_py/containers/tickers/bydfi_ticker.py (26 issues)
 - bt_api_py/containers/tickers/curve_ticker.py (28 issues)
 - bt_api_py/containers/tickers/hyperliquid_ticker.py (15 issues)
 - ... 还有 2 个文件
@@ -84,7 +77,6 @@
 
 ##### bt_api_py/containers/orders (2 个文件)
 - bt_api_py/containers/orders/coinbase_order.py (53 issues)
-- bt_api_py/containers/orders/kucoin_order.py (75 issues)
 
 ##### bt_api_py/containers/trades (2 个文件)
 - bt_api_py/containers/trades/coinbase_trade.py (39 issues)
@@ -102,7 +94,6 @@
 - bt_api_py/containers/balances/binance_balance.py (84 issues)
 
 ##### bt_api_py/containers/bars (1 个文件)
-- bt_api_py/containers/bars/bitfinex_bar.py (29 issues)
 
 ##### bt_api_py/containers/ctp (1 个文件)
 - bt_api_py/containers/ctp/ctp_position.py (38 issues)
@@ -125,14 +116,8 @@
 ##### bt_api_py/exchange_registers/register_bitbank.py (1 个文件)
 - bt_api_py/exchange_registers/register_bitbank.py (2 issues)
 
-##### bt_api_py/exchange_registers/register_bitstamp.py (1 个文件)
-- bt_api_py/exchange_registers/register_bitstamp.py (1 issues)
 
-##### bt_api_py/exchange_registers/register_coindcx.py (1 个文件)
-- bt_api_py/exchange_registers/register_coindcx.py (1 issues)
 
-##### bt_api_py/exchange_registers/register_exmo.py (1 个文件)
-- bt_api_py/exchange_registers/register_exmo.py (2 issues)
 
 ##### bt_api_py/exchange_registers/register_ib_web.py (1 个文件)
 - bt_api_py/exchange_registers/register_ib_web.py (3 issues)
@@ -140,35 +125,19 @@
 ##### bt_api_py/exchange_registers/register_okx.py (1 个文件)
 - bt_api_py/exchange_registers/register_okx.py (4 issues)
 
-##### bt_api_py/exchange_registers/register_upbit.py (1 个文件)
-- bt_api_py/exchange_registers/register_upbit.py (1 issues)
 
 ##### bt_api_py/feeds/feed.py (1 个文件)
 - bt_api_py/feeds/feed.py (8 issues)
 
-##### bt_api_py/feeds/live_bitfinex (1 个文件)
-- bt_api_py/feeds/live_bitfinex/request_base.py (28 issues)
 
-##### bt_api_py/feeds/live_bitinka (1 个文件)
-- bt_api_py/feeds/live_bitinka/spot.py (95 issues)
 
-##### bt_api_py/feeds/live_bitunix (1 个文件)
-- bt_api_py/feeds/live_bitunix/spot.py (86 issues)
 
 ##### bt_api_py/feeds/live_bybit (1 个文件)
 - bt_api_py/feeds/live_bybit/spot.py (115 issues)
 
-##### bt_api_py/feeds/live_coinex (1 个文件)
-- bt_api_py/feeds/live_coinex/request_base.py (29 issues)
 
-##### bt_api_py/feeds/live_cryptocom (1 个文件)
-- bt_api_py/feeds/live_cryptocom/request_base.py (27 issues)
 
-##### bt_api_py/feeds/live_foxbit (1 个文件)
-- bt_api_py/feeds/live_foxbit/spot.py (92 issues)
 
-##### bt_api_py/feeds/live_hitbtc (1 个文件)
-- bt_api_py/feeds/live_hitbtc/request_base.py (25 issues)
 
 ##### bt_api_py/feeds/live_hyperliquid (1 个文件)
 - bt_api_py/feeds/live_hyperliquid/request_base.py (108 issues)
@@ -176,17 +145,9 @@
 ##### bt_api_py/feeds/live_kraken (1 个文件)
 - bt_api_py/feeds/live_kraken/spot.py (122 issues)
 
-##### bt_api_py/feeds/live_mercado_bitcoin (1 个文件)
-- bt_api_py/feeds/live_mercado_bitcoin/request_base.py (34 issues)
 
-##### bt_api_py/feeds/live_poloniex (1 个文件)
-- bt_api_py/feeds/live_poloniex/request_base.py (36 issues)
 
-##### bt_api_py/feeds/live_swyftx (1 个文件)
-- bt_api_py/feeds/live_swyftx/request_base.py (29 issues)
 
-##### bt_api_py/feeds/live_yobit (1 个文件)
-- bt_api_py/feeds/live_yobit/request_base.py (30 issues)
 
 ##### bt_api_py/functions/async_send_message.py (1 个文件)
 - bt_api_py/functions/async_send_message.py (4 issues)

@@ -171,8 +171,8 @@ cd ../..
 - [ ] **Step 2: 按依赖序批量提交推送其余 58 仓(核心大仓先,长尾后)**
 
 ```bash
-# 顺序: binance okx bybit gateio hyperliquid htx kucoin bitget mexc ...
-for repo in binance okx bybit gateio hyperliquid htx kucoin bitget mexc; do
+# 顺序: binance okx bybit gateio hyperliquid htx bitget mexc ...
+for repo in binance okx bybit gateio hyperliquid htx bitget mexc; do
   cd bt_api/bt_api_$repo || continue
   git add -A
   if git diff --cached --quiet; then echo "$repo: nothing to commit"; cd ../..; continue; fi
@@ -181,7 +181,7 @@ for repo in binance okx bybit gateio hyperliquid htx kucoin bitget mexc; do
   cd ../..
 done
 # 长尾仓批量
-for repo in $(ls bt_api | grep '^bt_api_' | sed 's/bt_api_//' | grep -vE '^(base|binance|okx|bybit|gateio|hyperliquid|htx|kucoin|bitget|mexc)$'); do
+for repo in $(ls bt_api | grep '^bt_api_' | sed 's/bt_api_//' | grep -vE '^(base|binance|okx|bybit|gateio|hyperliquid|htx|bitget|mexc)$'); do
   cd bt_api/bt_api_$repo || continue
   git add -A
   if git diff --cached --quiet; then cd ../..; continue; fi
@@ -1254,7 +1254,7 @@ def test_binance_error_response_raises_translated_error() -> None:
 
 - [ ] **Step 1: 读 bt_api_binance 的 pyproject entry-points 与 plugin.py,提炼模板(入口点格式、plugin.py 注册函数签名)**
 
-- [ ] **Step 2: 写生成脚本 `scripts/fix_plugin_entries.py`:对 29 仓逐一检查 entry-points 缺失 → 按模板补 `[project.entry-points."bt_api.plugins"]` 段与 plugin.py(内容按模板生成,注释标 `# generated, verify register call`);bybit/gmx 等缺 plugin.py 的用 exchange-integration skill 的生成器产出后人工核对**
+- [ ] **Step 2: 写生成脚本 `scripts/fix_plugin_entries.py`:对 29 仓逐一检查 entry-points 缺失 → 按模板补 `[project.entry-points."bt_api.plugins"]` 段与 plugin.py(内容按模板生成,注释标 `# generated, verify register call`);bybit 等缺 plugin.py 的用 exchange-integration skill 的生成器产出后人工核对**
 
 - [ ] **Step 3: 写发现 smoke 测试(母仓库 `tests/test_plugin_discovery.py`)**
 
@@ -1357,15 +1357,11 @@ def test_subscribe_waits_for_login_ack() -> None:
 
 **验收:** `grep -rn 'f"Async Request' bt_api/bt_api_hyperliquid/src/` 无结果;logger 名按仓隔离。
 
-### Task 4.10: gateio ctp 残留与 btbns 空仓处置(B-16)
+### Task 4.10: gateio ctp 残留处置(B-16)
 
 - [ ] **Step 1: 删除 `bt_api/bt_api_gateio/src/bt_api_ctp/` 残留包,commit+push+pin**
 
-- [ ] **Step 2: btbns 决策门:实现(有真实交易所需求)或从 .gitmodules 移除(暂未实现)。选择移除 → 母仓库 `git rm` 子模块 + .gitmodules 条目 + 残留引用清理;选择实现 → 按 exchange-integration skill 生成器产出并纳入迭代 4 验收**
-
-- [ ] **Step 3: commit+push+pin** → `chore: remove ctp residue from gateio; retire empty btbns submodule`(按决策)
-
-**验收:** gateio 仓无 ctp 目录;btbns 按决策落地且 .gitmodules 与母仓库一致。
+**验收:** gateio 仓无 ctp 目录。
 
 ### Task 4.11: 每仓最低测试基线(B-10)
 
@@ -1377,7 +1373,7 @@ def test_subscribe_waits_for_login_ack() -> None:
   - L2(有私有接口的仓):签名黄金值 + 错误翻译
   - L3(纯公开接口仓):normalize 真实报文 ≥2 用例(禁止 exchange_name 单断言空壳)
 
-- [ ] **Step 2: 修掉现有空壳测试(binance 自指签名测试改为调用被测方法断言黄金值;zebpay 单断言测试补齐 normalize 用例)**
+- [ ] **Step 2: 修掉现有空壳测试(binance 自指签名测试改为调用被测方法断言黄金值)**
 
 - [ ] **Step 3: 各仓逐仓落地基线并 commit+push;母仓库 nightly matrix 全绿(FAIL 清零)**
 

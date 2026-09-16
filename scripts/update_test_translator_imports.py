@@ -9,19 +9,9 @@ root = Path("/Users/yunjinqi/Documents/new_projects/bt_api_py")
 exchange_translators = {
     "bigone": "bt_api_bigone",
     "bingx": "bt_api_bingx",
-    "bitfinex": "bt_api_bitfinex",
-    "bitso": "bt_api_bitso",
-    "bitstamp": "bt_api_bitstamp",
-    "bitvavo": "bt_api_bitvavo",
-    "buda": "bt_api_buda",
-    "cryptocom": "bt_api_cryptocom",
     "ctp": "bt_api_ctp",
     "dydx": "bt_api_dydx",
-    "exmo": "bt_api_exmo",
-    "foxbit": "bt_api_foxbit",
     "gateio": "bt_api_gateio",
-    "gemini": "bt_api_gemini",
-    "hitbtc": "bt_api_hitbtc",
     "htx": "bt_api_htx",
     "hyperliquid": "bt_api_hyperliquid",
     "ib_web": "bt_api_ib_web",
@@ -29,10 +19,6 @@ exchange_translators = {
     "mexc": "bt_api_mexc",
     "mt5": "bt_api_mt5",
     "okx": "bt_api_okx",
-    "phemex": "bt_api_phemex",
-    "poloniex": "bt_api_poloniex",
-    "upbit": "bt_api_upbit",
-    "yobit": "bt_api_yobit",
 }
 
 
@@ -64,14 +50,6 @@ def update_file(filepath: Path) -> bool:
         old_import = f"from bt_api_py.errors.{ex}_translator import {translator_class}"
         new_import = f"from {pkg}.errors.{ex}_translator import {translator_class}"
         content = content.replace(old_import, new_import)
-
-        # 处理 bitfinex 特殊文件名
-        if ex == "bitfinex":
-            old_import2 = (
-                f"from bt_api_py.errors.bitfinex_error_translator import {translator_class}"
-            )
-            new_import2 = f"from {pkg}.errors.bitfinex_translator import {translator_class}"
-            content = content.replace(old_import2, new_import2)
 
     if content != original:
         filepath.write_text(content, encoding="utf-8")

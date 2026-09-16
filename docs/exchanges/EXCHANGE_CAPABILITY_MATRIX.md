@@ -1,6 +1,6 @@
 # 交易所能力矩阵
 
-**最后更新：** 2026-03-08
+**最后更新：** 2026-09-16
 **版本：** 0.15
 
 本文档提供每个交易所的详细能力矩阵，帮助开发者和维护者快速了解各交易所的实现状态、测试覆盖率和文档完整性。
@@ -37,11 +37,6 @@
 | **BITGET___SWAP** | ✅ | ⚠️ | 42+/80% | ⚠️ | WebSocket需完善 |
 | **KRAKEN___SPOT** | ✅ | ⚠️ | 46+/85% | ⚠️ | WebSocket需完善 |
 | **GATEIO___SPOT** | ✅ | ⚠️ | 56+/85% | ⚠️ | WebSocket需完善 |
-| **UPBIT___SPOT** | ✅ | ⚠️ | 103/85% | ⚠️ | WebSocket需完善 |
-| **CRYPTO_COM___SPOT** | ✅ | ⚠️ | 97+/85% | ⚠️ | WebSocket需完善 |
-| **HITBTC___SPOT** | ✅ | ⚠️ | 103+/85% | ⚠️ | WebSocket需完善 |
-| **PHEMEX___SPOT** | ✅ | ⚠️ | 65+/80% | ⚠️ | WebSocket需完善 |
-| **GEMINI___SPOT** | ✅ | ⚠️ | 20+/75% | ⚠️ | WebSocket需完善，导入路径问题 |
 
 ### 传统金融
 
@@ -67,14 +62,10 @@
 | **OKX___SPOT** | ✅ | ⚠️ | 部分/60% | ⚠️ | Mock路径问题导致测试失败 |
 | **OKX___SWAP** | ✅ | ⚠️ | 部分/55% | ⚠️ | WebSocket需完善 |
 | **OKX___OPTION** | ✅ | ⚠️ | 部分/50% | ⚠️ | 期权支持不完整 |
-| **KUCOIN___SPOT** | ✅ | ⚠️ | 16/47通过 | ⚠️ | 测试稳定性问题 |
 | **MEXC___SPOT** | ✅ | ⚠️ | 11/42通过 | ⚠️ | 测试稳定性问题 |
 | **MEXC___SWAP** | ✅ | ⚠️ | 部分/50% | ⚠️ | WebSocket需完善 |
-| **BITFINEX___SPOT** | ✅ | ⚠️ | 13/43通过 | ⚠️ | 测试稳定性问题 |
-| **BITFINEX___SWAP** | ✅ | ⚠️ | 部分/50% | ⚠️ | WebSocket需完善 |
 | **COINBASE___SPOT** | ✅ | ⚠️ | 19/45通过 | ⚠️ | Import路径问题 |
 | **COINBASE___SWAP** | ✅ | ❌ | 部分/60% | ⚠️ | WebSocket未实现 |
-| **BYDFI___SPOT** | ✅ | ⚠️ | 1/17通过 | ⚠️ | JSON解析问题 |
 
 ### 去中心化交易所 (DEX)
 
@@ -95,7 +86,6 @@
 | **DYDX___PERP** | ✅ 基础 | ❌ | ❌ | ⚠️ | 缺少WebSocket、完整测试 |
 | **CURVE___V2** | ⚠️ 基础 | ❌ | ❌ | ⚠️ | 稳定币交换，需要完整测试 |
 | **BALANCER___V2** | ⚠️ 基础 | ❌ | ❌ | ⚠️ | AMM，需要完整测试 |
-| **GMX___PERP** | ⚠️ 基础 | ❌ | ❌ | ⚠️ | 衍生品，需要完整测试 |
 | **RAYDIUM___SOL** | ⚠️ 基础 | ❌ | ❌ | ⚠️ | Solana AMM，需要完整测试 |
 | **COWSWAP___V1** | ⚠️ 基础 | ❌ | ❌ | ⚠️ | 聚合器，需要完整测试 |
 
@@ -107,38 +97,39 @@
 
 ### 加密货币交易所 (部分列表)
 
-4E, AAX, AscendEX, Bequant, BigONE, Bithumb, Bitcoin.com, BitMart, Bitrue, Bitstamp, Bitunix, Bitvavo, BTSE, BTC Markets, BYDFi, Coinsbit, CoinEx, CoinList, CoinMetro, Coinone, CoinSwitch, CoinTiger, CoinZest, Crypto.com, Currency.com, DigiFinex, Exmo, FTX (已关闭), FTX US (已关闭), Gate.io, HitBTC, Hcoin, Huobi Korea, IDAX, Independent Reserve, Indodax, ItBit, Koinim, Koinex, Korbit, Kuna, LakeBTC, Latoken, LBank, Liquid, Livecoin, Lykke, Mercado Bitcoin, Nexchange, Nominex, NovaDAX, OceanEx, OKCoin, Poloniex, ProBit, QBTC, Quedex, RightBTC, SatoshiTango, SouthXchange, Stellarport, StormGain, SushiSwap, Swyftx, The Ocean, Tidex, TimeX, Tokocrypto, Tokenize, Tokens, TradeSatoshi, Upbit, VCC, WazirX, WhiteBIT, XinFin, YoBit, Zaif, ZB, Zebpay, Zecoex
+4E, AAX, AscendEX, Bequant, BigONE, Bitcoin.com, BTSE, Coinsbit, CoinList, CoinMetro, CoinTiger, CoinZest, Currency.com, DigiFinex, FTX (已关闭), FTX US (已关闭), Gate.io, Hcoin, Huobi Korea, IDAX, Indodax, ItBit, Koinim, Koinex, Kuna, LakeBTC, LBank, Liquid, Livecoin, Lykke, Nexchange, Nominex, NovaDAX, OceanEx, OKCoin, ProBit, QBTC, Quedex, RightBTC, SouthXchange, Stellarport, StormGain, SushiSwap, The Ocean, Tidex, TimeX, Tokocrypto, Tokenize, Tokens, TradeSatoshi, VCC, WhiteBIT, XinFin, ZB, Zecoex
 
 ---
 
 ## 📈 统计总览
 
+> 计数基于本矩阵明细行（生产就绪 / Beta / Alpha）与「框架就绪 (已注册)」列表条目。
+
 ### 按状态分类
 
-| 状态 | 数量 | 百分比 |
-|------|------|--------|
-| ✅ 生产就绪 | 13 | 18% |
-| 🟡 Beta | 9 | 12% |
-| 🚧 Alpha | 6 | 8% |
-| 📋 框架就绪 | 45+ | 62% |
-| **总计** | **73+** | **100%** |
+| 状态 | 数量 |
+|------|------|
+| ✅ 生产就绪 | 14 |
+| 🟡 Beta | 10 |
+| 🚧 Alpha | 5 |
+| 📋 框架就绪 | 58 |
 
 ### 按类型分类
 
 | 类型 | 生产就绪 | Beta | Alpha | 框架就绪 |
 |------|--------|------|------|---------|
-| 加密货币 (CEX) | 11 | 6 | 0 | 45+ |
+| 加密货币 (CEX) | 11 | 7 | 0 | 58 |
 | 传统金融 | 2 | 0 | 0 | 0 |
-| 去中心化 (DEX) | 1 | 3 | 6 | 0 |
+| 去中心化 (DEX) | 1 | 3 | 5 | 0 |
 
 ### 能力覆盖
 
 | 能力 | 完整支持 | 部分支持 | 未实现 | N/A |
 |------|--------|--------|--------|-----|
-| REST API | 21 | 7 | 0 | 45+ |
-| WebSocket | 4 | 17 | 6 | 45+ |
-| 完整测试 | 13 | 3 | 0 | 57+ |
-| 完整文档 | 13 | 9 | 0 | 51+ |
+| REST API | 24 | 5 | 0 | 58 |
+| WebSocket | 8 | 10 | 11 | 58 |
+| 完整测试 | 14 | 10 | 5 | 58 |
+| 完整文档 | 8 | 21 | 0 | 58 |
 
 ---
 

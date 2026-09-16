@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BT_API_DIR = ROOT / "bt_api"
 
-EXCLUDED = {"bt_api_base", "bt_api_btbns"}
+EXCLUDED = {"bt_api_base"}
 
 REGISTER_FUNC_RE = re.compile(r"def\s+(register(?:_\w+)?)\s*\(([^)]*)\)")
 REGISTER_FEED_RE = re.compile(r'register_feed\(\s*["\']([^"\']+)["\']')

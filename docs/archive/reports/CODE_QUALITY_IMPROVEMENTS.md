@@ -13,9 +13,6 @@
 
 ### 2. 类型注解改进
 
-- **btc_markets_ticker.py**：为 `last_price`、`bid_price` 等添加 `float | None` 显式类型注解
-- **gemini_order.py**：移除冗余 `type: ignore`，补充正确的类型注解
-- **gemini_bar.py**：移除未使用的 `type: ignore` 注释
 - **binance_bar.py**：移除未使用的 `type: ignore` 注释
 
 ### 3. 代码清理
@@ -45,7 +42,7 @@
    - 考虑在 `pyproject.toml` 中为部分模块启用 `disallow_untyped_defs`
 
 2. **PTH（pathlib）分批迁移**
-   - 已迁移：`config_loader.py`、`balancer_exchange_data.py`、`binance_exchange_data.py`、`okx_exchange_data.py`、`kraken_exchange_data.py`、`bitfinex_exchange_data.py`、`log_message.py`
+   - 已迁移：`config_loader.py`、`balancer_exchange_data.py`、`binance_exchange_data.py`、`okx_exchange_data.py`、`kraken_exchange_data.py`、`log_message.py`
    - 新增 `config_loader.get_exchange_config_path(filename)` 供其余 exchange_data 复用
    - 新代码优先使用 `pathlib.Path`，旧代码在改动时顺带迁移
 

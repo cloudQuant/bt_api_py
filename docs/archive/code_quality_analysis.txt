@@ -37,59 +37,17 @@ containers/symbols: 4 个文件
 containers/positions: 4 个文件
 .: 3 个文件
 risk_management/ml_models: 3 个文件
-feeds/live_coinswitch: 3 个文件
-feeds/live_coindcx: 3 个文件
-feeds/live_swyftx: 3 个文件
-feeds/live_zaif: 3 个文件
-feeds/live_valr: 3 个文件
-feeds/live_zebpay: 3 个文件
 feeds/live_dydx: 3 个文件
-feeds/live_bithumb: 3 个文件
-feeds/live_btc_markets: 3 个文件
-feeds/live_mercado_bitcoin: 3 个文件
 feeds/live_bigone: 3 个文件
-feeds/live_satoshitango: 3 个文件
 feeds/live_bybit: 3 个文件
-feeds/live_bydfi: 3 个文件
 feeds/live_cow_swap: 3 个文件
-feeds/live_bitunix: 3 个文件
 feeds/live_bequant: 3 个文件
-feeds/live_cryptocom: 3 个文件
-feeds/live_wazirx: 3 个文件
-feeds/live_latoken: 3 个文件
-feeds/live_bitso: 3 个文件
-feeds/live_bitmart: 3 个文件
-feeds/live_bitinka: 3 个文件
-feeds/live_gmx: 3 个文件
-feeds/live_exmo: 3 个文件
-feeds/live_coinex: 3 个文件
-feeds/live_yobit: 3 个文件
-feeds/live_korbit: 3 个文件
-feeds/live_luno: 3 个文件
-feeds/live_bitstamp: 3 个文件
-feeds/live_upbit: 3 个文件
 feeds/live_coinbase: 3 个文件
-feeds/live_coinspot: 3 个文件
-feeds/live_kucoin: 3 个文件
-feeds/live_bitfinex: 3 个文件
-feeds/live_poloniex: 3 个文件
-feeds/live_coinone: 3 个文件
 feeds/live_bitbns: 3 个文件
-feeds/live_hitbtc: 3 个文件
-feeds/live_bitrue: 3 个文件
 feeds/live_bitflyer: 3 个文件
 feeds/live_bingx: 3 个文件
-feeds/live_bitvavo: 3 个文件
-feeds/live_phemex: 3 个文件
 feeds/live_curve: 3 个文件
-feeds/live_coincheck: 3 个文件
-feeds/live_buda: 3 个文件
-feeds/live_btcturk: 3 个文件
-feeds/live_giottus: 3 个文件
 feeds/live_gateio: 3 个文件
-feeds/live_foxbit: 3 个文件
-feeds/live_localbitcoins: 3 个文件
-feeds/live_independent_reserve: 3 个文件
 feeds/live_bitbank: 3 个文件
 containers/greeks: 3 个文件
 containers/incomes: 3 个文件
@@ -99,7 +57,6 @@ utils: 2 个文件
 feeds/live_balancer: 2 个文件
 feeds/live_raydium: 2 个文件
 feeds/live_uniswap: 2 个文件
-feeds/live_ripio: 2 个文件
 feeds/live_sushiswap: 2 个文件
 containers: 2 个文件
 containers/pools: 2 个文件
@@ -110,10 +67,8 @@ containers/requestdatas: 2 个文件
 containers/assets: 2 个文件
 security_compliance: 2 个文件
 security_compliance/network: 2 个文件
-feeds/live_gemini: 2 个文件
 risk_management: 1 个文件
 risk_management/core: 1 个文件
-feeds/live_hitbtc/mixins: 1 个文件
 configs: 1 个文件
 security_compliance/auth: 1 个文件
 security_compliance/recovery: 1 个文件
@@ -175,32 +130,26 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 11. feeds/live_coinswitch/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 12. feeds/live_coindcx/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 13. feeds/live_swyftx/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 14. feeds/live_zaif/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 15. feeds/live_valr/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 16. feeds/live_zebpay/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -210,17 +159,14 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 18. feeds/live_bithumb/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 19. feeds/live_btc_markets/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 20. feeds/live_mercado_bitcoin/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -230,7 +176,6 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 22. feeds/live_satoshitango/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -240,7 +185,6 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
 
- 24. feeds/live_bydfi/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -250,7 +194,6 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 26. feeds/live_bitunix/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -260,17 +203,14 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 28. feeds/live_cryptocom/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 29. feeds/live_wazirx/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 30. feeds/live_latoken/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
@@ -310,32 +250,26 @@ risk_management/containers: 1 个文件
      函数数: 1, 类数: 1
      类型注解: 0, 文档字符串: 0
 
- 38. feeds/live_bitso/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 39. feeds/live_bitmart/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 40. feeds/live_bitinka/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 41. feeds/live_gmx/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 42. feeds/live_exmo/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 43. feeds/live_coinex/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -370,27 +304,22 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
 
- 50. feeds/live_yobit/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 51. feeds/live_korbit/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
 
- 52. feeds/live_luno/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 53. feeds/live_bitstamp/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 54. feeds/live_upbit/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
@@ -405,17 +334,14 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 57. feeds/live_coinspot/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 58. feeds/live_kucoin/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
 
- 59. feeds/live_bitfinex/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
@@ -425,12 +351,10 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 61. feeds/live_poloniex/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 62. feeds/live_coinone/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -440,22 +364,18 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 64. feeds/live_hitbtc/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 65. feeds/live_hitbtc/mixins/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 66. feeds/live_bitrue/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 67. feeds/live_ripio/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -475,12 +395,10 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 71. feeds/live_bitvavo/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 72. feeds/live_phemex/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -490,22 +408,18 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 74. feeds/live_coincheck/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 75. feeds/live_buda/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 76. feeds/live_btcturk/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 77. feeds/live_giottus/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -525,17 +439,14 @@ risk_management/containers: 1 个文件
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 81. feeds/live_foxbit/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
 
- 82. feeds/live_localbitcoins/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 0
 
- 83. feeds/live_independent_reserve/__init__.py
      质量分数: 0.0
      函数数: 0, 类数: 0
      类型注解: 0, 文档字符串: 1
@@ -825,7 +736,6 @@ risk_management/containers: 1 个文件
      函数数: 50, 类数: 1
      类型注解: 0, 文档字符串: 1
 
-141. feeds/live_poloniex/spot.py
      质量分数: 0.9
      函数数: 52, 类数: 1
      类型注解: 0, 文档字符串: 2
@@ -855,22 +765,18 @@ risk_management/containers: 1 个文件
      函数数: 16, 类数: 1
      类型注解: 0, 文档字符串: 1
 
-147. feeds/live_valr/request_base.py
      质量分数: 1.9
      函数数: 26, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-148. feeds/live_wazirx/request_base.py
      质量分数: 1.9
      函数数: 26, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-149. feeds/live_phemex/spot.py
      质量分数: 1.9
      函数数: 26, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-150. feeds/live_swyftx/request_base.py
      质量分数: 1.9
      函数数: 25, 类数: 1
      类型注解: 0, 文档字符串: 2
@@ -880,7 +786,6 @@ risk_management/containers: 1 个文件
      函数数: 25, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-152. feeds/live_coinex/spot.py
      质量分数: 1.9
      函数数: 25, 类数: 1
      类型注解: 0, 文档字符串: 2
@@ -900,7 +805,6 @@ risk_management/containers: 1 个文件
      函数数: 24, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-156. feeds/live_hitbtc/spot.py
      质量分数: 2.0
      函数数: 24, 类数: 1
      类型注解: 0, 文档字符串: 2
@@ -920,7 +824,6 @@ risk_management/containers: 1 个文件
      函数数: 21, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-160. containers/orders/kucoin_order.py
      质量分数: 2.4
      函数数: 39, 类数: 3
      类型注解: 0, 文档字符串: 4
@@ -950,7 +853,6 @@ risk_management/containers: 1 个文件
      函数数: 35, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-166. feeds/live_cryptocom/spot.py
      质量分数: 2.8
      函数数: 26, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -965,22 +867,18 @@ risk_management/containers: 1 个文件
      函数数: 17, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-169. containers/tickers/korbit_ticker.py
      质量分数: 2.9
      函数数: 23, 类数: 3
      类型注解: 0, 文档字符串: 3
 
-170. containers/tickers/latoken_ticker.py
      质量分数: 2.9
      函数数: 23, 类数: 3
      类型注解: 0, 文档字符串: 3
 
-171. containers/tickers/bitfinex_ticker.py
      质量分数: 2.9
      函数数: 23, 类数: 3
      类型注解: 0, 文档字符串: 3
 
-172. containers/tickers/localbitcoins_ticker.py
      质量分数: 2.9
      函数数: 23, 类数: 3
      类型注解: 0, 文档字符串: 3
@@ -995,22 +893,18 @@ risk_management/containers: 1 个文件
      函数数: 23, 类数: 2
      类型注解: 0, 文档字符串: 3
 
-175. feeds/live_zaif/request_base.py
      质量分数: 3.1
      函数数: 32, 类数: 1
      类型注解: 2, 文档字符串: 2
 
-176. feeds/live_zaif/spot.py
      质量分数: 3.1
      函数数: 29, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-177. feeds/live_zebpay/spot.py
      质量分数: 3.1
      函数数: 29, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-178. feeds/live_coinone/spot.py
      质量分数: 3.1
      函数数: 15, 类数: 1
      类型注解: 0, 文档字符串: 2
@@ -1035,32 +929,26 @@ risk_management/containers: 1 个文件
      函数数: 28, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-183. feeds/live_yobit/request_base.py
      质量分数: 3.3
      函数数: 30, 类数: 1
      类型注解: 2, 文档字符串: 2
 
-184. feeds/live_bitso/spot.py
      质量分数: 3.3
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-185. feeds/live_bitmart/spot.py
      质量分数: 3.3
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-186. feeds/live_yobit/spot.py
      质量分数: 3.3
      函数数: 27, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-187. feeds/live_upbit/spot.py
      质量分数: 3.3
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-188. feeds/live_bitrue/spot.py
      质量分数: 3.3
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 2
@@ -1110,12 +998,10 @@ risk_management/containers: 1 个文件
      函数数: 33, 类数: 3
      类型注解: 1, 文档字符串: 4
 
-198. feeds/live_bitstamp/spot.py
      质量分数: 3.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-199. containers/orders/cryptocom_order.py
      质量分数: 3.6
      函数数: 41, 类数: 1
      类型注解: 0, 文档字符串: 6
@@ -1135,32 +1021,26 @@ risk_management/containers: 1 个文件
      函数数: 24, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-203. containers/bars/kucoin_bar.py
      质量分数: 3.7
      函数数: 24, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-204. containers/balances/kucoin_balance.py
      质量分数: 3.7
      函数数: 24, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-205. feeds/live_coinswitch/spot.py
      质量分数: 3.8
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-206. feeds/live_independent_reserve/spot.py
      质量分数: 3.8
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 2
 
-207. containers/orders/poloniex_order.py
      质量分数: 3.8
      函数数: 23, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-208. feeds/live_zebpay/request_base.py
      质量分数: 3.9
      函数数: 32, 类数: 1
      类型注解: 3, 文档字符串: 2
@@ -1170,17 +1050,14 @@ risk_management/containers: 1 个文件
      函数数: 17, 类数: 2
      类型注解: 0, 文档字符串: 3
 
-210. containers/tickers/giottus_ticker.py
      质量分数: 3.9
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-211. containers/tickers/bitso_ticker.py
      质量分数: 3.9
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-212. containers/tickers/bitstamp_ticker.py
      质量分数: 3.9
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1200,7 +1077,6 @@ risk_management/containers: 1 个文件
      函数数: 3, 类数: 3
      类型注解: 0, 文档字符串: 1
 
-216. feeds/live_coinspot/spot.py
      质量分数: 4.2
      函数数: 11, 类数: 1
      类型注解: 0, 文档字符串: 2
@@ -1220,7 +1096,6 @@ risk_management/containers: 1 个文件
      函数数: 17, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-220. feeds/live_latoken/spot.py
      质量分数: 4.3
      函数数: 20, 类数: 3
      类型注解: 0, 文档字符串: 4
@@ -1240,7 +1115,6 @@ risk_management/containers: 1 个文件
      函数数: 16, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-224. feeds/live_korbit/spot.py
      质量分数: 4.5
      函数数: 19, 类数: 3
      类型注解: 0, 文档字符串: 4
@@ -1260,17 +1134,14 @@ risk_management/containers: 1 个文件
      函数数: 30, 类数: 2
      类型注解: 0, 文档字符串: 6
 
-228. feeds/live_kucoin/futures.py
      质量分数: 4.7
      函数数: 30, 类数: 3
      类型注解: 2, 文档字符串: 4
 
-229. feeds/live_latoken/request_base.py
      质量分数: 4.7
      函数数: 31, 类数: 1
      类型注解: 1, 文档字符串: 5
 
-230. containers/tickers/poloniex_ticker.py
      质量分数: 4.8
      函数数: 18, 类数: 3
      类型注解: 0, 文档字符串: 4
@@ -1300,7 +1171,6 @@ risk_management/containers: 1 个文件
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-236. containers/tickers/kucoin_ticker.py
      质量分数: 5.2
      函数数: 20, 类数: 4
      类型注解: 0, 文档字符串: 5
@@ -1315,12 +1185,10 @@ risk_management/containers: 1 个文件
      函数数: 25, 类数: 3
      类型注解: 0, 文档字符串: 6
 
-239. containers/tickers/buda_ticker.py
      质量分数: 5.4
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-240. containers/tickers/gmx_ticker.py
      质量分数: 5.4
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1330,7 +1198,6 @@ risk_management/containers: 1 个文件
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-242. containers/tickers/btcturk_ticker.py
      质量分数: 5.4
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1345,7 +1212,6 @@ risk_management/containers: 1 个文件
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-245. containers/orderbooks/kucoin_orderbook.py
      质量分数: 5.4
      函数数: 19, 类数: 4
      类型注解: 0, 文档字符串: 5
@@ -1360,22 +1226,18 @@ risk_management/containers: 1 个文件
      函数数: 22, 类数: 1
      类型注解: 1, 文档字符串: 4
 
-248. feeds/live_swyftx/spot.py
      质量分数: 5.6
      函数数: 15, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-249. feeds/live_valr/spot.py
      质量分数: 5.6
      函数数: 15, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-250. feeds/live_wazirx/spot.py
      质量分数: 5.6
      函数数: 15, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-251. feeds/live_localbitcoins/spot.py
      质量分数: 5.6
      函数数: 15, 类数: 3
      类型注解: 0, 文档字符串: 4
@@ -1385,32 +1247,26 @@ risk_management/containers: 1 个文件
      函数数: 15, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-253. containers/balances/poloniex_balance.py
      质量分数: 5.6
      函数数: 15, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-254. containers/trades/kucoin_trade.py
      质量分数: 5.7
      函数数: 18, 类数: 4
      类型注解: 0, 文档字符串: 5
 
-255. containers/tickers/coincheck_ticker.py
      质量分数: 5.8
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-256. containers/tickers/coinone_ticker.py
      质量分数: 5.8
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-257. containers/tickers/btc_markets_ticker.py
      质量分数: 5.8
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-258. containers/tickers/coindcx_ticker.py
      质量分数: 5.8
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1430,12 +1286,10 @@ risk_management/containers: 1 个文件
      函数数: 4, 类数: 0
      类型注解: 0, 文档字符串: 1
 
-262. containers/bars/bitfinex_bar.py
      质量分数: 6.2
      函数数: 15, 类数: 1
      类型注解: 0, 文档字符串: 4
 
-263. containers/orders/bitfinex_order.py
      质量分数: 6.2
      函数数: 37, 类数: 3
      类型注解: 0, 文档字符串: 10
@@ -1445,7 +1299,6 @@ risk_management/containers: 1 个文件
      函数数: 2, 类数: 2
      类型注解: 0, 文档字符串: 1
 
-265. containers/tickers/cryptocom_ticker.py
      质量分数: 6.6
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 5
@@ -1460,7 +1313,6 @@ risk_management/containers: 1 个文件
      函数数: 38, 类数: 3
      类型注解: 1, 文档字符串: 10
 
-268. feeds/live_localbitcoins/request_base.py
      质量分数: 6.9
      函数数: 21, 类数: 1
      类型注解: 1, 文档字符串: 5
@@ -1480,52 +1332,42 @@ risk_management/containers: 1 个文件
      函数数: 17, 类数: 1
      类型注解: 0, 文档字符串: 5
 
-272. feeds/live_coinex/request_base.py
      质量分数: 7.0
      函数数: 35, 类数: 1
      类型注解: 3, 文档字符串: 7
 
-273. feeds/live_coinone/request_base.py
      质量分数: 7.0
      函数数: 35, 类数: 1
      类型注解: 3, 文档字符串: 7
 
-274. feeds/live_bitstamp/request_base.py
      质量分数: 7.0
      函数数: 35, 类数: 1
      类型注解: 5, 文档字符串: 5
 
-275. feeds/live_bitrue/request_base.py
      质量分数: 7.0
      函数数: 35, 类数: 1
      类型注解: 5, 文档字符串: 5
 
-276. containers/accounts/bitfinex_account.py
      质量分数: 7.1
      函数数: 5, 类数: 2
      类型注解: 0, 文档字符串: 2
 
-277. feeds/live_upbit/request_base.py
      质量分数: 7.2
      函数数: 34, 类数: 1
      类型注解: 3, 文档字符串: 7
 
-278. feeds/live_korbit/request_base.py
      质量分数: 7.3
      函数数: 27, 类数: 1
      类型注解: 4, 文档字符串: 4
 
-279. containers/orderbooks/cryptocom_orderbook.py
      质量分数: 7.5
      函数数: 19, 类数: 1
      类型注解: 0, 文档字符串: 6
 
-280. feeds/live_bitso/request_base.py
      质量分数: 7.5
      函数数: 36, 类数: 1
      类型注解: 5, 文档字符串: 6
 
-281. containers/trades/bitfinex_trade.py
      质量分数: 7.8
      函数数: 14, 类数: 2
      类型注解: 0, 文档字符串: 5
@@ -1535,12 +1377,10 @@ risk_management/containers: 1 个文件
      函数数: 24, 类数: 2
      类型注解: 2, 文档字符串: 6
 
-283. containers/accounts/kucoin_account.py
      质量分数: 7.9
      函数数: 16, 类数: 3
      类型注解: 0, 文档字符串: 6
 
-284. feeds/live_bitmart/request_base.py
      质量分数: 8.0
      函数数: 37, 类数: 1
      类型注解: 5, 文档字符串: 7
@@ -1560,7 +1400,6 @@ risk_management/containers: 1 个文件
      函数数: 33, 类数: 1
      类型注解: 5, 文档字符串: 6
 
-288. feeds/live_phemex/request_base.py
      质量分数: 8.5
      函数数: 29, 类数: 1
      类型注解: 5, 文档字符串: 5
@@ -1570,7 +1409,6 @@ risk_management/containers: 1 个文件
      函数数: 22, 类数: 1
      类型注解: 0, 文档字符串: 8
 
-290. feeds/live_independent_reserve/request_base.py
      质量分数: 8.7
      函数数: 28, 类数: 1
      类型注解: 4, 文档字符串: 6
@@ -1585,22 +1423,18 @@ risk_management/containers: 1 个文件
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 5
 
-293. containers/exchanges/wazirx_exchange_data.py
      质量分数: 9.1
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 4
 
-294. containers/exchanges/zaif_exchange_data.py
      质量分数: 9.1
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 4
 
-295. containers/exchanges/yobit_exchange_data.py
      质量分数: 9.1
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 4
 
-296. containers/exchanges/zebpay_exchange_data.py
      质量分数: 9.1
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 4
@@ -1610,7 +1444,6 @@ risk_management/containers: 1 个文件
      函数数: 34, 类数: 1
      类型注解: 6, 文档字符串: 7
 
-298. feeds/live_hitbtc/request_base.py
      质量分数: 9.5
      函数数: 31, 类数: 1
      类型注解: 5, 文档字符串: 7
@@ -1630,47 +1463,38 @@ risk_management/containers: 1 个文件
      函数数: 44, 类数: 4
      类型注解: 0, 文档字符串: 19
 
-302. feeds/live_coinswitch/request_base.py
      质量分数: 10.0
      函数数: 27, 类数: 1
      类型注解: 6, 文档字符串: 5
 
-303. feeds/live_coinspot/request_base.py
      质量分数: 10.5
      函数数: 28, 类数: 1
      类型注解: 6, 文档字符串: 6
 
-304. containers/exchanges/swyftx_exchange_data.py
      质量分数: 11.4
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-305. containers/exchanges/valr_exchange_data.py
      质量分数: 11.4
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-306. containers/exchanges/latoken_exchange_data.py
      质量分数: 11.4
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-307. containers/exchanges/localbitcoins_exchange_data.py
      质量分数: 12.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-308. containers/trades/latoken_trade.py
      质量分数: 12.5
      函数数: 1, 类数: 1
      类型注解: 0, 文档字符串: 1
 
-309. containers/trades/korbit_trade.py
      质量分数: 12.5
      函数数: 1, 类数: 1
      类型注解: 0, 文档字符串: 1
 
-310. containers/trades/localbitcoins_trade.py
      质量分数: 12.5
      函数数: 1, 类数: 1
      类型注解: 0, 文档字符串: 1
@@ -1680,17 +1504,14 @@ risk_management/containers: 1 个文件
      函数数: 17, 类数: 1
      类型注解: 0, 文档字符串: 9
 
-312. containers/orders/korbit_order.py
      质量分数: 12.5
      函数数: 1, 类数: 1
      类型注解: 0, 文档字符串: 1
 
-313. containers/orders/latoken_order.py
      质量分数: 12.5
      函数数: 1, 类数: 1
      类型注解: 0, 文档字符串: 1
 
-314. containers/orders/localbitcoins_order.py
      质量分数: 12.5
      函数数: 1, 类数: 1
      类型注解: 0, 文档字符串: 1
@@ -1710,7 +1531,6 @@ risk_management/containers: 1 个文件
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 10
 
-318. containers/bars/gemini_bar.py
      质量分数: 13.3
      函数数: 13, 类数: 2
      类型注解: 0, 文档字符串: 8
@@ -1750,12 +1570,10 @@ risk_management/containers: 1 个文件
      函数数: 23, 类数: 4
      类型注解: 0, 文档字符串: 16
 
-326. containers/tickers/mercado_bitcoin_ticker.py
      质量分数: 15.0
      函数数: 4, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-327. containers/tickers/luno_ticker.py
      质量分数: 15.0
      函数数: 4, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1765,12 +1583,10 @@ risk_management/containers: 1 个文件
      函数数: 4, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-329. containers/tickers/bithumb_ticker.py
      质量分数: 15.0
      函数数: 4, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-330. containers/tickers/bitmart_ticker.py
      质量分数: 15.0
      函数数: 4, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1800,7 +1616,6 @@ risk_management/containers: 1 个文件
      函数数: 33, 类数: 1
      类型注解: 0, 文档字符串: 22
 
-336. containers/balances/bitfinex_balance.py
      质量分数: 16.5
      函数数: 17, 类数: 3
      类型注解: 1, 文档字符串: 12
@@ -1825,7 +1640,6 @@ risk_management/containers: 1 个文件
      函数数: 3, 类数: 3
      类型注解: 0, 文档字符串: 4
 
-341. containers/exchanges/hitbtc_exchange_data.py
      质量分数: 16.7
      函数数: 10, 类数: 2
      类型注解: 0, 文档字符串: 8
@@ -1845,7 +1659,6 @@ risk_management/containers: 1 个文件
      函数数: 11, 类数: 1
      类型注解: 0, 文档字符串: 8
 
-345. containers/balances/hitbtc_balance.py
      质量分数: 16.7
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 10
@@ -1870,12 +1683,10 @@ risk_management/containers: 1 个文件
      函数数: 115, 类数: 1
      类型注解: 0, 文档字符串: 80
 
-350. containers/balances/gemini_balance.py
      质量分数: 17.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 7
 
-351. containers/orderbooks/bitfinex_orderbook.py
      质量分数: 17.6
      函数数: 27, 类数: 3
      类型注解: 1, 文档字符串: 20
@@ -1885,17 +1696,14 @@ risk_management/containers: 1 个文件
      函数数: 8, 类数: 1
      类型注解: 3, 文档字符串: 3
 
-353. feeds/live_satoshitango/request_base.py
      质量分数: 17.9
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 10
 
-354. feeds/live_giottus/request_base.py
      质量分数: 17.9
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 10
 
-355. containers/tickers/hitbtc_ticker.py
      质量分数: 18.1
      函数数: 17, 类数: 1
      类型注解: 0, 文档字符串: 13
@@ -1905,17 +1713,14 @@ risk_management/containers: 1 个文件
      函数数: 25, 类数: 4
      类型注解: 0, 文档字符串: 21
 
-357. containers/orders/gemini_order.py
      质量分数: 18.2
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 8
 
-358. feeds/live_luno/request_base.py
      质量分数: 18.3
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-359. feeds/live_mercado_bitcoin/request_base.py
      质量分数: 18.8
      函数数: 15, 类数: 1
      类型注解: 0, 文档字符串: 12
@@ -1930,7 +1735,6 @@ risk_management/containers: 1 个文件
      函数数: 2, 类数: 2
      类型注解: 0, 文档字符串: 3
 
-362. containers/tickers/foxbit_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1945,47 +1749,38 @@ risk_management/containers: 1 个文件
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-365. containers/tickers/bitinka_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-366. containers/tickers/bitvavo_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-367. containers/tickers/coinswitch_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-368. containers/tickers/swyftx_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-369. containers/tickers/zaif_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-370. containers/tickers/coinspot_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-371. containers/tickers/valr_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-372. containers/tickers/wazirx_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-373. containers/tickers/independent_reserve_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -1995,17 +1790,14 @@ risk_management/containers: 1 个文件
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-375. containers/tickers/yobit_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-376. containers/tickers/zebpay_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-377. containers/tickers/bitunix_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
@@ -2020,17 +1812,14 @@ risk_management/containers: 1 个文件
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-380. containers/tickers/satoshitango_ticker.py
      质量分数: 18.8
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 3
 
-381. containers/tickers/bydfi_ticker.py
      质量分数: 18.8
      函数数: 15, 类数: 1
      类型注解: 0, 文档字符串: 12
 
-382. containers/fundingrates/bitfinex_funding_rate.py
      质量分数: 18.8
      函数数: 2, 类数: 2
      类型注解: 0, 文档字符串: 3
@@ -2040,12 +1829,10 @@ risk_management/containers: 1 个文件
      函数数: 8, 类数: 3
      类型注解: 1, 文档字符串: 7
 
-384. containers/orderbooks/hitbtc_orderbook.py
      质量分数: 19.0
      函数数: 20, 类数: 1
      类型注解: 0, 文档字符串: 16
 
-385. containers/bars/hitbtc_bar.py
      质量分数: 19.0
      函数数: 20, 类数: 1
      类型注解: 0, 文档字符串: 16
@@ -2060,7 +1847,6 @@ risk_management/containers: 1 个文件
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 10
 
-388. feeds/live_bitinka/request_base.py
      质量分数: 19.2
      函数数: 12, 类数: 1
      类型注解: 0, 文档字符串: 10
@@ -2070,57 +1856,46 @@ risk_management/containers: 1 个文件
      函数数: 10, 类数: 3
      类型注解: 0, 文档字符串: 10
 
-390. containers/trades/gemini_trade.py
      质量分数: 19.4
      函数数: 7, 类数: 2
      类型注解: 0, 文档字符串: 7
 
-391. containers/tickers/gemini_ticker.py
      质量分数: 19.4
      函数数: 7, 类数: 2
      类型注解: 0, 文档字符串: 7
 
-392. containers/exchanges/kucoin_exchange_data.py
      质量分数: 19.5
      函数数: 11, 类数: 4
      类型注解: 2, 文档字符串: 9
 
-393. feeds/live_coindcx/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-394. feeds/live_btc_markets/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-395. feeds/live_bydfi/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-396. feeds/live_bitunix/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-397. feeds/live_bitvavo/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-398. feeds/live_coincheck/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-399. feeds/live_buda/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-400. feeds/live_btcturk/request_base.py
      质量分数: 19.6
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
@@ -2130,12 +1905,10 @@ risk_management/containers: 1 个文件
      函数数: 13, 类数: 1
      类型注解: 0, 文档字符串: 11
 
-402. exchange_registers/register_gemini.py
      质量分数: 19.7
      函数数: 15, 类数: 4
      类型注解: 0, 文档字符串: 15
 
-403. containers/trades/hitbtc_trade.py
      质量分数: 19.8
      函数数: 23, 类数: 1
      类型注解: 0, 文档字符串: 19
@@ -2145,17 +1918,14 @@ risk_management/containers: 1 个文件
      函数数: 40, 类数: 4
      类型注解: 0, 文档字符串: 35
 
-405. feeds/live_satoshitango/spot.py
      质量分数: 19.9
      函数数: 28, 类数: 1
      类型注解: 2, 文档字符串: 21
 
-406. feeds/live_luno/spot.py
      质量分数: 19.9
      函数数: 28, 类数: 1
      类型注解: 2, 文档字符串: 21
 
-407. feeds/live_giottus/spot.py
      质量分数: 19.9
      函数数: 28, 类数: 1
      类型注解: 2, 文档字符串: 21
@@ -2170,12 +1940,10 @@ risk_management/containers: 1 个文件
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 12
 
-410. feeds/live_foxbit/request_base.py
      质量分数: 20.0
      函数数: 14, 类数: 1
      类型注解: 0, 文档字符串: 12
 
-411. containers/orders/hitbtc_order.py
      质量分数: 20.0
      函数数: 24, 类数: 1
      类型注解: 0, 文档字符串: 20
@@ -2185,7 +1953,6 @@ risk_management/containers: 1 个文件
      函数数: 68, 类数: 3
      类型注解: 4, 文档字符串: 53
 
-413. feeds/live_mercado_bitcoin/spot.py
      质量分数: 20.3
      函数数: 25, 类数: 1
      类型注解: 2, 文档字符串: 19
@@ -2195,7 +1962,6 @@ risk_management/containers: 1 个文件
      函数数: 27, 类数: 1
      类型注解: 0, 文档字符串: 23
 
-415. feeds/live_foxbit/spot.py
      质量分数: 20.5
      函数数: 38, 类数: 1
      类型注解: 2, 文档字符串: 30
@@ -2205,42 +1971,34 @@ risk_management/containers: 1 个文件
      函数数: 14, 类数: 3
      类型注解: 0, 文档字符串: 14
 
-417. feeds/live_coincheck/spot.py
      质量分数: 20.6
      函数数: 33, 类数: 1
      类型注解: 2, 文档字符串: 26
 
-418. feeds/live_bydfi/spot.py
      质量分数: 20.8
      函数数: 34, 类数: 1
      类型注解: 2, 文档字符串: 27
 
-419. containers/exchanges/coincheck_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-420. containers/exchanges/bitinka_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-421. containers/exchanges/btcturk_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-422. containers/exchanges/buda_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-423. containers/exchanges/bitvavo_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-424. containers/exchanges/giottus_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
@@ -2255,12 +2013,10 @@ risk_management/containers: 1 个文件
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-427. containers/exchanges/bitunix_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-428. containers/exchanges/foxbit_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
@@ -2275,17 +2031,14 @@ risk_management/containers: 1 个文件
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-431. containers/exchanges/exmo_exchange_data.py
      质量分数: 20.8
      函数数: 4, 类数: 2
      类型注解: 0, 文档字符串: 5
 
-432. feeds/live_buda/spot.py
      质量分数: 20.9
      函数数: 35, 类数: 1
      类型注解: 2, 文档字符串: 28
 
-433. feeds/live_btcturk/spot.py
      质量分数: 20.9
      函数数: 35, 类数: 1
      类型注解: 2, 文档字符串: 28
@@ -2295,7 +2048,6 @@ risk_management/containers: 1 个文件
      函数数: 24, 类数: 1
      类型注解: 0, 文档字符串: 21
 
-435. containers/tickers/bitrue_ticker.py
      质量分数: 21.1
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 16
@@ -2305,12 +2057,10 @@ risk_management/containers: 1 个文件
      函数数: 22, 类数: 3
      类型注解: 8, 文档字符串: 12
 
-437. feeds/live_coindcx/spot.py
      质量分数: 21.1
      函数数: 31, 类数: 1
      类型注解: 2, 文档字符串: 25
 
-438. feeds/live_exmo/spot.py
      质量分数: 21.1
      函数数: 31, 类数: 1
      类型注解: 2, 文档字符串: 25
@@ -2320,7 +2070,6 @@ risk_management/containers: 1 个文件
      函数数: 38, 类数: 1
      类型注解: 0, 文档字符串: 33
 
-440. containers/exchanges/luno_exchange_data.py
      质量分数: 21.4
      函数数: 5, 类数: 2
      类型注解: 0, 文档字符串: 6
@@ -2355,27 +2104,22 @@ risk_management/containers: 1 个文件
      函数数: 6, 类数: 2
      类型注解: 0, 文档字符串: 7
 
-447. containers/exchanges/mercado_bitcoin_exchange_data.py
      质量分数: 21.9
      函数数: 6, 类数: 2
      类型注解: 0, 文档字符串: 7
 
-448. containers/tickers/upbit_ticker.py
      质量分数: 21.9
      函数数: 7, 类数: 1
      类型注解: 0, 文档字符串: 7
 
-449. feeds/live_btc_markets/spot.py
      质量分数: 22.0
      函数数: 32, 类数: 1
      类型注解: 3, 文档字符串: 26
 
-450. feeds/live_bitunix/spot.py
      质量分数: 22.0
      函数数: 32, 类数: 1
      类型注解: 3, 文档字符串: 26
 
-451. feeds/live_bitvavo/spot.py
      质量分数: 22.0
      函数数: 32, 类数: 1
      类型注解: 3, 文档字符串: 26
@@ -2390,57 +2134,46 @@ risk_management/containers: 1 个文件
      函数数: 62, 类数: 1
      类型注解: 0, 文档字符串: 56
 
-454. containers/exchanges/bydfi_exchange_data.py
      质量分数: 22.2
      函数数: 7, 类数: 2
      类型注解: 0, 文档字符串: 8
 
-455. containers/exchanges/coinswitch_exchange_data.py
      质量分数: 22.2
      函数数: 7, 类数: 2
      类型注解: 0, 文档字符串: 8
 
-456. containers/exchanges/independent_reserve_exchange_data.py
      质量分数: 22.2
      函数数: 7, 类数: 2
      类型注解: 0, 文档字符串: 8
 
-457. containers/exchanges/coinspot_exchange_data.py
      质量分数: 22.2
      函数数: 7, 类数: 2
      类型注解: 0, 文档字符串: 8
 
-458. containers/exchanges/coinex_exchange_data.py
      质量分数: 22.2
      函数数: 7, 类数: 2
      类型注解: 0, 文档字符串: 8
 
-459. containers/balances/upbit_balance.py
      质量分数: 22.2
      函数数: 8, 类数: 1
      类型注解: 0, 文档字符串: 8
 
-460. containers/orders/upbit_order.py
      质量分数: 22.2
      函数数: 8, 类数: 1
      类型注解: 0, 文档字符串: 8
 
-461. containers/tickers/exmo_ticker.py
      质量分数: 22.4
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 17
 
-462. feeds/live_gemini/spot.py
      质量分数: 22.5
      函数数: 37, 类数: 1
      类型注解: 5, 文档字符串: 29
 
-463. containers/exchanges/coinone_exchange_data.py
      质量分数: 22.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 9
 
-464. containers/exchanges/bitstamp_exchange_data.py
      质量分数: 22.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 9
@@ -2455,22 +2188,18 @@ risk_management/containers: 1 个文件
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 9
 
-467. containers/exchanges/bitso_exchange_data.py
      质量分数: 22.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 9
 
-468. containers/exchanges/bitrue_exchange_data.py
      质量分数: 22.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 9
 
-469. containers/exchanges/bitmart_exchange_data.py
      质量分数: 22.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 9
 
-470. containers/exchanges/upbit_exchange_data.py
      质量分数: 22.5
      函数数: 8, 类数: 2
      类型注解: 0, 文档字符串: 9
@@ -2480,7 +2209,6 @@ risk_management/containers: 1 个文件
      函数数: 15, 类数: 3
      类型注解: 1, 文档字符串: 15
 
-472. containers/exchanges/cryptocom_exchange_data.py
      质量分数: 22.5
      函数数: 17, 类数: 2
      类型注解: 1, 文档字符串: 16
@@ -2490,7 +2218,6 @@ risk_management/containers: 1 个文件
      函数数: 29, 类数: 1
      类型注解: 2, 文档字符串: 25
 
-474. containers/exchanges/korbit_exchange_data.py
      质量分数: 22.7
      函数数: 9, 类数: 2
      类型注解: 0, 文档字符串: 10
@@ -2505,12 +2232,10 @@ risk_management/containers: 1 个文件
      函数数: 15, 类数: 1
      类型注解: 0, 文档字符串: 15
 
-477. feeds/live_bithumb/request_base.py
      质量分数: 23.5
      函数数: 13, 类数: 1
      类型注解: 2, 文档字符串: 11
 
-478. feeds/live_poloniex/request_base.py
      质量分数: 23.5
      函数数: 12, 类数: 2
      类型注解: 1, 文档字符串: 12
@@ -2565,7 +2290,6 @@ risk_management/containers: 1 个文件
      函数数: 11, 类数: 1
      类型注解: 0, 文档字符串: 12
 
-489. feeds/live_bitfinex/spot.py
      质量分数: 25.0
      函数数: 24, 类数: 1
      类型注解: 0, 文档字符串: 25
@@ -2590,12 +2314,10 @@ risk_management/containers: 1 个文件
      函数数: 15, 类数: 5
      类型注解: 3, 文档字符串: 16
 
-494. containers/tickers/coinex_ticker.py
      质量分数: 25.0
      函数数: 18, 类数: 1
      类型注解: 0, 文档字符串: 19
 
-495. containers/balances/cryptocom_balance.py
      质量分数: 25.0
      函数数: 3, 类数: 1
      类型注解: 0, 文档字符串: 4
@@ -2615,7 +2337,6 @@ risk_management/containers: 1 个文件
      函数数: 40, 类数: 1
      类型注解: 1, 文档字符串: 40
 
-499. feeds/live_bitfinex/request_base.py
      质量分数: 25.0
      函数数: 28, 类数: 1
      类型注解: 1, 文档字符串: 28
@@ -2630,7 +2351,6 @@ risk_management/containers: 1 个文件
      函数数: 33, 类数: 1
      类型注解: 2, 文档字符串: 32
 
-502. feeds/live_gemini/request_base.py
      质量分数: 25.1
      函数数: 29, 类数: 1
      类型注解: 3, 文档字符串: 27
@@ -2650,17 +2370,14 @@ risk_management/containers: 1 个文件
      函数数: 104, 类数: 1
      类型注解: 1, 文档字符串: 106
 
-506. containers/exchanges/poloniex_exchange_data.py
      质量分数: 25.5
      函数数: 9, 类数: 2
      类型注解: 1, 文档字符串: 10
 
-507. feeds/live_bithumb/spot.py
      质量分数: 25.6
      函数数: 40, 类数: 1
      类型注解: 2, 文档字符串: 40
 
-508. feeds/live_bitinka/spot.py
      质量分数: 25.7
      函数数: 36, 类数: 1
      类型注解: 2, 文档字符串: 36
@@ -2675,17 +2392,14 @@ risk_management/containers: 1 个文件
      函数数: 60, 类数: 3
      类型注解: 14, 文档字符串: 51
 
-511. containers/exchanges/satoshitango_exchange_data.py
      质量分数: 26.4
      函数数: 5, 类数: 2
      类型注解: 1, 文档字符串: 6
 
-512. containers/exchanges/coindcx_exchange_data.py
      质量分数: 26.4
      函数数: 5, 类数: 2
      类型注解: 1, 文档字符串: 6
 
-513. containers/exchanges/bithumb_exchange_data.py
      质量分数: 26.4
      函数数: 5, 类数: 2
      类型注解: 1, 文档字符串: 6
@@ -2700,7 +2414,6 @@ risk_management/containers: 1 个文件
      函数数: 105, 类数: 1
      类型注解: 6, 文档字符串: 107
 
-516. feeds/live_kucoin/spot.py
      质量分数: 26.8
      函数数: 41, 类数: 1
      类型注解: 3, 文档字符串: 42
@@ -2720,7 +2433,6 @@ risk_management/containers: 1 个文件
      函数数: 24, 类数: 1
      类型注解: 1, 文档字符串: 26
 
-520. containers/exchanges/btc_markets_exchange_data.py
      质量分数: 27.1
      函数数: 4, 类数: 2
      类型注解: 1, 文档字符串: 5
@@ -2765,7 +2477,6 @@ risk_management/containers: 1 个文件
      函数数: 31, 类数: 2
      类型注解: 4, 文档字符串: 33
 
-529. feeds/live_ripio/spot.py
      质量分数: 28.3
      函数数: 31, 类数: 1
      类型注解: 7, 文档字符串: 29
@@ -2785,7 +2496,6 @@ risk_management/containers: 1 个文件
      函数数: 16, 类数: 6
      类型注解: 6, 文档字符串: 17
 
-533. feeds/live_exmo/request_base.py
      质量分数: 28.9
      函数数: 14, 类数: 1
      类型注解: 5, 文档字符串: 12
@@ -2855,7 +2565,6 @@ risk_management/containers: 1 个文件
      函数数: 8, 类数: 2
      类型注解: 4, 文档字符串: 9
 
-547. containers/exchanges/phemex_exchange_data.py
      质量分数: 35.3
      函数数: 13, 类数: 3
      类型注解: 7, 文档字符串: 14
@@ -2865,12 +2574,10 @@ risk_management/containers: 1 个文件
      函数数: 22, 类数: 1
      类型注解: 12, 文档字符串: 20
 
-549. containers/orderbooks/gemini_orderbook.py
      质量分数: 35.4
      函数数: 13, 类数: 2
      类型注解: 8, 文档字符串: 12
 
-550. containers/exchanges/gemini_exchange_data.py
      质量分数: 36.2
      函数数: 10, 类数: 3
      类型注解: 6, 文档字符串: 11
@@ -2880,7 +2587,6 @@ risk_management/containers: 1 个文件
      函数数: 11, 类数: 1
      类型注解: 6, 文档字符串: 11
 
-552. containers/exchanges/ripio_exchange_data.py
      质量分数: 36.6
      函数数: 9, 类数: 2
      类型注解: 5, 文档字符串: 10
@@ -2895,32 +2601,26 @@ risk_management/containers: 1 个文件
      函数数: 2, 类数: 0
      类型注解: 0, 文档字符串: 3
 
-555. exchange_registers/register_yobit.py
      质量分数: 37.5
      函数数: 2, 类数: 0
      类型注解: 0, 文档字符串: 3
 
-556. exchange_registers/register_swyftx.py
      质量分数: 37.5
      函数数: 2, 类数: 0
      类型注解: 0, 文档字符串: 3
 
-557. exchange_registers/register_wazirx.py
      质量分数: 37.5
      函数数: 2, 类数: 0
      类型注解: 0, 文档字符串: 3
 
-558. exchange_registers/register_zebpay.py
      质量分数: 37.5
      函数数: 2, 类数: 0
      类型注解: 0, 文档字符串: 3
 
-559. exchange_registers/register_zaif.py
      质量分数: 37.5
      函数数: 2, 类数: 0
      类型注解: 0, 文档字符串: 3
 
-560. exchange_registers/register_valr.py
      质量分数: 37.5
      函数数: 2, 类数: 0
      类型注解: 0, 文档字符串: 3
@@ -2945,7 +2645,6 @@ risk_management/containers: 1 个文件
      函数数: 92, 类数: 5
      类型注解: 50, 文档字符串: 97
 
-565. feeds/live_cryptocom/request_base.py
      质量分数: 39.2
      函数数: 30, 类数: 1
      类型注解: 18, 文档字符串: 30
@@ -2960,7 +2659,6 @@ risk_management/containers: 1 个文件
      函数数: 7, 类数: 0
      类型注解: 8, 文档字符串: 3
 
-568. containers/exchanges/gmx_exchange_data.py
      质量分数: 39.3
      函数数: 7, 类数: 3
      类型注解: 4, 文档字符串: 10
@@ -3010,7 +2708,6 @@ risk_management/containers: 1 个文件
      函数数: 9, 类数: 3
      类型注解: 6, 文档字符串: 12
 
-578. feeds/live_gmx/spot.py
      质量分数: 41.7
      函数数: 36, 类数: 1
      类型注解: 25, 文档字符串: 36
@@ -3040,7 +2737,6 @@ risk_management/containers: 1 个文件
      函数数: 13, 类数: 3
      类型注解: 7, 文档字符串: 19
 
-584. feeds/live_gmx/request_base.py
      质量分数: 43.2
      函数数: 11, 类数: 1
      类型注解: 8, 文档字符串: 12
@@ -3050,7 +2746,6 @@ risk_management/containers: 1 个文件
      函数数: 15, 类数: 1
      类型注解: 11, 文档字符串: 16
 
-586. containers/tickers/ripio_ticker.py
      质量分数: 43.4
      函数数: 8, 类数: 1
      类型注解: 5, 文档字符串: 10
@@ -3075,7 +2770,6 @@ risk_management/containers: 1 个文件
      函数数: 13, 类数: 3
      类型注解: 10, 文档字符串: 16
 
-591. containers/exchanges/bitfinex_exchange_data.py
      质量分数: 44.6
      函数数: 18, 类数: 5
      类型注解: 18, 文档字符串: 18
@@ -3175,12 +2869,10 @@ risk_management/containers: 1 个文件
      函数数: 35, 类数: 1
      类型注解: 34, 文档字符串: 36
 
-611. containers/tickers/phemex_ticker.py
      质量分数: 49.6
      函数数: 7, 类数: 1
      类型注解: 6, 文档字符串: 9
 
-612. exchange_registers/register_poloniex.py
      质量分数: 50.0
      函数数: 3, 类数: 0
      类型注解: 2, 文档字符串: 4

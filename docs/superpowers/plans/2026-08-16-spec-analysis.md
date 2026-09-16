@@ -44,18 +44,18 @@
 | B-02 | P0 | `bt_api_okx/.../request_base.py:216,250`;`market_wss_base.py:86` | OK-ACCESS-TIMESTAMP 用 `round(time.time(),3)` epoch 浮点,OKX V5 要求 ISO 8601,私有请求大概率被拒 | ✅已抽查验证 |
 | B-03 | P0 | 5 个子模块(bequant/bigone/bingx/bitbank/bitflyer) | 删除已 staged 未 commit;`.gitmodules` 已改但 `_generate_docs.py:452`、`docs/CODE_QUALITY.md:55` 仍引用死仓库 | |
 | B-04 | P0 | binance/okx/gateio/hyperliquid/bybit `request_base.py` | `translate_error` 定义但全仓零调用,API 层错误(如 Binance -2019)被当正常数据返回 | |
-| B-05 | P0 | 29 个适配器 pyproject | 无 `[project.entry-points."bt_api.plugins"]` 注册入口,运行时不可被发现;bybit、gmx 连 plugin.py 都没有 | |
+| B-05 | P0 | 29 个适配器 pyproject | 无 `[project.entry-points."bt_api.plugins"]` 注册入口,运行时不可被发现;bybit 连 plugin.py 都没有 | |
 | B-06 | P1 | binance/okx/hyperliquid `request()` | 同名方法签名漂移(有无 `is_sign`);目录布局漂移(binance 平铺 vs okx `live_*` 子目录) | |
 | B-07 | P1 | `bt_api_binance/.../request_base.py:166` | `sign()` 缺 key 时 `pk = self.private_key or ""` 空串参与 HMAC,静默降级 | |
 | B-08 | P1 | bybit | 完全没有 WSS 实现,能力矩阵不一致 | |
 | B-09 | P1 | 40+ 子模块 git 仓库 | 构建产物入库:bybit 29 个 .pyc、hyperliquid 34、mexc 30、bitget 40;okx 66 个 build/lib 文件;bybit 6 个 egg-info | |
-| B-10 | P1 | `bt_api_binance/tests/test_binance_sign.py:11-22` | 签名测试自指空壳(测试体内重实现 hmac 自比较);zebpay 唯一测试只断言 exchange_name;bithumb/giottus 测试跨仓复制粘贴 | |
+| B-10 | P1 | `bt_api_binance/tests/test_binance_sign.py:11-22` | 签名测试自指空壳(测试体内重实现 hmac 自比较) | |
 | B-11 | P1 | okx/hyperliquid `exchange_data` | URL 硬编码生产地址,无统一测试网切换入口;yaml 端表手写重复 | |
 | B-12 | P1 | `bt_api_hyperliquid/.../request_base.py:80,87-124` | 私钥加载后无任何 EIP-712/sign_message 调用,`is_sign` 参数被忽略,下单签名链路缺失(死代码或半成品) | |
 | B-13 | P1 | `bt_api_base/src/bt_api_base/feeds/feed.py:194-251` | HTTP 重试仅对异常生效,无 429/Retry-After 处理;RateLimiter 接入方式不统一 | |
 | B-14 | P1 | `bt_api_okx/.../market_wss_base.py:108` | 登录后固定 `time.sleep(0.3)` 再订阅,时序脆弱;断线重连后无重订阅逻辑 | |
 | B-15 | P1 | 39 个 request_base.py | 跨仓重复代码:39 处 hmac 签名、15+ 处时间戳转换、6 处 rate_limiter 工厂几乎逐字相同 | |
-| B-16 | P1 | `bt_api_gateio/src/bt_api_ctp/` | gateio 仓混入 ctp 适配器残留包;`bt_api_btbns` 是空仓库(0 源文件)仍被 pin | |
+| B-16 | P1 | `bt_api_gateio/src/bt_api_ctp/` | gateio 仓混入 ctp 适配器残留包 | |
 | B-17 | P1 | `bt_api_hyperliquid/.../request_base.py:117` | `async_request` 直接 f-string 打原始 URL 到日志,绕过脱敏 | |
 | B-18 | P1 | `bt_api_binance/.../request_base.py`(2581 行) | 头号适配器 request_base 是 2581 行巨型单文件 | |
 | B-19 | P1 | `bt_api/install_and_test_all.py:114` | 无 tests/ 目录的包直接 success=True,"没测"当"PASS";串行无并行、无报告产物 | |

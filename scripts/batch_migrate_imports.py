@@ -6,23 +6,13 @@ from pathlib import Path
 
 root = Path("/Users/yunjinqi/Documents/new_projects/bt_api_py")
 
-# 有插件包的交易所（已去除之前清理的 bybit/kucoin/bitget）
+# 有插件包的交易所（已去除之前清理的 bybit/bitget）
 plugin_exchanges = [
     "bigone",
     "bingx",
-    "bitfinex",
-    "bitso",
-    "bitstamp",
-    "bitvavo",
-    "buda",
-    "cryptocom",
     "ctp",
     "dydx",
-    "exmo",
-    "foxbit",
     "gateio",
-    "gemini",
-    "hitbtc",
     "htx",
     "hyperliquid",
     "ib_web",
@@ -30,10 +20,6 @@ plugin_exchanges = [
     "mexc",
     "mt5",
     "okx",
-    "phemex",
-    "poloniex",
-    "upbit",
-    "yobit",
 ]
 
 

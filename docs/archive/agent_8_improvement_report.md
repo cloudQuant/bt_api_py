@@ -29,28 +29,18 @@
 1. `containers/liquidations/__init__.py` - Added module docstring
 2. `containers/greeks/__init__.py` - Added module docstring
 3. `containers/timers/__init__.py` - Added module docstring
-4. `feeds/live_valr/__init__.py` - Improved module docstring
 5. `feeds/live_cow_swap/__init__.py` - Improved module docstring
-6. `feeds/live_exmo/__init__.py` - Improved module docstring
-7. `feeds/live_bitfinex/__init__.py` - Added module docstring
 8. `feeds/live_curve/__init__.py` - Improved module docstring
 
 #### Exchange Data Containers (4 files)
-9. `containers/exchanges/latoken_exchange_data.py` - Full type hints + docstrings
-10. `containers/exchanges/btcturk_exchange_data.py` - Full type hints + docstrings
-11. `containers/exchanges/exmo_exchange_data.py` - Full type hints + docstrings
-12. `containers/exchanges/bitstamp_exchange_data.py` - Full type hints + docstrings
 
 #### Ticker Data Containers (2 files)
-13. `containers/tickers/coinspot_ticker.py` - Full type hints + docstrings
-14. `containers/tickers/satoshitango_ticker.py` - Full type hints + docstrings
 
 #### Feed Implementations (2 files)
 15. `feeds/live_binance/swap.py` - Full type hints + docstrings
 16. `feeds/live_htx/coin_swap.py` - Full type hints + docstrings
 
 #### Exchange Registration (1 file)
-17. `exchange_registers/register_zaif.py` - Full type hints + docstrings
 
 ## Code Style Compliance
 
@@ -67,10 +57,9 @@ All processed files:
 
 44 files still need improvements, including:
 - Large files: `ctp/ctp_structs_risk.py` (95 functions/classes)
-- Order containers: `containers/orders/bitfinex_order.py`, `containers/orders/dydx_order.py`
+- Order containers: `containers/orders/dydx_order.py`
 - Balance containers: `containers/balances/mexc_balance.py`, `containers/balances/binance_balance.py`
-- Trade containers: `containers/trades/mexc_trade.py`, `containers/trades/hitbtc_trade.py`
-- Ticker containers: `containers/tickers/bitfinex_ticker.py`, `containers/tickers/poloniex_ticker.py`
+- Trade containers: `containers/trades/mexc_trade.py`
 - Various feed implementations and request handlers
 
 ## Estimated Total Improvements for All 61 Files
@@ -82,10 +71,10 @@ All processed files:
 ## Next Steps
 
 To complete the remaining 44 files:
-1. Process ticker data containers (bitfinex, poloniex, btc_markets, bybit, phemex)
-2. Process order data containers (bitfinex_order, dydx_order)
+1. Process ticker data containers (bybit)
+2. Process order data containers (dydx_order)
 3. Process balance containers (mexc_balance, binance_balance)
-4. Process trade containers (mexc_trade, hitbtc_trade)
+4. Process trade containers (mexc_trade)
 5. Process orderbook containers (okx_l2_orderbook)
 6. Process feed implementations (live_ib_web_stream, live_okx mixins, etc.)
 7. Process CTP structures (ctp_structs_risk.py - large file with 95 classes)

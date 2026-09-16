@@ -153,12 +153,9 @@ def pytest_collection_modifyitems(config, items):
             "binance",
             "ctp",
             "htx",
-            "bitfinex",
             "coinbase",
-            "kucoin",
             "mexc",
             "bybit",
-            "upbit",
             "hyperliquid",
         ):
             if exchange in fspath:

@@ -173,7 +173,7 @@ if [[ "$TEST_TYPES" == *"integration"* ]] || [[ "$TEST_TYPES" == "" ]]; then
     echo -e "\n${GREEN}🔗 Running integration tests...${NC}"
     
     # Group integration tests by exchange to avoid rate limiting
-    for exchange in binance okx htx bybit kucoin mexc; do
+    for exchange in binance okx htx bybit mexc; do
         echo "Testing $exchange integration..."
         if pytest -m "integration and $exchange" --tb=short --maxfail=3 -q; then
             echo -e "${GREEN}✅ $exchange integration tests passed${NC}"

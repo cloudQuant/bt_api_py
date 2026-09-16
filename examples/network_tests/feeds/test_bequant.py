@@ -3,7 +3,7 @@ Tests for BeQuant Spot Feed implementation.
 Comprehensive coverage: parameter generation, normalization, mocked HTTP sync
 calls, registry, method existence, feed init, auth, and integration tests.
 
-BeQuant uses HitBTC V3 API (white-label) with HTTP Basic Auth.
+BeQuant uses a white-label exchange API (v3) with HTTP Basic Auth.
 """
 
 import queue

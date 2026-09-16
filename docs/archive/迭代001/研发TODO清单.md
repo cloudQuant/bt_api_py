@@ -522,10 +522,10 @@ pytest tests/ -k "<x>" --collect-only                       # 必须无输出
 
 | 类别 | 数量 | 清单 |
 |---|---:|---|
-| Tier A — 头部 CEX (高流量) | 17 | binance ✅, okx ✅, bybit, bitget, kucoin, htx, mexc, gateio, coinbase, kraken, cryptocom, bingx, hyperliquid, phemex, bitfinex, bitmart, gemini |
-| Tier B — 中型 CEX | 14 | bitstamp, bitunix, bydfi, bitrue, coinex, hitbtc, poloniex, upbit, bithumb, bitflyer, ascendex*, aivora*, allinx*, 4e* |
-| Tier C — 区域/小型 CEX | 32 | bigone, bitbank, bitbns, bitinka, bitso, bitvavo, btc_markets, btcturk, buda, coincheck, coindcx, coinone, coinspot, coinswitch, exmo, foxbit, giottus, independent_reserve, korbit, latoken, localbitcoins, luno, mercado_bitcoin, ripio, satoshitango, swyftx, valr, wazirx, yobit, zaif, zebpay, bequant |
-| Tier D — DEX (Web3 依赖) | 9 | uniswap, sushiswap, pancakeswap, curve, dydx, gmx, cow_swap, raydium, balancer |
+| Tier A — 头部 CEX (高流量) | 11 | binance ✅, okx ✅, bybit, bitget, htx, mexc, gateio, coinbase, kraken, bingx, hyperliquid |
+| Tier B — 中型 CEX | 5 | bitflyer, ascendex*, aivora*, allinx*, 4e* |
+| Tier C — 区域/小型 CEX | 4 | bigone, bitbank, bitbns, bequant |
+| Tier D — DEX (Web3 依赖) | 8 | uniswap, sushiswap, pancakeswap, curve, dydx, cow_swap, raydium, balancer |
 | Tier E — 特殊环境依赖 | 4 | ctp (C++ 原生扩展), ib (ib-insync), ib_web (playwright), mt5 (本地 MT5 终端) |
 
 > **`*` 标记**:ascendex / aivora / allinx / 4e 在 `feeds/` 目录下存在但**没有**对应 register 文件,需要在 Wave 2 规划阶段先补齐或标记为"已废弃"。
@@ -552,20 +552,13 @@ pytest tests/ -k "<x>" --collect-only                       # 必须无输出
 |---|---|---|---:|---|
 | [ ] T9201 | `bt_api_bybit` | `feeds/live_bybit/` | M | 纯 REST/WSS |
 | [ ] T9202 | `bt_api_bitget` | `feeds/live_bitget/` | M | 纯 REST/WSS |
-| [ ] T9203 | `bt_api_kucoin` | `feeds/live_kucoin/` | M | WSS 需 token 鉴权 |
 | [ ] T9204 | `bt_api_htx` | `feeds/live_htx/` | M | 原火币,数据结构独特 |
 | [ ] T9205 | `bt_api_mexc` | `feeds/live_mexc/` + `live_mexc_feed.py` | M | 有 wrapper 文件要一并处理 |
 | [ ] T9206 | `bt_api_gateio` | `feeds/live_gateio/` | M | 纯 REST/WSS |
 | [ ] T9207 | `bt_api_coinbase` | `feeds/live_coinbase/` | M | 鉴权走 JWT/ECDSA,需核对依赖 |
 | [ ] T9208 | `bt_api_kraken` | `feeds/live_kraken/` | M | 纯 REST/WSS |
-| [ ] T9209 | `bt_api_cryptocom` | `feeds/live_cryptocom/` | M | 纯 REST/WSS |
 | [ ] T9210 | `bt_api_bingx` | `feeds/live_bingx/` | S-M | 较新,量小 |
 | [ ] T9211 | `bt_api_hyperliquid` | `feeds/live_hyperliquid/` + `live_hyperliquid_feed.py` | M | Perp DEX,含 wrapper |
-| [ ] T9212 | `bt_api_phemex` | `feeds/live_phemex/` | S-M | 较小 |
-| [ ] T9213 | `bt_api_bitfinex` | `feeds/live_bitfinex/` | M | WSS 消息格式独特 |
-| [ ] T9214 | `bt_api_bitmart` | `feeds/live_bitmart/` | M | 纯 REST/WSS |
-| [ ] T9215 | `bt_api_gemini` | `feeds/live_gemini/` | S-M | 美国监管链路 |
-| [ ] T9216 | `bt_api_bitstamp` | `feeds/live_bitstamp/` | S-M | 欧洲老牌 |
 | [ ] T9217 | Wave 2 收尾:主包移除 17 个 register 文件 + 对应 container + **对应所有测试目录/文件** | S | 必须跑 §5.0 原则 1 的验收 grep |
 
 **每个 T92xx 任务(T9201~T9216)的标准迁移范围**(按 §5.0 原则 1):
@@ -583,21 +576,13 @@ tests/integration/*<x>*                          → tests/integration/ ⚠️ �
 ```
 
 **Wave 2 成功标准**:
-1. 用户一条命令 `pip install bt_api_py bt_api_bybit bt_api_kucoin` 即可获得主流 CEX 覆盖,无需再 pull 主仓。
-2. 主仓 `grep -rnE "bybit|bitget|kucoin|htx|mexc|gateio|coinbase|kraken|cryptocom|bingx|hyperliquid|phemex|bitfinex|bitmart|gemini|bitstamp" tests/` 返回 0 条。
+1. 用户一条命令 `pip install bt_api_py bt_api_bybit` 即可获得主流 CEX 覆盖,无需再 pull 主仓。
+2. 主仓 `grep -rnE "bybit|bitget|htx|mexc|gateio|coinbase|kraken|bingx|hyperliquid" tests/` 返回 0 条。
 
 ### 5.4 Wave 3 — Tier B 中型 CEX (迭代 003)
 
 | TID | 插件名 | 备注 |
 |---|---|---|
-| [ ] T9301 | `bt_api_bitunix` | |
-| [ ] T9302 | `bt_api_bydfi` | |
-| [ ] T9303 | `bt_api_bitrue` | |
-| [ ] T9304 | `bt_api_coinex` | |
-| [ ] T9305 | `bt_api_hitbtc` | **注意**:`feeds/registry.py:145` 仍硬编码 import 此交易所,迁移时要一并修复 |
-| [ ] T9306 | `bt_api_poloniex` | |
-| [ ] T9307 | `bt_api_upbit` | 韩国 |
-| [ ] T9308 | `bt_api_bithumb` | 韩国 |
 | [ ] T9309 | `bt_api_bitflyer` | 日本 |
 | [ ] T9310 | `bt_api_ascendex` | ⚠️ 缺 register 文件,先补齐再拆 |
 | [ ] T9311 | `bt_api_aivora` | ⚠️ 同上,需先确认是否有效交易所 |
@@ -620,7 +605,6 @@ tests/integration/*<x>*                          → tests/integration/ ⚠️ �
 | [ ] T9403 | `bt_api_pancakeswap` | BSC | web3.py |
 | [ ] T9404 | `bt_api_curve` | EVM | 特殊 AMM 数学 |
 | [ ] T9405 | `bt_api_dydx` | EVM/Starkware | v3 vs v4 协议差异大,需研究产品决策保留哪个版本 |
-| [ ] T9406 | `bt_api_gmx` | Arbitrum/Avalanche | 含 keeper 依赖 |
 | [ ] T9407 | `bt_api_cow_swap` | EVM | 批次拍卖机制 |
 | [ ] T9408 | `bt_api_raydium` | Solana | 引入 solana-py 新依赖栈 |
 | [ ] T9409 | `bt_api_balancer` | EVM | |
@@ -704,9 +688,8 @@ tests/integration/*<x>*                          → tests/integration/ ⚠️ �
 
 | 批次 | 交易所 | 代码位置(全部删除) |
 |---|---|---|
-| [ ] T9601 亚洲 (16) | bitbank, bitbns, coincheck, coinone, coindcx, giottus, korbit, wazirx, yobit, zaif, zebpay, swyftx, coinspot, coinswitch, independent_reserve, luno | `bt_api_py/feeds/live_<name>/`, `bt_api_py/exchange_registers/register_<name>.py`, `bt_api_py/containers/exchanges/<name>_exchange_data.py`, `tests/feeds/live_<name>/`,以及任何 `tests/test_<name>_*.py` |
-| [ ] T9602 欧洲 (4) | bitvavo, btcturk, bequant, exmo | 同上 |
-| [ ] T9603 美洲 (11) | bitinka, bitso, buda, btc_markets, foxbit, latoken, localbitcoins, mercado_bitcoin, ripio, satoshitango, valr | 同上 |
+| [ ] T9601 亚洲 (2) | bitbank, bitbns | `bt_api_py/feeds/live_<name>/`, `bt_api_py/exchange_registers/register_<name>.py`, `bt_api_py/containers/exchanges/<name>_exchange_data.py`, `tests/feeds/live_<name>/`,以及任何 `tests/test_<name>_*.py` |
+| [ ] T9602 欧洲 (1) | bequant | 同上 |
 | [ ] T9604 其他 (1) | bigone | 同上 |
 
 #### 5.7.2 删除操作清单(每个交易所必须执行)
@@ -745,7 +728,7 @@ pytest tests/ -x --ignore-glob='**/live_*'
 #### 5.7.3 验收标准
 
 - [ ] 32 个交易所全部从 `bt_api_py/feeds/`、`bt_api_py/exchange_registers/`、`bt_api_py/containers/exchanges/`、`bt_api_py/gateway/adapters/`、`tests/` 中消失
-- [ ] `grep -rnE "(bitbank|bitbns|coincheck|coinone|coindcx|giottus|korbit|wazirx|yobit|zaif|zebpay|swyftx|coinspot|coinswitch|independent_reserve|luno|bitvavo|btcturk|bequant|exmo|bitinka|bitso|buda|btc_markets|foxbit|latoken|localbitcoins|mercado_bitcoin|ripio|satoshitango|valr|bigone)" bt_api_py/ tests/ docs/` 返回 **0** 条(除 CHANGELOG 记录之外)
+- [ ] `grep -rnE "(bitbank|bitbns|bequant|bigone)" bt_api_py/ tests/ docs/` 返回 **0** 条(除 CHANGELOG 记录之外)
 - [ ] 核心 CI 全绿
 - [ ] `CHANGELOG.md` 在 "Breaking Changes / Removed" 段落完整列出 32 个被删除的交易所,并指明"如有需要请自行基于插件模板重新实现"
 - [ ] README / 文档中的交易所列表同步更新

@@ -181,7 +181,6 @@
 优先文件：
 
 1. `bt_api_py/feeds/live_binance/request_base.py`
-2. `bt_api_py/feeds/live_kucoin/request_base.py`
 3. `bt_api_py/feeds/live_kraken/request_base.py`
 4. `bt_api_py/feeds/live_mexc/request_base.py`
 5. `bt_api_py/feeds/live_hyperliquid/request_base.py`

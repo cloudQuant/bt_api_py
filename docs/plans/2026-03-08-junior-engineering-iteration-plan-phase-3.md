@@ -22,7 +22,6 @@
 ### 2.1 已确认的生产代码正确性问题
 
 - [bitget_account.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/containers/accounts/bitget_account.py#L147) 使用了未定义的 `BitgetBalanceData`
-- [upbit_balance.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/containers/balances/upbit_balance.py#L96) 使用了未定义变量 `currency`
 - `ruff` 还指出一批生产路径中的裸 `except`、`raise ... from` 缺失和导入顺序问题，这些不只是“好不好看”，而是会影响调试质量和部分运行时行为
 
 ### 2.2 运行时日志与吞错热点仍然存在
@@ -50,7 +49,6 @@
 - [test_okx_swap_req_account_config.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_okx_swap_req_account_config.py) `84` 个 `print()`
 - [test_hyperliquid_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_hyperliquid_integration.py) `60` 个 `print()`
 - [test_live_ib_web_request_data.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_live_ib_web_request_data.py) `38` 个 `print()`
-- [test_gemini_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_gemini_integration.py) `45` 个 `print()`
 
 这类测试更像手工调试脚本，而不是稳定、可复跑、可验收的自动化测试。
 
@@ -124,8 +122,6 @@
 建议修改文件：
 
 - [bitget_account.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/containers/accounts/bitget_account.py)
-- [upbit_balance.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/containers/balances/upbit_balance.py)
-- [upbit_ticker.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/containers/tickers/upbit_ticker.py)
 - [order.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/containers/orders/order.py)
 - 相关的容器测试文件；如果缺失，允许新增最小测试文件
 
@@ -141,8 +137,6 @@
 ```bash
 ruff check \
   bt_api_py/containers/accounts/bitget_account.py \
-  bt_api_py/containers/balances/upbit_balance.py \
-  bt_api_py/containers/tickers/upbit_ticker.py \
   bt_api_py/containers/orders/order.py
 ```
 
@@ -155,7 +149,7 @@ ruff check \
 验收标准：
 
 - 目标文件中的明确正确性错误被消除。
-- 至少覆盖到 `Bitget` 与 `Upbit` 对应修复点的验证路径。
+- 至少覆盖到 `Bitget` 对应修复点的验证路径。
 
 ### P3-T2 network/live 测试边界补标
 
@@ -203,7 +197,6 @@ pytest tests/feeds/test_live_binance_spot_request_data.py -m network --co
 - [test_okx_swap_req_funding.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_okx_swap_req_funding.py)
 - [test_okx_swap_req_account_config.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_okx_swap_req_account_config.py)
 - [test_live_ib_web_request_data.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_live_ib_web_request_data.py)
-- [test_gemini_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_gemini_integration.py)
 - [test_hyperliquid_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_hyperliquid_integration.py)
 
 开发动作：
@@ -220,13 +213,11 @@ rg '\bprint\s*\(' \
   tests/feeds/test_okx_swap_req_funding.py \
   tests/feeds/test_okx_swap_req_account_config.py \
   tests/feeds/test_live_ib_web_request_data.py \
-  tests/integration/test_gemini_integration.py \
   tests/integration/test_hyperliquid_integration.py
 pytest \
   tests/feeds/test_okx_swap_req_funding.py \
   tests/feeds/test_okx_swap_req_account_config.py \
   tests/feeds/test_live_ib_web_request_data.py \
-  tests/integration/test_gemini_integration.py \
   tests/integration/test_hyperliquid_integration.py -q
 ```
 

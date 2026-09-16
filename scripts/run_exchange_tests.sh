@@ -25,12 +25,9 @@ if [[ $# -lt 1 ]]; then
     echo "用法: bash scripts/run_exchange_tests.sh <exchange_name> [--network] [pytest参数]"
     echo ""
     echo "可用的交易所名称示例："
-    echo "  binance okx htx ctp ib bybit bitget kraken kucoin coinbase"
-    echo "  mexc hyperliquid dydx bitfinex upbit gemini gateio hitbtc poloniex"
-    echo "  bequant bigone bingx bitbank bitbns bitflyer bithumb bitstamp"
-    echo "  btcturk buda bybit bydfi coincheck coindcx coinex coinone"
-    echo "  exmo foxbit gateio giottus independent_reserve korbit latoken"
-    echo "  luno mercado_bitcoin phemex ripio satoshitango swyftx valr wazirx yobit zaif zebpay"
+    echo "  binance okx htx ctp ib bybit bitget kraken coinbase"
+    echo "  mexc hyperliquid dydx gateio"
+    echo "  bequant bigone bingx bitbank bitflyer"
     exit 1
 fi
 

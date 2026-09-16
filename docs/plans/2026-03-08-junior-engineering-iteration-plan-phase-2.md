@@ -222,12 +222,8 @@ pytest tests/feeds/test_live_binance_spot_request_data.py tests/feeds/test_live_
 建议修改文件：
 
 - [bt_api_py/feeds/live_bitbank/request_base.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/feeds/live_bitbank/request_base.py)
-- [bt_api_py/feeds/live_bithumb/request_base.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/feeds/live_bithumb/request_base.py)
-- [bt_api_py/feeds/live_buda/request_base.py](/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py/feeds/live_buda/request_base.py)
 - `bt_api_py/feeds/request_base_support.py`（新增）
 - [tests/feeds/test_bitbank.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_bitbank.py)
-- [tests/feeds/test_bithumb.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_bithumb.py)
-- [tests/feeds/test_buda.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/feeds/test_buda.py)
 
 具体动作：
 
@@ -249,7 +245,7 @@ pytest tests/feeds/test_live_binance_spot_request_data.py tests/feeds/test_live_
 自测命令：
 
 ```bash
-pytest tests/feeds/test_bitbank.py tests/feeds/test_bithumb.py tests/feeds/test_buda.py -q
+pytest tests/feeds/test_bitbank.py -q
 ```
 
 ### N6 Live Request 测试标记与脚本化清理

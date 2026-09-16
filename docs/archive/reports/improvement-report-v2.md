@@ -162,7 +162,7 @@ class Container:
 
 **文件:** `bt_api_py/feeds/registry.py`（模块底部）
 
-**问题:** 模块被导入时会自动执行 `initialize_default_feeds()`，导入 binance/okx/hitbtc 等模块。这属于导入副作用（import side effect），会导致：
+**问题:** 模块被导入时会自动执行 `initialize_default_feeds()`，导入 binance/okx 等模块。这属于导入副作用（import side effect），会导致：
 - 导入顺序敏感，增加调试难度
 - 无法在单元测试中控制哪些交易所被加载
 - 延长首次导入时间

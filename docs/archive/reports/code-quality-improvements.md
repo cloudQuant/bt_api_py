@@ -6,7 +6,6 @@
 
 ### 配置与工具链
 
-- **pyproject.toml**: 移除重复的 mypy override（`live_yobit.*` 出现两次）
 - **ruff**: 新增 S (security)、PERF (performance)、PIE790 (no-unnecessary-pass) 规则
 - **ruff --fix**: 自动修复 236+ 处（含 PIE790 冗余 pass、PERF102 items→values/keys 等）
 
@@ -43,7 +42,6 @@
 
 ### 2. 运行时 Bug 修复
 
-- **kucoin_orderbook.py**: 修复 `float + "_orders"` 的 TypeError（Python 中 float 与 str 不能直接相加）
   - 改为使用 `f"{price_float}_orders"` 构建字符串键
   - 为 `bid_dict`、`ask_dict` 添加类型注解 `dict[float | str, float]`
   - 修复 `bid_dict.get(f"{p}_orders", 1)` 的 key 类型不匹配问题

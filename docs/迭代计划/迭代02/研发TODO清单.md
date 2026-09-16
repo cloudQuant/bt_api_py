@@ -44,7 +44,7 @@
 
 ### T106 核心包零交易所代码检查
 
-- [ ] `grep -r "binance\|okx\|ctp\|kucoin\|bybit" bt_api_py/` 确认无硬编码交易所逻辑
+- [ ] `grep -r "binance\|okx\|ctp\|bybit" bt_api_py/` 确认无硬编码交易所逻辑
 - [ ] 检查 error.py 中是否有交易所特定错误码
 - [ ] 检查 auth_config.py 中的交易所特定配置类是否应保留
 
@@ -98,10 +98,7 @@
 
 ### T206 补齐缺失的 pyproject.toml
 
-- [ ] bt_api_bydfi/pyproject.toml
 - [ ] bt_api_coinbase/pyproject.toml
-- [ ] bt_api_coinone/pyproject.toml
-- [ ] bt_api_gmx/pyproject.toml
 - [ ] 格式参照 bt_api_binance 的 pyproject.toml
 
 ### T207 DirectClient 使用示例

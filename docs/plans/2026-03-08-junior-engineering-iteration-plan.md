@@ -163,10 +163,8 @@ pytest tests/test_monitoring.py -q
 
 建议修改文件：
 
-- [tests/integration/test_gemini_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_gemini_integration.py)
 - [tests/integration/test_kraken_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_kraken_integration.py)
 - [tests/integration/test_mexc_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_mexc_integration.py)
-- [tests/integration/test_bitfinex_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_bitfinex_integration.py)
 - [tests/integration/test_hyperliquid.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_hyperliquid.py)
 - [tests/integration/test_hyperliquid_integration.py](/Users/yunjinqi/Documents/source_code/bt_api_py/tests/integration/test_hyperliquid_integration.py)
 
@@ -190,10 +188,8 @@ pytest tests/test_monitoring.py -q
 自测命令：
 
 ```bash
-pytest tests/integration/test_gemini_integration.py \
   tests/integration/test_kraken_integration.py \
   tests/integration/test_mexc_integration.py \
-  tests/integration/test_bitfinex_integration.py \
   tests/integration/test_hyperliquid.py \
   tests/integration/test_hyperliquid_integration.py -q
 ```

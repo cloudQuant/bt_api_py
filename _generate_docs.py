@@ -50,25 +50,6 @@ EXCHANGE_INFO = {
         "containers": ["accounts", "assets", "balances", "bars", "exchanges", "fundingrates", "greeks", "liquidations", "markprices", "openinterests", "orderbooks", "orders", "positions", "pricelimits", "symbols", "tickers", "trades"],
         "base_version": "0.15",
     },
-    "bt_api_gemini": {
-        "name": "Gemini",
-        "name_cn": "Gemini交易所",
-        "exchange_code": "GEMINI",
-        "symbol_example": "BTCUSD",
-        "import_class": "GeminiRequestDataSpot",
-        "features_en": """- Spot trading support
-- REST API implementation
-- Ticker and trade data
-- Order book tracking
-- Balance management""",
-        "features_cn": """- 现货交易支持
-- REST API 实现
-- 行情和交易数据
-- 订单簿跟踪
-- 余额管理""",
-        "containers": ["balances", "bars", "orderbooks", "orders", "trades"],
-        "base_version": "0.1.0",
-    },
     "bt_api_bybit": {
         "name": "Bybit",
         "name_cn": "Bybit交易所",
@@ -403,7 +384,6 @@ def exchange_description(name: str) -> str:
     descs = {
         "Binance": "Binance exchange plugin for bt_api, supporting Spot and Futures trading with REST and WebSocket APIs.",
         "OKX": "OKX exchange plugin for bt_api, supporting Spot, Futures, Swap, and Options trading.",
-        "Gemini": "Gemini exchange plugin for bt_api, supporting Spot trading.",
         "Bybit": "Bybit exchange plugin for bt_api, supporting Spot and Derivatives trading.",
         "Gate.io": "Gate.io exchange plugin for bt_api, supporting Spot and Futures trading.",
         "CTP (China Futures)": "CTP exchange plugin for bt_api, supporting Chinese futures market trading.",

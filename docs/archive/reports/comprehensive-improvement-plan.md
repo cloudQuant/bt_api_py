@@ -403,7 +403,7 @@ for _finder, _name, _ispkg in pkgutil.iter_modules(_exchange_reg_pkg.__path__):
 - 为每个主要交易所创建 mock API 响应的单元测试
 - 测试重点: ticker 解析、order 解析、balance 解析、position 解析
 - 使用参数化测试覆盖多交易所同类操作
-- 优先覆盖: Binance, OKX, HTX, Bybit, KuCoin（按使用量排序）
+- 优先覆盖: Binance, OKX, HTX, Bybit（按使用量排序）
 
 ```python
 # 示例: 参数化交易所 ticker 解析测试

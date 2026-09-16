@@ -70,16 +70,11 @@ bt_api_py/                              # 项目根目录
 │   │   ├── live_bitget/                # Bitget实现
 │   │   ├── live_kraken/                # Kraken实现
 │   │   ├── live_gate/                  # Gate.io实现
-│   │   ├── live_upbit/                 # Upbit实现
-│   │   ├── live_cryptocom/             # Crypto.com实现
-│   │   ├── live_kucoin/                # KuCoin实现
 │   │   ├── live_mexc/                  # MEXC实现
-│   │   ├── live_bitfinex/              # Bitfinex实现
 │   │   ├── live_coinbase/              # Coinbase实现
 │   │   ├── live_dydx/                  # dYdX实现
 │   │   ├── live_hyperliquid/           # Hyperliquid实现
-│   │   ├── live_bydfi/                 # BYDFi实现
-│   │   └── ... (73+ exchanges total)   # 其他70+交易所
+│   │   └── ... (14 submodules kept)    # 保留的交易所插件
 │   │
 │   ├── ctp/                            # CTP期货API [C++扩展]
 │   │   ├── __init__.py                 # CTP包入口

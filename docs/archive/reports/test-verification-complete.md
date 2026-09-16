@@ -20,11 +20,7 @@ tests/containers/tickers/test_binance_ticker.py
 tests/containers/tickers/test_okx_ticker.py
 tests/containers/orderbooks/test_binance_orderbook.py
 tests/containers/orderbooks/test_okx_orderbooks.py
-tests/feeds/test_live_swyftx_request_data.py
-tests/feeds/test_live_ripio_request_data.py
-tests/feeds/test_live_phemex_request_data.py
 tests/feeds/test_live_mexc_request_data.py
-tests/feeds/test_live_satoshitango_request_data.py
 tests/containers/bars/test_binance_request_bar.py
 tests/containers/bars/test_ok_request_bar.py
 ```

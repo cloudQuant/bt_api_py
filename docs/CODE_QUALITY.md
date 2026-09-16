@@ -45,14 +45,14 @@
 ### 6. pathlib 迁移（2025-03 第二批）
 
 - **config_loader.py**：新增 `get_exchange_config_path(filename)` 辅助函数
-- **containers/exchanges/**：`binance_exchange_data.py`、`okx_exchange_data.py`、`kraken_exchange_data.py`、`bitfinex_exchange_data.py` 配置路径迁移至 pathlib
+- **containers/exchanges/**：`binance_exchange_data.py`、`okx_exchange_data.py`、`kraken_exchange_data.py` 配置路径迁移至 pathlib
 - **functions/log_message.py**：`_get_project_logs_dir()`、`SpdLogManager` 中 `os.path` 迁移至 `pathlib.Path`
 - 提升可读性与跨平台兼容性
 
 ### 7. 代码质量优化（2025-03 第三批）
 
 - **S113 Kraken**：`live_kraken/request_base.py` 中 `req_lib.post()` 显式传入 `timeout=` 参数，消除 Ruff S113 静态检测误报
-- **pathlib 扩展迁移**：`bitrue`、`bitunix`、`latoken`、`bithumb`、`satoshitango`、`mercado_bitcoin`、`zebpay`、`coincheck`、`kucoin`、`ib_web` 等 exchange_data 统一使用 `get_exchange_config_path()`
+- **pathlib 扩展迁移**：`ib_web` 等 exchange_data 统一使用 `get_exchange_config_path()`
 - **PERF 性能优化**：`pancakeswap_pool.py` 使用列表推导替代 `filter_by_tvl`/`filter_by_volume` 循环；`anomaly_detector.py`、`ensemble_model.py` 中 `_dict_to_features` 使用列表推导；`exchange_health.py`、`advanced_websocket_manager.py` 使用列表推导
 - **logging_system**：`extra.update(kwargs)` 替代循环赋值
 - **S110/S112 异常日志**：`live_ib_web_feed.py` portfolio 端点失败时记录 debug 日志；`monitoring/metrics.py` 中 metric.collect 失败时记录 debug 日志
@@ -60,7 +60,7 @@
 ### 8. 代码质量优化（2025-03 第四批）
 
 - **S110/S112 异常日志**：`my_websocket_app.py` 代理解析、WebSocket 重启失败时增加 `logger.debug`；`monitoring/config.py` 清理资源失败时记录 debug 日志；`monitoring/elk.py` Logstash 发送失败时记录 debug；`monitoring/prometheus.py` 服务循环异常时记录 debug；`audit_logger.py` 解析/读取失败时记录 debug
-- **PERF401 性能优化**：`pancakeswap_exchange_data.py` 稳定币与交易对使用 `list.extend` 替代循环 append；`live_cryptocom/request_base.py` 使用 `parts.extend()` 替代循环；`live_dydx/spot.py` K 线归一化使用列表推导
+- **PERF401 性能优化**：`pancakeswap_exchange_data.py` 稳定币与交易对使用 `list.extend` 替代循环 append；`live_dydx/spot.py` K 线归一化使用列表推导
 - **S113 requests timeout**：`tests/containers/symbols/test_binance_symbol.py`、`tests/containers/bars/test_ok_request_bar.py` 中 `requests.get` 添加 `timeout=30`
 
 ## 编码规范（AGENTS.md 摘要）
@@ -77,7 +77,7 @@
 |------|------|------|
 | S110/S112 | try-except 中增加 `logger.debug()` | ✅ 已修复核心模块（my_websocket、monitoring、audit_logger） |
 | S113 | `requests` 调用添加 `timeout=` | ✅ 已修复（含 Kraken、tests） |
-| PERF401/402/403 | 用列表/字典推导替代循环 | ✅ 已优化 pancakeswap、cryptocom、dydx 等 |
+| PERF401/402/403 | 用列表/字典推导替代循环 | ✅ 已优化 pancakeswap、dydx 等 |
 | pathlib 迁移 | `os.path` → `pathlib.Path` | ✅ exchange_data 已全部迁移 |
 
 ## 渐进式 Mypy 加强（2025-03）

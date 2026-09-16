@@ -10,19 +10,9 @@ root = Path("/Users/yunjinqi/Documents/new_projects/bt_api_py")
 plugin_exchanges = [
     "bigone",
     "bingx",
-    "bitfinex",
-    "bitso",
-    "bitstamp",
-    "bitvavo",
-    "buda",
-    "cryptocom",
     "ctp",
     "dydx",
-    "exmo",
-    "foxbit",
     "gateio",
-    "gemini",
-    "hitbtc",
     "htx",
     "hyperliquid",
     "ib_web",
@@ -30,10 +20,6 @@ plugin_exchanges = [
     "mexc",
     "mt5",
     "okx",
-    "phemex",
-    "poloniex",
-    "upbit",
-    "yobit",
 ]
 
 deleted = []
@@ -68,11 +54,7 @@ for ex in plugin_exchanges:
             errors.append(f"feeds/live_{ex}/: {e}")
 
     # 4. 删除 errors/{ex}_translator.py (如果存在)
-    # 注意：bitfinex 的文件名是 bitfinex_error_translator.py
-    if ex == "bitfinex":
-        translator_file = root / "bt_api_py/errors/bitfinex_error_translator.py"
-    else:
-        translator_file = root / f"bt_api_py/errors/{ex}_translator.py"
+    translator_file = root / f"bt_api_py/errors/{ex}_translator.py"
 
     if translator_file.exists():
         try:
