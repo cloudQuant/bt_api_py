@@ -1,0 +1,99 @@
+# 迭代04 CTP 全市场 tick 采集配置 —— 模板（可提交到版本库，不含任何敏感信息）
+#
+# 用法：
+#   1. 复制为 collector.yaml（copy / cp，该文件已被 .gitignore 忽略）
+#   2. 把 data_root 改成你机器上的采集数据目录
+#   3. 账号/前置地址不要写在这里：放到仓库根目录的 .env（同样被忽略），
+#      启动脚本会自动 `set -a; source .env; set +a`
+#   4. 用启动脚本运行：sh ctp_data/start_collector.sh
+#
+# 不连行情的校验命令（改完配置先跑一遍）：
+#   python -m bt_api_ctp.collector --config ctp_data/collector.yaml --check-calendar
+#   python -m bt_api_ctp.collector --config ctp_data/collector.yaml --validate-shards
+
+# 采集数据根目录。
+# 相对路径 = 相对仓库根目录：启动脚本会先 cd 到仓库根目录，所以任何机器上
+# 都解析到 <仓库根>/ctp_data，无需按机器修改。想放到别的盘就写绝对路径。
+# 注意：本行保持 `data_root: <值>` 单行写法，不要加行尾注释（脚本按行读取用于打印）。
+data_root: ctp_data
+
+# 本机负责的合约范围（分片）。exchanges 留空 = 全市场（六大交易所的期货 + 期权）。
+# 单机无法承载全市场，多机部署时每台机器只声明自己负责的交易所。
+shard:
+  strategy: by_exchange          # by_exchange | by_prefix | hash_mod
+  # exchanges: [SHFE, DCE]       # by_exchange：本机负责的交易所
+  # strategy: by_prefix
+  # prefixes: [rb, cu, m]
+  # strategy: hash_mod
+  # shard_id: 0
+  # total_shards: 3
+
+# 多机分片校验（--validate-shards）：列出所有机器的分片配置，
+# 校验交集非空 / 并集有缺口。
+# shard_all:
+#   - {strategy: by_exchange, exchanges: [SHFE, INE]}
+#   - {strategy: by_exchange, exchanges: [DCE, CZCE]}
+#   - {strategy: by_exchange, exchanges: [CFFEX, GFEX]}
+
+# 订阅的合约类型。留空 = 代码默认 future + option + spot_option。
+# spot_option 是 CFFEX 股指期权（IO/MO/HO），漏掉会漏采。
+# asset_types: [future, option, spot_option]
+
+buffer:
+  per_instrument_cap: 100000     # 单合约缓冲上限，防止某合约异常刷量耗尽内存
+  overflow_policy: drop          # drop=丢弃并告警 | flush=触发刷盘
+  flush_interval_sec: 5          # 定时刷盘间隔
+  heartbeat_interval_sec: 60     # 心跳/健康守卫周期；设为 0 会关闭健康守卫
+
+sink:
+  merge_existing: true           # 当日重跑时与已落盘数据合并去重（中断恢复）
+                                 # 必须保持 true：false 会让后一次压缩覆盖前一次结果
+  gap_threshold_sec: 60          # 缺口检测阈值下限（秒）
+  compact_segments: 64           # 每积累多少个段文件压缩一次最终文件
+                                 # 调大 = 更少重写、内存占用更高
+  gap_threshold_factor: 10       # 阈值按合约自身间隔中位数的倍数自适应（0 = 关闭）
+  drop_outside_session: true     # 丢弃不在任何交易时段内的快照（订阅时的伪快照）
+                                 # 无夜盘品种的伪快照因此被静默丢弃，报告里只体现为
+                                 # 一个全局计数 ticks_outside_session
+
+# 数据健康守卫：交易时段内按心跳周期评估数据流。
+# 阈值是绝对值，务必按分片规模设置，否则退化时不会告警（默认 1 只检测完全停摆）。
+health:
+  enabled: true
+  min_ticks_per_interval: 1      # 一个周期内少于此条数即视为停摆；
+                                 # 建议取"本分片预期每分钟条数的 1%"
+  stall_intervals: 2             # 连续多少个停摆周期后告警
+  silent_after_sec: 300          # 活跃过的合约静默多久算静默
+  silent_share_alarm: 0.8        # 静默占比达到多少时告警
+
+subscription:
+  batch_size: 100                # 分批订阅每批数量（重连重订阅也走这个批大小）
+  batch_interval_sec: 0.1        # 批次间隔，必须 > 0
+
+calendar:
+  holidays_file: ""              # 节假日 JSON 列表文件，如 ["20261001", "20261002"]
+                                 # 留空 = 只用工作日规则判断
+
+# 日志：终端(stderr) 与文件同时输出，文件按交易日命名。
+#   <data_root>/logs/collector-<交易日>.log（夜盘记为次日）
+logging:
+  dir: logs                      # 相对 data_root 的日志目录
+  file: true                     # false = 只输出终端
+  tick_interval: 1000            # 每个合约累计多少个 tick 报一次里程碑
+  tick_mode: every               # every=每累计到 tick_interval 的整数倍就报一次，
+                                 #       报出的是累计值（1000/2000/3000…）；off=关闭
+                                 # （first「仅首次达标」模式已删除，配了会被校验拒绝）
+
+# CTP 连接信息。这里全部留空，实际取值顺序为 yaml -> 环境变量 -> 默认值：
+#   CTP_MD_FRONT / CTP_TD_FRONT / CTP_BROKER_ID / CTP_USER_ID / CTP_PASSWORD
+#   CTP_APP_ID / CTP_AUTH_CODE
+# collector 自己不加载 .env，账号请放在仓库根目录的 .env 里。
+ctp:
+  md_front: ""
+  td_front: ""
+  broker_id: ""
+  user_id: ""
+  password: ""
+  app_id: ""
+  auth_code: ""
+  login_timeout_sec: 30

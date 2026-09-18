@@ -102,9 +102,15 @@ depth snapshot to Parquet for backtesting: one file per instrument under
 scheduler (cron/systemd/launchd units included) and exits by itself at the close:
 
 ```bash
-python -m bt_api_ctp.collector --config collector.yaml --until-close --wait-open
+# 推荐：启动脚本（自动加载 .env、定位解释器、前台跑到收盘）
+sh ctp_data/start_collector.sh
+
+# 等价的手工方式（必须在仓库根目录执行：data_root 是相对仓库根的相对路径）
+python -m bt_api_ctp.collector --config ctp_data/collector.yaml --until-close --wait-open
 ```
 
+`ctp_data/` is the collection runtime directory; see
+[`ctp_data/README.md`](ctp_data/README.md) for setup, scheduling and stopping.
 Reading the data and the deployment checklist:
 [`bt_api/bt_api_ctp/README.md`](bt_api/bt_api_ctp/README.md) and
 [`bt_api/bt_api_ctp/deploy/collector/README.md`](bt_api/bt_api_ctp/deploy/collector/README.md).

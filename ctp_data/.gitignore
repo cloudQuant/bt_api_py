@@ -1,0 +1,22 @@
+# ctp_data 是采集运行目录：版本库里只保留"怎么跑"的东西，
+# 行情数据、日志、锁、待压缩段、本机配置一律不提交。
+#
+# 本目录中被跟踪的文件只有：
+#   README.md               使用说明
+#   start_collector.sh      macOS / Linux 启动脚本
+#   start_collector.bat     Windows 启动脚本
+#   collector.example.yaml  配置模板（不含敏感信息）
+#   .gitignore              本文件
+#
+# 其余全部忽略，包括但不限于：
+#   20260918/ 等交易日目录、logs/、report.json、*.log、
+#   collector.yaml、.staging/、.locks/、.DS_Store
+
+# 先忽略本目录下的一切（不递归进子目录）
+*
+# 再显式放行需要提交的 5 个文件
+!.gitignore
+!README.md
+!start_collector.sh
+!start_collector.bat
+!collector.example.yaml
