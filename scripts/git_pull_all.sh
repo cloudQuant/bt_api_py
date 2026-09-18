@@ -6,6 +6,8 @@
 #   ./scripts/git_pull_all.sh -j 4            # 4 个并发
 #   JOBS=4 ./scripts/git_pull_all.sh          # 等价于 -j 4
 #   ./scripts/git_pull_all.sh --rebase        # 其余参数原样透传给 git pull
+#   ./scripts/git_pull_all.sh --init          # 先把缺失的 submodule clone 到主仓库记录的
+#                                             # SHA（不切分支），再照常 pull
 #
 # 行为:
 #   - 仓库清单 = 主仓库 + .gitmodules 中全部 submodule（未初始化的自动跳过）
@@ -28,6 +30,7 @@
 set -uo pipefail
 
 JOBS="${JOBS:-8}"
+INIT_SUBMODULES=0
 PASSTHROUGH=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -35,6 +38,7 @@ while [ $# -gt 0 ]; do
       JOBS="$2"; shift 2 ;;
     -j*) JOBS="${1#-j}"; shift ;;
     --jobs=*) JOBS="${1#*=}"; shift ;;
+    --init) INIT_SUBMODULES=1; shift ;;
     *) PASSTHROUGH+=("$1"); shift ;;
   esac
 done
@@ -43,6 +47,37 @@ case "$JOBS" in *[!0-9]*|'') echo "invalid jobs: $JOBS" >&2; exit 2 ;; esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# 第一步只统计：.gitmodules 里声明了哪些 submodule、哪些还没被 clone 到本地。
+declare -a ALL_SUBMODULES=()
+declare -a UNINITIALIZED=()
+if [ -z "${GIT_ALL_REPOS_FILE:-}" ] && [ -f "$ROOT/.gitmodules" ]; then
+  while read -r _key path; do
+    [ -n "$path" ] || continue
+    ALL_SUBMODULES+=("$path")
+  done < <(git config --file "$ROOT/.gitmodules" --get-regexp '^submodule\..*\.path$')
+fi
+collect_uninitialized() {
+  UNINITIALIZED=()
+  local path
+  for path in ${ALL_SUBMODULES[@]+"${ALL_SUBMODULES[@]}"}; do
+    [ -e "$ROOT/$path/.git" ] || UNINITIALIZED+=("$path")
+  done
+}
+collect_uninitialized
+
+# --init：先按主仓库记录的 SHA 把缺失的子模块 clone 下来（这就是"固定版本"口径，
+# 不切分支）。默认关闭，因为这会 clone 十几个仓库、需要能访问 GitHub（可能要代理）。
+if [ "$INIT_SUBMODULES" -eq 1 ] && [ "${#UNINITIALIZED[@]}" -gt 0 ]; then
+  echo "== --init：${#UNINITIALIZED[@]} 个 submodule 尚未初始化，先执行 git submodule update --init --recursive =="
+  if git -C "$ROOT" submodule update --init --recursive; then
+    collect_uninitialized
+    echo "== --init 完成，仍未初始化：${#UNINITIALIZED[@]} 个 =="
+  else
+    echo "== --init 失败（网络 / 代理 / 权限？）：子模块仍是未初始化状态 ==" >&2
+  fi
+  echo
+fi
+
 declare -a REPOS=()
 if [ -n "${GIT_ALL_REPOS_FILE:-}" ] && [ -f "$GIT_ALL_REPOS_FILE" ]; then
   while IFS= read -r line; do
@@ -50,13 +85,24 @@ if [ -n "${GIT_ALL_REPOS_FILE:-}" ] && [ -f "$GIT_ALL_REPOS_FILE" ]; then
   done < "$GIT_ALL_REPOS_FILE"
 else
   REPOS+=("$ROOT")
-  if [ -f "$ROOT/.gitmodules" ]; then
-    while read -r _key path; do
-      [ -n "$path" ] && [ -e "$ROOT/$path/.git" ] && REPOS+=("$ROOT/$path")
-    done < <(git config --file "$ROOT/.gitmodules" --get-regexp '^submodule\..*\.path$')
-  fi
+  for path in ${ALL_SUBMODULES[@]+"${ALL_SUBMODULES[@]}"}; do
+    [ -e "$ROOT/$path/.git" ] && REPOS+=("$ROOT/$path")
+  done
 fi
 [ "${#REPOS[@]}" -ge 1 ] || { echo "no repositories found" >&2; exit 2; }
+
+# 未初始化的 submodule 会被上面的过滤静默丢掉（新克隆的机器上它们只是空目录），
+# 不说一声就会被误读成"脚本没拉到子模块"。这里明确报出来并给出修复命令。
+if [ "${#UNINITIALIZED[@]}" -gt 0 ]; then
+  echo "== 注意：${#UNINITIALIZED[@]} 个 submodule 尚未初始化，本脚本无法 pull 它们 =="
+  printf '   %s\n' "${UNINITIALIZED[@]}"
+  echo "   原因：它们还没被 clone 到本地（目录为空或不存在）。先执行一次："
+  echo "       git submodule update --init --recursive"
+  echo "   或者让本脚本代你执行（固定 SHA 口径，不切分支）："
+  echo "       git_pull_all.sh --init        # Windows: git_pull_all.bat --init"
+  echo "   完成后它们处于 detached HEAD（按提交固定，属正常），说明见运行结束处。"
+  echo
+fi
 
 export GIT_HTTP_LOW_SPEED_LIMIT=1000
 export GIT_HTTP_LOW_SPEED_TIME=120
@@ -117,7 +163,7 @@ skip=$(grep -c '^\[SKIP\]' "$LOGFILE" || true)
 rm -f "$LOGFILE"
 
 echo "== summary: OK=$ok FAIL=$fail SKIP=$skip =="
-if [ "${skip:-0}" -gt 0 ]; then
+if [ "${skip:-0}" -gt 0 ] || [ "${#UNINITIALIZED[@]}" -gt 0 ]; then
   cat <<'EOF'
 
 == 关于 [SKIP] detached HEAD ==
