@@ -1,22 +1,30 @@
 # ctp_data 是采集运行目录：版本库里只保留"怎么跑"的东西，
 # 行情数据、日志、锁、待压缩段、本机配置一律不提交。
 #
-# 本目录中被跟踪的文件只有：
-#   README.md               使用说明
-#   start_collector.sh      macOS / Linux 启动脚本
-#   start_collector.bat     Windows 启动脚本
-#   collector.example.yaml  配置模板（不含敏感信息）
-#   .gitignore              本文件
+# 本目录中被跟踪的文件：
+#   README.md                使用说明
+#   start_collector.sh/.bat  单时段启动脚本（跑到收盘就退出）
+#   service.sh/.bat/.py      常驻调度器（长期运行，按开盘时刻反复拉起采集）
+#   collector.example.yaml   配置模板（不含敏感信息）
+#   deploy/                  平台部署资产（Ubuntu systemd 单元 / Win11 任务计划 XML）
+#   .gitignore               本文件
 #
 # 其余全部忽略，包括但不限于：
-#   20260918/ 等交易日目录、logs/、report.json、*.log、
+#   20260918/ 等交易日目录、logs/、report.json、*.log、service.log、
 #   collector.yaml、.staging/、.locks/、.DS_Store
+#
+# 注意：gitignore 的裸 `*` 会匹配任意深度，所以子目录要「先放行目录、再放行内容」。
 
-# 先忽略本目录下的一切（不递归进子目录）
+# 先忽略本目录下的一切
 *
-# 再显式放行需要提交的 5 个文件
+# 再显式放行需要提交的文件
 !.gitignore
 !README.md
 !start_collector.sh
 !start_collector.bat
 !collector.example.yaml
+!service.sh
+!service.bat
+!service.py
+!deploy/
+!deploy/**

@@ -1,0 +1,36 @@
+[Unit]
+Description=bt_api_ctp tick collector (long-running supervisor)
+Documentation=https://github.com/cloudQuant/bt_api_py
+# 常驻调度器：自己算下一个开盘时刻，提前 15 分钟拉起一次采集，跑到收盘再等下一段。
+# 相比之下 deploy/collector/systemd/*.timer 是「外部调度器」模型（每天两次触发）。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 按你的部署改这三处：用户、仓库路径、解释器（service.sh 自己会挑解释器，这里给 PATH 兜底）
+User=trader
+Group=trader
+WorkingDirectory=/opt/bt_api_py
+EnvironmentFile=-/opt/bt_api_py/.env
+Environment=PATH=/opt/bt_api_py/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/bin/sh /opt/bt_api_py/ctp_data/service.sh
+
+# 常驻进程意外退出后自动拉起（采集侧失败由 service.py 自己按退出码重试）
+Restart=always
+RestartSec=30
+
+# 只给主进程发 SIGTERM：service.sh/service.py 会把它转成 SIGINT 交给采集子进程，
+# 让采集优雅收尾（flush -> 压缩 -> 写 report.json）而不是被硬杀。
+# 注意不能用默认的 control-group：那样 SIGTERM 会直接打死采集进程，finalize 不会执行。
+KillMode=mixed
+KillSignal=SIGTERM
+# 收盘收尾（压缩 + 扫全量文件生成报告）可能数分钟，退出超时给足
+TimeoutStopSec=600
+
+Nice=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

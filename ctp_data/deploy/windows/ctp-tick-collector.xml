@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  Win11 常驻采集服务（任务计划程序）
+
+  导入前请修改下面 4 处（都在 <Actions> 与 <Principal> 里）：
+
+    1. <UserId>            当前登录用户名，如 DESKTOP-ABC\yunjinqi
+    2. <Command>           cmd.exe（保持不动）
+    3. <Arguments>         你的仓库路径，如 /c "D:\code\bt_api_py\ctp_data\service.bat"
+    4. <WorkingDirectory>  同一个仓库路径，如 D:\code\bt_api_py
+
+  导入（管理员 PowerShell / CMD）：
+    schtasks /Create /XML ctp-tick-collector.xml /TN "ctp-tick-collector"
+
+  查看/停止/删除：
+    schtasks /Query /TN "ctp-tick-collector" /V /FO LIST
+    schtasks /End   /TN "ctp-tick-collector"
+    schtasks /Delete /TN "ctp-tick-collector" /F
+
+  说明：
+  - 两个触发器：开机后 1 分钟启动一次；每天 08:30 再启动一次作为兜底。
+    两者都不会重复启动（MultipleInstancesPolicy=IgnoreNew），已在跑时直接忽略。
+  - LogonType=InteractiveToken：仅在你登录时运行，不需要保存密码；
+    工作站场景够用。无人登录也要跑的话，改成 <LogonType>Password</LogonType> 并配上密码。
+  - 日志写到 ctp_data\service.log（service.py 内部按 5MB × 3 轮转）。
+  - 采集进程要读仓库根目录的 .env 拿 CTP 账号；任务以你的身份运行，权限没问题。
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>bt_api_ctp tick collector (long-running supervisor)</Description>
+    <URI>\ctp-tick-collector</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <BootTrigger>
+      <Enabled>true</Enabled>
+      <Delay>PT1M</Delay>
+    </BootTrigger>
+    <CalendarTrigger>
+      <StartBoundary>2026-01-01T08:30:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>CHANGE_ME\your-user</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <!-- 常驻任务不能有执行时限 -->
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>5</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>cmd.exe</Command>
+      <Arguments>/c "D:\code\bt_api_py\ctp_data\service.bat"</Arguments>
+      <WorkingDirectory>D:\code\bt_api_py</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

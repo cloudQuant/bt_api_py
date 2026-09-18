@@ -152,29 +152,64 @@ kill -INT "$(cat ctp_data/collector.pid)"
 
 ---
 
-## 5. 自动调度
+## 5. 长期运行与自动调度
 
 一个交易日 = **夜盘（前一晚 21:00 起，最晚到次日 02:30）+ 白盘（09:00–15:15）**。
 夜盘归属次日：周五晚的夜盘与周一的日盘是同一个交易日，周日晚没有夜盘，
 法定节假日前一晚夜盘暂停。
 
-| 时段 | 启动时间 | 命令 |
-|------|---------|------|
-| 白盘 | 交易日 **08:45** | `start_collector.sh` |
-| 夜盘 | 交易日当晚 **20:45** | `COLLECTOR_ARGS='--night --until-close --wait-open' start_collector.sh` |
+采集进程本身是**单时段**的：跑到本组收盘就自己退出（`--until-close`）。所以"长期运行"
+有两种做法，推荐第一种。
 
-**为什么提前 15 分钟**：TD 登录 + 六大交易所合约查询 + 全市场约 1.7 万条分批订阅，
-实测需要 1.5～4 分钟；压着 21:00 或 09:00 启动会丢掉开盘头几分钟的数据，
-而 CTP 行情不可回补。
+### 5.1 常驻调度器：一次启动，长期运行（推荐）
 
-现成的调度单元（systemd / launchd 已按 08:45、20:45 配好）见
-[`bt_api/bt_api_ctp/deploy/collector/`](../bt_api/bt_api_ctp/deploy/collector/)：
+[`service.sh`](service.sh) / [`service.bat`](service.bat)（逻辑在 [`service.py`](service.py)）
+是一个常驻进程：算好下一个开盘时刻，**提前 15 分钟**拉起一次采集，等它退出后按退出码决定
+「跳到下一时段 / 短退避重试 / 直接失败」，如此循环。
+
+```bash
+sh ctp_data/service.sh                # 前台常驻，Ctrl+C / SIGTERM 优雅停止
+sh ctp_data/service.sh --dry-run      # 只打印调度计划、不采集（部署前先验证时段算得对）
+```
+
+行为要点：
+
+| 场景 | 行为 |
+|------|------|
+| 开盘前 15 分钟 | 拉起与 `start_collector.sh` 相同的采集命令（夜盘段自动加 `--night`） |
+| 采集正常结束（exit 0） | 推进到下一个时段 |
+| 非交易日 / 当晚无夜盘（exit 3） | 视为正常跳过，不重试，推进到下一时段 |
+| 采集失败（其他非 0） | 等 `--retry-backoff`（默认 300s）重试，默认最多 2 次，然后放弃本时段 |
+| 配置错误（exit 2） | 立即退出（重试无意义），交给服务管理器告警 |
+| 收到 SIGTERM / SIGINT | 转成 SIGINT 交给正在跑的采集进程，等它 finalize 完再退出 |
+
+可选参数：`--lead 900`（提前秒数）、`--retry 2`、`--retry-backoff 300`、`--config <yaml>`、
+`--log-file <path>`（5MB × 3 轮转）、`--once`（只处理一个时段，便于验证）。
+
+**平台托管**（让常驻进程开机自启、崩了自动拉起）：
+
+| 平台 | 素材 | 安装要点 |
+|---|---|---|
+| Ubuntu | [`deploy/systemd/ctp-tick-collector.service`](deploy/systemd/ctp-tick-collector.service) | 改好 `User`/路径 → `cp` 到 `/etc/systemd/system/` → `systemctl enable --now ctp-tick-collector`；日志 `journalctl -u ctp-tick-collector -f` |
+| Win11 | [`deploy/windows/ctp-tick-collector.xml`](deploy/windows/ctp-tick-collector.xml) | 按文件头注释改 4 处 → `schtasks /Create /XML ctp-tick-collector.xml /TN "ctp-tick-collector"`；日志 `<仓库>\ctp_data\service.log` |
+
+> systemd 单元刻意用 `KillMode=mixed`：只给常驻进程发 SIGTERM，由它转成 SIGINT 交给采集进程。
+> 不要用默认的 `control-group`——那样 SIGTERM 会直接打死采集进程，`finalize()` 不会执行。
+
+### 5.2 外部调度器（另一种模型）
+
+不想多一个常驻进程，就每天触发两次（仓库里 systemd timer / launchd 已按 08:45、20:45 配好，
+见 [`bt_api/bt_api_ctp/deploy/collector/`](../bt_api/bt_api_ctp/deploy/collector/)）：
 
 ```cron
-# crontab -e（注意 cron 环境不加载 .env，脚本会自己去读，所以没问题）
+# crontab -e（cron 环境不加载 .env，脚本会自己去读，所以没问题）
 45 8  * * 1-5  cd /path/to/bt_api_py && sh ctp_data/start_collector.sh                    >> ctp_data/cron.log 2>&1
 45 20 * * 1-5  cd /path/to/bt_api_py && COLLECTOR_ARGS='--night --until-close --wait-open' sh ctp_data/start_collector.sh >> ctp_data/cron.log 2>&1
 ```
+
+两种模型共同的要点：**为什么提前 15 分钟**——TD 登录 + 六大交易所合约查询 + 全市场约 1.7 万条
+分批订阅实测需要 1.5～4 分钟（盘中重启时查询可能耗时 25 分钟并以失败告终），压着 09:00 / 21:00
+启动会丢掉开盘头几分钟，而 CTP 行情不可回补。
 
 ---
 
@@ -211,6 +246,15 @@ ctp_data/
    全市场压测必须用生产账号。
 6. **`.locks/` 只增不减**：每天约 1.7 万个锁文件，需要运维定期清理。
 7. **`merge_existing` 必须保持 `true`**：设为 `false` 会让后一次压缩整体覆盖前一次结果。
+8. **无人值守必须配 `calendar.holidays_file`**：留空时只按"工作日"判断交易日——节假日白盘会
+   "跑完但零数据、退出码 0"（看起来成功），`--night` 判断"节前夜盘暂停"也依赖它。
+9. **停机只能用 SIGTERM/SIGINT**：只有它们能让采集 finalize（flush → 压缩 → 写 `report.json`）；
+   `kill -9` 会留下未合并的段文件（不会丢数据，由下次运行认领，但当次没有报告）。
+10. **磁盘与文件数要规划**：数据每天数百 MB、`.locks/` 每天约 1.7 万个文件、日志按交易日一个
+    文件且无保留策略。需要定期清理 `logs/` 与 `.locks/`。
+11. **周末/节假日会有几次空启动**：常驻调度器不判断交易日，周末会各拉起一次采集进程，进程
+    立即以退出码 3 结束（不连柜台、秒退）。这是有意为之——交易日历只有一处（采集进程内部），
+    常驻侧不重复实现。
 
 排障工具（只读，不干扰采集进程）：
 
