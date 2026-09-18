@@ -1,17 +1,21 @@
 @echo off
 rem
-rem 常驻调度器启动器（Windows）
+rem Long-running collector supervisor -- Windows launcher
 rem
-rem 与 start_collector.bat 的区别：那个只跑一个时段（跑到收盘就退出），这个长期活着，
-rem 按下一个开盘时刻反复拉起同一条采集命令。
+rem Difference from start_collector.bat: that one covers a single session group
+rem (it exits at the close), this one stays alive and starts the same collection
+rem command again before every session open.
 rem
-rem 用法：
-rem   ctp_data\service.bat                      :: 常驻前台运行，Ctrl+C 停止
-rem   ctp_data\service.bat --dry-run            :: 只打印调度计划，不启动采集
+rem Usage:
+rem   ctp_data\service.bat                      :: run in the foreground, Ctrl+C stops
+rem   ctp_data\service.bat --dry-run            :: print the schedule only
 rem   set COLLECTOR_SERVICE_ARGS=--lead 600 & ctp_data\service.bat
 rem   set PYTHON=C:\path\to\python.exe & ctp_data\service.bat
 rem
-rem 注意：.env 只支持简单的 KEY=VALUE 行，# 开头为注释，值不能含空格或 ! & ^ 等特殊字符。
+rem NOTE: .env supports only simple KEY=VALUE lines (# starts a comment; values
+rem       must not contain spaces or ! & ^ etc.).
+rem NOTE: keep this file pure ASCII -- cmd.exe reads .bat files with the OEM code
+rem       page, and non-ASCII text can break the batch parsing on a GBK console.
 rem
 setlocal
 
@@ -20,23 +24,24 @@ for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
 set "ENV_FILE=%REPO_ROOT%\.env"
 
 if exist "%ENV_FILE%" (
-    echo [ctp_service] 加载环境变量: %ENV_FILE%
+    echo [ctp_service] loading env: %ENV_FILE%
     for /f "usebackq eol=# tokens=1* delims==" %%A in ("%ENV_FILE%") do (
         if not "%%~A"=="" set "%%~A=%%~B"
     )
 ) else (
-    echo [ctp_service] 警告: %ENV_FILE% 不存在
-    echo [ctp_service] 请确认 CTP_MD_FRONT / CTP_TD_FRONT / CTP_BROKER_ID / CTP_USER_ID / CTP_PASSWORD 已在当前环境中设置
+    echo [ctp_service] WARNING: %ENV_FILE% not found
+    echo [ctp_service] make sure CTP_MD_FRONT / CTP_TD_FRONT / CTP_BROKER_ID / CTP_USER_ID / CTP_PASSWORD are set, or fill them into collector.yaml
 )
 
-rem 仓库源码优先（与 start_collector.bat 一致）：否则会静默用到 site-packages 里的旧安装。
+rem Prefer the repo source (same as start_collector.bat): otherwise a stale
+rem install in site-packages would be used silently.
 set "REPO_SRC=%REPO_ROOT%\bt_api\bt_api_ctp\src"
 if exist "%REPO_SRC%\bt_api_ctp" (
     if defined PYTHONPATH set "PYTHONPATH=%REPO_SRC%;%PYTHONPATH%"
     if not defined PYTHONPATH set "PYTHONPATH=%REPO_SRC%"
 )
 
-rem 数值库线程池上限（与 start_collector.bat 一致）。
+rem Cap the numeric libraries' thread pools (same as start_collector.bat).
 if not defined OMP_NUM_THREADS set "OMP_NUM_THREADS=4"
 if not defined NUMEXPR_MAX_THREADS set "NUMEXPR_MAX_THREADS=4"
 if not defined NUMEXPR_NUM_THREADS set "NUMEXPR_NUM_THREADS=4"
@@ -50,21 +55,22 @@ set "PYTHON_BIN=py"
 "%PYTHON_BIN%" -c "import bt_api_ctp.collector.schedule" >nul 2>nul
 if not errorlevel 1 goto python_ok
 
-echo [ctp_service] 错误: 找不到能 import bt_api_ctp 的 python
-echo [ctp_service] 请先在仓库根目录执行 pip install -e .，或用 set PYTHON=C:\path\to\python.exe 指定
+echo [ctp_service] ERROR: no python interpreter can import bt_api_ctp
+echo [ctp_service] run "pip install -e ." in the repo root, or set PYTHON=C:\path\to\python.exe
 exit /b 2
 
 :python_ok
 set "SVC_ARGS=%COLLECTOR_SERVICE_ARGS%"
 
-echo [ctp_service] 解释器: %PYTHON_BIN%
-echo [ctp_service] 配置: %SCRIPT_DIR%collector.yaml（可用 --config 覆盖）
-echo [ctp_service] 参数: %SVC_ARGS% %*
-echo [ctp_service] Ctrl+C 停止：会先让当前采集优雅收尾再退出
+echo [ctp_service] interpreter: %PYTHON_BIN%
+echo [ctp_service] config: %SCRIPT_DIR%collector.yaml (override with --config)
+echo [ctp_service] args: %SVC_ARGS% %*
+echo [ctp_service] Ctrl+C stops: the running collection finalises first
 
 pushd "%REPO_ROOT%" >nul
-rem 任务计划程序没有控制台，日志落到文件（service.py 内部按 5MB × 3 轮转）。
-rem SERVICE_LOG 可覆盖路径；不作为常驻服务时也可以删掉 --log-file 直接看终端。
+rem Task Scheduler gives no console, so the log goes to a file (service.py
+rem rotates it at 5MB x 3). SERVICE_LOG overrides the path; drop --log-file to
+rem watch the console when running interactively.
 if not defined SERVICE_LOG set "SERVICE_LOG=%SCRIPT_DIR%service.log"
 "%PYTHON_BIN%" "%SCRIPT_DIR%service.py" --log-file "%SERVICE_LOG%" %SVC_ARGS% %*
 set "RC=%ERRORLEVEL%"
