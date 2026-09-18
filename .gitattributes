@@ -7,3 +7,8 @@ bt_api_py/ctp/api/**/thostmduserapi_se filter=lfs diff=lfs merge=lfs -text
 bt_api_py/ctp/api/**/thosttraderapi_se filter=lfs diff=lfs merge=lfs -text
 bt_api_py/ctp/**/thostmduserapi_se filter=lfs diff=lfs merge=lfs -text
 bt_api_py/ctp/**/thosttraderapi_se filter=lfs diff=lfs merge=lfs -text
+
+# Windows batch files must be CRLF in the working tree: cmd.exe mis-parses LF-only
+# files that contain multi-line `if (...)` blocks. Blobs stay LF (git's default),
+# so this no longer depends on each machine's core.autocrlf setting.
+*.bat text eol=crlf
