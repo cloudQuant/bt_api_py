@@ -266,7 +266,83 @@ python scripts/reconcile_tick_universe.py \
 
 ---
 
-## 8. 相关文档
+## 8. Windows：编译 CTP 原生扩展（首次必做一次）
+
+`bt_api_ctp` 的原生扩展 `_ctp` 是必需的。缺了它 CTP 运行时只会静默降级，采集直接失败：
+
+```
+RuntimeWarning: CTP C++ extension (_ctp) failed to load;
+  expected=_ctp.cp311-win_amd64.pyd, _ctp.pyd; available=_ctp.cpython-31x-darwin.so
+collection failed: CTP runtime ... has no verified native extension
+```
+
+仓库源码树里**只提交了 macOS 的** `_ctp*.so`（所以 macOS 免编译），Windows / Linux 需要在本机编译一次。
+
+### 前置
+
+- Python 3.11（与 `expected=_ctp.cp311-win_amd64.pyd` 的 ABI 对应；换 Python 版本要重新编译）
+- 编译用的解释器必须与跑采集的**同一个**：`python -c "import sys; print(sys.executable, sys.version)"` 确认是 3.11
+- **Visual Studio Build Tools**，勾选"使用 C++ 的桌面开发"（提供 MSVC）
+- Windows 版 CTP 依赖已在仓库里：`bt_api/bt_api_ctp/src/bt_api_ctp/ctp/api/6.7.7/windows`
+
+### 编译
+
+先进入 **"x64 Native Tools Command Prompt for VS 2022"**（开始菜单 → Visual Studio 2022），它已经把 MSVC
+环境变量准备好：
+
+```bat
+cd /d D:\bt_api_py\bt_api\bt_api_ctp
+python setup.py build_ext --inplace
+```
+
+> **必须在已配置 MSVC 的 shell 里执行**（"x64 Native Tools Command Prompt for VS 2022"，或先 `call
+> vcvars64.bat` 的 shell）。这种 shell 里 `setup.py` 会自动设置 `DISTUTILS_USE_SDK=1`/`MSSdk=1`，
+> 让 setuptools 直接使用现成的 MSVC 环境、**跳过 `vcvarsall.bat` 探测**。
+>
+> 那次探测在装了 conda 的机器上会再启动嵌套 `cmd`，被 conda 的自动激活钩子污染后返回非零退出码，报
+> `error: Error executing cmd /u /c "...\vcvarsall.bat" x86_amd64 && set`——**此时编译还没开始**，
+> 与源码或 CTP 库无关。日志开头若出现若干
+> `conda-script.py ... ModuleNotFoundError: No module named 'conda'` 即是此坑。
+>
+> 用**更旧的检出**（`setup.py` 尚无该自动检测）时，手动补上这两行即可：
+> `set DISTUTILS_USE_SDK=1`、`set MSSdk=1`。
+
+`setup.py` 会自动按平台选 API 目录，并把 CTP 运行库拷到扩展旁边。产物应为：
+
+```
+D:\bt_api_py\bt_api\bt_api_ctp\src\bt_api_ctp\ctp\_ctp.cp311-win_amd64.pyd
+（同目录还会多出若干 CTP 运行库 DLL）
+```
+
+> **不要用 `pip install .`（非 editable）**：它编译的是 site-packages 里的副本，而 `start_collector.bat`
+> 把仓库源码放在 PYTHONPATH 最前（源码优先），那个 `.pyd` 就用不上了。要用 pip 请用 `pip install -e .`
+> 并在同一个 MSVC shell 里设置上述两个环境变量；若报"缺 CTP 构建输入"，再加 `--no-build-isolation`。
+
+### 验证（不连行情）
+
+```powershell
+set PYTHONPATH=D:\bt_api_py\bt_api\bt_api_ctp\src
+python -c "import bt_api_ctp; print(bt_api_ctp.__file__)"
+python -c "from bt_api_ctp.ctp._ctp_base import is_ctp_native_loaded, get_ctp_import_error; print(is_ctp_native_loaded(), get_ctp_import_error())"
+```
+
+第一条要指向 `D:\bt_api_py\...\src\bt_api_ctp\__init__.py`（不是 site-packages）；第二条应打印
+`True None`（CI 用的同一条判据）。打印 `False ...` 就是没编译成功或 import 错了副本。
+
+### 常见失败
+
+| 现象 | 原因 |
+|------|------|
+| `Required CTP build inputs are missing` | `ctp/api/6.7.7/windows` 不存在（子模块未初始化） |
+| `Microsoft Visual C++ 14.0 or greater is required` | 没装 VS Build Tools 的 C++ 工作负载 |
+| `Error executing cmd /u /c "...\vcvarsall.bat" x86_amd64 && set` | setuptools 探测 MSVC 环境失败（conda 自动激活钩子污染嵌套 cmd）；在 Native Tools 提示符里重跑，新版 `setup.py` 会自动跳过该探测 |
+| 产出 `_ctp.cp310-...pyd` 但运行找 `cp311` | 编译用的 Python 版本 ≠ 跑采集的 Python 版本 |
+| 产物存在仍报 `no verified native extension` | import 到的是 site-packages 的旧副本（看上面第一条验证） |
+| 不想在本机编译 | 可 `pip install bt_api_ctp`（有 win_amd64 预编译 wheel），但那是 2.0.2 发布版，**不含**批 1/2/3 的修复；而且必须让脚本不要优先仓库源码 |
+
+---
+
+## 9. 相关文档
 
 - 需求 / 设计 / 验收 / 整改：[`docs/迭代计划/迭代04-CTP全市场tick数据采集与落盘/`](../docs/迭代计划/迭代04-CTP全市场tick数据采集与落盘/)
 - 部署单元（systemd / launchd）：[`bt_api/bt_api_ctp/deploy/collector/`](../bt_api/bt_api_ctp/deploy/collector/)
