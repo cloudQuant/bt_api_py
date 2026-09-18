@@ -378,8 +378,16 @@ def main() -> int:
         results.append(install_one(spec, args))
 
     if args.with_root:
-        ok = install_root(args)
-        results.append(InstallResult("bt_api_py", "source" if ok else "failed", str(ROOT)))
+        if methods:
+            ok = install_root(args)
+            results.append(InstallResult("bt_api_py", "source" if ok else "failed", str(ROOT)))
+        else:
+            # --strategy none 是"只体检"：连核心也不能装，否则 --with-root 会绕过它。
+            results.append(
+                InstallResult(
+                    "bt_api_py", "checked", installed_version("bt_api_py") or "not installed"
+                )
+            )
 
     for spec in other_specs:
         results.append(install_one(spec, args))
