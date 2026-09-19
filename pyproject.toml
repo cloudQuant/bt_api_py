@@ -177,9 +177,13 @@ ignore = [
 "__init__.py" = ["F401", "F403"]
 "bt_api_py/ctp/*.py" = ["N801", "N802", "N803", "N806", "S110", "S112", "S324"]  # CTP vendor wrapper
 "tests/*.py" = ["N802", "N803", "S106", "S108", "S110", "S113", "S301", "S501", "S603", "PERF401", "PERF402"]
-# Import availability checks in integration tests
-"tests/integration/test_kraken_integration.py" = ["F401"]
-"tests/integration/test_mexc_integration.py" = ["F401"]
+# 子仓测试与示例脚本沿用同一套测试约定：其中的凭据一律是占位夹具（非真实密钥），
+# 与上面 "tests/*.py" 的 S106 豁免保持一致。
+"bt_api/*/tests/**/*.py" = ["S106"]
+"examples/**/*.py" = ["S106"]
+# 注：原 "tests/integration/test_{kraken,mexc}_integration.py" 两条豁免已删除——
+# 这两个路径在本仓库中不存在（真实文件位于 examples/network_tests/integration/），
+# 且真实文件已在文件头用 `# ruff: noqa: F401` 自行声明豁免。
 
 [tool.ruff.format]
 quote-style = "double"

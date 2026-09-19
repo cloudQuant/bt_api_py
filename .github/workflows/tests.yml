@@ -8,16 +8,17 @@ on:
   workflow_dispatch:
     inputs:
       coverage-threshold:
-        description: "Minimum coverage percentage for the Ubuntu baseline suite"
+        description: "Minimum coverage percentage for the Ubuntu baseline suite (留空则使用 pyproject.toml 的 fail_under)"
         required: false
-        default: "40"
+        default: ""
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  COVERAGE_THRESHOLD: "40"
+  # 覆盖率门槛的单一事实来源是 pyproject.toml 的 [tool.coverage.report] fail_under
+  # （当前 40），此处不再重复定义，避免两处数值漂移。
   SMOKE_TEST_PATHS: >-
     tests/test_bt_api_quality.py
     tests/test_forwarding_schema.py
@@ -71,6 +72,56 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
 
+  # 迭代07：门禁原来只扫 bt_api_py/tests，子仓（bt_api/*/src + tests，约 25 万行）
+  # 无门禁，一个月内 lint 债从 642 涨到 1303。本 job 引入"棘轮"：以入库快照为
+  # 基线，任何规则数量上升即失败，债务只降不升。ruff 固定版本，保证与快照同源。
+  quality-ratchet:
+    name: Quality Ratchet (submodules included)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: quality
+
+    steps:
+      # 必须带子仓：棘轮快照覆盖 bt_api/*/src 与 bt_api/*/tests，
+      # 若子仓未检出，脚本会因"范围内路径缺失"直接失败（防止假通过）。
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install ruff and mypy
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff==0.16.2" "mypy>=1.0"
+
+      - name: Check lint debt did not increase
+        run: python scripts/ci/check_quality_ratchet.py
+
+      # 迭代07 M4-Task13：L1 子仓的 mypy 门禁（binance 见 TECH_DEBT 的 mypy 债）。
+      - name: MyPy on L1 submodules
+        run: |
+          for d in bt_api/bt_api_binance/src bt_api/bt_api_okx/src bt_api/bt_api_bybit/src bt_api/bt_api_gateio/src bt_api/bt_api_hyperliquid/src; do
+            echo "mypy $d"
+            PYTHONPATH="$d:bt_api/bt_api_base/src" mypy "$d" --ignore-missing-imports
+          done
+
+      - name: Publish ratchet summary
+        if: always()
+        run: |
+          {
+            echo "### Quality ratchet (lint debt may only decrease)"
+            echo ""
+            echo '```'
+            python scripts/ci/check_quality_ratchet.py --report || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   compatibility:
     name: Compatibility
     needs: quality
@@ -110,13 +161,20 @@ jobs:
         env:
           SKIP_LIVE_TESTS: "true"
         run: |
+          # 覆盖率门槛以 pyproject.toml 的 [tool.coverage.report] fail_under 为
+          # 单一事实来源（当前 40）。仅当 workflow_dispatch 显式传入
+          # coverage-threshold 时才临时覆盖，避免两处数值各写一份而漂移。
+          EXTRA_ARGS=""
+          if [ -n "${{ github.event.inputs['coverage-threshold'] }}" ]; then
+            EXTRA_ARGS="--cov-fail-under=${{ github.event.inputs['coverage-threshold'] }}"
+          fi
           pytest tests -v \
             -m "$FULL_SUITE_MARKERS" \
             --cov=bt_api_py \
             --cov-report=xml:coverage-full.xml \
             --cov-report=html \
             --cov-report=term-missing \
-            --cov-fail-under=${{ github.event.inputs['coverage-threshold'] || env.COVERAGE_THRESHOLD }}
+            $EXTRA_ARGS
 
       - name: Upload coverage to Codecov
         if: always() && env.CODECOV_TOKEN != ''

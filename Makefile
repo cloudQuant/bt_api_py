@@ -1,4 +1,11 @@
-.PHONY: help install test test-cov test-fast test-unit test-integration test-performance test-contracts test-e2e clean lint format type-check security-scan docs analyze-coverage optimized-test
+.PHONY: help install test test-cov test-fast test-unit test-integration test-performance test-contracts test-e2e clean lint lint-all lint-submodules lint-stat format type-check type-check-l1 security-scan docs analyze-coverage optimized-test quality-ratchet quality-ratchet-update
+
+# 质量门禁范围（迭代07）。与 scripts/ci/check_quality_ratchet.py 的 default_scope()
+# 必须保持一致；tests/scripts/test_check_quality_ratchet.py 会断言两者相等。
+SUB_SRC       := $(wildcard bt_api/bt_api_*/src)
+SUB_TESTS     := $(wildcard bt_api/bt_api_*/tests)
+CORE_SCOPE    := bt_api_py tests
+QUALITY_SCOPE := $(CORE_SCOPE) scripts examples $(SUB_SRC) $(SUB_TESTS)
 
 # Default target
 help:
@@ -23,7 +30,12 @@ help:
 	@echo "  make analyze-coverage Analyze test coverage gaps"
 	@echo ""
 	@echo "Code Quality:"
-	@echo "  make lint             Run ruff linter"
+	@echo "  make lint             Run ruff linter (core scope: bt_api_py + tests)"
+	@echo "  make lint-submodules  Run ruff linter on bt_api/*/src + bt_api/*/tests"
+	@echo "  make lint-all         Run ruff linter on the full gated scope"
+	@echo "  make lint-stat        Ruff statistics for the full gated scope"
+	@echo "  make quality-ratchet  Verify lint debt did not increase (CI gate)"
+	@echo "  make quality-ratchet-update  Refresh the ratchet snapshot when debt decreased"
 	@echo "  make format           Format code with ruff"
 	@echo "  make type-check       Run mypy type checking"
 	@echo "  make check            Run all checks (lint + type-check)"
@@ -87,9 +99,32 @@ analyze-coverage:
 	python scripts/analyze_coverage.py
 
 # Code Quality
+# `lint` 保持"主包范围"，当前为绿，供日常快速自查；
+# 子仓与 examples/scripts 的存量债由 `lint-all` / `make quality-ratchet` 呈现，
+# 并由 CI 的棘轮保证"只降不升"（见 docs/迭代计划/迭代07-代码质量提升/）。
 lint:
-	@echo "Running ruff linter..."
-	ruff check bt_api_py/ tests/
+	@echo "Running ruff linter (core scope)..."
+	ruff check $(CORE_SCOPE)
+
+lint-submodules:
+	@echo "Running ruff linter (submodules)..."
+	ruff check $(SUB_SRC) $(SUB_TESTS)
+
+lint-all:
+	@echo "Running ruff linter (full scope: core + submodules + scripts + examples)..."
+	ruff check $(QUALITY_SCOPE)
+
+lint-stat:
+	@echo "Ruff statistics (full scope)..."
+	ruff check $(QUALITY_SCOPE) --statistics
+
+quality-ratchet:
+	@echo "Checking the quality ratchet (lint debt may only decrease)..."
+	python scripts/ci/check_quality_ratchet.py
+
+quality-ratchet-update:
+	@echo "Refreshing the quality ratchet snapshot (only when the debt decreased)..."
+	python scripts/ci/check_quality_ratchet.py --update
 
 format:
 	@echo "Formatting code with ruff..."
@@ -99,6 +134,17 @@ format:
 type-check:
 	@echo "Running mypy type checking..."
 	mypy bt_api_py/
+	@echo "NOTE: submodule mypy scope is tracked as 迭代07 Task 13 (M4)."
+
+# L1 子仓的 mypy 门禁（迭代07 M4-Task13）。
+MYPY_L1_SUBMODULES := bt_api/bt_api_binance/src bt_api/bt_api_okx/src bt_api/bt_api_bybit/src bt_api/bt_api_gateio/src bt_api/bt_api_hyperliquid/src
+
+type-check-l1:
+	@echo "Running mypy on L1 submodules (binance/okx/bybit/gateio/hyperliquid)..."
+	@for d in $(MYPY_L1_SUBMODULES); do \
+	  printf "  %-34s " "$$d"; \
+	  PYTHONPATH="$$d:bt_api/bt_api_base/src" mypy "$$d" --ignore-missing-imports || exit 1; \
+	done
 
 check: lint type-check
 	@echo "All checks passed!"

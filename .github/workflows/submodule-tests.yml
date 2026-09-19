@@ -92,6 +92,68 @@ jobs:
         if: steps.detect.outputs.count != '0' && steps.validation.outcome != 'success'
         run: exit 1
 
+  # 迭代07：子仓自身的 lint 门禁（按仓分片，失败可精确定位到具体仓库）。
+  # 现状为 "report-only"：continue-on-error 为 true，存量债（约 1100 项，集中在
+  # bt_api_binance / bt_api_okx）清零后应移除该行转为阻塞。滚动棘轮由
+  # .github/workflows/tests.yml 的 quality-ratchet job 承担。
+  discover-submodules:
+    name: Discover submodules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      modules: ${{ steps.list.outputs.modules }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: List bt_api_* checkouts
+        id: list
+        run: |
+          MODULES=$(ls -d bt_api/bt_api_* 2>/dev/null | xargs -n1 basename | sort | paste -sd, -)
+          MODULES_JSON=$(printf '%s' "$MODULES" | python3 -c \
+            'import json,sys; print(json.dumps([m for m in sys.stdin.read().strip().split(",") if m]))')
+          echo "modules=$MODULES_JSON" >> "$GITHUB_OUTPUT"
+          echo "Discovered submodules: $MODULES_JSON"
+
+  submodule-quality:
+    name: Submodule Quality / ${{ matrix.module }}
+    needs: discover-submodules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # report-only：见上方注释，清存量后改为阻塞。
+    continue-on-error: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.discover-submodules.outputs.modules) }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install ruff
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff==0.16.2"
+
+      - name: Ruff lint (${{ matrix.module }})
+        run: ruff check bt_api/${{ matrix.module }}
+
+      - name: Ruff format check (${{ matrix.module }})
+        run: ruff format --check bt_api/${{ matrix.module }}
+
   submodule-diagnostic:
     name: Submodule Diagnostic / All Profiles
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
