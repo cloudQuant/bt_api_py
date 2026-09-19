@@ -1,6 +1,7 @@
 # ctp_data —— CTP 全市场 tick 采集运行目录
 
-本目录既是**采集数据根目录**，也是**启动入口**。版本库里只保留"怎么跑"的文件，
+本目录既是**采集数据根目录**，也是**采集启动入口**，同时是**盘后数据清洗的权威 tick 库**
+（清洗会把各分片机的数据拉回这里合并，并在此目录下生成 K 线）。版本库里只保留"怎么跑"的文件，
 行情数据、日志、锁文件、本机配置全部由 `.gitignore` 排除。
 
 | 文件 | 是否入库 | 说明 |
@@ -11,9 +12,12 @@
 | `collector.example.yaml` | ✅ | 配置模板，不含敏感信息 |
 | `.gitignore` | ✅ | 忽略规则 |
 | `collector.yaml` | ❌ | 本机配置，从模板复制 |
-| `logs/`、`<交易日>/`、`.staging/`、`.locks/` | ❌ | 运行产物 |
+| `logs/`、`<交易日>/`、`.staging/`、`.locks/` | ❌ | 采集运行产物 |
+| `cleaner.yaml` | ❌ | 清洗本机配置，从模板复制（见第 9 节） |
+| `kline/` | ❌ | K 线输出（跨日追加，见第 9 节） |
+| `cleaner/`（`manifest.json`、`reports/`、`staging/`） | ❌ | 清洗状态、报告与拉取过渡区 |
 
-> 账号凭证不在本目录：放在**仓库根目录的 `.env`**（同样不入库）。
+> 账号凭证不在本目录：放在**仓库根目录的 `.env`**（同样不入库）。清洗脚本不需要 CTP 账号。
 
 ---
 
@@ -219,6 +223,10 @@ sh ctp_data/service.sh --dry-run      # 只打印调度计划、不采集（部�
 ctp_data/
 ├── <交易日YYYYMMDD>/<交易所>/<合约>.parquet   # 一个合约一个文件
 ├── <交易日YYYYMMDD>/report.json               # 收盘完整性报告（每合约行数/缺口/覆盖率）
+├── kline/<交易所>/<品种>/<合约>_<N>min.parquet # K 线（清洗产物，跨日追加）
+├── cleaner/manifest.json                      # 清洗状态留痕（拉取/校验/合并/删除）
+├── cleaner/reports/clean-<交易日>.json         # 每次清洗运行的报告
+├── cleaner/staging/<主机>/<交易日>/            # 拉取过渡区（合并成功后自动清理）
 ├── logs/collector-<交易日>.log                # 采集日志（夜盘记为次日）
 ├── .staging/<pid>-<nonce>/                    # 待压缩段文件
 └── .locks/<交易日>/<交易所>/                   # 跨进程文件锁（只增不减，见下）
@@ -342,8 +350,110 @@ python -c "from bt_api_ctp.ctp._ctp_base import is_ctp_native_loaded, get_ctp_im
 
 ---
 
-## 9. 相关文档
+## 9. 盘后数据清洗与 K 线合成（迭代06）
 
-- 需求 / 设计 / 验收 / 整改：[`docs/迭代计划/迭代04-CTP全市场tick数据采集与落盘/`](../docs/迭代计划/迭代04-CTP全市场tick数据采集与落盘/)
-- 部署单元（systemd / launchd）：[`bt_api/bt_api_ctp/deploy/collector/`](../bt_api/bt_api_ctp/deploy/collector/)
+采集侧每个分片机各自保存 `<data_root>/<交易日>/...`；清洗侧把它们集中到本目录、按去重键
+合并排序，再合成 1/5/15 分钟 K 线，并在确认拉取校验通过后回收远程已合并的目录。实现在
+[`bt_api/bt_api_ctp/src/bt_api_ctp/cleaner/`](../bt_api/bt_api_ctp/src/bt_api_ctp/cleaner/)，
+需求/设计/验收见 [`docs/迭代计划/迭代06-CTP数据清洗/`](../docs/迭代计划/迭代06-CTP数据清洗/)。
+
+### 9.1 首次准备
+
+```bash
+# ① 复制配置模板（清洗不需要 CTP 账号；账号仍只在仓库根 .env）
+#    模板含 rsync / sftp / local 三种主机示例
+cp bt_api/bt_api_ctp/examples/cleaner.example.yaml ctp_data/cleaner.yaml
+#    编辑 cleaner.yaml：填入各分片机的 backend / host / remote_data_root
+
+# ② 首次务必先"只拉不删"跑通，确认合并正确后再打开删除
+#    pull:
+#      delete_remote_after_verify: false
+
+# ③ 连通性自检（只读，不传输、不删除）
+python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml check-hosts
+```
+
+### 9.2 常用命令
+
+```bash
+# 全流程：拉取 → 校验 → 合并 → 合成 K 线 → 回收远程已合并目录
+python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml run
+
+# 只看计划不动数据（含删除清单预览；开启删除前建议先看一次）
+python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml run --dry-run
+
+# 分阶段：只拉取+校验 / 只合并（并补齐缺失 K 线）/ 只合成 K 线
+python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml pull
+python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml merge
+python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml kline --backfill   # 历史回填
+
+# 指定交易日
+python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml run --day 20260918
+```
+
+退出码：`0` 成功、`1` 配置错误、`2` 连接/传输/校验失败、`3` 非交易日（正常跳过）、
+`4` 合并或 K 线失败。**退出码 2/4 时远程数据一律保留**，下次运行自动重试。
+
+### 9.3 定时调度：每个交易日 16:00
+
+一个交易日 `T` 的目录 = T−1 晚夜盘 + T 白盘：白盘 15:15 收盘，加 close-grace 后在 ~15:5x
+写完 `report.json`，因此 **16:00 时 `T/` 已完整、且没有进程再写它**；当晚 21:00 起的夜盘
+写入 `T+1/` 目录，与本轮删除无冲突。所以 16:00 拉取并回收 `T/` 是安全的（周五同理：
+周五晚夜盘归下周一目录）。
+
+部署素材：[`bt_api/bt_api_ctp/deploy/cleaner/`](../bt_api/bt_api_ctp/deploy/cleaner/)（cron 与 launchd）。
+
+```cron
+0 16 * * 1-5 cd /path/to/bt_api_py && python -m bt_api_ctp.cleaner --config ctp_data/cleaner.yaml run >> ctp_data/cron-cleaner.log 2>&1
+```
+
+调度器只按星期触发；节假日由 `cleaner.yaml` 的 `calendar.holidays_file` 判断（非交易日退出 3）。
+
+### 9.4 删除远程数据的安全边界
+
+远程目录只有在**同时**满足以下三条时才会被删除；任何一条不满足都只保留并告警：
+
+1. `cleaner/manifest.json` 中该目录状态为 `merged`（已拉取 + 校验通过 + 已合并）；
+2. 配置 `pull.delete_remote_after_verify: true`；
+3. 目标是 `remote_data_root` 下的合法 `YYYYMMDD` 目录。
+
+K 线在**回收之前**合成：即使合成失败，远程数据仍在，下次运行自动重试。
+
+### 9.5 K 线产物
+
+```
+kline/<交易所>/<品种>/<合约>_<N>min.parquet   # N ∈ {1, 5, 15}
+```
+
+- **不按日期分目录**：一个合约一个周期只有一个文件，跨日追加（重跑同一天幂等）。
+- 品种目录用标的品种代码：期货 `rb2610` → `SHFE/rb/`；期权归标的品种
+  （DCE `m2611-C-2500` → `DCE/m/`、CZCE `FG611C1000` → `CZCE/FG/`、
+  CFFEX `HO2609-C-2500` → `CFFEX/HO/`）。
+- 字段：`datetime`（桶起始，交易所本地时间）、`trading_day`、`exchange_id`、
+  `instrument_id`、`open/high/low/close`、`volume`、`amount`、`open_interest`。
+  `volume`/`amount` 由交易所**当日累计值差分**得到；1 分钟自 tick 聚合，5/15 分钟自
+  1 分钟汇总，因此多周期可相互验证。
+- **组合套利合约会被跳过**：`RM701MSC2100`、`c2701-MS-C-2000` 之类既非期货也非期权，
+  不进 K 线（每个交易日约 118 个，属预期行为）。
+
+### 9.6 注意事项
+
+1. **`local` 主机的 `remote_data_root` 不能与 `tick_root` 重叠**（相等、父目录或子目录）：
+   `local` 把它当真实路径，重叠会导致回收删掉权威库本身。配置加载阶段会直接拒绝。
+2. **首次启用删除前先用 `delete_remote_after_verify: false` 空跑 ≥ 1 个交易日**，
+   核对 `cleaner/reports/clean-<交易日>.json` 的 `anomalies` 为空。
+3. **`sftp` 后端需要 `paramiko`**：`pip install "bt_api_ctp[cleaner]"`；`rsync`/`local` 不需要。
+4. **16:00 依赖本机开机**：漏跑不丢数据——远程数据在被删除前一直保留，下次运行会扫描
+   所有"已完成且未删除"的目录自动补拉。
+5. **磁盘瞬时翻倍**：staging 与权威库并存；`run` 在合并成功后会清理 staging。
+6. **清洗与采集互不干扰**：清洗只读采集产物、写 `kline/` 与 `cleaner/`；两者可同时存在
+   （16:00 采集进程已退出，21:00 才再次启动）。
+
+---
+
+## 10. 相关文档
+
+- 需求 / 设计 / 实施 / 验收：[`docs/迭代计划/迭代06-CTP数据清洗/`](../docs/迭代计划/迭代06-CTP数据清洗/)
+- 采集需求 / 设计 / 验收 / 整改：[`docs/迭代计划/迭代04-CTP全市场tick数据采集与落盘/`](../docs/迭代计划/迭代04-CTP全市场tick数据采集与落盘/)
+- 部署单元：清洗 [`bt_api/bt_api_ctp/deploy/cleaner/`](../bt_api/bt_api_ctp/deploy/cleaner/)；采集 [`bt_api/bt_api_ctp/deploy/collector/`](../bt_api/bt_api_ctp/deploy/collector/)
 - 插件说明：[`bt_api/bt_api_ctp/README.md`](../bt_api/bt_api_ctp/README.md)
