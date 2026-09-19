@@ -7,11 +7,10 @@ Following Binance/OKX test standards with DEX-specific adaptations.
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.exchanges.balancer_exchange_data import (
     BalancerExchangeDataSpot,
 )
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_balancer.spot import BalancerRequestDataSpot
 
 

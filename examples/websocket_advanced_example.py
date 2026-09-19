@@ -6,25 +6,21 @@ Demonstrates high-performance WebSocket connections with monitoring and error ha
 import asyncio
 import logging
 import os
-from typing import Dict, Any
+from typing import Any
 
 from bt_api_py.websocket import (
+    AlertSeverity,
+    AuthenticationType,
+    ExchangeCredentials,
+    PerformanceAlert,
+    PoolConfiguration,
+    WebSocketConfig,
+    get_monitoring_dashboard,
     get_websocket_manager,
     get_websocket_monitor,
-    subscribe_to_ticker,
-    subscribe_to_depth,
-    subscribe_to_trades,
-    subscribe_to_klines,
     get_websocket_stats,
-    get_monitoring_dashboard,
-    WebSocketConfig,
-    PoolConfiguration,
-    ExchangeCredentials,
-    AuthenticationType,
-    PerformanceAlert,
-    AlertSeverity,
+    subscribe_to_ticker,
 )
-
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +36,7 @@ class TradingDataHandler:
         self.trade_data = {}
         self.kline_data = {}
 
-    async def handle_ticker_data(self, data: Dict[str, Any]) -> None:
+    async def handle_ticker_data(self, data: dict[str, Any]) -> None:
         """Handle ticker data updates."""
         symbol = data.get("symbol")
         if symbol:
@@ -53,7 +49,7 @@ class TradingDataHandler:
 
             logger.info(f"Ticker {symbol}: ${last_price:.2f} ({change_24h:+.2f}%) Volume: {volume}")
 
-    async def handle_depth_data(self, data: Dict[str, Any]) -> None:
+    async def handle_depth_data(self, data: dict[str, Any]) -> None:
         """Handle order book depth updates."""
         symbol = data.get("symbol")
         if symbol:
@@ -71,7 +67,7 @@ class TradingDataHandler:
                     f"Depth {symbol}: Bid ${best_bid:.2f} Ask ${best_ask:.2f} Spread ${spread:.2f}"
                 )
 
-    async def handle_trade_data(self, data: Dict[str, Any]) -> None:
+    async def handle_trade_data(self, data: dict[str, Any]) -> None:
         """Handle trade data updates."""
         symbol = data.get("symbol")
         if symbol:
@@ -95,7 +91,7 @@ class TradingDataHandler:
                 f"Trade {symbol}: {trade_info['side']} {trade_info['quantity']} @ ${trade_info['price']:.2f}"
             )
 
-    async def handle_kline_data(self, data: Dict[str, Any]) -> None:
+    async def handle_kline_data(self, data: dict[str, Any]) -> None:
         """Handle candlestick/kline data updates."""
         symbol = data.get("symbol")
         if symbol:
@@ -400,7 +396,7 @@ async def example_performance_benchmark():
     )
 
     if latency_result.success:
-        logger.info(f"Latency benchmark results:")
+        logger.info("Latency benchmark results:")
         for metric, value in latency_result.metrics.items():
             logger.info(f"  {metric}: {value}")
     else:
@@ -413,7 +409,7 @@ async def example_performance_benchmark():
     )
 
     if throughput_result.success:
-        logger.info(f"Throughput benchmark results:")
+        logger.info("Throughput benchmark results:")
         for metric, value in throughput_result.metrics.items():
             logger.info(f"  {metric}: {value}")
     else:
@@ -426,7 +422,7 @@ async def example_performance_benchmark():
     )
 
     if memory_result.success:
-        logger.info(f"Memory benchmark results:")
+        logger.info("Memory benchmark results:")
         for metric, value in memory_result.metrics.items():
             logger.info(f"  {metric}: {value}")
     else:

@@ -8,9 +8,9 @@ Run tests:
 import queue
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 import bt_api_py.exchange_registers.register_kraken  # noqa: F401
+import pytest
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.balances.kraken_balance import KrakenSpotWssBalanceData
 from bt_api_py.containers.exchanges.kraken_exchange_data import (
     KrakenExchangeDataFutures,
@@ -18,7 +18,6 @@ from bt_api_py.containers.exchanges.kraken_exchange_data import (
 )
 from bt_api_py.containers.orderbooks.kraken_orderbook import KrakenRequestOrderBookData
 from bt_api_py.containers.orders.kraken_order import KrakenRequestOrderData
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.kraken_ticker import KrakenRequestTickerData
 from bt_api_py.feeds.live_kraken import KrakenRequestData, KrakenRequestDataSpot
 from bt_api_py.feeds.live_kraken.futures import KrakenRequestDataFutures

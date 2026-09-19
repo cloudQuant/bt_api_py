@@ -3,6 +3,10 @@
 
 import os
 import re
+from pathlib import Path
+
+# 仓库根目录：由本文件位置推导，避免硬编码绝对路径（跨机器可移植）
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def analyze_file_quality(file_path: str) -> dict:
@@ -63,7 +67,7 @@ def find_python_files(root_dir: str) -> list[str]:
 
 
 def main():
-    root_dir = "/Users/yunjinqi/Documents/source_code/bt_api_py/bt_api_py"
+    root_dir = str(REPO_ROOT / "bt_api_py")
     python_files = find_python_files(root_dir)
 
     print(f"找到 {len(python_files)} 个Python文件")
@@ -107,7 +111,7 @@ def main():
         )
 
     # 将完整列表保存到文件
-    output_file = "/Users/yunjinqi/Documents/source_code/bt_api_py/code_quality_analysis.txt"
+    output_file = str(REPO_ROOT / "code_quality_analysis.txt")
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("代码质量分析报告\n")
         f.write(f"{'=' * 80}\n\n")

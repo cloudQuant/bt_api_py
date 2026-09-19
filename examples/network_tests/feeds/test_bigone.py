@@ -10,14 +10,13 @@ Responses wrapped in {"data": ...}.
 import queue
 from unittest.mock import patch
 
-import pytest
-
 # Import registration to auto-register BigONE
 import bt_api_py.exchange_registers.register_bigone  # noqa: F401
+import pytest
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.exchanges.bigone_exchange_data import (
     BigONEExchangeDataSpot,
 )
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_bigone.spot import BigONERequestDataSpot
 
 # ── Sample API responses (BigONE wraps in {"data": ...}) ─────

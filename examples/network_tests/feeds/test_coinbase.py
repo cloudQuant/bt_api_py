@@ -8,15 +8,14 @@ Run tests:
 import queue
 from unittest.mock import patch
 
-import pytest
-
 import bt_api_py.exchange_registers.register_coinbase  # noqa: F401
+import pytest
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.accounts.coinbase_account import CoinbaseRequestAccountData
 from bt_api_py.containers.bars.coinbase_bar import CoinbaseRequestBarData
 from bt_api_py.containers.exchanges.coinbase_exchange_data import CoinbaseExchangeDataSpot
 from bt_api_py.containers.orderbooks.coinbase_orderbook import CoinbaseRequestOrderBookData
 from bt_api_py.containers.orders.coinbase_order import CoinbaseRequestOrderData
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.coinbase_ticker import CoinbaseRequestTickerData
 from bt_api_py.feeds.live_coinbase import CoinbaseRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry

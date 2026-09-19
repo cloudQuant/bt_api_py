@@ -3,10 +3,6 @@ import random
 import time
 
 import pytest
-
-# from bt_api_py.containers.positions.binance_position import BinanceWssPositionData
-from test_live_binance_swap_request_data import init_req_feed
-
 from bt_api_py.containers.accounts.binance_account import BinanceSwapWssAccountData
 from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSwap
@@ -18,6 +14,9 @@ from bt_api_py.containers.tickers.binance_ticker import BinanceWssTickerData
 from bt_api_py.containers.trades.binance_trade import BinanceAggTradeData
 from bt_api_py.feeds.live_binance_feed import BinanceAccountWssDataSwap, BinanceMarketWssDataSwap
 from bt_api_py.functions.utils import read_account_config
+
+# from bt_api_py.containers.positions.binance_position import BinanceWssPositionData
+from test_live_binance_swap_request_data import init_req_feed
 
 pytestmark = [pytest.mark.integration, pytest.mark.network]
 

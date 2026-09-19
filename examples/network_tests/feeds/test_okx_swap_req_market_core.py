@@ -2,13 +2,12 @@ import queue
 import time
 
 import pytest
-
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.bars.okx_bar import OkxBarData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.fundingrates.okx_funding_rate import OkxFundingRateData
 from bt_api_py.containers.markprices.okx_mark_price import OkxMarkPriceData
 from bt_api_py.containers.orderbooks.okx_orderbook import OkxOrderBookData
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.okx_ticker import OkxTickerData
 
 # from bt_api_py.containers.orders.okx_order import OkxOrderData

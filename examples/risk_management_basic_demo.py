@@ -4,8 +4,9 @@
 """
 
 import asyncio
+
+from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
 from bt_api_py.risk_management.core.risk_manager import RiskManager
-from bt_api_py.risk_management.containers.risk_events import RiskEvent, RiskLevel, RiskEventType
 
 
 async def main():
@@ -42,7 +43,7 @@ async def main():
         order_data={"symbol": "BTCUSDT", "side": "buy", "size": 1.0, "price": 50000},
     )
 
-    print(f"   订单检查结果:")
+    print("   订单检查结果:")
     print(f"     - 批准: {result['approved']}")
     print(f"     - 警告数: {len(result.get('warnings', []))}")
     print(f"     - 限制数: {len(result.get('restrictions', []))}")
@@ -71,7 +72,7 @@ async def main():
     print("✅ 性能统计")
     print("✅ 异步处理")
 
-    print(f"\n🚀 系统已为 BINANCE:demo_account 准备就绪!")
+    print("\n🚀 系统已为 BINANCE:demo_account 准备就绪!")
 
 
 if __name__ == "__main__":

@@ -4,9 +4,10 @@ OKX Sub-account API Usage Examples
 This script demonstrates how to use the OKX Sub-account REST API interfaces.
 """
 
+import queue
+
 from bt_api_py.feeds.live_okx_feed import OkxRequestDataSwap
 from bt_api_py.functions.utils import read_account_config
-import queue
 
 
 def init_okx_client():
@@ -89,7 +90,7 @@ def example_get_sub_account_funding_balance():
 
     if result.get_status():
         balances = result.get_data()
-        print(f"Funding balances:")
+        print("Funding balances:")
         for balance in balances[:5]:  # Show first 5
             print(
                 f"  - {balance.get('ccy')}: "

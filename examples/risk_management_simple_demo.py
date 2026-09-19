@@ -4,8 +4,9 @@
 """
 
 import asyncio
+
+from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
 from bt_api_py.risk_management.core.risk_manager import RiskManager
-from bt_api_py.risk_management.containers.risk_events import RiskEvent, RiskLevel, RiskEventType
 
 
 async def main():
@@ -72,7 +73,7 @@ async def main():
     print("4. 获取性能指标...")
     metrics = risk_manager.get_performance_metrics()
 
-    print(f"   性能指标:")
+    print("   性能指标:")
     print(f"     - 处理的事件数: {metrics['events_processed']}")
     print(f"     - 活跃事件数: {metrics['active_events']}")
     print(f"     - 缓存的指标数: {metrics['cached_metrics']}")
@@ -97,7 +98,7 @@ async def main():
     assessor = risk_manager.risk_assessor
 
     # 只获取基本统计信息，避免复杂的计算
-    print(f"   评估器状态:")
+    print("   评估器状态:")
     print(f"     - 已训练: {assessor.is_trained}")
     print(f"     - 因子权重配置: {len(assessor.factor_weights)}")
     print(f"     - 风险阈值配置: {assessor.risk_thresholds}")
@@ -109,14 +110,14 @@ async def main():
     # 设置一些限制
     limits_manager.set_static_limit("max_order_size", "BINANCE", "test_account_001", 1000000)
 
-    print(f"   设置限制: max_order_size = 1,000,000")
+    print("   设置限制: max_order_size = 1,000,000")
 
     # 8. 演示策略引擎
     print("8. 演示策略引擎...")
     policy_engine = risk_manager.policy_engine
 
     print(f"   策略引擎状态: {len(policy_engine.rules)} 规则已配置")
-    print(f"     - 默认规则包括高风险暂停、保证金检查等")
+    print("     - 默认规则包括高风险暂停、保证金检查等")
 
     # 9. 启动简单监控
     print("9. 启动监控 (2秒)...")
@@ -138,7 +139,7 @@ async def main():
     print("✅ 可扩展的ML模型集成")
     print("✅ 合规监控和报告")
 
-    print(f"\n🚀 系统已为BINANCE:test_account_001 准备就绪!")
+    print("\n🚀 系统已为BINANCE:test_account_001 准备就绪!")
     print("📊 实时监控、风险预警、合规检查功能全部可用")
 
 

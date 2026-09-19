@@ -3,12 +3,10 @@
 演示如何使用智能风控和合规监控系统
 """
 
-import time
 import asyncio
-from decimal import Decimal
 
+from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
 from bt_api_py.risk_management.core.risk_manager import RiskManager
-from bt_api_py.risk_management.containers.risk_events import RiskEvent, RiskLevel, RiskEventType
 
 
 async def main():
@@ -82,7 +80,7 @@ async def main():
         exchange_name=exchange_name, account_id=account_id, order_data=low_risk_order
     )
 
-    print(f"   低风险订单检查结果:")
+    print("   低风险订单检查结果:")
     print(f"     - 批准: {order_check_result['approved']}")
     print(f"     - 风险级别: {order_check_result.get('risk_level', 'UNKNOWN')}")
     print(f"     - 风险评分: {order_check_result.get('risk_score', 0)}")
@@ -101,7 +99,7 @@ async def main():
         exchange_name=exchange_name, account_id=account_id, order_data=high_risk_order
     )
 
-    print(f"   高风险订单检查结果:")
+    print("   高风险订单检查结果:")
     print(f"     - 批准: {high_risk_result['approved']}")
     print(f"     - 需要缓解措施: {high_risk_result.get('mitigation_required', False)}")
     print(f"     - 限制数量: {len(high_risk_result.get('restrictions', []))}")
@@ -120,7 +118,7 @@ async def main():
     print("6. 获取性能指标...")
     performance_metrics = risk_manager.get_performance_metrics()
 
-    print(f"   性能指标:")
+    print("   性能指标:")
     print(f"     - 处理的事件数: {performance_metrics['events_processed']}")
     print(f"     - 风险评估数: {performance_metrics['risk_assessments']}")
     print(f"     - 违规检测数: {performance_metrics['violations_detected']}")
@@ -189,7 +187,7 @@ async def main():
 
     assessment_result = risk_assessor.assess_risk(mock_risk_metrics)
 
-    print(f"   风险评估结果:")
+    print("   风险评估结果:")
     print(f"     - 风险评分: {assessment_result.score}")
     print(f"     - 风险级别: {assessment_result.level}")
     print(f"     - 置信度: {assessment_result.confidence}")
@@ -202,7 +200,7 @@ async def main():
     print("10. 获取风险评估统计...")
     risk_stats = risk_assessor.get_risk_statistics()
 
-    print(f"   风险评估统计:")
+    print("   风险评估统计:")
     print(f"     - 总评估次数: {risk_stats['assessment_stats']['total_assessments']}")
     print(f"     - 平均风险评分: {risk_stats['assessment_stats']['average_score']}")
     print(f"     - 评分分布: {risk_stats['assessment_stats']['score_distribution']}")

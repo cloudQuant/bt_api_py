@@ -7,7 +7,6 @@ import queue
 from unittest.mock import patch
 
 import pytest
-
 from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataMargin
 from bt_api_py.containers.orders.binance_order import BinanceSpotWssOrderData

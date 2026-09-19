@@ -21,7 +21,6 @@ import queue
 import time
 
 import pytest
-
 from bt_api_py.auth_config import IbWebAuthConfig
 from bt_api_py.feeds.live_ib_web_feed import IbWebRequestDataStock
 from bt_api_py.functions.utils import read_account_config

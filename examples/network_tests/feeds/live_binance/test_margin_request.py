@@ -6,7 +6,6 @@ Tests for Binance Margin API Request Implementation
 import queue
 
 import pytest
-
 from bt_api_py.feeds.live_binance.margin import BinanceRequestDataMargin
 
 

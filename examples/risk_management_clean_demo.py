@@ -4,8 +4,9 @@
 """
 
 import asyncio
+
+from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
 from bt_api_py.risk_management.core.risk_manager import RiskManager
-from bt_api_py.risk_management.containers.risk_events import RiskEvent, RiskLevel, RiskEventType
 
 
 async def main():
@@ -105,7 +106,7 @@ async def main():
     print("⚡️ 异常检测和模式识别")
     print("📈 实时仪表板")
 
-    print(f"已为用户 demo_account (BINANCE) 配置完成风险监控")
+    print("已为用户 demo_account (BINANCE) 配置完成风险监控")
 
 
 if __name__ == "__main__":

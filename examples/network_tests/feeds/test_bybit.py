@@ -10,10 +10,9 @@ Run with coverage:
 
 import queue
 
-import pytest
-
 # Import registration to auto-register Bybit
 import bt_api_py.exchange_registers.register_bybit  # noqa: F401
+import pytest
 from bt_api_py.containers.balances.bybit_balance import (
     BybitSpotBalanceData,
 )

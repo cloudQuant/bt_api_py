@@ -6,24 +6,24 @@ This script demonstrates a complete monitoring setup for a trading system.
 """
 
 import asyncio
-import time
 import random
+import time
 from pathlib import Path
 
 # Setup logging for production
-from bt_api_py.logging_system import setup_logging_for_production, get_logger
+from bt_api_py.logging_system import get_logger, setup_logging_for_production
 
 setup_logging_for_production()
 logger = get_logger(__name__)
 
 # Setup monitoring
 from bt_api_py.monitoring import (
-    monitor_performance,
-    monitor_calls,
     counter,
     gauge,
-    histogram,
     get_business_collector,
+    histogram,
+    monitor_calls,
+    monitor_performance,
     start_prometheus_exporter,
     stop_prometheus_exporter,
 )

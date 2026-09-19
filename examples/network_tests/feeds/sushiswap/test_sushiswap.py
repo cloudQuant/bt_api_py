@@ -8,12 +8,11 @@ from enum import Enum
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.exchanges.sushiswap_exchange_data import (
     SushiSwapChain,
     SushiSwapExchangeDataSpot,
 )
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_sushiswap.spot import SushiSwapRequestDataSpot
 
 

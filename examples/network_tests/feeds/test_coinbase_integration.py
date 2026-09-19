@@ -14,7 +14,6 @@ import json
 from queue import Queue
 
 import pytest
-
 from bt_api_py.containers.balances.coinbase_balance import CoinbaseBalanceData
 from bt_api_py.containers.exchanges.coinbase_exchange_data import (
     CoinbaseExchangeData,

@@ -7,10 +7,9 @@ Run tests:
 
 import queue
 
-import pytest
-
 # Import registration to auto-register Bitget
 import bt_api_py.exchange_registers.register_bitget  # noqa: F401
+import pytest
 from bt_api_py.containers.balances.bitget_balance import BitgetBalanceData
 from bt_api_py.containers.exchanges.bitget_exchange_data import (
     BitgetExchangeDataSpot,

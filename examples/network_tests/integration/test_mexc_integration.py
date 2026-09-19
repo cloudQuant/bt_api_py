@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
+# ruff: noqa: F401  # 本文件是导入可用性验证：这些 import 本身即被测对象，故豁免 F401。
 """
 Test script for MEXC integration
-# ruff: noqa: F401  # Import verification tests - F401 unused imports allowed
 
 This script tests whether the MEXC feed can be imported and instantiated.
 """
 
+import os
 import sys
 
-# Add the project root to the path
-sys.path.insert(0, "/Users/yunjinqi/Documents/source_code/bt_api_py")
+# Add the project root to the path (derived from this file, no hardcoded absolute path)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 
 def test_mexc_import():

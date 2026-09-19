@@ -13,10 +13,9 @@ import hmac
 import os
 import queue
 
-import pytest
-
 # Import registration to auto-register Gate.io
 import bt_api_py.exchange_registers.register_gateio  # noqa: F401
+import pytest
 from bt_api_py.containers.balances.gateio_balance import (
     GateioBalanceData,
 )

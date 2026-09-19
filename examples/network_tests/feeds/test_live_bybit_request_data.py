@@ -18,7 +18,6 @@ import queue
 import time
 
 import pytest
-
 from bt_api_py.feeds.live_bybit.spot import BybitRequestDataSpot
 
 

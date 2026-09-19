@@ -14,7 +14,6 @@ import queue
 import time
 
 import pytest
-
 from bt_api_py.containers.assets.okx_asset import OkxDepositInfoData, OkxWithdrawalInfoData
 from bt_api_py.containers.exchanges.okx_exchange_data import OkxExchangeDataSwap
 from bt_api_py.containers.liquidations.okx_liquidation_order import OkxLiquidationOrderData

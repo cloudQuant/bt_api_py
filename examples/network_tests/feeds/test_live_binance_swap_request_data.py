@@ -3,7 +3,7 @@ import random
 import time
 
 import pytest
-
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.accounts.binance_account import BinanceSwapRequestAccountData
 from bt_api_py.containers.balances.binance_balance import BinanceSwapRequestBalanceData
 from bt_api_py.containers.bars.binance_bar import BinanceRequestBarData
@@ -16,7 +16,6 @@ from bt_api_py.containers.markprices.binance_mark_price import BinanceRequestMar
 from bt_api_py.containers.orderbooks.binance_orderbook import BinanceRequestOrderBookData
 from bt_api_py.containers.orders.binance_order import BinanceRequestOrderData
 from bt_api_py.containers.positions.binance_position import BinanceRequestPositionData
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.binance_ticker import BinanceRequestTickerData
 from bt_api_py.feeds.live_binance_feed import BinanceRequestDataSwap
 from bt_api_py.functions.utils import read_account_config

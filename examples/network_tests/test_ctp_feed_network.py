@@ -22,9 +22,9 @@ import time
 from pathlib import Path
 
 import pytest
+from bt_api_py.ctp._ctp_base import get_ctp_import_error, is_ctp_native_loaded
 from dotenv import load_dotenv
 
-from bt_api_py.ctp._ctp_base import get_ctp_import_error, is_ctp_native_loaded
 from bt_api_py.ctp_env_selector import apply_ctp_env
 
 _CTP_ATEXIT_REGISTERED = False
@@ -56,11 +56,11 @@ def _check_ctp_service(host: str, port: int, timeout: float = 3.0) -> str:
         try:
             data = sock.recv(128)
             return "ok" if data else "no_service"
-        except socket.timeout:
+        except TimeoutError:
             return "no_service"
         finally:
             sock.close()
-    except socket.timeout:
+    except TimeoutError:
         return "timeout"
     except ConnectionRefusedError:
         return "refused"

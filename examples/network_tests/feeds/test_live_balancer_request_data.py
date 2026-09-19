@@ -8,7 +8,6 @@ import queue
 from unittest.mock import patch
 
 import pytest
-
 from bt_api_py.feeds.live_balancer.spot import BalancerRequestDataSpot
 
 

@@ -10,10 +10,9 @@ Tests for MEXC spot trading implementation following Binance/OKX standards:
 
 import queue
 
-import pytest
-
 # Import registration to auto-register MEXC
 import bt_api_py.exchange_registers.register_mexc  # noqa: F401
+import pytest
 from bt_api_py.containers.orderbooks.mexc_orderbook import MexcRequestOrderBookData
 from bt_api_py.containers.tickers.mexc_ticker import MexcRequestTickerData
 from bt_api_py.feeds.live_mexc.spot import MexcRequestDataSpot

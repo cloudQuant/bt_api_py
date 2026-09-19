@@ -9,7 +9,6 @@ import queue
 from unittest.mock import patch
 
 import pytest
-
 from bt_api_py.containers.exchanges.dydx_exchange_data import DydxExchangeDataSwap
 from bt_api_py.feeds.live_dydx.spot import DydxRequestDataSpot
 

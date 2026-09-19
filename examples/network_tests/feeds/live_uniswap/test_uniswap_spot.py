@@ -7,7 +7,6 @@ from decimal import Decimal
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
 from bt_api_py.containers.exchanges.uniswap_pool import UniswapPool
 from bt_api_py.containers.exchanges.uniswap_quote import UniswapQuote
 from bt_api_py.containers.exchanges.uniswap_ticker import UniswapTicker

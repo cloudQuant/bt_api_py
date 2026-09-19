@@ -16,10 +16,9 @@ Run with coverage:
 
 import queue
 
-import pytest
-
 # Import registration to auto-register OKX
 import bt_api_py.exchange_registers.register_okx  # noqa: F401
+import pytest
 
 # OkxBalance import not available
 from bt_api_py.containers.exchanges.okx_exchange_data import (

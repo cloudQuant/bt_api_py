@@ -9,14 +9,13 @@ BeQuant uses a white-label exchange API (v3) with HTTP Basic Auth.
 import queue
 from unittest.mock import patch
 
-import pytest
-
 # Import registration to auto-register BeQuant
 import bt_api_py.exchange_registers.register_bequant  # noqa: F401
+import pytest
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.exchanges.bequant_exchange_data import (
     BeQuantExchangeDataSpot,
 )
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_bequant.spot import BeQuantRequestDataSpot
 
 # ── Sample API responses ─────────────────────────────────────

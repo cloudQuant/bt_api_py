@@ -15,18 +15,17 @@ import time
 import unittest
 from pathlib import Path
 
-import pytest
-from dotenv import load_dotenv
-
 # Import registration to auto-register HTX
 import bt_api_py.exchange_registers.register_htx  # noqa: F401
+import pytest
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.exchanges.htx_exchange_data import HtxExchangeDataSpot
 from bt_api_py.containers.orderbooks.htx_orderbook import HtxRequestOrderBookData
 from bt_api_py.containers.orders.htx_order import HtxRequestOrderData
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.tickers.htx_ticker import HtxRequestTickerData
 from bt_api_py.feeds.live_htx.spot import HtxRequestDataSpot
 from bt_api_py.registry import ExchangeRegistry
+from dotenv import load_dotenv
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")

@@ -7,11 +7,10 @@ Following Binance/OKX test standards with DEX-specific adaptations.
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-
+from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.containers.exchanges.cow_swap_exchange_data import (
     CowSwapExchangeDataSpot,
 )
-from bt_api_base.containers.requestdatas.request_data import RequestData
 from bt_api_py.feeds.live_cow_swap.spot import CowSwapRequestDataSpot
 
 

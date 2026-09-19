@@ -3,7 +3,6 @@ import random
 import time
 
 import pytest
-
 from bt_api_py.containers.accounts.binance_account import BinanceSpotWssAccountData
 from bt_api_py.containers.bars.binance_bar import BinanceWssBarData
 from bt_api_py.containers.exchanges.binance_exchange_data import BinanceExchangeDataSpot

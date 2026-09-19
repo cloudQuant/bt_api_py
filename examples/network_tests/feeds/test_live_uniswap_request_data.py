@@ -19,10 +19,9 @@ Run with coverage:
 import queue
 from unittest.mock import MagicMock
 
-import pytest
-
 # Import registration to auto-register Uniswap
 import bt_api_py.exchange_registers.register_uniswap  # noqa: F401
+import pytest
 from bt_api_py.containers.exchanges.uniswap_exchange_data import (
     UniswapChain,
     UniswapExchangeData,

@@ -3,17 +3,18 @@
 从项目根目录运行，避免导入路径问题
 """
 
-import sys
+import asyncio
 import os
+import sys
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__))))
 
+from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
 from bt_api_py.risk_management.core.risk_manager import RiskManager
-from bt_api_py.risk_management.containers.risk_events import RiskEvent, RiskLevel, RiskEventType
 
 
-def main():
+async def main():
     """主函数 - 演示风险管理系统"""
     print("=== bt_api_py 智能风控和合规监控系统演示 ===\n")
 
@@ -60,7 +61,7 @@ def main():
     print("5. 获取性能指标...")
     metrics = risk_manager.get_performance_metrics()
 
-    print(f"   性能指标:")
+    print("   性能指标:")
     print(f"     - 处理的事件数: {metrics['events_processed']}")
     print(f"     - 活跃事件数: {metrics['active_events']}")
     print(f"     - 平均处理时间: {metrics['average_processing_time_ms']:.2f}ms")
@@ -82,8 +83,8 @@ def main():
     print("✅ 异步处理")
     print("✅ 支持73+交易所实时监控")
 
-    print(f"\n🚀 系统已为 BINANCE:demo_account 准备就绪!")
+    print("\n🚀 系统已为 BINANCE:demo_account 准备就绪!")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

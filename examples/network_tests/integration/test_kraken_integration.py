@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+# ruff: noqa: F401  # 本文件是导入可用性验证：这些 import 本身即被测对象，故豁免 F401。
 """
 Simple test script to verify Kraken integration can be imported and instantiated.
-# ruff: noqa: F401  # Import verification tests - F401 unused imports allowed
 """
 
 import os

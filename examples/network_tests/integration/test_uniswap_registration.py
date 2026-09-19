@@ -7,10 +7,9 @@ and used through the ExchangeRegistry.
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 # Import the registration module to ensure Uniswap is registered
 import bt_api_py.exchange_registers.register_uniswap  # noqa: F401 - module import triggers registration
+import pytest
 from bt_api_py.containers.exchanges.uniswap_exchange_data import (
     UniswapChain,
     UniswapExchangeDataSpot,
