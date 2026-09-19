@@ -135,3 +135,9 @@ logs/
 test.log
 tmp_keys/
 configs/ibkr_cookies.json
+
+# A股历史数据目录（stock_data）——数据文件不入库，只保留 README
+**/stock_data/daily/
+**/stock_data/adjustment_factors/
+**/stock_data/financials/
+**/stock_data/*.parquet
