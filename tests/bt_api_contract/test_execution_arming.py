@@ -1112,6 +1112,10 @@ def test_armed_placement_still_runs_existing_journal_guards(tmp_path, mutation, 
             "account_risk_snapshot_stale",
         ),
     ],
+    # 显式静态 id：参数含收集时求值的 monotonic_ns()，若由 pytest 自动生成
+    # 用例 id，各 xdist worker 会得到不同 id，导致 "Different tests were
+    # collected" 而无法并行（-n）。见迭代07：启用 -n 8 的前置修复。
+    ids=["no_risk_record", "loss_limit_breached", "snapshot_stale"],
 )
 def test_armed_placement_still_runs_account_risk_guards(
     tmp_path, risk_record, verified_at, expected_code

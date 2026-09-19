@@ -73,14 +73,14 @@ def test_gateway_config_from_kwargs_allocates_named_runtime() -> None:
     config = GatewayConfig.from_kwargs(
         exchange_type="ctp",
         asset_type="future",
-        account_id="089763",
-        runtime_name="ctp-future-089763",
+        account_id="test_account",
+        runtime_name="ctp-future-test_account",
     )
 
-    assert config.runtime_name == "ctp-future-089763"
+    assert config.runtime_name == "ctp-future-test_account"
     assert config.exchange_type == "CTP"
     assert config.asset_type == "FUTURE"
-    assert config.account_id == "089763"
+    assert config.account_id == "test_account"
     assert config.command_endpoint.startswith("tcp://")
     assert config.event_endpoint.startswith("tcp://")
     assert config.market_endpoint.startswith("tcp://")
@@ -91,8 +91,8 @@ def test_gateway_runtime_starts_registered_adapter_and_reports_session_health() 
     config = GatewayConfig.from_kwargs(
         exchange_type="CTP",
         asset_type="FUTURE",
-        account_id="089763",
-        runtime_name="ctp-future-089763",
+        account_id="test_account",
+        runtime_name="ctp-future-test_account",
         command_endpoint=_free_tcp_endpoint(),
         event_endpoint=_free_tcp_endpoint(),
         market_endpoint=_free_tcp_endpoint(),
@@ -130,8 +130,8 @@ def test_gateway_runtime_command_server_uses_adapter_methods() -> None:
     config = GatewayConfig.from_kwargs(
         exchange_type="CTP",
         asset_type="FUTURE",
-        account_id="089763",
-        runtime_name="ctp-future-089763",
+        account_id="test_account",
+        runtime_name="ctp-future-test_account",
         command_endpoint=_free_tcp_endpoint(),
         event_endpoint=_free_tcp_endpoint(),
         market_endpoint=_free_tcp_endpoint(),
@@ -143,7 +143,7 @@ def test_gateway_runtime_command_server_uses_adapter_methods() -> None:
         private_endpoint=config.event_endpoint,
         exchange="CTP",
         market_type="FUTURE",
-        account_id="089763",
+        account_id="test_account",
         strategy_id="bt-test",
         command_timeout_ms=1000,
     )
