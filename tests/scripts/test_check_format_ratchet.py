@@ -155,7 +155,7 @@ class TestBaseline:
             "bt_api_kraken": 7,
             "bt_api_mexc": 12,
             "bt_api_mt5": 7,
-            "bt_api_okx": 86,
+            "bt_api_okx": 85,
         }
 
         assert payload["schema_version"] == ratchet.SCHEMA_VERSION
@@ -167,7 +167,7 @@ class TestBaseline:
         }
         assert payload["modules"] == sorted(expected)
         assert payload["format"]["by_module"] == expected
-        assert payload["format"]["total"] == 452
+        assert payload["format"]["total"] == 451
         assert payload["format"]["total"] == sum(expected.values())
         assert payload["notes"]
 
