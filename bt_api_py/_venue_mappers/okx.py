@@ -19,6 +19,7 @@ def _wire_decimal(value: Decimal | None) -> str | None:
 def map_order_request(request: OrderRequest) -> dict[str, Any]:
     """Map a v1 ``OrderRequest`` to OKX ``make_order`` arguments."""
     offset, closing = position_intent(request)
+    post_only = request.time_in_force == "post_only"
     if offset in {"close_today", "close_yesterday"} or request.position_id is not None:
         raise CapabilityNotSupportedError(
             "make_order",
@@ -31,10 +32,10 @@ def map_order_request(request: OrderRequest) -> dict[str, Any]:
         "price": _wire_decimal(request.price),
         "order_type": f"{request.side.value}-{request.order_type.value}",
         "offset": offset,
-        "post_only": False,
+        "post_only": post_only,
         "client_order_id": request.client_order_id,
         "reduce_only": closing,
-        "time_in_force": request.time_in_force,
+        "time_in_force": "GTC" if post_only else request.time_in_force,
         "size_in_contracts": request.quantity_unit in {"contracts", "native"},
     }
     if request.position_mode == "dual_side":
