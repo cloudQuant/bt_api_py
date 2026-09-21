@@ -20,10 +20,10 @@
 | 上版诊断子集（`-n 8`，显式排除旧工件失败） | 1321 passed / 882s | **1489 passed / 2 warnings / 42.97s** | 仅为根因定位留下的历史子集；不替代完整 marker，也不构成外部 CTP/SimNow 证据 |
 | 本版完整根 marker（`PIP_NO_INDEX=1`） | 不适用 | **1735 passed / 2 warnings / 88.69s** | **PASS（checkout-local）**：同范围显式 `--cov-branch` 复跑为 **1735 passed / 2 warnings / 110.06s**，总覆盖率 **67.27%**，高于 40% 门槛。后续完整运行均未再出现 N-19 的退出后插件线程 warning，但单次历史观察仍保留 WATCH。dirty checkout 含未跟踪测试；该证据不等于 clean-checkout、外部 CI 或发布证明 |
 | okx mixins 目录 | 44 文件 / 20,369 行 | **20 文件 / 17,129 行** | 合并机械切分 + 样板收敛（API 零变更） |
-| L1 五仓 mypy 错误 | 416（binance 392 / okx 17 / bybit 3 / gateio 4） | 历史收敛为 **0**；当前 dirty checkout **3** | `type-check-l1` 当前因既有 dirty OKX 的 `registry_registration.py:120,174` 缺注解与 `market_wss_base.py:906` 的 `int(Any | None)` 失败，非本批改动；root lint 与主包 mypy PASS，须在 clean checkout 复核 L1 |
+| L1 五仓 mypy 错误 | 416（binance 392 / okx 17 / bybit 3 / gateio 4） | 历史收敛为 **0**；当前 handoff 候选 **3** | `type-check-l1` 当前因已持久化 OKX 候选的 `registry_registration.py:120,174` 缺注解与 `market_wss_base.py:906` 的 `int(Any | None)` 失败；root lint 与主包 mypy PASS，修复后须复核 L1 |
 | 公共 API 指标 | 无固定分母 | docstring **594/691（85.96%）**；参数注解 **1016/1035（98.16%）** | `make public-api-quality`，2026-09-20 |
 | 主包覆盖率（CI 标记，`-n 8`） | 历史 66.29% | **67.27%** | **1735 passed、2 warnings、110.06s**；statement + branch 口径，满足 55% 阶段目标，`pyproject` 默认门槛维持 40% |
-| 子仓 format 债（Ruff 0.16.2） | 无可机读逐仓基线 | **453 文件 / 15 仓** | 快照基线为 452；当前 dirty OKX 为 **87 > 86**，`make format-ratchet` 正确失败。不得用更新基线掩盖该回退，也不是 format 已清零的证据 |
+| 子仓 format 债（Ruff 0.16.2） | 无可机读逐仓基线 | **453 文件 / 15 仓** | 快照基线为 452；已持久化 OKX handoff 候选为 **87 > 86**，`make format-ratchet` 正确失败。不得用更新基线掩盖该回退，也不是 format 已清零的证据 |
 | 子仓 Bandit 静态预检（默认 profile + `--ignore-nosec`） | 无独立基线 | **26 项**（High 1 / Medium 3 / Low 22） | 仅为当前 checkout 的源码预检；CTP `B507` High 未清零前不得建立绿色 required 基线 |
 | 根仓渐进 Ruff ignore 债（2 条选定规则） | 无可机读盘点 | 最近完整报告 **37 项** | Tasks37–41 仅有目标 TC 零新增证据，未取得 fresh 全范围库存；该历史数不计入 10 项子仓 lint 棘轮余量，也不等于已清零 |
 
@@ -229,7 +229,7 @@
 | N-03 | 4 个示例集成测试的 noqa 写在 docstring 内（机制失效） | 21 项 F401 长期漏网 | DONE（F-09） |
 | N-04 | `risk_management_root_demo.py` 无法编译（同步函数内 await） | 示例不可运行，CI 不覆盖 examples 故长期未发现 | DONE（F-08） |
 | N-05 | 参数化测试 ID 含实时时间戳 | 阻塞 `-n` 并行（团队要求的 `-n 8` 无法使用） | DONE（F-12） |
-| N-06 | 原 `submodule-quality` 把 lint 与 format 绑定在同一个 report-only job；CI 同版 Ruff 0.16.2 的快照基线为 15 仓 **452** 个待格式化文件（Binance 100、OKX 86、IB Web 40、Base 33；计数含 Ruff 支持的 Markdown 代码块），另有 **10** 个 lint 项 | 直接移除 `continue-on-error` 会把已知格式存量一次性变为阻塞故障；把 lint 与 format 混合提交会失去独立回滚 | DOING：`submodule-lint` / `submodule-format` 仍各自 report-only；根 `format-ratchet` 以 15 仓逐仓快照阻止 format 债增长（新/缺失仓也失败），并由 `quality-gate` 阻塞。当前 dirty OKX 使实际总数为 **453**，因此相对 452 基线正确失败；两项仍须独立清零、稳定 CI、可回滚后再升级 blocking，交付图见实施计划 Task 10-B |
+| N-06 | 原 `submodule-quality` 把 lint 与 format 绑定在同一个 report-only job；CI 同版 Ruff 0.16.2 的快照基线为 15 仓 **452** 个待格式化文件（Binance 100、OKX 86、IB Web 40、Base 33；计数含 Ruff 支持的 Markdown 代码块），另有 **10** 个 lint 项 | 直接移除 `continue-on-error` 会把已知格式存量一次性变为阻塞故障；把 lint 与 format 混合提交会失去独立回滚 | DOING：`submodule-lint` / `submodule-format` 仍各自 report-only；根 `format-ratchet` 以 15 仓逐仓快照阻止 format 债增长（新/缺失仓也失败），并由 `quality-gate` 阻塞。已持久化 OKX handoff 候选使实际总数为 **453**，因此相对 452 基线正确失败；两项仍须独立清零、稳定 CI、可回滚后再升级 blocking，交付图见实施计划 Task 10-B |
 | N-07 | `scripts/analyze_docstrings.py` 全树扫描会计入生成代码、测试和示例，输出的 6018 个缺失 docstring 不能证明 AC-9 的“公开 API 覆盖率” | 69%/85% 目标没有可复算、稳定的分母 | DONE（F-20）：专用 AST 指标固定公开源级分母并有 fixture 回归测试 |
 | N-08 | Curve/Raydium/SushiSwap 的 5 个示例测试仍导入已不存在的旧容器/DEX feed 路径 | 原文件在当前根仓无法收集，不能作为行为通过证据 | DONE（F-21）：经历史删除与当前公开边界确认后正式退役，并以精确前缀 AST 测试防回归 |
 | N-09 | `test_zmq_forwarding_runtime_start_sync_cleans_up_after_thread_start_failure` 修改共享 `threading.Thread`；在没有既有 forwarding loop 的 xdist worker 中，`_run_awaitable_sync` 无法启动后台 loop 而死等 | 根并行回归不能完成，先前被中断运行不构成通过证据 | DONE（F-24）：mock 已局部化，清理断言保留且新鲜根并行回归通过 |
