@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-20T03:23:05+08:00",
+  "generated_at": "2026-09-21T01:52:11.415175+00:00",
   "ruff_version": "ruff 0.16.2",
   "scope": {
     "pattern": "bt_api/bt_api_*",
@@ -24,7 +24,7 @@
     "bt_api_okx"
   ],
   "format": {
-    "total": 452,
+    "total": 451,
     "by_module": {
       "bt_api_base": 33,
       "bt_api_binance": 100,
@@ -40,8 +40,8 @@
       "bt_api_kraken": 7,
       "bt_api_mexc": 12,
       "bt_api_mt5": 7,
-      "bt_api_okx": 86
+      "bt_api_okx": 85
     }
   },
-  "notes": "Submodule format ratchet baseline. Per-module counts may only decrease; use --update when no module grows and at least one module improves, or --force-update for an intentional rebaseline."
+  "notes": "Submodule format ratchet baseline. Per-module counts may only decrease; use --update after improvements or --force-update for an intentional rebaseline."
 }

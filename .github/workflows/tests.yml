@@ -36,6 +36,7 @@ jobs:
       # full history required: shallow clones break gitleaks PR-range scans (base^..head)
       - uses: actions/checkout@v6
         with:
+          submodules: recursive
           fetch-depth: 0
 
       - uses: actions/setup-python@v6
@@ -167,6 +168,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - uses: actions/setup-python@v6
         with:

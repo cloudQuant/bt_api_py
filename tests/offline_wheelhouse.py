@@ -118,16 +118,30 @@ def _copy_distribution_wheel(distribution: metadata.Distribution, wheelhouse: Pa
                 )
             wheel_file.write_text(wheel_contents, encoding="utf-8")
 
-        before = set(wheelhouse.glob("*.whl"))
-        from wheel.cli.pack import pack
-
-        pack(str(stage), str(wheelhouse), build_number=None)
-        created = set(wheelhouse.glob("*.whl")) - before
-        if len(created) != 1:
+        tags = [
+            line.partition(":")[2].strip()
+            for line in wheel_file.read_text(encoding="utf-8").splitlines()
+            if line.startswith("Tag:")
+        ]
+        if not tags:
             raise RuntimeError(
-                f"repacking {distribution.metadata['Name']} produced {len(created)} wheels"
+                f"installed distribution {distribution.metadata['Name']} has no wheel tag"
             )
-        return next(iter(created))
+        python_tags, abi_tags, platform_tags = zip(
+            *(tag.split("-", 2) for tag in tags), strict=True
+        )
+        distribution_name = canonicalize_name(distribution.metadata["Name"]).replace("-", "_")
+        version = distribution.version.replace("-", "_")
+        python_tag = ".".join(dict.fromkeys(python_tags))
+        abi_tag = ".".join(dict.fromkeys(abi_tags))
+        platform_tag = ".".join(dict.fromkeys(platform_tags))
+        wheel_name = f"{distribution_name}-{version}-{python_tag}-{abi_tag}-{platform_tag}.whl"
+        wheel_path = wheelhouse / wheel_name
+        with WheelFile(wheel_path, "w") as archive:
+            for source in sorted(stage.rglob("*")):
+                if source.is_file() and source.name != "RECORD":
+                    archive.write(source, source.relative_to(stage).as_posix())
+        return wheel_path
     finally:
         shutil.rmtree(stage_parent)
 
