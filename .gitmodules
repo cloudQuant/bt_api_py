@@ -1,55 +1,77 @@
 [submodule "bt_api/bt_api_base"]
 	path = bt_api/bt_api_base
 	url = https://github.com/cloudQuant/bt_api_base.git
+	branch = dev
 [submodule "bt_api/bt_api_binance"]
 	path = bt_api/bt_api_binance
 	url = https://github.com/cloudQuant/bt_api_binance.git
+	branch = dev
 [submodule "bt_api/bt_api_bitget"]
 	path = bt_api/bt_api_bitget
 	url = https://github.com/cloudQuant/bt_api_bitget.git
+	branch = dev
 [submodule "bt_api/bt_api_bybit"]
 	path = bt_api/bt_api_bybit
 	url = https://github.com/cloudQuant/bt_api_bybit.git
+	branch = dev
 [submodule "bt_api/bt_api_coinbase"]
 	path = bt_api/bt_api_coinbase
 	url = https://github.com/cloudQuant/bt_api_coinbase.git
+	branch = dev
 [submodule "bt_api/bt_api_ctp"]
 	path = bt_api/bt_api_ctp
 	url = https://github.com/cloudQuant/bt_api_ctp.git
+	branch = dev
 [submodule "bt_api/bt_api_dydx"]
 	path = bt_api/bt_api_dydx
 	url = https://github.com/cloudQuant/bt_api_dydx.git
+	branch = dev
 [submodule "bt_api/bt_api_gateio"]
 	path = bt_api/bt_api_gateio
 	url = https://github.com/cloudQuant/bt_api_gateio.git
+	branch = dev
 [submodule "bt_api/bt_api_htx"]
 	path = bt_api/bt_api_htx
 	url = https://github.com/cloudQuant/bt_api_htx.git
+	branch = dev
 [submodule "bt_api/bt_api_hyperliquid"]
 	path = bt_api/bt_api_hyperliquid
 	url = https://github.com/cloudQuant/bt_api_hyperliquid.git
+	branch = dev
 [submodule "bt_api/bt_api_ib_web"]
 	path = bt_api/bt_api_ib_web
 	url = https://github.com/cloudQuant/bt_api_ib_web.git
+	branch = dev
 [submodule "bt_api/bt_api_kraken"]
 	path = bt_api/bt_api_kraken
 	url = https://github.com/cloudQuant/bt_api_kraken.git
+	branch = dev
 [submodule "bt_api/bt_api_mexc"]
 	path = bt_api/bt_api_mexc
 	url = https://github.com/cloudQuant/bt_api_mexc.git
+	branch = dev
 [submodule "bt_api/bt_api_mt5"]
 	path = bt_api/bt_api_mt5
 	url = https://github.com/cloudQuant/bt_api_mt5.git
+	branch = dev
 [submodule "bt_api/bt_api_okx"]
 	path = bt_api/bt_api_okx
 	url = https://github.com/cloudQuant/bt_api_okx.git
+	branch = dev
 [submodule "bt_api/bt_api_execution"]
 	path = bt_api/bt_api_execution
 	url = https://github.com/cloudQuant/bt_api_execution.git
 	installable = false
+	branch = dev
 [submodule "bt_api/bt_api_risk"]
 	path = bt_api/bt_api_risk
 	url = https://github.com/cloudQuant/bt_api_risk.git
+	branch = dev
 [submodule "bt_api/bt_api_monitor"]
 	path = bt_api/bt_api_monitor
 	url = https://github.com/cloudQuant/bt_api_monitor.git
+	branch = dev
+[submodule "bt_api/bt_api_gateway"]
+	path = bt_api/bt_api_gateway
+	url = https://github.com/cloudQuant/bt_api_gateway.git
+	branch = dev
