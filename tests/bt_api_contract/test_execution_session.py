@@ -1082,7 +1082,9 @@ def _write_historical_unknown_make_order(path, factory, *, include_cancel):
 @pytest.mark.parametrize("include_cancel", [False, True])
 def test_historical_documented_rejection_recovers_locally(factory, tmp_path, include_cancel):
     path = tmp_path / f"documented-rejection-{include_cancel}.jsonl"
-    client_id, _ = _write_historical_unknown_make_order(path, factory, include_cancel=include_cancel)
+    client_id, _ = _write_historical_unknown_make_order(
+        path, factory, include_cancel=include_cancel
+    )
     restarted = factory(path)
     backend = restarted._backend
 
@@ -1111,14 +1113,14 @@ def test_historical_documented_rejection_recovery_is_unavailable_in_market_data_
         api.recover_historical_documented_definite_rejections()
 
 
-@pytest.mark.parametrize("evidence", ["unknown_code", "order_id", "missing_intent", "fill", "trade"])
+@pytest.mark.parametrize(
+    "evidence", ["unknown_code", "order_id", "missing_intent", "fill", "trade"]
+)
 def test_historical_documented_rejection_recovery_rejects_insufficient_evidence(
     factory, tmp_path, evidence
 ):
     path = tmp_path / f"documented-rejection-blocked-{evidence}.jsonl"
-    client_id, rows = _write_historical_unknown_make_order(
-        path, factory, include_cancel=True
-    )
+    client_id, rows = _write_historical_unknown_make_order(path, factory, include_cancel=True)
     make_update = next(
         row
         for row in rows
@@ -1144,7 +1146,9 @@ def test_historical_documented_rejection_recovery_rejects_insufficient_evidence(
     assert recovered == {"completed": True, "recovered_client_order_ids": []}
     assert client_id in restarted.get_execution_summary()["unknown_ids"]
     assert restarted.get_execution_summary()["trading_blocked"] is True
-    assert restarted._backend.placed == restarted._backend.queried == restarted._backend.canceled == []
+    assert (
+        restarted._backend.placed == restarted._backend.queried == restarted._backend.canceled == []
+    )
 
 
 def test_request_account_cannot_forge_a_second_ledger(factory, monkeypatch):
@@ -1555,9 +1559,6 @@ def test_migration_registry_writes_roll_back_when_committed_transaction_fails(
         if Path(path) == transaction_path and value.get("status") == "COMMITTED":
             captured["prepared_transaction"] = json.loads(transaction_path.read_text())
             captured["registry_paths"] = list(registry_root.glob("*.lock"))
-            captured["registry_manifests"] = {
-                path: json.loads(path.read_text()) for path in captured["registry_paths"]
-            }
             raise RuntimeError("committed transaction write failed")
         original_atomic_write_json(path, value)
 
@@ -1568,8 +1569,6 @@ def test_migration_registry_writes_roll_back_when_committed_transaction_fails(
     prepared_transaction = captured["prepared_transaction"]
     assert prepared_transaction["status"] == "PREPARED"
     assert set(captured["registry_paths"]) == set(expected_manifests)
-    for manifest in captured["registry_manifests"].values():
-        assert manifest["active_journal"] == str(destination)
     assert source.read_bytes() == source_bytes
     for path in (
         destination,

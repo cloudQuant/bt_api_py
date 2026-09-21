@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-09-21
+
+### Fixed
+- Make the quality-ratchet scope comparison portable between Windows and POSIX
+  path separators, so initialized submodules are not falsely reported missing.
+- Format the OKX adapter README examples to keep the submodule format-ratchet
+  at its recorded baseline.
+- Preserve the portable POSIX file-lock typing boundary and Windows journal
+  rollback coverage added during iteration 07.
+
+### Changed
+- Pin the release candidate's exchange adapters to the iteration-07 commits
+  derived from their current `master` branches.
+- Publish the iteration-07 quality-gate and execution-session improvements in
+  the active documentation.
+
 ## [0.15.3] - 2026-09-15
 
 ### Fixed

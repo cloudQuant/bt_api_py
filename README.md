@@ -7,6 +7,15 @@
 
 Release-blocking CI targets Python 3.11–3.13. Python 3.14 is canary-only.
 
+## Release 0.15.4
+
+This quality-focused patch makes the lint-debt gate compare checkout paths
+consistently on Windows and POSIX, retains the iteration-07 execution-session
+typing and rollback coverage, and pins the bundled adapter source revisions to
+commits derived from their current `master` branches. It does not expand the
+set of venues represented as ready for live trading; use `doctor` and the support-status
+policy to inspect the evidence available in your environment.
+
 ## Install and diagnose
 
 ```bash
@@ -139,5 +148,6 @@ See `docs/operations/support-status-policy.md` for the evidence and expiry rules
 - [BtApi reference](docs/reference/bt_api.md)
 - [Support-status policy](docs/operations/support-status-policy.md)
 - [Submodule validation profiles](docs/ci/submodule-validation-profiles.md)
+- [Release notes 0.15.4](docs/releases/0.15.4.md)
 
 Use a clean checkout and retain JSON/JUnit/log artifacts when validating exchange plugins. A registry entry, source directory, or historical test number is not release evidence.

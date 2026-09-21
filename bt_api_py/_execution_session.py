@@ -51,6 +51,15 @@ class _WindowsLocker(Protocol):
     def locking(self, fd: int, mode: int, nbytes: int) -> None: ...
 
 
+class _PosixLocker(Protocol):
+    """The POSIX-only portion of ``fcntl`` used for journal locks."""
+
+    LOCK_EX: int
+    LOCK_NB: int
+
+    def flock(self, fd: int, operation: int) -> None: ...
+
+
 _TERMINAL = {"completed", "canceled", "expired", "rejected"}
 _STATUSES = _TERMINAL | {"submitted", "accepted", "partial"}
 _NONTERMINAL_PROGRESS = {"submitted": 0, "accepted": 1, "partial": 2}
@@ -538,7 +547,8 @@ def _lock_file(path, operation, code):
         else:
             import fcntl
 
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            posix_locker = cast("_PosixLocker", fcntl)
+            posix_locker.flock(fd, posix_locker.LOCK_EX | posix_locker.LOCK_NB)
         return handle
     except Exception:
         handle.close()
@@ -788,7 +798,8 @@ def _lock_existing_journal(path):
         else:
             import fcntl
 
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            posix_locker = cast("_PosixLocker", fcntl)
+            posix_locker.flock(fd, posix_locker.LOCK_EX | posix_locker.LOCK_NB)
         return handle
     except Exception:
         handle.close()
@@ -8186,8 +8197,7 @@ class _ExecutionSession:
                 ):
                     continue
                 if any(
-                    row.get("event") == "client_id_reservation"
-                    for row in records[make_index + 1 :]
+                    row.get("event") == "client_id_reservation" for row in records[make_index + 1 :]
                 ):
                     continue
                 post_rejection = records[make_index + 1 :]
@@ -8215,10 +8225,9 @@ class _ExecutionSession:
                     continue
                 ambiguous_evidence = False
                 for evidence_row in ambiguous_order_evidence_rows:
-                    if (
-                        evidence_row.get("exchange_name") != venue
-                        or evidence_row.get("symbol") not in (None, "", symbol)
-                    ):
+                    if evidence_row.get("exchange_name") != venue or evidence_row.get(
+                        "symbol"
+                    ) not in (None, "", symbol):
                         continue
                     identity = self._ledger_identity(
                         venue,

@@ -84,6 +84,8 @@ nav:
       - 架构: explanation/architecture.md
       - Support status policy: operations/support-status-policy.md
       - Submodule validation: ci/submodule-validation-profiles.md
+  - 发布说明:
+      - 0.15.4: releases/0.15.4.md
 
 # Historical vendor manuals and old planning material remain in the checkout,
 # but are excluded from the active site until they have current contract

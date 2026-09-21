@@ -102,14 +102,19 @@ def missing_scope_paths(resolved: Sequence[str], recorded: Sequence[str]) -> lis
     smaller scope, report far fewer findings, and *pass* the ratchet while the
     debt is simply invisible.  A missing path is an error, not a silent pass.
     """
-    present = {path.rstrip("/") for path in resolved}
-    return [path for path in recorded if path.rstrip("/") not in present]
+    present = {_normalise_scope_path(path) for path in resolved}
+    return [path for path in recorded if _normalise_scope_path(path) not in present]
 
 
 def unrecorded_scope_paths(resolved: Sequence[str], recorded: Sequence[str]) -> list[str]:
     """Paths the current scan includes that the snapshot does not gate."""
-    known = {path.rstrip("/") for path in recorded}
-    return [path for path in resolved if path.rstrip("/") not in known]
+    known = {_normalise_scope_path(path) for path in recorded}
+    return [path for path in resolved if _normalise_scope_path(path) not in known]
+
+
+def _normalise_scope_path(path: str) -> str:
+    """Compare checkout-relative paths consistently on Windows and POSIX."""
+    return path.replace("\\", "/").rstrip("/")
 
 
 def _run_ruff(command: Sequence[str]) -> subprocess.CompletedProcess[str]:

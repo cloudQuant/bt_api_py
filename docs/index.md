@@ -9,6 +9,7 @@
 - [Read the public API reference](reference/core-api.md)
 - [Understand direct and ZMQ boundaries](explanation/architecture.md)
 - [Read support-status evidence rules](operations/support-status-policy.md)
+- [Read the 0.15.4 release notes](releases/0.15.4.md)
 
 ## Runtime guarantee boundaries
 

@@ -34,7 +34,9 @@ def test_submodule_lint_and_format_are_separate_report_only_jobs() -> None:
         assert job["strategy"]["matrix"]["module"] == MODULE_MATRIX
 
         steps = job["steps"]
-        checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
+        checkout = next(
+            step for step in steps if step.get("uses", "").startswith("actions/checkout@")
+        )
         assert checkout["with"]["submodules"] == "recursive"
 
         setup_python = next(

@@ -84,6 +84,12 @@ class TestScopeGuard:
             ratchet.missing_scope_paths(["bt_api/bt_api_okx/src/"], ["bt_api/bt_api_okx/src"]) == []
         )
 
+    def test_windows_path_separator_is_tolerated(self) -> None:
+        assert (
+            ratchet.missing_scope_paths(["bt_api\\bt_api_okx\\src"], ["bt_api/bt_api_okx/src"])
+            == []
+        )
+
     def test_complete_scope_has_no_missing_paths(self) -> None:
         scope = ratchet.default_scope()
 
