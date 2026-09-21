@@ -28,6 +28,7 @@ class ForwardingRuntime:
     risk_rules: RiskRuleSet | None = None
     state_store: SQLiteStateStore | None = None
     source: object | None = None
+    write_enabled: bool = True
 
     def __post_init__(self) -> None:
         if self.bus is None:
@@ -38,6 +39,7 @@ class ForwardingRuntime:
             bus=self.bus,
             risk_rules=self.risk_rules,
             state_store=self.state_store,
+            write_enabled=self.write_enabled,
         )
         self.source_supervisor = SourceSupervisor(self.source) if self.source is not None else None
         account_id = str(getattr(self.adapter, "account_id", "default"))
@@ -86,7 +88,6 @@ class ZmqForwardingRuntime(ForwardingRuntime):
         state_store: SQLiteStateStore | None = None,
     ) -> None:
         """__init__ method"""
-        super().__init__(adapter=adapter, bus=bus, risk_rules=risk_rules, state_store=state_store)
         # Safe-by-default: read-only loopback/IPC unless explicitly authorized.
         # A missing private_endpoint must not silently share the public market port.
         config = GatewayConfig(
@@ -96,6 +97,13 @@ class ZmqForwardingRuntime(ForwardingRuntime):
             enable_trading=enable_trading,
             allow_remote=allow_remote,
             allow_shared_private_endpoint=allow_shared_private_endpoint,
+        )
+        super().__init__(
+            adapter=adapter,
+            bus=bus,
+            risk_rules=risk_rules,
+            state_store=state_store,
+            write_enabled=config.enable_trading,
         )
         self.config = config
         self.market_endpoint = config.market_endpoint

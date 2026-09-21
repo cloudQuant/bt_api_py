@@ -131,6 +131,7 @@ def test_gateway_runtime_command_server_uses_adapter_methods() -> None:
         exchange_type="CTP",
         asset_type="FUTURE",
         account_id="test_account",
+        gateway_enable_trading=True,
         runtime_name="ctp-future-test_account",
         command_endpoint=_free_tcp_endpoint(),
         event_endpoint=_free_tcp_endpoint(),

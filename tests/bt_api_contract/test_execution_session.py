@@ -3246,7 +3246,9 @@ def test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent(
     from bt_api_py.forwarding.schema import CommandAck, OrderCommand
 
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    runtime = GatewayRuntime(GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="demo"))
+    runtime = GatewayRuntime(
+        GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="demo", enable_trading=True)
+    )
     method = (
         Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
     )

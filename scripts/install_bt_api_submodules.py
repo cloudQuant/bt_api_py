@@ -32,6 +32,7 @@ class PackageSpec:
     dist_name: str
     path: Path
     url: str
+    installable: bool = True
 
 
 @dataclass
@@ -114,8 +115,18 @@ def load_submodule_packages() -> list[PackageSpec]:
         if not path_value.startswith("bt_api/bt_api_"):
             continue
         path = resolve_submodule_path(path_value)
+        try:
+            installable = parser.getboolean(section, "installable", fallback=True)
+        except ValueError as error:
+            raise ValueError(f"Invalid installable value for submodule: {path_value}") from error
         specs.append(
-            PackageSpec(name=path.name, dist_name=read_project_name(path), path=path, url=url)
+            PackageSpec(
+                name=path.name,
+                dist_name=read_project_name(path),
+                path=path,
+                url=url,
+                installable=installable,
+            )
         )
 
     def sort_key(spec: PackageSpec) -> tuple[int, str]:
@@ -232,6 +243,13 @@ def pip_install_pypi(
 
 
 def install_one(spec: PackageSpec, args: argparse.Namespace) -> InstallResult:
+    if not spec.installable:
+        return InstallResult(
+            spec.name,
+            "not-packaged",
+            "declared installable=false; skipped source and PyPI installation",
+        )
+
     current_version = installed_version(spec.dist_name)
     if current_version and not args.upgrade:
         return InstallResult(spec.name, "installed", current_version)
@@ -392,7 +410,8 @@ def main() -> int:
 
     print_summary(results)
     failed = [result for result in results if result.status == "failed"]
-    if failed and args.strict:
+    not_packaged = [result for result in results if result.status == "not-packaged"]
+    if args.strict and (failed or not_packaged):
         return 1
     return 0
 

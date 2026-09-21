@@ -901,7 +901,9 @@ def test_forwarding_extra_roundtrip_reaches_existing_gateway_runtime():
         account_id="a",
         strategy_id="s",
     )
-    runtime = GatewayRuntime(GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="a"))
+    runtime = GatewayRuntime(
+        GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="a", enable_trading=True)
+    )
     runtime.adapter = SimpleNamespace(
         place_order=Mock(
             return_value={
@@ -957,7 +959,7 @@ def test_ctp_cancel_references_survive_wire_and_runtime_payload():
     from bt_api_py.forwarding.schema import OrderCommand
 
     runtime = GatewayRuntime(
-        GatewayConfig(exchange_type="CTP", asset_type="FUTURE", account_id="a")
+        GatewayConfig(exchange_type="CTP", asset_type="FUTURE", account_id="a", enable_trading=True)
     )
     runtime.adapter = SimpleNamespace(
         cancel_order=Mock(return_value={"order_id": "sys-9", "status": "canceled"})

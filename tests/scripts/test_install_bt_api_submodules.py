@@ -8,6 +8,166 @@ from types import SimpleNamespace
 from scripts import install_bt_api_submodules as installer
 
 
+def test_load_submodule_packages_reads_non_installable_metadata(monkeypatch, tmp_path):
+    gitmodules = tmp_path / ".gitmodules"
+    child = tmp_path / "bt_api" / "bt_api_execution"
+    child.mkdir(parents=True)
+    gitmodules.write_text(
+        """[submodule \"bt_api/bt_api_execution\"]
+path = bt_api/bt_api_execution
+url = https://example.invalid/bt_api_execution.git
+installable = false
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(installer, "ROOT", tmp_path)
+    monkeypatch.setattr(installer, "GITMODULES", gitmodules)
+
+    specs = installer.load_submodule_packages()
+
+    assert specs == [
+        installer.PackageSpec(
+            "bt_api_execution",
+            "bt_api_execution",
+            child,
+            "https://example.invalid/bt_api_execution.git",
+            installable=False,
+        )
+    ]
+
+
+def test_not_packaged_submodule_is_initialized_but_never_installed(monkeypatch, tmp_path):
+    child = tmp_path / "bt_api" / "bt_api_execution"
+    spec = installer.PackageSpec(
+        "bt_api_execution",
+        "bt_api_execution",
+        child,
+        "unused",
+        installable=False,
+    )
+    monkeypatch.setattr(installer, "ROOT", tmp_path)
+    commands = []
+    monkeypatch.setattr(installer, "resolve_executable", lambda _value: "/tool/git")
+    monkeypatch.setattr(
+        installer,
+        "run_command",
+        lambda command, **kwargs: commands.append((command, kwargs)),
+    )
+
+    installer.ensure_submodules([spec], jobs=2, skip_update=False, dry_run=True)
+
+    assert [command for command, _kwargs in commands] == [
+        ["/tool/git", "submodule", "sync", "--recursive"],
+        [
+            "/tool/git",
+            "submodule",
+            "update",
+            "--init",
+            "--recursive",
+            "--jobs",
+            "2",
+            str(child.relative_to(tmp_path)),
+        ],
+    ]
+
+    calls = []
+    args = SimpleNamespace(strategy="source-first", upgrade=True, python="/unused/python")
+    monkeypatch.setattr(installer, "installed_version", lambda _name: calls.append("version"))
+    monkeypatch.setattr(
+        installer,
+        "pip_install_source",
+        lambda *_args, **_kwargs: calls.append("source") or False,
+    )
+    monkeypatch.setattr(
+        installer,
+        "pip_install_pypi",
+        lambda *_args, **_kwargs: calls.append("pypi") or False,
+    )
+
+    result = installer.install_one(spec, args)
+
+    assert result.status == "not-packaged"
+    assert "installable=false" in result.detail
+    assert calls == []
+
+
+def test_packaged_submodule_keeps_source_then_pypi_fallback(monkeypatch, tmp_path):
+    spec = installer.PackageSpec(
+        "bt_api_example",
+        "bt_api_example",
+        tmp_path / "missing",
+        "unused",
+    )
+    args = SimpleNamespace(
+        strategy="source-first",
+        upgrade=True,
+        python="/unused/python",
+        editable=False,
+        dry_run=False,
+    )
+    calls = []
+    monkeypatch.setattr(
+        installer, "pip_install_source", lambda *_args, **_kwargs: calls.append("source") or False
+    )
+    monkeypatch.setattr(
+        installer, "pip_install_pypi", lambda *_args, **_kwargs: calls.append("pypi") or True
+    )
+
+    result = installer.install_one(spec, args)
+
+    assert result.status == "pypi"
+    assert calls == ["source", "pypi"]
+
+
+def test_main_reports_not_packaged_by_default_and_strict_mode_fails(monkeypatch, tmp_path):
+    spec = installer.PackageSpec(
+        "bt_api_execution",
+        "bt_api_execution",
+        tmp_path / "bt_api_execution",
+        "unused",
+        installable=False,
+    )
+    summaries = []
+
+    def run(strict):
+        args = SimpleNamespace(
+            packages=["execution"],
+            strategy="source-first",
+            with_root=False,
+            jobs=1,
+            skip_submodule_update=False,
+            dry_run=False,
+            python="/unused/python",
+            editable=False,
+            upgrade=False,
+            editable_root=False,
+            strict=strict,
+        )
+        monkeypatch.setattr(installer, "parse_args", lambda: args)
+        monkeypatch.setattr(installer, "load_submodule_packages", lambda: [spec])
+        monkeypatch.setattr(installer, "ensure_submodules", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(
+            installer,
+            "install_one",
+            lambda *_args: installer.InstallResult(
+                "bt_api_execution", "not-packaged", "declared installable=false"
+            ),
+        )
+        monkeypatch.setattr(
+            installer,
+            "print_summary",
+            lambda results: summaries.append([(item.name, item.status) for item in results]),
+        )
+        return installer.main()
+
+    assert run(strict=False) == 0
+    assert run(strict=True) == 1
+    assert summaries == [
+        [("bt_api_execution", "not-packaged")],
+        [("bt_api_execution", "not-packaged")],
+    ]
+
+
 def test_main_keeps_base_root_and_remaining_package_order_offline(monkeypatch):
     """The dependency package precedes root, then remaining packages in manifest order."""
     specs = [

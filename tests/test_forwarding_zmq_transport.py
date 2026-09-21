@@ -64,6 +64,21 @@ class CountingMockBrokerAdapter(MockBrokerAdapter):
         return await super().disconnect()
 
 
+class WriteCountingMockBrokerAdapter(MockBrokerAdapter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.place_count = 0
+        self.cancel_count = 0
+
+    async def place_order(self, request):
+        self.place_count += 1
+        return await super().place_order(request)
+
+    async def cancel_order(self, request):
+        self.cancel_count += 1
+        return await super().cancel_order(request)
+
+
 def test_zmq_market_pub_sub_transports_market_events() -> None:
     endpoint = _free_tcp_endpoint()
     publisher = ZmqMarketPublisher(endpoint)
@@ -328,6 +343,8 @@ def test_zmq_forwarding_runtime_serves_market_and_order_clients() -> None:
         market_endpoint=market_endpoint,
         command_endpoint=command_endpoint,
         private_endpoint=private_endpoint,
+        enable_trading=True,
+        allow_remote=True,
     )
     client = ZmqForwardingClient(
         market_endpoint=market_endpoint,
@@ -384,6 +401,54 @@ def test_zmq_forwarding_runtime_serves_market_and_order_clients() -> None:
     assert response["order_id"]
     assert "order" in updates
     assert "trade" in updates
+
+
+def test_zmq_forwarding_runtime_rejects_writes_when_trading_is_disabled() -> None:
+    market_endpoint = _free_tcp_endpoint()
+    command_endpoint = _free_tcp_endpoint()
+    private_endpoint = _free_tcp_endpoint()
+    adapter = WriteCountingMockBrokerAdapter()
+    runtime = ZmqForwardingRuntime(
+        adapter,
+        market_endpoint=market_endpoint,
+        command_endpoint=command_endpoint,
+        private_endpoint=private_endpoint,
+    )
+    client = ZmqForwardingClient(
+        market_endpoint=market_endpoint,
+        command_endpoint=command_endpoint,
+        private_endpoint=private_endpoint,
+        exchange="SIM",
+        market_type="SPOT",
+        account_id="paper",
+        strategy_id="s1",
+    )
+
+    runtime.start_sync()
+    try:
+        client.connect()
+        with pytest.raises(RuntimeError, match="forwarding trading is disabled"):
+            client.submit_order(
+                {
+                    "bt_order_ref": 1,
+                    "symbol": "RB2510",
+                    "side": "buy",
+                    "size": 1,
+                    "order_type": "limit",
+                    "price": 3500.0,
+                }
+            )
+        with pytest.raises(RuntimeError, match="forwarding trading is disabled"):
+            client.cancel_order("missing-order", "RB2510")
+        with pytest.raises(RuntimeError, match="forwarding trading is disabled"):
+            client.cancel_all("RB2510")
+    finally:
+        client.disconnect()
+        runtime.stop_sync()
+
+    assert adapter.orders == {}
+    assert adapter.place_count == 0
+    assert adapter.cancel_count == 0
 
 
 def test_zmq_forwarding_client_stats_refreshes_market_events() -> None:

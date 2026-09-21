@@ -14,7 +14,9 @@ class GatewayConfig:
     Safe-by-default policy:
 
     * ``enable_trading`` is ``False`` unless the operator also opts into an
-      authenticated remote deployment via ``allow_remote=True``.
+      explicit gateway deployment policy via ``allow_remote=True``.  This is
+      not peer authentication; remote trading additionally needs an
+      authenticated transport/ACL layer.
     * Non-loopback TCP endpoints are rejected unless ``allow_remote=True``.
     * The private event endpoint must not silently share the public market
       endpoint unless ``allow_shared_private_endpoint=True``.
@@ -34,7 +36,8 @@ class GatewayConfig:
         if self.enable_trading and not self.allow_remote:
             raise GatewaySafetyError(
                 "enable_trading=True requires an explicit safe policy "
-                "(allow_remote=True for an authenticated remote deployment); "
+                "(allow_remote=True for an explicit gateway deployment policy; "
+                "this does not authenticate peers); "
                 "otherwise keep enable_trading=False"
             )
         if not self.allow_remote:

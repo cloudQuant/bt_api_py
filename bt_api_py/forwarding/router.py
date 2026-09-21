@@ -24,6 +24,9 @@ logger = get_logger("forwarding.router")
 _VALID_SIDES = frozenset({"buy", "sell"})
 _VALID_ORDER_TYPES = frozenset({"limit", "market"})
 _MAX_CACHED_ACKS = 10_000
+_TRADING_DISABLED_REASON = (
+    "forwarding trading is disabled; provider write was not attempted"
+)
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,7 @@ class OrderRouter:
         state_store: SQLiteStateStore | None = None,
         audit_logger: Any | None = None,
         command_result_ttl_seconds: float = 3600.0,
+        write_enabled: bool = True,
     ) -> None:
         """__init__ method"""
         self.adapter = adapter
@@ -120,6 +124,7 @@ class OrderRouter:
         self.risk_rules = risk_rules or RiskRuleSet()
         self.state_store = state_store
         self.audit_logger = audit_logger
+        self.write_enabled = bool(write_enabled)
         if command_result_ttl_seconds <= 0:
             raise ValueError("command_result_ttl_seconds must be > 0")
         self.command_result_ttl_seconds = float(command_result_ttl_seconds)
@@ -156,6 +161,7 @@ class OrderRouter:
             "sequence_id": self._sequence_id,
             "state_store_enabled": self.state_store is not None,
             "bus_attached": self.bus is not None,
+            "write_enabled": self.write_enabled,
             "risk": {
                 "allowed_account_count": (
                     None
@@ -216,6 +222,9 @@ class OrderRouter:
 
     async def place_order(self, command: OrderCommand) -> CommandAck:
         """place_order method"""
+        disabled = self._reject_write_when_disabled(command)
+        if disabled is not None:
+            return disabled
         cached = self._get_cached_ack(command)
         if cached is not None:
             return cached
@@ -339,6 +348,9 @@ class OrderRouter:
 
     async def cancel_order(self, command: OrderCommand) -> CommandAck:
         """cancel_order method"""
+        disabled = self._reject_write_when_disabled(command)
+        if disabled is not None:
+            return disabled
         cached = self._get_cached_ack(command)
         if cached is not None:
             return cached
@@ -425,6 +437,9 @@ class OrderRouter:
 
     async def cancel_all(self, command: OrderCommand) -> CommandAck:
         """Cancel every cancellable order in the command's scoped account."""
+        disabled = self._reject_write_when_disabled(command)
+        if disabled is not None:
+            return disabled
         cached = self._get_cached_ack(command)
         if cached is not None:
             return cached
@@ -500,6 +515,20 @@ class OrderRouter:
         if cached is not None:
             self._cache_ack(key, cached)
         return cached
+
+    def _reject_write_when_disabled(self, command: OrderCommand) -> CommandAck | None:
+        """Reject a mutating command before any cache, adapter, or provider I/O.
+
+        ``ZmqForwardingRuntime`` is intentionally read-only unless its gateway
+        configuration explicitly enables trading.  Keep this guard inside the
+        router as well as in the runtime so callers cannot bypass it by calling
+        ``place_order``/``cancel_order``/``cancel_all`` directly.
+        """
+        if self.write_enabled:
+            return None
+        ack = self._reject(command, _TRADING_DISABLED_REASON)
+        self._remember_ack(ack, command)
+        return ack
 
     def _cache_ack(self, key: str, ack: CommandAck) -> None:
         self._acks_by_idempotency_key[key] = ack

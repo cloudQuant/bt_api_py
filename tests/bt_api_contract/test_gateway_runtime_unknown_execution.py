@@ -22,7 +22,9 @@ from bt_api_py.forwarding.schema import CommandAck, OrderCommand
 @pytest.fixture
 def pipeline(monkeypatch):
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    runtime = GatewayRuntime(GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="demo"))
+    runtime = GatewayRuntime(
+        GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="demo", enable_trading=True)
+    )
 
     class Client:
         def _send_command_sync(self, command):

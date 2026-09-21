@@ -43,3 +43,13 @@
 [submodule "bt_api/bt_api_okx"]
 	path = bt_api/bt_api_okx
 	url = https://github.com/cloudQuant/bt_api_okx.git
+[submodule "bt_api/bt_api_execution"]
+	path = bt_api/bt_api_execution
+	url = https://github.com/cloudQuant/bt_api_execution.git
+	installable = false
+[submodule "bt_api/bt_api_risk"]
+	path = bt_api/bt_api_risk
+	url = https://github.com/cloudQuant/bt_api_risk.git
+[submodule "bt_api/bt_api_monitor"]
+	path = bt_api/bt_api_monitor
+	url = https://github.com/cloudQuant/bt_api_monitor.git
