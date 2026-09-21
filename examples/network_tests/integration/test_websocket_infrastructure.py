@@ -9,7 +9,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator, Iterable
-from typing import Protocol
+from typing import Protocol, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -280,7 +280,7 @@ class TestWebSocketConnections:
                         and "data" in data
                         and data["stream"] in valid_streams
                     ):
-                        validated_messages.append(data)
+                        validated_messages.append(cast("dict[str, object]", data))
                     else:
                         # Log invalid message format
                         pass
