@@ -11,10 +11,7 @@ from unittest.mock import Mock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRAPER_PATHS = (
-    "scripts/scrape_margin_docs.py",
-    "scripts/tools/scrape_margin_docs.py",
-)
+SCRAPER_PATHS = ("scripts/scrape_margin_docs.py",)
 
 
 class PlaywrightSyncApiModule(ModuleType):

@@ -10,10 +10,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNNER_SCRIPTS = (
-    "scripts/run_tests.sh",
-    "scripts/testing/run_tests.sh",
-)
+RUNNER_SCRIPTS = ("scripts/run_tests.sh",)
 
 
 def _write_fake_toolchain(

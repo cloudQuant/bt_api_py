@@ -11,10 +11,7 @@ from unittest.mock import Mock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-COOKIE_SCRIPTS = (
-    "scripts/get_ibkr_cookie.py",
-    "scripts/tools/get_ibkr_cookie.py",
-)
+COOKIE_SCRIPTS = ("scripts/get_ibkr_cookie.py",)
 
 
 class BrowserCookie3Module(ModuleType):
