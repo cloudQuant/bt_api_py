@@ -42,10 +42,12 @@ def _gateway_available():
         import requests
         import urllib3
 
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        verify_ssl = cfg.get("verify_ssl", False)
+        if not verify_ssl:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         resp = requests.post(
             f"{base_url}/iserver/auth/status",
-            verify=False,
+            verify=verify_ssl,
             timeout=5,
             proxies={"http": None, "https": None},
         )

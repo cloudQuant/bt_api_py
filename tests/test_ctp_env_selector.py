@@ -2,8 +2,51 @@ import os
 import sys
 from datetime import datetime
 from types import ModuleType, SimpleNamespace
+from unittest.mock import Mock
 
+from bt_api_py import ctp_env_selector
 from bt_api_py.ctp_env_selector import apply_ctp_env, get_ctp_fronts, select_ctp_fronts
+
+
+class _YamlModule(ModuleType):
+    safe_load: Mock
+
+
+def test_load_default_fronts_logs_safe_diagnostic_on_yaml_failure(monkeypatch, tmp_path):
+    payload_secret = "yaml-payload-secret"
+    path_secret = "yaml-path-secret"
+    config_path = tmp_path / f"{path_secret}.yaml"
+    config_path.write_text(payload_secret, encoding="utf-8")
+    exception_text = f"parse failure for {payload_secret} at {config_path}"
+
+    yaml = _YamlModule("yaml")
+    yaml.safe_load = Mock(side_effect=ValueError(exception_text))
+    logger = Mock()
+    monkeypatch.setitem(sys.modules, "yaml", yaml)
+    monkeypatch.setattr(ctp_env_selector, "_FRONTS_CONFIG_PATH", config_path)
+    monkeypatch.setattr(ctp_env_selector, "logger", logger, raising=False)
+
+    defaults = ctp_env_selector._load_default_fronts()
+
+    assert defaults == {
+        "set1": {
+            "td_front": "tcp://182.254.243.31:30001",
+            "md_front": "tcp://182.254.243.31:30011",
+        },
+        "set2": {
+            "td_front": "tcp://182.254.243.31:40001",
+            "md_front": "tcp://182.254.243.31:40011",
+        },
+    }
+    yaml.safe_load.assert_called_once()
+    logger.debug.assert_called_once()
+    assert logger.debug.call_args.kwargs == {}
+    diagnostic = " ".join(str(value) for value in logger.debug.call_args.args)
+    assert logger.debug.call_args.args[-1] == "ValueError"
+    assert exception_text not in diagnostic
+    assert payload_secret not in diagnostic
+    assert path_secret not in diagnostic
+    assert str(config_path) not in diagnostic
 
 
 def test_select_ctp_fronts_auto_uses_set1_during_regular_session(monkeypatch):

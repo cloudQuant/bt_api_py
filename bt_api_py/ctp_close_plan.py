@@ -123,9 +123,7 @@ def _read(value: Any, names: Sequence[str], default: Any = _MISSING) -> Any:
 
     found: list[tuple[str, Any]] = []
     if isinstance(value, Mapping):
-        for name in names:
-            if name in value:
-                found.append((name, value[name]))
+        found.extend((name, value[name]) for name in names if name in value)
     else:
         for name in names:
             try:

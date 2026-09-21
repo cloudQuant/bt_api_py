@@ -17,8 +17,6 @@ from __future__ import annotations
 import atexit
 import os
 import queue
-import subprocess
-import sys
 import time
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -33,6 +31,7 @@ from bt_api_py.feeds.live_ctp_feed import (
 )
 from dotenv import load_dotenv
 
+from bt_api_py._ctp_probe import probe_simnow_trader_connection
 from bt_api_py.bt_api import BtApi
 from bt_api_py.ctp_env_selector import apply_ctp_env
 
@@ -229,50 +228,20 @@ def _connect_feed(config: dict[str, str]) -> CtpRequestDataFuture:
     return feed
 
 
-def _probe_env_connection(env_key: str, env: dict[str, str], creds: tuple[str, str, str, str, str]):
+def _probe_env_connection(
+    env_key: str, env: dict[str, str], creds: tuple[str, str, str, str, str]
+) -> tuple[str, bool, str]:
     """Probe one SimNow environment in a subprocess for better CTP isolation."""
     broker_id, user_id, password, app_id, auth_code = creds
-    child_env = os.environ.copy()
-    child_env.update(
-        {
-            "BTAPI_SIMNOW_BROKER_ID": broker_id,
-            "BTAPI_SIMNOW_USER_ID": user_id,
-            "BTAPI_SIMNOW_PASSWORD": password,
-            "BTAPI_SIMNOW_APP_ID": app_id,
-            "BTAPI_SIMNOW_AUTH_CODE": auth_code,
-            "BTAPI_SIMNOW_TD_FRONT": env["td_front"],
-        }
+    ready, details = probe_simnow_trader_connection(
+        td_front=env["td_front"],
+        broker_id=broker_id,
+        user_id=user_id,
+        password=password,
+        app_id=app_id,
+        auth_code=auth_code,
     )
-    script = """
-import os
-import sys
-from bt_api_py.ctp.client import TraderClient
-
-client = TraderClient(
-    os.environ["BTAPI_SIMNOW_TD_FRONT"],
-    os.environ["BTAPI_SIMNOW_BROKER_ID"],
-    os.environ["BTAPI_SIMNOW_USER_ID"],
-    os.environ["BTAPI_SIMNOW_PASSWORD"],
-    app_id=os.environ["BTAPI_SIMNOW_APP_ID"],
-    auth_code=os.environ["BTAPI_SIMNOW_AUTH_CODE"],
-)
-client.start(block=False)
-ready = client.wait_ready(timeout=6)
-print(f"{ready=}", flush=True)
-client.stop()
-os._exit(0 if ready else 1)
-""".strip()
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        cwd=PROJECT_ROOT,
-        env=child_env,
-        capture_output=True,
-        text=True,
-        timeout=12,
-        check=False,
-    )
-    details = (result.stdout + result.stderr).strip()
-    return env_key, result.returncode == 0, details
+    return env_key, ready, details
 
 
 @pytest.fixture(scope="module")

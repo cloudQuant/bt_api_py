@@ -133,8 +133,7 @@ class CoverageAnalyzer:
 
         if untested_exchanges:
             report.append("\n**Untested exchanges:**")
-            for exchange in sorted(untested_exchanges):
-                report.append(f"- {exchange}")
+            report.extend(f"- {exchange}" for exchange in sorted(untested_exchanges))
 
         # Module coverage
         report.append("\n## Module Test Distribution")

@@ -157,15 +157,9 @@ ignore = [
     "S104",  # possible binding to all interfaces (false positive for dev servers)
     "S105",  # possible hardcoded password (false positive for config keys, token addresses)
     "S107",  # false positive for param defaults like input_token="base"
-    "S110",  # try-except-pass: fix gradually with proper logging
-    "S112",  # try-except-continue: fix gradually
     "S311",  # random for non-crypto: tests use random, crypto uses secrets
     "S307",  # verify=False: IB demo uses for local testing
-    "PERF401",  # list comprehension: fix gradually
-    "PERF402",  # list copy: fix gradually
-    "PERF403",  # dict comprehension: fix gradually
     "PERF203",  # existing loop try/except patterns accepted for now
-    "S113",  # requests timeout: fix gradually (add timeout= to all requests)
     "S108",  # /tmp path: dev defaults acceptable
     "S301",  # pickle: ML model serialization, fix with joblib/safe format
     "S506",  # yaml.FullLoader: config files from trusted source
@@ -176,7 +170,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "bt_api_py/ctp/*.py" = ["N801", "N802", "N803", "N806", "S110", "S112", "S324"]  # CTP vendor wrapper
-"tests/*.py" = ["N802", "N803", "S106", "S108", "S110", "S113", "S301", "S501", "S603", "PERF401", "PERF402"]
+"tests/*.py" = ["N802", "N803", "S106", "S108", "S301", "S501", "S603"]
 # 子仓测试与示例脚本沿用同一套测试约定：其中的凭据一律是占位夹具（非真实密钥），
 # 与上面 "tests/*.py" 的 S106 豁免保持一致。
 "bt_api/*/tests/**/*.py" = ["S106"]

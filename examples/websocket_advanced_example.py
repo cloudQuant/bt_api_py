@@ -6,6 +6,7 @@ Demonstrates high-performance WebSocket connections with monitoring and error ha
 import asyncio
 import logging
 import os
+from contextlib import suppress
 from typing import Any
 
 from bt_api_py.websocket import (
@@ -351,7 +352,6 @@ async def example_advanced_subscription():
 
         # Show final statistics
         final_stats = await get_websocket_stats()
-        dashboard = await get_monitoring_dashboard()
 
         logger.info("=== Final Statistics ===")
         logger.info(f"Total connections: {final_stats['global_metrics']['total_connections']}")
@@ -377,10 +377,8 @@ async def example_advanced_subscription():
     finally:
         # Stop stats logging
         stats_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await stats_task
-        except asyncio.CancelledError:
-            pass
 
 
 async def example_performance_benchmark():

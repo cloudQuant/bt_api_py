@@ -10,12 +10,26 @@ on:
       - '.readthedocs.yaml'
       - 'docs/requirements.txt'
       - '.github/workflows/docs.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'MANIFEST.in'
+      - 'bt_api_py/**'
+      - 'scripts/generate_exchange_support_docs.py'
+      - 'scripts/ci/check_docs_contract.py'
   pull_request:
     paths:
       - 'docs/**'
       - 'README.md'
       - 'mkdocs.yml'
+      - '.readthedocs.yaml'
       - 'docs/requirements.txt'
+      - '.github/workflows/docs.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'MANIFEST.in'
+      - 'bt_api_py/**'
+      - 'scripts/generate_exchange_support_docs.py'
+      - 'scripts/ci/check_docs_contract.py'
   workflow_dispatch:
 
 permissions:
@@ -42,10 +56,16 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Install doc dependencies
-        run: pip install --upgrade pip -r docs/requirements.txt
+        run: python -m pip install --upgrade pip -r docs/requirements.txt
 
       - name: Install package (needed by mkdocstrings)
-        run: pip install --no-build-isolation -e . || pip install --no-deps -e .
+        run: python -m pip install -e .
+
+      - name: Check generated docs are current
+        run: python scripts/generate_exchange_support_docs.py --check
+
+      - name: Check docs contract
+        run: python scripts/ci/check_docs_contract.py
 
       - name: Build docs (strict)
         run: mkdocs build --strict

@@ -374,8 +374,7 @@ def main() -> int:
     # Install bt_api_base before bt_api_py because bt_api_py depends on it.
     base_specs = [spec for spec in specs if spec.name == "bt_api_base"]
     other_specs = [spec for spec in specs if spec.name != "bt_api_base"]
-    for spec in base_specs:
-        results.append(install_one(spec, args))
+    results.extend([install_one(spec, args) for spec in base_specs])
 
     if args.with_root:
         if methods:
@@ -389,8 +388,7 @@ def main() -> int:
                 )
             )
 
-    for spec in other_specs:
-        results.append(install_one(spec, args))
+    results.extend([install_one(spec, args) for spec in other_specs])
 
     print_summary(results)
     failed = [result for result in results if result.status == "failed"]

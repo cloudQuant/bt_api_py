@@ -5,9 +5,8 @@ import logging
 import sys
 import warnings
 from datetime import UTC, datetime
-from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -19,6 +18,8 @@ from bt_api_py.monitoring.elk import (
     LogstashHandler,
     correlation_id_var,
     request_id_var,
+    session_id_var,
+    user_id_var,
 )
 from bt_api_py.monitoring.metrics import Gauge, Histogram, MetricRegistry
 from bt_api_py.monitoring.prometheus import (
@@ -26,6 +27,9 @@ from bt_api_py.monitoring.prometheus import (
     get_prometheus_exporter,
     start_prometheus_exporter,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class FakeClientTimeout:
@@ -811,6 +815,79 @@ def test_logstash_handler_format_to_logstash_uses_local_context_vars() -> None:
     assert payload["message"] == "hello world"
     assert payload["correlation_id"] == "corr-1"
     assert payload["request_id"] == "req-1"
+
+
+def test_logstash_handler_forwards_custom_fields_and_preserves_payload_contract() -> None:
+    handler = LogstashHandler()
+    try:
+        raise RuntimeError("log event failed")
+    except RuntimeError:
+        exception_info = sys.exc_info()
+
+    record = logging.LogRecord(
+        name="bt-api-contract",
+        level=logging.WARNING,
+        pathname="/tmp/monitoring-contract.py",
+        lineno=73,
+        msg="order %s accepted",
+        args=("order-7",),
+        exc_info=exception_info,
+        func="handle_order",
+    )
+    record.service = "execution"
+    record.order_id = "order-7"
+    context_vars = (
+        (correlation_id_var, "corr-custom"),
+        (request_id_var, "req-custom"),
+        (user_id_var, "user-custom"),
+        (session_id_var, "session-custom"),
+    )
+    context_tokens = [(variable, variable.set(value)) for variable, value in context_vars]
+
+    try:
+        payload = handler.format_to_logstash(record)
+    finally:
+        for variable, token in reversed(context_tokens):
+            variable.reset(token)
+
+    assert payload["message"] == "order order-7 accepted"
+    assert payload["level"] == "WARNING"
+    assert payload["logger"] == "bt-api-contract"
+    assert payload["file"] == "/tmp/monitoring-contract.py"
+    assert payload["line"] == 73
+    assert payload["function"] == "handle_order"
+    assert payload["@timestamp"] == datetime.fromtimestamp(record.created).isoformat()
+    assert payload["service"] == "execution"
+    assert payload["order_id"] == "order-7"
+    assert payload["correlation_id"] == "corr-custom"
+    assert payload["request_id"] == "req-custom"
+    assert payload["user_id"] == "user-custom"
+    assert payload["session_id"] == "session-custom"
+    assert payload["exception"]["type"] == "RuntimeError"
+    assert payload["exception"]["message"] == "log event failed"
+    assert "RuntimeError: log event failed" in payload["exception"]["traceback"]
+
+    filtered_record_fields = {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "threadName",
+        "processName",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+    }
+    assert filtered_record_fields.isdisjoint(payload)
 
 
 def test_logstash_handler_emit_without_running_loop_handles_error(

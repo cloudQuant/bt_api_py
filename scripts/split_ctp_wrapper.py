@@ -404,9 +404,7 @@ def generate_class_module(
 ):
     """生成一个类子模块 — 包含实际的类定义代码。"""
     # 合并该模块所有类的代码
-    code_parts = []
-    for name in class_names:
-        code_parts.append(class_blocks[name])
+    code_parts = [class_blocks[name] for name in class_names]
     merged_code = "".join(code_parts)
 
     import_line = _determine_imports(merged_code)
@@ -446,8 +444,7 @@ def generate_compat_ctp_py(module_names: list, output_dir: str, dry_run: bool = 
         "",
         "from ._ctp_base import *  # noqa: F401,F403  — SWIG infrastructure",
     ]
-    for mod in module_names:
-        lines.append(f"from .{mod} import *  # noqa: F401,F403")
+    lines.extend(f"from .{mod} import *  # noqa: F401,F403" for mod in module_names)
     lines.append("")
 
     content = "\n".join(lines)

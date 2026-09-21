@@ -985,6 +985,168 @@ def test_allocated_id_is_durable_before_return_and_survives_restart(factory, mon
     assert second.new_client_order_id(VENUE) != client_id
 
 
+def test_reserved_cancel_unknown_has_an_explicit_local_recovery(factory, tmp_path):
+    path = tmp_path / "reserved-cancel-unknown.jsonl"
+    first = factory(path)
+    client_id = first.new_client_order_id(VENUE)
+    first._backend.cancel_result = TimeoutError("transport detail must stay private")
+    cancel = CancelOrderRequest(
+        symbol=SYMBOL,
+        account_id=VENUE,
+        client_order_id=client_id,
+    )
+
+    unknown = first.cancel_order(VENUE, cancel, normalized=True)
+    assert unknown["execution_unknown"] is True
+    assert first.get_execution_summary()["unknown_ids"] == [client_id]
+    first.close()
+
+    restarted = factory(path)
+    before = len(restarted._backend.canceled)
+    recovered = restarted.recover_reservation_only_cancel_unknowns()
+
+    assert recovered["recovered_client_order_ids"] == [client_id]
+    assert restarted.get_execution_summary()["unknown_ids"] == []
+    assert restarted._backend.canceled[before:] == []
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    terminal = rows[-1]
+    assert terminal["event"] == "order_update"
+    assert terminal["update_origin"] == "reservation_only_cancel_recovery"
+    assert terminal["local_resolution"] == "reservation_only_cancel_unknown"
+    assert terminal["remote_write_attempted"] is False
+    assert terminal["status"] == "canceled"
+    assert terminal["execution_unknown"] is False
+    assert terminal["terminal_confirmed"] is True
+
+
+@pytest.mark.parametrize("make_intent,order_id", [(True, None), (False, "venue-order-1")])
+def test_reserved_cancel_recovery_rejects_intent_or_exchange_order_id(
+    factory, tmp_path, make_intent, order_id
+):
+    path = tmp_path / f"blocked-reserved-cancel-{make_intent}-{order_id}.jsonl"
+    first = factory(path)
+    client_id = first.new_client_order_id(VENUE)
+    if make_intent:
+        first._backend.place_result = TimeoutError("placement outcome unknown")
+        placed = first.make_order(VENUE, request(client_id), normalized=True)
+        assert placed["execution_unknown"] is True
+    first._backend.cancel_result = {"code": "51603", "msg": "order not found"}
+    cancel = CancelOrderRequest(
+        symbol=SYMBOL,
+        account_id=VENUE,
+        client_order_id=client_id,
+        order_id=order_id,
+    )
+    canceled = first.cancel_order(VENUE, cancel, normalized=True)
+    assert canceled["execution_unknown"] is True
+    first.close()
+
+    restarted = factory(path)
+    recovered = restarted.recover_reservation_only_cancel_unknowns()
+
+    assert recovered["recovered_client_order_ids"] == []
+    assert client_id in restarted.get_execution_summary()["unknown_ids"]
+    assert restarted.get_execution_summary()["trading_blocked"] is True
+
+
+def _write_historical_unknown_make_order(path, factory, *, include_cancel):
+    first = factory(path)
+    client_id = "123456789012"
+    first._backend.place_result = {"code": "59999", "msg": "private placement detail"}
+    placed = first.make_order(VENUE, request(client_id), normalized=True)
+    assert placed["execution_unknown"] is True
+    if include_cancel:
+        first._backend.cancel_result = {"code": "51603", "msg": "private cancel detail"}
+        canceled = first.cancel_order(
+            VENUE,
+            CancelOrderRequest(
+                symbol=SYMBOL,
+                account_id=VENUE,
+                client_order_id=client_id,
+            ),
+            normalized=True,
+        )
+        assert canceled["execution_unknown"] is True
+    first.close()
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    make_update = next(
+        row
+        for row in rows
+        if row.get("event") == "order_update" and row.get("update_origin") == "make_order"
+    )
+    make_update["error_code"] = "50123"
+    path.write_text("".join(json.dumps(row, allow_nan=False) + "\n" for row in rows))
+    return client_id, rows
+
+
+@pytest.mark.parametrize("include_cancel", [False, True])
+def test_historical_documented_rejection_recovers_locally(factory, tmp_path, include_cancel):
+    path = tmp_path / f"documented-rejection-{include_cancel}.jsonl"
+    client_id, _ = _write_historical_unknown_make_order(path, factory, include_cancel=include_cancel)
+    restarted = factory(path)
+    backend = restarted._backend
+
+    recovered = restarted.recover_historical_documented_definite_rejections()
+
+    assert recovered == {"completed": True, "recovered_client_order_ids": [client_id]}
+    assert restarted.get_execution_summary()["unknown_ids"] == []
+    assert backend.placed == backend.queried == backend.canceled == []
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    terminal = rows[-1]
+    assert terminal["event"] == "order_update"
+    assert terminal["update_origin"] == "historical_documented_definite_rejection_recovery"
+    assert terminal["local_resolution"] == "historical_documented_definite_rejection"
+    assert terminal["status"] == "rejected"
+    assert terminal["error_code"] == "50123"
+    assert terminal["execution_unknown"] is False
+    assert terminal["terminal_confirmed"] is True
+    assert terminal["definite_reject"] is True
+    assert terminal["remote_write_attempted"] is True
+
+
+def test_historical_documented_rejection_recovery_is_unavailable_in_market_data_only(factory):
+    api = factory(config={"market_data_only": True})
+
+    with pytest.raises(NormalizedApiError, match="execution_session_required"):
+        api.recover_historical_documented_definite_rejections()
+
+
+@pytest.mark.parametrize("evidence", ["unknown_code", "order_id", "missing_intent", "fill", "trade"])
+def test_historical_documented_rejection_recovery_rejects_insufficient_evidence(
+    factory, tmp_path, evidence
+):
+    path = tmp_path / f"documented-rejection-blocked-{evidence}.jsonl"
+    client_id, rows = _write_historical_unknown_make_order(
+        path, factory, include_cancel=True
+    )
+    make_update = next(
+        row
+        for row in rows
+        if row.get("event") == "order_update" and row.get("update_origin") == "make_order"
+    )
+    if evidence == "unknown_code":
+        make_update["error_code"] = "59999"
+    elif evidence == "order_id":
+        make_update["order_id"] = "remote-order-1"
+    elif evidence == "missing_intent":
+        rows[:] = [row for row in rows if row.get("event") != "intent"]
+    elif evidence == "fill":
+        make_update.update(filled="0.01", avg_price="60000")
+    elif evidence == "trade":
+        trade = dict(make_update)
+        trade.update(event="trade", trade_id="remote-trade-1", size="0.01")
+        rows.append(trade)
+    path.write_text("".join(json.dumps(row, allow_nan=False) + "\n" for row in rows))
+
+    restarted = factory(path)
+    recovered = restarted.recover_historical_documented_definite_rejections()
+
+    assert recovered == {"completed": True, "recovered_client_order_ids": []}
+    assert client_id in restarted.get_execution_summary()["unknown_ids"]
+    assert restarted.get_execution_summary()["trading_blocked"] is True
+    assert restarted._backend.placed == restarted._backend.queried == restarted._backend.canceled == []
+
+
 def test_request_account_cannot_forge_a_second_ledger(factory, monkeypatch):
     api = factory(config={"strategy_id": "spread-a"})
     monkeypatch.setattr("bt_api_py._execution_session.time.time_ns", lambda: 456)
@@ -1290,6 +1452,137 @@ def test_prepared_migration_recovers_after_crash_and_retries(monkeypatch, tmp_pa
     assert json.loads(transaction.read_text())["status"] == "COMMITTED"
     recovered = migrate_execution_journal(source, destination, claims, remote_reconcile=reconcile)
     assert recovered["status"] == "COMPLETE"
+
+
+def test_migration_cutover_failure_restores_source_and_clears_prepare(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        execution_session_module,
+        "_ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
+    source = tmp_path / "legacy-rollback.jsonl"
+    destination = tmp_path / "migrated-rollback.jsonl"
+    source_bytes = (
+        json.dumps(
+            {
+                "event": "intent",
+                "exchange_name": VENUE,
+                "symbol": SYMBOL,
+                "client_order_id": "rollback-order",
+            }
+        )
+        + "\n"
+    ).encode()
+    source.write_bytes(source_bytes)
+    claims = {
+        "rollback-order": {
+            "provider": "OKX",
+            "environment": "demo",
+            "account_id": "ignored-alias",
+            "strategy_id": "spread-a",
+            "credential_fingerprint": MIGRATION_FINGERPRINT,
+        }
+    }
+
+    def reconcile(**manifest):
+        return {"verified": True, "unknown_ids": [], **manifest}
+
+    def fail_publish(*_args):
+        raise RuntimeError("publish failure")
+
+    monkeypatch.setattr(execution_session_module, "_publish_no_replace", fail_publish)
+    with pytest.raises(RuntimeError, match="publish failure"):
+        migrate_execution_journal(source, destination, claims, remote_reconcile=reconcile)
+
+    assert source.read_bytes() == source_bytes
+    assert not destination.exists()
+    assert not Path(str(destination) + ".cutover.transaction.json").exists()
+    freeze = json.loads(Path(str(source) + ".freeze").read_text())
+    assert freeze["status"] == "BLOCKED"
+    assert freeze["reason"] == "cutover_failed_rolled_back"
+
+
+def test_migration_registry_writes_roll_back_when_committed_transaction_fails(
+    monkeypatch, tmp_path
+):
+    registry_root = tmp_path / "execution-ledgers"
+    monkeypatch.setattr(execution_session_module, "_ledger_registry_root", lambda: registry_root)
+    source = tmp_path / "legacy-registry-rollback.jsonl"
+    destination = tmp_path / "migrated-registry-rollback.jsonl"
+    source_bytes = (
+        json.dumps(
+            {
+                "event": "intent",
+                "exchange_name": VENUE,
+                "symbol": SYMBOL,
+                "client_order_id": "registry-rollback-order",
+            }
+        )
+        + "\n"
+    ).encode()
+    source.write_bytes(source_bytes)
+    claims = {
+        "registry-rollback-order": {
+            "provider": "OKX",
+            "environment": "demo",
+            "account_id": "ignored-alias",
+            "strategy_id": "spread-a",
+            "credential_fingerprint": MIGRATION_FINGERPRINT,
+        }
+    }
+    identity = execution_session_module._claim_identity(claims["registry-rollback-order"])
+    expected_manifests = {}
+    registry_root.mkdir(parents=True)
+    for digest in execution_session_module._identity_registry_digests(identity):
+        lock_path = registry_root / f"{digest}.lock"
+        manifest = {
+            "ledger_identity": identity,
+            "active_journal": str(source),
+            "fencing_epoch": 7,
+            "custom_marker": f"preexisting-{digest[:12]}",
+        }
+        lock_path.write_text(json.dumps(manifest))
+        expected_manifests[lock_path] = manifest
+
+    def reconcile(**manifest):
+        return {"verified": True, "unknown_ids": [], **manifest}
+
+    transaction_path = Path(str(destination) + ".cutover.transaction.json")
+    original_atomic_write_json = execution_session_module._atomic_write_json
+    captured = {}
+
+    def fail_committed_transaction(path, value):
+        if Path(path) == transaction_path and value.get("status") == "COMMITTED":
+            captured["prepared_transaction"] = json.loads(transaction_path.read_text())
+            captured["registry_paths"] = list(registry_root.glob("*.lock"))
+            captured["registry_manifests"] = {
+                path: json.loads(path.read_text()) for path in captured["registry_paths"]
+            }
+            raise RuntimeError("committed transaction write failed")
+        original_atomic_write_json(path, value)
+
+    monkeypatch.setattr(execution_session_module, "_atomic_write_json", fail_committed_transaction)
+    with pytest.raises(RuntimeError, match="committed transaction write failed"):
+        migrate_execution_journal(source, destination, claims, remote_reconcile=reconcile)
+
+    prepared_transaction = captured["prepared_transaction"]
+    assert prepared_transaction["status"] == "PREPARED"
+    assert set(captured["registry_paths"]) == set(expected_manifests)
+    for manifest in captured["registry_manifests"].values():
+        assert manifest["active_journal"] == str(destination)
+    assert source.read_bytes() == source_bytes
+    for path in (
+        destination,
+        Path(prepared_transaction["staging"]),
+        Path(prepared_transaction["sealed_source"]),
+        transaction_path,
+    ):
+        assert not path.exists()
+    for path, expected in expected_manifests.items():
+        assert json.loads(path.read_text()) == expected
+    freeze = json.loads(Path(str(source) + ".freeze").read_text())
+    assert freeze["status"] == "BLOCKED"
+    assert freeze["reason"] == "cutover_failed_rolled_back"
 
 
 @pytest.mark.parametrize(
@@ -1707,7 +2000,7 @@ def test_only_explicit_rejection_is_terminal(factory, result):
 
 def test_unrecognized_numeric_venue_error_remains_unknown(factory):
     api = factory()
-    api._backend.place_result = {"code": "50120", "msg": "private native message"}
+    api._backend.place_result = {"code": "59999", "msg": "private native message"}
 
     update = api.make_order(VENUE, request(), normalized=True)
 

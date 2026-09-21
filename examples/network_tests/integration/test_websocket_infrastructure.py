@@ -6,29 +6,75 @@ message handling, and reconnection logic.
 
 import asyncio
 import json
+import logging
 import time
+from collections.abc import AsyncIterator, Iterable
+from typing import Protocol
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 import websockets
+from websockets.exceptions import ConnectionClosed
 
-try:
-    ConnectionClosed = websockets.exceptions.ConnectionClosed
-except AttributeError:
-    from websockets import ConnectionClosed
+logger = logging.getLogger(__name__)
+
+
+class _WebSocketConnection(Protocol):
+    """Stable connection interface shared by supported websockets server APIs."""
+
+    async def send(self, message: str) -> None: ...
+
+    def __aiter__(self) -> AsyncIterator[str | bytes]: ...
+
+
+class _WebSocketReceiver(Protocol):
+    """Minimal interface required by the shared message receive helper."""
+
+    async def recv(self) -> str | bytes: ...
+
+
+class _ListeningSocket(Protocol):
+    """Socket interface needed to discover the server's bound port."""
+
+    def getsockname(self) -> tuple[str, int]: ...
+
+
+class _WebSocketServer(Protocol):
+    """Stable lifecycle and socket interface exposed by websockets servers."""
+
+    @property
+    def sockets(self) -> Iterable[_ListeningSocket]: ...
+
+    def close(self) -> None: ...
+
+    async def wait_closed(self) -> None: ...
+
+
+async def _receive_messages(
+    websocket: _WebSocketReceiver, message_count: int
+) -> list[dict[str, object]]:
+    """Receive and decode a bounded number of WebSocket messages."""
+    messages_received: list[dict[str, object]] = []
+    for _ in range(message_count):
+        try:
+            message = await websocket.recv()
+            messages_received.append(json.loads(message))
+        except Exception as exc:
+            logger.debug("WebSocket message receive failed: %s", type(exc).__name__)
+    return messages_received
 
 
 class MockWebSocketServer:
     """Mock WebSocket server for testing."""
 
-    def __init__(self, responses: list[dict]):
+    def __init__(self, responses: list[dict[str, object]]):
         self.responses = responses
-        self.sent_messages = []
-        self.connections = []
-        self.server = None
+        self.sent_messages: list[object] = []
+        self.connections: list[_WebSocketConnection] = []
+        self.server: _WebSocketServer | None = None
 
-    async def handler(self, websocket, path):
+    async def handler(self, websocket: _WebSocketConnection) -> None:
         """Handle WebSocket connections."""
         self.connections.append(websocket)
 
@@ -49,12 +95,11 @@ class MockWebSocketServer:
         except ConnectionClosed:
             pass
 
-    async def start(self, port: int = 8765):
+    async def start(self, port: int = 8765) -> _WebSocketServer:
         """Start the mock server."""
-        import websockets
-
-        self.server = await websockets.serve(self.handler, "localhost", port)
-        return self.server
+        server = await websockets.serve(self.handler, "127.0.0.1", port)
+        self.server = server
+        return server
 
     async def stop(self):
         """Stop the mock server."""
@@ -70,16 +115,18 @@ class WebSocketTestHarness:
     def __init__(self, exchange_name: str):
         self.exchange_name = exchange_name
         self.server = MockWebSocketServer([])
-        self.messages = []
-        self.connection_events = []
+        self.messages: list[dict[str, object]] = []
+        self.connection_events: list[dict[str, object]] = []
 
-    async def setup_mock_server(self, responses: list[dict]):
+    async def setup_mock_server(self, responses: list[dict[str, object]]) -> str:
         """Set up mock server with predefined responses."""
         self.server = MockWebSocketServer(responses)
-        await self.server.start()
-        return "ws://localhost:8765"
+        server = await self.server.start(port=0)
+        socket = next(iter(server.sockets))
+        port = socket.getsockname()[1]
+        return f"ws://127.0.0.1:{port}"
 
-    def create_mock_websocket_client(self):
+    def create_mock_websocket_client(self) -> AsyncMock:
         """Create a mock WebSocket client for testing."""
         mock_ws = AsyncMock()
         mock_ws.send = AsyncMock()
@@ -89,28 +136,28 @@ class WebSocketTestHarness:
         mock_ws.closed = False
 
         # Configure message queue
-        message_queue = asyncio.Queue()
+        message_queue: asyncio.Queue[str] = asyncio.Queue()
 
         async def recv_side_effect():
             try:
                 return await asyncio.wait_for(message_queue.get(), timeout=1.0)
             except TimeoutError:
                 # Simulate WebSocket timeout
-                raise ConnectionClosed(1006, "Connection timeout") from None
+                raise ConnectionClosed(None, None) from None
 
         mock_ws.recv.side_effect = recv_side_effect
 
         # Method to add messages to queue
-        def add_message(msg):
+        def add_message(msg: str) -> None:
             message_queue.put_nowait(msg)
 
         mock_ws._add_message = add_message
 
         return mock_ws
 
-    def simulate_connection_events(self):
+    def simulate_connection_events(self) -> list[dict[str, object]]:
         """Simulate various WebSocket connection events."""
-        events = [
+        events: list[dict[str, object]] = [
             {"type": "connect", "timestamp": time.time()},
             {
                 "type": "message",
@@ -159,18 +206,8 @@ class TestWebSocketConnections:
             mock_client._add_message(json.dumps(response))
 
         # Simulate connection
-        messages_received = []
-
-        async def receive_messages():
-            for _ in range(len(responses)):
-                try:
-                    message = await mock_client.recv()
-                    messages_received.append(json.loads(message))
-                except Exception:
-                    pass
-
         # Run message receiving
-        await receive_messages()
+        messages_received = await _receive_messages(mock_client, len(responses))
 
         # Verify messages
         assert len(messages_received) == len(responses)
@@ -191,7 +228,7 @@ class TestWebSocketConnections:
             if connection_state["attempts"] <= 3:
                 # First attempts fail
                 mock_client.closed = True
-                raise ConnectionClosed(1006, "Connection lost")
+                raise ConnectionClosed(None, None)
             else:
                 # Reconnect succeeds
                 mock_client.closed = False
@@ -225,7 +262,7 @@ class TestWebSocketConnections:
             "invalid_json_string",  # Invalid JSON
         ]
 
-        validated_messages = []
+        validated_messages: list[dict[str, object]] = []
 
         async def validate_and_process_messages():
             valid_streams = {"btcusdt@ticker", "btcusdt@depth"}
@@ -238,7 +275,8 @@ class TestWebSocketConnections:
 
                     # Validate message structure
                     if (
-                        "stream" in data
+                        isinstance(data, dict)
+                        and "stream" in data
                         and "data" in data
                         and data["stream"] in valid_streams
                     ):
@@ -276,7 +314,7 @@ class TestWebSocketConnections:
             send_times.append(time.time())
 
         # Measure message processing rate
-        received_messages = []
+        received_messages: list[dict[str, object]] = []
         start_time = time.time()
 
         async def process_messages():

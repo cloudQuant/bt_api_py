@@ -1,120 +1,74 @@
 #!/usr/bin/env python3
-"""Analyze test performance and identify slow tests."""
+"""Compatibility wrapper for the canonical slow-test analyzer."""
 
-import json
-import sys
-from pathlib import Path
-from typing import Any
+from __future__ import annotations
+
+import importlib as _importlib
+import runpy as _runpy
+import sys as _sys
+from pathlib import Path as _Path
+from types import ModuleType as _ModuleType
+
+_CANONICAL_MODULE = "scripts.analyze_slow_tests"
+_canonical: _ModuleType | None = None
+_CANONICAL_ATTRIBUTES: set[str] = set()
 
 
-def parse_pytest_json(json_file: Path) -> list[dict[str, Any]]:
-    """Parse pytest JSON report and extract test durations."""
-    with open(json_file) as f:
-        data = json.load(f)
+def _load_canonical() -> _ModuleType:
+    global _canonical
+    if _canonical is None:
+        _canonical = _importlib.import_module(_CANONICAL_MODULE)
+    return _canonical
 
-    tests = []
-    for test in data.get("tests", []):
-        tests.append(
-            {
-                "nodeid": test.get("nodeid", ""),
-                "duration": test.get("call", {}).get("duration", 0),
-                "outcome": test.get("outcome", ""),
-            }
+
+def __getattr__(name: str):
+    canonical = _load_canonical()
+    if name == "__all__":
+        return getattr(
+            canonical,
+            "__all__",
+            [attribute for attribute in vars(canonical) if not attribute.startswith("_")],
         )
-
-    return tests
-
-
-def analyze_tests(tests: list[dict[str, Any]], threshold: float = 1.0) -> None:
-    """Analyze and report slow tests."""
-    # Sort by duration
-    sorted_tests = sorted(tests, key=lambda x: x["duration"], reverse=True)
-
-    # Filter slow tests
-    slow_tests = [t for t in sorted_tests if t["duration"] > threshold]
-
-    print(f"\n{'=' * 80}")
-    print("Test Performance Analysis")
-    print(f"{'=' * 80}\n")
-
-    print(f"Total tests: {len(tests)}")
-    print(f"Slow tests (>{threshold}s): {len(slow_tests)}")
-
-    if slow_tests:
-        print(f"\n{'Top 20 Slowest Tests:'}")
-        print(f"{'-' * 80}")
-        print(f"{'Duration':<12} {'Status':<10} {'Test'}")
-        print(f"{'-' * 80}")
-
-        for test in slow_tests[:20]:
-            duration = f"{test['duration']:.2f}s"
-            outcome = test["outcome"]
-            nodeid = test["nodeid"]
-
-            # Truncate long test names
-            if len(nodeid) > 60:
-                nodeid = nodeid[:57] + "..."
-
-            print(f"{duration:<12} {outcome:<10} {nodeid}")
-
-    # Statistics
-    total_duration = sum(t["duration"] for t in tests)
-    slow_duration = sum(t["duration"] for t in slow_tests)
-
-    print(f"\n{'Statistics:'}")
-    print(f"{'-' * 80}")
-    print(f"Total test time: {total_duration:.2f}s")
-    print(f"Slow test time: {slow_duration:.2f}s ({slow_duration / total_duration * 100:.1f}%)")
-    print(f"Average test time: {total_duration / len(tests):.2f}s")
-
-    if slow_tests:
-        print(f"Average slow test time: {slow_duration / len(slow_tests):.2f}s")
-
-    # Recommendations
-    print(f"\n{'Recommendations:'}")
-    print(f"{'-' * 80}")
-
-    if len(slow_tests) > 10:
-        print("• Consider marking slow tests with @pytest.mark.slow")
-        print("• Run slow tests separately: ./scripts/run_tests.sh -m 'not slow'")
-
-    network_tests = [
-        t
-        for t in slow_tests
-        if "network" in t["nodeid"].lower()
-        or "request" in t["nodeid"].lower()
-        or "wss" in t["nodeid"].lower()
-    ]
-    if network_tests:
-        print(f"• {len(network_tests)} slow tests appear to be network-related")
-        print("  Consider using @pytest.mark.network and mocking for unit tests")
-
-    if slow_duration > total_duration * 0.5:
-        print("• Slow tests account for >50% of test time")
-        print("  Consider optimizing or parallelizing these tests")
-
-    print()
+    value = getattr(canonical, name)
+    _CANONICAL_ATTRIBUTES.add(name)
+    return value
 
 
-def main():
-    """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python analyze_slow_tests.py <pytest-json-report>")
-        print("\nGenerate report with:")
-        print("  pytest --json-report --json-report-file=report.json")
-        sys.exit(1)
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(dir(_load_canonical())))
 
-    json_file = Path(sys.argv[1])
 
-    if not json_file.exists():
-        print(f"Error: File not found: {json_file}")
-        sys.exit(1)
+class _ForwardingModule(_ModuleType):
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self.__dict__ or name.startswith("__"):
+            super().__setattr__(name, value)
+            return
+        canonical = _load_canonical()
+        if name in _CANONICAL_ATTRIBUTES or hasattr(canonical, name):
+            _CANONICAL_ATTRIBUTES.add(name)
+            setattr(canonical, name, value)
+        else:
+            super().__setattr__(name, value)
 
-    threshold = float(sys.argv[2]) if len(sys.argv) > 2 else 1.0
-
-    tests = parse_pytest_json(json_file)
-    analyze_tests(tests, threshold)
+    def __delattr__(self, name: str) -> None:
+        if name in self.__dict__:
+            super().__delattr__(name)
+            return
+        if name.startswith("__"):
+            super().__delattr__(name)
+            return
+        canonical = _load_canonical()
+        if name in _CANONICAL_ATTRIBUTES or hasattr(canonical, name):
+            _CANONICAL_ATTRIBUTES.add(name)
+            delattr(canonical, name)
+            return
+        super().__delattr__(name)
 
 
 if __name__ == "__main__":
-    main()
+    _runpy.run_path(
+        str(_Path(__file__).resolve().parents[1] / _Path(__file__).name),
+        run_name="__main__",
+    )
+elif __name__ in _sys.modules:
+    _sys.modules[__name__].__class__ = _ForwardingModule

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from bt_api_binance.containers.orderbooks.binance_orderbook import (
     BinanceRequestOrderBookData,
     BinanceWssOrderBookData,
@@ -73,6 +74,28 @@ def test_zero_previous_sequence_is_a_delta_without_claiming_continuity():
     assert event["continuity_status"] == "unverified"
 
 
+def test_explicit_binance_rebuilt_snapshot_overrides_native_previous_update_id():
+    event = normalize_event(
+        {
+            "bids": [["100", "2"]],
+            "asks": [["101", "3"]],
+            "E": 1700000000000,
+            "u": 12345,
+            "pu": 12344,
+            "snapshot_or_delta": "snapshot",
+        },
+        "BINANCE___SWAP",
+        kind="orderbook",
+        symbol="BTCUSDT",
+    )
+
+    assert event["sequence"] == 12345
+    assert event["previous_sequence"] == 12344
+    assert event["timestamp"] == pytest.approx(1700000000.0)
+    assert event["snapshot_or_delta"] == "snapshot"
+    assert event["continuity_status"] == "snapshot"
+
+
 def test_binance_wss_raw_payload_preserves_final_update_id():
     raw = json.dumps(
         {
@@ -110,3 +133,38 @@ def test_binance_rest_raw_payload_preserves_last_update_id():
     event = normalize_event(book, "BINANCE___SWAP", kind="orderbook", symbol="BTCUSDT")
 
     assert event["sequence"] == 9001
+
+
+def test_orderbook_price_volume_lists_normalize_strictly_and_mark_delta_unverified():
+    event = normalize_event(
+        {
+            "bid_price_list": ["100.25", "99.5"],
+            "bid_volume_list": ["2", "3.5"],
+            "ask_price_list": ["101.75"],
+            "ask_volume_list": ["4"],
+            "action": "update",
+            "continuity_status": "future_status",
+        },
+        "BINANCE___SWAP",
+        kind="orderbook",
+        symbol="BTCUSDT",
+    )
+
+    assert event["bids"] == [(100.25, 2.0), (99.5, 3.5)]
+    assert event["asks"] == [(101.75, 4.0)]
+    assert event["quantity_unit"] == "base"
+    assert event["snapshot_or_delta"] == "delta"
+    assert event["continuity_status"] == "unverified"
+
+    with pytest.raises(ValueError):
+        normalize_event(
+            {
+                "bid_price_list": ["100.25", "99.5"],
+                "bid_volume_list": ["2"],
+                "ask_price_list": [],
+                "ask_volume_list": [],
+            },
+            "BINANCE___SWAP",
+            kind="orderbook",
+            symbol="BTCUSDT",
+        )

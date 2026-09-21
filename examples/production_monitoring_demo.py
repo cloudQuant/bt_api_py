@@ -10,13 +10,8 @@ import random
 import time
 from pathlib import Path
 
-# Setup logging for production
 from bt_api_py.logging_system import get_logger, setup_logging_for_production
 
-setup_logging_for_production()
-logger = get_logger(__name__)
-
-# Setup monitoring
 from bt_api_py.monitoring import (
     counter,
     gauge,
@@ -27,6 +22,10 @@ from bt_api_py.monitoring import (
     start_prometheus_exporter,
     stop_prometheus_exporter,
 )
+
+# Setup logging for production
+setup_logging_for_production()
+logger = get_logger(__name__)
 
 # Initialize business metrics collector
 business_metrics = get_business_collector()
@@ -137,7 +136,7 @@ async def trading_bot():
 
                 await asyncio.sleep(1)
 
-            except Exception as e:
+            except Exception:
                 error_counter.inc()
                 logger.exception(f"Error in trading iteration {i}")
 
@@ -177,9 +176,19 @@ async def monitor_system_health():
 
             await asyncio.sleep(2)
 
-        except Exception as e:
+        except Exception:
             error_counter.inc()
             logger.exception(f"Error in health monitoring iteration {i}")
+
+
+def _stop_prometheus_exporter_safely() -> None:
+    """Stop the exporter without letting a shutdown error escape the demo."""
+    try:
+        stop_prometheus_exporter()
+    except Exception as error:
+        logger.warning("Prometheus exporter stop failed (%s)", type(error).__name__)
+    else:
+        logger.info("Prometheus exporter stopped")
 
 
 async def main():
@@ -202,11 +211,7 @@ async def main():
         logger.info("Received interrupt signal")
     finally:
         # Cleanup
-        try:
-            stop_prometheus_exporter()
-            logger.info("Prometheus exporter stopped")
-        except Exception:
-            pass
+        _stop_prometheus_exporter_safely()
 
     logger.info("Monitoring system demonstration complete")
 

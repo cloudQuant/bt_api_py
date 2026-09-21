@@ -106,6 +106,12 @@ def missing_scope_paths(resolved: Sequence[str], recorded: Sequence[str]) -> lis
     return [path for path in recorded if path.rstrip("/") not in present]
 
 
+def unrecorded_scope_paths(resolved: Sequence[str], recorded: Sequence[str]) -> list[str]:
+    """Paths the current scan includes that the snapshot does not gate."""
+    known = {path.rstrip("/") for path in recorded}
+    return [path for path in resolved if path.rstrip("/") not in known]
+
+
 def _run_ruff(command: Sequence[str]) -> subprocess.CompletedProcess[str]:
     """Run one ruff invocation.
 
@@ -190,6 +196,33 @@ def _print_report(counts: dict[str, int], comparison: Comparison | None) -> None
             print(f"  - {line}")
 
 
+def _print_scope_mismatch(missing: Sequence[str], unrecorded: Sequence[str]) -> None:
+    if missing:
+        print(
+            "ERROR: the snapshot gated paths that are not present in this checkout:\n"
+            + "\n".join(f"  - {path}" for path in missing)
+            + "\nCheck out the submodules (actions/checkout with submodules: recursive) "
+            "before trusting the ratchet; a smaller scope would pass silently.",
+            file=sys.stderr,
+        )
+    if unrecorded:
+        print(
+            "ERROR: the current scan includes paths that are not recorded in the snapshot:\n"
+            + "\n".join(f"  - {path}" for path in unrecorded)
+            + "\nReview the scope expansion, then use --force-update to record it.",
+            file=sys.stderr,
+        )
+
+
+def _print_force_update_scope_shrink(missing: Sequence[str]) -> None:
+    print(
+        "ERROR: --force-update cannot remove paths already recorded in the baseline:\n"
+        + "\n".join(f"  - {path}" for path in missing)
+        + "\nRestore the recorded scope before updating the snapshot.",
+        file=sys.stderr,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
@@ -204,7 +237,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="print the gated paths (single source of truth for the Makefile)",
     )
     parser.add_argument(
-        "--force-update", action="store_true", help="write the snapshot unconditionally"
+        "--force-update",
+        action="store_true",
+        help="write a snapshot; with an existing baseline, preserve its scope and debt floor",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -212,6 +247,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.print_scope:
         print(" ".join(scope))
         return 0
+
+    force_baseline: dict[str, Any] | None = None
+    force_recorded_scope: Sequence[str] = ()
+    if args.force_update and not args.report and args.baseline.exists():
+        force_baseline = load_baseline(args.baseline)
+        force_recorded_scope = force_baseline.get("scope", ())
+        missing = missing_scope_paths(scope, force_recorded_scope)
+        if missing:
+            _print_force_update_scope_shrink(missing)
+            return 1
+
     counts = scan_ruff(scope)
 
     if args.report:
@@ -219,8 +265,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.update or args.force_update:
-        if not args.force_update and args.baseline.exists():
+        if args.force_update and force_baseline is not None:
+            unrecorded = unrecorded_scope_paths(scope, force_recorded_scope)
+            if unrecorded:
+                recorded_counts = scan_ruff(force_recorded_scope)
+                recorded_comparison = compare_counts(
+                    recorded_counts, force_baseline["ruff"]["by_rule"]
+                )
+                if recorded_comparison.regressions:
+                    _print_report(recorded_counts, recorded_comparison)
+                    print(
+                        "\nrefusing --force-update: counts in the previously recorded scope "
+                        "may not increase; fix these regressions before recording the expansion.",
+                        file=sys.stderr,
+                    )
+                    return 1
+            else:
+                current_comparison = compare_counts(counts, force_baseline["ruff"]["by_rule"])
+                if current_comparison.regressions:
+                    _print_report(counts, current_comparison)
+                    print(
+                        "\nrefusing --force-update: same-scope counts may not increase; "
+                        "fix these regressions before updating the snapshot.",
+                        file=sys.stderr,
+                    )
+                    return 1
+        elif not args.force_update and args.baseline.exists():
             baseline = load_baseline(args.baseline)
+            missing = missing_scope_paths(scope, baseline.get("scope", ()))
+            unrecorded = unrecorded_scope_paths(scope, baseline.get("scope", ()))
+            if missing or unrecorded:
+                _print_scope_mismatch(missing, unrecorded)
+                return 1
             comparison = compare_counts(counts, baseline["ruff"]["by_rule"])
             if comparison.regressions:
                 _print_report(counts, comparison)
@@ -249,14 +325,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
     missing = missing_scope_paths(scope, baseline.get("scope", ()))
-    if missing:
-        print(
-            "ERROR: the snapshot gated paths that are not present in this checkout:\n"
-            + "\n".join(f"  - {path}" for path in missing)
-            + "\nCheck out the submodules (actions/checkout with submodules: recursive) "
-            "before trusting the ratchet; a smaller scope would pass silently.",
-            file=sys.stderr,
-        )
+    unrecorded = unrecorded_scope_paths(scope, baseline.get("scope", ()))
+    if missing or unrecorded:
+        _print_scope_mismatch(missing, unrecorded)
         return 1
     comparison = compare_counts(counts, baseline["ruff"]["by_rule"])
     _print_report(counts, comparison)

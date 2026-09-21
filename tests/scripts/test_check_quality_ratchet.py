@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.ci import check_quality_ratchet as ratchet
 
@@ -156,3 +157,42 @@ class TestCommittedSnapshot:
             pytest.skip("ruff is not installed")
 
         assert ratchet.ruff_version().startswith("ruff ")
+
+
+class TestQualityGateWorkflowWiring:
+    @staticmethod
+    def _quality_gate_job():
+        workflow = yaml.load(
+            (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8"),
+            Loader=yaml.BaseLoader,
+        )
+        return workflow["jobs"]["quality-gate"]
+
+    def test_quality_gate_requires_quality_ratchet(self):
+        assert "quality-ratchet" in self._quality_gate_job()["needs"]
+
+    def test_quality_gate_always_runs_to_inspect_prerequisites(self):
+        assert self._quality_gate_job()["if"] == "always()"
+
+    def test_quality_gate_fails_when_quality_ratchet_is_not_successful(self):
+        job = self._quality_gate_job()
+        check_step = next(step for step in job["steps"] if step.get("name") == "Check job results")
+        lines = check_step["run"].splitlines()
+        condition = 'if [ "${{ needs.quality-ratchet.result }}" != "success" ]; then'
+
+        assert condition in lines
+        start = lines.index(condition)
+        end = next(index for index in range(start + 1, len(lines)) if lines[index].strip() == "fi")
+        assert any(line.strip() == "exit 1" for line in lines[start + 1 : end])
+
+    def test_quality_gate_summary_reports_quality_ratchet_status(self):
+        job = self._quality_gate_job()
+        summary_step = next(step for step in job["steps"] if step.get("name") == "Generate summary")
+        summary_line = next(
+            line for line in summary_step["run"].splitlines() if "Quality ratchet" in line
+        )
+
+        assert (
+            "${{ needs.quality-ratchet.result == 'success' && 'Passed' || 'Failed' }}"
+            in summary_line
+        )

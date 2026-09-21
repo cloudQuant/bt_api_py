@@ -60,9 +60,13 @@ def find_python_files(root_dir: str) -> list[str]:
     for root, dirs, files in os.walk(root_dir):
         # 跳过__pycache__和其他不需要的目录
         dirs[:] = [d for d in dirs if d not in ["__pycache__", ".git", "build", "dist", "htmlcov"]]
-        for file in files:
-            if file.endswith(".py") and not file.startswith("."):
-                python_files.append(os.path.join(root, file))
+        python_files.extend(
+            [
+                os.path.join(root, file)
+                for file in files
+                if file.endswith(".py") and not file.startswith(".")
+            ]
+        )
     return python_files
 
 

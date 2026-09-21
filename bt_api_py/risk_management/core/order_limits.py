@@ -34,6 +34,7 @@ class OrderLimitsMixin:
         if utilization > self.critical_threshold:
             status = LimitStatus.CRITICAL
             restriction = "Order exceeds maximum size limit"
+            warning = ""
         elif utilization > self.warning_threshold:
             status = LimitStatus.WARNING
             restriction = "Order approaching size limit"
@@ -79,6 +80,7 @@ class OrderLimitsMixin:
         if utilization > self.critical_threshold:
             status = LimitStatus.CRITICAL
             restriction = "Order frequency exceeds limit"
+            warning = ""
         elif utilization > self.warning_threshold:
             status = LimitStatus.WARNING
             restriction = "Order frequency approaching limit"

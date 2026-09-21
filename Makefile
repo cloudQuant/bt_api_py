@@ -1,4 +1,4 @@
-.PHONY: help install test test-cov test-fast test-unit test-integration test-performance test-contracts test-e2e clean lint lint-all lint-submodules lint-stat format type-check type-check-l1 security-scan docs analyze-coverage optimized-test quality-ratchet quality-ratchet-update
+.PHONY: help install test test-cov test-fast test-unit test-integration test-performance test-contracts test-e2e clean lint lint-all lint-submodules lint-stat format type-check type-check-l1 security-scan docs analyze-coverage optimized-test quality-ratchet quality-ratchet-update format-ratchet format-ratchet-update public-api-quality tech-debt-report
 
 # 质量门禁范围（迭代07）。与 scripts/ci/check_quality_ratchet.py 的 default_scope()
 # 必须保持一致；tests/scripts/test_check_quality_ratchet.py 会断言两者相等。
@@ -36,6 +36,10 @@ help:
 	@echo "  make lint-stat        Ruff statistics for the full gated scope"
 	@echo "  make quality-ratchet  Verify lint debt did not increase (CI gate)"
 	@echo "  make quality-ratchet-update  Refresh the ratchet snapshot when debt decreased"
+	@echo "  make format-ratchet  Verify submodule format debt did not increase (CI gate)"
+	@echo "  make format-ratchet-update  Refresh the format ratchet when debt decreased"
+	@echo "  make tech-debt-report  Render read-only Ruff gradual-ignore debt report"
+	@echo "  make public-api-quality Measure public callable docstrings and parameter annotations"
 	@echo "  make format           Format code with ruff"
 	@echo "  make type-check       Run mypy type checking"
 	@echo "  make check            Run all checks (lint + type-check)"
@@ -72,14 +76,19 @@ test-integration:
 	./scripts/run_tests.sh -m "integration"
 
 test-ctp:
-	./scripts/run_tests.sh --ctp
+	./scripts/run_tests.sh --ctp -m "ctp"
 
 test-html:
 	./scripts/run_tests.sh --html --cov
 
 test-performance:
-	@echo "Running performance tests..."
-	pytest tests/performance/ --tb=short -v
+	@set -eu; \
+	benchmark_dir=$$(mktemp -d "$${TMPDIR:-/tmp}/bt-api-py-benchmark.XXXXXX"); \
+	trap 'rm -rf "$$benchmark_dir"' EXIT; \
+	test -f tests/performance/test_event_normalization_performance.py; \
+	echo "Running performance tests..."; \
+	python -m pytest tests/performance/test_event_normalization_performance.py::test_normalize_event_orderbook_dict_hot_path --tb=short -v -n 8 --benchmark-json="$$benchmark_dir/benchmark.json"; \
+	python scripts/ci/check_performance_baseline.py --baseline docs/acceptance/2026-09-21-performance-baseline.json --report "$$benchmark_dir/benchmark.json"
 
 test-contracts:
 	@echo "Running property-based tests..."
@@ -125,6 +134,22 @@ quality-ratchet:
 quality-ratchet-update:
 	@echo "Refreshing the quality ratchet snapshot (only when the debt decreased)..."
 	python scripts/ci/check_quality_ratchet.py --update
+
+format-ratchet:
+	@echo "Checking the submodule format ratchet (per-module debt may only decrease)..."
+	python scripts/ci/check_format_ratchet.py
+
+format-ratchet-update:
+	@echo "Refreshing the format ratchet snapshot (only when debt decreased)..."
+	python scripts/ci/check_format_ratchet.py --update
+
+tech-debt-report:
+	@echo "Rendering read-only Ruff gradual-ignore debt report..."
+	python scripts/ci/render_tech_debt.py
+
+public-api-quality:
+	@echo "Measuring public API docstring and parameter-annotation coverage..."
+	python scripts/measure_public_api_quality.py
 
 format:
 	@echo "Formatting code with ruff..."

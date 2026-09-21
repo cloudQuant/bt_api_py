@@ -1,7 +1,9 @@
 import asyncio
 import socket
+import threading
 import time
 from collections.abc import Callable, Generator
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -699,16 +701,44 @@ def test_zmq_forwarding_runtime_start_sync_cleans_up_after_thread_start_failure(
     command_endpoint = _free_tcp_endpoint()
     private_endpoint = _free_tcp_endpoint()
     created_threads: list[Any] = []
+    created_publishers: list[Any] = []
+    created_command_servers: list[Any] = []
+
+    class TrackingPublisher:
+        def __init__(self, endpoint: str) -> None:
+            self.endpoint = endpoint
+            self.closed = False
+            created_publishers.append(self)
+
+        def publish(self, event: object) -> None:
+            raise AssertionError("publisher should not publish during failed startup")
+
+        def close(self) -> None:
+            self.closed = True
+
+    class TrackingCommandServer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.started = False
+            self.stopped = False
+            created_command_servers.append(self)
+
+        def start(self) -> None:
+            self.started = True
+
+        def stop(self) -> None:
+            self.stopped = True
 
     class FakeThread:
         def __init__(self, *args: object, **kwargs: object) -> None:
             self.ident: int | None = None
+            self.start_count = 0
             self.join_count = 0
             self.index = len(created_threads)
             created_threads.append(self)
 
         def start(self) -> None:
-            if self.index == 2:
+            self.start_count += 1
+            if self.index == 1:
                 raise RuntimeError("thread start failed")
             self.ident = self.index + 1
 
@@ -725,7 +755,11 @@ def test_zmq_forwarding_runtime_start_sync_cleans_up_after_thread_start_failure(
         command_endpoint=command_endpoint,
         private_endpoint=private_endpoint,
     )
-    monkeypatch.setattr(service_module.threading, "Thread", FakeThread)
+    original_thread_class = threading.Thread
+    monkeypatch.setattr(service_module, "threading", SimpleNamespace(Thread=FakeThread))
+    monkeypatch.setattr(service_module, "ZmqEventPublisher", TrackingPublisher)
+    monkeypatch.setattr(service_module, "ZmqCommandServer", TrackingCommandServer)
+    assert threading.Thread is original_thread_class
 
     with pytest.raises(RuntimeError, match="thread start failed"):
         runtime.start_sync()
@@ -733,7 +767,16 @@ def test_zmq_forwarding_runtime_start_sync_cleans_up_after_thread_start_failure(
     assert adapter.connect_count == 1
     assert adapter.disconnect_count == 1
     assert adapter.connected is False
-    assert [thread.join_count for thread in created_threads] == [1, 1, 0]
+    assert [thread.start_count for thread in created_threads] == [1, 1]
+    assert [thread.join_count for thread in created_threads] == [1, 0]
+    assert [publisher.endpoint for publisher in created_publishers] == [
+        market_endpoint,
+        private_endpoint,
+    ]
+    assert all(publisher.closed for publisher in created_publishers)
+    assert len(created_command_servers) == 1
+    assert created_command_servers[0].started is True
+    assert created_command_servers[0].stopped is True
     assert runtime._market_publisher is None
     assert runtime._private_publisher is None
     assert runtime._command_server is None

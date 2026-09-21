@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Protocol
+from weakref import WeakValueDictionary
 
 from bt_api_py._contracts.models import SubscribeRequest
 
@@ -40,6 +42,7 @@ class SourceSupervisor:
     def __init__(self, upstream: Any) -> None:
         self._upstream = upstream
         self._refcounts: dict[tuple, int] = {}
+        self._key_locks: WeakValueDictionary[tuple, asyncio.Lock] = WeakValueDictionary()
         self.upstream_start_count = 0
         self.upstream_stop_count = 0
 
@@ -52,20 +55,29 @@ class SourceSupervisor:
             request.account_id,
         )
 
+    def _lock_for(self, key: tuple) -> asyncio.Lock:
+        lock = self._key_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._key_locks[key] = lock
+        return lock
+
     async def subscribe(self, request: SubscribeRequest) -> _SupervisedSubscription:
         key = self._key(request)
-        count = self._refcounts.get(key, 0)
-        if count == 0:
-            await self._upstream.start(request)
-            self.upstream_start_count += 1
-        self._refcounts[key] = count + 1
+        async with self._lock_for(key):
+            count = self._refcounts.get(key, 0)
+            if count == 0:
+                await self._upstream.start(request)
+                self.upstream_start_count += 1
+            self._refcounts[key] = count + 1
         return _SupervisedSubscription(self, key)
 
     async def _release(self, key: tuple) -> None:
-        count = self._refcounts.get(key, 0)
-        if count <= 1:
-            self._refcounts.pop(key, None)
-            await self._upstream.stop(key)
-            self.upstream_stop_count += 1
-        else:
-            self._refcounts[key] = count - 1
+        async with self._lock_for(key):
+            count = self._refcounts.get(key, 0)
+            if count <= 1:
+                self._refcounts.pop(key, None)
+                await self._upstream.stop(key)
+                self.upstream_stop_count += 1
+            else:
+                self._refcounts[key] = count - 1

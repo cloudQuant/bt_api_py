@@ -548,24 +548,23 @@ def barrier(session, snapshot, *, first_id=1, account_balance="100"):
     revision = session.recovery_event_revision()
     private_revision = session.recovery_private_event_revision()
     ingress_revision = session.recovery_private_ingress_revision()
-    rounds = []
-    for offset in (0, 4):
-        rounds.append(
-            {
-                "request_ids": {
-                    "account": first_id + offset,
-                    "positions": first_id + offset + 1,
-                    "orders": first_id + offset + 2,
-                    "trades": first_id + offset + 3,
-                },
-                "account_fingerprint": ACCOUNT,
-                "trading_day": TRADING_DAY,
-                "connection_generation": 4,
-                "snapshot_sha256": snapshot_sha256,
-                "account_snapshot_sha256": account_sha256,
-                "full_snapshot_sha256": full_sha256,
-            }
-        )
+    rounds = [
+        {
+            "request_ids": {
+                "account": first_id + offset,
+                "positions": first_id + offset + 1,
+                "orders": first_id + offset + 2,
+                "trades": first_id + offset + 3,
+            },
+            "account_fingerprint": ACCOUNT,
+            "trading_day": TRADING_DAY,
+            "connection_generation": 4,
+            "snapshot_sha256": snapshot_sha256,
+            "account_snapshot_sha256": account_sha256,
+            "full_snapshot_sha256": full_sha256,
+        }
+        for offset in (0, 4)
+    ]
     material = {
         "schema_version": "bt-api-py.ctp-recovery-query-barrier.v1",
         "stable": True,

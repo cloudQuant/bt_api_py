@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from bt_api_base.logging_factory import get_logger
 

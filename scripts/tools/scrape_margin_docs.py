@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Scrape Binance Margin Trading API docs using Playwright and save as markdown files."""
 
+import logging
 import os
 import time
 
 from playwright.sync_api import sync_playwright
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://developers.binance.com"
 DOCS_DIR = os.path.join(
@@ -289,6 +292,15 @@ def discover_sidebar_links(page):
     }""")
 
 
+def _safe_discover_sidebar_links(page):
+    """Return no links when sidebar discovery fails, with a safe warning."""
+    try:
+        return discover_sidebar_links(page)
+    except Exception as error:
+        logger.warning("Sidebar link discovery failed (%s)", type(error).__name__)
+        return []
+
+
 def main():
     os.makedirs(DOCS_DIR, exist_ok=True)
 
@@ -321,15 +333,12 @@ def main():
                     scraped[filename] = content
 
                 # Try to discover new links from sidebar
-                try:
-                    links = discover_sidebar_links(page)
-                    for link in links:
-                        href = link["href"]
-                        key = href.replace("/docs/margin_trading/", "").lower().rstrip("/")
-                        if key and key not in ALL_PAGES and key not in scraped:
-                            print(f"    Discovered: {key} -> {href}")
-                except Exception:
-                    pass
+                links = _safe_discover_sidebar_links(page)
+                for link in links:
+                    href = link["href"]
+                    key = href.replace("/docs/margin_trading/", "").lower().rstrip("/")
+                    if key and key not in ALL_PAGES and key not in scraped:
+                        print(f"    Discovered: {key} -> {href}")
 
             except Exception as e:
                 print(f"    ERROR: {e}")

@@ -1,3 +1,4 @@
+import logging
 import queue
 import random
 import time
@@ -24,6 +25,7 @@ from bt_api_py.feeds.live_okx_feed import (
 from bt_api_py.functions.utils import read_account_config
 
 pytestmark = [pytest.mark.integration, pytest.mark.network]
+logger = logging.getLogger(__name__)
 
 # from bt_api_py.containers.trades.okx_trade import OkxWssTradeData
 # from bt_api_py.containers.positions.okx_position import OkxPositionData
@@ -47,6 +49,29 @@ def init_req_feed():
     kwargs = generate_kwargs(exchange=OkxExchangeDataSpot)
     live_okx_spot_feed = OkxRequestDataSpot(data_queue, **kwargs)
     return live_okx_spot_feed
+
+
+def _cleanup_open_orders(live_okx_spot_feed):
+    try:
+        open_orders = live_okx_spot_feed.get_open_orders()
+        for order in open_orders.get_data():
+            try:
+                order_data = order.init_data()
+                inst_id = order_data.get_order_symbol_name()
+                order_id = order_data.get_order_id()
+                if order_id:
+                    live_okx_spot_feed.cancel_order(inst_id, order_id=order_id)
+            except Exception as exc:
+                logger.debug(
+                    "Best-effort OKX open-order cleanup failed (exception type: %s)",
+                    type(exc).__name__,
+                )
+        time.sleep(1)
+    except Exception as exc:
+        logger.debug(
+            "Best-effort OKX open-order cleanup failed (exception type: %s)",
+            type(exc).__name__,
+        )
 
 
 @pytest.mark.auth_account
@@ -148,20 +173,7 @@ def test_get_okx_account_data_feed():
     # 下单撤单测试订单功能
     live_okx_spot_feed = init_req_feed()
     # 清理挂单释放保证金
-    try:
-        open_orders = live_okx_spot_feed.get_open_orders()
-        for order in open_orders.get_data():
-            try:
-                order_data = order.init_data()
-                inst_id = order_data.get_order_symbol_name()
-                order_id = order_data.get_order_id()
-                if order_id:
-                    live_okx_spot_feed.cancel_order(inst_id, order_id=order_id)
-            except Exception:
-                pass
-        time.sleep(1)
-    except Exception:
-        pass
+    _cleanup_open_orders(live_okx_spot_feed)
     price_data = live_okx_spot_feed.get_tick("OP-USDT")
     price_data = price_data.get_data()[0].init_data()
     ask_price = round(price_data.get_ask_price() * 1.1, 2)

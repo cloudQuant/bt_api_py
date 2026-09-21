@@ -33,8 +33,7 @@ _CTP_ATEXIT_REGISTERED = False
 if not is_ctp_native_loaded():
     _ctp_err = get_ctp_import_error()
     pytest.exit(
-        f"CTP C++ extension (_ctp) not available: {_ctp_err}. "
-        "Run: git lfs install && git lfs pull",
+        f"CTP C++ extension (_ctp) not available: {_ctp_err}. Run: git lfs install && git lfs pull",
         returncode=1,
     )
 
@@ -97,15 +96,18 @@ INSTRUMENT = os.environ.get("CTP_INSTRUMENT", "SA605")
 EXCHANGE = os.environ.get("CTP_EXCHANGE", "CZCE")
 CONNECT_TIMEOUT = float(os.environ.get("CTP_CONNECT_TIMEOUT", "30"))
 
+
 def _require_ctp_credentials() -> None:
     if not USER_ID or not PASSWORD:
         pytest.fail(
             "CTP_USER_ID/CTP_PASSWORD or SIMNOW_USER_ID/SIMNOW_PASSWORD not set in project .env"
         )
 
+
 def _safe_text(value: object) -> str:
     text = str(value)
     return text.encode("utf-8", errors="backslashreplace").decode("utf-8")
+
 
 EXCHANGE_PARAMS = {
     "broker_id": BROKER_ID,

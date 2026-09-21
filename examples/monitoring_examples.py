@@ -265,7 +265,7 @@ class TradingBotExample:
         await self.initialize()
 
         # Run trading loop
-        for i in range(10):
+        for _ in range(10):
             try:
                 # Place some orders
                 await self.place_order("BTCUSDT", "BUY", 0.01)

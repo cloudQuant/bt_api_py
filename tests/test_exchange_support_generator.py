@@ -32,6 +32,49 @@ def test_renderer_uses_evidence_tiers_without_certified_exchange_counts() -> Non
         assert f"`{entry['tier']}`" in rendered
 
 
+def test_renderer_preserves_entry_rows_order_and_policy_text() -> None:
+    module = _load_module()
+    data = {
+        "policy": {
+            "blocking_python": ["3.11", "3.12"],
+            "canary_python": ["3.13"],
+        },
+        "entries": [
+            {
+                "name": "First Venue",
+                "tier": "certified",
+                "scope": "spot only",
+                "limitations": "read-only metadata",
+            },
+            {
+                "name": "Second Venue",
+                "tier": "experimental",
+                "scope": "linear futures",
+                "limitations": "no write eligibility",
+            },
+        ],
+    }
+
+    rendered = module.render(data)
+
+    assert rendered == "\n".join(
+        [
+            "## Support status",
+            "",
+            "The entries below are evidence tiers, not a count of production-ready exchanges.",
+            "",
+            "| Scope | Tier | Evidence boundary | Current limitation |",
+            "| --- | --- | --- | --- |",
+            "| First Venue | `certified` | spot only | read-only metadata |",
+            "| Second Venue | `experimental` | linear futures | no write eligibility |",
+            "",
+            "Blocking CI supports Python `3.11`, `3.12`; Python `3.13` is canary-only.",
+            "",
+            "See `docs/operations/support-status-policy.md` for the evidence and expiry rules.",
+        ]
+    )
+
+
 def test_replace_marker_block_updates_only_target_section() -> None:
     module = _load_module()
     original = "\n".join(

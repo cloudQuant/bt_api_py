@@ -134,8 +134,7 @@ def generate_csv(exchange_caps: dict[str, list[str]]) -> str:
         caps_set = set(exchange_caps[key])
 
         values = [exchange, asset_type]
-        for cap in all_caps:
-            values.append("1" if cap in caps_set else "0")
+        values.extend("1" if cap in caps_set else "0" for cap in all_caps)
 
         rows.append(",".join(values))
 

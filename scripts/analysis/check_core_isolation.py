@@ -1,32 +1,74 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""Compatibility wrapper for the canonical core-isolation checker."""
+
 from __future__ import annotations
 
-import pathlib
-import re
+import importlib as _importlib
+import runpy as _runpy
+import sys as _sys
+from pathlib import Path as _Path
+from types import ModuleType as _ModuleType
 
-FORBIDDEN = re.compile(
-    r"^\s*(from|import)\s+bt_api_(binance|okx|ctp|ib_web|mt5)\b",
-    re.MULTILINE,
-)
-CORE_DIR = pathlib.Path("bt_api_py")
+_CANONICAL_MODULE = "scripts.check_core_isolation"
+_canonical: _ModuleType | None = None
+_CANONICAL_ATTRIBUTES: set[str] = set()
 
 
-def main() -> int:
-    failures: list[str] = []
-    for py_file in CORE_DIR.rglob("*.py"):
-        text = py_file.read_text(encoding="utf-8")
-        for match in FORBIDDEN.finditer(text):
-            line_number = text[: match.start()].count("\n") + 1
-            failures.append(f"{py_file}:{line_number}: {match.group().strip()}")
+def _load_canonical() -> _ModuleType:
+    global _canonical
+    if _canonical is None:
+        _canonical = _importlib.import_module(_CANONICAL_MODULE)
+    return _canonical
 
-    if failures:
-        print("Core package must not import plugin packages:")
-        for failure in failures:
-            print(f"  {failure}")
-        return 1
-    print("core-plugin-isolation OK")
-    return 0
+
+def __getattr__(name: str):
+    canonical = _load_canonical()
+    if name == "__all__":
+        return getattr(
+            canonical,
+            "__all__",
+            [attribute for attribute in vars(canonical) if not attribute.startswith("_")],
+        )
+    value = getattr(canonical, name)
+    _CANONICAL_ATTRIBUTES.add(name)
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(dir(_load_canonical())))
+
+
+class _ForwardingModule(_ModuleType):
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self.__dict__ or name.startswith("__"):
+            super().__setattr__(name, value)
+            return
+        canonical = _load_canonical()
+        if name in _CANONICAL_ATTRIBUTES or hasattr(canonical, name):
+            _CANONICAL_ATTRIBUTES.add(name)
+            setattr(canonical, name, value)
+        else:
+            super().__setattr__(name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name in self.__dict__:
+            super().__delattr__(name)
+            return
+        if name.startswith("__"):
+            super().__delattr__(name)
+            return
+        canonical = _load_canonical()
+        if name in _CANONICAL_ATTRIBUTES or hasattr(canonical, name):
+            _CANONICAL_ATTRIBUTES.add(name)
+            delattr(canonical, name)
+            return
+        super().__delattr__(name)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _runpy.run_path(
+        str(_Path(__file__).resolve().parents[1] / _Path(__file__).name),
+        run_name="__main__",
+    )
+elif __name__ in _sys.modules:
+    _sys.modules[__name__].__class__ = _ForwardingModule

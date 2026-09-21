@@ -120,12 +120,12 @@ def check_manifest(
     if status_rule is not None:
         checks = (status_rule.get("parameters") or {}).get("required_status_checks") or []
         contexts = {check.get("context", "") for check in checks}
-    for context in required_checks:
-        if context not in contexts:
-            drifts.append(
-                f"{label}: required_status_checks is missing required check '{context}' "
-                f"(has: {sorted(contexts)})"
-            )
+    drifts.extend(
+        f"{label}: required_status_checks is missing required check '{context}' "
+        f"(has: {sorted(contexts)})"
+        for context in required_checks
+        if context not in contexts
+    )
 
     expected_bypass = manifest.get("bypass_actors") or []
     actual_bypass = ruleset.get("bypass_actors") or []

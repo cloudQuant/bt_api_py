@@ -87,6 +87,7 @@ class PositionLimitsMixin:
         if utilization > self.critical_threshold:
             status = LimitStatus.CRITICAL
             restriction = "Position size exceeds limit"
+            warning = ""
         elif utilization > self.warning_threshold:
             status = LimitStatus.WARNING
             restriction = ""
@@ -119,6 +120,7 @@ class PositionLimitsMixin:
         if utilization > self.critical_threshold:
             status = LimitStatus.CRITICAL
             restriction = "Notional exposure exceeds limit"
+            warning = ""
         elif utilization > self.warning_threshold:
             status = LimitStatus.WARNING
             restriction = ""
@@ -151,6 +153,7 @@ class PositionLimitsMixin:
         if utilization > self.critical_threshold:
             status = LimitStatus.CRITICAL
             restriction = "Leverage exceeds limit"
+            warning = ""
         elif utilization > self.warning_threshold:
             status = LimitStatus.WARNING
             restriction = ""
@@ -183,6 +186,7 @@ class PositionLimitsMixin:
         if utilization > self.critical_threshold:
             status = LimitStatus.CRITICAL
             restriction = "Concentration exceeds limit"
+            warning = ""
         elif utilization > self.warning_threshold:
             status = LimitStatus.WARNING
             restriction = ""

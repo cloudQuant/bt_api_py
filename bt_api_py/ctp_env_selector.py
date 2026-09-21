@@ -7,12 +7,15 @@ reason can be displayed in gateway health and smoke reports.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, time
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+
+logger = logging.getLogger(__name__)
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -40,8 +43,8 @@ def _load_default_fronts() -> dict[str, dict[str, str]]:
                         for field in ("td_front", "md_front"):
                             if section.get(field):
                                 defaults[key][field] = str(section[field])
-    except Exception:
-        pass
+    except Exception as error:
+        logger.debug("Could not load CTP front configuration (%s)", type(error).__name__)
     return defaults
 
 

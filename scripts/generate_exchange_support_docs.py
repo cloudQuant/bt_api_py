@@ -23,16 +23,15 @@ def load_data(path: Path = DATA_PATH) -> dict[str, Any]:
 
 def render(data: dict[str, Any]) -> str:
     policy = dict(data["policy"])
-    rows = []
-    for entry in data["entries"]:
-        rows.append(
-            "| {name} | `{tier}` | {scope} | {limitations} |".format(
-                name=entry["name"],
-                tier=entry["tier"],
-                scope=entry["scope"],
-                limitations=entry["limitations"],
-            )
+    rows = [
+        "| {name} | `{tier}` | {scope} | {limitations} |".format(
+            name=entry["name"],
+            tier=entry["tier"],
+            scope=entry["scope"],
+            limitations=entry["limitations"],
         )
+        for entry in data["entries"]
+    ]
     return "\n".join(
         [
             "## Support status",

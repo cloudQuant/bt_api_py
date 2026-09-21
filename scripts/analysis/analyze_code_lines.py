@@ -1,193 +1,74 @@
 #!/usr/bin/env python3
-"""
-代码行数分析脚本
-分析项目中的代码行数，按文件类型和目录统计
-"""
+"""Compatibility wrapper for the canonical code-line analyzer."""
 
-from collections import defaultdict
-from pathlib import Path
+from __future__ import annotations
 
+import importlib as _importlib
+import runpy as _runpy
+import sys as _sys
+from pathlib import Path as _Path
+from types import ModuleType as _ModuleType
 
-def should_skip(path: Path) -> bool:
-    """判断是否应该跳过该路径"""
-    skip_dirs = {
-        ".git",
-        "__pycache__",
-        ".pytest_cache",
-        "node_modules",
-        ".venv",
-        "venv",
-        "env",
-        ".env",
-        "dist",
-        "build",
-        ".egg-info",
-        ".tox",
-        ".mypy_cache",
-        ".ruff_cache",
-        ".agents",
-        ".claude",
-        ".cursor",
-        ".gemini",
-        ".windsurf",
-        "_bmad",
-        "_bmad-output",
-        ".benchmarks",
-        ".kiro",
-    }
-
-    # 检查路径的任何部分是否在跳过列表中
-    return any(part in skip_dirs or part.startswith(".") for part in path.parts)
+_CANONICAL_MODULE = "scripts.analyze_code_lines"
+_canonical: _ModuleType | None = None
+_CANONICAL_ATTRIBUTES: set[str] = set()
 
 
-def count_lines(file_path: Path) -> tuple[int, int, int]:
-    """
-    统计文件行数
-    返回: (总行数, 代码行数, 空行数)
-    """
-    try:
-        with open(file_path, encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-            total = len(lines)
-            blank = sum(1 for line in lines if line.strip() == "")
-            code = total - blank
-            return total, code, blank
-    except Exception as e:
-        print(f"警告: 无法读取文件 {file_path}: {e}")
-        return 0, 0, 0
+def _load_canonical() -> _ModuleType:
+    global _canonical
+    if _canonical is None:
+        _canonical = _importlib.import_module(_CANONICAL_MODULE)
+    return _canonical
 
 
-def analyze_project(root_dir: str = ".") -> dict:
-    """分析项目代码行数"""
-    root_path = Path(root_dir).resolve()
-
-    stats = {
-        "by_extension": defaultdict(lambda: {"files": 0, "total": 0, "code": 0, "blank": 0}),
-        "by_directory": defaultdict(lambda: {"files": 0, "total": 0, "code": 0, "blank": 0}),
-        "total": {"files": 0, "total": 0, "code": 0, "blank": 0},
-    }
-
-    # 只统计这些代码文件类型
-    code_extensions = {
-        ".py",
-        ".pyx",
-        ".pxd",  # Python
-        ".js",
-        ".jsx",
-        ".ts",
-        ".tsx",  # JavaScript/TypeScript
-        ".java",
-        ".kt",  # Java/Kotlin
-        ".c",
-        ".cpp",
-        ".cc",
-        ".h",
-        ".hpp",  # C/C++
-        ".go",  # Go
-        ".rs",  # Rust
-        ".rb",  # Ruby
-        ".php",  # PHP
-        ".swift",  # Swift
-        ".m",
-        ".mm",  # Objective-C
-        ".sh",
-        ".bash",  # Shell
-        ".sql",  # SQL
-        ".yaml",
-        ".yml",  # YAML
-        ".json",  # JSON
-        ".xml",  # XML
-        ".md",  # Markdown
-        ".txt",  # Text
-    }
-
-    for file_path in root_path.rglob("*"):
-        if not file_path.is_file():
-            continue
-
-        if should_skip(file_path.relative_to(root_path)):
-            continue
-
-        ext = file_path.suffix.lower()
-        if ext not in code_extensions:
-            continue
-
-        total, code, blank = count_lines(file_path)
-
-        if total == 0:
-            continue
-
-        # 按扩展名统计
-        stats["by_extension"][ext]["files"] += 1
-        stats["by_extension"][ext]["total"] += total
-        stats["by_extension"][ext]["code"] += code
-        stats["by_extension"][ext]["blank"] += blank
-
-        # 按目录统计
-        rel_path = file_path.relative_to(root_path)
-        top_dir = rel_path.parts[0] if len(rel_path.parts) > 1 else "(root)"
-
-        stats["by_directory"][top_dir]["files"] += 1
-        stats["by_directory"][top_dir]["total"] += total
-        stats["by_directory"][top_dir]["code"] += code
-        stats["by_directory"][top_dir]["blank"] += blank
-
-        # 总计
-        stats["total"]["files"] += 1
-        stats["total"]["total"] += total
-        stats["total"]["code"] += code
-        stats["total"]["blank"] += blank
-
-    return stats
-
-
-def print_stats(stats: dict):
-    """打印统计结果"""
-    print("=" * 80)
-    print("代码行数统计报告")
-    print("=" * 80)
-
-    # 总计
-    print("\n【总计】")
-    print(f"文件数: {stats['total']['files']:,}")
-    print(f"总行数: {stats['total']['total']:,}")
-    print(f"代码行: {stats['total']['code']:,}")
-    print(f"空白行: {stats['total']['blank']:,}")
-
-    # 按文件类型统计
-    print("\n【按文件类型统计】")
-    print(f"{'类型':<10} {'文件数':>8} {'总行数':>12} {'代码行':>12} {'空白行':>12}")
-    print("-" * 80)
-
-    sorted_ext = sorted(stats["by_extension"].items(), key=lambda x: x[1]["code"], reverse=True)
-
-    for ext, data in sorted_ext:
-        print(
-            f"{ext:<10} {data['files']:>8,} {data['total']:>12,} "
-            f"{data['code']:>12,} {data['blank']:>12,}"
+def __getattr__(name: str):
+    canonical = _load_canonical()
+    if name == "__all__":
+        return getattr(
+            canonical,
+            "__all__",
+            [attribute for attribute in vars(canonical) if not attribute.startswith("_")],
         )
+    value = getattr(canonical, name)
+    _CANONICAL_ATTRIBUTES.add(name)
+    return value
 
-    # 按目录统计
-    print("\n【按目录统计】")
-    print(f"{'目录':<30} {'文件数':>8} {'总行数':>12} {'代码行':>12} {'空白行':>12}")
-    print("-" * 80)
 
-    sorted_dir = sorted(stats["by_directory"].items(), key=lambda x: x[1]["code"], reverse=True)
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(dir(_load_canonical())))
 
-    for dir_name, data in sorted_dir:
-        print(
-            f"{dir_name:<30} {data['files']:>8,} {data['total']:>12,} "
-            f"{data['code']:>12,} {data['blank']:>12,}"
-        )
 
-    print("=" * 80)
+class _ForwardingModule(_ModuleType):
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in self.__dict__ or name.startswith("__"):
+            super().__setattr__(name, value)
+            return
+        canonical = _load_canonical()
+        if name in _CANONICAL_ATTRIBUTES or hasattr(canonical, name):
+            _CANONICAL_ATTRIBUTES.add(name)
+            setattr(canonical, name, value)
+        else:
+            super().__setattr__(name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name in self.__dict__:
+            super().__delattr__(name)
+            return
+        if name.startswith("__"):
+            super().__delattr__(name)
+            return
+        canonical = _load_canonical()
+        if name in _CANONICAL_ATTRIBUTES or hasattr(canonical, name):
+            _CANONICAL_ATTRIBUTES.add(name)
+            delattr(canonical, name)
+            return
+        super().__delattr__(name)
 
 
 if __name__ == "__main__":
-    import sys
-
-    root = sys.argv[1] if len(sys.argv) > 1 else "."
-    print(f"正在分析目录: {Path(root).resolve()}\n")
-
-    stats = analyze_project(root)
-    print_stats(stats)
+    _runpy.run_path(
+        str(_Path(__file__).resolve().parents[1] / _Path(__file__).name),
+        run_name="__main__",
+    )
+elif __name__ in _sys.modules:
+    _sys.modules[__name__].__class__ = _ForwardingModule

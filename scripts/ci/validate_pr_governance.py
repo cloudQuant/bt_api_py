@@ -16,12 +16,14 @@ import argparse
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 VALID_TARGETS = {"dev", "master", "code-optimization"}
 RISK_LABELS = {"risk:r0", "risk:r1", "risk:r2", "risk:r3"}
-SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+ZERO_SHA = "0" * 40
 EVIDENCE_RE = re.compile(r"复现|repro|regression|回归|pytest|test", re.IGNORECASE)
 
 EXIT_OK = 0
@@ -29,15 +31,119 @@ EXIT_VIOLATION = 1
 EXIT_INPUT_ERROR = 2
 
 
+def _raise_input_error(message: str) -> NoReturn:
+    print(f"{EXIT_INPUT_ERROR}: {message}", file=sys.stderr)
+    raise SystemExit(EXIT_INPUT_ERROR)
+
+
 def read_context(raw_path: str) -> dict[str, Any]:
-    if raw_path == "-":
-        return json.loads(sys.stdin.read())
     try:
-        return json.loads(Path(raw_path).read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise SystemExit(f"{EXIT_INPUT_ERROR}: file not found: {raw_path}") from exc
+        if raw_path == "-":
+            context = json.loads(sys.stdin.read())
+        else:
+            context = json.loads(Path(raw_path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _raise_input_error(f"file not found: {raw_path}")
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"{EXIT_INPUT_ERROR}: invalid JSON: {exc}") from exc
+        _raise_input_error(f"invalid JSON: {exc}")
+    if not isinstance(context, dict):
+        _raise_input_error("top-level context must be a JSON object")
+    return context
+
+
+def _is_submodule_path(path: Any) -> bool:
+    normalized = str(path).rstrip("/")
+    if normalized == ".gitmodules":
+        return True
+    parts = normalized.split("/")
+    return (
+        len(parts) == 2
+        and parts[0] == "bt_api"
+        and parts[1].startswith("bt_api_")
+        and len(parts[1]) > len("bt_api_")
+    )
+
+
+def _is_gitlink_path(path: str) -> bool:
+    return path != ".gitmodules" and _is_submodule_path(path)
+
+
+def _validate_v2_gitlinks(
+    context: dict[str, Any], changed_files: list[str], violations: list[str]
+) -> None:
+    raw_errors = context.get("collection_errors")
+    if not isinstance(raw_errors, list):
+        violations.append("schema_version 2 requires a collection_errors list")
+    elif raw_errors:
+        details = "; ".join(str(error) for error in raw_errors)
+        violations.append(f"collection_errors is non-empty: {details}")
+
+    raw_records = context.get("gitlink_changes")
+    if not isinstance(raw_records, list):
+        violations.append("schema_version 2 requires a gitlink_changes list")
+        records: list[Any] = []
+    else:
+        records = raw_records
+
+    changed_gitlinks = [path for path in changed_files if _is_gitlink_path(path)]
+    changed_counts = Counter(changed_gitlinks)
+    for path, count in changed_counts.items():
+        if count > 1:
+            violations.append(f"duplicate gitlink path in changed_files: {path}")
+
+    record_paths: list[str] = []
+    for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            violations.append(f"gitlink_changes[{index}] must be an object")
+            continue
+
+        path = record.get("path")
+        if not isinstance(path, str) or not _is_gitlink_path(path):
+            violations.append(
+                f"gitlink_changes[{index}].path must be a bt_api/bt_api_<name> gitlink path"
+            )
+            continue
+        record_paths.append(path)
+
+        operation = record.get("operation")
+        if operation != "update":
+            violations.append(
+                f"gitlink_changes[{index}] operation {operation!r} is not an accepted update"
+            )
+            continue
+
+        old_sha = record.get("old_sha")
+        new_sha = record.get("new_sha")
+        if (
+            not isinstance(old_sha, str)
+            or not SHA_RE.fullmatch(old_sha)
+            or old_sha == ZERO_SHA
+            or not isinstance(new_sha, str)
+            or not SHA_RE.fullmatch(new_sha)
+            or new_sha == ZERO_SHA
+            or old_sha.lower() == new_sha.lower()
+        ):
+            violations.append(
+                f"gitlink update {path!r} requires distinct, non-zero full 40-hex old/new SHA values"
+            )
+
+    record_counts = Counter(record_paths)
+    for path, count in record_counts.items():
+        if count > 1:
+            violations.append(f"duplicate gitlink record path: {path}")
+        if changed_counts.get(path, 0) != 1:
+            violations.append(
+                f"gitlink record path {path!r} must map to exactly one changed_files entry"
+            )
+
+    violations.extend(
+        f"gitlink path {path!r} requires exactly one matching gitlink_changes record"
+        for path in changed_gitlinks
+        if record_counts.get(path, 0) != 1
+    )
+
+    if ".gitmodules" in changed_files and not record_paths:
+        violations.append(".gitmodules changed without a corresponding gitlink_changes record")
 
 
 def validate(context: dict[str, Any]) -> list[str]:
@@ -45,7 +151,13 @@ def validate(context: dict[str, Any]) -> list[str]:
     target = context.get("target_branch")
     labels = set(context.get("labels") or [])
     body = context.get("body") or ""
-    changed = context.get("changed_files") or []
+    raw_changed = context.get("changed_files", [])
+    if not isinstance(raw_changed, list) or any(not isinstance(path, str) for path in raw_changed):
+        violations.append("changed_files must be a list of path strings")
+        changed: list[str] = []
+    else:
+        changed = raw_changed
+    submodule_paths = [path for path in changed if _is_submodule_path(path)]
 
     if target not in VALID_TARGETS:
         violations.append(
@@ -70,20 +182,17 @@ def validate(context: dict[str, Any]) -> list[str]:
                 "master PR lacks reproduction/regression/test evidence in the description"
             )
 
-    if context.get("submodules_changed"):
-        for key in ("old_sha", "new_sha"):
-            value = context.get(key)
-            if not value or not SHA_RE.match(str(value)):
-                violations.append(
-                    f"submodule change requires a full 40-hex {key} "
-                    "(plugin PR link and rollback SHA belong in the description)"
-                )
-        if not changed or not any(
-            str(path).startswith(("bt_api/", ".gitmodules")) for path in changed
-        ):
-            violations.append(
-                "submodules_changed=true but no bt_api/ or .gitmodules path in changed_files"
-            )
+    schema_version = context.get("schema_version")
+    if type(schema_version) is int and schema_version == 2:
+        if "changed_files" not in context:
+            violations.append("schema_version 2 requires a changed_files list")
+        _validate_v2_gitlinks(context, changed, violations)
+    elif submodule_paths or context.get("submodules_changed") is True:
+        violations.append(
+            "submodule metadata/gitlink path(s) "
+            f"{submodule_paths} require schema_version 2 and per-path gitlink_changes "
+            "records; legacy global old_sha/new_sha fields are not authoritative"
+        )
 
     return violations
 

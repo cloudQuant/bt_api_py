@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-20T03:23:05+08:00",
+  "ruff_version": "ruff 0.16.2",
+  "scope": {
+    "pattern": "bt_api/bt_api_*",
+    "command": "ruff format --check bt_api/<module>"
+  },
+  "modules": [
+    "bt_api_base",
+    "bt_api_binance",
+    "bt_api_bitget",
+    "bt_api_bybit",
+    "bt_api_coinbase",
+    "bt_api_ctp",
+    "bt_api_dydx",
+    "bt_api_gateio",
+    "bt_api_htx",
+    "bt_api_hyperliquid",
+    "bt_api_ib_web",
+    "bt_api_kraken",
+    "bt_api_mexc",
+    "bt_api_mt5",
+    "bt_api_okx"
+  ],
+  "format": {
+    "total": 452,
+    "by_module": {
+      "bt_api_base": 33,
+      "bt_api_binance": 100,
+      "bt_api_bitget": 10,
+      "bt_api_bybit": 18,
+      "bt_api_coinbase": 23,
+      "bt_api_ctp": 25,
+      "bt_api_dydx": 20,
+      "bt_api_gateio": 25,
+      "bt_api_htx": 23,
+      "bt_api_hyperliquid": 23,
+      "bt_api_ib_web": 40,
+      "bt_api_kraken": 7,
+      "bt_api_mexc": 12,
+      "bt_api_mt5": 7,
+      "bt_api_okx": 86
+    }
+  },
+  "notes": "Submodule format ratchet baseline. Per-module counts may only decrease; use --update when no module grows and at least one module improves, or --force-update for an intentional rebaseline."
+}

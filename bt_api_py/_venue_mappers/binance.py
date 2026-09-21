@@ -90,6 +90,75 @@ def _matching_row(result: Any, symbol: str) -> dict[str, Any]:
     return matching[0] if matching else (source[0] if len(source) == 1 else {})
 
 
+def _build_binance_readiness_assessment(
+    *,
+    quantity_ready: bool,
+    min_ready: bool | None,
+    lot_ready: bool | None,
+    max_ready: bool | None,
+    permission: dict[str, Any],
+    position_mode_ready: bool | None,
+    instrument_live: bool | None,
+    margin_mode_ready: bool | None,
+    leverage_ready: bool | None,
+    spec: Any,
+    spec_error: str | None,
+    expected_mode_valid: bool,
+) -> tuple[dict[str, bool | None], list[str], bool, bool]:
+    checks = {
+        "quantity_native": quantity_ready,
+        "quantity_min_size": min_ready,
+        "quantity_lot_size": lot_ready,
+        "quantity_max_size": max_ready,
+        "trading_permission": permission["can_trade"],
+        "position_mode": position_mode_ready,
+        "instrument_live": instrument_live,
+        "margin_mode": margin_mode_ready,
+        "leverage": leverage_ready,
+    }
+
+    reasons: list[str] = []
+    if not quantity_ready:
+        reasons.append("invalid_quantity_native")
+    if spec is None:
+        reasons.append(f"instrument_rules_unavailable:{spec_error}")
+    elif quantity_ready:
+        if min_ready is False:
+            reasons.append("quantity_below_min_size")
+        if lot_ready is False:
+            reasons.append("quantity_not_multiple_of_lot_size")
+        elif lot_ready is None:
+            reasons.append("lot_size_unproven")
+        if max_ready is False:
+            reasons.append("quantity_above_max_size")
+        elif max_ready is None:
+            reasons.append("max_size_unproven")
+    if permission["can_trade"] is False:
+        reasons.append("trading_permission_denied")
+    elif permission["can_trade"] is None:
+        reasons.append("trading_permission_unproven")
+    if not expected_mode_valid:
+        reasons.append("invalid_expected_position_mode")
+    elif position_mode_ready is False:
+        reasons.append("position_mode_mismatch")
+    elif position_mode_ready is None:
+        reasons.append("position_mode_unproven")
+    if instrument_live is False:
+        reasons.append("instrument_not_live")
+    elif instrument_live is None:
+        reasons.append("instrument_state_unproven")
+    if margin_mode_ready is False:
+        reasons.append("margin_mode_mismatch")
+    elif margin_mode_ready is None:
+        reasons.append("margin_mode_unproven")
+    if leverage_ready is not True:
+        reasons.append("leverage_unproven")
+
+    definite_failure = any(check is False for check in checks.values())
+    ready = all(check is True for check in checks.values())
+    return checks, reasons, definite_failure, ready
+
+
 def normalize_order_readiness(
     exchange_name: str,
     symbol: str,
@@ -193,57 +262,20 @@ def normalize_order_readiness(
         if configured_margin_mode in {"cross", "isolated"}
         else None
     )
-    checks = {
-        "quantity_native": quantity_ready,
-        "quantity_min_size": min_ready,
-        "quantity_lot_size": lot_ready,
-        "quantity_max_size": max_ready,
-        "trading_permission": permission["can_trade"],
-        "position_mode": position_mode_ready,
-        "instrument_live": instrument_live,
-        "margin_mode": margin_mode_ready,
-        "leverage": leverage_ready,
-    }
-
-    reasons: list[str] = []
-    if not quantity_ready:
-        reasons.append("invalid_quantity_native")
-    if spec is None:
-        reasons.append(f"instrument_rules_unavailable:{spec_error}")
-    elif quantity_ready:
-        if min_ready is False:
-            reasons.append("quantity_below_min_size")
-        if lot_ready is False:
-            reasons.append("quantity_not_multiple_of_lot_size")
-        elif lot_ready is None:
-            reasons.append("lot_size_unproven")
-        if max_ready is False:
-            reasons.append("quantity_above_max_size")
-        elif max_ready is None:
-            reasons.append("max_size_unproven")
-    if permission["can_trade"] is False:
-        reasons.append("trading_permission_denied")
-    elif permission["can_trade"] is None:
-        reasons.append("trading_permission_unproven")
-    if not expected_mode_valid:
-        reasons.append("invalid_expected_position_mode")
-    elif position_mode_ready is False:
-        reasons.append("position_mode_mismatch")
-    elif position_mode_ready is None:
-        reasons.append("position_mode_unproven")
-    if instrument_live is False:
-        reasons.append("instrument_not_live")
-    elif instrument_live is None:
-        reasons.append("instrument_state_unproven")
-    if margin_mode_ready is False:
-        reasons.append("margin_mode_mismatch")
-    elif margin_mode_ready is None:
-        reasons.append("margin_mode_unproven")
-    if leverage_ready is not True:
-        reasons.append("leverage_unproven")
-
-    definite_failure = any(check is False for check in checks.values())
-    ready = all(check is True for check in checks.values())
+    checks, reasons, definite_failure, ready = _build_binance_readiness_assessment(
+        quantity_ready=quantity_ready,
+        min_ready=min_ready,
+        lot_ready=lot_ready,
+        max_ready=max_ready,
+        permission=permission,
+        position_mode_ready=position_mode_ready,
+        instrument_live=instrument_live,
+        margin_mode_ready=margin_mode_ready,
+        leverage_ready=leverage_ready,
+        spec=spec,
+        spec_error=spec_error,
+        expected_mode_valid=expected_mode_valid,
+    )
     return {
         "ready": ready,
         "definite_failure": definite_failure,

@@ -11,9 +11,14 @@ import zipfile
 from importlib.resources import files
 from pathlib import Path
 
+import pytest
 import yaml
 
 from bt_api_py._plugin_catalog import PluginCatalog
+from scripts.ci.offline_pip import WheelhousePathError, pip_source_environment
+from scripts.ci.verify_wheel_contract import _isolated_subprocess_env
+from scripts.ci.verify_wheel_contract import verify as verify_wheel_contract
+from tests.offline_wheelhouse import build_project_wheelhouse
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WHEEL_CONTRACT_SCRIPT = REPOSITORY_ROOT / "scripts" / "ci" / "verify_wheel_contract.py"
@@ -61,8 +66,8 @@ def test_core_reference_ci_supplement_uses_an_immutable_public_okx_source() -> N
     ) in okx_requirement
 
 
-def test_dev_extra_declares_no_isolation_build_toolchain() -> None:
-    """The full suite invokes ``python -m build --no-isolation`` directly."""
+def test_build_frontend_and_pep517_toolchain_are_declared() -> None:
+    """The installed-wheel test uses the project PEP 517 build-system requirements."""
     with (REPOSITORY_ROOT / "pyproject.toml").open("rb") as config_file:
         config = tomllib.load(config_file)
 
@@ -76,12 +81,13 @@ def test_dev_extra_declares_no_isolation_build_toolchain() -> None:
 
 
 def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Path) -> None:
+    wheelhouse = build_project_wheelhouse(tmp_path / "wheelhouse")
     dist_dir = tmp_path / "dist"
     build = subprocess.run(
-        [sys.executable, "-m", "build", "--no-isolation", "--outdir", str(dist_dir)],
+        [sys.executable, "-m", "build", "--outdir", str(dist_dir)],
         cwd=REPOSITORY_ROOT,
         capture_output=True,
-        env=_build_subprocess_env(),
+        env=pip_source_environment(_build_subprocess_env(), wheelhouse),
         text=True,
     )
     assert build.returncode == 0, build.stderr
@@ -95,6 +101,8 @@ def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Pa
             str(dist_dir),
             "--receipt",
             str(receipt_path),
+            "--wheelhouse",
+            str(wheelhouse),
         ],
         cwd=tmp_path,
         capture_output=True,
@@ -119,6 +127,46 @@ def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Pa
     assert receipt["doctor"]["exit_code"] == 0
     assert receipt["doctor"]["payload"]["name"] == "core-reference"
     assert "site-packages/bt_api_py" in receipt["package_file"].replace("\\", "/")
+    assert "site-packages/bt_api_base" in receipt["base_package_file"].replace("\\", "/")
+    assert receipt["probe"]["base_package_file"] == receipt["base_package_file"]
+
+
+def test_wheel_contract_rejects_invalid_wheelhouse_before_reading_artifacts(
+    tmp_path: Path,
+) -> None:
+    for wheelhouse in (Path("relative-wheelhouse"), tmp_path / "missing-wheelhouse"):
+        with pytest.raises(WheelhousePathError):
+            verify_wheel_contract(tmp_path / "missing-dist", wheelhouse=wheelhouse)
+
+
+def test_wheel_contract_subprocess_uses_only_the_explicit_wheelhouse(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("PIP_INDEX_URL", "https://invalid.example/simple")
+    monkeypatch.setenv("PIP_EXTRA_INDEX_URL", "https://invalid.example/extra")
+    monkeypatch.setenv("PIP_FIND_LINKS", "https://invalid.example/wheels")
+    monkeypatch.setenv("PIP_TRUSTED_HOST", "invalid.example")
+
+    environment = _isolated_subprocess_env(tmp_path)
+
+    assert environment["PIP_NO_INDEX"] == "1"
+    assert environment["PIP_FIND_LINKS"] == str(tmp_path.resolve())
+    assert environment["PIP_NO_CACHE_DIR"] == "1"
+    assert environment["PIP_CONFIG_FILE"] == os.devnull
+    assert not {"PIP_INDEX_URL", "PIP_EXTRA_INDEX_URL", "PIP_TRUSTED_HOST"} & set(environment)
+
+
+def test_wheel_contract_cli_loads_from_an_unrelated_working_directory(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(WHEEL_CONTRACT_SCRIPT), "--help"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--wheelhouse" in result.stdout
 
 
 def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
@@ -156,8 +204,12 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
     smoke_job = publish_data["jobs"]["smoke-install-testpypi"]
     assert smoke_job["needs"] == ["build", "publish-testpypi"]
     smoke_steps = smoke_job["steps"]
-    assert smoke_steps[0]["uses"] == "actions/checkout@v6"
-    assert smoke_steps[0]["with"]["ref"] == "${{ inputs.expected_sha }}"
+    checkouts = [
+        step for step in smoke_steps if step.get("uses", "").startswith("actions/checkout@")
+    ]
+    assert len(checkouts) == 1
+    assert checkouts[0]["uses"] == "actions/checkout@v6"
+    assert checkouts[0]["with"]["ref"] == "${{ needs.build.outputs.source_sha }}"
 
     smoke_install = next(
         step
@@ -170,8 +222,17 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
     assert 'test -n "$VERSION"' in smoke_install_run
     assert '"bt_api_py[core-reference]==$VERSION"' in smoke_install_run
     assert '-r "$GITHUB_WORKSPACE/requirements-ci-core-reference.txt"' in smoke_install_run
-    assert "--index-url https://test.pypi.org/simple/" in smoke_install_run
-    assert "--extra-index-url https://pypi.org/simple/" in smoke_install_run
+    download_segment = smoke_install_run.split("python3 -m pip download", maxsplit=1)[1].split(
+        'if [[ "$downloaded" -ne 1 ]]', maxsplit=1
+    )[0]
+    local_install_segment = smoke_install_run.split('"$venv_python" -m pip install', maxsplit=1)[
+        1
+    ].split("printf 'SMOKE_VENV", maxsplit=1)[0]
+    assert "--index-url https://test.pypi.org/simple/" in download_segment
+    assert "https://pypi.org/simple/" not in download_segment
+    assert "--index-url https://pypi.org/simple/" in local_install_segment
+    assert "https://test.pypi.org/simple/" not in local_install_segment
+    assert "--extra-index-url" not in local_install_segment
 
     doctor_contract = next(
         step
@@ -194,12 +255,13 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
 
 
 def test_built_wheel_contains_catalog_but_not_bytecode(tmp_path: Path) -> None:
+    wheelhouse = build_project_wheelhouse(tmp_path / "wheelhouse")
     dist_dir = tmp_path / "dist"
     build = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(dist_dir)],
+        [sys.executable, "-m", "build", "--wheel", "--outdir", str(dist_dir)],
         cwd=REPOSITORY_ROOT,
         capture_output=True,
-        env=_build_subprocess_env(),
+        env=pip_source_environment(_build_subprocess_env(), wheelhouse),
         text=True,
     )
     assert build.returncode == 0, build.stderr

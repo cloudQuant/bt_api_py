@@ -60,6 +60,99 @@ def _position_mode(value: Any) -> str | None:
     return {"net_mode": "net", "long_short_mode": "dual_side"}.get(value, value)
 
 
+def _build_okx_readiness_assessment(
+    *,
+    quantity_ready: bool,
+    min_size_ready: bool | None,
+    lot_size_ready: bool | None,
+    permission: dict[str, Any],
+    account_level_ready: bool | None,
+    position_mode_matches: bool | None,
+    instrument_ready: bool,
+    leverage_ready: bool | None,
+    max_buy_ready: bool | None,
+    max_sell_ready: bool | None,
+    expected_mode_valid: bool,
+    matching_instruments: Any,
+    instrument_state: Any,
+) -> tuple[dict[str, bool | None], list[str], bool, bool]:
+    checks = {
+        "quantity_native": quantity_ready,
+        "quantity_min_size": min_size_ready,
+        "quantity_lot_size": lot_size_ready,
+        "trading_permission": permission["can_trade"],
+        "derivatives_account_level": account_level_ready,
+        "position_mode": position_mode_matches,
+        "instrument_live": instrument_ready,
+        "leverage": leverage_ready,
+        "max_buy": max_buy_ready,
+        "max_sell": max_sell_ready,
+    }
+
+    reasons: list[str] = []
+    if not quantity_ready:
+        reasons.append("invalid_quantity_native")
+    elif matching_instruments:
+        if min_size_ready is False:
+            reasons.append("quantity_below_min_size")
+        elif min_size_ready is None:
+            reasons.append("min_size_unproven")
+        if lot_size_ready is False:
+            reasons.append("quantity_not_multiple_of_lot_size")
+        elif lot_size_ready is None:
+            reasons.append("lot_size_unproven")
+    if permission["can_trade"] is False:
+        reasons.append("trading_permission_denied")
+    elif permission["can_trade"] is None:
+        reasons.append("trading_permission_unproven")
+    if account_level_ready is False:
+        reasons.append("account_level_has_no_derivatives")
+    elif account_level_ready is None:
+        reasons.append("account_level_unproven")
+    if not expected_mode_valid:
+        reasons.append("invalid_expected_position_mode")
+    elif position_mode_matches is False:
+        reasons.append("position_mode_mismatch")
+    elif position_mode_matches is None:
+        reasons.append("position_mode_unproven")
+    if not matching_instruments:
+        reasons.append("instrument_not_enabled")
+    elif instrument_state != "live":
+        reasons.append("instrument_not_live")
+    if leverage_ready is False:
+        reasons.append("leverage_configuration_missing")
+    elif leverage_ready is None:
+        reasons.append("leverage_unproven")
+    if max_buy_ready is False:
+        reasons.append("max_buy_insufficient")
+    elif max_buy_ready is None:
+        reasons.append("max_buy_unproven")
+    if max_sell_ready is False:
+        reasons.append("max_sell_insufficient")
+    elif max_sell_ready is None:
+        reasons.append("max_sell_unproven")
+
+    definite_failure = any(
+        check is False
+        for name, check in checks.items()
+        if name
+        in {
+            "quantity_native",
+            "quantity_min_size",
+            "quantity_lot_size",
+            "trading_permission",
+            "derivatives_account_level",
+            "position_mode",
+            "instrument_live",
+            "leverage",
+            "max_buy",
+            "max_sell",
+        }
+    )
+    ready = all(check is True for check in checks.values())
+    return checks, reasons, definite_failure, ready
+
+
 def normalize_order_readiness(
     exchange_name: str,
     symbol: str,
@@ -161,80 +254,21 @@ def normalize_order_readiness(
                 # exponents. Such a quantity remains unproven and cannot pass.
                 lot_size_ready = None
     instrument_ready = bool(matching_instruments) and instrument_state == "live"
-    checks = {
-        "quantity_native": quantity_ready,
-        "quantity_min_size": min_size_ready,
-        "quantity_lot_size": lot_size_ready,
-        "trading_permission": permission["can_trade"],
-        "derivatives_account_level": account_level_ready,
-        "position_mode": position_mode_matches,
-        "instrument_live": instrument_ready,
-        "leverage": leverage_ready,
-        "max_buy": max_buy_ready,
-        "max_sell": max_sell_ready,
-    }
-
-    reasons: list[str] = []
-    if not quantity_ready:
-        reasons.append("invalid_quantity_native")
-    elif matching_instruments:
-        if min_size_ready is False:
-            reasons.append("quantity_below_min_size")
-        elif min_size_ready is None:
-            reasons.append("min_size_unproven")
-        if lot_size_ready is False:
-            reasons.append("quantity_not_multiple_of_lot_size")
-        elif lot_size_ready is None:
-            reasons.append("lot_size_unproven")
-    if permission["can_trade"] is False:
-        reasons.append("trading_permission_denied")
-    elif permission["can_trade"] is None:
-        reasons.append("trading_permission_unproven")
-    if account_level_ready is False:
-        reasons.append("account_level_has_no_derivatives")
-    elif account_level_ready is None:
-        reasons.append("account_level_unproven")
-    if not expected_mode_valid:
-        reasons.append("invalid_expected_position_mode")
-    elif position_mode_matches is False:
-        reasons.append("position_mode_mismatch")
-    elif position_mode_matches is None:
-        reasons.append("position_mode_unproven")
-    if not matching_instruments:
-        reasons.append("instrument_not_enabled")
-    elif instrument_state != "live":
-        reasons.append("instrument_not_live")
-    if leverage_ready is False:
-        reasons.append("leverage_configuration_missing")
-    elif leverage_ready is None:
-        reasons.append("leverage_unproven")
-    if max_buy_ready is False:
-        reasons.append("max_buy_insufficient")
-    elif max_buy_ready is None:
-        reasons.append("max_buy_unproven")
-    if max_sell_ready is False:
-        reasons.append("max_sell_insufficient")
-    elif max_sell_ready is None:
-        reasons.append("max_sell_unproven")
-
-    definite_failure = any(
-        check is False
-        for name, check in checks.items()
-        if name
-        in {
-            "quantity_native",
-            "quantity_min_size",
-            "quantity_lot_size",
-            "trading_permission",
-            "derivatives_account_level",
-            "position_mode",
-            "instrument_live",
-            "leverage",
-            "max_buy",
-            "max_sell",
-        }
+    checks, reasons, definite_failure, ready = _build_okx_readiness_assessment(
+        quantity_ready=quantity_ready,
+        min_size_ready=min_size_ready,
+        lot_size_ready=lot_size_ready,
+        permission=permission,
+        account_level_ready=account_level_ready,
+        position_mode_matches=position_mode_matches,
+        instrument_ready=instrument_ready,
+        leverage_ready=leverage_ready,
+        max_buy_ready=max_buy_ready,
+        max_sell_ready=max_sell_ready,
+        expected_mode_valid=expected_mode_valid,
+        matching_instruments=matching_instruments,
+        instrument_state=instrument_state,
     )
-    ready = all(check is True for check in checks.values())
     return {
         "ready": ready,
         "definite_failure": definite_failure,

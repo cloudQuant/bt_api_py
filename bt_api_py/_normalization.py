@@ -38,6 +38,8 @@ _DEFINITE_REJECT_CODES_BY_VENUE = {
         {
             "50101",  # API key does not match the selected environment
             "50119",  # API key does not exist
+            "50120",  # API key lacks permission for this function
+            "50123",  # API key lacks crypto trading permission
             "51000",  # invalid request parameter
             "51008",  # insufficient balance or margin
             "51010",  # request unsupported by the account mode
@@ -2328,6 +2330,63 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
     raise CapabilityNotSupportedError(operation, detail="no normalized result mapper")
 
 
+def _orderbook_event_fields(row, exchange_name):
+    def levels(side):
+        values = row.get(side)
+        if values is None:
+            prefix = "bid" if side == "bids" else "ask"
+            values = zip(
+                row.get(prefix + "_price_list") or [],
+                row.get(prefix + "_volume_list") or [],
+                strict=True,
+            )
+        return [(number(level[0]), number(level[1])) for level in values]
+
+    raw_sequence = pick(row, "sequence", "sequence_id", "update_id", "lastUpdateId", "u")
+    raw_previous = pick(row, "previous_sequence", "prev_sequence", "prevSeqId", "pu")
+    sequence = int(raw_sequence) if raw_sequence not in (None, "") else None
+    previous_sequence = int(raw_previous) if raw_previous not in (None, "") else None
+    declared_snapshot_or_delta = row.get("snapshot_or_delta")
+    if declared_snapshot_or_delta is None:
+        action = str(pick(row, "action", default="")).lower()
+        snapshot_or_delta = (
+            "delta"
+            if action in {"update", "delta"} or row.get("pu") not in (None, "")
+            else "snapshot"
+        )
+    else:
+        declared_snapshot_or_delta = str(declared_snapshot_or_delta).strip().lower()
+        snapshot_or_delta = (
+            declared_snapshot_or_delta
+            if declared_snapshot_or_delta in {"snapshot", "delta"}
+            else "unverified"
+        )
+    continuity_status = str(pick(row, "continuity_status", default="")).lower()
+    if not continuity_status:
+        continuity_status = (
+            "snapshot" if snapshot_or_delta == "snapshot" and sequence is not None else "unverified"
+        )
+    if continuity_status not in {
+        "continuous",
+        "snapshot",
+        "duplicate",
+        "out_of_order",
+        "gap",
+        "checksum_failed",
+        "unverified",
+    }:
+        continuity_status = "unverified"
+    return {
+        "bids": levels("bids"),
+        "asks": levels("asks"),
+        "quantity_unit": _unit(exchange_name, row),
+        "sequence": sequence,
+        "previous_sequence": previous_sequence,
+        "snapshot_or_delta": snapshot_or_delta,
+        "continuity_status": continuity_status,
+    }
+
+
 def normalize_event(
     item,
     exchange_name,
@@ -2389,54 +2448,7 @@ def normalize_event(
         return _finish_event(event, row)
     result = {**_base(exchange_name, row, symbol), "kind": kind, **_timestamps(row)}
     if kind == "orderbook":
-
-        def levels(side):
-            values = row.get(side)
-            if values is None:
-                prefix = "bid" if side == "bids" else "ask"
-                values = zip(
-                    row.get(prefix + "_price_list") or [],
-                    row.get(prefix + "_volume_list") or [],
-                    strict=True,
-                )
-            return [(number(level[0]), number(level[1])) for level in values]
-
-        raw_sequence = pick(row, "sequence", "sequence_id", "update_id", "lastUpdateId", "u")
-        raw_previous = pick(row, "previous_sequence", "prev_sequence", "prevSeqId", "pu")
-        sequence = int(raw_sequence) if raw_sequence not in (None, "") else None
-        previous_sequence = int(raw_previous) if raw_previous not in (None, "") else None
-        action = str(pick(row, "snapshot_or_delta", "action", default="")).lower()
-        snapshot_or_delta = (
-            "delta"
-            if action in {"update", "delta"} or row.get("pu") not in (None, "")
-            else "snapshot"
-        )
-        continuity_status = str(pick(row, "continuity_status", default="")).lower()
-        if not continuity_status:
-            continuity_status = (
-                "snapshot"
-                if snapshot_or_delta == "snapshot" and sequence is not None
-                else "unverified"
-            )
-        if continuity_status not in {
-            "continuous",
-            "snapshot",
-            "duplicate",
-            "out_of_order",
-            "gap",
-            "checksum_failed",
-            "unverified",
-        }:
-            continuity_status = "unverified"
-        result.update(
-            bids=levels("bids"),
-            asks=levels("asks"),
-            quantity_unit=_unit(exchange_name, row),
-            sequence=sequence,
-            previous_sequence=previous_sequence,
-            snapshot_or_delta=snapshot_or_delta,
-            continuity_status=continuity_status,
-        )
+        result.update(_orderbook_event_fields(row, exchange_name))
     elif kind == "tick":
         if _is_ctp_quote_v2(row):
             result.update(

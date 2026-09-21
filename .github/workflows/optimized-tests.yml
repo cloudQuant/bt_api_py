@@ -35,7 +35,7 @@ jobs:
     uses: ./.github/workflows/reusable-compat-matrix.yml
 
   performance:
-    if: github.event_name == 'schedule' || inputs.run_performance == true
+    if: github.event_name == 'workflow_dispatch' && inputs.run_performance == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -58,39 +58,34 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run performance tests
+        shell: bash
         run: |
-          if [ -d tests/performance ]; then
-            pytest tests/performance/ --tb=short -v --benchmark-json=benchmark.json
-          else
-            echo "No performance tests found, skipping"
-          fi
+          set -euo pipefail
+          test -f tests/performance/test_event_normalization_performance.py
+          python -m pytest tests/performance/test_event_normalization_performance.py::test_normalize_event_orderbook_dict_hot_path --tb=short -v -n 8 --benchmark-json=benchmark.json
 
-      # Read-only benchmark reporting (plan M4 step 5): results go to artifacts
-      # only; no contents:write and no auto-push on this path.
+      - name: Validate performance baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/ci/check_performance_baseline.py \
+            --baseline docs/acceptance/2026-09-21-performance-baseline.json \
+            --report benchmark.json
+
       - name: Upload benchmark result artifact
-        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-result
           path: benchmark.json
           retention-days: 30
-
-      - name: Check regression threshold
-        run: |
-          python - <<'PY'
-          import json, os
-          path = "benchmark.json"
-          if not os.path.exists(path):
-              print("no benchmark.json produced; nothing to check")
-              raise SystemExit(0)
-          data = json.load(open(path))
-          print(f"benchmarks recorded: {len(data.get('benchmarks', []))}")
-          PY
+          if-no-files-found: error
 
   security:
     if: github.event_name == 'schedule' || inputs.run_security == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -111,21 +106,37 @@ jobs:
 
       - name: Run security scan
         run: |
-          bandit -r bt_api_py -c pyproject.toml -f json -o bandit-report.json || true
-          pip-audit -f json -o pip-audit-report.json || true
+          set +e
+          bandit -r bt_api_py -c pyproject.toml -f json -o bandit-report.json
+          bandit_status=$?
+          pip-audit -f json -o pip-audit-report.json
+          pip_audit_status=$?
+          set -e
+          bandit_report_status=0
+          pip_audit_report_status=0
+          test -s bandit-report.json || bandit_report_status=1
+          test -s pip-audit-report.json || pip_audit_report_status=1
+          if [ "$bandit_status" -ne 0 ] || [ "$pip_audit_status" -ne 0 ] || [ "$bandit_report_status" -ne 0 ] || [ "$pip_audit_report_status" -ne 0 ]; then
+            echo "Security scan/report check failed (bandit=${bandit_status}, pip-audit=${pip_audit_status}, bandit-report=${bandit_report_status}, pip-audit-report=${pip_audit_report_status})."
+            exit 1
+          fi
 
       - name: Upload security reports
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: security-reports
           path: |
             bandit-report.json
             pip-audit-report.json
+          if-no-files-found: error
 
   build-test:
     if: github.event_name == 'schedule' || inputs.run_build_test == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -150,9 +161,44 @@ jobs:
         run: twine check dist/*
 
       - name: Test wheel installation
+        shell: bash
         run: |
-          pip install dist/*.whl
-          python -c "import bt_api_py; print('Package installed successfully')"
+          set -euo pipefail
+          shopt -s nullglob
+          wheels=( "$GITHUB_WORKSPACE"/dist/*.whl )
+          if [ "${#wheels[@]}" -ne 1 ] || [ ! -f "${wheels[0]}" ]; then
+            echo "Expected exactly one wheel in $GITHUB_WORKSPACE/dist; found ${#wheels[@]}."
+            exit 1
+          fi
+
+          wheel_path="$(realpath "${wheels[0]}")"
+          test -f "$wheel_path"
+          venv_dir="$(mktemp -d "$RUNNER_TEMP/bt-api-py-wheel-venv.XXXXXX")"
+          smoke_dir="$(mktemp -d "$RUNNER_TEMP/bt-api-py-wheel-cwd.XXXXXX")"
+          python -m venv "$venv_dir"
+          venv_python="$venv_dir/bin/python"
+
+          unset PYTHONPATH
+          "$venv_python" -m pip install "$wheel_path"
+          cd "$smoke_dir"
+          "$venv_python" - <<'PY'
+          import os
+          from pathlib import Path
+
+          import bt_api_py
+
+          module_path = Path(bt_api_py.__file__).resolve()
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          try:
+              module_path.relative_to(workspace)
+          except ValueError:
+              pass
+          else:
+              raise AssertionError(f"bt_api_py imported from the checkout: {module_path}")
+
+          print(f"Imported bt_api_py from: {module_path}")
+          PY
+          "$venv_python" -m pip check
 
   notify:
     if: failure()

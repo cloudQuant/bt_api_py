@@ -82,9 +82,9 @@ def find_python_files(root_dir: str, exclude_dirs: list[str] | None = None) -> l
         # Modify dirnames in-place to skip excluded directories
         dirnames[:] = [d for d in dirnames if d not in exclude_dirs and not d.endswith(".egg-info")]
 
-        for filename in filenames:
-            if filename.endswith(".py"):
-                python_files.append(os.path.join(dirpath, filename))
+        python_files.extend(
+            [os.path.join(dirpath, filename) for filename in filenames if filename.endswith(".py")]
+        )
 
     return sorted(python_files)
 

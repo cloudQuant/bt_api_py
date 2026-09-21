@@ -1,3 +1,4 @@
+import logging
 import queue
 import random
 import time
@@ -17,6 +18,7 @@ from bt_api_py.feeds.live_okx_feed import OkxRequestDataSpot
 from bt_api_py.functions.utils import get_public_ip, read_account_config
 
 pytestmark = [pytest.mark.integration, pytest.mark.network]
+logger = logging.getLogger(__name__)
 
 
 def generate_kwargs():
@@ -300,11 +302,13 @@ def cleanup_open_orders(feed):
                 order_id = order_data.get_order_id()
                 if order_id:
                     feed.cancel_order(inst_id, order_id=order_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "OKX open-order cleanup failed for one item (%s)", type(exc).__name__
+                )
         time.sleep(1)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("OKX open-order cleanup failed (%s)", type(exc).__name__)
 
 
 @pytest.mark.auth_order

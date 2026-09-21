@@ -14,9 +14,12 @@ IBKR Gateway Cookie 提取工具
 """
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # 添加项目路径
 project_root = Path(__file__).parent.parent
@@ -63,7 +66,12 @@ def get_cookie_from_browser():
                         return cookies
                 except requests.exceptions.RequestException:
                     continue
-            except Exception:
+            except Exception as error:
+                logger.debug(
+                    "Skipping %s browser after cookie read failure (%s)",
+                    browser_name,
+                    type(error).__name__,
+                )
                 continue
 
         print("✗ 未找到有效的 IBKR Gateway cookies")

@@ -83,9 +83,7 @@ def test_binance_wss_data_feed():
             receive_binance_order_book_data = True
 
     if not (
-        receive_binance_bar_data
-        and receive_binance_ticker_data
-        and receive_binance_order_book_data
+        receive_binance_bar_data and receive_binance_ticker_data and receive_binance_order_book_data
     ):
         pytest.skip("Skipped (no data, likely network): websocket feed returned incomplete data")
 

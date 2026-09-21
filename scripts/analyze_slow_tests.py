@@ -12,15 +12,14 @@ def parse_pytest_json(json_file: Path) -> list[dict[str, Any]]:
     with open(json_file) as f:
         data = json.load(f)
 
-    tests = []
-    for test in data.get("tests", []):
-        tests.append(
-            {
-                "nodeid": test.get("nodeid", ""),
-                "duration": test.get("call", {}).get("duration", 0),
-                "outcome": test.get("outcome", ""),
-            }
-        )
+    tests = [
+        {
+            "nodeid": test.get("nodeid", ""),
+            "duration": test.get("call", {}).get("duration", 0),
+            "outcome": test.get("outcome", ""),
+        }
+        for test in data.get("tests", [])
+    ]
 
     return tests
 

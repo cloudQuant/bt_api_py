@@ -122,6 +122,32 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  format-ratchet:
+    name: Format Ratchet (submodules)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install pinned Ruff
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff==0.16.2"
+
+      - name: Check per-module format debt did not increase
+        run: python scripts/ci/check_format_ratchet.py
+
   compatibility:
     name: Compatibility
     needs: quality
@@ -160,21 +186,44 @@ jobs:
       - name: Run baseline suite with coverage gate
         env:
           SKIP_LIVE_TESTS: "true"
+          COVERAGE_THRESHOLD: ${{ github.event.inputs['coverage-threshold'] }}
+        shell: bash
         run: |
+          set -euo pipefail
           # 覆盖率门槛以 pyproject.toml 的 [tool.coverage.report] fail_under 为
           # 单一事实来源（当前 40）。仅当 workflow_dispatch 显式传入
           # coverage-threshold 时才临时覆盖，避免两处数值各写一份而漂移。
-          EXTRA_ARGS=""
-          if [ -n "${{ github.event.inputs['coverage-threshold'] }}" ]; then
-            EXTRA_ARGS="--cov-fail-under=${{ github.event.inputs['coverage-threshold'] }}"
+          coverage_threshold_re='^(0|[1-9][0-9]?)([.][0-9]+)?$|^100([.]0+)?$'
+          extra_args=()
+          if [[ -n "$COVERAGE_THRESHOLD" ]]; then
+            if [[ ! "$COVERAGE_THRESHOLD" =~ $coverage_threshold_re ]]; then
+              echo "::error::coverage-threshold must be a decimal between 0 and 100"
+              exit 2
+            fi
+            extra_args+=("--cov-fail-under=${COVERAGE_THRESHOLD}")
           fi
-          pytest tests -v \
-            -m "$FULL_SUITE_MARKERS" \
-            --cov=bt_api_py \
-            --cov-report=xml:coverage-full.xml \
-            --cov-report=html \
-            --cov-report=term-missing \
-            $EXTRA_ARGS
+
+          pytest_args=(
+            tests -v -n 8
+            -m "$FULL_SUITE_MARKERS"
+            --cov=bt_api_py
+            --cov-branch
+            --cov-report=xml:coverage-full.xml
+            --cov-report=html
+            --cov-report=term-missing
+          )
+          if [[ -n "$COVERAGE_THRESHOLD" ]]; then
+            pytest_args+=("${extra_args[0]}")
+          fi
+          python -m pytest "${pytest_args[@]}"
+
+      - name: Validate coverage reports
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s coverage-full.xml
+          test -s htmlcov/index.html
 
       - name: Upload coverage to Codecov
         if: always() && env.CODECOV_TOKEN != ''
@@ -191,7 +240,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report-ubuntu-py3.11
-          path: htmlcov/
+          path: |
+            coverage-full.xml
+            htmlcov/
+          if-no-files-found: error
           retention-days: 30
 
   wheel-contract:
@@ -234,7 +286,7 @@ jobs:
   quality-gate:
     name: Tests / Quality Gate
     runs-on: ubuntu-latest
-    needs: [quality, compatibility, full-suite, wheel-contract]
+    needs: [quality, quality-ratchet, compatibility, full-suite, wheel-contract, format-ratchet]
     if: always()
 
     steps:
@@ -242,6 +294,10 @@ jobs:
         run: |
           if [ "${{ needs.quality.result }}" != "success" ]; then
             echo "::error::Quality checks failed"
+            exit 1
+          fi
+          if [ "${{ needs.quality-ratchet.result }}" != "success" ]; then
+            echo "::error::Quality ratchet failed"
             exit 1
           fi
           if [ "${{ needs.compatibility.result }}" != "success" ]; then
@@ -256,6 +312,10 @@ jobs:
             echo "::error::Installed wheel contract failed"
             exit 1
           fi
+          if [ "${{ needs.format-ratchet.result }}" != "success" ]; then
+            echo "::error::Submodule format ratchet failed"
+            exit 1
+          fi
 
       - name: Generate summary
         run: |
@@ -264,8 +324,10 @@ jobs:
           echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Quality | ${{ needs.quality.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Quality ratchet | ${{ needs.quality-ratchet.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Compatibility matrix | ${{ needs.compatibility.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Ubuntu baseline suite | ${{ needs.full-suite.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Installed wheel contract | ${{ needs.wheel-contract.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Submodule format ratchet | ${{ needs.format-ratchet.result == 'success' && 'Passed' || 'Failed' }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Compatibility matrix: macOS, Linux, Windows x Python 3.11-3.13 (blocking) + 3.14 (canary)." >> "$GITHUB_STEP_SUMMARY"

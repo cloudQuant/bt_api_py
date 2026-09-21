@@ -1,6 +1,6 @@
 #!/bin/bash
 # Run tests script for bt_api_py
-# Usage: ./scripts/run_tests.sh [OPTIONS]
+# Usage: ./scripts/testing/run_tests.sh [OPTIONS]
 
 set -eo pipefail
 
@@ -55,10 +55,10 @@ while [[ $# -gt 0 ]]; do
             fi
             ;;
         -h|--help)
-            echo "Usage: ./scripts/run_tests.sh [OPTIONS]"
+            echo "Usage: ./scripts/testing/run_tests.sh [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  -c, --ctp              Run CTP related tests (default: false)"
+            echo "  -c, --ctp              Include tests marked ctp in the current selection"
             echo "  -p, --parallel NUM     Number of parallel processes (default: 8)"
             echo "  -f, --fast             Run non-network, non-slow tests only (8 workers)"
             echo "  --cov, --coverage      Generate coverage report"
@@ -71,12 +71,13 @@ while [[ $# -gt 0 ]]; do
             echo "  unit, integration, slow, network, ctp, binance, okx, ib"
             echo ""
             echo "Examples:"
-            echo "  ./scripts/run_tests.sh                      # Run all tests (no CTP), 8 processes"
-            echo "  ./scripts/run_tests.sh --fast               # Run fast tests only (no network/slow)"
-            echo "  ./scripts/run_tests.sh --ctp --cov          # Run with CTP and coverage"
-            echo "  ./scripts/run_tests.sh -m unit              # Run only unit tests"
-            echo "  ./scripts/run_tests.sh -m 'not slow' --cov  # Fast tests with coverage"
-            echo "  ./scripts/run_tests.sh --html               # Generate HTML report"
+            echo "  ./scripts/testing/run_tests.sh                      # Run all tests (no CTP), 8 processes"
+            echo "  ./scripts/testing/run_tests.sh --fast               # Run fast tests only (no network/slow)"
+            echo "  ./scripts/testing/run_tests.sh --ctp -m ctp --cov  # Run only tests marked ctp with coverage"
+            echo "  ./scripts/testing/run_tests.sh --ctp --cov         # Include ctp-marked tests in the current selection"
+            echo "  ./scripts/testing/run_tests.sh -m unit              # Run only unit tests"
+            echo "  ./scripts/testing/run_tests.sh -m 'not slow' --cov  # Non-slow, non-CTP tests with coverage"
+            echo "  ./scripts/testing/run_tests.sh --html               # Generate HTML report"
             exit 0
             ;;
         *)
@@ -96,8 +97,17 @@ if [ "$FAST_MODE" = true ]; then
     echo "Fast mode: running non-network, non-slow tests only"
 fi
 
-# Build pytest command
-PYTEST_CMD=(pytest -v)
+# Exclude CTP-marked tests by default, while preserving user marker precedence.
+if [ "$RUN_CTP" = false ]; then
+    if [ -n "$MARKERS" ]; then
+        MARKERS="($MARKERS) and not ctp"
+    else
+        MARKERS="not ctp"
+    fi
+fi
+
+# Build pytest command using the active Python environment and its installed plugins.
+PYTEST_CMD=(python -m pytest -v)
 
 # Add parallel option
 if [ "$PARALLEL" -eq 1 ]; then
@@ -107,18 +117,10 @@ else
     PYTEST_CMD+=(-n "$PARALLEL")
 fi
 
-# Add CTP exclusion/inclusion
-if [ "$RUN_CTP" = false ]; then
-    echo "Excluding CTP related tests..."
-    PYTEST_CMD+=(--ignore=tests/test_ctp_feed.py)
-else
-    echo "Including CTP related tests..."
-fi
-
 # Add coverage options
 if [ "$COVERAGE" = true ]; then
     echo "Enabling coverage reporting..."
-    PYTEST_CMD+=(--cov=bt_api_py --cov-report=term-missing --cov-report=html)
+    PYTEST_CMD+=(--cov=bt_api_py --cov-branch --cov-report=term-missing --cov-report=html)
 fi
 
 # Add HTML report
@@ -144,8 +146,17 @@ echo ""
 # Run tests (output to both terminal and log file)
 echo "Log file: $LOG_FILE"
 echo ""
+set +e
 "${PYTEST_CMD[@]}" 2>&1 | tee "$LOG_FILE"
-EXIT_CODE=${PIPESTATUS[0]}
+PIPE_STATUSES=("${PIPESTATUS[@]}")
+set -e
+PYTEST_EXIT_CODE=${PIPE_STATUSES[0]}
+TEE_EXIT_CODE=${PIPE_STATUSES[1]}
+if [ "$PYTEST_EXIT_CODE" -ne 0 ]; then
+    EXIT_CODE=$PYTEST_EXIT_CODE
+else
+    EXIT_CODE=$TEE_EXIT_CODE
+fi
 
 # Analyze log for failures and errors (short summary lines only, with error detail)
 if [ -f "$LOG_FILE" ]; then

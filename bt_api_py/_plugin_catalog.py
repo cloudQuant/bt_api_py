@@ -75,11 +75,14 @@ class PluginCatalog:
         if installed and version is not None and min_version:
             version_ok = self._version_satisfies(version, min_version)
         entry_point = self._has_entry_point(plugin)
-        certified = (CERTIFIED_CARDS_DIR / f"{plugin}.md").exists()
+        certified = (CERTIFIED_CARDS_DIR / f"{plugin}.md").is_file()
+        is_certified = (
+            certification == "certified" and certified and installed and version_ok and entry_point
+        )
 
         if not installed:
             status = "missing"
-        elif certified:
+        elif is_certified:
             status = "certified"
         elif entry_point:
             status = "loadable"

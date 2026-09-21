@@ -1,11 +1,8 @@
 name: Publish to PyPI
 
-# Release flow (docs/governance/release-flow.md):
-#   dev → master promotion → TestPyPI dispatch at a pinned master-reachable SHA
-#   → fresh-env install smoke → v* tag on the SAME SHA → GitHub Release → PyPI.
-# Manual dispatch can NEVER target production PyPI; only `release: published`
-# events reach the pypi environment (plan M5 steps 1–3).
-
+# Every event records one candidate artifact. Manual dispatch only builds and
+# uploads it; published releases use the same-run TestPyPI, smoke, and PyPI
+# chain only when ENABLE_PYPI_RELEASE is explicitly set to true.
 on:
   release:
     types: [published]
@@ -26,102 +23,175 @@ jobs:
     permissions:
       contents: read
     outputs:
+      source_sha: ${{ steps.source.outputs.source_sha }}
       version: ${{ steps.version.outputs.version }}
+      wheel_filename: ${{ steps.candidate.outputs.wheel_filename }}
+      wheel_sha256: ${{ steps.candidate.outputs.wheel_sha256 }}
+      sdist_filename: ${{ steps.candidate.outputs.sdist_filename }}
+      sdist_sha256: ${{ steps.candidate.outputs.sdist_sha256 }}
+      manifest_sha256: ${{ steps.candidate.outputs.manifest_sha256 }}
+      manifest_filename: ${{ steps.candidate.outputs.manifest_filename }}
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.expected_sha || github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
-      - name: Guard manual dispatch source
-        if: github.event_name == 'workflow_dispatch'
+      - name: Guard candidate source
+        id: source
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
-          EXPECTED="${{ inputs.expected_sha }}"
-          ACTUAL="$(git rev-parse HEAD)"
-          echo "expected=$EXPECTED actual=$ACTUAL"
-          if [ "$EXPECTED" != "$ACTUAL" ]; then
-            echo "::error::checkout SHA does not match expected_sha input"
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            SOURCE_SHA="$EXPECTED_SHA"
+            if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::expected_sha must be a full lowercase 40-character SHA"
+              exit 1
+            fi
+          else
+            SOURCE_SHA="$RELEASE_SHA"
+            if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::release SHA is malformed"
+              exit 1
+            fi
+          fi
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]; then
+            echo "::error::checkout SHA does not match the candidate SHA"
             exit 1
           fi
           git fetch origin master --quiet
-          if ! git merge-base --is-ancestor "$ACTUAL" origin/master; then
-            echo "::error::expected_sha is not reachable from master"
+          if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/master; then
+            echo "::error::candidate SHA is not reachable from master"
             exit 1
           fi
-
-      - name: Guard release provenance
-        if: github.event_name == 'release'
-        run: |
-          git fetch origin master --quiet
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
-            echo "::error::release tag commit is not reachable from master"
-            exit 1
-          fi
-
-      - name: Verify tag matches package version
-        if: github.event_name == 'release'
-        run: |
-          python -m pip install --quiet .
-          PKG_VERSION=$(python -c "import importlib.metadata; print(importlib.metadata.version('bt_api_py'))")
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::tag $GITHUB_REF_NAME != package version $PKG_VERSION"
-            exit 1
-          fi
+          printf 'source_sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Read package version
         id: version
+        shell: bash
         run: |
+          set -euo pipefail
           VERSION="$(python - <<'PY'
           import tomllib
-          print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])
+
+          with open("pyproject.toml", "rb") as project_file:
+              print(tomllib.load(project_file)["project"]["version"])
           PY
           )"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          test -n "$VERSION"
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build
+      - name: Verify release tag version
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "::error::release tag must be v$VERSION (got $RELEASE_TAG)"
+            exit 1
+          fi
+
+      - name: Build distributions
+        shell: bash
+        run: |
+          set -euo pipefail
           python -m pip install --quiet build twine
           python -m build
-          twine check dist/*
-
-      - name: Record artifact digests
-        run: |
-          mkdir -p dist-meta
-          sha256sum dist/* | tee dist-meta/SHA256SUMS.txt
+          python -m twine check dist/*
 
       - name: Verify installed wheel resource contract
+        shell: bash
         run: |
+          set -euo pipefail
+          mkdir -p dist-meta
           python scripts/ci/verify_wheel_contract.py \
             --dist-dir dist \
             --receipt dist-meta/wheel-contract-receipt.json
 
-      - uses: actions/upload-artifact@v4
+      - name: Record release candidate
+        id: candidate
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          python scripts/ci/release_candidate.py record \
+            --dist-dir dist \
+            --meta-dir dist-meta \
+            --receipt dist-meta/wheel-contract-receipt.json \
+            --source-sha "$SOURCE_SHA" \
+            --version "$VERSION" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Upload release candidate
+        uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: release-candidate
           path: |
             dist/
             dist-meta/
+          if-no-files-found: error
+          retention-days: 30
 
   publish-testpypi:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'release' && vars.ENABLE_PYPI_RELEASE == 'true'
     needs: [build]
     runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/bt_api_py
     permissions:
       contents: read
       id-token: write
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/bt_api_py
     steps:
-      - name: Download dist
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
         with:
-          name: dist
+          ref: ${{ needs.build.outputs.source_sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate
           path: dist-artifact/
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Verify release candidate
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}
+          WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}
+          SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+          MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          python scripts/ci/release_candidate.py verify \
+            --dist-dir dist-artifact/dist \
+            --meta-dir dist-artifact/dist-meta \
+            --expected-source-sha "$SOURCE_SHA" \
+            --expected-version "$VERSION" \
+            --expected-wheel-filename "$WHEEL_FILENAME" \
+            --expected-wheel-sha256 "$WHEEL_SHA256" \
+            --expected-sdist-filename "$SDIST_FILENAME" \
+            --expected-sdist-sha256 "$SDIST_SHA256" \
+            --expected-manifest-sha256 "$MANIFEST_SHA256"
 
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -130,7 +200,7 @@ jobs:
           packages-dir: dist-artifact/dist/
 
   smoke-install-testpypi:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'release' && vars.ENABLE_PYPI_RELEASE == 'true'
     needs: [build, publish-testpypi]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -139,33 +209,147 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.expected_sha }}
+          ref: ${{ needs.build.outputs.source_sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate
+          path: dist-artifact/
 
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
+      - name: Verify release candidate
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}
+          WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}
+          SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+          MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          python scripts/ci/release_candidate.py verify \
+            --dist-dir dist-artifact/dist \
+            --meta-dir dist-artifact/dist-meta \
+            --expected-source-sha "$SOURCE_SHA" \
+            --expected-version "$VERSION" \
+            --expected-wheel-filename "$WHEEL_FILENAME" \
+            --expected-wheel-sha256 "$WHEEL_SHA256" \
+            --expected-sdist-filename "$SDIST_FILENAME" \
+            --expected-sdist-sha256 "$SDIST_SHA256" \
+            --expected-manifest-sha256 "$MANIFEST_SHA256"
+
       - name: Install candidate in a fresh virtualenv and smoke test
         working-directory: ${{ runner.temp }}
+        shell: bash
         env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
+          WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}
+          WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}
+          SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+          MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
         run: |
+          set -euo pipefail
+          work_dir="$(mktemp -d "$RUNNER_TEMP/release-smoke.XXXXXX")"
+          downloads_root="$work_dir/downloads"
+          venv_dir="$work_dir/venv"
+          mkdir "$downloads_root"
+
+          downloaded=0
+          download_dir=""
+          for attempt in 1 2 3 4 5; do
+            attempt_dir="$downloads_root/attempt-$attempt"
+            mkdir "$attempt_dir"
+            if [[ -n "$(find "$attempt_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+              echo "::error::TestPyPI attempt directory must start empty"
+              exit 1
+            fi
+            cd "$attempt_dir"
+            if env -u PIP_EXTRA_INDEX_URL -u PIP_INDEX_URL -u PIP_NO_INDEX \
+              -u PIP_FIND_LINKS PIP_CONFIG_FILE=/dev/null \
+              python3 -m pip download \
+              --index-url https://test.pypi.org/simple/ \
+              --no-cache-dir \
+              --no-deps \
+              --only-binary=:all: \
+              --timeout 15 \
+              --retries 0 \
+              --dest "$attempt_dir" \
+              "bt_api_py==$VERSION"; then
+              downloaded=1
+              download_dir="$attempt_dir"
+              break
+            fi
+            if [[ "$attempt" -lt 5 ]]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+          if [[ "$downloaded" -ne 1 ]]; then
+            echo "::error::could not download the exact wheel from TestPyPI after 5 attempts"
+            exit 1
+          fi
+
+          shopt -s nullglob
+          wheels=( "$download_dir"/*.whl )
+          if [[ "${#wheels[@]}" -ne 1 ]]; then
+            echo "::error::TestPyPI must return exactly one wheel"
+            exit 1
+          fi
+          wheel_path="$download_dir/$WHEEL_FILENAME"
+          python3 "$GITHUB_WORKSPACE/scripts/ci/release_candidate.py" \
+            verify-downloaded-wheel \
+            --manifest "$GITHUB_WORKSPACE/dist-artifact/dist-meta/release-candidate.json" \
+            --wheel-dir "$download_dir" \
+            --expected-source-sha "$SOURCE_SHA" \
+            --expected-version "$VERSION" \
+            --expected-wheel-filename "$WHEEL_FILENAME" \
+            --expected-wheel-sha256 "$WHEEL_SHA256" \
+            --expected-sdist-filename "$SDIST_FILENAME" \
+            --expected-sdist-sha256 "$SDIST_SHA256" \
+            --expected-manifest-sha256 "$MANIFEST_SHA256"
+
           test -n "$VERSION"
-          echo "smoke-installing bt_api_py==$VERSION from TestPyPI"
-          python3 -m venv .venv-smoke
-          ./.venv-smoke/bin/pip install --upgrade pip
-          ./.venv-smoke/bin/pip install \
-            --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
+          candidate_requirement="bt_api_py[core-reference]==$VERSION"
+          wheel_uri="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_uri())' "$wheel_path")"
+          local_wheel_requirement="bt_api_py[core-reference] @ $wheel_uri"
+          echo "smoke-installing $candidate_requirement from the verified local wheel"
+          python3 -m venv "$venv_dir"
+          venv_python="$venv_dir/bin/python"
+          env -u PIP_EXTRA_INDEX_URL -u PIP_INDEX_URL -u PIP_NO_INDEX \
+            -u PIP_FIND_LINKS PIP_CONFIG_FILE=/dev/null \
+            "$venv_python" -m pip install \
+            --index-url https://pypi.org/simple/ \
+            --no-cache-dir \
             -r "$GITHUB_WORKSPACE/requirements-ci-core-reference.txt" \
-            "bt_api_py[core-reference]==$VERSION"
-          ./.venv-smoke/bin/python -c "import bt_api_py; print('smoke OK:', bt_api_py.__version__)"
+            "$local_wheel_requirement"
+          printf 'SMOKE_VENV=%s\n' "$venv_dir" >> "$GITHUB_ENV"
+          "$venv_python" - <<'PY'
+          import os
+          from pathlib import Path
+
+          import bt_api_py
+
+          package_path = Path(bt_api_py.__file__).resolve()
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          assert bt_api_py.__version__ == os.environ["VERSION"], bt_api_py.__version__
+          assert not package_path.is_relative_to(workspace), (package_path, workspace)
+          print(f"smoke OK: {bt_api_py.__version__} from {package_path}")
+          PY
 
       - name: Validate core-reference doctor contract
         working-directory: ${{ runner.temp }}
+        shell: bash
         run: |
-          ./.venv-smoke/bin/python -m bt_api_py.doctor --bundle core-reference --format json > doctor-core-reference.json
-          ./.venv-smoke/bin/python - <<'PY'
+          set -euo pipefail
+          "$SMOKE_VENV/bin/python" -m bt_api_py.doctor --bundle core-reference --format json \
+            > doctor-core-reference.json
+          "$SMOKE_VENV/bin/python" - <<'PY'
           import importlib
           import json
           import os
@@ -186,27 +370,57 @@ jobs:
           workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
           assert not package_file.is_relative_to(workspace), (package_file, workspace)
 
-          for module_name in ("bt_api_binance", "bt_api_okx", "bt_api_ctp"):
+          for module_name in ("bt_api_py", "bt_api_binance", "bt_api_okx", "bt_api_ctp"):
               importlib.import_module(module_name)
           print("core-reference doctor contract passed")
           PY
 
   publish-pypi:
-    if: github.event_name == 'release'
-    needs: [build]
+    if: github.event_name == 'release' && vars.ENABLE_PYPI_RELEASE == 'true'
+    needs: [build, publish-testpypi, smoke-install-testpypi]
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/bt_api_py
     permissions:
       contents: read
       id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/bt_api_py
     steps:
-      - name: Download dist
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
         with:
-          name: dist
+          ref: ${{ needs.build.outputs.source_sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate
           path: dist-artifact/
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Verify release candidate
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          VERSION: ${{ needs.build.outputs.version }}
+          WHEEL_FILENAME: ${{ needs.build.outputs.wheel_filename }}
+          WHEEL_SHA256: ${{ needs.build.outputs.wheel_sha256 }}
+          SDIST_FILENAME: ${{ needs.build.outputs.sdist_filename }}
+          SDIST_SHA256: ${{ needs.build.outputs.sdist_sha256 }}
+          MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          python scripts/ci/release_candidate.py verify \
+            --dist-dir dist-artifact/dist \
+            --meta-dir dist-artifact/dist-meta \
+            --expected-source-sha "$SOURCE_SHA" \
+            --expected-version "$VERSION" \
+            --expected-wheel-filename "$WHEEL_FILENAME" \
+            --expected-wheel-sha256 "$WHEEL_SHA256" \
+            --expected-sdist-filename "$SDIST_FILENAME" \
+            --expected-sdist-sha256 "$SDIST_SHA256" \
+            --expected-manifest-sha256 "$MANIFEST_SHA256"
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

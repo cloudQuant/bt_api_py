@@ -7,7 +7,7 @@ compliance_limits），本模块保留编排逻辑并通过 mixin 继承。
 from __future__ import annotations
 
 import time
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from bt_api_base.logging_factory import get_logger
 
@@ -20,6 +20,17 @@ from .position_limits import PositionLimitsMixin
 from .risk_limits import RiskLimitsMixin
 
 __all__ = ["DynamicLimit", "LimitStatus", "LimitType", "LimitsManager"]
+
+
+class _LimitBreach(TypedDict):
+    timestamp: int
+    exchange_name: str | None
+    account_id: str | None
+    limit_type: str | None
+    current_value: object | None
+    limit_value: object | None
+    utilization_ratio: object | None
+    status: str
 
 
 class LimitsManager(
@@ -377,7 +388,7 @@ class LimitsManager(
         exchange_name: str | None = None,
         account_id: str | None = None,
         time_window: int | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[_LimitBreach]:
         """
         获取限额违约记录。
 
@@ -385,9 +396,9 @@ class LimitsManager(
             account_id: 账户 ID（可选）
             time_window: 时间窗口（秒，可选）
 
-        Returns: List[Dict[str, Any]]: 违约记录
+        Returns: List[_LimitBreach]: 违约记录
         """
-        breaches = []
+        breaches: list[_LimitBreach] = []
         current_time = int(time.time())
 
         for check_record in self.check_history:
@@ -402,20 +413,20 @@ class LimitsManager(
             result = check_record.get("result", {})
             detailed_checks = result.get("detailed_checks", [])
 
-            for check in detailed_checks:
-                if check.get("status") in [LimitStatus.BREACHED, LimitStatus.CRITICAL]:
-                    breaches.append(
-                        {
-                            "timestamp": check_record.get("timestamp"),
-                            "exchange_name": check_record.get("exchange_name"),
-                            "account_id": check_record.get("account_id"),
-                            "limit_type": check.get("limit_type"),
-                            "current_value": check.get("current_value"),
-                            "limit_value": check.get("limit_value"),
-                            "utilization_ratio": check.get("utilization_ratio"),
-                            "status": check.get("status"),
-                        }
-                    )
+            breaches.extend(
+                {
+                    "timestamp": cast("int", check_record.get("timestamp")),
+                    "exchange_name": check_record.get("exchange_name"),
+                    "account_id": check_record.get("account_id"),
+                    "limit_type": check.get("limit_type"),
+                    "current_value": check.get("current_value"),
+                    "limit_value": check.get("limit_value"),
+                    "utilization_ratio": check.get("utilization_ratio"),
+                    "status": check.get("status"),
+                }
+                for check in detailed_checks
+                if check.get("status") in [LimitStatus.BREACHED, LimitStatus.CRITICAL]
+            )
 
         return sorted(breaches, key=lambda x: x["timestamp"], reverse=True)
 

@@ -161,8 +161,7 @@ def classify_missing(
                 individual[key].append(instrument)
             else:
                 whole[key].append(instrument)
-        for name in sorted(have - wanted):
-            extras.append((exchange, name))
+        extras.extend([(exchange, name) for name in sorted(have - wanted)])
     return dict(whole), dict(individual), extras, dict(totals)
 
 
@@ -411,8 +410,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_section("收盘报告 report.json")
         print(f"  生成时间 {digest['generated_at']}  trading_day={digest['trading_day']}")
         print(
-            f"  合约 {digest['instruments']}  行数 {digest['rows']}  "
-            f"交易所 {digest['exchanges']}"
+            f"  合约 {digest['instruments']}  行数 {digest['rows']}  交易所 {digest['exchanges']}"
         )
         print(
             f"  单条快照合约 {digest['single_row_instruments']}（coverage 记为 null，"

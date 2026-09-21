@@ -313,40 +313,21 @@ def _thaw(value: Any) -> Any:
     return value
 
 
-def evaluate_ctp_budget(
-    evidence: Mapping[str, Any],
-    *,
-    mode: str = "ordinary",
-    now: datetime | None = None,
-) -> CtpBudgetEvaluation:
-    """Evaluate a complete, provider-neutral CTP budget evidence package.
-
-    ``reachable_states`` are alternatives in one execution plan.  Their costs
-    are therefore reduced with ``max`` rather than summed.  A caller supplied
-    final basket or ``complete=True`` cannot establish coverage by itself.
-    """
-
-    if not isinstance(evidence, Mapping) or type(evidence) is not dict:
-        raise CtpBudgetError("budget_invalid_evidence")
-    if mode not in {"ordinary", "recovery"}:
-        raise CtpBudgetError("budget_invalid_mode")
-    context = _normalize_context(evidence)
-    source = evidence.get("source")
-    if source not in _SOURCE_VALUES:
-        raise CtpBudgetError("budget_invalid_source")
-    _string(evidence.get("source_version"), field="source_version", pattern=_SAFE_ID)
-    if evidence.get("money_unit") != BUDGET_MONEY_UNIT:
-        raise CtpBudgetError("budget_money_unit_required")
-    states = evidence.get("reachable_states")
+def _evaluate_reachable_states(
+    states: list[Any], context: Mapping[str, Any]
+) -> tuple[
+    list[tuple[str, Decimal]],
+    list[Decimal],
+    list[Decimal],
+    set[str],
+    list[str],
+]:
     reasons: list[str] = []
     state_costs: list[tuple[str, Decimal]] = []
     ordinary_values: list[Decimal] = []
     recovery_values: list[Decimal] = []
     seen_ids: set[str] = set()
     seen_kinds: set[str] = set()
-    if not isinstance(states, list) or not states:
-        reasons.append("budget_path_incomplete")
-        states = []
     for state in states:
         if not isinstance(state, Mapping) or type(state) is not dict:
             reasons.append("budget_invalid_state")
@@ -392,6 +373,46 @@ def evaluate_ctp_budget(
             recovery_values.append(increment)
         else:
             ordinary_values.append(total)
+    return state_costs, ordinary_values, recovery_values, seen_kinds, reasons
+
+
+def evaluate_ctp_budget(
+    evidence: Mapping[str, Any],
+    *,
+    mode: str = "ordinary",
+    now: datetime | None = None,
+) -> CtpBudgetEvaluation:
+    """Evaluate a complete, provider-neutral CTP budget evidence package.
+
+    ``reachable_states`` are alternatives in one execution plan.  Their costs
+    are therefore reduced with ``max`` rather than summed.  A caller supplied
+    final basket or ``complete=True`` cannot establish coverage by itself.
+    """
+
+    if not isinstance(evidence, Mapping) or type(evidence) is not dict:
+        raise CtpBudgetError("budget_invalid_evidence")
+    if mode not in {"ordinary", "recovery"}:
+        raise CtpBudgetError("budget_invalid_mode")
+    context = _normalize_context(evidence)
+    source = evidence.get("source")
+    if source not in _SOURCE_VALUES:
+        raise CtpBudgetError("budget_invalid_source")
+    _string(evidence.get("source_version"), field="source_version", pattern=_SAFE_ID)
+    if evidence.get("money_unit") != BUDGET_MONEY_UNIT:
+        raise CtpBudgetError("budget_money_unit_required")
+    states = evidence.get("reachable_states")
+    reasons: list[str] = []
+    if not isinstance(states, list) or not states:
+        reasons.append("budget_path_incomplete")
+        states = []
+    (
+        state_costs,
+        ordinary_values,
+        recovery_values,
+        seen_kinds,
+        state_reasons,
+    ) = _evaluate_reachable_states(states, context)
+    reasons.extend(state_reasons)
 
     required_kinds = evidence.get("required_state_kinds", _REQUIRED_STATE_KINDS)
     if not isinstance(required_kinds, (list, tuple, set, frozenset)):

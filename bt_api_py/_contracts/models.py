@@ -434,6 +434,10 @@ class OrderRequest:
     strategy_identity_sha256: str | None = None
 
     def __post_init__(self) -> None:
+        self._validate_core_fields()
+        self._validate_intent_fields()
+
+    def _validate_core_fields(self) -> None:
         if not self.symbol:
             raise ValueError("symbol must be a non-empty string")
         if not isinstance(self.side, Side):
@@ -450,6 +454,8 @@ class OrderRequest:
             raise ValueError("price must be finite and > 0")
         if self.quantity_unit not in {"base", "contracts", "lots", "native"}:
             raise ValueError("quantity_unit must be base, contracts, lots or native")
+
+    def _validate_intent_fields(self) -> None:
         if self.offset not in {None, "open", "close", "close_today", "close_yesterday"}:
             raise ValueError("offset must be open, close, close_today or close_yesterday")
         if self.position_mode not in {None, "net", "dual_side"}:

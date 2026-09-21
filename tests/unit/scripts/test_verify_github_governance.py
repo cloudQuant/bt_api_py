@@ -17,6 +17,7 @@ Two phases are covered:
 from __future__ import annotations
 
 import json
+import runpy
 import shutil
 import subprocess
 import sys
@@ -114,6 +115,38 @@ def test_missing_required_check_is_reported(activated_dev_manifest_dir: Path) ->
     assert result.returncode == 1
     assert "required_status_checks" in result.stdout
     assert "PR Governance / Summary" in result.stdout
+
+
+def test_required_check_diagnostics_follow_manifest_order() -> None:
+    check_manifest = runpy.run_path(str(SCRIPT))["check_manifest"]
+    manifest = {
+        "enforcement": "active",
+        "approvals_required": 2,
+        "required_checks": ["CI / Build", "CI / Unit Tests"],
+        "bypass_actors": [],
+    }
+    ruleset = {
+        "enforcement": "active",
+        "rules": [
+            {
+                "type": "pull_request",
+                "parameters": {"required_approving_review_count": 2},
+            },
+            {
+                "type": "required_status_checks",
+                "parameters": {"required_status_checks": []},
+            },
+        ],
+        "bypass_actors": [],
+    }
+    drifts: list[str] = []
+
+    check_manifest(manifest, ruleset, "fixture.json", drifts)
+
+    assert drifts == [
+        "fixture.json: required_status_checks is missing required check 'CI / Build' (has: [])",
+        "fixture.json: required_status_checks is missing required check 'CI / Unit Tests' (has: [])",
+    ]
 
 
 def test_wrong_approval_count_is_reported(activated_dev_manifest_dir: Path) -> None:

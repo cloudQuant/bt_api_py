@@ -2,7 +2,7 @@
 
 生成日期：2026-03-07  
 项目类型：Python Library  
-Python版本：3.9-3.14
+Python版本：3.11+（CI 阻塞目标：3.11–3.13；3.14 仅 canary）
 
 ---
 
@@ -11,7 +11,7 @@ Python版本：3.9-3.14
 ### 1. 环境要求
 
 **必需：**
-- Python 3.9+ (当前兼容目标: 3.9, 3.10, 3.11, 3.12, 3.13, 3.14)
+- Python 3.11+（当前阻塞兼容目标：3.11、3.12、3.13；3.14 为 canary）
 - pip 或 uv (包管理器)
 - Git
 
@@ -163,6 +163,8 @@ make test-cov
 # 或
 ./scripts/run_tests.sh --cov
 
+# 两者均启用 statement + branch coverage（--cov-branch）
+
 # 查看HTML报告
 open htmlcov/index.html
 ```
@@ -216,8 +218,12 @@ pytest tests -m "not slow and not network" -v
 # 运行CTP测试（需要CTP环境）
 make test-ctp
 # 或
-./scripts/run_tests.sh --ctp
+./scripts/run_tests.sh --ctp -m ctp
 ```
+
+`--ctp` 只是解除 runner 默认注入的 `not ctp` 排除，不代表“仅运行 CTP”。
+需要仅 CTP 时使用上述 `--ctp -m ctp` 组合或 `make test-ctp`；普通 `make test` 和
+`./scripts/run_tests.sh` 默认仍排除 CTP。
 
 ### 测试标记
 

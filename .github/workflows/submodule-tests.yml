@@ -92,10 +92,10 @@ jobs:
         if: steps.detect.outputs.count != '0' && steps.validation.outcome != 'success'
         run: exit 1
 
-  # 迭代07：子仓自身的 lint 门禁（按仓分片，失败可精确定位到具体仓库）。
-  # 现状为 "report-only"：continue-on-error 为 true，存量债（约 1100 项，集中在
-  # bt_api_binance / bt_api_okx）清零后应移除该行转为阻塞。滚动棘轮由
-  # .github/workflows/tests.yml 的 quality-ratchet job 承担。
+  # 迭代07：子仓 lint 与 format 分别按仓分片，并维持 report-only。
+  # 截至 2026-09-20：lint 存量 10 项、format 涉及 452 个文件。
+  # 两项需分别清零、稳定 CI、独立回滚后，才分别升级为 blocking。
+  # 滚动棘轮由 .github/workflows/tests.yml 的 quality-ratchet job 承担。
   discover-submodules:
     name: Discover submodules
     runs-on: ubuntu-latest
@@ -118,12 +118,12 @@ jobs:
           echo "modules=$MODULES_JSON" >> "$GITHUB_OUTPUT"
           echo "Discovered submodules: $MODULES_JSON"
 
-  submodule-quality:
-    name: Submodule Quality / ${{ matrix.module }}
+  submodule-lint:
+    name: Submodule Lint / ${{ matrix.module }}
     needs: discover-submodules
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # report-only：见上方注释，清存量后改为阻塞。
+    # report-only：lint 存量清零并满足上方独立升级条件后再改为阻塞。
     continue-on-error: true
 
     strategy:
@@ -150,6 +150,36 @@ jobs:
 
       - name: Ruff lint (${{ matrix.module }})
         run: ruff check bt_api/${{ matrix.module }}
+
+  submodule-format:
+    name: Submodule Format / ${{ matrix.module }}
+    needs: discover-submodules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # report-only：format 存量清零并满足上方独立升级条件后再改为阻塞。
+    continue-on-error: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.discover-submodules.outputs.modules) }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install ruff
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff==0.16.2"
 
       - name: Ruff format check (${{ matrix.module }})
         run: ruff format --check bt_api/${{ matrix.module }}

@@ -427,7 +427,10 @@ def test_public_normalized_path_does_not_rewrap_existing_safe_error(api):
     assert original.__context__ is None and original.__cause__ is None
 
 
-@pytest.mark.parametrize("code, unknown", [("51008", False), ("50004", True), ("-1007", True)])
+@pytest.mark.parametrize(
+    "code, unknown",
+    [("50120", False), ("50123", False), ("51008", False), ("50004", True), ("-1007", True)],
+)
 def test_explicit_response_error_semantics(api, code, unknown):
     api._backend.make_order = Mock(return_value={"code": code, "msg": "secret signed URL"})
     with pytest.raises(NormalizedApiError) as captured:

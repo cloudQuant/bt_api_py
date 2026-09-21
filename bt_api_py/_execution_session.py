@@ -19,7 +19,7 @@ from collections import defaultdict, deque
 from collections.abc import Mapping
 from contextlib import contextmanager, suppress
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation, localcontext
 from pathlib import Path
@@ -40,6 +40,7 @@ from ._ctp_budget import (
     evaluate_ctp_budget,
 )
 from ._ctp_execution_authorization import recovery_action_digest, recovery_plan_digest
+from ._normalization import _is_definite_reject
 
 
 class _WindowsLocker(Protocol):
@@ -1065,6 +1066,434 @@ def _recover_migration_transaction(source, destination):
         source_lease.close()
 
 
+def _freeze_migration_source(
+    source,
+    destination,
+    source_lease,
+    normalized_claims,
+    migration_id,
+    freeze,
+):
+    source_bytes = source.read_bytes()
+    source_hash = hashlib.sha256(source_bytes).hexdigest()
+    try:
+        source_epoch = int(
+            _read_locked_json(source_lease, "migrate_journal").get("fencing_epoch", 0)
+        )
+    except NormalizedApiError:
+        raise
+    claims_hash = hashlib.sha256(
+        json.dumps(normalized_claims, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    freeze_record = {
+        "schema_version": _JOURNAL_SCHEMA_VERSION,
+        "status": "FROZEN",
+        "migration_id": migration_id,
+        "source": str(source),
+        "destination": str(destination),
+        "source_hash": source_hash,
+        "source_epoch": source_epoch,
+        "claims_hash": claims_hash,
+    }
+    _atomic_write_json(freeze, freeze_record)
+    return source_bytes, source_hash, source_epoch, claims_hash, freeze_record
+
+
+def _claim_migration_records(
+    source_bytes, normalized_claims, migration_id, source_hash, source_epoch
+):
+    migrated = []
+    quarantined = []
+    for line_number, line in enumerate(source_bytes.decode("utf-8").splitlines(), 1):
+        try:
+            row = json.loads(line)
+            if not isinstance(row, dict) or not row.get("event"):
+                raise ValueError("invalid_record")
+            client_id = str(row.get("client_order_id") or "")
+            native_id = str(row.get("order_id") or row.get("venue_order_id") or "")
+            identity = normalized_claims.get(client_id) or normalized_claims.get(
+                f"order:{native_id}"
+            )
+            if identity is None:
+                raise ValueError("unclaimed_identity")
+            ledger_identity = {
+                key: identity[key]
+                for key in (
+                    "provider",
+                    "environment",
+                    "account_id",
+                    "credential_fingerprint",
+                )
+                if key in identity
+            }
+            embedded = row.get("ledger_identity")
+            if isinstance(embedded, dict) and not _recorded_identity_matches(
+                embedded, ledger_identity
+            ):
+                raise ValueError("embedded_identity_mismatch")
+            row_provider = str(row.get("exchange_name") or "").partition("___")[0].upper()
+            if row_provider in _CRYPTO_PROVIDERS and row_provider != identity["provider"]:
+                raise ValueError("claim_provider_mismatch")
+            migrated.append(
+                {
+                    **row,
+                    "schema_version": _JOURNAL_SCHEMA_VERSION,
+                    "account_id": identity["account_id"],
+                    "strategy_id": identity["strategy_id"],
+                    "ledger_identity": ledger_identity,
+                    "migration_id": migration_id,
+                    "source_hash": source_hash,
+                    "source_epoch": source_epoch,
+                    "source_record_index": line_number,
+                }
+            )
+        except Exception as exc:
+            quarantined.append(
+                {
+                    "schema_version": _JOURNAL_SCHEMA_VERSION,
+                    "migration_id": migration_id,
+                    "source_record_index": line_number,
+                    "reason": str(exc) or type(exc).__name__,
+                    "raw_line": line,
+                }
+            )
+    return migrated, quarantined
+
+
+def _block_migration(
+    freeze,
+    freeze_record,
+    migration_id,
+    source,
+    destination,
+    source_hash,
+    source_epoch,
+    reason,
+    *,
+    migrated=0,
+    quarantined=0,
+    quarantine=None,
+):
+    freeze_record.update(status="BLOCKED", reason=reason)
+    _atomic_write_json(freeze, freeze_record)
+    return _migration_blocked(
+        migration_id,
+        source,
+        destination,
+        source_hash,
+        source_epoch,
+        reason,
+        migrated=migrated,
+        quarantined=quarantined,
+        quarantine=quarantine,
+    )
+
+
+def _reconcile_migration_records(
+    remote_reconcile,
+    identity,
+    migrated,
+    source_hash,
+    source_epoch,
+    migration_id,
+):
+    records_hash = _migration_records_hash(migrated)
+    if not callable(remote_reconcile):
+        return records_hash, None, "remote_reconcile_required"
+    try:
+        reconciliation = remote_reconcile(
+            ledger_identity=dict(identity),
+            records=tuple(dict(row) for row in migrated),
+            records_hash=records_hash,
+            record_count=len(migrated),
+            source_hash=source_hash,
+            source_epoch=source_epoch,
+            migration_id=migration_id,
+        )
+    except Exception as exc:
+        reconciliation = {"verified": False, "reason": type(exc).__name__}
+    echoed_identity = (
+        _normalized_ledger_identity(reconciliation.get("ledger_identity", {}))
+        if isinstance(reconciliation, dict)
+        else {}
+    )
+    reconciliation_verified = (
+        isinstance(reconciliation, dict)
+        and reconciliation.get("verified") is True
+        and not reconciliation.get("unknown_ids")
+        and echoed_identity == _normalized_ledger_identity(identity)
+        and reconciliation.get("source_hash") == source_hash
+        and int(reconciliation.get("source_epoch", -1)) == source_epoch
+        and reconciliation.get("migration_id") == migration_id
+        and reconciliation.get("records_hash") == records_hash
+        and int(reconciliation.get("record_count", -1)) == len(migrated)
+    )
+    reason = None if reconciliation_verified else "remote_reconcile_unverified"
+    return records_hash, reconciliation, reason
+
+
+@dataclass(frozen=True)
+class _MigrationPreparation:
+    source_bytes: bytes
+    source_hash: str
+    source_epoch: int
+    claims_hash: str
+    freeze_record: dict[str, Any]
+    migrated: list[dict[str, Any]]
+    identity: dict[str, Any]
+    records_hash: str
+    reconciliation: dict[str, Any]
+
+
+def _prepare_migration_records_and_reconciliation(
+    source,
+    destination,
+    source_lease,
+    normalized_claims,
+    migration_id,
+    freeze,
+    quarantine,
+    remote_reconcile,
+) -> _MigrationPreparation | dict[str, Any]:
+    source_bytes, source_hash, source_epoch, claims_hash, freeze_record = _freeze_migration_source(
+        source, destination, source_lease, normalized_claims, migration_id, freeze
+    )
+    migrated, quarantined = _claim_migration_records(
+        source_bytes, normalized_claims, migration_id, source_hash, source_epoch
+    )
+    if quarantined:
+        _atomic_write_jsonl(quarantine, quarantined)
+        return _block_migration(
+            freeze,
+            freeze_record,
+            migration_id,
+            source,
+            destination,
+            source_hash,
+            source_epoch,
+            "quarantined_records",
+            migrated=len(migrated),
+            quarantined=len(quarantined),
+            quarantine=quarantine,
+        )
+
+    identities = {
+        json.dumps(row["ledger_identity"], sort_keys=True, separators=(",", ":"))
+        for row in migrated
+    }
+    if len(identities) != 1:
+        return _block_migration(
+            freeze,
+            freeze_record,
+            migration_id,
+            source,
+            destination,
+            source_hash,
+            source_epoch,
+            "single_ledger_identity_required",
+            migrated=len(migrated),
+        )
+    identity = json.loads(next(iter(identities)))
+    records_hash, reconciliation, blocked_reason = _reconcile_migration_records(
+        remote_reconcile, identity, migrated, source_hash, source_epoch, migration_id
+    )
+    if blocked_reason is not None:
+        return _block_migration(
+            freeze,
+            freeze_record,
+            migration_id,
+            source,
+            destination,
+            source_hash,
+            source_epoch,
+            blocked_reason,
+            migrated=len(migrated),
+        )
+    return _MigrationPreparation(
+        source_bytes=source_bytes,
+        source_hash=source_hash,
+        source_epoch=source_epoch,
+        claims_hash=claims_hash,
+        freeze_record=freeze_record,
+        migrated=migrated,
+        identity=identity,
+        records_hash=records_hash,
+        reconciliation=reconciliation,
+    )
+
+
+def _has_other_migration_authority(registry_leases, source, destination):
+    for _digest, _handle, manifest in registry_leases:
+        active = manifest.get("active_journal")
+        if active and Path(active).resolve() not in {source, destination} and Path(active).exists():
+            return True
+    return False
+
+
+def _stage_migration_cutover(
+    destination,
+    registry_leases,
+    preparation,
+    migration_id,
+):
+    source_epoch = preparation.source_epoch
+    destination_epoch = (
+        max(
+            source_epoch,
+            *(int(manifest.get("fencing_epoch", 0)) for _d, _h, manifest in registry_leases),
+        )
+        + 1
+    )
+    cutover_owner = f"cutover:{migration_id}"
+    finalized = [
+        {
+            **row,
+            "owner_token": cutover_owner,
+            "owner_pid": os.getpid(),
+            "fencing_epoch": destination_epoch,
+            "cutover_id": migration_id,
+        }
+        for row in preparation.migrated
+    ]
+    destination_hash = _migration_records_hash(finalized)
+    staging = destination.with_name(f".{destination.name}.{migration_id}.validated")
+    _atomic_write_jsonl(staging, finalized)
+    validated = [json.loads(line) for line in staging.read_text().splitlines()]
+    if validated != finalized or _migration_records_hash(validated) != destination_hash:
+        raise NormalizedApiError(
+            "migrate_journal", "staging_validation_failed", definite_reject=True
+        )
+    return staging, destination_epoch, destination_hash
+
+
+def _prepare_migration_cutover(source, destination, registry_leases, preparation, migration_id):
+    staging, destination_epoch, destination_hash = _stage_migration_cutover(
+        destination, registry_leases, preparation, migration_id
+    )
+    sealed_source = source.with_name(f"{source.name}.{migration_id}.sealed")
+    transaction = {
+        "schema_version": _JOURNAL_SCHEMA_VERSION,
+        "status": "PREPARED",
+        "migration_id": migration_id,
+        "source": str(source),
+        "destination": str(destination),
+        "staging": str(staging),
+        "sealed_source": str(sealed_source),
+        "source_hash": preparation.source_hash,
+        "source_epoch": preparation.source_epoch,
+        "claims_hash": preparation.claims_hash,
+        "records_hash": preparation.records_hash,
+        "destination_hash": destination_hash,
+        "destination_epoch": destination_epoch,
+        "migrated_records": len(preparation.migrated),
+        "ledger_identity": preparation.identity,
+        "previous_manifests": {digest: manifest for digest, _handle, manifest in registry_leases},
+    }
+    return transaction, staging
+
+
+def _seal_migration_source(
+    source, source_bytes, migration_id, source_hash, destination, epoch, sealed_source
+):
+    os.replace(source, sealed_source)
+    _fsync_directory(source.parent)
+    if sealed_source.read_bytes() != source_bytes:
+        raise NormalizedApiError(
+            "migrate_journal", "source_changed_while_frozen", definite_reject=True
+        )
+    tombstone = {
+        "schema_version": _JOURNAL_SCHEMA_VERSION,
+        "event": "cutover_tombstone",
+        "migration_id": migration_id,
+        "source_hash": source_hash,
+        "destination": str(destination),
+        "destination_epoch": epoch,
+        "sealed_source": str(sealed_source),
+    }
+    _atomic_write_json(source, tombstone)
+
+
+def _finish_migration_cutover(
+    destination,
+    registry_leases,
+    transaction,
+    identity,
+    migration_id,
+    source_hash,
+    epoch,
+    reconciliation,
+    transaction_path,
+):
+    cutover_owner = f"cutover:{migration_id}"
+    for digest, handle, _manifest in registry_leases:
+        _write_locked_json(
+            handle,
+            {
+                "schema_version": _JOURNAL_SCHEMA_VERSION,
+                "ledger_identity": identity,
+                "active_journal": str(destination),
+                "owner_token": cutover_owner,
+                "owner_pid": os.getpid(),
+                "fencing_epoch": epoch,
+                "source_hash": source_hash,
+                "registry_scope": digest,
+                "cutover_status": "COMMITTED",
+            },
+        )
+    committed_transaction = {
+        **transaction,
+        "status": "COMMITTED",
+        "remote_reconcile": {
+            key: value
+            for key, value in reconciliation.items()
+            if key not in {"credentials", "secret", "api_key"}
+        },
+    }
+    _atomic_write_json(transaction_path, committed_transaction)
+    transaction.update(committed_transaction)
+    receipt = _complete_migration_files(transaction, reconciliation)
+    return _migration_report(transaction, receipt)
+
+
+def _rollback_migration_cutover(
+    transaction,
+    registry_leases,
+    destination,
+    staging,
+    source,
+    freeze,
+    migration_id,
+    transaction_path,
+):
+    for digest, handle, _manifest in registry_leases:
+        previous = transaction.get("previous_manifests", {}).get(digest) or {}
+        with suppress(Exception):
+            _write_locked_json(handle, previous)
+    with suppress(FileNotFoundError):
+        destination.unlink()
+    if staging is not None:
+        with suppress(FileNotFoundError):
+            Path(staging).unlink()
+    sealed_source = Path(transaction["sealed_source"])
+    if sealed_source.exists():
+        with suppress(FileNotFoundError):
+            source.unlink()
+        os.replace(sealed_source, source)
+        _fsync_directory(source.parent)
+    freeze_record = {
+        "schema_version": _JOURNAL_SCHEMA_VERSION,
+        "status": "BLOCKED",
+        "reason": "cutover_failed_rolled_back",
+        "migration_id": migration_id,
+        "source": str(source),
+        "destination": str(destination),
+    }
+    with suppress(Exception):
+        _atomic_write_json(freeze, freeze_record)
+    with suppress(FileNotFoundError):
+        transaction_path.unlink()
+
+
 def migrate_execution_journal(
     source,
     destination,
@@ -1101,198 +1530,46 @@ def migrate_execution_journal(
     staging = None
     transaction = None
     transaction_path = _migration_transaction_path(destination)
-    migrated = []
-    quarantined = []
     migration_id = uuid.uuid4().hex
     freeze = Path(str(source) + ".freeze")
     try:
-        source_bytes = source.read_bytes()
-        source_hash = hashlib.sha256(source_bytes).hexdigest()
-        try:
-            source_epoch = int(
-                _read_locked_json(source_lease, "migrate_journal").get("fencing_epoch", 0)
-            )
-        except NormalizedApiError:
-            raise
-        claims_hash = hashlib.sha256(
-            json.dumps(normalized_claims, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-        freeze_record = {
-            "schema_version": _JOURNAL_SCHEMA_VERSION,
-            "status": "FROZEN",
-            "migration_id": migration_id,
-            "source": str(source),
-            "destination": str(destination),
-            "source_hash": source_hash,
-            "source_epoch": source_epoch,
-            "claims_hash": claims_hash,
-        }
-        _atomic_write_json(freeze, freeze_record)
-
-        for line_number, line in enumerate(source_bytes.decode("utf-8").splitlines(), 1):
-            try:
-                row = json.loads(line)
-                if not isinstance(row, dict) or not row.get("event"):
-                    raise ValueError("invalid_record")
-                client_id = str(row.get("client_order_id") or "")
-                native_id = str(row.get("order_id") or row.get("venue_order_id") or "")
-                identity = normalized_claims.get(client_id) or normalized_claims.get(
-                    f"order:{native_id}"
-                )
-                if identity is None:
-                    raise ValueError("unclaimed_identity")
-                ledger_identity = {
-                    key: identity[key]
-                    for key in (
-                        "provider",
-                        "environment",
-                        "account_id",
-                        "credential_fingerprint",
-                    )
-                    if key in identity
-                }
-                embedded = row.get("ledger_identity")
-                if isinstance(embedded, dict) and not _recorded_identity_matches(
-                    embedded, ledger_identity
-                ):
-                    raise ValueError("embedded_identity_mismatch")
-                row_provider = str(row.get("exchange_name") or "").partition("___")[0].upper()
-                if row_provider in _CRYPTO_PROVIDERS and row_provider != identity["provider"]:
-                    raise ValueError("claim_provider_mismatch")
-                migrated.append(
-                    {
-                        **row,
-                        "schema_version": _JOURNAL_SCHEMA_VERSION,
-                        "account_id": identity["account_id"],
-                        "strategy_id": identity["strategy_id"],
-                        "ledger_identity": ledger_identity,
-                        "migration_id": migration_id,
-                        "source_hash": source_hash,
-                        "source_epoch": source_epoch,
-                        "source_record_index": line_number,
-                    }
-                )
-            except Exception as exc:
-                quarantined.append(
-                    {
-                        "schema_version": _JOURNAL_SCHEMA_VERSION,
-                        "migration_id": migration_id,
-                        "source_record_index": line_number,
-                        "reason": str(exc) or type(exc).__name__,
-                        "raw_line": line,
-                    }
-                )
-        if quarantined:
-            _atomic_write_jsonl(quarantine, quarantined)
-            freeze_record.update(status="BLOCKED", reason="quarantined_records")
-            _atomic_write_json(freeze, freeze_record)
-            return _migration_blocked(
-                migration_id,
-                source,
-                destination,
-                source_hash,
-                source_epoch,
-                "quarantined_records",
-                migrated=len(migrated),
-                quarantined=len(quarantined),
-                quarantine=quarantine,
-            )
-
-        identities = {
-            json.dumps(row["ledger_identity"], sort_keys=True, separators=(",", ":"))
-            for row in migrated
-        }
-        if len(identities) != 1:
-            freeze_record.update(status="BLOCKED", reason="single_ledger_identity_required")
-            _atomic_write_json(freeze, freeze_record)
-            return _migration_blocked(
-                migration_id,
-                source,
-                destination,
-                source_hash,
-                source_epoch,
-                "single_ledger_identity_required",
-                migrated=len(migrated),
-            )
-        identity = json.loads(next(iter(identities)))
-        records_hash = _migration_records_hash(migrated)
-        if not callable(remote_reconcile):
-            freeze_record.update(status="BLOCKED", reason="remote_reconcile_required")
-            _atomic_write_json(freeze, freeze_record)
-            return _migration_blocked(
-                migration_id,
-                source,
-                destination,
-                source_hash,
-                source_epoch,
-                "remote_reconcile_required",
-                migrated=len(migrated),
-            )
-        try:
-            reconciliation = remote_reconcile(
-                ledger_identity=dict(identity),
-                records=tuple(dict(row) for row in migrated),
-                records_hash=records_hash,
-                record_count=len(migrated),
-                source_hash=source_hash,
-                source_epoch=source_epoch,
-                migration_id=migration_id,
-            )
-        except Exception as exc:
-            reconciliation = {"verified": False, "reason": type(exc).__name__}
-        echoed_identity = (
-            _normalized_ledger_identity(reconciliation.get("ledger_identity", {}))
-            if isinstance(reconciliation, dict)
-            else {}
+        prepared = _prepare_migration_records_and_reconciliation(
+            source,
+            destination,
+            source_lease,
+            normalized_claims,
+            migration_id,
+            freeze,
+            quarantine,
+            remote_reconcile,
         )
-        reconciliation_verified = (
-            isinstance(reconciliation, dict)
-            and reconciliation.get("verified") is True
-            and not reconciliation.get("unknown_ids")
-            and echoed_identity == _normalized_ledger_identity(identity)
-            and reconciliation.get("source_hash") == source_hash
-            and int(reconciliation.get("source_epoch", -1)) == source_epoch
-            and reconciliation.get("migration_id") == migration_id
-            and reconciliation.get("records_hash") == records_hash
-            and int(reconciliation.get("record_count", -1)) == len(migrated)
-        )
-        if not reconciliation_verified:
-            freeze_record.update(status="BLOCKED", reason="remote_reconcile_unverified")
-            _atomic_write_json(freeze, freeze_record)
-            return _migration_blocked(
-                migration_id,
-                source,
-                destination,
-                source_hash,
-                source_epoch,
-                "remote_reconcile_unverified",
-                migrated=len(migrated),
-            )
+        if not isinstance(prepared, _MigrationPreparation):
+            return prepared
+        source_bytes = prepared.source_bytes
+        source_hash = prepared.source_hash
+        source_epoch = prepared.source_epoch
+        freeze_record = prepared.freeze_record
+        migrated = prepared.migrated
+        identity = prepared.identity
+        reconciliation = prepared.reconciliation
 
         registry_leases = _acquire_identity_registry_leases(identity)
-        for _digest, _handle, manifest in registry_leases:
-            active = manifest.get("active_journal")
-            if (
-                active
-                and Path(active).resolve() not in {source, destination}
-                and Path(active).exists()
-            ):
-                freeze_record.update(status="BLOCKED", reason="ledger_has_other_authority")
-                _atomic_write_json(freeze, freeze_record)
-                return _migration_blocked(
-                    migration_id,
-                    source,
-                    destination,
-                    source_hash,
-                    source_epoch,
-                    "ledger_has_other_authority",
-                    migrated=len(migrated),
-                )
-
+        if _has_other_migration_authority(registry_leases, source, destination):
+            return _block_migration(
+                freeze,
+                freeze_record,
+                migration_id,
+                source,
+                destination,
+                source_hash,
+                source_epoch,
+                "ledger_has_other_authority",
+                migrated=len(migrated),
+            )
         if source.read_bytes() != source_bytes:
-            freeze_record.update(status="BLOCKED", reason="source_changed_while_frozen")
-            _atomic_write_json(freeze, freeze_record)
-            return _migration_blocked(
+            return _block_migration(
+                freeze,
+                freeze_record,
                 migration_id,
                 source,
                 destination,
@@ -1302,126 +1579,45 @@ def migrate_execution_journal(
                 migrated=len(migrated),
             )
 
-        destination_epoch = (
-            max(
-                source_epoch,
-                *(int(manifest.get("fencing_epoch", 0)) for _d, _h, manifest in registry_leases),
-            )
-            + 1
+        transaction, staging = _prepare_migration_cutover(
+            source, destination, registry_leases, prepared, migration_id
         )
-        cutover_owner = f"cutover:{migration_id}"
-        finalized = [
-            {
-                **row,
-                "owner_token": cutover_owner,
-                "owner_pid": os.getpid(),
-                "fencing_epoch": destination_epoch,
-                "cutover_id": migration_id,
-            }
-            for row in migrated
-        ]
-        destination_hash = _migration_records_hash(finalized)
-        staging = destination.with_name(f".{destination.name}.{migration_id}.validated")
-        _atomic_write_jsonl(staging, finalized)
-        validated = [json.loads(line) for line in staging.read_text().splitlines()]
-        if validated != finalized or _migration_records_hash(validated) != destination_hash:
-            raise NormalizedApiError(
-                "migrate_journal", "staging_validation_failed", definite_reject=True
-            )
-        sealed_source = source.with_name(f"{source.name}.{migration_id}.sealed")
-        transaction = {
-            "schema_version": _JOURNAL_SCHEMA_VERSION,
-            "status": "PREPARED",
-            "migration_id": migration_id,
-            "source": str(source),
-            "destination": str(destination),
-            "staging": str(staging),
-            "sealed_source": str(sealed_source),
-            "source_hash": source_hash,
-            "source_epoch": source_epoch,
-            "claims_hash": claims_hash,
-            "records_hash": records_hash,
-            "destination_hash": destination_hash,
-            "destination_epoch": destination_epoch,
-            "migrated_records": len(migrated),
-            "ledger_identity": identity,
-            "previous_manifests": {
-                digest: manifest for digest, _handle, manifest in registry_leases
-            },
-        }
         _atomic_write_json(transaction_path, transaction)
-
-        os.replace(source, sealed_source)
-        _fsync_directory(source.parent)
-        if sealed_source.read_bytes() != source_bytes:
-            raise NormalizedApiError(
-                "migrate_journal", "source_changed_while_frozen", definite_reject=True
-            )
-        tombstone = {
-            "schema_version": _JOURNAL_SCHEMA_VERSION,
-            "event": "cutover_tombstone",
-            "migration_id": migration_id,
-            "source_hash": source_hash,
-            "destination": str(destination),
-            "destination_epoch": destination_epoch,
-            "sealed_source": str(sealed_source),
-        }
-        _atomic_write_json(source, tombstone)
+        epoch = transaction["destination_epoch"]
+        _seal_migration_source(
+            source,
+            source_bytes,
+            migration_id,
+            source_hash,
+            destination,
+            epoch,
+            Path(transaction["sealed_source"]),
+        )
         _publish_no_replace(staging, destination)
         staging = None
-        for digest, handle, _manifest in registry_leases:
-            _write_locked_json(
-                handle,
-                {
-                    "schema_version": _JOURNAL_SCHEMA_VERSION,
-                    "ledger_identity": identity,
-                    "active_journal": str(destination),
-                    "owner_token": cutover_owner,
-                    "owner_pid": os.getpid(),
-                    "fencing_epoch": destination_epoch,
-                    "source_hash": source_hash,
-                    "registry_scope": digest,
-                    "cutover_status": "COMMITTED",
-                },
-            )
-        transaction["status"] = "COMMITTED"
-        transaction["remote_reconcile"] = {
-            key: value
-            for key, value in reconciliation.items()
-            if key not in {"credentials", "secret", "api_key"}
-        }
-        _atomic_write_json(transaction_path, transaction)
-        receipt = _complete_migration_files(transaction, reconciliation)
-        return _migration_report(transaction, receipt)
+        return _finish_migration_cutover(
+            destination,
+            registry_leases,
+            transaction,
+            identity,
+            migration_id,
+            source_hash,
+            epoch,
+            reconciliation,
+            transaction_path,
+        )
     except Exception:
         if transaction is not None and transaction.get("status") != "COMMITTED":
-            for digest, handle, _manifest in registry_leases:
-                previous = transaction.get("previous_manifests", {}).get(digest) or {}
-                with suppress(Exception):
-                    _write_locked_json(handle, previous)
-            with suppress(FileNotFoundError):
-                destination.unlink()
-            if staging is not None:
-                with suppress(FileNotFoundError):
-                    Path(staging).unlink()
-            sealed_source = Path(transaction["sealed_source"])
-            if sealed_source.exists():
-                with suppress(FileNotFoundError):
-                    source.unlink()
-                os.replace(sealed_source, source)
-                _fsync_directory(source.parent)
-            freeze_record = {
-                "schema_version": _JOURNAL_SCHEMA_VERSION,
-                "status": "BLOCKED",
-                "reason": "cutover_failed_rolled_back",
-                "migration_id": migration_id,
-                "source": str(source),
-                "destination": str(destination),
-            }
-            with suppress(Exception):
-                _atomic_write_json(freeze, freeze_record)
-            with suppress(FileNotFoundError):
-                transaction_path.unlink()
+            _rollback_migration_cutover(
+                transaction,
+                registry_leases,
+                destination,
+                staging,
+                source,
+                freeze,
+                migration_id,
+                transaction_path,
+            )
         raise
     finally:
         _close_registry_leases(registry_leases)
@@ -1466,6 +1662,7 @@ class _ExecutionSession:
         self.orders = {}
         self.used_ids = set()
         self.reserved_ids = set()
+        self._reservation_only_cancel_unknowns = {}
         self.historical_unknown = set()
         self.pending = defaultdict(deque)
         self.trade_ids = set()
@@ -3406,6 +3603,7 @@ class _ExecutionSession:
         if self.path is None or not self.path.exists():
             return
         try:
+            reservation_cancel_events: dict[tuple[str, str, str, str], list[dict[str, object]]] = {}
             epoch_owners: dict[int, str] = {}
             previous_epoch = -1
             for line in self.path.read_text().splitlines():
@@ -3490,14 +3688,16 @@ class _ExecutionSession:
                     venue = row.get("exchange_name")
                     if not client_id or not venue:
                         raise ValueError("missing_reservation_identity")
-                    self.reserved_ids.add(
-                        self._client_key(
-                            venue,
-                            row.get("account_id"),
-                            client_id,
-                            row,
-                        )
+                    client_key = self._client_key(
+                        venue,
+                        row.get("account_id"),
+                        client_id,
+                        row,
                     )
+                    reservation_cancel_events.setdefault(client_key, []).append(
+                        {"event": event, "exchange_name": venue, "client_order_id": client_id}
+                    )
+                    self.reserved_ids.add(client_key)
                     continue
                 if event in {"trade", "trade_update"} and row.get("trade_id"):
                     self.trade_ids.add(self._trade_key(row.get("exchange_name"), row))
@@ -3513,6 +3713,30 @@ class _ExecutionSession:
                         row.get("account_id"),
                         client_id,
                         row,
+                    )
+                    reservation_cancel_events.setdefault(client_key, []).append(
+                        {
+                            "event": event,
+                            **{
+                                key: row.get(key)
+                                for key in (
+                                    "exchange_name",
+                                    "client_order_id",
+                                    "account_id",
+                                    "symbol",
+                                    "order_id",
+                                    "venue_order_id",
+                                    "external_order_id",
+                                    "order_ref",
+                                    "front_id",
+                                    "session_id",
+                                    "execution_unknown",
+                                    "terminal_confirmed",
+                                    "update_origin",
+                                )
+                                if key in row
+                            },
+                        }
                     )
                     self.used_ids.add(client_key)
                     self.reserved_ids.discard(client_key)
@@ -3563,6 +3787,62 @@ class _ExecutionSession:
                 if not state.get("terminal"):
                     self.historical_unknown.add(self._identifier(state))
                     state["last_update"] = self._unknown(state, "restart_reconciliation")
+            self._reservation_only_cancel_unknowns.clear()
+            for client_key, records in reservation_cancel_events.items():
+                if len(records) != 3:
+                    continue
+                reservation, cancel_intent, unknown_update = records
+                if [row.get("event") for row in records] != [
+                    "client_id_reservation",
+                    "cancel_intent",
+                    "order_update",
+                ]:
+                    continue
+                if (
+                    unknown_update.get("execution_unknown") is not True
+                    or unknown_update.get("terminal_confirmed") is not False
+                    or unknown_update.get("update_origin") not in (None, "cancel_order")
+                    or not cancel_intent.get("symbol")
+                    or cancel_intent.get("symbol") != unknown_update.get("symbol")
+                    or any(
+                        row.get(key) not in (None, "")
+                        for row in records
+                        for key in (
+                            "order_id",
+                            "venue_order_id",
+                            "external_order_id",
+                            "order_ref",
+                            "front_id",
+                            "session_id",
+                        )
+                    )
+                ):
+                    continue
+                venue = cancel_intent.get("exchange_name")
+                client_id = cancel_intent.get("client_order_id")
+                if (
+                    not venue
+                    or not client_id
+                    or unknown_update.get("exchange_name") != venue
+                    or unknown_update.get("client_order_id") != client_id
+                ):
+                    continue
+                state = self.orders.get((venue, str(client_id)))
+                if (
+                    state is None
+                    or state.get("terminal")
+                    or state.get("_intent_persisted")
+                    or state.get("order_id") not in (None, "")
+                    or self._identifier(state) not in self.historical_unknown
+                ):
+                    continue
+                self._reservation_only_cancel_unknowns[client_key] = {
+                    "exchange_name": venue,
+                    "client_order_id": str(client_id),
+                    "account_id": state.get("account_id"),
+                    "symbol": state.get("symbol"),
+                    "evidence": "reservation_then_cancel_then_unknown",
+                }
         except Exception:
             raise NormalizedApiError(
                 "journal", "unreadable_journal", definite_reject=True
@@ -7668,6 +7948,7 @@ class _ExecutionSession:
                     **update,
                     _EXPLICIT_IDENTITY_FIELDS: sorted(_explicit_identity_fields(state)),
                     "fee_unresolved": state.get("fee_unresolved", False),
+                    "update_origin": origin if isinstance(origin, str) else None,
                 },
                 allow_read_only=allow_read_only_journal,
             )
@@ -7686,6 +7967,322 @@ class _ExecutionSession:
             self.historical_unknown.discard(self._identifier(state))
             self.historical_unknown.difference_update(state.get("recovery_ids", ()))
         return update
+
+    def recover_reservation_only_cancel_unknowns(self):
+        """Resolve only journal-proven cancellations of never-submitted reservations.
+
+        This operation reads and appends the local execution journal only. It
+        never queries or writes an exchange adapter, and deliberately refuses
+        market-data-only sessions.
+        """
+        with self.mutex:
+            if self.config["market_data_only"]:
+                raise NormalizedApiError(
+                    "recover_cancel_unknown",
+                    "execution_session_required",
+                    definite_reject=True,
+                )
+            recovered = []
+            for client_key, evidence in tuple(self._reservation_only_cancel_unknowns.items()):
+                venue = evidence["exchange_name"]
+                client_id = evidence["client_order_id"]
+                state = self.orders.get((venue, client_id))
+                if (
+                    state is None
+                    or state.get("terminal")
+                    or state.get("_intent_persisted")
+                    or state.get("order_id") not in (None, "")
+                    or state.get("symbol") != evidence["symbol"]
+                    or state.get("account_id") != evidence["account_id"]
+                    or self._identifier(state) not in self.historical_unknown
+                ):
+                    continue
+                update = {
+                    **self._identity(state, {}),
+                    "kind": "order",
+                    "status": "canceled",
+                    "execution_unknown": False,
+                    "terminal_confirmed": True,
+                    "remote_write_attempted": False,
+                    "local_resolution": "reservation_only_cancel_unknown",
+                }
+                recorded = self._record(
+                    state,
+                    update,
+                    origin="reservation_only_cancel_recovery",
+                )
+                if (
+                    recorded.get("terminal_confirmed") is not True
+                    or recorded.get("execution_unknown") is True
+                ):
+                    raise NormalizedApiError(
+                        "recover_cancel_unknown",
+                        "local_terminal_journal_write_failed",
+                        execution_unknown=True,
+                    )
+                recovered.append(client_id)
+                self._reservation_only_cancel_unknowns.pop(client_key, None)
+            return {
+                "completed": True,
+                "recovered_client_order_ids": sorted(recovered),
+            }
+
+    @staticmethod
+    def _historical_update_has_fill_evidence(row):
+        if row.get("execution_source") == "trades":
+            return True
+        for key in (
+            "filled",
+            "cum_qty",
+            "cumQty",
+            "cum_quantity",
+            "executed_qty",
+            "executedQty",
+            "last_filled_qty",
+            "commission",
+            "cumulative_commission",
+            "unbooked_cumulative_commission",
+            "fee",
+            "unbooked_fee",
+        ):
+            value = row.get(key)
+            if value in (None, ""):
+                continue
+            try:
+                amount = Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                return True
+            if not amount.is_finite() or amount != 0:
+                return True
+        for key in ("avg_price", "average_price", "execution_avg_price"):
+            value = row.get(key)
+            if value not in (None, "", 0, 0.0, "0", "0.0"):
+                return True
+        return False
+
+    @staticmethod
+    def _historical_update_has_remote_identity(row):
+        return any(
+            row.get(key) not in (None, "")
+            for key in (
+                "order_id",
+                "venue_order_id",
+                "remote_order_id",
+                "external_order_id",
+                "native_order_id",
+                "exchange_order_id",
+                "order_ref",
+                "front_id",
+                "session_id",
+                "exchange_id",
+                "position_id",
+                "trade_id",
+                "fill_id",
+                "execution_id",
+            )
+        )
+
+    def recover_historical_documented_definite_rejections(self):
+        """Locally terminalize only historical unknowns with a documented rejection.
+
+        The proof is the durable sequence of one placement intent followed by
+        its venue-coded ``make_order`` unknown response. Later cancel/query
+        unknowns cannot undo that documented rejection, but any terminal,
+        remote-ID, trade, or fill evidence keeps the order unresolved. This
+        method never calls an exchange adapter.
+        """
+        operation = "recover_documented_definite_rejection"
+        with self.mutex:
+            if self.config["market_data_only"]:
+                raise NormalizedApiError(
+                    operation,
+                    "execution_session_required",
+                    definite_reject=True,
+                )
+            if self.path is None or not self.path.exists():
+                return {"completed": True, "recovered_client_order_ids": []}
+
+            try:
+                self._assert_writer_lease(operation)
+                records_by_identity = defaultdict(list)
+                ambiguous_order_evidence_rows = []
+                relevant_events = {
+                    "client_id_reservation",
+                    "intent",
+                    "cancel_intent",
+                    "order_update",
+                    "trade",
+                    "trade_update",
+                }
+                for line in self.path.read_text(encoding="utf-8").splitlines():
+                    row = json.loads(line)
+                    if not isinstance(row, dict):
+                        raise ValueError("invalid journal record")
+                    event = row.get("event")
+                    if event not in relevant_events:
+                        continue
+                    venue = row.get("exchange_name")
+                    client_id = row.get("client_order_id")
+                    if not client_id:
+                        if event in {
+                            "cancel_intent",
+                            "order_update",
+                            "trade",
+                            "trade_update",
+                        }:
+                            if not venue:
+                                raise ValueError("unbound order evidence")
+                            ambiguous_order_evidence_rows.append(row)
+                        continue
+                    if not venue:
+                        raise ValueError("order event missing venue")
+                    key = self._client_key(venue, row.get("account_id"), client_id, row)
+                    records_by_identity[key].append(row)
+            except Exception:
+                raise NormalizedApiError(
+                    operation,
+                    "unreadable_journal",
+                    execution_unknown=True,
+                ) from None
+
+            recovered = []
+            for client_key, records in records_by_identity.items():
+                account_id, client_id = client_key[2:]
+                if not records or any(
+                    row.get("exchange_name") != records[0].get("exchange_name")
+                    or str(row.get("client_order_id") or "") != str(client_id)
+                    for row in records
+                ):
+                    continue
+                venue = records[0]["exchange_name"]
+                intents = [
+                    (index, row)
+                    for index, row in enumerate(records)
+                    if row.get("event") == "intent"
+                ]
+                make_updates = [
+                    (index, row)
+                    for index, row in enumerate(records)
+                    if row.get("event") == "order_update"
+                    and row.get("update_origin") == "make_order"
+                ]
+                if len(intents) != 1 or len(make_updates) != 1:
+                    continue
+                intent_index, intent = intents[0]
+                make_index, make_update = make_updates[0]
+                error_code = str(make_update.get("error_code") or "")
+                if (
+                    intent_index >= make_index
+                    or make_update.get("execution_unknown") is not True
+                    or make_update.get("terminal_confirmed") is not False
+                    or make_update.get("status") != "submitted"
+                    or make_update.get("definite_reject") is True
+                    or not _is_definite_reject(venue, error_code)
+                ):
+                    continue
+                if [row.get("event") for row in records[:make_index]] not in (
+                    ["intent"],
+                    ["client_id_reservation", "intent"],
+                ):
+                    continue
+                if any(
+                    row.get("event") == "client_id_reservation"
+                    for row in records[make_index + 1 :]
+                ):
+                    continue
+                post_rejection = records[make_index + 1 :]
+                if any(
+                    row.get("event") == "trade"
+                    or row.get("event") == "trade_update"
+                    or row.get("event") not in {"cancel_intent", "order_update"}
+                    or (
+                        row.get("event") == "order_update"
+                        and (
+                            row.get("update_origin") not in {"cancel_order", "query_order"}
+                            or row.get("execution_unknown") is not True
+                            or row.get("terminal_confirmed") is not False
+                            or row.get("status") != "submitted"
+                            or row.get("definite_reject") is True
+                        )
+                    )
+                    for row in post_rejection
+                ):
+                    continue
+                symbol = intent.get("symbol")
+                if not symbol or any(
+                    row.get("symbol") not in (None, "", symbol) for row in records
+                ):
+                    continue
+                ambiguous_evidence = False
+                for evidence_row in ambiguous_order_evidence_rows:
+                    if (
+                        evidence_row.get("exchange_name") != venue
+                        or evidence_row.get("symbol") not in (None, "", symbol)
+                    ):
+                        continue
+                    identity = self._ledger_identity(
+                        venue,
+                        evidence_row.get("account_id"),
+                        evidence_row,
+                    )
+                    if self._ledger_key(identity) == client_key[:3]:
+                        ambiguous_evidence = True
+                        break
+                if ambiguous_evidence:
+                    continue
+                if any(
+                    self._historical_update_has_remote_identity(row)
+                    or (
+                        row.get("event") == "order_update"
+                        and self._historical_update_has_fill_evidence(row)
+                    )
+                    for row in records
+                ):
+                    continue
+                state = self.orders.get((venue, str(client_id)))
+                if (
+                    state is None
+                    or state.get("terminal")
+                    or state.get("_intent_persisted") is not True
+                    or state.get("order_id") not in (None, "")
+                    or state.get("account_id") != account_id
+                    or state.get("symbol") != symbol
+                    or state.get("fee_unresolved")
+                    or self._identifier(state) not in self.historical_unknown
+                ):
+                    continue
+                update = {
+                    **self._identity(state, {}),
+                    "kind": "order",
+                    "status": "rejected",
+                    "filled": 0,
+                    "execution_unknown": False,
+                    "terminal_confirmed": True,
+                    "definite_reject": True,
+                    "error_code": error_code,
+                    "remote_write_attempted": True,
+                    "local_resolution": "historical_documented_definite_rejection",
+                }
+                recorded = self._record(
+                    state,
+                    update,
+                    origin="historical_documented_definite_rejection_recovery",
+                )
+                if (
+                    recorded.get("status") != "rejected"
+                    or recorded.get("terminal_confirmed") is not True
+                    or recorded.get("execution_unknown") is not False
+                    or recorded.get("definite_reject") is not True
+                    or recorded.get("error_code") != error_code
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "local_terminal_journal_write_failed",
+                        execution_unknown=True,
+                    )
+                recovered.append(str(client_id))
+
+            return {"completed": True, "recovered_client_order_ids": sorted(recovered)}
 
     def _begin_invoke(
         self,

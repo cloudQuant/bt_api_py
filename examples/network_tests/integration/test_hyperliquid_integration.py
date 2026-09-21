@@ -6,6 +6,7 @@ It includes both basic tests and integration examples.
 """
 
 import contextlib
+import logging
 import time
 from queue import Queue
 
@@ -15,6 +16,13 @@ pytest.importorskip("eth_account")
 
 from bt_api_py.feeds.live_hyperliquid import HyperliquidRequestDataSpot
 from bt_api_py.functions.log_message import SpdLogManager
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _debug_suppressed_exception_type(exc: Exception) -> None:
+    """Log only the exception class for failures in best-effort examples."""
+    _LOGGER.debug("Suppressed Hyperliquid integration exception type: %s", type(exc).__name__)
 
 
 def test_market_data_queries():
@@ -41,8 +49,8 @@ def test_market_data_queries():
 
         request_data.get_exchange_status()
 
-    except Exception:
-        pass
+    except Exception as exc:
+        _debug_suppressed_exception_type(exc)
 
 
 def test_authenticated_queries():
@@ -65,8 +73,8 @@ def test_authenticated_queries():
                 symbol="BTC", side="buy", quantity=0.001, price=40000, order_type="limit"
             )
 
-    except Exception:
-        pass
+    except Exception as exc:
+        _debug_suppressed_exception_type(exc)
 
 
 def test_websocket_subscription():
@@ -120,8 +128,8 @@ def test_websocket_subscription():
         }
         wss_data.process_trades_message(trades_message)
 
-    except Exception:
-        pass
+    except Exception as exc:
+        _debug_suppressed_exception_type(exc)
 
 
 def test_config_loading():
@@ -140,8 +148,8 @@ def test_config_loading():
 
         # Check API endpoints
 
-    except Exception:
-        pass
+    except Exception as exc:
+        _debug_suppressed_exception_type(exc)
 
 
 def main():

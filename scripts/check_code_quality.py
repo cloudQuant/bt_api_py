@@ -121,9 +121,7 @@ class CodeQualityChecker:
             # 排除指定目录
             dirs[:] = [d for d in dirs if d not in exclude_dirs and not d.startswith(".")]
 
-            for file in files:
-                if file.endswith(".py"):
-                    python_files.append(Path(root) / file)
+            python_files.extend([Path(root) / file for file in files if file.endswith(".py")])
 
         if self.verbose:
             print(f"Found {len(python_files)} Python files to check\n")

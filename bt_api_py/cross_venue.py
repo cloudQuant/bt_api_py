@@ -48,6 +48,83 @@ def _aware_datetime(value: object, field: str) -> datetime:
     return value.astimezone(UTC)
 
 
+def _rebuild_funding_freshness(value: Mapping[str, Any]) -> Freshness:
+    freshness_value = value.get("freshness")
+    if isinstance(freshness_value, Freshness):
+        return freshness_value
+    if not isinstance(freshness_value, Mapping):
+        raise CrossVenueValueError("funding_freshness_missing")
+
+    observed_at = _aware_datetime(freshness_value.get("observed_at"), "funding_observed_at")
+    source_value = freshness_value.get("source")
+    if not source_value:
+        source_value = value.get("source")
+    return Freshness(
+        source=str(source_value or "").strip(),
+        observed_at=observed_at,
+        stale=bool(freshness_value.get("stale", False)),
+        stale_reason=(
+            None
+            if freshness_value.get("stale_reason") in (None, "")
+            else str(freshness_value.get("stale_reason"))
+        ),
+    )
+
+
+def _rebuild_funding_snapshot(value: Mapping[str, Any]) -> FundingSnapshot:
+    interval = value.get("settlement_interval_seconds")
+    if value.get("available") is True and (
+        isinstance(interval, bool) or not isinstance(interval, int) or interval <= 0
+    ):
+        raise CrossVenueValueError("funding_interval_invalid")
+
+    freshness = _rebuild_funding_freshness(value)
+    raw_value = value.get("raw")
+    raw = cast("Mapping[str, Any]", raw_value) if isinstance(raw_value, Mapping) else {}
+    try:
+        return FundingSnapshot(
+            exchange_name=str(value.get("exchange_name") or ""),
+            symbol=str(value.get("symbol") or ""),
+            rate=value.get("rate"),
+            next_funding_time=_aware_datetime(value.get("next_funding_time"), "next_funding_time")
+            if value.get("next_funding_time") is not None
+            else None,
+            settlement_interval_seconds=interval,
+            source=str(value.get("source") or "").strip(),
+            freshness=freshness,
+            available=value.get("available") is True,
+            unavailable_reason=value.get("unavailable_reason"),
+            raw=raw,
+        )
+    except (TypeError, ValueError) as exc:
+        raise CrossVenueValueError(str(exc) or "funding_snapshot_invalid") from exc
+
+
+def _validate_funding_snapshot(
+    snapshot: FundingSnapshot,
+    now_epoch: DecimalInput,
+    expected_exchange_name: str | None,
+    expected_symbol: str | None,
+) -> FundingSnapshot:
+    if snapshot.available is not True:
+        raise CrossVenueValueError(snapshot.unavailable_reason or "funding_unavailable")
+    if snapshot.freshness.stale:
+        raise CrossVenueValueError(snapshot.freshness.stale_reason or "funding_stale")
+    if not snapshot.source:
+        raise CrossVenueValueError("funding_source_missing")
+    if expected_exchange_name and snapshot.exchange_name != expected_exchange_name:
+        raise CrossVenueValueError("funding_exchange_name_mismatch")
+    if expected_symbol and snapshot.symbol != expected_symbol:
+        raise CrossVenueValueError("funding_symbol_mismatch")
+    if snapshot.next_funding_time is None or snapshot.rate is None:
+        raise CrossVenueValueError("funding_snapshot_incomplete")
+    now = decimal_value(now_epoch, "funding_now_epoch")
+    next_epoch = decimal_value(snapshot.next_funding_time.timestamp(), "next_funding_time")
+    if next_epoch <= now:
+        raise CrossVenueValueError("funding_schedule_expired")
+    return snapshot
+
+
 def coerce_funding_snapshot(
     value: FundingSnapshot | Mapping[str, Any],
     *,
@@ -66,69 +143,16 @@ def coerce_funding_snapshot(
     if isinstance(value, FundingSnapshot):
         snapshot = value
     elif isinstance(value, Mapping):
-        interval = value.get("settlement_interval_seconds")
-        if value.get("available") is True and (
-            isinstance(interval, bool) or not isinstance(interval, int) or interval <= 0
-        ):
-            raise CrossVenueValueError("funding_interval_invalid")
-        freshness_value = value.get("freshness")
-        if isinstance(freshness_value, Freshness):
-            freshness = freshness_value
-        elif isinstance(freshness_value, Mapping):
-            observed_at = _aware_datetime(freshness_value.get("observed_at"), "funding_observed_at")
-            freshness = Freshness(
-                source=str(freshness_value.get("source") or value.get("source") or "").strip(),
-                observed_at=observed_at,
-                stale=bool(freshness_value.get("stale", False)),
-                stale_reason=(
-                    None
-                    if freshness_value.get("stale_reason") in (None, "")
-                    else str(freshness_value.get("stale_reason"))
-                ),
-            )
-        else:
-            raise CrossVenueValueError("funding_freshness_missing")
-        raw_value = value.get("raw")
-        raw = cast("Mapping[str, Any]", raw_value) if isinstance(raw_value, Mapping) else {}
-        try:
-            snapshot = FundingSnapshot(
-                exchange_name=str(value.get("exchange_name") or ""),
-                symbol=str(value.get("symbol") or ""),
-                rate=value.get("rate"),
-                next_funding_time=_aware_datetime(
-                    value.get("next_funding_time"), "next_funding_time"
-                )
-                if value.get("next_funding_time") is not None
-                else None,
-                settlement_interval_seconds=interval,
-                source=str(value.get("source") or "").strip(),
-                freshness=freshness,
-                available=value.get("available") is True,
-                unavailable_reason=value.get("unavailable_reason"),
-                raw=raw,
-            )
-        except (TypeError, ValueError) as exc:
-            raise CrossVenueValueError(str(exc) or "funding_snapshot_invalid") from exc
+        snapshot = _rebuild_funding_snapshot(value)
     else:
         raise CrossVenueValueError("funding_snapshot_missing")
 
-    if snapshot.available is not True:
-        raise CrossVenueValueError(snapshot.unavailable_reason or "funding_unavailable")
-    if snapshot.freshness.stale:
-        raise CrossVenueValueError(snapshot.freshness.stale_reason or "funding_stale")
-    if not snapshot.source:
-        raise CrossVenueValueError("funding_source_missing")
-    if expected_exchange_name and snapshot.exchange_name != expected_exchange_name:
-        raise CrossVenueValueError("funding_exchange_name_mismatch")
-    if expected_symbol and snapshot.symbol != expected_symbol:
-        raise CrossVenueValueError("funding_symbol_mismatch")
-    if snapshot.next_funding_time is None or snapshot.rate is None:
-        raise CrossVenueValueError("funding_snapshot_incomplete")
-    now = decimal_value(now_epoch, "funding_now_epoch")
-    next_epoch = decimal_value(snapshot.next_funding_time.timestamp(), "next_funding_time")
-    if next_epoch <= now:
-        raise CrossVenueValueError("funding_schedule_expired")
-    return snapshot
+    return _validate_funding_snapshot(
+        snapshot,
+        now_epoch,
+        expected_exchange_name,
+        expected_symbol,
+    )
 
 
 def normalize_orderbook_evidence(

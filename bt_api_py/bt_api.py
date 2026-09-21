@@ -1148,6 +1148,32 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             }
         return {"session_enabled": True, **self._execution_session.summary()}
 
+    def recover_reservation_only_cancel_unknowns(self) -> dict[str, Any]:
+        """Resolve locally proven reservation-only cancel unknowns before Store startup.
+
+        The SDK execution session checks the durable journal sequence and writes
+        only a local terminal journal event. No venue adapter is consulted.
+        """
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "recover_cancel_unknown",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        return session.recover_reservation_only_cancel_unknowns()
+
+    def recover_historical_documented_definite_rejections(self) -> dict[str, Any]:
+        """Resolve only historical unknowns proven rejected by a documented venue code."""
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "recover_documented_definite_rejection",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        return session.recover_historical_documented_definite_rejections()
+
     @staticmethod
     def evaluate_ctp_execution_budget(
         evidence: Mapping[str, Any], *, mode: str = "ordinary", now: Any = None
@@ -7779,6 +7805,79 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             self._record_verified_position_mode(exchange_name, position_mode)
             return result
 
+    def _get_binance_order_readiness(
+        self,
+        exchange_name: str,
+        symbol: str,
+        quantity_native: Decimal | float | int | str,
+        *,
+        margin_mode: str,
+        position_mode: str | None,
+        account_config: Any,
+        extra_data: Any,
+    ) -> dict[str, Any]:
+        from ._venue_mappers.binance import (
+            normalize_order_readiness as normalize_binance_order_readiness,
+        )
+
+        def options() -> Any:
+            return deepcopy(extra_data)
+
+        exchange_info = self._backend.get_exchange_info(exchange_name, symbol, extra_data=options())
+
+        def optional_read(name: str, *args: Any, **read_kwargs: Any) -> Any:
+            method = getattr(self._backend, name, None)
+            if not callable(method):
+                return None
+            try:
+                return method(*args, **read_kwargs)
+            except Exception:
+                return None
+
+        position_mode_info = optional_read("get_position_mode", exchange_name, extra_data=options())
+        initial = normalize_binance_order_readiness(
+            exchange_name,
+            symbol,
+            quantity_native,
+            margin_mode=margin_mode,
+            expected_position_mode=position_mode,
+            account_config=account_config,
+            exchange_info=exchange_info,
+            position_mode_info=position_mode_info,
+        )
+        if initial["definite_failure"]:
+            return initial
+        symbol_config = optional_read(
+            "get_symbol_config", exchange_name, symbol, extra_data=options()
+        )
+        leverage_info = optional_read(
+            "get_leverage_info",
+            exchange_name,
+            symbol,
+            margin_mode=margin_mode,
+            extra_data=options(),
+        )
+        max_size = optional_read(
+            "get_max_size",
+            exchange_name,
+            symbol,
+            margin_mode=margin_mode,
+            extra_data=options(),
+        )
+        return normalize_binance_order_readiness(
+            exchange_name,
+            symbol,
+            quantity_native,
+            margin_mode=margin_mode,
+            expected_position_mode=position_mode,
+            account_config=account_config,
+            exchange_info=exchange_info,
+            position_mode_info=position_mode_info,
+            symbol_config=symbol_config,
+            leverage_info=leverage_info,
+            max_size=max_size,
+        )
+
     def get_order_readiness(
         self,
         exchange_name: str,
@@ -7871,67 +7970,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     max_size=max_size,
                 )
 
-            from ._venue_mappers.binance import (
-                normalize_order_readiness as normalize_binance_order_readiness,
-            )
-
-            exchange_info = self._backend.get_exchange_info(
-                exchange_name, symbol, extra_data=options()
-            )
-
-            def optional_read(name: str, *args: Any, **read_kwargs: Any) -> Any:
-                method = getattr(self._backend, name, None)
-                if not callable(method):
-                    return None
-                try:
-                    return method(*args, **read_kwargs)
-                except Exception:
-                    return None
-
-            position_mode_info = optional_read(
-                "get_position_mode", exchange_name, extra_data=options()
-            )
-            initial = normalize_binance_order_readiness(
+            return self._get_binance_order_readiness(
                 exchange_name,
                 symbol,
                 quantity_native,
                 margin_mode=margin_mode,
-                expected_position_mode=position_mode,
+                position_mode=position_mode,
                 account_config=account_config,
-                exchange_info=exchange_info,
-                position_mode_info=position_mode_info,
-            )
-            if initial["definite_failure"]:
-                return initial
-            symbol_config = optional_read(
-                "get_symbol_config", exchange_name, symbol, extra_data=options()
-            )
-            leverage_info = optional_read(
-                "get_leverage_info",
-                exchange_name,
-                symbol,
-                margin_mode=margin_mode,
-                extra_data=options(),
-            )
-            max_size = optional_read(
-                "get_max_size",
-                exchange_name,
-                symbol,
-                margin_mode=margin_mode,
-                extra_data=options(),
-            )
-            return normalize_binance_order_readiness(
-                exchange_name,
-                symbol,
-                quantity_native,
-                margin_mode=margin_mode,
-                expected_position_mode=position_mode,
-                account_config=account_config,
-                exchange_info=exchange_info,
-                position_mode_info=position_mode_info,
-                symbol_config=symbol_config,
-                leverage_info=leverage_info,
-                max_size=max_size,
+                extra_data=extra_data,
             )
         except Exception as exc:
             failure = normalize_error(exc, operation, exchange_name=exchange_name)

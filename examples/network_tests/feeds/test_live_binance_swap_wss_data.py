@@ -266,7 +266,9 @@ def test_binance_wss_depth_with_symbol_list():
     items = _collect_wss_data(data_queue, wait_seconds=5)
     received_ob = any(isinstance(d, BinanceWssOrderBookData) for d in items)
     if not received_ob:
-        pytest.skip("Skipped (no data, likely network): depth with symbol_list returned no orderbook data")
+        pytest.skip(
+            "Skipped (no data, likely network): depth with symbol_list returned no orderbook data"
+        )
     assert received_ob is True, "depth with symbol_list should push BinanceWssOrderBookData"
 
 
@@ -282,7 +284,9 @@ def test_binance_wss_agg_trade_with_symbol_list():
     items = _collect_wss_data(data_queue, wait_seconds=10)
     received_agg = any(isinstance(d, BinanceAggTradeData) for d in items)
     if not received_agg:
-        pytest.skip("Skipped (no data, likely network): agg_trade with symbol_list returned no trade data")
+        pytest.skip(
+            "Skipped (no data, likely network): agg_trade with symbol_list returned no trade data"
+        )
     assert received_agg is True, "agg_trade with symbol_list should push BinanceAggTradeData"
 
 

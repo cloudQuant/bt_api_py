@@ -14,7 +14,7 @@ pytest.importorskip("sklearn")
 
 from bt_api_py.risk_management.containers.risk_events import RiskEventType, RiskLevel
 from bt_api_py.risk_management.containers.risk_metrics import RiskMetrics
-from bt_api_py.risk_management.core.limits_manager import LimitsManager
+from bt_api_py.risk_management.core.limits_manager import LimitsManager, LimitStatus
 from bt_api_py.risk_management.core.policy_engine import PolicyEngine
 from bt_api_py.risk_management.core.risk_assessor import RiskAssessor
 from bt_api_py.risk_management.core.risk_manager import RiskManager
@@ -250,6 +250,119 @@ class TestRiskManagement:
         assert "max_order_size" in limits
         assert limits["max_order_size"]["value"] == 1000000
 
+    def test_get_limit_breaches_filters_and_sorts_check_history(self):
+        """只返回筛选范围内的 BREACHED/CRITICAL 限额记录，并按时间倒序排列。"""
+        manager = LimitsManager()
+        current_time = int(time.time())
+        manager.check_history = [
+            {
+                "timestamp": current_time - 20,
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "result": {
+                    "detailed_checks": [
+                        {
+                            "limit_type": "max_order_size",
+                            "current_value": 120,
+                            "limit_value": 100,
+                            "utilization_ratio": 1.2,
+                            "status": LimitStatus.BREACHED,
+                        },
+                        {
+                            "limit_type": "max_daily_loss",
+                            "current_value": 30,
+                            "limit_value": 100,
+                            "utilization_ratio": 0.3,
+                            "status": LimitStatus.WARNING,
+                        },
+                    ]
+                },
+            },
+            {
+                "timestamp": current_time - 10,
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "result": {
+                    "detailed_checks": [
+                        {
+                            "limit_type": "max_position_value",
+                            "current_value": 250,
+                            "limit_value": 200,
+                            "utilization_ratio": 1.25,
+                            "status": LimitStatus.CRITICAL,
+                        },
+                        {
+                            "limit_type": "max_leverage",
+                            "current_value": 2,
+                            "limit_value": 3,
+                            "utilization_ratio": 0.67,
+                            "status": "WITHIN_LIMIT",
+                        },
+                        {
+                            "limit_type": "max_daily_loss",
+                            "current_value": 110,
+                            "limit_value": 100,
+                            "utilization_ratio": 1.1,
+                            "status": LimitStatus.BREACHED,
+                        },
+                    ]
+                },
+            },
+            {
+                "timestamp": current_time - 5,
+                "exchange_name": "BINANCE",
+                "account_id": "other_account",
+                "result": {"detailed_checks": [{"status": LimitStatus.BREACHED}]},
+            },
+            {
+                "timestamp": current_time - 5,
+                "exchange_name": "OKX",
+                "account_id": "test_account",
+                "result": {"detailed_checks": [{"status": LimitStatus.CRITICAL}]},
+            },
+            {
+                "timestamp": current_time - 3601,
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "result": {"detailed_checks": [{"status": LimitStatus.CRITICAL}]},
+            },
+        ]
+
+        assert manager.get_limit_breaches(
+            exchange_name="BINANCE", account_id="test_account", time_window=3600
+        ) == [
+            {
+                "timestamp": current_time - 10,
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "limit_type": "max_position_value",
+                "current_value": 250,
+                "limit_value": 200,
+                "utilization_ratio": 1.25,
+                "status": LimitStatus.CRITICAL,
+            },
+            {
+                "timestamp": current_time - 10,
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "limit_type": "max_daily_loss",
+                "current_value": 110,
+                "limit_value": 100,
+                "utilization_ratio": 1.1,
+                "status": LimitStatus.BREACHED,
+            },
+            {
+                "timestamp": current_time - 20,
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "limit_type": "max_order_size",
+                "current_value": 120,
+                "limit_value": 100,
+                "utilization_ratio": 1.2,
+                "status": LimitStatus.BREACHED,
+            },
+        ]
+
     def test_pre_trade_limits_check(self):
         """测试预交易限制检查"""
         manager = LimitsManager()
@@ -278,6 +391,91 @@ class TestRiskManagement:
         assert "warnings" in result
         assert "restrictions" in result
 
+    def test_pre_trade_limits_detailed_checks_and_limit_semantics(self):
+        """真实限额检查按固定顺序汇总通过、警告和关键限制。"""
+        manager = LimitsManager()
+        manager.set_static_limit(
+            limit_type="max_order_size",
+            exchange_name="BINANCE",
+            account_id="test_account",
+            value=1_000_000,
+        )
+        current_metrics = RiskMetrics(
+            {
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "market_risk": {"value_at_risk_1d": 100_000},
+                "credit_risk": {"credit_utilization": 0.4},
+            }
+        )
+        expected_check_order = [
+            "max_order_size",
+            "max_orders_per_minute",
+            "min_margin_requirement",
+            "position_limits",
+            "risk_limits",
+            "compliance_limits",
+        ]
+        expected_restricted_check_order = [
+            *expected_check_order[:4],
+            "max_var",
+            expected_check_order[5],
+        ]
+
+        within_limits = manager.check_pre_trade_limits(
+            exchange_name="BINANCE",
+            account_id="test_account",
+            order_data={"symbol": "BTCUSDT", "size": 10, "price": 50_000},
+            current_metrics=current_metrics,
+        )
+
+        assert [check["limit_type"] for check in within_limits["detailed_checks"]] == (
+            expected_check_order
+        )
+        assert [check["status"] for check in within_limits["detailed_checks"]] == [
+            LimitStatus.WITHIN_LIMIT
+        ] * 6
+        assert within_limits["approved"] is True
+        assert within_limits["warnings"] == []
+        assert within_limits["restrictions"] == []
+        assert within_limits["mitigation_required"] is False
+
+        warning = manager.check_pre_trade_limits(
+            exchange_name="BINANCE",
+            account_id="test_account",
+            order_data={"symbol": "BTCUSDT", "size": 18, "price": 50_000},
+            current_metrics=current_metrics,
+        )
+
+        assert warning["detailed_checks"][0]["status"] == LimitStatus.WARNING
+        assert warning["approved"] is True
+        assert warning["warnings"] == ["Order size 900,000 is 90.0% of limit"]
+        assert warning["restrictions"] == []
+        assert warning["mitigation_required"] is False
+
+        high_var_metrics = RiskMetrics(
+            {
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "market_risk": {"value_at_risk_1d": 1_200_000},
+                "credit_risk": {"credit_utilization": 0.4},
+            }
+        )
+        restricted = manager.check_pre_trade_limits(
+            exchange_name="BINANCE",
+            account_id="test_account",
+            order_data={"symbol": "ETHUSDT", "size": 10, "price": 50_000},
+            current_metrics=high_var_metrics,
+        )
+
+        assert [check["limit_type"] for check in restricted["detailed_checks"]] == (
+            expected_restricted_check_order
+        )
+        assert restricted["detailed_checks"][4]["status"] == LimitStatus.CRITICAL
+        assert restricted["approved"] is False
+        assert restricted["restrictions"] == ["VaR exceeds limit"]
+        assert restricted["mitigation_required"] is True
+
     def test_policy_engine_initialization(self):
         """测试策略引擎初始化"""
         engine = PolicyEngine()
@@ -285,6 +483,8 @@ class TestRiskManagement:
         assert engine is not None
         assert engine.rules is not None
         assert engine.action_handlers is not None
+        assert engine.default_actions
+        assert all(callable(handler) for handler in engine.default_actions.values())
         assert len(engine.rules) > 0  # 应该有默认规则
 
     def test_order_policy_evaluation(self):
@@ -537,6 +737,100 @@ class TestRiskManagement:
         # 应该返回结果而不是抛出异常
         assert result is not None
         assert "approved" in result
+
+    @pytest.mark.parametrize(
+        ("method_name", "limit_type", "limit_value", "method_args", "restriction"),
+        [
+            (
+                "_check_max_order_size",
+                "max_order_size",
+                100,
+                ("BINANCE", "test_account", {"size": 2, "price": 60}, None),
+                "Order exceeds maximum size limit",
+            ),
+            (
+                "_check_order_frequency",
+                "max_orders_per_minute",
+                0.5,
+                ("BINANCE", "test_account", {}),
+                "Order frequency exceeds limit",
+            ),
+            (
+                "_check_max_position_size",
+                "max_position_size",
+                100,
+                ("BINANCE", "test_account", {"total_value": 120}),
+                "Position size exceeds limit",
+            ),
+            (
+                "_check_notional_exposure",
+                "max_notional_exposure",
+                100,
+                ("BINANCE", "test_account", {"notional_exposure": 120}),
+                "Notional exposure exceeds limit",
+            ),
+            (
+                "_check_leverage_limit",
+                "max_leverage",
+                2,
+                ("BINANCE", "test_account", {"leverage": 3}),
+                "Leverage exceeds limit",
+            ),
+            (
+                "_check_concentration_limit",
+                "max_concentration",
+                0.3,
+                ("BINANCE", "test_account", {"concentration_ratio": 0.4}),
+                "Concentration exceeds limit",
+            ),
+        ],
+    )
+    def test_critical_limit_checks_return_empty_warning(
+        self, method_name, limit_type, limit_value, method_args, restriction
+    ):
+        """关键限额检查保留限制信息且返回空 warning。"""
+        manager = LimitsManager()
+        manager.set_static_limit(
+            limit_type=limit_type,
+            exchange_name="BINANCE",
+            account_id="test_account",
+            value=limit_value,
+        )
+
+        result = getattr(manager, method_name)(*method_args)
+
+        assert result["status"] == LimitStatus.CRITICAL
+        assert result["restriction"] == restriction
+        assert result["warning"] == ""
+
+    def test_pre_trade_limits_records_critical_order_size_check(self):
+        """关键订单尺寸限制仍进入预交易结果的详细检查。"""
+        manager = LimitsManager()
+        manager.set_static_limit(
+            limit_type="max_order_size",
+            exchange_name="BINANCE",
+            account_id="test_account",
+            value=100,
+        )
+        current_metrics = RiskMetrics(
+            {
+                "exchange_name": "BINANCE",
+                "account_id": "test_account",
+                "market_risk": {"value_at_risk_1d": 100_000},
+                "credit_risk": {"credit_utilization": 0.4},
+            }
+        )
+
+        result = manager.check_pre_trade_limits(
+            exchange_name="BINANCE",
+            account_id="test_account",
+            order_data={"symbol": "BTCUSDT", "size": 2, "price": 60},
+            current_metrics=current_metrics,
+        )
+
+        assert result["detailed_checks"]
+        assert result["detailed_checks"][0]["status"] == LimitStatus.CRITICAL
+        assert result["detailed_checks"][0]["restriction"] == "Order exceeds maximum size limit"
 
 
 if __name__ == "__main__":

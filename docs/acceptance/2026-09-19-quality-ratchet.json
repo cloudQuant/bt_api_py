@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-19T13:17:28.088404+00:00",
+  "generated_at": "2026-09-19T17:21:53.591707+00:00",
   "ruff_version": "ruff 0.16.2",
   "scope": [
     "bt_api_py",
@@ -39,18 +39,12 @@
     "bt_api/bt_api_okx/tests"
   ],
   "ruff": {
-    "total": 21,
+    "total": 10,
     "by_rule": {
-      "B007": 1,
       "B017": 2,
-      "E402": 2,
-      "F841": 3,
+      "E402": 1,
       "S106": 3,
-      "S501": 1,
-      "S603": 1,
-      "SIM105": 1,
-      "TC002": 4,
-      "UP042": 3
+      "TC002": 4
     }
   },
   "notes": "Quality ratchet baseline (迭代07). Counts may only decrease; refresh with scripts/ci/check_quality_ratchet.py --update. Re-generate after any deliberate ruff version change."

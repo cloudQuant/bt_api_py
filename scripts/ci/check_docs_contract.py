@@ -53,9 +53,11 @@ def validate_support_matrix(data: dict[str, Any], root: Path) -> list[str]:
         if tier not in CERTIFICATION_TIERS:
             continue
         name = str(entry.get("name") or "<unnamed>")
-        for field in ("receipt_path", "head_sha", "profile", "validated_at", "expires_at"):
-            if not entry.get(field):
-                errors.append(f"{name}: {tier} entry is missing {field}")
+        errors.extend(
+            f"{name}: {tier} entry is missing {field}"
+            for field in ("receipt_path", "head_sha", "profile", "validated_at", "expires_at")
+            if not entry.get(field)
+        )
         receipt = root / str(entry.get("receipt_path") or "")
         if entry.get("receipt_path") and not receipt.is_file():
             errors.append(f"{name}: receipt_path does not exist: {entry['receipt_path']}")
@@ -77,12 +79,16 @@ def check_docs_contract(root: Path = ROOT) -> list[str]:
             errors.append(f"active documentation missing: {relative_path}")
             continue
         content = path.read_text(encoding="utf-8")
-        for forbidden in FORBIDDEN_PATHS:
-            if forbidden in content:
-                errors.append(f"{relative_path}: references retired path {forbidden}")
-        for claim in FORBIDDEN_PYTHON_CLAIMS:
-            if match := claim.search(content):
-                errors.append(f"{relative_path}: overstates Python support with {match.group(0)}")
+        errors.extend(
+            f"{relative_path}: references retired path {forbidden}"
+            for forbidden in FORBIDDEN_PATHS
+            if forbidden in content
+        )
+        errors.extend(
+            f"{relative_path}: overstates Python support with {match.group(0)}"
+            for claim in FORBIDDEN_PYTHON_CLAIMS
+            if (match := claim.search(content))
+        )
         if re.search(r"order_type\s*=\s*[\"'](?:market|limit)[\"']", content):
             errors.append(
                 f"{relative_path}: uses a bare legacy order_type example instead of OrderRequest"

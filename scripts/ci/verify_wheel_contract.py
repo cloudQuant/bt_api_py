@@ -15,6 +15,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .offline_pip import (
+        WheelhousePathError,
+        pip_source_args,
+        pip_source_environment,
+        resolve_wheelhouse_path,
+    )
+else:
+    from offline_pip import (
+        WheelhousePathError,
+        pip_source_args,
+        pip_source_environment,
+        resolve_wheelhouse_path,
+    )
+
 PACKAGE_RESOURCE = "bt_api_py/configs/exchange-bundles.toml"
 PACKAGE_GLOB = "bt_api_py-*.whl"
 SDIST_GLOB = "bt_api_py-*.tar.gz"
@@ -67,7 +82,7 @@ def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
-def _isolated_subprocess_env() -> dict[str, str]:
+def _isolated_subprocess_env(wheelhouse: Path | None = None) -> dict[str, str]:
     """Return an environment that cannot join a parent pytest-cov session.
 
     The installed-wheel probe deliberately starts a second interpreter outside
@@ -84,7 +99,7 @@ def _isolated_subprocess_env() -> dict[str, str]:
         if key.startswith("COV_CORE_") or key in {"COVERAGE_FILE", "COVERAGE_PROCESS_START"}:
             env.pop(key, None)
     env["PYTHONNOUSERSITE"] = "1"
-    return env
+    return pip_source_environment(env, resolve_wheelhouse_path(wheelhouse))
 
 
 def _run(command: list[str], *, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -107,13 +122,15 @@ def _head_sha() -> str:
     return result.stdout.strip()
 
 
-def _isolated_install_probe(wheel: Path) -> tuple[str, dict[str, Any], dict[str, Any]]:
+def _isolated_install_probe(
+    wheel: Path, wheelhouse: Path | None = None
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
     with tempfile.TemporaryDirectory(prefix="bt-api-py-wheel-contract-") as temp_dir:
         temp_root = Path(temp_dir)
         venv_dir = temp_root / "venv"
-        env = _isolated_subprocess_env()
+        env = _isolated_subprocess_env(wheelhouse)
         create = _run(
-            [sys.executable, "-m", "venv", "--system-site-packages", str(venv_dir)],
+            [sys.executable, "-m", "venv", str(venv_dir)],
             cwd=temp_root,
             env=env,
         )
@@ -130,6 +147,7 @@ def _isolated_install_probe(wheel: Path) -> tuple[str, dict[str, Any], dict[str,
                 "-m",
                 "pip",
                 "install",
+                *pip_source_args(wheelhouse),
                 "--disable-pip-version-check",
                 "--force-reinstall",
                 # This is an installed-package probe.  Resolve the wheel's
@@ -146,17 +164,25 @@ def _isolated_install_probe(wheel: Path) -> tuple[str, dict[str, Any], dict[str,
                 f"{install.stderr.strip() or install.stdout.strip()}"
             )
 
+        check = _run([str(python), "-m", "pip", "check"], cwd=temp_root, env=env)
+        if check.returncode != 0:
+            raise WheelContractError(
+                "isolated installed dependency check failed: "
+                f"{check.stderr.strip() or check.stdout.strip()}"
+            )
+
         probe = _run(
             [
                 str(python),
                 "-c",
                 (
                     "import importlib.resources as resources, json, pathlib; "
-                    "import bt_api_py; "
+                    "import bt_api_base, bt_api_py; "
                     "from bt_api_py._plugin_catalog import PluginCatalog; "
                     "resource = resources.files('bt_api_py.configs').joinpath("
                     "'exchange-bundles.toml'); "
                     "payload = {'package_file': str(pathlib.Path(bt_api_py.__file__).resolve()), "
+                    "'base_package_file': str(pathlib.Path(bt_api_base.__file__).resolve()), "
                     "'resource': str(resource), 'resource_is_file': resource.is_file(), "
                     "'bundles': PluginCatalog().list_bundles()}; "
                     "assert payload['resource_is_file']; "
@@ -183,6 +209,16 @@ def _isolated_install_probe(wheel: Path) -> tuple[str, dict[str, Any], dict[str,
             raise WheelContractError(
                 "installed package probe resolved outside the virtualenv site-packages: "
                 f"{package_file}"
+            )
+        base_package_path = Path(str(probe_payload["base_package_file"])).resolve()
+        if (
+            not base_package_path.is_relative_to(venv_dir.resolve())
+            or "site-packages" not in base_package_path.parts
+            or "bt_api_base" not in base_package_path.parts
+        ):
+            raise WheelContractError(
+                "installed base package probe resolved outside the virtualenv site-packages: "
+                f"{base_package_path}"
             )
 
         doctor = _run(
@@ -219,8 +255,9 @@ def _isolated_install_probe(wheel: Path) -> tuple[str, dict[str, Any], dict[str,
         )
 
 
-def verify(dist_dir: Path) -> dict[str, Any]:
+def verify(dist_dir: Path, wheelhouse: Path | None = None) -> dict[str, Any]:
     """Build an evidence receipt for the source, wheel, and sdist resource contract."""
+    wheelhouse = resolve_wheelhouse_path(wheelhouse)
 
     source_resource = REPOSITORY_ROOT / PACKAGE_RESOURCE
     if not source_resource.is_file():
@@ -238,7 +275,7 @@ def verify(dist_dir: Path) -> dict[str, Any]:
             f"source, wheel, and sdist exchange-bundles.toml hashes do not match: {resource_hashes}"
         )
 
-    package_file, probe, doctor = _isolated_install_probe(wheel)
+    package_file, probe, doctor = _isolated_install_probe(wheel, wheelhouse)
     return {
         "schema_version": 1,
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -254,6 +291,7 @@ def verify(dist_dir: Path) -> dict[str, Any]:
         },
         "resource_sha256": resource_hashes,
         "package_file": package_file,
+        "base_package_file": probe["base_package_file"],
         "probe": probe,
         "doctor": doctor,
     }
@@ -263,11 +301,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dist-dir", type=Path, required=True)
     parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument(
+        "--wheelhouse",
+        type=Path,
+        help="Use only wheels from this existing absolute local directory.",
+    )
     args = parser.parse_args(argv)
 
     try:
-        receipt = verify(args.dist_dir.resolve())
-    except (OSError, WheelContractError, zipfile.BadZipFile, tarfile.TarError) as exc:
+        receipt = verify(args.dist_dir.resolve(), wheelhouse=args.wheelhouse)
+    except (
+        OSError,
+        WheelContractError,
+        WheelhousePathError,
+        zipfile.BadZipFile,
+        tarfile.TarError,
+    ) as exc:
         receipt = {
             "schema_version": 1,
             "result": "failed",

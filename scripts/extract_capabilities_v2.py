@@ -132,8 +132,7 @@ def generate_markdown_table(exchange_caps: dict[str, list[str]]) -> str:
         asset_type = parts[1] if len(parts) > 1 else "UNKNOWN"
 
         values = [exchange, asset_type]
-        for cap in all_capabilities:
-            values.append("✓" if cap in caps else "✗")
+        values.extend("✓" if cap in caps else "✗" for cap in all_capabilities)
 
         rows.append("|" + "|".join(values) + "|")
 
@@ -162,8 +161,7 @@ def generate_csv(exchange_caps: dict[str, list[str]]) -> str:
         asset_type = parts[1] if len(parts) > 1 else "UNKNOWN"
 
         values = [exchange, asset_type]
-        for cap in all_capabilities:
-            values.append("1" if cap in caps else "0")
+        values.extend("1" if cap in caps else "0" for cap in all_capabilities)
 
         rows.append(",".join(values))
 

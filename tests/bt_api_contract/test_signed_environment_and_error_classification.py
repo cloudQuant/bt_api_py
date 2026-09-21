@@ -17,7 +17,6 @@ SYMBOL = "BTC-USDT-SWAP"
 @pytest.mark.parametrize(
     "exchange_name,code",
     [
-        (OKX, "50120"),
         (OKX, "59999"),
         ("BINANCE___SWAP", "-4999"),
         ("BINANCE___SWAP", "51008"),
@@ -43,6 +42,8 @@ def test_unknown_numeric_write_response_defaults_to_execution_unknown(exchange_n
 @pytest.mark.parametrize(
     "exchange_name,code",
     [
+        (OKX, "50120"),
+        (OKX, "50123"),
         (OKX, "51000"),
         (OKX, "51008"),
         ("BINANCE___SWAP", "-1102"),
@@ -66,7 +67,7 @@ def test_documented_venue_rejection_codes_remain_definite(exchange_name, code):
 
 
 def test_existing_normalized_numeric_error_cannot_bypass_venue_classification():
-    original = NormalizedApiError("make_order", "50120", definite_reject=True)
+    original = NormalizedApiError("make_order", "59999", definite_reject=True)
 
     error = normalize_error(original, "make_order", exchange_name=OKX, write=True)
 
@@ -147,7 +148,7 @@ def execution_api(monkeypatch, tmp_path):
 
 def test_unknown_numeric_submit_stays_nonterminal_and_blocks_resubmission(monkeypatch, tmp_path):
     api = execution_api(monkeypatch, tmp_path)
-    backend = ResponseBackend(NormalizedApiError("make_order", "50120", definite_reject=True))
+    backend = ResponseBackend(NormalizedApiError("make_order", "59999", definite_reject=True))
     api._backend = backend
     try:
         update = api.make_order(OKX, request("123456789012"), normalized=True)

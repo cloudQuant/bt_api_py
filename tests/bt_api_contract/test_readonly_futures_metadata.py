@@ -278,6 +278,75 @@ def test_binance_readiness_uses_account_mode_symbol_rules_and_leverage(api):
     assert all(value is True for value in result["checks"].values())
 
 
+def test_binance_readiness_success_preserves_read_order_parameters_and_extra_data_copies(api):
+    feed = _binance_readiness_feed()
+    feed.get_leverage_info = Mock(
+        return_value=[
+            {
+                "symbol": "BTCUSDT",
+                "marginType": "CROSSED",
+                "positionSide": "LONG",
+                "leverage": "10",
+            }
+        ]
+    )
+    feed.get_max_size = Mock(
+        return_value=[{"symbol": "BTCUSDT", "maxBuy": "100", "maxSell": "100"}]
+    )
+    api.exchange_feeds["BINANCE___SWAP"] = feed
+    extra_data = {"audit": {"operation": "readiness", "tokens": ["one", "two"]}}
+    calls = []
+    read_names = (
+        "get_account_config",
+        "get_exchange_info",
+        "get_position_mode",
+        "get_symbol_config",
+        "get_leverage_info",
+        "get_max_size",
+    )
+
+    for method_name in read_names:
+        method = getattr(feed, method_name)
+        response = method.return_value
+
+        def record_read(*args, _method_name=method_name, _response=response, **kwargs):
+            calls.append((_method_name, args, dict(kwargs)))
+            return _response
+
+        method.side_effect = record_read
+
+    result = api.get_order_readiness(
+        "BINANCE___SWAP",
+        "BTCUSDT",
+        "0.002",
+        margin_mode="cross",
+        position_mode="dual_side",
+        extra_data=extra_data,
+    )
+
+    assert result["ready"] is True
+    assert [
+        (name, args, {key: value for key, value in kwargs.items() if key != "extra_data"})
+        for name, args, kwargs in calls
+    ] == [
+        ("get_account_config", (), {}),
+        ("get_exchange_info", ("BTCUSDT",), {}),
+        ("get_position_mode", (), {}),
+        ("get_symbol_config", ("BTCUSDT",), {}),
+        ("get_leverage_info", ("BTCUSDT",), {"margin_mode": "cross"}),
+        ("get_max_size", ("BTCUSDT", "cross"), {}),
+    ]
+
+    copied_options = [kwargs["extra_data"] for _, _, kwargs in calls]
+    assert all(options == extra_data and options is not extra_data for options in copied_options)
+    assert len({id(options) for options in copied_options}) == len(read_names)
+    copied_audit = [options["audit"] for options in copied_options]
+    assert all(
+        audit == extra_data["audit"] and audit is not extra_data["audit"] for audit in copied_audit
+    )
+    assert len({id(audit) for audit in copied_audit}) == len(read_names)
+
+
 def test_binance_readiness_keeps_missing_symbol_config_unproven(api):
     feed = _binance_readiness_feed(symbol_config=[])
     api.exchange_feeds["BINANCE___SWAP"] = feed
@@ -289,6 +358,58 @@ def test_binance_readiness_keeps_missing_symbol_config_unproven(api):
     assert result["ready"] is False
     assert result["definite_failure"] is False
     assert set(result["reasons"]) == {"margin_mode_unproven", "leverage_unproven"}
+
+
+def test_binance_readiness_marks_margin_mismatch_and_zero_leverage_as_failures(api):
+    feed = _binance_readiness_feed(
+        symbol_config=[
+            {
+                "symbol": "BTCUSDT",
+                "marginType": "ISOLATED",
+                "leverage": "0",
+            }
+        ]
+    )
+    api.exchange_feeds["BINANCE___SWAP"] = feed
+
+    result = api.get_order_readiness(
+        "BINANCE___SWAP",
+        "BTCUSDT",
+        "0.002",
+        margin_mode="cross",
+        position_mode="dual_side",
+    )
+
+    assert result["checks"]["margin_mode"] is False
+    assert result["checks"]["leverage"] is False
+    assert result["definite_failure"] is True
+    assert result["reasons"] == ["margin_mode_mismatch", "leverage_unproven"]
+
+
+def test_binance_invalid_quantity_short_circuits_optional_account_reads(api):
+    feed = _binance_readiness_feed()
+    feed.get_leverage_info = Mock(return_value=None)
+    feed.get_max_size = Mock(return_value=None)
+    api.exchange_feeds["BINANCE___SWAP"] = feed
+
+    result = api.get_order_readiness(
+        "BINANCE___SWAP",
+        "BTCUSDT",
+        "NaN",
+        margin_mode="cross",
+        position_mode="dual_side",
+    )
+
+    assert result["checks"]["quantity_native"] is False
+    assert result["definite_failure"] is True
+    assert result["reasons"] == [
+        "invalid_quantity_native",
+        "margin_mode_unproven",
+        "leverage_unproven",
+    ]
+    feed.get_symbol_config.assert_not_called()
+    feed.get_leverage_info.assert_not_called()
+    feed.get_max_size.assert_not_called()
 
 
 @pytest.mark.asyncio
