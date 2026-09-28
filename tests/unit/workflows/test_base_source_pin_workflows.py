@@ -20,7 +20,10 @@ def _step_index(steps: list[dict[str, object]], name: str) -> int:
 
 
 def _assert_source_bootstrap_precedes_package_install(
-    steps: list[dict[str, object]], install_step: str
+    steps: list[dict[str, object]],
+    install_step: str,
+    *,
+    expect_github_env: bool = False,
 ) -> None:
     bootstrap_index = _step_index(steps, "Build and install parent-pinned base wheel")
     install_index = _step_index(steps, install_step)
@@ -30,7 +33,10 @@ def _assert_source_bootstrap_precedes_package_install(
     assert BOOTSTRAP_COMMAND in bootstrap["run"]
     assert '--wheel-dir "${{ runner.temp }}/bt_api_base_wheelhouse"' in bootstrap["run"]
     assert "$RUNNER_TEMP" not in bootstrap["run"]
-    assert "$GITHUB_ENV" not in bootstrap["run"]
+    if expect_github_env:
+        assert '--github-env "$GITHUB_ENV"' in bootstrap["run"]
+    else:
+        assert "$GITHUB_ENV" not in bootstrap["run"]
     assert (
         "continue-on-error" not in bootstrap
         or str(bootstrap["continue-on-error"]).lower() != "true"
@@ -57,7 +63,7 @@ def test_tests_workflow_bootstraps_every_root_dependency_install_job() -> None:
         quality_steps, "Install package + quality tools"
     )
     _assert_source_bootstrap_precedes_package_install(
-        full_suite_steps, "Install package + dev deps"
+        full_suite_steps, "Install package + dev deps", expect_github_env=True
     )
 
 
