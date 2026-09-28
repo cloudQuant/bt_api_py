@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-19T17:21:53.591707+00:00",
+  "generated_at": "2026-09-28T14:02:47.687472+00:00",
   "ruff_version": "ruff 0.16.2",
   "scope": [
     "bt_api_py",
@@ -15,13 +15,16 @@
     "bt_api/bt_api_ctp/src",
     "bt_api/bt_api_dydx/src",
     "bt_api/bt_api_gateio/src",
+    "bt_api/bt_api_gateway/src",
     "bt_api/bt_api_htx/src",
     "bt_api/bt_api_hyperliquid/src",
     "bt_api/bt_api_ib_web/src",
     "bt_api/bt_api_kraken/src",
     "bt_api/bt_api_mexc/src",
+    "bt_api/bt_api_monitor/src",
     "bt_api/bt_api_mt5/src",
     "bt_api/bt_api_okx/src",
+    "bt_api/bt_api_risk/src",
     "bt_api/bt_api_base/tests",
     "bt_api/bt_api_binance/tests",
     "bt_api/bt_api_bitget/tests",
@@ -30,13 +33,16 @@
     "bt_api/bt_api_ctp/tests",
     "bt_api/bt_api_dydx/tests",
     "bt_api/bt_api_gateio/tests",
+    "bt_api/bt_api_gateway/tests",
     "bt_api/bt_api_htx/tests",
     "bt_api/bt_api_hyperliquid/tests",
     "bt_api/bt_api_ib_web/tests",
     "bt_api/bt_api_kraken/tests",
     "bt_api/bt_api_mexc/tests",
+    "bt_api/bt_api_monitor/tests",
     "bt_api/bt_api_mt5/tests",
-    "bt_api/bt_api_okx/tests"
+    "bt_api/bt_api_okx/tests",
+    "bt_api/bt_api_risk/tests"
   ],
   "ruff": {
     "total": 10,
