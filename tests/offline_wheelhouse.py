@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-import sys
 import sysconfig
 import tempfile
 import tomllib
@@ -17,10 +15,9 @@ from packaging.utils import canonicalize_name
 from packaging.version import Version
 from wheel.wheelfile import WheelFile
 
-from scripts.ci.offline_pip import pip_source_args, pip_source_environment
+from scripts.ci.base_source_pin import verify_base_source_pin
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-BASE_SOURCE = REPOSITORY_ROOT / "bt_api" / "bt_api_base"
 PYTEST_SOCKET_VERSION = "0.7.0"
 
 
@@ -252,58 +249,34 @@ def build_validator_wheelhouse(destination: Path) -> Path:
     return wheelhouse
 
 
-def _build_local_base_wheel(wheelhouse: Path) -> None:
-    if not (BASE_SOURCE / "pyproject.toml").is_file():
-        raise RuntimeError(f"local bt_api_base source is unavailable: {BASE_SOURCE}")
-
-    with tempfile.TemporaryDirectory(prefix="bt-api-base-wheel-source-") as temp_dir:
-        source = Path(temp_dir) / "bt_api_base"
-        shutil.copytree(
-            BASE_SOURCE,
-            source,
-            ignore=shutil.ignore_patterns(
-                ".git", "build", "dist", "*.egg-info", "__pycache__", ".pytest_cache"
-            ),
-        )
-        environment = pip_source_environment(os.environ, wheelhouse)
-        command = [
-            sys.executable,
-            "-m",
-            "pip",
-            "wheel",
-            *pip_source_args(wheelhouse),
-            "--wheel-dir",
-            str(wheelhouse),
-            str(source),
-        ]
-        result = subprocess.run(
-            command,
-            cwd=temp_dir,
-            env=environment,
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                "local bt_api_base wheel build failed: "
-                f"{result.stderr.strip() or result.stdout.strip()}"
-            )
-        if not list(wheelhouse.glob("bt_api_base-0.15.4-*.whl")):
-            raise RuntimeError("local bt_api_base build did not produce version 0.15.4")
-
-
 def build_project_wheelhouse(destination: Path) -> Path:
-    """Build a temporary root/base runtime dependency wheelhouse from local installs."""
+    """Build a temporary root/base dependency wheelhouse from local installs."""
     wheelhouse = destination.resolve()
     wheelhouse.mkdir(parents=True, exist_ok=True)
     root_pyproject = REPOSITORY_ROOT / "pyproject.toml"
-    base_pyproject = BASE_SOURCE / "pyproject.toml"
+    base_pin = verify_base_source_pin(REPOSITORY_ROOT)
+    base_metadata = subprocess.run(
+        [  # noqa: S607 - Git is required for the checked-out source pin.
+            "git",
+            "-C",
+            str(base_pin.source_path),
+            "show",
+            f"{base_pin.source_commit}:pyproject.toml",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if base_metadata.returncode != 0:
+        raise RuntimeError("pinned bt_api_base source metadata could not be read")
+    pinned_base_config = tomllib.loads(base_metadata.stdout)
     root_requirements = _project_requirements(root_pyproject, "dependencies")
-    base_requirements = _project_requirements(base_pyproject, "dependencies")
     build_requirements = [
         *_build_requirements(root_pyproject),
-        *_build_requirements(base_pyproject),
+        *[str(item) for item in pinned_base_config.get("build-system", {}).get("requires", [])],
+    ]
+    base_requirements = [
+        str(item) for item in pinned_base_config.get("project", {}).get("dependencies", [])
     ]
 
     root_requirements = [
@@ -313,5 +286,4 @@ def build_project_wheelhouse(destination: Path) -> Path:
     ]
     requirements = [*root_requirements, *base_requirements, *build_requirements]
     _repackage_dependency_closure(wheelhouse, requirements, excluded={"bt_api_base"})
-    _build_local_base_wheel(wheelhouse)
     return wheelhouse

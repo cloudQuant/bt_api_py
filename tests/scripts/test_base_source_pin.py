@@ -14,6 +14,7 @@ import scripts.ci.base_source_pin as base_source_pin
 from scripts.ci.base_source_pin import (
     BASE_ORIGIN,
     BaseSourcePinError,
+    build_pinned_base_wheel,
     verify_base_source_pin,
 )
 
@@ -186,6 +187,54 @@ def test_pip_child_processes_receive_only_allowlisted_environment(
         assert "fake-pip-secret" not in json.dumps(environment)
     assert pip_child_environments[0]["PIP_INDEX_URL"] == "https://pypi.org/simple/"
     assert "PIP_INDEX_URL" not in pip_child_environments[1]
+
+
+def test_pinned_source_wheel_can_be_built_from_a_local_wheelhouse_without_installing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent, _, source_sha = _make_repositories(tmp_path)
+    build_wheelhouse = tmp_path / "build-wheelhouse"
+    build_wheelhouse.mkdir()
+    original_run = subprocess.run
+    pip_calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def capture_run(
+        command: list[str], *args: object, **kwargs: object
+    ) -> subprocess.CompletedProcess:
+        if len(command) >= 3 and command[1:3] == ["-m", "pip"]:
+            environment = kwargs["env"]
+            assert isinstance(environment, dict)
+            pip_calls.append((command, environment))
+            assert "wheel" in command
+            output_dir = Path(command[command.index("--wheel-dir") + 1])
+            wheel_path = output_dir / "bt_api_base-0.15.5-py3-none-any.whl"
+            with zipfile.ZipFile(wheel_path, "w") as wheel:
+                wheel.writestr(
+                    "bt_api_base-0.15.5.dist-info/METADATA",
+                    "Name: bt_api_base\nVersion: 0.15.5\n",
+                )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        return original_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(base_source_pin.subprocess, "run", capture_run)
+
+    receipt = build_pinned_base_wheel(
+        parent,
+        tmp_path / "wheelhouse",
+        build_wheelhouse=build_wheelhouse,
+    )
+
+    assert len(pip_calls) == 1
+    command, environment = pip_calls[0]
+    assert "--no-index" in command
+    assert command[command.index("--find-links") + 1] == str(build_wheelhouse.resolve())
+    assert "PIP_INDEX_URL" not in environment
+    assert "PIP_EXTRA_INDEX_URL" not in environment
+    assert receipt.source_commit == source_sha
+    assert receipt.source_origin == BASE_ORIGIN
+    assert receipt.package_version == "0.15.5"
+    assert receipt.wheel_path.is_file()
+    assert receipt.wheel_sha256 == base_source_pin._sha256(receipt.wheel_path)
 
 
 def test_source_pin_rejects_a_checkout_that_does_not_match_the_gitlink(

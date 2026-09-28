@@ -292,6 +292,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Checkout parent-pinned base source
+        run: git submodule update --init --depth 1 -- bt_api/bt_api_base
+
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"

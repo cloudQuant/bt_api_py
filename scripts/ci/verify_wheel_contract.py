@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 if __package__:
+    from .base_source_pin import BaseSourcePinError, BaseWheelReceipt, build_pinned_base_wheel
     from .offline_pip import (
         WheelhousePathError,
         pip_source_args,
@@ -23,6 +24,7 @@ if __package__:
         resolve_wheelhouse_path,
     )
 else:
+    from base_source_pin import BaseSourcePinError, BaseWheelReceipt, build_pinned_base_wheel
     from offline_pip import (
         WheelhousePathError,
         pip_source_args,
@@ -82,6 +84,30 @@ def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
+def _require_venv_package_path(package_file: str, venv_dir: Path, package_name: str) -> str:
+    package_path = Path(package_file).resolve()
+    venv_path = venv_dir.resolve()
+    if package_path.is_relative_to(venv_path):
+        relative_parts = tuple(
+            part.casefold() for part in package_path.relative_to(venv_path).parts
+        )
+        expected_package = package_name.casefold()
+        has_expected_package_path = any(
+            part == "site-packages"
+            and index + 1 < len(relative_parts)
+            and relative_parts[index + 1] == expected_package
+            for index, part in enumerate(relative_parts)
+        )
+    else:
+        has_expected_package_path = False
+    if not has_expected_package_path:
+        raise WheelContractError(
+            f"installed {package_name} package probe resolved outside the virtualenv site-packages: "
+            f"{package_path}"
+        )
+    return package_path.as_posix()
+
+
 def _isolated_subprocess_env(wheelhouse: Path | None = None) -> dict[str, str]:
     """Return an environment that cannot join a parent pytest-cov session.
 
@@ -123,8 +149,8 @@ def _head_sha() -> str:
 
 
 def _isolated_install_probe(
-    wheel: Path, wheelhouse: Path | None = None
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    wheel: Path, wheelhouse: Path | None = None, *, base_wheel_dir: Path
+) -> tuple[str, dict[str, Any], dict[str, Any], BaseWheelReceipt]:
     with tempfile.TemporaryDirectory(prefix="bt-api-py-wheel-contract-") as temp_dir:
         temp_root = Path(temp_dir)
         venv_dir = temp_root / "venv"
@@ -141,6 +167,40 @@ def _isolated_install_probe(
             )
         python = _venv_python(venv_dir)
 
+        base_wheel_dir = base_wheel_dir.resolve()
+        try:
+            base_receipt = build_pinned_base_wheel(
+                REPOSITORY_ROOT,
+                base_wheel_dir,
+                build_wheelhouse=wheelhouse,
+            )
+        except (BaseSourcePinError, WheelhousePathError, OSError) as exc:
+            raise WheelContractError(
+                f"could not build the pinned bt_api_base wheel: {exc}"
+            ) from exc
+
+        base_env = _isolated_subprocess_env(base_wheel_dir)
+        install_base = _run(
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                *pip_source_args(base_wheel_dir),
+                "--disable-pip-version-check",
+                "--no-deps",
+                "--force-reinstall",
+                str(base_receipt.wheel_path),
+            ],
+            cwd=temp_root,
+            env=base_env,
+        )
+        if install_base.returncode != 0:
+            raise WheelContractError(
+                "isolated pinned base wheel installation failed: "
+                f"{install_base.stderr.strip() or install_base.stdout.strip()}"
+            )
+
         install = _run(
             [
                 str(python),
@@ -149,10 +209,11 @@ def _isolated_install_probe(
                 "install",
                 *pip_source_args(wheelhouse),
                 "--disable-pip-version-check",
-                "--force-reinstall",
                 # This is an installed-package probe.  Resolve the wheel's
                 # declared runtime dependencies instead of relying on whatever
                 # happens to be present in the runner's system site-packages.
+                # The pinned base wheel is already installed into this fresh
+                # venv and satisfies the candidate wheel's base requirement.
                 str(wheel),
             ],
             cwd=temp_root,
@@ -177,12 +238,18 @@ def _isolated_install_probe(
                 "-c",
                 (
                     "import importlib.resources as resources, json, pathlib; "
+                    "from importlib import metadata; "
                     "import bt_api_base, bt_api_py; "
                     "from bt_api_py._plugin_catalog import PluginCatalog; "
                     "resource = resources.files('bt_api_py.configs').joinpath("
                     "'exchange-bundles.toml'); "
+                    "base_distribution = metadata.distribution('bt_api_base'); "
+                    "base_direct_url = json.loads(base_distribution.read_text('direct_url.json') "
+                    "or '{}'); "
                     "payload = {'package_file': str(pathlib.Path(bt_api_py.__file__).resolve()), "
                     "'base_package_file': str(pathlib.Path(bt_api_base.__file__).resolve()), "
+                    "'base_version': base_distribution.version, "
+                    "'base_direct_url': base_direct_url, "
                     "'resource': str(resource), 'resource_is_file': resource.is_file(), "
                     "'bundles': PluginCatalog().list_bundles()}; "
                     "assert payload['resource_is_file']; "
@@ -204,21 +271,34 @@ def _isolated_install_probe(
                 f"resource probe did not return JSON: {probe.stdout!r}"
             ) from exc
 
-        package_file = str(probe_payload["package_file"]).replace("\\", "/")
-        if "site-packages/bt_api_py" not in package_file:
+        package_file = _require_venv_package_path(
+            str(probe_payload["package_file"]), venv_dir, "bt_api_py"
+        )
+        base_package_file = _require_venv_package_path(
+            str(probe_payload["base_package_file"]), venv_dir, "bt_api_base"
+        )
+        probe_payload["base_package_file"] = base_package_file
+        if probe_payload["base_version"] != base_receipt.package_version:
             raise WheelContractError(
-                "installed package probe resolved outside the virtualenv site-packages: "
-                f"{package_file}"
+                "installed base package version does not match the parent-pinned source wheel: "
+                f"{probe_payload['base_version']} != {base_receipt.package_version}"
             )
-        base_package_path = Path(str(probe_payload["base_package_file"])).resolve()
-        if (
-            not base_package_path.is_relative_to(venv_dir.resolve())
-            or "site-packages" not in base_package_path.parts
-            or "bt_api_base" not in base_package_path.parts
-        ):
+        expected_wheel_url = base_receipt.wheel_path.resolve().as_uri()
+        recorded_wheel_url = probe_payload["base_direct_url"].get("url")
+        if recorded_wheel_url != expected_wheel_url:
             raise WheelContractError(
-                "installed base package probe resolved outside the virtualenv site-packages: "
-                f"{base_package_path}"
+                "installed base package PEP 610 URL does not identify the exact pinned local wheel: "
+                f"{recorded_wheel_url!r} != {expected_wheel_url!r}"
+            )
+        archive_info = probe_payload["base_direct_url"].get("archive_info") or {}
+        recorded_hash = archive_info.get("hash")
+        if recorded_hash is None:
+            recorded_hash = (archive_info.get("hashes") or {}).get("sha256")
+            if recorded_hash:
+                recorded_hash = f"sha256={recorded_hash}"
+        if recorded_hash != f"sha256={base_receipt.wheel_sha256}":
+            raise WheelContractError(
+                "installed base package PEP 610 wheel hash does not match the pinned source wheel"
             )
 
         doctor = _run(
@@ -252,11 +332,13 @@ def _isolated_install_probe(
                 "stdout_sha256": _sha256(doctor.stdout.encode()),
                 "stderr_sha256": _sha256(doctor.stderr.encode()),
             },
+            base_receipt,
         )
 
 
 def verify(dist_dir: Path, wheelhouse: Path | None = None) -> dict[str, Any]:
     """Build an evidence receipt for the source, wheel, and sdist resource contract."""
+    dist_dir = dist_dir.resolve()
     wheelhouse = resolve_wheelhouse_path(wheelhouse)
 
     source_resource = REPOSITORY_ROOT / PACKAGE_RESOURCE
@@ -275,7 +357,11 @@ def verify(dist_dir: Path, wheelhouse: Path | None = None) -> dict[str, Any]:
             f"source, wheel, and sdist exchange-bundles.toml hashes do not match: {resource_hashes}"
         )
 
-    package_file, probe, doctor = _isolated_install_probe(wheel, wheelhouse)
+    package_file, probe, doctor, base_receipt = _isolated_install_probe(
+        wheel,
+        wheelhouse,
+        base_wheel_dir=dist_dir / "bt_api_base_source",
+    )
     return {
         "schema_version": 1,
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -292,6 +378,19 @@ def verify(dist_dir: Path, wheelhouse: Path | None = None) -> dict[str, Any]:
         "resource_sha256": resource_hashes,
         "package_file": package_file,
         "base_package_file": probe["base_package_file"],
+        "base_source": {
+            "parent_commit": base_receipt.parent_commit,
+            "source_commit": base_receipt.source_commit,
+            "source_tree": base_receipt.source_tree,
+            "source_origin": base_receipt.source_origin,
+            "package_name": base_receipt.package_name,
+            "package_version": base_receipt.package_version,
+            "minimum_version": base_receipt.minimum_version,
+            "wheel_filename": base_receipt.wheel_filename,
+            "wheel_path": base_receipt.wheel_path.relative_to(dist_dir).as_posix(),
+            "wheel_path_url": base_receipt.wheel_path.resolve().as_uri(),
+            "wheel_sha256": base_receipt.wheel_sha256,
+        },
         "probe": probe,
         "doctor": doctor,
     }

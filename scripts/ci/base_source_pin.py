@@ -19,6 +19,11 @@ from dataclasses import asdict, dataclass
 from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 
+if __package__:
+    from .offline_pip import pip_source_args, resolve_wheelhouse_path
+else:
+    from offline_pip import pip_source_args, resolve_wheelhouse_path
+
 BASE_PATH = "bt_api/bt_api_base"
 BASE_ORIGIN = "https://github.com/cloudQuant/bt_api_base.git"
 MINIMUM_BASE_VERSION = (0, 15, 5)
@@ -335,14 +340,16 @@ def _verify_installed_wheel(receipt: BaseWheelReceipt) -> None:
         )
 
 
-def build_and_install_base_wheel(
+def build_pinned_base_wheel(
     repository_root: Path,
     wheel_dir: Path,
     *,
     python: str = sys.executable,
+    build_wheelhouse: Path | None = None,
 ) -> BaseWheelReceipt:
-    """Build the parent-pinned source archive, hash it, install it, and verify PEP 610."""
+    """Build a wheel from the parent-pinned source and return its provenance receipt."""
     pin = verify_base_source_pin(repository_root)
+    build_wheelhouse = resolve_wheelhouse_path(build_wheelhouse)
     wheel_dir = wheel_dir.resolve()
     wheel_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="bt-api-base-pinned-source-") as temporary:
@@ -350,13 +357,14 @@ def build_and_install_base_wheel(
         source_root = _extract_pinned_archive(pin, temporary_root)
         output_dir = temporary_root / "wheel-output"
         output_dir.mkdir()
-        environment = _subprocess_environment(public_pip_index=True)
+        environment = _subprocess_environment(public_pip_index=build_wheelhouse is None)
         command = [
             python,
             "-m",
             "pip",
             "wheel",
             "--no-deps",
+            *pip_source_args(build_wheelhouse),
             "--wheel-dir",
             str(output_dir),
             str(source_root),
@@ -402,6 +410,19 @@ def build_and_install_base_wheel(
     )
 
     if _sha256(final_wheel) != receipt.wheel_sha256:
+        raise BaseSourcePinError("local bt_api_base wheel hash changed after the source build")
+    return receipt
+
+
+def build_and_install_base_wheel(
+    repository_root: Path,
+    wheel_dir: Path,
+    *,
+    python: str = sys.executable,
+) -> BaseWheelReceipt:
+    """Build the parent-pinned source archive, hash it, install it, and verify PEP 610."""
+    receipt = build_pinned_base_wheel(repository_root, wheel_dir, python=python)
+    if _sha256(receipt.wheel_path) != receipt.wheel_sha256:
         raise BaseSourcePinError("local bt_api_base wheel hash changed before installation")
     install_environment = _subprocess_environment()
     completed = subprocess.run(  # noqa: S603
@@ -412,7 +433,7 @@ def build_and_install_base_wheel(
             "install",
             "--no-deps",
             "--force-reinstall",
-            str(final_wheel),
+            str(receipt.wheel_path),
         ],
         capture_output=True,
         check=False,
