@@ -31,7 +31,10 @@ def _assert_source_bootstrap_precedes_package_install(
     assert '--wheel-dir "${{ runner.temp }}/bt_api_base_wheelhouse"' in bootstrap["run"]
     assert "$RUNNER_TEMP" not in bootstrap["run"]
     assert "$GITHUB_ENV" not in bootstrap["run"]
-    assert "continue-on-error" not in bootstrap or bootstrap["continue-on-error"].lower() != "true"
+    assert (
+        "continue-on-error" not in bootstrap
+        or str(bootstrap["continue-on-error"]).lower() != "true"
+    )
     assert "python -m pip check" in steps[_step_index(steps, "Check installed dependencies")]["run"]
 
 
@@ -63,7 +66,7 @@ def test_windows_compatibility_job_uses_cross_platform_temp_and_only_checks_out_
     checkout_index = next(
         index
         for index, step in enumerate(steps)
-        if step.get("uses", "").startswith("actions/checkout@")
+        if str(step.get("uses", "")).startswith("actions/checkout@")
     )
     source_index = _step_index(steps, "Checkout pinned base source")
     bootstrap_index = _step_index(steps, "Build and install parent-pinned base wheel")
