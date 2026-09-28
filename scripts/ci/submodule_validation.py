@@ -421,6 +421,9 @@ def validate_package(
             "-m",
             "pip",
             "wheel",
+            # Install/check below validates runtime dependencies against the
+            # exact local base wheel already installed in this environment.
+            "--no-deps",
             *pip_source_args(wheelhouse),
             "--wheel-dir",
             str(plugin_dist_dir),

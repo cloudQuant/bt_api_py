@@ -6,10 +6,15 @@ import json
 import os
 import subprocess
 import sys
+from email.parser import Parser
 from pathlib import Path
 from types import MappingProxyType
+from zipfile import ZipFile
 
 import pytest
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 from scripts.ci import submodule_validation
 from scripts.ci.offline_pip import WheelhousePathError, pip_source_environment
@@ -147,6 +152,7 @@ def _write_package(
     root: Path,
     name: str,
     *,
+    version: str = "0.0.1",
     importable: bool = True,
     with_tests: bool = False,
     dependencies: tuple[str, ...] = (),
@@ -168,7 +174,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = \"{name}\"
-version = \"0.0.1\"
+version = \"{version}\"
 {dependency_block}""",
         encoding="utf-8",
     )
@@ -331,6 +337,62 @@ def test_validation_installs_declared_base_wheel_dependencies(tmp_path: Path) ->
 
     results = {item["package"]: item for item in payload["packages"]}
     assert results["bt_api_good"]["status"] == "passed"
+
+
+def test_plugin_wheel_uses_the_exact_preinstalled_base_wheel(tmp_path: Path) -> None:
+    wheelhouse = build_validator_wheelhouse(tmp_path / "wheelhouse")
+    _write_package(tmp_path, "bt_api_base", version="0.15.5")
+    _write_package(
+        tmp_path,
+        "bt_api_ctp",
+        dependencies=("bt_api_base>=0.15.5,<1.0",),
+    )
+    config = tmp_path / "configs" / "submodule-validation.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        '[profiles.core-reference]\npackages = ["bt_api_ctp"]\ninclude_base = true\n',
+        encoding="utf-8",
+    )
+    bundle_catalog = tmp_path / "bt_api_py" / "configs" / "exchange-bundles.toml"
+    bundle_catalog.parent.mkdir(parents=True)
+    bundle_catalog.write_text("[bundles]\n", encoding="utf-8")
+    assert not list(wheelhouse.glob("bt_api_base-*.whl"))
+
+    artifacts = tmp_path / "artifacts"
+    payload = run_validation(
+        profile="core-reference",
+        repository_root=tmp_path,
+        artifacts_dir=artifacts,
+        config_path=config,
+        wheelhouse=wheelhouse,
+    )
+
+    results = {item["package"]: item for item in payload["packages"]}
+    ctp_result = results["bt_api_ctp"]
+    assert ctp_result["status"] == "passed"
+    assert ctp_result["phases"]["build"]["status"] == "passed"
+    assert ctp_result["phases"]["install"]["status"] == "passed"
+    assert ctp_result["phases"]["dependency_check"]["status"] == "passed"
+    assert results["bt_api_base"]["status"] == "passed"
+
+    base_wheel = Path(ctp_result["environment"]["base_wheel"])
+    plugin_wheel = Path(ctp_result["environment"]["plugin_wheel"])
+    assert base_wheel.name.startswith("bt_api_base-0.15.5-")
+    assert base_wheel.is_file()
+    assert base_wheel.parent != wheelhouse
+
+    with ZipFile(plugin_wheel) as wheel:
+        metadata_name = next(
+            name for name in wheel.namelist() if name.endswith(".dist-info/METADATA")
+        )
+        metadata = Parser().parsestr(wheel.read(metadata_name).decode("utf-8"))
+    requirements = [
+        Requirement(value)
+        for value in metadata.get_all("Requires-Dist", [])
+        if canonicalize_name(Requirement(value).name) == "bt-api-base"
+    ]
+    assert len(requirements) == 1
+    assert Version("0.15.5") in requirements[0].specifier
 
 
 def test_dependency_check_failure_stops_before_import_and_records_evidence(
