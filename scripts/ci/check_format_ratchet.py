@@ -131,6 +131,17 @@ def scan_module(module: str) -> int:
         raise FormatScanError(f"invalid submodule name: {module!r}")
     path = f"bt_api/{module}"
     result = _ruff("format", "--check", path)
+    # Ruff exits successfully with this warning for a checked-out adapter
+    # module that has no Python sources yet (for example, execution). Treat
+    # only this exact stderr-only response as zero debt; all other empty or
+    # unparseable output remains a fail-closed scan error.
+    if (
+        result.returncode == 0
+        and not (result.stdout or "").strip()
+        and (result.stderr or "").splitlines()
+        == ["warning: No Python files found under the given path(s)"]
+    ):
+        return 0
     try:
         return parse_format_output(result.stdout or "", result.returncode)
     except FormatScanError as error:

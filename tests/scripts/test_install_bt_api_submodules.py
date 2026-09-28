@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from argparse import Namespace
 from pathlib import Path
-from types import SimpleNamespace
 
 from scripts import install_bt_api_submodules as installer
 
@@ -71,17 +71,26 @@ def test_not_packaged_submodule_is_initialized_but_never_installed(monkeypatch, 
     ]
 
     calls = []
-    args = SimpleNamespace(strategy="source-first", upgrade=True, python="/unused/python")
+    args = Namespace(strategy="source-first", upgrade=True, python="/unused/python")
     monkeypatch.setattr(installer, "installed_version", lambda _name: calls.append("version"))
+
+    def fail_source(*_args, **_kwargs):
+        calls.append("source")
+        return False
+
+    def fail_pypi(*_args, **_kwargs):
+        calls.append("pypi")
+        return False
+
     monkeypatch.setattr(
         installer,
         "pip_install_source",
-        lambda *_args, **_kwargs: calls.append("source") or False,
+        fail_source,
     )
     monkeypatch.setattr(
         installer,
         "pip_install_pypi",
-        lambda *_args, **_kwargs: calls.append("pypi") or False,
+        fail_pypi,
     )
 
     result = installer.install_one(spec, args)
@@ -98,7 +107,7 @@ def test_packaged_submodule_keeps_source_then_pypi_fallback(monkeypatch, tmp_pat
         tmp_path / "missing",
         "unused",
     )
-    args = SimpleNamespace(
+    args = Namespace(
         strategy="source-first",
         upgrade=True,
         python="/unused/python",
@@ -106,12 +115,17 @@ def test_packaged_submodule_keeps_source_then_pypi_fallback(monkeypatch, tmp_pat
         dry_run=False,
     )
     calls = []
-    monkeypatch.setattr(
-        installer, "pip_install_source", lambda *_args, **_kwargs: calls.append("source") or False
-    )
-    monkeypatch.setattr(
-        installer, "pip_install_pypi", lambda *_args, **_kwargs: calls.append("pypi") or True
-    )
+
+    def fail_source(*_args, **_kwargs):
+        calls.append("source")
+        return False
+
+    def succeed_pypi(*_args, **_kwargs):
+        calls.append("pypi")
+        return True
+
+    monkeypatch.setattr(installer, "pip_install_source", fail_source)
+    monkeypatch.setattr(installer, "pip_install_pypi", succeed_pypi)
 
     result = installer.install_one(spec, args)
 
@@ -130,7 +144,7 @@ def test_main_reports_not_packaged_by_default_and_strict_mode_fails(monkeypatch,
     summaries = []
 
     def run(strict):
-        args = SimpleNamespace(
+        args = Namespace(
             packages=["execution"],
             strategy="source-first",
             with_root=False,
@@ -175,7 +189,7 @@ def test_main_keeps_base_root_and_remaining_package_order_offline(monkeypatch):
         installer.PackageSpec("bt_api_base", "bt-api-base", Path("base"), "unused"),
         installer.PackageSpec("bt_api_okx", "bt-api-okx", Path("okx"), "unused"),
     ]
-    args = SimpleNamespace(
+    args = Namespace(
         packages=[],
         strategy="source-first",
         with_root=True,

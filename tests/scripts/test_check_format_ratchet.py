@@ -94,6 +94,36 @@ class TestScopeAndScan:
         assert ratchet.scan_module("bt_api_example") == 0
         assert calls == [("format", "--check", "bt_api/bt_api_example")]
 
+    def test_successful_no_python_warning_is_zero_debt(self, monkeypatch):
+        def fake_ruff(*args):
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                "",
+                "warning: No Python files found under the given path(s)\n",
+            )
+
+        monkeypatch.setattr(ratchet, "_ruff", fake_ruff)
+
+        assert ratchet.scan_module("bt_api_execution") == 0
+
+    @pytest.mark.parametrize(
+        ("returncode", "stdout", "stderr"),
+        [
+            (0, "", "warning: another condition\n"),
+            (0, "", "warning: No Python files found under the given path(s)\nextra\n"),
+            (1, "", "warning: No Python files found under the given path(s)\n"),
+        ],
+    )
+    def test_other_empty_output_still_fails_closed(self, monkeypatch, returncode, stdout, stderr):
+        def fake_ruff(*args):
+            return subprocess.CompletedProcess(args, returncode, stdout, stderr)
+
+        monkeypatch.setattr(ratchet, "_ruff", fake_ruff)
+
+        with pytest.raises(ratchet.FormatScanError):
+            ratchet.scan_module("bt_api_execution")
+
     def test_ruff_process_uses_fixed_root_and_never_a_shell(self, monkeypatch):
         calls = []
         completed = subprocess.CompletedProcess(["ruff", "--version"], 0, "ruff 0.16.2\n", "")
@@ -148,14 +178,18 @@ class TestBaseline:
             "bt_api_coinbase": 23,
             "bt_api_ctp": 25,
             "bt_api_dydx": 20,
+            "bt_api_execution": 0,
             "bt_api_gateio": 25,
+            "bt_api_gateway": 0,
             "bt_api_htx": 23,
             "bt_api_hyperliquid": 23,
             "bt_api_ib_web": 40,
             "bt_api_kraken": 7,
             "bt_api_mexc": 12,
+            "bt_api_monitor": 0,
             "bt_api_mt5": 7,
             "bt_api_okx": 85,
+            "bt_api_risk": 0,
         }
 
         assert payload["schema_version"] == ratchet.SCHEMA_VERSION

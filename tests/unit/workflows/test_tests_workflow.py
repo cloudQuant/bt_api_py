@@ -256,7 +256,10 @@ def test_coverage_reports_are_validated_before_optional_uploads() -> None:
     codecov_options = _mapping(
         _required_field(codecov_step, "with", codecov_path), f"{codecov_path}.with"
     )
-    assert _string_field(codecov_step, "if", codecov_path) == "always() && env.CODECOV_TOKEN != ''"
+    assert _string_field(codecov_step, "if", codecov_path) == (
+        "always() && (github.event_name != 'pull_request' || "
+        "github.event.pull_request.head.repo.full_name == github.repository)"
+    )
     assert _string_field(codecov_options, "fail_ci_if_error", f"{codecov_path}.with") == "false"
 
 

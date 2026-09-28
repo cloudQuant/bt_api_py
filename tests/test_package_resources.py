@@ -15,8 +15,13 @@ import pytest
 import yaml
 
 from bt_api_py._plugin_catalog import PluginCatalog
+from scripts.ci.base_source_pin import BASE_ORIGIN
 from scripts.ci.offline_pip import WheelhousePathError, pip_source_environment
-from scripts.ci.verify_wheel_contract import _isolated_subprocess_env
+from scripts.ci.verify_wheel_contract import (
+    WheelContractError,
+    _isolated_subprocess_env,
+    _require_venv_package_path,
+)
 from scripts.ci.verify_wheel_contract import verify as verify_wheel_contract
 from tests.offline_wheelhouse import build_project_wheelhouse
 
@@ -80,6 +85,23 @@ def test_build_frontend_and_pep517_toolchain_are_declared() -> None:
     assert "numpy>=1.26.0" in project_dependencies
 
 
+def test_wheel_contract_rejects_main_package_path_outside_venv(tmp_path: Path) -> None:
+    venv_dir = tmp_path / "venv"
+    installed_path = venv_dir / "Lib" / "site-packages" / "bt_api_py" / "__init__.py"
+    outside_path = tmp_path / "system" / "Lib" / "site-packages" / "bt_api_py" / "__init__.py"
+    nested_package_path = (
+        venv_dir / "Lib" / "site-packages" / "unexpected" / "bt_api_py" / "__init__.py"
+    )
+
+    assert _require_venv_package_path(str(installed_path), venv_dir, "bt_api_py") == str(
+        installed_path.resolve()
+    ).replace("\\", "/")
+    with pytest.raises(WheelContractError, match="outside the virtualenv"):
+        _require_venv_package_path(str(outside_path), venv_dir, "bt_api_py")
+    with pytest.raises(WheelContractError, match="outside the virtualenv"):
+        _require_venv_package_path(str(nested_package_path), venv_dir, "bt_api_py")
+
+
 def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Path) -> None:
     wheelhouse = build_project_wheelhouse(tmp_path / "wheelhouse")
     dist_dir = tmp_path / "dist"
@@ -129,6 +151,30 @@ def test_wheel_contract_checker_runs_doctor_from_an_installed_wheel(tmp_path: Pa
     assert "site-packages/bt_api_py" in receipt["package_file"].replace("\\", "/")
     assert "site-packages/bt_api_base" in receipt["base_package_file"].replace("\\", "/")
     assert receipt["probe"]["base_package_file"] == receipt["base_package_file"]
+    base_source = receipt["base_source"]
+    source_gitlink = subprocess.check_output(
+        ["git", "ls-tree", "HEAD", "bt_api/bt_api_base"],  # noqa: S607
+        cwd=REPOSITORY_ROOT,
+        text=True,
+    ).split()
+    assert base_source["parent_commit"] == receipt["head_sha"]
+    assert base_source["source_commit"] == source_gitlink[2]
+    assert base_source["source_origin"] == BASE_ORIGIN
+    assert base_source["package_name"] == "bt_api_base"
+    assert base_source["package_version"] == "0.15.5"
+    assert base_source["wheel_sha256"]
+    base_wheel = dist_dir / base_source["wheel_path"]
+    assert base_source["wheel_path"] == (f"bt_api_base_source/{base_source['wheel_filename']}")
+    assert base_wheel.is_file()
+    assert base_source["wheel_path_url"] == base_wheel.resolve().as_uri()
+    assert receipt["probe"]["base_version"] == base_source["package_version"]
+    direct_url = receipt["probe"]["base_direct_url"]
+    assert direct_url["url"] == base_source["wheel_path_url"]
+    archive_info = direct_url["archive_info"]
+    recorded_hash = archive_info.get("hash")
+    if recorded_hash is None:
+        recorded_hash = f"sha256={archive_info['hashes']['sha256']}"
+    assert recorded_hash == f"sha256={base_source['wheel_sha256']}"
 
 
 def test_wheel_contract_rejects_invalid_wheelhouse_before_reading_artifacts(
@@ -179,6 +225,34 @@ def test_ci_workflows_enforce_the_installed_wheel_contract() -> None:
 
     assert "scripts/ci/verify_wheel_contract.py" in tests_workflow
     tests_data = yaml.safe_load(tests_workflow)
+    wheel_contract_steps = tests_data["jobs"]["wheel-contract"]["steps"]
+    checkout_index = next(
+        index
+        for index, step in enumerate(wheel_contract_steps)
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    base_checkout_index = next(
+        index
+        for index, step in enumerate(wheel_contract_steps)
+        if step.get("name") == "Checkout parent-pinned base source"
+    )
+    verifier_index = next(
+        index
+        for index, step in enumerate(wheel_contract_steps)
+        if step.get("name") == "Verify installed wheel resource contract"
+    )
+    assert checkout_index < base_checkout_index < verifier_index
+    assert "submodules" not in wheel_contract_steps[checkout_index].get("with", {})
+    assert (
+        wheel_contract_steps[base_checkout_index]["run"]
+        == "git submodule update --init --depth 1 -- bt_api/bt_api_base"
+    )
+    wheel_contract_artifact = next(
+        step
+        for step in wheel_contract_steps
+        if step.get("name") == "Archive wheel contract receipt"
+    )
+    assert "dist/" in wheel_contract_artifact["with"]["path"].splitlines()
     full_suite_steps = tests_data["jobs"]["full-suite"]["steps"]
     full_suite_install = next(
         step for step in full_suite_steps if step.get("name") == "Install package + dev deps"
