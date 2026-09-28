@@ -24,9 +24,7 @@ logger = get_logger("forwarding.router")
 _VALID_SIDES = frozenset({"buy", "sell"})
 _VALID_ORDER_TYPES = frozenset({"limit", "market"})
 _MAX_CACHED_ACKS = 10_000
-_TRADING_DISABLED_REASON = (
-    "forwarding trading is disabled; provider write was not attempted"
-)
+_TRADING_DISABLED_REASON = "forwarding trading is disabled; provider write was not attempted"
 
 
 @dataclass(frozen=True)
