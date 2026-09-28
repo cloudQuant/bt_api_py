@@ -16,6 +16,7 @@ on:
       - 'bt_api_py/**'
       - 'scripts/generate_exchange_support_docs.py'
       - 'scripts/ci/check_docs_contract.py'
+      - 'scripts/ci/base_source_pin.py'
   pull_request:
     paths:
       - 'docs/**'
@@ -30,6 +31,7 @@ on:
       - 'bt_api_py/**'
       - 'scripts/generate_exchange_support_docs.py'
       - 'scripts/ci/check_docs_contract.py'
+      - 'scripts/ci/base_source_pin.py'
   workflow_dispatch:
 
 permissions:
@@ -47,6 +49,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Checkout pinned base source
+        run: git submodule update --init --depth 1 -- bt_api/bt_api_base
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -58,8 +63,16 @@ jobs:
       - name: Install doc dependencies
         run: python -m pip install --upgrade pip -r docs/requirements.txt
 
+      - name: Build and install parent-pinned base wheel
+        run: >-
+          python scripts/ci/base_source_pin.py
+          --wheel-dir "${{ runner.temp }}/bt_api_base_wheelhouse"
+
       - name: Install package (needed by mkdocstrings)
         run: python -m pip install -e .
+
+      - name: Check installed dependencies
+        run: python -m pip check
 
       - name: Check generated docs are current
         run: python scripts/generate_exchange_support_docs.py --check
