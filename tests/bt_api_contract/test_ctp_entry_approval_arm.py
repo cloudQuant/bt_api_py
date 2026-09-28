@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal  # noqa: F401  (parity with sibling fixtures)
 
@@ -28,7 +29,7 @@ from .test_execution_arming import (
     _install_account_stream,
     _ManagedFeed,
     _ready_state,
-    _session,
+    _session as _execution_session,
 )
 from .test_execution_recovery import (
     CYCLE,
@@ -36,6 +37,11 @@ from .test_execution_recovery import (
 
 ENTRY_SCHEMA = "ctp-execution-entry-approval-v1"
 ENTRY_PURPOSE = "ctp_execution_approval"
+
+
+def _session(tmp_path):
+    """Build a test session with a pre-created Windows CTP journal when needed."""
+    return _execution_session(tmp_path, provisioned=os.name == "nt")
 
 
 @pytest.fixture()

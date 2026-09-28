@@ -400,7 +400,7 @@ def validate_package(
             *pip_source_args(wheelhouse),
             str(base_wheel),
             "pytest>=7.0",
-            "pytest-asyncio>=0.21.0",
+            "pytest-asyncio>=0.23.8,<0.24",
             "pytest-socket>=0.7.0",
         ],
         cwd=repository_root,

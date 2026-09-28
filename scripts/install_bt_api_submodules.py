@@ -151,7 +151,10 @@ def filter_packages(specs: list[PackageSpec], selected: list[str] | None) -> lis
     if not selected:
         return specs
 
-    selected_names = {item.removeprefix("bt_api/").strip() for item in selected}
+    selected_names = {
+        (item[len("bt_api/") :] if item.startswith("bt_api/") else item).strip()
+        for item in selected
+    }
     selected_names = {
         item if item.startswith("bt_api_") else f"bt_api_{item}" for item in selected_names
     }

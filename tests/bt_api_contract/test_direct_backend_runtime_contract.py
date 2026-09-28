@@ -10,7 +10,7 @@ import pytest
 from bt_api_base.feeds.capability import Capability
 
 from bt_api_py._contracts.errors import CapabilityNotSupportedError
-from bt_api_py._contracts.models import OrderRequest, OrderType, Side
+from bt_api_py._contracts.models import CancelOrderRequest, OrderRequest, OrderType, Side
 from bt_api_py.bt_api import BtApi
 from bt_api_py.exceptions import InvalidOrderError
 
@@ -159,6 +159,48 @@ def test_direct_backend_preserves_all_public_v1_operations() -> None:
     assert api.get_capabilities("COVERAGE___SPOT").operations["make_order"] is True
     with pytest.raises(CapabilityNotSupportedError, match="transport=direct"):
         api.get_command_status("COVERAGE___SPOT", "command-1")
+
+
+def test_ctp_direct_adapter_forwards_managed_submit_and_cancel_identity() -> None:
+    api, feed = _api_with_direct_feed()
+    api.exchange_feeds["CTP___FUTURE"] = feed
+    api.data_queues["CTP___FUTURE"] = queue.Queue()
+    order = OrderRequest(
+        symbol="SA609",
+        side=Side.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("1"),
+        price=Decimal("1500"),
+        account_id="acct-1",
+        client_order_id="000000000042",
+        exchange_id="CZCE",
+        offset="open",
+        managed_intent_id="managed-intent-42",
+        runtime_order_id="runtime-order-42",
+        hedge_flag="2",
+    )
+    api.make_order("CTP___FUTURE", order)
+    submit_kwargs = feed.calls[-1][2]
+    assert submit_kwargs["managed_intent_id"] == "managed-intent-42"
+    assert submit_kwargs["runtime_order_id"] == "runtime-order-42"
+    assert submit_kwargs["hedge_flag"] == "2"
+
+    cancel = CancelOrderRequest(
+        symbol="SA609",
+        account_id="acct-1",
+        client_order_id="000000000042",
+        order_ref="000000000042",
+        runtime_order_id="runtime-order-42",
+        runtime_action_id="sdk-action-1",
+        managed_cancel_intent_id="cancel.managed-intent-42",
+    )
+    api.cancel_order("CTP___FUTURE", cancel)
+    cancel_args, cancel_kwargs = feed.calls[-1][1], feed.calls[-1][2]
+    assert cancel_args == ("SA609", None)
+    assert cancel_kwargs["order_ref"] == "000000000042"
+    assert cancel_kwargs["runtime_order_id"] == "runtime-order-42"
+    assert cancel_kwargs["runtime_action_id"] == "sdk-action-1"
+    assert cancel_kwargs["managed_cancel_intent_id"] == "cancel.managed-intent-42"
 
 
 def test_direct_capability_sets_and_mappings_normalize_to_plain_sorted_flags() -> None:
