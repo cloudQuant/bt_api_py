@@ -7,6 +7,7 @@ equivalent: production code must receive an independently signed artifact.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -24,13 +25,13 @@ SCHEMA = "ctp-execution-approval-v1"
 ALGORITHM = "Ed25519"
 KEY_ID = "operator-test-1"
 FIXED_PUBLIC_KEY_B64 = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
-FIXED_SIGNATURE_B64 = (
-    "TwiANcyIexBY9hl7zaPjEXEvWy5jLUX048sPwV9kWL5kQpuSUrexNuWbljub_G0QeGYzdIkSDZFZbhRVAJiyCQ"
-)
+FIXED_SIGNATURE_B64 = "TwiANcyIexBY9hl7zaPjEXEvWy5jLUX048sPwV9kWL5kQpuSUrexNuWbljub_G0QeGYzdIkSDZFZbhRVAJiyCQ"
 
 
 def _iso(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    return (
+        value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    )
 
 
 def _context() -> dict:
@@ -99,10 +100,12 @@ def _signed_artifact(payload, private_key) -> bytes:
     signature = private_key.sign(payload_bytes)
     return json.dumps(
         {
-            "schema_version": SCHEMA,
+            "schema_version": payload["schema_version"],
             "algorithm": ALGORITHM,
             "payload": payload,
-            "signature": base64.urlsafe_b64encode(signature).decode("ascii").rstrip("="),
+            "signature": base64.urlsafe_b64encode(signature)
+            .decode("ascii")
+            .rstrip("="),
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -119,7 +122,9 @@ def signing_material():
         "schema_version": "ctp-execution-trust-root-v1",
         "keys": {
             KEY_ID: {
-                "public_key": base64.urlsafe_b64encode(public_key).decode("ascii").rstrip("="),
+                "public_key": base64.urlsafe_b64encode(public_key)
+                .decode("ascii")
+                .rstrip("="),
                 "role": "independent_operator",
                 "purposes": ["ctp_execution_approval"],
                 "not_before": _iso(datetime.now(UTC) - timedelta(minutes=1)),
@@ -137,6 +142,31 @@ def signing_material():
     return private_key, root
 
 
+@pytest.fixture(autouse=True)
+def provision_windows_ctp_test_journals(monkeypatch):
+    """Pre-create test journals structurally for the Windows CTP contract only."""
+    if os.name != "nt":
+        return
+
+    original_init = BtApi.__init__
+
+    def init_with_provisioned_journal(self, *args, execution_config=None, **kwargs):
+        if isinstance(execution_config, dict) and execution_config.get("order_journal"):
+            execution_config = dict(execution_config)
+            journal = Path(execution_config["order_journal"])
+            journal.parent.mkdir(parents=True, exist_ok=True)
+            journal.touch(exist_ok=True)
+            execution_config["windows_ctp_journal_preprovisioned"] = True
+        return original_init(
+            self,
+            *args,
+            execution_config=execution_config,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(BtApi, "__init__", init_with_provisioned_journal)
+
+
 def test_positive_verification_binds_complete_context(signing_material):
     private_key, root = signing_material
     from bt_api_py._ctp_execution_authorization import (
@@ -150,9 +180,9 @@ def test_positive_verification_binds_complete_context(signing_material):
     )
     assert result.approval_id == "approval-u1a-1"
     assert result.payload["connection_generation"] == 7
-    assert [dict(item) for item in result.payload["authorized_instruments"]] == _context()[
-        "authorized_instruments"
-    ]
+    assert [
+        dict(item) for item in result.payload["authorized_instruments"]
+    ] == _context()["authorized_instruments"]
 
 
 def test_non_synthetic_context_cannot_self_assert_runtime_identity(signing_material):
@@ -172,7 +202,9 @@ def test_non_synthetic_context_cannot_self_assert_runtime_identity(signing_mater
     assert raised.value.code == "ctp_approval_context_untrusted"
 
 
-def test_runtime_context_builder_seals_and_recomputes_identity(monkeypatch, signing_material):
+def test_runtime_context_builder_seals_and_recomputes_identity(
+    monkeypatch, signing_material
+):
     from bt_api_py import BtApi
     from bt_api_py._ctp_execution_authorization import CtpExecutionApprovalContext
 
@@ -237,7 +269,9 @@ def test_runtime_context_builder_seals_and_recomputes_identity(monkeypatch, sign
     assert values["connection_generation"] == 9
     assert values["account_fingerprint"] == "acct_1234567890abcdef"
     private_key, root = signing_material
-    payload = _payload(**{field: value for field, value in values.items() if field != "source"})
+    payload = _payload(
+        **{field: value for field, value in values.items() if field != "source"}
+    )
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(payload, private_key), trust_root=root, context=context
     )
@@ -390,7 +424,9 @@ def test_tampered_or_wrong_purpose_artifact_is_rejected(signing_material, change
         ("future_reservation_id", "other-reservation"),
     ],
 )
-def test_every_context_binding_is_compared_to_the_signed_payload(signing_material, field, value):
+def test_every_context_binding_is_compared_to_the_signed_payload(
+    signing_material, field, value
+):
     private_key, root = signing_material
     from bt_api_py._ctp_execution_authorization import verify_ctp_execution_approval
 
@@ -548,7 +584,9 @@ def test_same_journal_allows_one_durable_redemption_then_rejects_restart_replay(
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
-    capability = api.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
+    capability = api.redeem_ctp_execution_approval(
+        verified, trust_root=root, context=_context()
+    )
     assert capability.approval_id == verified.approval_id
     assert api.get_execution_summary()["market_data_only"] is True
     api.close()
@@ -560,7 +598,9 @@ def test_same_journal_allows_one_durable_redemption_then_rejects_restart_replay(
         }
     )
     with pytest.raises(NormalizedApiError) as raised:
-        recovered.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
+        recovered.redeem_ctp_execution_approval(
+            verified, trust_root=root, context=_context()
+        )
     assert raised.value.code == "ctp_approval_already_consumed"
     recovered.close()
 
@@ -584,7 +624,9 @@ def test_public_redeem_can_verify_a_signed_artifact_in_one_explicit_step(
     api.close()
 
 
-def test_two_threads_cannot_double_spend_same_approval(signing_material, tmp_path: Path):
+def test_two_threads_cannot_double_spend_same_approval(
+    signing_material, tmp_path: Path
+):
     private_key, root = signing_material
     api = BtApi(
         execution_config={
@@ -598,7 +640,9 @@ def test_two_threads_cannot_double_spend_same_approval(signing_material, tmp_pat
 
     def redeem():
         try:
-            api.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
+            api.redeem_ctp_execution_approval(
+                verified, trust_root=root, context=_context()
+            )
             return "ok"
         except NormalizedApiError as exc:
             return exc.code
@@ -610,11 +654,17 @@ def test_two_threads_cannot_double_spend_same_approval(signing_material, tmp_pat
     api.close()
 
 
-def test_two_api_instances_cannot_double_spend_same_journal_nonce(signing_material, tmp_path: Path):
+def test_two_api_instances_cannot_double_spend_same_journal_nonce(
+    signing_material, tmp_path: Path
+):
     private_key, root = signing_material
     journal = tmp_path / "two-api.jsonl"
-    first = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
-    second = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    first = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
+    second = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     artifact = _signed_artifact(_payload(), private_key)
     verified = [
         api.verify_ctp_execution_approval(artifact, trust_root=root, context=_context())
@@ -623,7 +673,9 @@ def test_two_api_instances_cannot_double_spend_same_journal_nonce(signing_materi
 
     def redeem(api, approval):
         try:
-            return api.redeem_ctp_execution_approval(approval, trust_root=root, context=_context())
+            return api.redeem_ctp_execution_approval(
+                approval, trust_root=root, context=_context()
+            )
         except NormalizedApiError as exc:
             return exc
 
@@ -635,7 +687,13 @@ def test_two_api_instances_cannot_double_spend_same_journal_nonce(signing_materi
                 verified,
             )
         )
-    assert sum(type(result).__name__ == "CtpExecutionApprovalCapability" for result in results) == 1
+    assert (
+        sum(
+            type(result).__name__ == "CtpExecutionApprovalCapability"
+            for result in results
+        )
+        == 1
+    )
     failures = [result for result in results if isinstance(result, NormalizedApiError)]
     assert len(failures) == 1
     assert failures[0].code in {
@@ -651,11 +709,15 @@ def test_read_only_preauthorization_is_really_persisted_and_generation_is_not_ov
 ):
     private_key, root = signing_material
     journal = tmp_path / "readonly.jsonl"
-    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
-    api.preauthorize_ctp_execution_approval(verified, trust_root=root, context=_context())
+    api.preauthorize_ctp_execution_approval(
+        verified, trust_root=root, context=_context()
+    )
     row = json.loads(journal.read_text().splitlines()[-1])
     assert row["event"] == "ctp_execution_approval_pre_authorized"
     assert row["connection_generation"] == 7
@@ -684,7 +746,9 @@ def test_revocation_snapshot_version_is_fenced_by_the_same_journal(
 ):
     private_key, root = signing_material
     journal = tmp_path / "revocations.jsonl"
-    api = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": False, "order_journal": str(journal)}
+    )
     first = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -696,19 +760,25 @@ def test_revocation_snapshot_version_is_fenced_by_the_same_journal(
     newer_payload = _payload(
         approval_id="approval-u1a-2", nonce="nonce-u1a-2", revocation_snapshot_version=4
     )
-    newer = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
+    newer = BtApi(
+        execution_config={"market_data_only": False, "order_journal": str(journal)}
+    )
     verified_newer = newer.verify_ctp_execution_approval(
         _signed_artifact(newer_payload, private_key),
         trust_root=newer_root,
         context=_context(),
     )
-    newer.redeem_ctp_execution_approval(verified_newer, trust_root=newer_root, context=_context())
+    newer.redeem_ctp_execution_approval(
+        verified_newer, trust_root=newer_root, context=_context()
+    )
     newer.close()
 
     # A restart must retain the higher durable snapshot version.  Replaying
     # an otherwise valid artifact against an older operator snapshot is a
     # rollback, even though its Ed25519 signature still verifies.
-    old = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
+    old = BtApi(
+        execution_config={"market_data_only": False, "order_journal": str(journal)}
+    )
     with pytest.raises(NormalizedApiError) as raised:
         old.redeem_ctp_execution_approval(first, trust_root=root, context=_context())
     assert raised.value.code in {
@@ -726,7 +796,9 @@ def test_fsync_failure_never_returns_a_consumable_capability(
     from bt_api_py import _execution_session as session_module
 
     journal = tmp_path / "fsync.jsonl"
-    api = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": False, "order_journal": str(journal)}
+    )
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -749,7 +821,9 @@ def test_consumption_started_fences_restart_after_completion_failure(
 ):
     private_key, root = signing_material
     journal = tmp_path / "pending.jsonl"
-    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -758,7 +832,9 @@ def test_consumption_started_fences_restart_after_completion_failure(
 
     def fail_completion(event, row, **kwargs):
         if event == "ctp_execution_approval_consumed":
-            raise NormalizedApiError("journal", "persistence_failed", definite_reject=True)
+            raise NormalizedApiError(
+                "journal", "persistence_failed", definite_reject=True
+            )
         return original_journal(event, row, **kwargs)
 
     monkeypatch.setattr(session, "_journal", fail_completion)
@@ -769,9 +845,13 @@ def test_consumption_started_fences_restart_after_completion_failure(
     assert raised.value.code == "ctp_approval_consumption_uncertain"
     api.close()
 
-    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    recovered = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     with pytest.raises(NormalizedApiError) as raised:
-        recovered.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
+        recovered.redeem_ctp_execution_approval(
+            verified, trust_root=root, context=_context()
+        )
     assert raised.value.code == "ctp_approval_consumption_uncertain"
     recovered.close()
 
@@ -781,7 +861,9 @@ def test_journal_approval_payload_tampering_is_rejected_after_restart(
 ):
     private_key, root = signing_material
     journal = tmp_path / "tampered.jsonl"
-    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -791,10 +873,16 @@ def test_journal_approval_payload_tampering_is_rejected_after_restart(
     for row in rows:
         if row["event"] == "ctp_execution_approval_consumed":
             row["connection_generation"] = 999
-    journal.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
-    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    journal.write_text(
+        "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
+    )
+    recovered = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     with pytest.raises(NormalizedApiError) as raised:
-        recovered.redeem_ctp_execution_approval(verified, trust_root=root, context=_context())
+        recovered.redeem_ctp_execution_approval(
+            verified, trust_root=root, context=_context()
+        )
     assert raised.value.code == "unreadable_journal"
     recovered.close()
 
@@ -802,7 +890,9 @@ def test_journal_approval_payload_tampering_is_rejected_after_restart(
 def test_torn_approval_tail_is_rejected_after_restart(signing_material, tmp_path: Path):
     private_key, root = signing_material
     journal = tmp_path / "torn.jsonl"
-    api = BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": False, "order_journal": str(journal)}
+    )
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -811,14 +901,20 @@ def test_torn_approval_tail_is_rejected_after_restart(signing_material, tmp_path
     with journal.open("ab") as stream:
         stream.write(b'{"event":"ctp_execution_approval_consumed"')
     with pytest.raises(NormalizedApiError) as raised:
-        BtApi(execution_config={"market_data_only": False, "order_journal": str(journal)})
+        BtApi(
+            execution_config={"market_data_only": False, "order_journal": str(journal)}
+        )
     assert raised.value.code == "unreadable_journal"
 
 
-def test_public_revocation_snapshot_uses_the_same_journal(signing_material, tmp_path: Path):
+def test_public_revocation_snapshot_uses_the_same_journal(
+    signing_material, tmp_path: Path
+):
     _private_key, root = signing_material
     journal = tmp_path / "revocation-only.jsonl"
-    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     result = api.record_ctp_execution_approval_revocation_snapshot(trust_root=root)
     assert result["revocation_snapshot_version"] == 3
     assert result["updated"] is True
@@ -827,7 +923,9 @@ def test_public_revocation_snapshot_uses_the_same_journal(signing_material, tmp_
     )
     api.close()
 
-    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    recovered = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     same = recovered.record_ctp_execution_approval_revocation_snapshot(trust_root=root)
     assert same["updated"] is False
     recovered.close()
@@ -870,7 +968,9 @@ def test_session_rejects_unwritable_journal_before_returning_capability(
     private_key, root = signing_material
     journal = tmp_path / "directory"
     journal.mkdir()
-    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     verified = api.verify_ctp_execution_approval(
         _signed_artifact(_payload(), private_key), trust_root=root, context=_context()
     )
@@ -892,7 +992,15 @@ def test_old_mapping_recovery_entry_stays_rejected(tmp_path: Path):
     api.close()
 
 
-def _runtime_approval_fixture(tmp_path, monkeypatch, name):
+def _runtime_approval_fixture(
+    tmp_path,
+    monkeypatch,
+    name,
+    *,
+    profile="simnow_demo",
+    credential_binding_provider=None,
+    use_controlled_binding_test_seam=True,
+):
     """Build the same sealed runtime fixture used by the independent probes."""
     from bt_api_py import _execution_session as session_module
 
@@ -901,10 +1009,15 @@ def _runtime_approval_fixture(tmp_path, monkeypatch, name):
         "_ledger_registry_root",
         lambda: tmp_path / "approval-ledger-registry",
     )
+    journal = tmp_path / f"{name}.jsonl"
+    provisioned = os.name == "nt"
+    if provisioned:
+        journal.touch()
     api = BtApi(
         execution_config={
             "market_data_only": True,
-            "order_journal": str(tmp_path / f"{name}.jsonl"),
+            "order_journal": str(journal),
+            "windows_ctp_journal_preprovisioned": provisioned,
         }
     )
     feed = SimpleNamespace(
@@ -912,9 +1025,22 @@ def _runtime_approval_fixture(tmp_path, monkeypatch, name):
             "account_fingerprint": "acct_1234567890abcdef",
             "trading_day": "20260911",
             "connection_generation": 7,
-            "environment_profile": "simnow_demo",
+            "environment_profile": profile,
         }
     )
+    feed._execution_bound_td_front = "tcp://approved-td"
+    feed._execution_bound_md_front = "tcp://approved-md"
+    feed._trader = SimpleNamespace(
+        front=feed._execution_bound_td_front,
+        _bound_front=feed._execution_bound_td_front,
+        _session_native_front=feed._execution_bound_td_front,
+        _connection_generation=7,
+    )
+    feed._md_client = SimpleNamespace(
+        front=feed._execution_bound_md_front,
+        connection_generation=11,
+    )
+    feed._md_stream_generation = 4
     feed.get_session_state = lambda: dict(feed.state)
     feed.get_environment_info = lambda: {
         "verified": True,
@@ -952,14 +1078,32 @@ def _runtime_approval_fixture(tmp_path, monkeypatch, name):
     )
     strategy_file = tmp_path / f"{name}-strategy.txt"
     strategy_file.write_text("synthetic strategy version 1\n")
-    context = api.build_ctp_execution_approval_context(
-        _context(),
-        exchange_name="CTP___FUTURE",
-        configuration={"mode": "synthetic-read-only"},
-        strategy_source=strategy_file,
-        preflight={"complete": True},
-        evidence={"complete": True},
-    )
+    verifier = None
+    if credential_binding_provider is not None and use_controlled_binding_test_seam:
+        from bt_api_py.bt_api import _issue_ctp_controlled_test_authority_for_core
+
+        verifier = api._create_ctp_credential_binding_verifier_for_test(
+            credential_binding_provider,
+            authority=_issue_ctp_controlled_test_authority_for_core(),
+        )
+    try:
+        context = api.build_ctp_execution_approval_context(
+            _context(),
+            exchange_name="CTP___FUTURE",
+            configuration={"mode": "synthetic-read-only"},
+            strategy_source=strategy_file,
+            preflight={"complete": True},
+            evidence={"complete": True},
+            credential_binding_verifier=verifier,
+            credential_binding_provider=(
+                credential_binding_provider
+                if not use_controlled_binding_test_seam
+                else None
+            ),
+        )
+    except Exception:
+        api.close()
+        raise
     return api, feed, strategy_file, context
 
 
@@ -967,7 +1111,636 @@ def _runtime_payload(context, now=None, **changes):
     values = context.as_dict()
     values.pop("source")
     values.update(changes)
-    return _payload(now, **values)
+    payload = _payload(now, **values)
+    if (
+        "credential_binding_key_id" in values
+        or "credential_binding_hmac_sha256" in values
+    ):
+        from bt_api_py import SIMNOW_APPROVAL_SCHEMA_VERSION
+
+        payload["schema_version"] = SIMNOW_APPROVAL_SCHEMA_VERSION
+    return payload
+
+
+@pytest.mark.parametrize("profile", ["set1_group1", "config_front_pair"])
+def test_simnow_bounded_context_requires_pathless_binding_provider(
+    tmp_path, monkeypatch, profile
+):
+    with pytest.raises(NormalizedApiError) as raised:
+        _runtime_approval_fixture(
+            tmp_path,
+            monkeypatch,
+            f"simnow-missing-binding-{profile}",
+            profile=profile,
+        )
+    assert raised.value.code == "ctp_credential_binding_required"
+
+
+def test_neutral_config_front_pair_context_verifies_with_fresh_bound_credential_tag(
+    signing_material, tmp_path, monkeypatch
+):
+    private_key, root = signing_material
+    tag = {
+        "credential_binding_key_id": "runtime-binding-key-1",
+        "credential_binding_hmac_sha256": "a" * 64,
+    }
+    api, _feed, _strategy_file, context = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        "config-front-pair-bound",
+        profile="config_front_pair",
+        credential_binding_provider=lambda: dict(tag),
+    )
+
+    approval = api.verify_ctp_execution_approval(
+        _signed_artifact(_runtime_payload(context), private_key),
+        trust_root=root,
+        context=context,
+    )
+
+    assert approval.payload["environment_profile"] == "config_front_pair"
+    assert approval.payload["credential_binding_key_id"] == tag[
+        "credential_binding_key_id"
+    ]
+    api.close()
+
+
+def test_bare_callable_cannot_satisfy_trusted_credential_binding(tmp_path, monkeypatch):
+    with pytest.raises(NormalizedApiError) as raised:
+        _runtime_approval_fixture(
+            tmp_path,
+            monkeypatch,
+            "simnow-bare-callback-rejected",
+            profile="set1_group1",
+            credential_binding_provider=lambda: {
+                "credential_binding_key_id": "runtime-binding-key-1",
+                "credential_binding_hmac_sha256": "a" * 64,
+            },
+            use_controlled_binding_test_seam=False,
+        )
+    assert raised.value.code == "ctp_credential_binding_trust_required"
+
+
+def test_raw_mapping_cannot_satisfy_trusted_credential_binding(tmp_path, monkeypatch):
+    with pytest.raises(NormalizedApiError) as raised:
+        _runtime_approval_fixture(
+            tmp_path,
+            monkeypatch,
+            "simnow-raw-mapping-rejected",
+            profile="set1_group1",
+            credential_binding_provider={
+                "credential_binding_key_id": "runtime-binding-key-1",
+                "credential_binding_hmac_sha256": "a" * 64,
+            },
+            use_controlled_binding_test_seam=False,
+        )
+    assert raised.value.code == "ctp_credential_binding_trust_required"
+
+
+def test_credential_binding_verifier_cannot_be_replayed_across_sdk_instances(tmp_path):
+    from bt_api_py.bt_api import _issue_ctp_controlled_test_authority_for_core
+
+    first = BtApi(execution_config={"market_data_only": True})
+    second = BtApi(execution_config={"market_data_only": True})
+    try:
+        verifier = first._create_ctp_credential_binding_verifier_for_test(
+            lambda: {
+                "credential_binding_key_id": "runtime-binding-key-1",
+                "credential_binding_hmac_sha256": "a" * 64,
+            },
+            authority=_issue_ctp_controlled_test_authority_for_core(),
+        )
+        with pytest.raises(NormalizedApiError) as raised:
+            second.build_ctp_execution_approval_context(
+                _context(),
+                credential_binding_provider=verifier,
+            )
+        assert raised.value.code == "ctp_credential_binding_trust_required"
+    finally:
+        first.close()
+        second.close()
+
+
+def test_credential_binding_refresh_rejects_front_and_configuration_drift(
+    tmp_path, monkeypatch
+):
+    api, feed, strategy_file, context = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        "simnow-binding-drift",
+        profile="set1_group1",
+        credential_binding_provider=lambda: {
+            "credential_binding_key_id": "runtime-binding-key-1",
+            "credential_binding_hmac_sha256": "a" * 64,
+        },
+    )
+    try:
+        feed._trader.front = "tcp://changed-td"
+        with pytest.raises(NormalizedApiError) as front_raised:
+            api._refresh_ctp_execution_approval_context(context)
+        assert front_raised.value.code == "ctp_credential_binding_active_front_unavailable"
+
+        feed._trader.front = feed._execution_bound_td_front
+        strategy_file.write_text("synthetic strategy version 2\n")
+        refreshed = api._refresh_ctp_execution_approval_context(context)
+        assert (
+            refreshed.as_dict()["strategy_identity_sha256"]
+            != context.as_dict()["strategy_identity_sha256"]
+        )
+        assert (
+            refreshed.as_dict()["credential_binding_hmac_sha256"]
+            != context.as_dict()["credential_binding_hmac_sha256"]
+        )
+    finally:
+        api.close()
+
+
+@pytest.mark.parametrize("field", ["account_fingerprint", "trading_day", "connection_generation"])
+def test_credential_binding_refresh_invalidates_account_day_and_generation_drift(
+    signing_material, tmp_path, monkeypatch, field
+):
+    private_key, root = signing_material
+    api, feed, _strategy_file, context = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        f"simnow-binding-{field}-drift",
+        profile="set1_group1",
+        credential_binding_provider=lambda: {
+            "credential_binding_key_id": "runtime-binding-key-1",
+            "credential_binding_hmac_sha256": "a" * 64,
+        },
+    )
+    try:
+        proof = _signed_artifact(_runtime_payload(context), private_key)
+        api.verify_ctp_execution_approval(proof, trust_root=root, context=context)
+
+        if field == "account_fingerprint":
+            feed.state[field] = "acct_2234567890abcdef"
+        elif field == "trading_day":
+            feed.state[field] = "20260912"
+        else:
+            feed.state[field] = 8
+            feed._trader._connection_generation = 8
+
+        refreshed = api._refresh_ctp_execution_approval_context(context)
+        assert (
+            refreshed.as_dict()["credential_binding_hmac_sha256"]
+            != context.as_dict()["credential_binding_hmac_sha256"]
+        )
+        with pytest.raises(NormalizedApiError) as raised:
+            api.verify_ctp_execution_approval(
+                proof, trust_root=root, context=refreshed
+            )
+        assert raised.value.code == "ctp_approval_context_mismatch"
+    finally:
+        api.close()
+
+
+def _active_md_identity_fixture():
+    """Build real CTP client/stream types without starting native sessions."""
+    from bt_api_ctp.ctp.client import MdClient, MdIdentityObservation, TraderClient
+    from bt_api_ctp.feeds.base_stream import ConnectionState
+    from bt_api_ctp.feeds.live_ctp_feed import CtpMarketStream, CtpRequestDataFuture
+
+    td_front = "tcp://approved-td"
+    md_front = "tcp://approved-md"
+    broker_id = "broker-123"
+    user_id = "user-456"
+    td_generation = 7
+    md_generation = 11
+    trading_day = "20260911"
+
+    trader = TraderClient(td_front, broker_id, user_id, "test-only")
+    trader._session_native_front = td_front
+    trader._connection_generation = td_generation
+    trader._trading_day = trading_day
+    feed = object.__new__(CtpRequestDataFuture)
+    feed._trader = trader
+    feed._execution_bound_td_front = td_front
+    feed._execution_bound_md_front = md_front
+    feed._execution_bound_broker_id = broker_id
+    feed._execution_bound_user_id = user_id
+
+    md_client = MdClient(md_front, broker_id, user_id, "test-only")
+    md_client._connected = True
+    md_client._loggedin = True
+    md_client._connection_generation = md_generation
+    md_client._active_md_identity = MdIdentityObservation(
+        front=md_front,
+        broker_id=broker_id,
+        user_id=user_id,
+        connection_generation=md_generation,
+        request_id=md_generation,
+        trading_day=trading_day,
+        authenticated=True,
+    )
+
+    ingress = object()
+    stream = object.__new__(CtpMarketStream)
+    stream.stream_name = "ctp_market_stream"
+    stream.data_queue = ingress
+    stream._running = True
+    stream._state = ConnectionState.AUTHENTICATED
+    stream.md_front = md_front
+    stream._md_client = md_client
+    stream._observed_client_generation = md_generation
+    stream._connection_generation = 4
+
+    api = SimpleNamespace(
+        _ctp_market_ingress_queues={"CTP___FUTURE": ingress},
+        _subscription_streams=[stream],
+    )
+    state = {
+        "account_fingerprint": "acct_" + trader._account_fingerprint,
+        "trading_day": trading_day,
+        "connection_generation": td_generation,
+    }
+    return api, feed, stream, md_client, state
+
+
+def test_credential_binding_consumes_native_active_md_identity():
+    from bt_api_ctp.ctp.client import MdIdentityObservation
+
+    from bt_api_py.bt_api import BtApi
+
+    api, feed, _stream, md_client, state = _active_md_identity_fixture()
+    result = BtApi._ctp_credential_binding_fronts(
+        api, "CTP___FUTURE", feed, state, object(), operation="test"
+    )
+    assert result == {
+        "td_front": "tcp://approved-td",
+        "md_front": "tcp://approved-md",
+        "md_connection_generation": 11,
+        "md_stream_generation": 4,
+    }
+    assert type(md_client.active_md_identity) is MdIdentityObservation
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [
+        {"authenticated": True},
+        SimpleNamespace(authenticated=True),
+        {
+            "authenticated": True,
+            "field": "mapping",
+        },
+    ],
+)
+def test_credential_binding_rejects_untyped_active_md_identity(identity):
+    from bt_api_py.bt_api import BtApi
+
+    api, feed, _stream, md_client, state = _active_md_identity_fixture()
+    md_client._active_md_identity = identity
+    with pytest.raises(NormalizedApiError) as raised:
+        BtApi._ctp_credential_binding_fronts(
+            api, "CTP___FUTURE", feed, state, object(), operation="test"
+        )
+    assert raised.value.code == "ctp_credential_binding_active_md_identity_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement", "expected_code"),
+    [
+        ("broker_id", "other-broker", "ctp_credential_binding_scope_mismatch"),
+        ("user_id", "other-user", "ctp_credential_binding_scope_mismatch"),
+        ("trading_day", "20260912", "ctp_credential_binding_scope_mismatch"),
+        ("connection_generation", 12, "ctp_credential_binding_active_front_unavailable"),
+        ("request_id", 12, "ctp_credential_binding_active_front_unavailable"),
+    ],
+)
+def test_credential_binding_rejects_md_identity_account_day_and_generation_drift(
+    field, replacement, expected_code
+):
+    from dataclasses import replace
+
+    from bt_api_py.bt_api import BtApi
+
+    api, feed, _stream, md_client, state = _active_md_identity_fixture()
+    md_client._active_md_identity = replace(
+        md_client._active_md_identity, **{field: replacement}
+    )
+    with pytest.raises(NormalizedApiError) as raised:
+        BtApi._ctp_credential_binding_fronts(
+            api, "CTP___FUTURE", feed, state, object(), operation="test"
+        )
+    assert raised.value.code == expected_code
+
+
+@pytest.mark.parametrize("profile", ["set1_group1", "config_front_pair"])
+def test_plain_synthetic_mapping_cannot_verify_legacy_bounded_approval(
+    signing_material, profile
+):
+    private_key, root = signing_material
+    from bt_api_py._ctp_execution_authorization import verify_ctp_execution_approval
+
+    legacy_context = _context()
+    legacy_context["environment_profile"] = profile
+    legacy_payload = _payload(environment_profile=profile)
+
+    with pytest.raises(NormalizedApiError) as raised:
+        verify_ctp_execution_approval(
+            _signed_artifact(legacy_payload, private_key),
+            trust_root=root,
+            context=legacy_context,
+        )
+    assert raised.value.code == "ctp_credential_binding_required"
+
+
+@pytest.mark.parametrize(
+    "profile", ["set1_group1", "set1_group2", "config_front_pair"]
+)
+def test_simnow_set1_legacy_v1_approval_is_rejected(
+    signing_material, tmp_path, monkeypatch, profile
+):
+    private_key, root = signing_material
+    tag = {
+        "credential_binding_key_id": "runtime-binding-key-1",
+        "credential_binding_hmac_sha256": "a" * 64,
+    }
+    api, _feed, _strategy_file, context = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        f"legacy-{profile}",
+        profile=profile,
+        credential_binding_provider=lambda: dict(tag),
+    )
+    old_payload = _runtime_payload(context)
+    old_payload.pop("credential_binding_key_id")
+    old_payload.pop("credential_binding_hmac_sha256")
+    old_payload["schema_version"] = SCHEMA
+    with pytest.raises(NormalizedApiError) as raised:
+        api.verify_ctp_execution_approval(
+            _signed_artifact(old_payload, private_key), trust_root=root, context=context
+        )
+    assert raised.value.code == "ctp_credential_binding_required"
+    api.close()
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("credential_binding_key_id", "runtime-binding-key-2"),
+        ("credential_binding_hmac_sha256", "b" * 64),
+    ],
+)
+def test_simnow_set1_tag_rotation_invalidates_signed_approval(
+    signing_material, tmp_path, monkeypatch, field, replacement
+):
+    private_key, root = signing_material
+    current = {
+        "credential_binding_key_id": "runtime-binding-key-1",
+        "credential_binding_hmac_sha256": "a" * 64,
+    }
+    api, _feed, _strategy_file, context = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        f"rotation-{field}",
+        profile="set1_group1",
+        credential_binding_provider=lambda: dict(current),
+    )
+    payload = _runtime_payload(context)
+    proof = _signed_artifact(payload, private_key)
+    api.verify_ctp_execution_approval(proof, trust_root=root, context=context)
+    assert "runtime-binding-key-1" not in repr(context)
+    assert current["credential_binding_hmac_sha256"] not in repr(context)
+
+    current[field] = replacement
+    refreshed = api._refresh_ctp_execution_approval_context(context)
+    with pytest.raises(NormalizedApiError) as raised:
+        api.verify_ctp_execution_approval(proof, trust_root=root, context=refreshed)
+    assert raised.value.code == "ctp_approval_context_mismatch"
+    api.close()
+
+
+def test_simnow_binding_is_journaled_once_without_credential_projection(
+    signing_material, tmp_path, monkeypatch
+):
+    private_key, root = signing_material
+    journal = tmp_path / "simnow-bound.jsonl"
+    tag = {
+        "credential_binding_key_id": "runtime-binding-key-1",
+        "credential_binding_hmac_sha256": "c" * 64,
+    }
+    api, _feed, _strategy_file, context = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        "simnow-bound",
+        profile="set1_group2",
+        credential_binding_provider=lambda: dict(tag),
+    )
+    assert api._execution_session.path == journal
+    api.preauthorize_ctp_execution_approval(
+        _signed_artifact(_runtime_payload(context), private_key),
+        trust_root=root,
+        context=context,
+    )
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    record = next(
+        row for row in rows if row["event"] == "ctp_execution_approval_pre_authorized"
+    )
+    assert record["credential_binding_key_id"] == tag["credential_binding_key_id"]
+    context_hmac = context.as_dict()["credential_binding_hmac_sha256"]
+    assert (
+        record["credential_binding_hmac_sha256"]
+        == context_hmac
+    )
+    assert (
+        record["approval_payload"]["credential_binding_hmac_sha256"]
+        == context_hmac
+    )
+    identity = api._execution_session.execution_identity("CTP___FUTURE")
+    assert not any(name.startswith("credential_binding_") for name in identity)
+    assert not any(name in record for name in ("password", "investor_id", "auth_code"))
+    assert list(tmp_path.glob("*.jsonl")) == [journal]
+    api.close()
+
+
+@pytest.mark.parametrize("profile", ["set2_7x24", "set1_group1_vpn", "set2_7x24_4000x"])
+def test_non_set1_simnow_approval_context_is_unsupported(
+    tmp_path, monkeypatch, profile
+):
+    with pytest.raises(NormalizedApiError) as raised:
+        _runtime_approval_fixture(
+            tmp_path,
+            monkeypatch,
+            f"simnow-unsupported-{profile}",
+            profile=profile,
+            credential_binding_provider=lambda: {
+                "credential_binding_key_id": "runtime-binding-key-1",
+                "credential_binding_hmac_sha256": "a" * 64,
+            },
+        )
+    assert raised.value.code == "ctp_credential_binding_scope_unsupported"
+
+
+def test_credential_binding_provider_rejects_raw_credential_fields(
+    tmp_path, monkeypatch
+):
+    with pytest.raises(NormalizedApiError) as raised:
+        _runtime_approval_fixture(
+            tmp_path,
+            monkeypatch,
+            "simnow-raw-credential-rejected",
+            profile="set1_group1",
+            credential_binding_provider=lambda: {
+                "credential_binding_key_id": "runtime-binding-key-1",
+                "credential_binding_hmac_sha256": "a" * 64,
+                "password": "never-cross-this-boundary",
+            },
+        )
+    assert raised.value.code == "ctp_credential_binding_invalid"
+
+
+@pytest.mark.parametrize(
+    ("helper", "schema_name"),
+    [
+        ("entry", "SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION"),
+        ("recovery", "SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION"),
+    ],
+)
+def test_simnow_entry_and_recovery_payload_variants_preserve_binding_fields(
+    helper, schema_name
+):
+    from bt_api_py import _ctp_execution_authorization as authorization
+
+    if helper == "entry":
+        from .test_ctp_entry_approval_arm import _entry_payload
+
+        payload = _entry_payload()
+    else:
+        from .test_ctp_execution_recovery_approval import _recovery_payload
+
+        payload = _recovery_payload()
+    payload["schema_version"] = getattr(authorization, schema_name)
+    payload["credential_binding_key_id"] = "runtime-binding-key-1"
+    payload["credential_binding_hmac_sha256"] = "d" * 64
+
+    normalized = authorization._normalize_payload(payload)
+
+    assert normalized["credential_binding_key_id"] == "runtime-binding-key-1"
+    assert normalized["credential_binding_hmac_sha256"] == "d" * 64
+
+
+def test_set1_entry_capability_cannot_reach_generic_native_authority(
+    signing_material, tmp_path: Path, monkeypatch
+):
+    from bt_api_py import SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION
+
+    private_key, root = signing_material
+    api, feed, _strategy_file, context = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        "set1-generic-write-closed",
+        profile="set1_group1",
+        credential_binding_provider=lambda: {
+            "credential_binding_key_id": "runtime-binding-key-1",
+            "credential_binding_hmac_sha256": "b" * 64,
+        },
+    )
+    payload = _runtime_payload(
+        context,
+        receipt_sha256="c" * 64,
+        source_hashes_sha256="d" * 64,
+        ctp_package_sha256="e" * 64,
+    )
+    payload["schema_version"] = SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION
+    capability = api.redeem_ctp_execution_approval(
+        _signed_artifact(payload, private_key),
+        trust_root=root,
+        context=context,
+    )
+    native_calls = []
+    feed._issue_execution_authorization_for_core = lambda *_a, **_kw: native_calls.append(
+        "arm-issuer"
+    )
+    feed._issue_settlement_authorization_for_core = lambda *_a, **_kw: native_calls.append(
+        "settlement-issuer"
+    )
+    feed.arm_execution_gate = lambda *_a, **_kw: native_calls.append("arm-gate")
+    feed.confirm_settlement = lambda *_a, **_kw: native_calls.append("settlement")
+    try:
+        for call in (
+            lambda: api.arm_execution_from_approval(capability),
+            lambda: api.confirm_ctp_settlement_from_approval(capability),
+            lambda: api.arm_execution_recovery(
+                authorization=capability,
+                recovery_token_sha256="f" * 64,
+                budget_capability=object(),
+            ),
+        ):
+            with pytest.raises(NormalizedApiError) as raised:
+                call()
+            assert raised.value.code == "ctp_simnow_execution_not_admitted"
+        assert native_calls == []
+    finally:
+        api.close()
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        "set1_group1",
+        "set1_group2",
+        "set1_group1_vpn",
+        "set2_7x24",
+        "set2_7x24_4000x",
+        "set2_7x24_vpn",
+        "set1",
+        "set2",
+    ],
+)
+def test_all_restricted_simnow_profiles_block_generic_order_and_cancel_dispatch(
+    profile, tmp_path: Path, monkeypatch
+):
+    api, feed, _strategy_file, _context_value = _runtime_approval_fixture(
+        tmp_path,
+        monkeypatch,
+        f"dispatch-closed-{profile}",
+        profile="set1_group1",
+        credential_binding_provider=lambda: {
+            "credential_binding_key_id": "runtime-binding-key-1",
+            "credential_binding_hmac_sha256": "b" * 64,
+        },
+    )
+    feed.state["environment_profile"] = profile
+    feed.native_calls = []
+    feed.make_order = lambda *_a, **_kw: feed.native_calls.append("insert")
+    feed.cancel_order = lambda *_a, **_kw: feed.native_calls.append("action")
+    feed.cancel_all = lambda *_a, **_kw: feed.native_calls.append("cancel-all")
+
+    async def async_make_order(*_args, **_kwargs):
+        feed.native_calls.append("async-insert")
+
+    async def async_cancel_order(*_args, **_kwargs):
+        feed.native_calls.append("async-action")
+
+    async def async_cancel_all(*_args, **_kwargs):
+        feed.native_calls.append("async-cancel-all")
+
+    feed.async_make_order = async_make_order
+    feed.async_cancel_order = async_cancel_order
+    feed.async_cancel_all = async_cancel_all
+    try:
+        calls = (
+            lambda: api.make_order("CTP___FUTURE", "CZCE.SA701", normalized=True),
+            lambda: api.cancel_order("CTP___FUTURE", "CZCE.SA701", normalized=True),
+            lambda: api.cancel_all("CTP___FUTURE"),
+            lambda: asyncio.run(
+                api.async_make_order("CTP___FUTURE", normalized=True)
+            ),
+            lambda: asyncio.run(
+                api.async_cancel_order("CTP___FUTURE", normalized=True)
+            ),
+            lambda: asyncio.run(api.async_cancel_all("CTP___FUTURE")),
+        )
+        for call in calls:
+            with pytest.raises(NormalizedApiError) as raised:
+                call()
+            assert raised.value.code == "ctp_simnow_execution_not_admitted"
+        assert feed.native_calls == []
+    finally:
+        api.close()
 
 
 @pytest.mark.parametrize(
@@ -1084,7 +1857,11 @@ def test_runtime_change_during_lease_commit_is_rejected_before_approval_event(
 
     def change_at_lease_fsync(fd):
         nonlocal mutated
-        if not mutated and lock_path.exists() and os.fstat(fd).st_ino == lock_path.stat().st_ino:
+        if (
+            not mutated
+            and lock_path.exists()
+            and os.fstat(fd).st_ino == lock_path.stat().st_ino
+        ):
             mutated = True
             if mutation == "generation":
                 feed.state["connection_generation"] = 8
@@ -1099,7 +1876,11 @@ def test_runtime_change_during_lease_commit_is_rejected_before_approval_event(
     assert raised.value.code == "ctp_approval_context_mismatch"
     assert mutated is True
     if journal.exists():
-        events = [json.loads(line)["event"] for line in journal.read_text().splitlines() if line]
+        events = [
+            json.loads(line)["event"]
+            for line in journal.read_text().splitlines()
+            if line
+        ]
         assert not {
             "ctp_execution_approval_pre_authorized",
             "ctp_execution_approval_consumption_started",
@@ -1124,8 +1905,14 @@ def test_runtime_change_during_consumed_commit_is_rejected_after_durable_fence(
 
     def change_at_consumed_fsync(fd):
         nonlocal observed
-        if not observed and journal.exists() and os.fstat(fd).st_ino == journal.stat().st_ino:
-            rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
+        if (
+            not observed
+            and journal.exists()
+            and os.fstat(fd).st_ino == journal.stat().st_ino
+        ):
+            rows = [
+                json.loads(line) for line in journal.read_text().splitlines() if line
+            ]
             if rows and rows[-1]["event"] == "ctp_execution_approval_consumed":
                 observed = True
                 feed.state["connection_generation"] = 8
@@ -1160,8 +1947,14 @@ def test_consumed_fsync_failure_stays_permanently_uncertain_in_process(
 
     def fail_after_consumed_flush(fd):
         nonlocal injected
-        if not injected and journal.exists() and os.fstat(fd).st_ino == journal.stat().st_ino:
-            rows = [json.loads(line) for line in journal.read_text().splitlines() if line]
+        if (
+            not injected
+            and journal.exists()
+            and os.fstat(fd).st_ino == journal.stat().st_ino
+        ):
+            rows = [
+                json.loads(line) for line in journal.read_text().splitlines() if line
+            ]
             if rows and rows[-1].get("event") == "ctp_execution_approval_consumed":
                 injected = True
                 raise OSError("synthetic fsync failure after consumed row flush")
@@ -1203,7 +1996,9 @@ def test_newer_snapshot_cannot_forget_prior_revocation_before_preauthorization(
 ):
     private_key, root = signing_material
     journal = tmp_path / "revocation-monotonic.jsonl"
-    api = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    api = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     api.record_ctp_execution_approval_revocation_snapshot(
         trust_root=_root_with_revocations(root, 4, approval_ids=("revoked-a",))
     )
@@ -1225,10 +2020,14 @@ def test_newer_snapshot_cannot_forget_prior_revocation_before_preauthorization(
     api.close()
 
 
-def test_nested_revocation_in_preauthorization_survives_restart(signing_material, tmp_path: Path):
+def test_nested_revocation_in_preauthorization_survives_restart(
+    signing_material, tmp_path: Path
+):
     private_key, root = signing_material
     journal = tmp_path / "revocation-nested.jsonl"
-    first = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    first = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     first.preauthorize_ctp_execution_approval(
         _signed_artifact(
             _payload(
@@ -1242,7 +2041,9 @@ def test_nested_revocation_in_preauthorization_survives_restart(signing_material
     )
     first.close()
 
-    recovered = BtApi(execution_config={"market_data_only": True, "order_journal": str(journal)})
+    recovered = BtApi(
+        execution_config={"market_data_only": True, "order_journal": str(journal)}
+    )
     proof = _signed_artifact(
         _payload(
             approval_id="revoked-b",

@@ -44,4 +44,10 @@ def map_order_request(request: OrderRequest) -> dict[str, Any]:
     }
     if request.exchange_id is not None:
         result["exchange_id"] = request.exchange_id
+    if request.hedge_flag is not None:
+        result["hedge_flag"] = request.hedge_flag
+    if request.managed_intent_id is not None:
+        result["managed_intent_id"] = request.managed_intent_id
+    if request.runtime_order_id is not None:
+        result["runtime_order_id"] = request.runtime_order_id
     return result

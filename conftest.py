@@ -8,6 +8,7 @@ test runs under ``examples/network_tests``. For repo-wide fixtures and hooks,
 keeping a thin root bootstrap is the conventional placement.
 """
 
+import inspect
 import os
 import sys
 import warnings
@@ -142,6 +143,14 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     """Modify test collection to add markers automatically and skip tests without API keys."""
+    if any(inspect.iscoroutinefunction(item.obj) for item in items) and not config.pluginmanager.hasplugin(
+        "asyncio"
+    ):
+        raise pytest.UsageError(
+            "async tests were collected without pytest-asyncio; install the dev dependencies "
+            "and do not pass -p no:asyncio"
+        )
+
     skip_live = should_skip_live_tests()
 
     for item in items:

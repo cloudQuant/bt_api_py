@@ -375,6 +375,12 @@ class DirectBackend:
                 value = getattr(request, key, None)
                 if value is not None:
                     kwargs[key] = value
+            if request.runtime_order_id is not None:
+                kwargs["runtime_order_id"] = request.runtime_order_id
+            if request.runtime_action_id is not None:
+                kwargs["runtime_action_id"] = request.runtime_action_id
+            if request.managed_cancel_intent_id is not None:
+                kwargs["managed_cancel_intent_id"] = request.managed_cancel_intent_id
             if order_id is None:
                 kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
             kwargs.update(self._execution_options(exchange_name))
@@ -411,6 +417,12 @@ class DirectBackend:
                 value = getattr(request, key, None)
                 if value is not None:
                     kwargs[key] = value
+            if request.runtime_order_id is not None:
+                kwargs["runtime_order_id"] = request.runtime_order_id
+            if request.runtime_action_id is not None:
+                kwargs["runtime_action_id"] = request.runtime_action_id
+            if request.managed_cancel_intent_id is not None:
+                kwargs["managed_cancel_intent_id"] = request.managed_cancel_intent_id
             if order_id is None:
                 kwargs.setdefault("order_ref", request.order_ref or request.client_order_id)
             kwargs.update(self._execution_options(exchange_name))

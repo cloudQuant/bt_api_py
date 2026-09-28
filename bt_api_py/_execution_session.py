@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import stat
 import time
 import unicodedata
 import uuid
@@ -39,7 +40,11 @@ from ._ctp_budget import (
     budget_evidence_digest,
     evaluate_ctp_budget,
 )
-from ._ctp_execution_authorization import recovery_action_digest, recovery_plan_digest
+from ._ctp_execution_authorization import (
+    _is_ctp_entry_write_guard,
+    recovery_action_digest,
+    recovery_plan_digest,
+)
 from ._normalization import _is_definite_reject
 
 
@@ -77,6 +82,8 @@ _IDENTITY = (
     "execution_cycle_id",
     "execution_role",
     "strategy_identity_sha256",
+    "runtime_order_id",
+    "managed_intent_id",
 )
 _LEDGER_SEMANTIC_IDENTITY = frozenset(
     {
@@ -88,11 +95,13 @@ _LEDGER_SEMANTIC_IDENTITY = frozenset(
         "execution_cycle_id",
         "execution_role",
         "strategy_identity_sha256",
+        "managed_intent_id",
     }
 )
 _EXPLICIT_IDENTITY_FIELDS = "_explicit_identity_fields"
 _CONFIG: dict[str, Any] = {
     "order_journal": None,
+    "windows_ctp_journal_preprovisioned": False,
     "account_risk_state": None,
     "require_order_journal": True,
     "market_data_only": False,
@@ -375,7 +384,9 @@ def _execution_arm_proof(value):
         # native CTP gate always calculate the same proof digest.
         proof["authorized_instruments"] = list(canonical_authorized)
     account_fingerprint = proof["account_fingerprint"]
-    account_digest = account_fingerprint.removeprefix("acct_")
+    account_digest = (
+        account_fingerprint[5:] if account_fingerprint.startswith("acct_") else account_fingerprint
+    )
     if (
         account_fingerprint != account_fingerprint.lower()
         or not account_fingerprint.startswith("acct_")
@@ -530,6 +541,73 @@ def _default_journal_path(identities):
     return (_ledger_registry_root().parent / "execution-journals" / f"{digest}.jsonl").resolve()
 
 
+def _require_windows_ctp_journal_preprovision(
+    path,
+    config,
+    *,
+    journal_identity_at_open,
+    platform_name=None,
+):
+    """Require a pre-existing journal and explicit storage-contract attestation on Windows.
+
+    ``FlushFileBuffers`` flushes a file handle; Windows does not provide a
+    portable Python-level directory-entry flush contract equivalent to POSIX
+    directory ``fsync``. The configuration flag is only an operator attestation
+    that deployment provisioned and reviewed this path. It is not evidence that
+    a target filesystem survives power loss and does not authorize a CTP write.
+    """
+    if (os.name if platform_name is None else platform_name) != "nt":
+        return
+    if config["windows_ctp_journal_preprovisioned"] is not True:
+        raise NormalizedApiError(
+            "journal",
+            "windows_ctp_journal_provisioning_required",
+            definite_reject=True,
+        )
+    if path is None or journal_identity_at_open is None:
+        raise NormalizedApiError(
+            "journal",
+            "windows_ctp_journal_must_be_preprovisioned",
+            definite_reject=True,
+        )
+
+
+def _journal_file_identity(path):
+    """Return a regular, non-reparse journal file identity without following links."""
+    if path is None:
+        return None
+    try:
+        info = Path(path).lstat()
+    except OSError:
+        return None
+    return _regular_file_identity(info)
+
+
+def _regular_file_identity(info):
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    if not stat.S_ISREG(info.st_mode) or getattr(info, "st_file_attributes", 0) & reparse_flag:
+        return None
+    device = getattr(info, "st_dev", None)
+    file_id = getattr(info, "st_ino", None)
+    if device is None or file_id in (None, 0):
+        return None
+    return int(device), int(file_id)
+
+
+def _verify_windows_ctp_journal_identity(path, fd, expected_identity):
+    """Reject path replacement before or during a Windows CTP append."""
+    if (
+        expected_identity is None
+        or _regular_file_identity(os.fstat(fd)) != expected_identity
+        or _journal_file_identity(path) != expected_identity
+    ):
+        raise NormalizedApiError(
+            "journal",
+            "windows_ctp_journal_identity_changed",
+            definite_reject=True,
+        )
+
+
 def _lock_file(path, operation, code):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -639,7 +717,14 @@ def session_config(config):
     if not isinstance(config, dict) or set(config) - set(_CONFIG):
         raise NormalizedApiError("configure_execution", "invalid_execution_config")
     result = {**_CONFIG, **config}
-    if any(type(result[key]) is not bool for key in ("market_data_only", "require_order_journal")):
+    if any(
+        type(result[key]) is not bool
+        for key in (
+            "market_data_only",
+            "require_order_journal",
+            "windows_ctp_journal_preprovisioned",
+        )
+    ):
         raise NormalizedApiError("configure_execution", "invalid_execution_config")
     result["account_currencies"] = dict(result["account_currencies"] or {})
     account_ids = result["account_ids"]
@@ -954,6 +1039,68 @@ def _migration_receipt_path(destination):
     return Path(str(destination) + ".cutover.json")
 
 
+def _migration_platform_name():
+    return os.name
+
+
+def _contains_ctp_migration_authority(value):
+    if isinstance(value, dict):
+        provider = str(value.get("provider") or "").strip().upper()
+        exchange = str(value.get("exchange_name") or "").partition("___")[0].strip().upper()
+        event = str(value.get("event") or "").strip().lower()
+        if provider == "CTP" or exchange == "CTP" or event.startswith("ctp_"):
+            return True
+        if any(str(key).lower().startswith("ctp_") for key in value):
+            return True
+        return any(_contains_ctp_migration_authority(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_ctp_migration_authority(item) for item in value)
+    return False
+
+
+def _journal_payload_contains_ctp_migration_authority(payload):
+    try:
+        lines = payload.decode("utf-8").splitlines()
+    except (AttributeError, UnicodeDecodeError):
+        return False
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if _contains_ctp_migration_authority(record):
+            return True
+    return False
+
+
+def _journal_file_contains_ctp_migration_authority(path):
+    if not path:
+        return False
+    try:
+        with Path(path).open("rb") as stream:
+            return any(_journal_payload_contains_ctp_migration_authority(line) for line in stream)
+    except OSError:
+        return False
+
+
+def _require_windows_ctp_migration_durability(
+    *, authorities=(), payloads=(), paths=(), platform_name=None
+):
+    if (_migration_platform_name() if platform_name is None else platform_name) != "nt":
+        return
+    contains_ctp_authority = (
+        any(_contains_ctp_migration_authority(value) for value in authorities)
+        or any(_journal_payload_contains_ctp_migration_authority(payload) for payload in payloads)
+        or any(_journal_file_contains_ctp_migration_authority(path) for path in paths)
+    )
+    if contains_ctp_authority:
+        raise NormalizedApiError(
+            "migrate_journal",
+            "windows_ctp_migration_durability_unavailable",
+            definite_reject=True,
+        )
+
+
 def _complete_migration_files(transaction, reconciliation):
     source = Path(transaction["source"])
     destination = Path(transaction["destination"])
@@ -1025,6 +1172,16 @@ def _recover_migration_transaction(source, destination):
             "migrate_journal", "unreadable_cutover_transaction", definite_reject=True
         ) from None
 
+    _require_windows_ctp_migration_durability(
+        authorities=(transaction, identity),
+        paths=(
+            source,
+            destination,
+            transaction.get("staging"),
+            transaction.get("sealed_source"),
+        ),
+    )
+
     source_lease = _lock_existing_journal(source)
     registry_leases = _acquire_identity_registry_leases(identity)
     try:
@@ -1086,6 +1243,7 @@ def _freeze_migration_source(
     freeze,
 ):
     source_bytes = source.read_bytes()
+    _require_windows_ctp_migration_durability(payloads=(source_bytes,))
     source_hash = hashlib.sha256(source_bytes).hexdigest()
     try:
         source_epoch = int(
@@ -1517,7 +1675,9 @@ def migrate_execution_journal(
 
     A durable PREPARED transaction is written before the source is sealed.  A
     later invocation rolls a partial prepare back, or completes publication if
-    every registry scope already points at the validated destination.
+    every registry scope already points at the validated destination. CTP
+    authority migrations are refused on Windows because directory-entry
+    durability cannot be established there by this implementation.
     """
     source = Path(source).expanduser().resolve()
     destination = Path(destination).expanduser().resolve()
@@ -1536,6 +1696,7 @@ def migrate_execution_journal(
     if not isinstance(claims, dict):
         raise NormalizedApiError("migrate_journal", "invalid_claim", definite_reject=True)
     normalized_claims = {str(key): _claim_identity(value) for key, value in claims.items()}
+    _require_windows_ctp_migration_durability(authorities=(normalized_claims,))
     source_lease = _lock_existing_journal(source)
     registry_leases = []
     staging = None
@@ -1657,6 +1818,7 @@ class _ExecutionSession:
             self.config["order_journal"] = str(_default_journal_path(identities))
         path = self.config["order_journal"]
         self.path = Path(path) if path else None
+        self._journal_file_identity_at_open = _journal_file_identity(self.path)
         risk_path = self.config["account_risk_state"]
         if risk_path is None and self.path is not None:
             risk_path = str(self.path) + ".account-risk.json"
@@ -1673,6 +1835,9 @@ class _ExecutionSession:
         self.orders = {}
         self.used_ids = set()
         self.reserved_ids = set()
+        self.runtime_order_bindings = {}
+        self.runtime_action_bindings = {}
+        self._runtime_action_attempts = defaultdict(int)
         self._reservation_only_cancel_unknowns = {}
         self.historical_unknown = set()
         self.pending = defaultdict(deque)
@@ -1713,6 +1878,7 @@ class _ExecutionSession:
         self._recovery_mode = False
         self._recovery_dispatch_in_progress = False
         self._active_recovery_context = None
+        self._active_managed_write_context = None
         self._recovery_arm_capability = object()
         self._recovery_refresh_in_progress = False
         self._recovery_journal_error = None
@@ -1720,6 +1886,7 @@ class _ExecutionSession:
         self._recovery_pending_tokens = set()
         self._recovery_authorization_records = {}
         self._recovery_write_guard = None
+        self._entry_write_guard = None
         self._recovery_budget_owner = None
         self._recovery_budget_request = None
         self._recovery_budget_enforced = False
@@ -3599,6 +3766,24 @@ class _ExecutionSession:
         identity = self._ledger_identity(venue, account_id, row)
         return (*self._ledger_key(identity), str(client_id))
 
+    def _runtime_order_key(self, venue, row, runtime_order_id):
+        identity = self._ledger_identity(venue, row.get("account_id"), row)
+        strategy_id = str(row.get("strategy_id") or self.config["strategy_id"])
+        return (*self._ledger_key(identity), strategy_id, str(runtime_order_id))
+
+    def _runtime_action_key(self, venue, row, runtime_action_id):
+        identity = self._ledger_identity(venue, row.get("account_id"), row)
+        strategy_id = str(row.get("strategy_id") or self.config["strategy_id"])
+        return (*self._ledger_key(identity), strategy_id, str(runtime_action_id))
+
+    def _runtime_order_binding(self, venue, account_id, runtime_order_id):
+        key = self._runtime_order_key(
+            venue,
+            {"account_id": account_id, "strategy_id": self.config["strategy_id"]},
+            runtime_order_id,
+        )
+        return self.runtime_order_bindings.get(key)
+
     def _trade_key(self, venue, row):
         """Scope venue trade IDs to account, trading day, exchange and symbol."""
         identity = self._ledger_identity(venue, row.get("account_id"), row)
@@ -3705,6 +3890,50 @@ class _ExecutionSession:
                         client_id,
                         row,
                     )
+                    if client_key in self.reserved_ids or client_key in self.used_ids:
+                        raise ValueError("client_order_id_reservation_collision")
+                    runtime_order_id = row.get("runtime_order_id")
+                    managed_intent_id = row.get("managed_intent_id")
+                    if managed_intent_id is not None and runtime_order_id is None:
+                        raise ValueError("managed_intent_without_runtime_order_id")
+                    if runtime_order_id is not None:
+                        if (
+                            not isinstance(runtime_order_id, str)
+                            or not runtime_order_id
+                            or runtime_order_id != runtime_order_id.strip()
+                            or len(runtime_order_id.encode("utf-8")) > 256
+                        ):
+                            raise ValueError("invalid_runtime_order_id")
+                        if managed_intent_id is not None and (
+                            not isinstance(managed_intent_id, str)
+                            or not managed_intent_id
+                            or managed_intent_id != managed_intent_id.strip()
+                            or len(managed_intent_id.encode("utf-8")) > 256
+                        ):
+                            raise ValueError("invalid_managed_intent_id")
+                        runtime_key = self._runtime_order_key(venue, row, runtime_order_id)
+                        if runtime_key in self.runtime_order_bindings:
+                            raise ValueError("runtime_order_id_collision")
+                        if managed_intent_id is not None and any(
+                            key[:4] == runtime_key[:4]
+                            and key != runtime_key
+                            and binding.get("managed_intent_id") == managed_intent_id
+                            for key, binding in self.runtime_order_bindings.items()
+                        ):
+                            raise ValueError("managed_intent_id_collision")
+                        self.runtime_order_bindings[runtime_key] = {
+                            "exchange_name": venue,
+                            "account_id": row.get("account_id"),
+                            "strategy_id": row.get("strategy_id"),
+                            "connection_generation": row.get("connection_generation"),
+                            "trading_day": row.get("trading_day"),
+                            "runtime_order_id": runtime_order_id,
+                            "managed_intent_id": row.get("managed_intent_id"),
+                            "client_order_id": client_id,
+                            "symbol": row.get("symbol"),
+                            "status": "reservation_only",
+                            "loaded_from_journal": True,
+                        }
                     reservation_cancel_events.setdefault(client_key, []).append(
                         {"event": event, "exchange_name": venue, "client_order_id": client_id}
                     )
@@ -3753,6 +3982,98 @@ class _ExecutionSession:
                     self.reserved_ids.discard(client_key)
                 if not venue or not row.get("symbol"):
                     raise ValueError("missing_order_identity")
+                runtime_order_id = row.get("runtime_order_id")
+                managed_intent_id = row.get("managed_intent_id")
+                if managed_intent_id is not None and (
+                    not isinstance(managed_intent_id, str)
+                    or not managed_intent_id
+                    or managed_intent_id != managed_intent_id.strip()
+                    or len(managed_intent_id.encode("utf-8")) > 256
+                    or not isinstance(runtime_order_id, str)
+                    or row.get("hedge_flag") not in {"1", "2", "3"}
+                ):
+                    raise ValueError("invalid_managed_order_identity")
+                if (
+                    event == "intent"
+                    and self._provider(venue) == "CTP"
+                    and not isinstance(runtime_order_id, str)
+                ):
+                    raise ValueError("ctp_runtime_order_identity_missing")
+                if event == "intent" and runtime_order_id is not None:
+                    runtime_key = self._runtime_order_key(venue, row, runtime_order_id)
+                    binding = self.runtime_order_bindings.get(runtime_key)
+                    if (
+                        binding is None
+                        or binding.get("client_order_id") != client_id
+                        or binding.get("managed_intent_id") != row.get("managed_intent_id")
+                        or binding.get("symbol") not in (None, row.get("symbol"))
+                        or binding.get("status") != "reservation_only"
+                    ):
+                        raise ValueError("runtime_order_intent_binding_conflict")
+                    binding["status"] = "unresolved"
+                    binding["symbol"] = row.get("symbol")
+                if event == "cancel_intent":
+                    if self._provider(venue) == "CTP" and (
+                        not isinstance(row.get("runtime_order_id"), str)
+                        or not isinstance(row.get("runtime_action_id"), str)
+                    ):
+                        raise ValueError("ctp_runtime_cancel_identity_missing")
+                    runtime_action_id = row.get("runtime_action_id")
+                    if runtime_action_id is not None:
+                        if (
+                            not isinstance(runtime_action_id, str)
+                            or not runtime_action_id
+                            or runtime_action_id != runtime_action_id.strip()
+                            or len(runtime_action_id.encode("utf-8")) > 256
+                        ):
+                            raise ValueError("invalid_runtime_action_id")
+                        runtime_key = self._runtime_action_key(venue, row, runtime_action_id)
+                        if runtime_key in self.runtime_action_bindings:
+                            raise ValueError("runtime_action_id_collision")
+                        target_runtime_id = row.get("runtime_order_id")
+                        target = (
+                            self._runtime_order_binding(
+                                venue, row.get("account_id"), target_runtime_id
+                            )
+                            if target_runtime_id is not None
+                            else None
+                        )
+                        if target_runtime_id is not None and (
+                            target is None
+                            or target.get("client_order_id") != client_id
+                            or (
+                                target.get("managed_intent_id") is not None
+                                and (
+                                    not isinstance(row.get("managed_cancel_intent_id"), str)
+                                    or not row.get("managed_cancel_intent_id")
+                                    or row.get("managed_cancel_intent_id")
+                                    != row.get("managed_cancel_intent_id").strip()
+                                    or len(row.get("managed_cancel_intent_id").encode("utf-8"))
+                                    > 256
+                                )
+                            )
+                        ):
+                            raise ValueError("runtime_action_target_conflict")
+                        managed_cancel_intent_id = row.get("managed_cancel_intent_id")
+                        if managed_cancel_intent_id is not None and any(
+                            key[:4] == runtime_key[:4]
+                            and item.get("managed_cancel_intent_id") == managed_cancel_intent_id
+                            for key, item in self.runtime_action_bindings.items()
+                        ):
+                            raise ValueError("managed_cancel_intent_id_collision")
+                        self.runtime_action_bindings[runtime_key] = {
+                            "exchange_name": venue,
+                            "account_id": row.get("account_id"),
+                            "strategy_id": row.get("strategy_id"),
+                            "connection_generation": row.get("connection_generation"),
+                            "runtime_action_id": runtime_action_id,
+                            "runtime_order_id": target_runtime_id,
+                            "client_order_id": client_id,
+                            "managed_cancel_intent_id": managed_cancel_intent_id,
+                        }
+                        if target_runtime_id is not None:
+                            attempt_key = self._runtime_order_key(venue, row, target_runtime_id)
+                            self._runtime_action_attempts[attempt_key] += 1
                 state = self._state(venue, row, create=True)
                 self._identity(
                     state,
@@ -3790,6 +4111,11 @@ class _ExecutionSession:
                         }
                     }
                     state["terminal"] = bool(row.get("terminal_confirmed"))
+                    if state.get("runtime_order_id"):
+                        runtime_key = self._runtime_order_key(venue, row, state["runtime_order_id"])
+                        binding = self.runtime_order_bindings.get(runtime_key)
+                        if binding is not None:
+                            binding["status"] = "terminal" if state["terminal"] else "unresolved"
                     if state["terminal"]:
                         self.historical_unknown.difference_update(state["recovery_ids"])
                 if row.get("fee_unresolved"):
@@ -3865,17 +4191,43 @@ class _ExecutionSession:
         if self.path is None or (self.config["market_data_only"] and not allow_read_only):
             return
         try:
+            ctp_journal_event = (
+                self._provider(row.get("exchange_name")) == "CTP"
+                or event in _CTP_AUTHORIZATION_EVENTS
+            )
+            windows_ctp_journal = os.name == "nt" and ctp_journal_event
+            if ctp_journal_event:
+                _require_windows_ctp_journal_preprovision(
+                    self.path,
+                    self.config,
+                    journal_identity_at_open=self._journal_file_identity_at_open,
+                )
             self._assert_writer_lease("journal")
             created = False
-            try:
+            if windows_ctp_journal:
                 fd = os.open(
                     str(self.path),
-                    os.O_APPEND | os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                    0o600,
+                    os.O_APPEND | os.O_WRONLY,
                 )
-                created = True
-            except FileExistsError:
-                fd = os.open(str(self.path), os.O_APPEND | os.O_WRONLY, 0o600)
+                try:
+                    _verify_windows_ctp_journal_identity(
+                        self.path,
+                        fd,
+                        self._journal_file_identity_at_open,
+                    )
+                except Exception:
+                    os.close(fd)
+                    raise
+            else:
+                try:
+                    fd = os.open(
+                        str(self.path),
+                        os.O_APPEND | os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                        0o600,
+                    )
+                    created = True
+                except FileExistsError:
+                    fd = os.open(str(self.path), os.O_APPEND | os.O_WRONLY, 0o600)
             with os.fdopen(fd, "a") as stream:
                 venue = row.get("exchange_name")
                 ledger_identity = (
@@ -3926,6 +4278,12 @@ class _ExecutionSession:
                 stream.write(json.dumps(envelope, allow_nan=False) + "\n")
                 stream.flush()
                 os.fsync(stream.fileno())
+                if windows_ctp_journal:
+                    _verify_windows_ctp_journal_identity(
+                        self.path,
+                        stream.fileno(),
+                        self._journal_file_identity_at_open,
+                    )
             if created and os.name != "nt":
                 flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
                 directory_fd = os.open(str(self.path.parent), flags)
@@ -4269,6 +4627,7 @@ class _ExecutionSession:
         self._recovery_authorized_plan = None
         self._recovery_remaining_plan = None
         self._recovery_write_guard = None
+        self._entry_write_guard = None
         self._recovery_budget_request = None
         self._recovery_budget_enforced = False
         self._recovery_budget_capability = None
@@ -4330,6 +4689,7 @@ class _ExecutionSession:
                 self._arm_state_reader = None
                 self._ctp_execution_authorization_context = None
                 self._recovery_mode = False
+                self._entry_write_guard = None
                 if self._arm_revoked_generation is None:
                     self._arm_revoked_reason = None
                     self._arm_revoked_error_code = None
@@ -4687,6 +5047,7 @@ class _ExecutionSession:
                 self._arm_proof_sha256 = None
                 self._arm_state_reader = None
                 self._recovery_mode = False
+                self._entry_write_guard = None
                 self._recovery_refresh_in_progress = True
                 self._recovery_plan = None
                 self._recovery_authorized_plan = None
@@ -4808,9 +5169,10 @@ class _ExecutionSession:
                 # write belongs to pre-arm state.  Close the SDK lease now;
                 # the queue owner closes the native gate under its transition lock.
                 self.config["market_data_only"] = True
-                self._arm_proof_sha256 = None
-                self._recovery_mode = False
-                self._recovery_refresh_in_progress = True
+            self._arm_proof_sha256 = None
+            self._recovery_mode = False
+            self._entry_write_guard = None
+            self._recovery_refresh_in_progress = True
             return should_revoke
 
     @staticmethod
@@ -5635,6 +5997,7 @@ class _ExecutionSession:
                     "client_order_id": self._recovery_value(
                         order, "client_order_id", "OrderRef", "order_ref"
                     ),
+                    "runtime_order_id": self._recovery_value(intent, "runtime_order_id"),
                     "order_id": self._recovery_value(
                         order, "order_id", "OrderSysID", "venue_order_id"
                     ),
@@ -6053,6 +6416,7 @@ class _ExecutionSession:
                         "client_order_id": self._recovery_value(
                             order, "client_order_id", "OrderRef", "order_ref"
                         ),
+                        "runtime_order_id": self._recovery_value(intent, "runtime_order_id"),
                         "order_id": self._recovery_value(
                             order, "order_id", "OrderSysID", "venue_order_id"
                         ),
@@ -6416,6 +6780,7 @@ class _ExecutionSession:
             self._recovery_refresh_in_progress = False
             self._recovery_plan = verified
             self._recovery_completed = True
+            self._entry_write_guard = None
             return {
                 "completed": True,
                 "armed": False,
@@ -6435,6 +6800,7 @@ class _ExecutionSession:
             self._recovery_remaining_plan = None
             self._recovery_refresh_in_progress = True
             self._recovery_write_guard = None
+            self._entry_write_guard = None
             self._recovery_budget_request = None
             self._recovery_budget_enforced = False
             self._recovery_budget_capability = None
@@ -6520,9 +6886,79 @@ class _ExecutionSession:
                 ) from None
 
     def finalize_dispatch(self, context):
-        """Run the accepted U1b recovery gate and the bounded O2 gate."""
+        """Run the CTP authorization and bounded budget gates at dispatch."""
         self.finalize_recovery_dispatch(context)
+        self.finalize_entry_dispatch(context)
         self.finalize_budget_dispatch(context)
+
+    def finalize_entry_dispatch(self, context):
+        """Revalidate signed entry authority at the last SDK transport boundary.
+
+        BtApi's synchronous and asynchronous managed CTP submit/cancel paths
+        route through ``finalize_dispatch`` before the direct backend hands the
+        request to the CTP feed.  Recovery remains under its separate guard.
+        A legacy or otherwise unguarded ordinary arm may prepare local ledger
+        state, but it cannot cross this boundary to a native request.
+        """
+
+        if not isinstance(context, Mapping):
+            raise NormalizedApiError(
+                "execution_dispatch",
+                "ctp_entry_authorization_guard_invalid",
+                definite_reject=True,
+            )
+        operation = context.get("operation")
+        if operation not in {"make_order", "cancel_order"} or context.get("recovery_action"):
+            return
+        with self.mutex:
+            guard = self._entry_write_guard
+            if (
+                guard is None
+                and self._arm_managed
+                and not self._recovery_mode
+                and self._provider(self._arm_venue) == "CTP"
+                and context.get("_native_ctp_entry_guard_required") is True
+            ):
+                self._revoke_arm("ctp_entry_authorization_guard_invalid")
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_entry_authorization_guard_invalid",
+                    definite_reject=True,
+                )
+            if guard is None:
+                return
+            if context.get("_async_handoff") and (
+                self._active_managed_write_context is not context
+            ):
+                self._revoke_arm("ctp_entry_authorization_guard_invalid")
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_entry_authorization_guard_invalid",
+                    definite_reject=True,
+                )
+            if not self._arm_managed or self._recovery_mode:
+                self._revoke_arm("ctp_entry_authorization_guard_invalid")
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_entry_authorization_guard_invalid",
+                    definite_reject=True,
+                )
+            try:
+                guard.validate(
+                    operation,
+                    placement=operation == "make_order",
+                    recovery_action=False,
+                )
+            except NormalizedApiError as exc:
+                self._revoke_arm(exc.code)
+                raise
+            except Exception:
+                self._revoke_arm("ctp_entry_authorization_guard_invalid")
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_entry_authorization_guard_invalid",
+                    definite_reject=True,
+                ) from None
 
     def set_recovery_ingress_fence(self, epoch, ingress_revision, event_revision):
         """Remember the private-event fence established by the native arm."""
@@ -6587,6 +7023,7 @@ class _ExecutionSession:
         rollback_execution=None,
         prepare_execution_outside_mutex=False,
         authorization_context=None,
+        execution_write_guard=None,
     ):
         """Atomically convert one read-only session to durable execution.
 
@@ -6603,6 +7040,7 @@ class _ExecutionSession:
             rollback_execution=rollback_execution,
             prepare_execution_outside_mutex=prepare_execution_outside_mutex,
             authorization_context=authorization_context,
+            execution_write_guard=execution_write_guard,
         )
 
     def _arm_from_preflight(
@@ -6616,6 +7054,7 @@ class _ExecutionSession:
         prepare_execution_outside_mutex=False,
         _recovery_capability=None,
         authorization_context=None,
+        execution_write_guard=None,
     ):
         recovery_arm = _recovery_capability is self._recovery_arm_capability
         operation = "arm_execution_from_preflight"
@@ -6627,6 +7066,19 @@ class _ExecutionSession:
             previous_venue = self._arm_venue
             try:
                 normalized, proof_sha256 = _execution_arm_proof(proof)
+                if execution_write_guard is not None and (
+                    recovery_arm
+                    or not _is_ctp_entry_write_guard(
+                        execution_write_guard,
+                        session=self,
+                    )
+                    or execution_write_guard._proof_sha256 != proof_sha256
+                ):
+                    raise NormalizedApiError(
+                        operation,
+                        "ctp_entry_authorization_guard_invalid",
+                        definite_reject=True,
+                    )
                 if authorization_context is not None and (
                     not isinstance(authorization_context, Mapping)
                     or set(authorization_context)
@@ -6814,6 +7266,7 @@ class _ExecutionSession:
                 self._ctp_execution_authorization_context = (
                     dict(authorization_context) if authorization_context is not None else None
                 )
+                self._entry_write_guard = execution_write_guard
                 self._arm_revoked_reason = None
                 self._arm_revoked_error_code = None
                 self._arm_submit_calls = self.submit_calls
@@ -6890,6 +7343,24 @@ class _ExecutionSession:
                     code = "unresolved_or_undurable_journal"
                 elif placement and self.config["require_order_journal"] and self.path is None:
                     code = "order_journal_required"
+                elif placement and any(
+                    binding.get("loaded_from_journal") is True
+                    and binding.get("status") == "reservation_only"
+                    and binding.get("exchange_name") == venue
+                    and binding.get("strategy_id") == self.config["strategy_id"]
+                    and (
+                        not isinstance(self._ctp_execution_identity, Mapping)
+                        or binding.get("account_id")
+                        == self._ctp_execution_identity.get("account_id")
+                    )
+                    for binding in self.runtime_order_bindings.values()
+                ):
+                    # The reservation proves the old request never reached
+                    # dispatch, so its OrderRef is a safe burn rather than an
+                    # UNKNOWN order. The runtime order identity is nevertheless
+                    # orphaned; require reviewed reconciliation before replacing
+                    # it with a fresh framework action.
+                    code = "runtime_order_binding_recovery_required"
                 elif (
                     placement
                     and not recovery_action
@@ -6920,6 +7391,28 @@ class _ExecutionSession:
                     raise NormalizedApiError(
                         operation,
                         "ctp_recovery_authorization_invalid",
+                        definite_reject=True,
+                    ) from None
+            if (
+                code is None
+                and self._arm_managed
+                and not self._recovery_mode
+                and self._entry_write_guard is not None
+            ):
+                try:
+                    self._entry_write_guard.validate(
+                        operation,
+                        placement=placement,
+                        recovery_action=recovery_action,
+                    )
+                except NormalizedApiError as exc:
+                    self._revoke_arm(exc.code)
+                    raise
+                except Exception:
+                    self._revoke_arm("ctp_entry_authorization_guard_invalid")
+                    raise NormalizedApiError(
+                        operation,
+                        "ctp_entry_authorization_guard_invalid",
                         definite_reject=True,
                     ) from None
             if (
@@ -7670,6 +8163,344 @@ class _ExecutionSession:
             self.reserved_ids.add(key)
             return result
 
+    def new_runtime_order_binding(
+        self,
+        venue,
+        *,
+        symbol,
+        account_id=None,
+        managed_intent_id=None,
+        runtime_order_id=None,
+        budget_capability=None,
+        recovery_action=False,
+    ):
+        """Durably reserve one runtime identity and its native CTP OrderRef together."""
+        with self.mutex:
+            if self._provider(venue) != "CTP":
+                raise NormalizedApiError(
+                    "new_runtime_order_binding",
+                    "ctp_runtime_order_binding_required",
+                    definite_reject=True,
+                )
+            if type(recovery_action) is not bool:
+                raise NormalizedApiError(
+                    "new_runtime_order_binding",
+                    "invalid_recovery_action",
+                    definite_reject=True,
+                )
+            self.require_write(
+                "new_runtime_order_binding",
+                placement=True,
+                venue=venue,
+                recovery_action=recovery_action,
+            )
+            if self._arm_managed:
+                budget_state = self._require_budget_reservation_locked(
+                    budget_capability,
+                    operation="new_runtime_order_binding",
+                    mode=("recovery" if recovery_action else "ordinary"),
+                )
+                self._budget_context_matches_current_locked(
+                    budget_state, operation="new_runtime_order_binding"
+                )
+            if not isinstance(symbol, str) or not symbol or symbol != symbol.strip():
+                raise NormalizedApiError(
+                    "new_runtime_order_binding",
+                    "invalid_runtime_order_symbol",
+                    definite_reject=True,
+                )
+            if managed_intent_id is not None and (
+                not isinstance(managed_intent_id, str)
+                or not managed_intent_id
+                or managed_intent_id != managed_intent_id.strip()
+                or len(managed_intent_id.encode("utf-8")) > 256
+            ):
+                raise NormalizedApiError(
+                    "new_runtime_order_binding",
+                    "invalid_managed_intent_id",
+                    definite_reject=True,
+                )
+            generation = (
+                self._arm_proof.get("connection_generation")
+                if isinstance(self._arm_proof, Mapping)
+                else None
+            )
+            if type(generation) is not int or generation <= 0:
+                raise NormalizedApiError(
+                    "new_runtime_order_binding",
+                    "ctp_runtime_order_generation_unavailable",
+                    definite_reject=True,
+                )
+            ledger = self._ledger_identity(venue, account_id)
+            canonical_account = ledger["account_id"]
+            strategy_id = self.config["strategy_id"]
+            if runtime_order_id is None:
+                runtime_order_id = uuid.uuid4().hex
+            elif (
+                not isinstance(runtime_order_id, str)
+                or not runtime_order_id
+                or runtime_order_id != runtime_order_id.strip()
+                or len(runtime_order_id.encode("utf-8")) > 256
+            ):
+                raise NormalizedApiError(
+                    "new_runtime_order_binding", "invalid_runtime_order_id", definite_reject=True
+                )
+            runtime_key = self._runtime_order_key(
+                venue,
+                {
+                    "account_id": canonical_account,
+                    "strategy_id": strategy_id,
+                    "connection_generation": generation,
+                },
+                runtime_order_id,
+            )
+            if managed_intent_id is not None and any(
+                key[:4] == runtime_key[:4]
+                and key != runtime_key
+                and binding.get("managed_intent_id") == managed_intent_id
+                for key, binding in self.runtime_order_bindings.items()
+            ):
+                raise NormalizedApiError(
+                    "new_runtime_order_binding",
+                    "managed_intent_runtime_order_conflict",
+                    definite_reject=True,
+                )
+            existing = self.runtime_order_bindings.get(runtime_key)
+            if existing is not None:
+                if (
+                    existing.get("status") == "reserved"
+                    and existing.get("loaded_from_journal") is False
+                    and existing.get("managed_intent_id") == managed_intent_id
+                    and existing.get("symbol") == symbol
+                    and existing.get("connection_generation") == generation
+                ):
+                    result = {
+                        "runtime_order_id": runtime_order_id,
+                        "client_order_id": existing["client_order_id"],
+                        "ctp_order_ref": existing["client_order_id"],
+                        "connection_generation": generation,
+                    }
+                    if managed_intent_id is not None:
+                        result["managed_intent_id"] = managed_intent_id
+                    return result
+                raise NormalizedApiError(
+                    "new_runtime_order_binding",
+                    "runtime_order_id_collision_or_recovery_required",
+                    definite_reject=True,
+                )
+            candidate = time.time_ns() % 10**12
+            client_id = f"{candidate:012d}"
+            client_key = self._client_key(venue, canonical_account, client_id)
+            while client_key in self.used_ids | self.reserved_ids:
+                candidate = (candidate + 1) % 10**12
+                client_id = f"{candidate:012d}"
+                client_key = self._client_key(venue, canonical_account, client_id)
+            row = {
+                "exchange_name": venue,
+                "account_id": canonical_account,
+                "client_order_id": client_id,
+                "runtime_order_id": runtime_order_id,
+                "managed_intent_id": managed_intent_id,
+                "symbol": symbol,
+                "strategy_id": strategy_id,
+                "connection_generation": generation,
+            }
+            runtime_key = self._runtime_order_key(venue, row, runtime_order_id)
+            # This one fsynced record is the allocation boundary. A crash after
+            # return but before intent leaves a durable safe-burn mapping; no
+            # native dispatch can have happened because intents fsync first.
+            self._journal("client_id_reservation", row)
+            self.reserved_ids.add(client_key)
+            self.runtime_order_bindings[runtime_key] = {
+                "exchange_name": venue,
+                "account_id": canonical_account,
+                "strategy_id": strategy_id,
+                "connection_generation": generation,
+                "trading_day": self._arm_proof.get("trading_day"),
+                "runtime_order_id": runtime_order_id,
+                "managed_intent_id": managed_intent_id,
+                "client_order_id": client_id,
+                "symbol": symbol,
+                "status": "reserved",
+                "loaded_from_journal": False,
+            }
+            result = {
+                "runtime_order_id": runtime_order_id,
+                "client_order_id": client_id,
+                "ctp_order_ref": client_id,
+                "connection_generation": generation,
+            }
+            if managed_intent_id is not None:
+                result["managed_intent_id"] = managed_intent_id
+            return result
+
+    def get_runtime_order_bindings(self, venue, *, unresolved_only=True, runtime_order_id=None):
+        """List durable CTP runtime/OrderRef joins for the authenticated scope only."""
+        if type(unresolved_only) is not bool:
+            raise NormalizedApiError(
+                "get_runtime_order_bindings", "invalid_unresolved_only", definite_reject=True
+            )
+        with self.mutex:
+            if self._provider(venue) != "CTP":
+                raise NormalizedApiError(
+                    "get_runtime_order_bindings",
+                    "ctp_runtime_order_binding_required",
+                    definite_reject=True,
+                )
+            if venue != self._arm_venue or not isinstance(self._ctp_execution_identity, Mapping):
+                raise NormalizedApiError(
+                    "get_runtime_order_bindings",
+                    "ctp_runtime_order_scope_unavailable",
+                    definite_reject=True,
+                )
+            generation = (
+                self._arm_proof.get("connection_generation")
+                if isinstance(self._arm_proof, Mapping)
+                else None
+            )
+            if type(generation) is not int or generation <= 0:
+                raise NormalizedApiError(
+                    "get_runtime_order_bindings",
+                    "ctp_runtime_order_generation_unavailable",
+                    definite_reject=True,
+                )
+            identity = self._ledger_identity(venue)
+            ledger_key = self._ledger_key(identity)
+            strategy_id = self.config["strategy_id"]
+            result = []
+            for key, binding in self.runtime_order_bindings.items():
+                if (
+                    key[:3] != ledger_key
+                    or key[3] != strategy_id
+                    or binding.get("exchange_name") != venue
+                    or binding.get("connection_generation") != generation
+                    or (
+                        runtime_order_id is not None
+                        and binding.get("runtime_order_id") != runtime_order_id
+                    )
+                    or (unresolved_only and binding.get("status") == "terminal")
+                ):
+                    continue
+                status = binding.get("status")
+                item = {
+                    "runtime_order_id": binding["runtime_order_id"],
+                    "client_order_id": binding["client_order_id"],
+                    "ctp_order_ref": binding["client_order_id"],
+                    "symbol": binding.get("symbol"),
+                    "connection_generation": generation,
+                    "trading_day": binding.get("trading_day"),
+                    "status": status,
+                    "safe_burn": status == "reservation_only",
+                    "recovery_required": status == "reservation_only"
+                    or (status == "unresolved" and binding.get("loaded_from_journal") is True),
+                }
+                if binding.get("managed_intent_id") is not None:
+                    item["managed_intent_id"] = binding["managed_intent_id"]
+                result.append(item)
+            return sorted(result, key=lambda item: item["runtime_order_id"])
+
+    def next_runtime_action_id(self, venue, *, account_id, runtime_order_id):
+        """Return the stable ID for this order's next journaled cancel attempt."""
+        with self.mutex:
+            if self._provider(venue) != "CTP":
+                raise NormalizedApiError(
+                    "next_runtime_action_id",
+                    "ctp_runtime_action_binding_required",
+                    definite_reject=True,
+                )
+            if not isinstance(runtime_order_id, str) or not runtime_order_id:
+                raise NormalizedApiError(
+                    "next_runtime_action_id", "invalid_runtime_order_id", definite_reject=True
+                )
+            identity = self._ledger_identity(venue, account_id)
+            binding_key = (
+                *self._ledger_key(identity),
+                self.config["strategy_id"],
+                runtime_order_id,
+            )
+            binding = self.runtime_order_bindings.get(binding_key)
+            if binding is None:
+                raise NormalizedApiError(
+                    "next_runtime_action_id",
+                    "runtime_order_binding_unknown",
+                    definite_reject=True,
+                )
+            attempt = self._runtime_action_attempts[binding_key] + 1
+            scope_digest = hashlib.sha256(
+                json.dumps(binding_key, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            return uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"bt_api_py:ctp-cancel:{scope_digest}:{attempt}",
+            ).hex
+
+    def get_runtime_action_bindings(self, venue, *, runtime_order_id=None):
+        """List durable CTP cancel attempts in the active authenticated scope."""
+        if runtime_order_id is not None and (
+            not isinstance(runtime_order_id, str)
+            or not runtime_order_id
+            or runtime_order_id != runtime_order_id.strip()
+            or len(runtime_order_id.encode("utf-8")) > 256
+        ):
+            raise NormalizedApiError(
+                "get_runtime_action_bindings",
+                "invalid_runtime_order_id",
+                definite_reject=True,
+            )
+        with self.mutex:
+            if self._provider(venue) != "CTP":
+                raise NormalizedApiError(
+                    "get_runtime_action_bindings",
+                    "ctp_runtime_action_binding_required",
+                    definite_reject=True,
+                )
+            if venue != self._arm_venue or not isinstance(self._ctp_execution_identity, Mapping):
+                raise NormalizedApiError(
+                    "get_runtime_action_bindings",
+                    "ctp_runtime_action_scope_unavailable",
+                    definite_reject=True,
+                )
+            generation = (
+                self._arm_proof.get("connection_generation")
+                if isinstance(self._arm_proof, Mapping)
+                else None
+            )
+            if type(generation) is not int or generation <= 0:
+                raise NormalizedApiError(
+                    "get_runtime_action_bindings",
+                    "ctp_runtime_action_generation_unavailable",
+                    definite_reject=True,
+                )
+            identity = self._ledger_identity(venue)
+            ledger_key = self._ledger_key(identity)
+            strategy_id = self.config["strategy_id"]
+            result = []
+            for key, binding in self.runtime_action_bindings.items():
+                if (
+                    key[:3] != ledger_key
+                    or key[3] != strategy_id
+                    or binding.get("exchange_name") != venue
+                    or binding.get("connection_generation") != generation
+                    or (
+                        runtime_order_id is not None
+                        and binding.get("runtime_order_id") != runtime_order_id
+                    )
+                ):
+                    continue
+                item = {
+                    "runtime_action_id": binding["runtime_action_id"],
+                    "runtime_order_id": binding["runtime_order_id"],
+                    "client_order_id": binding["client_order_id"],
+                    "connection_generation": generation,
+                }
+                if binding.get("managed_cancel_intent_id") is not None:
+                    item["managed_cancel_intent_id"] = binding["managed_cancel_intent_id"]
+                result.append(item)
+            return sorted(
+                result,
+                key=lambda item: (item["runtime_order_id"], item["runtime_action_id"]),
+            )
+
     def _state(self, venue, row, *, create=False):
         client_id = str(row.get("client_order_id") or row.get("order_ref") or "")
         account_id = self._ledger_identity(venue, row.get("account_id"), row)["account_id"]
@@ -7941,6 +8772,47 @@ class _ExecutionSession:
             ):
                 if key in previous:
                     result[key] = previous[key]
+        for key in ("cancel_action_id", "native_request_id", "order_action_ref", "cancel_status"):
+            value = row.get(key)
+            if key == "cancel_status":
+                if value in {"accepted", "rejected", "unknown"}:
+                    result[key] = value
+            elif (
+                isinstance(value, str)
+                and 0 < len(value) <= 256
+                or isinstance(value, int)
+                and not isinstance(value, bool)
+                and value >= 0
+            ):
+                result[key] = value
+        cancel_evidence = row.get("cancel_evidence")
+        if isinstance(cancel_evidence, Mapping):
+            safe_evidence = {}
+            for key in (
+                "request_id",
+                "order_action_ref",
+                "status",
+                "account_fingerprint",
+                "trading_day",
+                "connection_generation",
+                "order_ref",
+                "order_sys_id",
+                "front_id",
+                "session_id",
+                "instrument_id",
+                "exchange_id",
+                "action_flag",
+                "evidence_source",
+                "evidence_received",
+                "callback_received",
+                "error_code",
+                "reason",
+                "observed_at_utc",
+            ):
+                value = cancel_evidence.get(key)
+                if value is None or isinstance(value, (str, int, bool)):
+                    safe_evidence[key] = value
+            result["cancel_evidence"] = safe_evidence
         return result
 
     def _record(
@@ -7974,6 +8846,12 @@ class _ExecutionSession:
         state["last_update"] = dict(update)
         state["_last_update_origin"] = origin
         state["_revision"] = state.get("_revision", 0) + 1
+        runtime_order_id = state.get("runtime_order_id")
+        if runtime_order_id:
+            runtime_key = self._runtime_order_key(state["exchange_name"], state, runtime_order_id)
+            binding = self.runtime_order_bindings.get(runtime_key)
+            if binding is not None:
+                binding["status"] = "terminal" if state["terminal"] else "unresolved"
         if state["terminal"]:
             self.historical_unknown.discard(self._identifier(state))
             self.historical_unknown.difference_update(state.get("recovery_ids", ()))
@@ -8328,6 +9206,37 @@ class _ExecutionSession:
                     venue=venue,
                     recovery_action=recovery_allowance is not None,
                 )
+                runtime_binding = None
+                if self._provider(venue) == "CTP" and self._arm_managed:
+                    runtime_order_id = getattr(request, "runtime_order_id", None)
+                    if (
+                        not isinstance(runtime_order_id, str)
+                        or not runtime_order_id
+                        or runtime_order_id != runtime_order_id.strip()
+                        or len(runtime_order_id.encode("utf-8")) > 256
+                    ):
+                        raise NormalizedApiError(
+                            operation,
+                            "ctp_runtime_order_identity_required",
+                            definite_reject=True,
+                        )
+                    runtime_key = self._runtime_order_key(venue, request_row, runtime_order_id)
+                    runtime_binding = self.runtime_order_bindings.get(runtime_key)
+                    current_generation = self._arm_proof.get("connection_generation")
+                    if (
+                        runtime_binding is None
+                        or runtime_binding.get("client_order_id") != request.client_order_id
+                        or runtime_binding.get("managed_intent_id")
+                        != getattr(request, "managed_intent_id", None)
+                        or runtime_binding.get("symbol") != request.symbol
+                        or runtime_binding.get("connection_generation") != current_generation
+                        or runtime_binding.get("status") != "reserved"
+                    ):
+                        raise NormalizedApiError(
+                            operation,
+                            "ctp_runtime_order_binding_conflict",
+                            definite_reject=True,
+                        )
                 if self._provider(venue) == "CTP" and self._arm_managed:
                     if budget_capability is None and recovery_allowance is not None:
                         budget_capability = self._recovery_budget_capability
@@ -8360,6 +9269,8 @@ class _ExecutionSession:
                 if preauthorize is not None:
                     preauthorize()
                 self._journal("intent", row)
+                if runtime_binding is not None:
+                    runtime_binding["status"] = "unresolved"
                 if budget_state is not None:
                     budget_action_id = f"order:{request.client_order_id}"
                     self.bind_ctp_budget_action(
@@ -8380,6 +9291,7 @@ class _ExecutionSession:
                 if operation == "cancel_order":
                     self.require_write(operation, venue=venue)
                     self._require_arm_scope(operation, venue, request.symbol, request.exchange_id)
+                    runtime_action_key = None
                     if self._arm_managed:
                         tracked = self._state(venue, request_row, create=False)
                         if not any(tracked is item for item in self.orders.values()):
@@ -8405,6 +9317,70 @@ class _ExecutionSession:
                                 recovery_action=True,
                             )
                     if self._provider(venue) == "CTP" and self._arm_managed:
+                        runtime_order_id = getattr(request, "runtime_order_id", None)
+                        runtime_action_id = getattr(request, "runtime_action_id", None)
+                        if (
+                            not isinstance(runtime_order_id, str)
+                            or not runtime_order_id
+                            or runtime_order_id != runtime_order_id.strip()
+                            or len(runtime_order_id.encode("utf-8")) > 256
+                            or not isinstance(runtime_action_id, str)
+                            or not runtime_action_id
+                            or runtime_action_id != runtime_action_id.strip()
+                            or len(runtime_action_id.encode("utf-8")) > 256
+                        ):
+                            raise NormalizedApiError(
+                                operation,
+                                "ctp_runtime_cancel_identity_required",
+                                definite_reject=True,
+                            )
+                        target = self._runtime_order_binding(
+                            venue, request.account_id, runtime_order_id
+                        )
+                        expected_action_id = self.next_runtime_action_id(
+                            venue,
+                            account_id=request.account_id,
+                            runtime_order_id=runtime_order_id,
+                        )
+                        if (
+                            target is None
+                            or target.get("client_order_id")
+                            != (request.client_order_id or request.order_ref)
+                            or target.get("symbol") != request.symbol
+                            or tracked.get("runtime_order_id") != runtime_order_id
+                            or runtime_action_id != expected_action_id
+                            or (
+                                target.get("managed_intent_id") is not None
+                                and not getattr(request, "managed_cancel_intent_id", None)
+                            )
+                        ):
+                            raise NormalizedApiError(
+                                operation,
+                                "ctp_runtime_cancel_binding_conflict",
+                                definite_reject=True,
+                            )
+                        runtime_action_key = self._runtime_action_key(
+                            venue, request_row, runtime_action_id
+                        )
+                        if runtime_action_key in self.runtime_action_bindings:
+                            raise NormalizedApiError(
+                                operation,
+                                "duplicate_runtime_action_id",
+                                definite_reject=True,
+                            )
+                        managed_cancel_intent_id = getattr(
+                            request, "managed_cancel_intent_id", None
+                        )
+                        if managed_cancel_intent_id is not None and any(
+                            key[:4] == runtime_action_key[:4]
+                            and item.get("managed_cancel_intent_id") == managed_cancel_intent_id
+                            for key, item in self.runtime_action_bindings.items()
+                        ):
+                            raise NormalizedApiError(
+                                operation,
+                                "duplicate_managed_cancel_intent_id",
+                                definite_reject=True,
+                            )
                         if budget_capability is None and recovery_allowance is not None:
                             budget_capability = self._recovery_budget_capability
                         budget_state = self._require_budget_reservation_locked(
@@ -8429,6 +9405,25 @@ class _ExecutionSession:
                         preauthorize()
                     try:
                         self._journal("cancel_intent", self._identity(state, request_row))
+                        if runtime_action_key is not None:
+                            self.runtime_action_bindings[runtime_action_key] = {
+                                "exchange_name": venue,
+                                "account_id": request.account_id,
+                                "strategy_id": self.config["strategy_id"],
+                                "connection_generation": (
+                                    self._arm_proof.get("connection_generation")
+                                    if isinstance(self._arm_proof, Mapping)
+                                    else None
+                                ),
+                                "runtime_action_id": request.runtime_action_id,
+                                "runtime_order_id": request.runtime_order_id,
+                                "client_order_id": request.client_order_id,
+                                "managed_cancel_intent_id": managed_cancel_intent_id,
+                            }
+                            runtime_order_key = self._runtime_order_key(
+                                venue, request_row, request.runtime_order_id
+                            )
+                            self._runtime_action_attempts[runtime_order_key] += 1
                         if budget_state is not None:
                             budget_action_id = f"cancel:{request.order_id or request.client_order_id or request.symbol}"
                             self.bind_ctp_budget_action(
@@ -8439,6 +9434,8 @@ class _ExecutionSession:
                             )
                     except NormalizedApiError as exc:
                         if exc.code != "persistence_failed":
+                            raise
+                        if self._provider(venue) == "CTP" and self._arm_managed:
                             raise
                         # Once durable state is unavailable, placements remain
                         # blocked but a cancel request is still a necessary
@@ -8604,6 +9601,9 @@ class _ExecutionSession:
             preauthorize=preauthorize,
             budget_capability=budget_capability,
         )
+        if on_context is not None:
+            with self.mutex:
+                self._active_managed_write_context = context
         if context["recovery_action"]:
             with self.mutex:
                 self._active_recovery_context = context
@@ -8635,6 +9635,10 @@ class _ExecutionSession:
                     if self._active_recovery_context is context:
                         self._active_recovery_context = None
                     self._recovery_dispatch_in_progress = False
+            if on_context is not None:
+                with self.mutex:
+                    if self._active_managed_write_context is context:
+                        self._active_managed_write_context = None
 
     def event(self, venue, event):
         if self.closed:
