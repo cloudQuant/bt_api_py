@@ -178,14 +178,18 @@ class TestBaseline:
             "bt_api_coinbase": 23,
             "bt_api_ctp": 25,
             "bt_api_dydx": 20,
+            "bt_api_execution": 0,
             "bt_api_gateio": 25,
+            "bt_api_gateway": 0,
             "bt_api_htx": 23,
             "bt_api_hyperliquid": 23,
             "bt_api_ib_web": 40,
             "bt_api_kraken": 7,
             "bt_api_mexc": 12,
+            "bt_api_monitor": 0,
             "bt_api_mt5": 7,
             "bt_api_okx": 85,
+            "bt_api_risk": 0,
         }
 
         assert payload["schema_version"] == ratchet.SCHEMA_VERSION

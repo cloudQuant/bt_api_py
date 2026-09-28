@@ -14,14 +14,18 @@
     "bt_api_coinbase",
     "bt_api_ctp",
     "bt_api_dydx",
+    "bt_api_execution",
     "bt_api_gateio",
+    "bt_api_gateway",
     "bt_api_htx",
     "bt_api_hyperliquid",
     "bt_api_ib_web",
     "bt_api_kraken",
     "bt_api_mexc",
+    "bt_api_monitor",
     "bt_api_mt5",
-    "bt_api_okx"
+    "bt_api_okx",
+    "bt_api_risk"
   ],
   "format": {
     "total": 451,
@@ -33,14 +37,18 @@
       "bt_api_coinbase": 23,
       "bt_api_ctp": 25,
       "bt_api_dydx": 20,
+      "bt_api_execution": 0,
       "bt_api_gateio": 25,
+      "bt_api_gateway": 0,
       "bt_api_htx": 23,
       "bt_api_hyperliquid": 23,
       "bt_api_ib_web": 40,
       "bt_api_kraken": 7,
       "bt_api_mexc": 12,
+      "bt_api_monitor": 0,
       "bt_api_mt5": 7,
-      "bt_api_okx": 85
+      "bt_api_okx": 85,
+      "bt_api_risk": 0
     }
   },
   "notes": "Submodule format ratchet baseline. Per-module counts may only decrease; use --update after improvements or --force-update for an intentional rebaseline."
