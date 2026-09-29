@@ -1325,6 +1325,14 @@ def _active_md_identity_fixture():
     md_client._connected = True
     md_client._loggedin = True
     md_client._connection_generation = md_generation
+    md_client._login_request_id = md_generation
+    md_client._login_request_generation = md_generation
+    md_client._login_request_pending = False
+    # Model the same native API/SPI pair that produced the terminal login fact.
+    md_client._api = object()
+    md_client._spi = object()
+    md_client._active_md_identity_api = md_client._api
+    md_client._active_md_identity_spi = md_client._spi
     md_client._active_md_identity = MdIdentityObservation(
         front=md_front,
         broker_id=broker_id,
@@ -1405,8 +1413,8 @@ def test_credential_binding_rejects_untyped_active_md_identity(identity):
         ("broker_id", "other-broker", "ctp_credential_binding_scope_mismatch"),
         ("user_id", "other-user", "ctp_credential_binding_scope_mismatch"),
         ("trading_day", "20260912", "ctp_credential_binding_scope_mismatch"),
-        ("connection_generation", 12, "ctp_credential_binding_active_front_unavailable"),
-        ("request_id", 12, "ctp_credential_binding_active_front_unavailable"),
+        ("connection_generation", 12, "ctp_credential_binding_active_md_identity_unavailable"),
+        ("request_id", 12, "ctp_credential_binding_active_md_identity_unavailable"),
     ],
 )
 def test_credential_binding_rejects_md_identity_account_day_and_generation_drift(
