@@ -394,7 +394,14 @@ def order_request(
     )
 
 
-def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE, ctp_order_identity=None):
+def bundle_order_request(
+    instrument,
+    *,
+    client_order_id,
+    cycle=CYCLE,
+    ctp_order_identity=None,
+    runtime_order_id=None,
+):
     exchange_id, symbol = instrument.split(".", 1)
     return OrderRequest(
         symbol=symbol,
@@ -413,6 +420,7 @@ def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE, ctp_order_
         execution_role="entry",
         strategy_identity_sha256=STRATEGY_IDENTITY,
         ctp_order_identity=ctp_order_identity,
+        runtime_order_id=runtime_order_id,
     )
 
 

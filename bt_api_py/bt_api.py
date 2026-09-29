@@ -9181,6 +9181,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
     def _make_order_typed(self, exchange_name: str, request: OrderRequest) -> Any:
         self._reject_simnow_profile_write(exchange_name, "make_order")
+        if _is_ctp_exchange(exchange_name) and (
+            request.ctp_order_identity is not None
+            or request.managed_intent_id is not None
+            or str(request.runtime_order_id or "").startswith("bt-managed-v1:")
+        ):
+            raise NormalizedApiError(
+                "make_order", "ctp_order_dispatch_handoff_unavailable", definite_reject=True
+            )
         return self._backend.make_order(exchange_name, request)
 
     def _make_order_legacy(
@@ -9316,16 +9324,24 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         the shared I9 worker into this SDK path. The echo is therefore never
         permission to reach a backend or native client.
         """
-        if not isinstance(request, CancelOrderRequest) or request.ctp_cancel_identity is None:
+        if not isinstance(request, CancelOrderRequest):
             return
         if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            if request.ctp_cancel_identity is None:
+                return
             raise NormalizedApiError(
                 "cancel_order",
                 "ctp_cancel_identity_venue_mismatch",
                 definite_reject=True,
             )
+        if (
+            request.ctp_cancel_identity is None
+            and request.managed_cancel_intent_id is None
+            and not str(request.runtime_order_id or "").startswith("bt-managed-v1:")
+        ):
+            return
         session = self._execution_session
-        if session is not None:
+        if session is not None and request.ctp_cancel_identity is not None:
             session._require_ctp_cancel_identity_binding("cancel_order", request)
         raise NormalizedApiError(
             "cancel_order",
@@ -9728,6 +9744,18 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
     async def async_make_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
         self._reject_simnow_profile_write(exchange_name, "async_make_order")
+        if args and isinstance(args[0], OrderRequest) and _is_ctp_exchange(exchange_name):
+            request = args[0]
+            if (
+                request.ctp_order_identity is not None
+                or request.managed_intent_id is not None
+                or str(request.runtime_order_id or "").startswith("bt-managed-v1:")
+            ):
+                raise NormalizedApiError(
+                    "async_make_order",
+                    "ctp_order_dispatch_handoff_unavailable",
+                    definite_reject=True,
+                )
         if kwargs.pop("normalized", False):
             budget_capability = kwargs.pop("budget_capability", None)
             if len(args) != 1 or not isinstance(args[0], OrderRequest) or kwargs:

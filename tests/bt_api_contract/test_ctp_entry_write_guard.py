@@ -218,15 +218,19 @@ def _runtime_entry_fixture(
             credential_binding_provider,
             authority=_issue_ctp_controlled_test_authority_for_core(),
         )
-    context = api.build_ctp_execution_approval_context(
-        seed,
-        exchange_name=VENUE,
-        configuration={"mode": "synthetic-read-only"},
-        strategy_source=strategy_path,
-        preflight={"complete": True},
-        evidence={"complete": True},
-        credential_binding_verifier=credential_binding_verifier,
-    )
+    try:
+        context = api.build_ctp_execution_approval_context(
+            seed,
+            exchange_name=VENUE,
+            configuration={"mode": "synthetic-read-only"},
+            strategy_source=strategy_path,
+            preflight={"complete": True},
+            evidence={"complete": True},
+            credential_binding_verifier=credential_binding_verifier,
+        )
+    except Exception:
+        session.close()
+        raise
     payload = _runtime_entry_payload(context.as_dict())
     artifact = _signed_entry_artifact(payload, private_key)
     if payload["schema_version"] != ENTRY_SCHEMA:
@@ -274,25 +278,21 @@ def _bound_entry_order(session):
 
 
 @pytest.mark.parametrize(
-    ("mutation", "expected_code"),
-    [
-        ("account", "ctp_approval_context_mismatch"),
-        ("trading_day", "ctp_approval_context_mismatch"),
-        ("generation", "ctp_approval_context_mismatch"),
-        ("artifact", "ctp_approval_context_mismatch"),
-        ("approval", "ctp_execution_authorization_material_mismatch"),
-    ],
+    "mutation", ["account", "trading_day", "generation", "artifact", "approval"]
 )
-def test_entry_submit_revalidates_approval_after_intent_before_req_order_insert(
-    monkeypatch, tmp_path, entry_signing_material, mutation, expected_code
+def test_entry_submit_rejects_candidate_binding_before_intent_or_native_write(
+    monkeypatch, tmp_path, entry_signing_material, mutation
 ):
     api, session, feed, capability, _payload, strategy_path = _runtime_entry_fixture(
         monkeypatch, tmp_path, entry_signing_material, f"submit-{mutation}"
     )
     request, budget, _binding = _bound_entry_order(session)
     native_calls = []
+    preauthorize_calls = []
+    journal_before = session.path.read_bytes()
 
     def drift_after_first_gate():
+        preauthorize_calls.append(True)
         if mutation == "account":
             feed._session_state["account_fingerprint"] = "f" * 16
         elif mutation == "trading_day":
@@ -310,24 +310,25 @@ def test_entry_submit_revalidates_approval_after_intent_before_req_order_insert(
         return {"order_id": "must-not-be-created"}
 
     try:
-        result = session.invoke(
-            "make_order",
-            VENUE,
-            request,
-            ReqOrderInsert,
-            preauthorize=drift_after_first_gate,
-            pre_dispatch=session.finalize_dispatch,
-            budget_capability=budget,
-        )
-        assert result["error_code"] == expected_code
-        assert result["definite_reject"] is True
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke(
+                "make_order",
+                VENUE,
+                request,
+                ReqOrderInsert,
+                preauthorize=drift_after_first_gate,
+                pre_dispatch=session.finalize_dispatch,
+                budget_capability=budget,
+            )
+        assert raised.value.code == "ctp_order_identity_binding_missing_or_mismatch"
+        assert preauthorize_calls == []
         assert native_calls == []
-        assert session.config["market_data_only"] is True
+        assert session.path.read_bytes() == journal_before
     finally:
         session.close()
 
 
-def test_entry_cancel_revalidates_live_generation_before_req_order_action(
+def test_entry_cancel_rejects_candidate_action_before_intent_or_native_write(
     monkeypatch, tmp_path, entry_signing_material
 ):
     _api, session, feed, _capability, _payload, _strategy_path = _runtime_entry_fixture(
@@ -363,8 +364,11 @@ def test_entry_cancel_revalidates_live_generation_before_req_order_action(
         runtime_action_id=action_id,
     )
     native_calls = []
+    preauthorize_calls = []
+    journal_before = session.path.read_bytes()
 
     def drift_after_first_gate():
+        preauthorize_calls.append(True)
         feed._session_state["connection_generation"] = 4
 
     def ReqOrderAction():
@@ -372,22 +376,25 @@ def test_entry_cancel_revalidates_live_generation_before_req_order_action(
         return {"order_id": "must-not-be-cancelled"}
 
     try:
-        result = session.invoke(
-            "cancel_order",
-            VENUE,
-            request,
-            ReqOrderAction,
-            preauthorize=drift_after_first_gate,
-            pre_dispatch=session.finalize_dispatch,
-            budget_capability=budget,
-        )
-        assert result["error_code"] == "ctp_approval_context_mismatch"
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke(
+                "cancel_order",
+                VENUE,
+                request,
+                ReqOrderAction,
+                preauthorize=drift_after_first_gate,
+                pre_dispatch=session.finalize_dispatch,
+                budget_capability=budget,
+            )
+        assert raised.value.code == "ctp_cancel_identity_binding_missing_or_mismatch"
+        assert preauthorize_calls == []
         assert native_calls == []
+        assert session.path.read_bytes() == journal_before
     finally:
         session.close()
 
 
-def test_official_simnow_credential_tag_drift_stays_closed_before_native_write(
+def test_official_simnow_fake_credential_tag_cannot_supply_active_front_binding(
     monkeypatch, tmp_path, entry_signing_material
 ):
     """A changing credential tag cannot turn the intentionally closed SimNow arm on."""
@@ -395,23 +402,17 @@ def test_official_simnow_credential_tag_drift_stays_closed_before_native_write(
         "credential_binding_key_id": "runtime-binding-key-1",
         "credential_binding_hmac_sha256": "a" * 64,
     }
-    api, session, feed, capability, _payload, _strategy_path = _runtime_entry_fixture(
-        monkeypatch,
-        tmp_path,
-        entry_signing_material,
-        "entry-set1-tag-drift",
-        profile="set1_group1",
-        credential_binding_provider=lambda: dict(binding),
-        arm=False,
-    )
-    binding["credential_binding_hmac_sha256"] = "b" * 64
-    try:
-        with pytest.raises(NormalizedApiError) as raised:
-            api.arm_execution_from_approval(capability)
-        assert raised.value.code == "ctp_simnow_execution_not_admitted"
-        assert feed._session_state["environment_profile"] == "set1_group1"
-    finally:
-        session.close()
+    with pytest.raises(NormalizedApiError) as raised:
+        _runtime_entry_fixture(
+            monkeypatch,
+            tmp_path,
+            entry_signing_material,
+            "entry-set1-tag-drift",
+            profile="set1_group1",
+            credential_binding_provider=lambda: dict(binding),
+            arm=False,
+        )
+    assert raised.value.code == "ctp_credential_binding_active_front_unavailable"
 
 
 def test_managed_ctp_without_sealed_entry_guard_and_caller_lambda_stay_closed(
@@ -459,7 +460,7 @@ def test_managed_ctp_without_sealed_entry_guard_and_caller_lambda_stay_closed(
 
 
 @pytest.mark.asyncio
-async def test_async_worker_rechecks_generation_at_req_order_insert_handoff(
+async def test_async_worker_cannot_start_from_candidate_binding_without_handoff(
     monkeypatch, tmp_path, entry_signing_material
 ):
     _api, session, feed, _capability, _payload, _strategy_path = _runtime_entry_fixture(
@@ -468,6 +469,7 @@ async def test_async_worker_rechecks_generation_at_req_order_insert_handoff(
     request, budget, _binding = _bound_entry_order(session)
     native_calls = []
     held = {}
+    journal_before = session.path.read_bytes()
 
     def bind_context(context):
         held["context"] = context
@@ -480,17 +482,19 @@ async def test_async_worker_rechecks_generation_at_req_order_insert_handoff(
         return {"order_id": "must-not-be-created"}
 
     try:
-        result = await session.async_invoke(
-            "make_order",
-            VENUE,
-            request,
-            queued_worker,
-            pre_dispatch=session.finalize_dispatch,
-            on_context=bind_context,
-            budget_capability=budget,
-        )
-        assert result["error_code"] == "ctp_approval_context_mismatch"
-        assert result["definite_reject"] is True
+        with pytest.raises(NormalizedApiError) as raised:
+            await session.async_invoke(
+                "make_order",
+                VENUE,
+                request,
+                queued_worker,
+                pre_dispatch=session.finalize_dispatch,
+                on_context=bind_context,
+                budget_capability=budget,
+            )
+        assert raised.value.code == "ctp_order_identity_binding_missing_or_mismatch"
+        assert held == {}
         assert native_calls == []
+        assert session.path.read_bytes() == journal_before
     finally:
         session.close()
