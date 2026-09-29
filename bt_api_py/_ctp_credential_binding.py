@@ -338,9 +338,7 @@ class CtpCredentialBindingVerifier:
             type(result).__module__ != _ADAPTER_MODULE
             or type(result).__name__ != _RESULT_CLASS
             or frozenset(getattr(type(result), "__dataclass_fields__", {})) != _RESULT_FIELDS
-            or getattr(
-                getattr(type(result), "__dataclass_params__", None), "frozen", False
-            )
+            or getattr(getattr(type(result), "__dataclass_params__", None), "frozen", False)
             is not True
         ):
             _reject(operation, "ctp_credential_binding_invalid")

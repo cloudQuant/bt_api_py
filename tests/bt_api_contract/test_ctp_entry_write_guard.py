@@ -75,13 +75,7 @@ def _runtime_entry_payload(context_values):
     from bt_api_py._ctp_execution_authorization import SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION
 
     payload = _entry_payload()
-    payload.update(
-        {
-            key: value
-            for key, value in context_values.items()
-            if key != "source"
-        }
-    )
+    payload.update({key: value for key, value in context_values.items() if key != "source"})
     payload["schema_version"] = (
         SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION
         if "credential_binding_key_id" in context_values
@@ -238,12 +232,16 @@ def _runtime_entry_fixture(
     if payload["schema_version"] != ENTRY_SCHEMA:
         artifact_value = __import__("json").loads(artifact)
         artifact_value["schema_version"] = payload["schema_version"]
-        artifact = __import__("json").dumps(
-            artifact_value,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
+        artifact = (
+            __import__("json")
+            .dumps(
+                artifact_value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            .encode("utf-8")
+        )
     capability = api.redeem_ctp_execution_approval(
         artifact,
         trust_root=trust_root,
