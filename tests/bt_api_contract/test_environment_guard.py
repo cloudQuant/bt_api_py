@@ -108,6 +108,10 @@ class Backend:
 @pytest.fixture
 def direct_factory(monkeypatch, tmp_path):
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
+    monkeypatch.setattr(
+        "bt_api_py._execution_session._ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
     feeds = {}
 
     def create_feed(exchange_name, data_queue, **kwargs):

@@ -338,13 +338,18 @@ def test_zmq_forwarding_runtime_serves_market_and_order_clients() -> None:
     market_endpoint = _free_tcp_endpoint()
     command_endpoint = _free_tcp_endpoint()
     private_endpoint = _free_tcp_endpoint()
+    adapter = MockBrokerAdapter()
+    adapter.exchange_name = "SIM___SPOT"
     runtime = ZmqForwardingRuntime(
-        MockBrokerAdapter(),
+        adapter,
         market_endpoint=market_endpoint,
         command_endpoint=command_endpoint,
         private_endpoint=private_endpoint,
         enable_trading=True,
         allow_remote=True,
+        expected_exchange="SIM",
+        expected_market_type="SPOT",
+        expected_account_id="paper",
     )
     client = ZmqForwardingClient(
         market_endpoint=market_endpoint,

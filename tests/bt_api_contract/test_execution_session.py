@@ -36,6 +36,15 @@ SYMBOL = "BTC-USDT-SWAP"
 MIGRATION_FINGERPRINT = hashlib.sha256(b"bt-api-py\0OKX\0fixture-okx-public").hexdigest()
 
 
+@pytest.fixture(autouse=True)
+def isolate_execution_ledger_registry(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        execution_session_module,
+        "_ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
+
+
 def credential_settings(venue):
     if venue.startswith("OKX___"):
         return {
@@ -893,6 +902,7 @@ def start_thread(call):
     [
         {"market_data_only": 1},
         {"require_order_journal": "true"},
+        {"windows_ctp_journal_preprovisioned": "true"},
         {"account_currency": ""},
         {"account_currency": 1},
         {"account_currencies": {VENUE: ""}},
@@ -1361,6 +1371,167 @@ def test_journal_migration_requires_remote_reconcile_and_atomically_cuts_over(
                 "required_environments": {VENUE: "demo"},
             },
         )
+
+
+@pytest.mark.parametrize(
+    ("record", "claim"),
+    [
+        (
+            {
+                "event": "intent",
+                "exchange_name": "CTP___SIMNOW",
+                "client_order_id": "ctp-order",
+            },
+            {
+                "provider": "CTP",
+                "environment": "demo",
+                "account_id": "ctp-account",
+                "strategy_id": "ctp-strategy",
+            },
+        ),
+        (
+            {
+                "event": "ctp_execution_approval_consumed",
+                "client_order_id": "approval-record",
+            },
+            {
+                "provider": "OKX",
+                "environment": "demo",
+                "account_id": "demo-a",
+                "strategy_id": "spread-a",
+                "credential_fingerprint": MIGRATION_FINGERPRINT,
+            },
+        ),
+    ],
+)
+def test_windows_ctp_migration_refuses_before_remote_reconcile_or_publish(
+    monkeypatch, tmp_path, record, claim
+):
+    monkeypatch.setattr(execution_session_module, "_migration_platform_name", lambda: "nt")
+    source = tmp_path / "legacy-ctp.jsonl"
+    destination = tmp_path / "migrated-ctp.jsonl"
+    source_bytes = (json.dumps(record) + "\n").encode()
+    source.write_bytes(source_bytes)
+    remote_reconcile = Mock()
+
+    with pytest.raises(
+        NormalizedApiError,
+        match="windows_ctp_migration_durability_unavailable",
+    ):
+        migrate_execution_journal(
+            source,
+            destination,
+            {record["client_order_id"]: claim},
+            remote_reconcile=remote_reconcile,
+        )
+
+    assert remote_reconcile.call_count == 0
+    assert source.read_bytes() == source_bytes
+    assert not destination.exists()
+    assert not Path(str(source) + ".freeze").exists()
+    assert not Path(str(destination) + ".cutover.transaction.json").exists()
+
+
+@pytest.mark.parametrize("transaction_provider", ["CTP", "OKX"])
+def test_windows_partial_ctp_cutover_recovery_refuses_without_touching_transaction(
+    monkeypatch, tmp_path, transaction_provider
+):
+    monkeypatch.setattr(execution_session_module, "_migration_platform_name", lambda: "nt")
+    source = tmp_path / "partial-ctp.jsonl"
+    destination = tmp_path / "published-ctp.jsonl"
+    source_bytes = (
+        json.dumps(
+            {
+                "event": "intent",
+                "exchange_name": "CTP___SIMNOW",
+                "client_order_id": "partial-ctp-order",
+            }
+        )
+        + "\n"
+    ).encode()
+    source.write_bytes(source_bytes)
+    transaction_path = Path(str(destination) + ".cutover.transaction.json")
+    transaction = {
+        "schema_version": 2,
+        "status": "PREPARED",
+        "migration_id": "partial-ctp",
+        "source": str(source.resolve()),
+        "destination": str(destination.resolve()),
+        "staging": str(tmp_path / ".published-ctp.validated"),
+        "sealed_source": str(tmp_path / "partial-ctp.jsonl.partial-ctp.sealed"),
+        "ledger_identity": {
+            "provider": transaction_provider,
+            "environment": "demo",
+            "account_id": "ctp-account" if transaction_provider == "CTP" else "demo-a",
+            **(
+                {"account_fingerprint": "a" * 64}
+                if transaction_provider == "CTP"
+                else {"credential_fingerprint": MIGRATION_FINGERPRINT}
+            ),
+        },
+    }
+    transaction_bytes = json.dumps(transaction).encode()
+    transaction_path.write_bytes(transaction_bytes)
+    monkeypatch.setattr(
+        execution_session_module,
+        "_lock_existing_journal",
+        lambda *_args: pytest.fail("recovery acquired a source lease before rejecting CTP"),
+    )
+
+    with pytest.raises(
+        NormalizedApiError,
+        match="windows_ctp_migration_durability_unavailable",
+    ):
+        migrate_execution_journal(source, destination, {})
+
+    assert source.read_bytes() == source_bytes
+    assert transaction_path.read_bytes() == transaction_bytes
+    assert not destination.exists()
+    assert not Path(transaction["staging"]).exists()
+    assert not Path(transaction["sealed_source"]).exists()
+
+
+def test_windows_non_ctp_journal_migration_keeps_existing_cutover_behavior(monkeypatch, tmp_path):
+    monkeypatch.setattr(execution_session_module, "_migration_platform_name", lambda: "nt")
+    monkeypatch.setattr(
+        execution_session_module,
+        "_ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
+    source = tmp_path / "legacy-okx-windows.jsonl"
+    destination = tmp_path / "migrated-okx-windows.jsonl"
+    source.write_text(
+        json.dumps(
+            {
+                "event": "intent",
+                "exchange_name": VENUE,
+                "client_order_id": "okx-windows-migration",
+            }
+        )
+        + "\n"
+    )
+    claims = {
+        "okx-windows-migration": {
+            "provider": "OKX",
+            "environment": "demo",
+            "account_id": "demo-a",
+            "strategy_id": "spread-a",
+            "credential_fingerprint": MIGRATION_FINGERPRINT,
+        }
+    }
+
+    def reconcile(**manifest):
+        return {"verified": True, "unknown_ids": [], **manifest}
+
+    report = migrate_execution_journal(
+        source,
+        destination,
+        claims,
+        remote_reconcile=reconcile,
+    )
+
+    assert report["status"] == "COMPLETE"
+    assert destination.is_file()
 
 
 def test_migration_detects_raw_concurrent_append_after_reconcile(monkeypatch, tmp_path):
@@ -1961,6 +2132,72 @@ def test_parent_directory_fsync_failure_prevents_dispatch(factory, monkeypatch):
     assert api.get_execution_summary()["trading_blocked"]
 
 
+def test_windows_ctp_preprovision_gate_requires_operator_attestation_and_existing_file(
+    tmp_path,
+):
+    path = tmp_path / "provisioned-ctp.jsonl"
+    path.touch()
+    config = execution_session_module.session_config({"windows_ctp_journal_preprovisioned": False})
+
+    with pytest.raises(NormalizedApiError, match="windows_ctp_journal_provisioning_required"):
+        execution_session_module._require_windows_ctp_journal_preprovision(
+            path,
+            config,
+            journal_identity_at_open=execution_session_module._journal_file_identity(path),
+            platform_name="nt",
+        )
+
+    config["windows_ctp_journal_preprovisioned"] = True
+    with pytest.raises(NormalizedApiError, match="windows_ctp_journal_must_be_preprovisioned"):
+        execution_session_module._require_windows_ctp_journal_preprovision(
+            path,
+            config,
+            journal_identity_at_open=None,
+            platform_name="nt",
+        )
+
+    assert (
+        execution_session_module._require_windows_ctp_journal_preprovision(
+            path,
+            config,
+            journal_identity_at_open=execution_session_module._journal_file_identity(path),
+            platform_name="nt",
+        )
+        is None
+    )
+
+
+def test_windows_ctp_journal_does_not_create_first_file(tmp_path, monkeypatch):
+    path = tmp_path / "first-ctp.jsonl"
+    session = execution_session_module._ExecutionSession(
+        {
+            "market_data_only": True,
+            "order_journal": str(path),
+            "windows_ctp_journal_preprovisioned": True,
+        },
+        exchange_names=("CTP___FUTURE",),
+    )
+    original = execution_session_module._require_windows_ctp_journal_preprovision
+
+    def require_windows_preprovision(*args, **kwargs):
+        return original(*args, **kwargs, platform_name="nt")
+
+    monkeypatch.setattr(
+        execution_session_module,
+        "_require_windows_ctp_journal_preprovision",
+        require_windows_preprovision,
+    )
+    with pytest.raises(NormalizedApiError, match="persistence_failed"):
+        session._journal(
+            "intent",
+            {"exchange_name": "CTP___FUTURE"},
+            allow_read_only=True,
+        )
+
+    assert not path.exists()
+    session.close()
+
+
 @pytest.mark.parametrize(
     "error", [TimeoutError("signed URL secret"), RuntimeError("signed URL secret")]
 )
@@ -2490,7 +2727,7 @@ def test_pending_query_progresses_despite_busy_market_and_slow_failure_has_backo
 
 
 def test_ctp_trade_authority_and_native_cancel_locator_are_preserved(factory):
-    api = factory()
+    api = factory(legacy=True)
     venue = "CTP___FUTURE"
     api.data_queues[venue] = Queue()
     req = request(
@@ -2577,7 +2814,8 @@ def test_configure_execution_is_idempotent_but_cannot_swap_journal(factory):
         api.configure_execution({"order_journal": "different.jsonl"})
 
 
-def _child_hold_session(path, connection):
+def _child_hold_session(path, connection, registry_root):
+    execution_session_module._ledger_registry_root = lambda: Path(registry_root)
     api = BtApi(debug=False)
     api.configure_execution(
         {
@@ -2596,12 +2834,18 @@ def test_process_lock_blocks_another_process_and_crash_releases_it(factory, tmp_
     context = multiprocessing.get_context("spawn")
     parent, child = context.Pipe()
     path = str(tmp_path / "process.jsonl")
-    process = context.Process(target=_child_hold_session, args=(path, child))
+    child_registry_root = tmp_path / "execution-ledgers"
+    process = context.Process(
+        target=_child_hold_session,
+        args=(path, child, str(child_registry_root)),
+    )
     process.start()
     try:
         assert parent.poll(20) and parent.recv()
-        with pytest.raises(NormalizedApiError, match="locked_or_unavailable"):
+        with pytest.raises(NormalizedApiError) as locked:
             factory(path)
+        assert locked.value.code == "authenticated_account_execution_session_locked"
+        assert locked.value.definite_reject is True
     finally:
         process.terminate()
         process.join(20)
@@ -2618,11 +2862,19 @@ def test_restart_restores_later_native_order_references_and_trade_ids(factory, t
         "exchange_name": venue,
         "symbol": "IF2609",
         "client_order_id": "100000000001",
+        "account_id": venue,
+        "runtime_order_id": "recovered-ctp-order",
+        "strategy_id": "default",
+        "connection_generation": 1,
     }
     path.write_text(
         "\n".join(
             json.dumps(row)
             for row in [
+                {
+                    "event": "client_id_reservation",
+                    **base,
+                },
                 {
                     "event": "intent",
                     **base,

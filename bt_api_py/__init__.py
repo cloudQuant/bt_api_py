@@ -7,6 +7,7 @@ and traditional financial markets (CTP, Interactive Brokers).
 from __future__ import annotations
 
 import os as _os
+from importlib import import_module as _import_module
 
 # 版本单一源：从 pyproject.toml 经 importlib.metadata 读取。
 from importlib.metadata import PackageNotFoundError
@@ -74,6 +75,8 @@ from bt_api_py._contracts import (
     CapabilityReport,
     CommandResultUnknownError,
     Consistency,
+    CtpCancelIdentityBinding,
+    CtpOrderIdentityBinding,
     DepthSnapshot,
     FeeSchedule,
     FillSnapshot,
@@ -111,10 +114,18 @@ from bt_api_py._ctp_budget import (
     evaluate_ctp_budget,
     evaluate_ctp_budget_numbers,
 )
+from bt_api_py._ctp_credential_binding import (
+    CtpCredentialBindingScope,
+    CtpCredentialBindingVerifier,
+)
 from bt_api_py._ctp_execution_authorization import (
+    ENTRY_APPROVAL_SCHEMA_VERSION,
     RECOVERY_APPROVAL_PURPOSE,
     RECOVERY_APPROVAL_SCHEMA_VERSION,
     RECOVERY_APPROVAL_SCOPE_VERSION,
+    SIMNOW_APPROVAL_SCHEMA_VERSION,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION,
     CtpExecutionApproval,
     CtpExecutionApprovalCapability,
     CtpExecutionApprovalContext,
@@ -184,12 +195,35 @@ if not _LIGHT_IMPORT:
     from bt_api_py.bt_api import BtApi
 
 
+_SIMNOW_EXPORTS = frozenset(
+    {
+        "OFFICIAL_SET1_PROFILES",
+        "CtpSimNowCancelResult",
+        "CtpSimNowExecutionAdapter",
+        "CtpSimNowExecutionError",
+        "CtpSimNowOrderIdentity",
+        "CtpSimNowOrderRequest",
+        "CtpSimNowOrderResult",
+        "CtpSimNowQueryResult",
+        "CtpSimNowReadObservation",
+        "CtpSimNowSessionIdentity",
+        "build_ctp_simnow_cancel_request",
+        "map_ctp_simnow_cancel_result",
+        "map_ctp_simnow_order_result",
+    }
+)
+
+
 def __getattr__(name: str):
     if name == "BtApi":
         from bt_api_py.bt_api import BtApi as _BtApi
 
         globals()["BtApi"] = _BtApi
         return _BtApi
+    if name in _SIMNOW_EXPORTS:
+        value = getattr(_import_module("bt_api_py.ctp_simnow_execution"), name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -207,9 +241,28 @@ __all__ = [
     "CtpExecutionApproval",
     "CtpExecutionApprovalCapability",
     "CtpExecutionApprovalContext",
+    "CtpCredentialBindingScope",
+    "CtpCredentialBindingVerifier",
+    "CtpSimNowExecutionAdapter",
+    "CtpSimNowExecutionError",
+    "CtpSimNowSessionIdentity",
+    "CtpSimNowOrderRequest",
+    "CtpSimNowOrderIdentity",
+    "CtpSimNowOrderResult",
+    "CtpSimNowCancelResult",
+    "CtpSimNowQueryResult",
+    "CtpSimNowReadObservation",
+    "OFFICIAL_SET1_PROFILES",
+    "build_ctp_simnow_cancel_request",
+    "map_ctp_simnow_cancel_result",
+    "map_ctp_simnow_order_result",
+    "ENTRY_APPROVAL_SCHEMA_VERSION",
     "RECOVERY_APPROVAL_PURPOSE",
     "RECOVERY_APPROVAL_SCHEMA_VERSION",
     "RECOVERY_APPROVAL_SCOPE_VERSION",
+    "SIMNOW_APPROVAL_SCHEMA_VERSION",
+    "SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION",
+    "SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION",
     "recovery_action_digest",
     "recovery_plan_digest",
     "verify_ctp_execution_recovery_approval",
@@ -283,6 +336,8 @@ __all__ = [
     "Consistency",
     "TransportMode",
     "ForwardingConfig",
+    "CtpCancelIdentityBinding",
+    "CtpOrderIdentityBinding",
     "OrderRequest",
     "CancelOrderRequest",
     "CancelAllRequest",

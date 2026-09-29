@@ -5,23 +5,28 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import queue
 import threading
+import time
 from collections import Counter, deque
+from dataclasses import asdict, replace
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from bt_api_py import (
     BtApi,
     CancelOrderRequest,
+    CtpOrderIdentityBinding,
     NormalizedApiError,
     OrderRequest,
     TransportMode,
 )
+from bt_api_py import _execution_session as execution_session_module
 from bt_api_py import bt_api as bt_api_module
 from bt_api_py._contracts.models import OrderType, Side
 from bt_api_py._direct_backend import DirectBackend
@@ -35,6 +40,15 @@ STRATEGY_IDENTITY = "7" * 64
 CYCLE = "cycle-iter22"
 BUNDLE_SCOPE_VERSION = "ctp-contract-bundle-v1"
 BUNDLE_INSTRUMENTS = ["CZCE.SA701", "CZCE.SA701C1080", "CZCE.SA701P1080"]
+
+
+@pytest.fixture(autouse=True)
+def isolate_execution_ledger_registry(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        execution_session_module,
+        "_ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
 
 
 class _RecoveryNativeAuthorization:
@@ -56,7 +70,9 @@ class ManagedRecoveryFeed:
             "settlement_readback_verified": True,
             "auto_settlement_confirm": False,
             "connection_generation": generation,
-            "account_fingerprint": ACCOUNT.removeprefix("acct_"),
+            "account_fingerprint": (
+                ACCOUNT[len("acct_") :] if ACCOUNT.startswith("acct_") else ACCOUNT
+            ),
             "trading_day": TRADING_DAY,
             "environment_profile": "simnow_demo",
         }
@@ -194,12 +210,17 @@ def context(value):
     }
 
 
-def make_session(path, *, strategy_identity=STRATEGY_IDENTITY):
+def make_session(path, *, strategy_identity=STRATEGY_IDENTITY, market_data_only=True):
+    provisioned = os.name == "nt"
+    if provisioned:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch(exist_ok=True)
     return _ExecutionSession(
         {
-            "market_data_only": True,
+            "market_data_only": market_data_only,
             "require_order_journal": True,
             "order_journal": str(path),
+            "windows_ctp_journal_preprovisioned": provisioned,
             "account_ids": {},
             "required_environments": {VENUE: "demo"},
             "strategy_id": "iter22-midfreq",
@@ -285,6 +306,59 @@ def _reserve_budget(session, proof_value, *, mode="ordinary"):
     return session.reserve_ctp_execution_budget(_budget_evidence(session, proof_value), mode=mode)
 
 
+def reserve_runtime_order(
+    session,
+    proof_value,
+    *,
+    runtime_order_id,
+    managed_intent_id=None,
+    order_ref_number,
+    symbol="SA609.CZCE",
+    recovery_action=False,
+):
+    """Use the production durable binding protocol with a deterministic test OrderRef."""
+    mode = "recovery" if recovery_action else "ordinary"
+    budget = _reserve_budget(session, proof_value, mode=mode)
+    now_ns = time.time_ns()
+    deterministic_ns = ((now_ns // 10**12) + 1) * 10**12 + order_ref_number
+    with patch("bt_api_py._execution_session.time.time_ns", return_value=deterministic_ns):
+        binding = session.new_runtime_order_binding(
+            VENUE,
+            symbol=symbol,
+            account_id=ACCOUNT,
+            managed_intent_id=managed_intent_id,
+            runtime_order_id=runtime_order_id,
+            budget_capability=budget,
+            recovery_action=recovery_action,
+        )
+    return binding, budget
+
+
+def bound_order_request(
+    session,
+    proof_value,
+    *,
+    runtime_order_id,
+    order_ref_number,
+    recovery_action=False,
+    **request_kwargs,
+):
+    binding, budget = reserve_runtime_order(
+        session,
+        proof_value,
+        runtime_order_id=runtime_order_id,
+        managed_intent_id=request_kwargs.get("managed_intent_id"),
+        order_ref_number=order_ref_number,
+        recovery_action=recovery_action,
+    )
+    request = order_request(
+        client_order_id=binding["client_order_id"],
+        runtime_order_id=runtime_order_id,
+        **request_kwargs,
+    )
+    return request, budget, binding
+
+
 def order_request(
     *,
     side=Side.BUY,
@@ -294,6 +368,9 @@ def order_request(
     role="entry",
     client_order_id="000000000001",
     cycle=CYCLE,
+    runtime_order_id=None,
+    managed_intent_id=None,
+    hedge_flag=None,
 ):
     return OrderRequest(
         symbol="SA609.CZCE",
@@ -311,10 +388,20 @@ def order_request(
         execution_cycle_id=cycle,
         execution_role=role,
         strategy_identity_sha256=STRATEGY_IDENTITY,
+        managed_intent_id=managed_intent_id,
+        hedge_flag=hedge_flag,
+        runtime_order_id=runtime_order_id,
     )
 
 
-def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE):
+def bundle_order_request(
+    instrument,
+    *,
+    client_order_id,
+    cycle=CYCLE,
+    ctp_order_identity=None,
+    runtime_order_id=None,
+):
     exchange_id, symbol = instrument.split(".", 1)
     return OrderRequest(
         symbol=symbol,
@@ -332,6 +419,8 @@ def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE):
         execution_cycle_id=cycle,
         execution_role="entry",
         strategy_identity_sha256=STRATEGY_IDENTITY,
+        ctp_order_identity=ctp_order_identity,
+        runtime_order_id=runtime_order_id,
     )
 
 
@@ -534,6 +623,163 @@ def canonical_sha256(value):
     ).hexdigest()
 
 
+def seed_ctp_order_identity(session, request, *, index):
+    """Seed non-authorizing read-back identity for one synthetic CTP order."""
+    account_ref = session._ctp_execution_identity["account_fingerprint"]
+    environment = session._ctp_execution_identity["environment_profile"]
+    strategy_id = session.config["strategy_id"]
+    trading_day = session._arm_proof["trading_day"]
+    account_payload = {
+        "provider": "CTP",
+        "environment": environment,
+        "account_ref": account_ref,
+    }
+    scope_payload = {
+        **account_payload,
+        "strategy_id": strategy_id,
+        "trading_day": trading_day,
+    }
+    account_key = "account:" + canonical_sha256(account_payload)
+    scope_key = "scope:" + canonical_sha256(scope_payload)
+    managed_intent_id = request.managed_intent_id or f"intent.iter22.bundle.{index}"
+    runtime_order_id = (
+        "bt-managed-v1:"
+        + hashlib.sha256(f"{request.account_id}:{request.client_order_id}".encode()).hexdigest()
+    )
+    created_at_ns = 1_780_000_000_000_000_000 + index
+    mirror_type = execution_session_module.CtpOrderIdentityReservationMirror
+    mirror = mirror_type(
+        account_key=account_key,
+        trading_day=trading_day,
+        scope_key=scope_key,
+        managed_intent_id=managed_intent_id,
+        runtime_order_id=runtime_order_id,
+        order_ref=request.client_order_id,
+        created_at_ns=created_at_ns,
+    )
+    mirror_key = (account_key, trading_day, scope_key, managed_intent_id)
+    session._journal(
+        "client_id_reservation",
+        {
+            "exchange_name": VENUE,
+            "account_id": request.account_id,
+            "client_order_id": request.client_order_id,
+            "managed_intent_id": managed_intent_id,
+            "runtime_order_id": runtime_order_id,
+            "trading_day": trading_day,
+            "strategy_id": strategy_id,
+            "ctp_order_identity_authority": (
+                execution_session_module._CTP_ORDER_IDENTITY_MIRROR_AUTHORITY
+            ),
+            "ctp_order_identity_scope": scope_payload,
+            "ctp_order_identity_reservation": {
+                "account_key": account_key,
+                "trading_day": trading_day,
+                "scope_key": scope_key,
+                "managed_intent_id": managed_intent_id,
+                "runtime_order_id": runtime_order_id,
+                "order_ref": request.client_order_id,
+                "created_at_ns": created_at_ns,
+            },
+        },
+    )
+    session._ctp_order_identity_mirrors[mirror_key] = mirror
+    client_key = session._client_key(VENUE, request.account_id, request.client_order_id)
+    session.reserved_ids.add(client_key)
+    return CtpOrderIdentityBinding(
+        environment=environment,
+        account_key=account_key,
+        trading_day=trading_day,
+        scope_key=scope_key,
+        managed_intent_id=managed_intent_id,
+        runtime_order_id=runtime_order_id,
+    )
+
+
+def bind_ctp_order_request(session, request, *, index):
+    binding = seed_ctp_order_identity(session, request, index=index)
+    return replace(
+        request,
+        ctp_order_identity=binding,
+        runtime_order_id=(
+            binding.runtime_order_id if request.managed_intent_id is not None else None
+        ),
+    )
+
+
+def seed_historical_order_intent(session, request):
+    """Write a prior-process C41 intent without invoking today's native path.
+
+    These recovery tests need durable history to reconcile; the synthetic
+    history is not an I9 claim, approval, queue receipt, or dispatch grant.
+    """
+    row = asdict(request)
+    row.update(
+        side=request.side.value,
+        order_type=request.order_type.value,
+        quantity=format(request.quantity, "f"),
+        price=format(request.price, "f") if request.price is not None else None,
+        size=format(request.quantity, "f"),
+        exchange_name=VENUE,
+        client_id_reserved=True,
+        strategy_id=session.config["strategy_id"],
+    )
+    session._journal("intent", row)
+    runtime_key = session._runtime_order_key(VENUE, row, request.runtime_order_id)
+    session.runtime_order_bindings[runtime_key]["status"] = "unresolved"
+    client_key = session._client_key(VENUE, request.account_id, request.client_order_id)
+    session.used_ids.add(client_key)
+    session.reserved_ids.discard(client_key)
+    state = session._state(VENUE, row, create=True)
+    state["_intent_persisted"] = True
+    state["strategy_id"] = session.config["strategy_id"]
+    session.submit_calls += 1
+
+
+def assert_unhanded_order_stays_local(session, request, transport, *, budget_capability=None):
+    """A read-back identity cannot append an intent or invoke a fake native sender."""
+    journal_before = session.path.read_bytes()
+    submits_before = session.submit_calls
+    with pytest.raises(NormalizedApiError) as caught:
+        session.invoke(
+            "make_order",
+            VENUE,
+            request,
+            transport,
+            budget_capability=budget_capability,
+        )
+    assert caught.value.code in {
+        "ctp_order_identity_binding_missing_or_mismatch",
+        "ctp_order_dispatch_handoff_unavailable",
+    }
+    assert session.path.read_bytes() == journal_before
+    assert session.submit_calls == submits_before
+    transport.assert_not_called()
+    return caught.value
+
+
+def assert_unhanded_cancel_stays_local(session, request, transport, *, budget_capability=None):
+    """An unclaimed cancel cannot append a cancel intent or call a fake native sender."""
+    journal_before = session.path.read_bytes()
+    cancels_before = session.cancel_calls
+    with pytest.raises(NormalizedApiError) as caught:
+        session.invoke(
+            "cancel_order",
+            VENUE,
+            request,
+            transport,
+            budget_capability=budget_capability,
+        )
+    assert caught.value.code in {
+        "ctp_cancel_identity_binding_missing_or_mismatch",
+        "ctp_cancel_dispatch_handoff_unavailable",
+    }
+    assert session.path.read_bytes() == journal_before
+    assert session.cancel_calls == cancels_before
+    transport.assert_not_called()
+    return caught.value
+
+
 def barrier(session, snapshot, *, first_id=1, account_balance="100"):
     account = (
         {
@@ -704,40 +950,52 @@ def write_crashed_journal(path, *, exposure=None, active=False, uncertain=False)
     session.arm_from_preflight(old_proof, lambda: context(old_proof))
     side = "sell" if exposure == "short" else "buy"
     position_side = "short" if exposure == "short" else "long"
+    runtime_order_id = "crashed-journal-order"
+    binding, budget = reserve_runtime_order(
+        session,
+        old_proof,
+        runtime_order_id=runtime_order_id,
+        order_ref_number=1,
+    )
     request = order_request(
         side=Side.SELL if side == "sell" else Side.BUY,
         position_side=position_side,
+        client_order_id=binding["client_order_id"],
+        runtime_order_id=runtime_order_id,
     )
-
-    def submit():
-        if uncertain:
-            raise TimeoutError("transport outcome unknown")
-        return order_update(side=side)
-
-    try:
-        session.invoke(
-            "make_order",
+    seed_historical_order_intent(session, request)
+    if not uncertain:
+        session.event(
             VENUE,
-            request,
-            submit,
-            budget_capability=_reserve_budget(session, old_proof),
+            order_update(side=side, client_order_id=binding["client_order_id"]),
         )
-    except NormalizedApiError:
-        if not uncertain:
-            raise
     if exposure is not None:
         session.event(
             VENUE,
-            trade_update(side=side, position_side=position_side),
+            trade_update(
+                side=side,
+                position_side=position_side,
+                client_order_id=binding["client_order_id"],
+            ),
         )
         session.event(
             VENUE,
-            order_update(side=side, status="completed", terminal=True),
+            order_update(
+                side=side,
+                status="completed",
+                terminal=True,
+                client_order_id=binding["client_order_id"],
+            ),
         )
     elif not active and not uncertain:
         session.event(
             VENUE,
-            order_update(side=side, status="canceled", terminal=True),
+            order_update(
+                side=side,
+                status="canceled",
+                terminal=True,
+                client_order_id=binding["client_order_id"],
+            ),
         )
     session.close()
 
@@ -759,25 +1017,30 @@ def write_bundle_crashed_journal(path, *, instruments=BUNDLE_INSTRUMENTS[:2]):
     session.arm_from_preflight(old_proof, lambda: context(old_proof))
     try:
         for index, instrument in enumerate(instruments, start=1):
-            client_order_id = f"0000000000{index:02d}"
+            runtime_order_id = f"bundle-fixture-order-{index}"
             order_id = f"SYS{index}"
             trade_id = f"TRADE{index}"
+            binding, budget = reserve_runtime_order(
+                session,
+                old_proof,
+                runtime_order_id=runtime_order_id,
+                order_ref_number=index,
+                symbol=instrument.split(".", 1)[1],
+            )
+            client_order_id = binding["client_order_id"]
             request = bundle_order_request(
                 instrument,
                 client_order_id=client_order_id,
+                runtime_order_id=runtime_order_id,
             )
-            session.invoke(
-                "make_order",
+            seed_historical_order_intent(session, request)
+            session.event(
                 VENUE,
-                request,
-                lambda instrument=instrument, client_order_id=client_order_id, order_id=order_id: (
-                    bundle_order_update(
-                        instrument,
-                        client_order_id=client_order_id,
-                        order_id=order_id,
-                    )
+                bundle_order_update(
+                    instrument,
+                    client_order_id=client_order_id,
+                    order_id=order_id,
                 ),
-                budget_capability=_reserve_budget(session, old_proof),
             )
             session.event(
                 VENUE,
@@ -799,6 +1062,34 @@ def write_bundle_crashed_journal(path, *, instruments=BUNDLE_INSTRUMENTS[:2]):
             )
     finally:
         session.close()
+
+
+def test_managed_ctp_order_without_consumed_mirror_stops_before_fake_transport(tmp_path):
+    path = tmp_path / "unbound-order.jsonl"
+    session = make_session(path)
+    old_proof = proof(3)
+    session.arm_from_preflight(old_proof, lambda: context(old_proof))
+    request = order_request(client_order_id="000000000090")
+    journal_before = path.read_bytes() if path.exists() else None
+    request_id_calls = []
+    transport_calls = []
+
+    try:
+        with pytest.raises(NormalizedApiError) as caught:
+            session.invoke(
+                "make_order",
+                VENUE,
+                request,
+                lambda: transport_calls.append(True),
+                pre_dispatch=lambda _context: request_id_calls.append(True),
+            )
+    finally:
+        session.close()
+
+    assert caught.value.code == "ctp_order_identity_binding_missing_or_mismatch"
+    assert (path.read_bytes() if path.exists() else None) == journal_before
+    assert request_id_calls == []
+    assert transport_calls == []
 
 
 def breached_recovery_session(path):
@@ -1219,7 +1510,7 @@ def test_remote_identity_or_active_order_semantic_mismatch_is_manual(tmp_path, d
         session.close()
 
 
-def test_recovery_close_blocks_open_reverse_wrong_cycle_and_oversize(tmp_path):
+def test_recovery_close_plan_cannot_dispatch_without_worker_handoff(tmp_path):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, exposure="long")
     session, current_proof = prepare_from_journal(path)
@@ -1264,109 +1555,168 @@ def test_recovery_close_blocks_open_reverse_wrong_cycle_and_oversize(tmp_path):
                 client_order_id="000000000002",
             ),
         )
+        identity_binding = seed_ctp_order_identity(session, rejected[0], index=2)
+        rejected = tuple(
+            replace(request, ctp_order_identity=identity_binding) for request in rejected
+        )
         for request in rejected:
             with pytest.raises(NormalizedApiError):
                 session.invoke("make_order", VENUE, request, transport)
         assert session.submit_calls == 0
         transport.assert_not_called()
 
-        allowed = order_request(
+        allowed, recovery_budget, allowed_binding = bound_order_request(
+            session,
+            current_proof,
+            runtime_order_id="recovery-close-order",
+            order_ref_number=2,
+            recovery_action=True,
             side=Side.SELL,
             quantity="2",
             offset="close",
             position_side="long",
             role="recovery_exit",
-            client_order_id="000000000002",
         )
-        result = session.invoke(
-            "make_order",
-            VENUE,
+        allowed = replace(allowed, runtime_order_id=None, ctp_order_identity=identity_binding)
+        assert_unhanded_order_stays_local(
+            session,
             allowed,
-            Mock(
-                return_value=order_update(
-                    side="sell",
-                    quantity="2",
-                    client_order_id="000000000002",
-                    order_id="SYS2",
-                    offset="close",
-                    position_side="long",
-                )
-            ),
+            transport,
+            budget_capability=recovery_budget,
         )
-        assert result["status"] == "accepted"
-        with pytest.raises(NormalizedApiError):
-            session.invoke("make_order", VENUE, allowed, transport)
+        assert plan["allowed_closes"]
         transport.assert_not_called()
     finally:
         session.close()
 
 
-def test_public_sync_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
+def test_public_sync_recovery_exit_requires_worker_handoff_after_arm(tmp_path):
     session = breached_recovery_session(tmp_path / "sync-orders.jsonl")
+    current_proof = session._arm_proof
+    close, recovery_budget, close_binding = bound_order_request(
+        session,
+        current_proof,
+        runtime_order_id="sync-recovery-exit",
+        order_ref_number=2,
+        recovery_action=True,
+        side=Side.SELL,
+        quantity="1",
+        offset="close",
+        position_side="long",
+        role="recovery_exit",
+    )
     submit = Mock(
         return_value=order_update(
             side="sell",
             quantity="1",
-            client_order_id="000000000002",
+            client_order_id=close_binding["client_order_id"],
             order_id="SYS2",
             offset="close",
             position_side="long",
         )
     )
     api = public_order_api(session, SimpleNamespace(make_order=submit))
-    entry = order_request(client_order_id="000000000003")
-    close = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    entry = bind_ctp_order_request(
+        session,
+        order_request(client_order_id="000000000003"),
+        index=3,
     )
+    close = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
+    )
+    journal_before = session.path.read_bytes()
     try:
         with pytest.raises(NormalizedApiError) as raised:
             api.make_order(VENUE, entry, normalized=True)
         assert raised.value.code == "execution_recovery_open_forbidden"
         submit.assert_not_called()
 
-        assert api.make_order(VENUE, close, normalized=True)["status"] == "accepted"
-        submit.assert_called_once()
+        with pytest.raises(NormalizedApiError) as raised:
+            api.make_order(
+                VENUE,
+                close,
+                normalized=True,
+                budget_capability=recovery_budget,
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        submit.assert_not_called()
+        assert session.path.read_bytes() == journal_before
+        assert session.submit_calls == 0
     finally:
         session.close()
 
 
-def test_public_async_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
+def test_public_async_recovery_exit_requires_worker_handoff_after_arm(tmp_path):
     session = breached_recovery_session(tmp_path / "async-orders.jsonl")
+    current_proof = session._arm_proof
+    close, recovery_budget, close_binding = bound_order_request(
+        session,
+        current_proof,
+        runtime_order_id="async-recovery-exit",
+        order_ref_number=2,
+        recovery_action=True,
+        side=Side.SELL,
+        quantity="1",
+        offset="close",
+        position_side="long",
+        role="recovery_exit",
+    )
     submit = AsyncMock(
         return_value=order_update(
             side="sell",
             quantity="1",
-            client_order_id="000000000002",
+            client_order_id=close_binding["client_order_id"],
             order_id="SYS2",
             offset="close",
             position_side="long",
         )
     )
     api = public_order_api(session, SimpleNamespace(async_make_order=submit))
-    entry = order_request(client_order_id="000000000003")
-    close = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    entry = bind_ctp_order_request(
+        session,
+        order_request(client_order_id="000000000003"),
+        index=3,
     )
+    close = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
+    )
+    journal_before = session.path.read_bytes()
 
     async def run():
         with pytest.raises(NormalizedApiError) as raised:
             await api.async_make_order(VENUE, entry, normalized=True)
-        assert raised.value.code == "execution_recovery_open_forbidden"
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         submit.assert_not_awaited()
 
-        result = await api.async_make_order(VENUE, close, normalized=True)
-        assert result["status"] == "accepted"
-        submit.assert_awaited_once()
+        with pytest.raises(NormalizedApiError) as raised:
+            await api.async_make_order(
+                VENUE,
+                close,
+                normalized=True,
+                budget_capability=recovery_budget,
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        submit.assert_not_awaited()
+        assert session.path.read_bytes() == journal_before
+        assert session.submit_calls == 0
 
     try:
         asyncio.run(run())
@@ -1374,11 +1724,12 @@ def test_public_async_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
         session.close()
 
 
-def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path):
+def test_unhanded_cancel_preserves_allowance_and_refresh_rotates_token(tmp_path):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, active=True)
     session, current_proof = prepare_from_journal(path)
     current = snapshot(orders=[active_order()])
+    runtime_order_id = "crashed-journal-order"
     cancel = CancelOrderRequest(
         symbol="SA609.CZCE",
         account_id=ACCOUNT,
@@ -1388,6 +1739,7 @@ def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path)
         front_id=11,
         session_id=22,
         order_ref="000000000001",
+        runtime_order_id=runtime_order_id,
     )
     transport = Mock(return_value=order_update(status="canceled", terminal=True))
     try:
@@ -1400,11 +1752,17 @@ def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path)
             lambda: context(current_proof),
             budget_capability=_reserve_budget(session, current_proof, mode="recovery"),
         )
-        session.invoke("cancel_order", VENUE, cancel, transport)
-        with pytest.raises(NormalizedApiError) as raised:
-            session.invoke("cancel_order", VENUE, cancel, transport)
-        assert raised.value.code == "execution_recovery_foreign_cancel"
-        transport.assert_called_once_with()
+        cancel = replace(
+            cancel,
+            runtime_action_id=session.next_runtime_action_id(
+                VENUE,
+                account_id=ACCOUNT,
+                runtime_order_id=runtime_order_id,
+            ),
+        )
+        assert_unhanded_cancel_stays_local(session, cancel, transport)
+        assert_unhanded_cancel_stays_local(session, cancel, transport)
+        assert session._recovery_mode is True
 
         session.pause_recovery()
         session.prepare_recovery(
@@ -1420,7 +1778,7 @@ def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path)
         session.close()
 
 
-def test_failed_recovery_transport_consumes_action_and_pauses_lease(tmp_path):
+def test_unhanded_cancel_never_reaches_failing_recovery_transport(tmp_path):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, active=True)
     session, current_proof = prepare_from_journal(path)
@@ -1431,6 +1789,8 @@ def test_failed_recovery_transport_consumes_action_and_pauses_lease(tmp_path):
         client_order_id="000000000001",
         order_id="SYS1",
         exchange_id="CZCE",
+        order_ref="000000000001",
+        runtime_order_id="crashed-journal-order",
     )
     failed = Mock(side_effect=TimeoutError("unknown cancel result"))
     retry = Mock()
@@ -1442,38 +1802,52 @@ def test_failed_recovery_transport_consumes_action_and_pauses_lease(tmp_path):
             lambda: context(current_proof),
             budget_capability=_reserve_budget(session, current_proof, mode="recovery"),
         )
-        result = session.invoke("cancel_order", VENUE, cancel, failed)
-        assert result["execution_unknown"] is True
-        assert session.config["market_data_only"] is True
-        assert session._recovery_mode is False
-        with pytest.raises(NormalizedApiError):
-            session.invoke("cancel_order", VENUE, cancel, retry)
-        failed.assert_called_once_with()
-        retry.assert_not_called()
+        cancel = replace(
+            cancel,
+            runtime_action_id=session.next_runtime_action_id(
+                VENUE,
+                account_id=ACCOUNT,
+                runtime_order_id=cancel.runtime_order_id,
+            ),
+        )
+        assert_unhanded_cancel_stays_local(session, cancel, failed)
+        assert_unhanded_cancel_stays_local(session, cancel, retry)
+        assert session.config["market_data_only"] is False
+        assert session._recovery_mode is True
     finally:
         session.close()
 
 
-def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
+def test_sync_and_async_recovery_dispatch_stay_closed_without_handoff(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
+    current_proof = session._arm_proof
+    owner_budget = _reserve_budget(session, current_proof, mode="recovery")
     entered = threading.Event()
     release = threading.Event()
     owner_result: queue.Queue[Any] = queue.Queue()
-    owner = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    owner = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
-    contender = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000003",
+    contender = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000003",
+        ),
+        index=3,
     )
 
     def transport():
@@ -1482,7 +1856,7 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
         return order_update(
             side="sell",
             quantity="1",
-            client_order_id="000000000002",
+            client_order_id=owner.client_order_id,
             order_id="SYS2",
             offset="close",
             position_side="long",
@@ -1490,30 +1864,40 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
 
     def run_owner():
         try:
-            owner_result.put(session.invoke("make_order", VENUE, owner, transport))
+            owner_result.put(
+                session.invoke(
+                    "make_order",
+                    VENUE,
+                    owner,
+                    transport,
+                    budget_capability=owner_budget,
+                )
+            )
         except Exception as exc:  # pragma: no cover - assertion reports it
             owner_result.put(exc)
 
     async_transport = AsyncMock()
     owner_thread = threading.Thread(target=run_owner)
+    journal_before = session.path.read_bytes()
     try:
         owner_thread.start()
-        assert entered.wait(timeout=5)
-        assert session._recovery_dispatch_in_progress is True
+        owner_thread.join(timeout=5)
+        assert not owner_thread.is_alive()
+        owner_failure = owner_result.get_nowait()
+        assert isinstance(owner_failure, NormalizedApiError)
+        assert owner_failure.code == "ctp_order_dispatch_handoff_unavailable"
+        assert not entered.is_set()
+        assert session._recovery_dispatch_in_progress is False
 
         with pytest.raises(NormalizedApiError) as sync_error:
             session.invoke("make_order", VENUE, contender, Mock())
-        assert sync_error.value.code == "execution_recovery_action_in_progress"
+        assert sync_error.value.definite_reject is True
 
         with pytest.raises(NormalizedApiError) as async_error:
             asyncio.run(session.async_invoke("make_order", VENUE, contender, async_transport))
-        assert async_error.value.code == "execution_recovery_action_in_progress"
+        assert async_error.value.definite_reject is True
         async_transport.assert_not_awaited()
-
-        release.set()
-        owner_thread.join(timeout=5)
-        assert not owner_thread.is_alive()
-        assert owner_result.get_nowait()["status"] == "accepted"
+        assert session.path.read_bytes() == journal_before
         assert session._recovery_dispatch_in_progress is False
     finally:
         release.set()
@@ -1521,24 +1905,34 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
         session.close()
 
 
-def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
+def test_async_recovery_order_without_handoff_keeps_native_gate_idle(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
+    current_proof = session._arm_proof
+    owner_budget = _reserve_budget(session, current_proof, mode="recovery")
     entered = asyncio.Event()
-    owner = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    owner = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
-    contender = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000003",
+    contender = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000003",
+        ),
+        index=3,
     )
     sync_transport = Mock()
 
@@ -1550,28 +1944,32 @@ def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
         session,
         SimpleNamespace(async_make_order=blocked_transport, make_order=sync_transport),
     )
+    journal_before = session.path.read_bytes()
 
     async def run():
-        task = asyncio.create_task(api.async_make_order(VENUE, owner, normalized=True))
-        await asyncio.wait_for(entered.wait(), timeout=5)
-        assert session._recovery_dispatch_in_progress is True
+        with pytest.raises(NormalizedApiError) as raised:
+            await api.async_make_order(
+                VENUE,
+                owner,
+                normalized=True,
+                budget_capability=owner_budget,
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        assert not entered.is_set()
+        assert session._recovery_dispatch_in_progress is False
 
         with pytest.raises(NormalizedApiError) as raised:
             api.make_order(VENUE, contender, normalized=True)
-        assert raised.value.code == "execution_recovery_action_in_progress"
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         sync_transport.assert_not_called()
-
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
 
     try:
         asyncio.run(run())
         assert session._recovery_dispatch_in_progress is False
-        assert session.config["market_data_only"] is True
-        assert session._recovery_mode is False
-        assert feed.get_execution_gate_state()["armed"] is False
-        assert feed.disarm_calls[-1] == "execution_recovery_action_requires_refresh"
+        assert session.config["market_data_only"] is False
+        assert session._recovery_mode is True
+        assert feed.get_execution_gate_state()["armed"] is True
+        assert session.path.read_bytes() == journal_before
         assert stream in api._subscription_streams
         assert stream._running is True
         assert api._subscription_flags[f"{VENUE}_account"] is True
@@ -1580,7 +1978,7 @@ def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
                 side="sell",
                 status="canceled",
                 terminal=True,
-                client_order_id="000000000002",
+                client_order_id=owner.client_order_id,
                 order_id="SYS2",
                 offset="close",
                 position_side="long",
@@ -1591,30 +1989,43 @@ def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
         session.close()
 
 
-def test_failed_public_recovery_transport_disarms_native_gate_before_return(tmp_path):
+def test_public_recovery_transport_is_not_called_without_handoff(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
+    current_proof = session._arm_proof
+    recovery_budget = _reserve_budget(session, current_proof, mode="recovery")
     failed = Mock(side_effect=TimeoutError("unknown recovery result"))
     api, feed, stream = public_recovery_order_api(
         session,
         SimpleNamespace(make_order=failed),
     )
-    close = order_request(
-        side=Side.SELL,
-        quantity="2",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    close = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="2",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
+    journal_before = session.path.read_bytes()
     try:
-        result = api.make_order(VENUE, close, normalized=True)
-        assert result["execution_unknown"] is True
+        with pytest.raises(NormalizedApiError) as raised:
+            api.make_order(
+                VENUE,
+                close,
+                normalized=True,
+                budget_capability=recovery_budget,
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         assert session._recovery_dispatch_in_progress is False
-        assert session.config["market_data_only"] is True
-        assert session._recovery_mode is False
-        assert feed.get_execution_gate_state()["armed"] is False
-        assert feed.disarm_calls[-1] == "execution_recovery_action_requires_refresh"
-        failed.assert_called_once_with(VENUE, close)
+        assert session.config["market_data_only"] is False
+        assert session._recovery_mode is True
+        assert feed.get_execution_gate_state()["armed"] is True
+        assert session.path.read_bytes() == journal_before
+        failed.assert_not_called()
         assert stream in api._subscription_streams
         assert stream._running is True
         assert api._subscription_flags[f"{VENUE}_account"] is True
@@ -1623,7 +2034,7 @@ def test_failed_public_recovery_transport_disarms_native_gate_before_return(tmp_
                 side="sell",
                 status="canceled",
                 terminal=True,
-                client_order_id="000000000002",
+                client_order_id=close.client_order_id,
                 order_id="SYS2",
                 offset="close",
                 position_side="long",
@@ -1636,6 +2047,19 @@ def test_failed_public_recovery_transport_disarms_native_gate_before_return(tmp_
 
 def test_pending_private_ingress_blocks_write_before_transport(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
+    current_proof = session._arm_proof
+    close, recovery_budget, _close_binding = bound_order_request(
+        session,
+        current_proof,
+        runtime_order_id="pending-private-recovery-order",
+        order_ref_number=2,
+        recovery_action=True,
+        side=Side.SELL,
+        quantity="1",
+        offset="close",
+        position_side="long",
+        role="recovery_exit",
+    )
     transport = Mock()
     api, feed, stream = public_recovery_order_api(
         session,
@@ -1666,18 +2090,29 @@ def test_pending_private_ingress_blocks_write_before_transport(tmp_path):
     producer.start()
     try:
         assert note_entered.wait(timeout=5)
-        close = order_request(
-            side=Side.SELL,
-            quantity="1",
-            offset="close",
-            position_side="long",
-            role="recovery_exit",
-            client_order_id="000000000002",
+        close = bind_ctp_order_request(
+            session,
+            order_request(
+                side=Side.SELL,
+                quantity="1",
+                offset="close",
+                position_side="long",
+                role="recovery_exit",
+                client_order_id="000000000002",
+            ),
+            index=2,
         )
+        journal_before = session.path.read_bytes()
         with pytest.raises(NormalizedApiError) as raised:
-            api.make_order(VENUE, close, normalized=True)
-        assert raised.value.code == "execution_private_event_pending"
+            api.make_order(
+                VENUE,
+                close,
+                normalized=True,
+                budget_capability=recovery_budget,
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         transport.assert_not_called()
+        assert session.path.read_bytes() == journal_before
     finally:
         release_note.set()
         producer.join(timeout=5)
@@ -1724,44 +2159,57 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
-    writer.invoke(
-        "make_order",
-        VENUE,
-        order_request(),
-        lambda: order_update(),
-        budget_capability=_reserve_budget(writer, old_proof),
+    entry_binding, _entry_budget = reserve_runtime_order(
+        writer,
+        old_proof,
+        runtime_order_id="ordinary-cycle-entry",
+        order_ref_number=1,
     )
-    writer.event(VENUE, trade_update())
+    writer_request = order_request(
+        client_order_id=entry_binding["client_order_id"],
+        runtime_order_id=entry_binding["runtime_order_id"],
+    )
+    seed_historical_order_intent(writer, writer_request)
+    writer.event(VENUE, order_update(client_order_id=writer_request.client_order_id))
     writer.event(
         VENUE,
-        order_update(status="completed", terminal=True),
+        trade_update(client_order_id=writer_request.client_order_id),
     )
-    close_request = order_request(
+    writer.event(
+        VENUE,
+        order_update(
+            status="completed",
+            terminal=True,
+            client_order_id=writer_request.client_order_id,
+        ),
+    )
+    close_request, close_budget, close_binding = bound_order_request(
+        writer,
+        old_proof,
+        runtime_order_id="ordinary-cycle-exit",
+        order_ref_number=2,
         side=Side.SELL,
         offset="close",
         position_side="long",
         role="exit",
-        client_order_id="000000000002",
     )
-    writer.invoke(
-        "make_order",
+    seed_historical_order_intent(writer, close_request)
+    writer.event(
         VENUE,
-        close_request,
-        lambda: order_update(
+        order_update(
             side="sell",
-            client_order_id="000000000002",
+            client_order_id=close_binding["client_order_id"],
             order_id="SYS2",
             offset="close",
             position_side="long",
         ),
-        budget_capability=_reserve_budget(writer, old_proof),
     )
     writer.event(
         VENUE,
         trade_update(
             side="sell",
             position_side="long",
-            client_order_id="000000000002",
+            client_order_id=close_binding["client_order_id"],
             order_id="SYS2",
             offset="close",
             trade_id="TRADE2",
@@ -1773,7 +2221,7 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
             side="sell",
             status="completed",
             terminal=True,
-            client_order_id="000000000002",
+            client_order_id=close_binding["client_order_id"],
             order_id="SYS2",
             offset="close",
             position_side="long",
@@ -1883,16 +2331,25 @@ def test_ordinary_arm_rejects_terminal_fill_without_durable_trade(tmp_path):
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
-    writer.invoke(
-        "make_order",
-        VENUE,
-        order_request(),
-        lambda: order_update(),
-        budget_capability=_reserve_budget(writer, old_proof),
+    entry_binding, _entry_budget = reserve_runtime_order(
+        writer,
+        old_proof,
+        runtime_order_id="terminal-without-trade-entry",
+        order_ref_number=1,
     )
+    writer_request = order_request(
+        client_order_id=entry_binding["client_order_id"],
+        runtime_order_id=entry_binding["runtime_order_id"],
+    )
+    seed_historical_order_intent(writer, writer_request)
+    writer.event(VENUE, order_update(client_order_id=writer_request.client_order_id))
     writer.event(
         VENUE,
-        order_update(status="completed", terminal=True),
+        order_update(
+            status="completed",
+            terminal=True,
+            client_order_id=writer_request.client_order_id,
+        ),
     )
     writer.close()
 
@@ -2344,3 +2801,462 @@ def test_prepare_authorization_fences_old_generation_but_allows_new_proof(tmp_pa
         assert session.arm_from_preflight(new_proof, lambda: context(new_proof))["armed"] is True
     finally:
         session.close()
+
+
+def test_ctp_runtime_orderref_binding_is_fsynced_and_orphan_retry_freezes(tmp_path):
+    path = tmp_path / "orders.jsonl"
+    current_proof = proof(4)
+    session = make_session(path)
+    runtime_order_id = "framework-order-0042"
+    try:
+        session.arm_from_preflight(current_proof, lambda: context(current_proof))
+        budget = _reserve_budget(session, current_proof)
+        binding = session.new_runtime_order_binding(
+            VENUE,
+            symbol="SA609.CZCE",
+            account_id=ACCOUNT,
+            runtime_order_id=runtime_order_id,
+            budget_capability=budget,
+        )
+        assert binding["runtime_order_id"] == runtime_order_id
+        assert binding["client_order_id"] == binding["ctp_order_ref"]
+        assert len(binding["ctp_order_ref"]) == 12
+        assert binding["ctp_order_ref"].isascii() and binding["ctp_order_ref"].isdigit()
+        reservation_rows = [
+            json.loads(line)
+            for line in path.read_text().splitlines()
+            if json.loads(line).get("event") == "client_id_reservation"
+        ]
+        assert len(reservation_rows) == 1
+        assert reservation_rows[0]["runtime_order_id"] == runtime_order_id
+        assert reservation_rows[0]["client_order_id"] == binding["ctp_order_ref"]
+        assert reservation_rows[0]["connection_generation"] == 4
+    finally:
+        session.close()
+
+    recovered = make_session(path)
+    try:
+        recovered.arm_from_preflight(current_proof, lambda: context(current_proof))
+        rows = recovered.get_runtime_order_bindings(VENUE, unresolved_only=False)
+        assert rows == [
+            {
+                "runtime_order_id": runtime_order_id,
+                "client_order_id": binding["client_order_id"],
+                "ctp_order_ref": binding["ctp_order_ref"],
+                "symbol": "SA609.CZCE",
+                "connection_generation": 4,
+                "trading_day": TRADING_DAY,
+                "status": "reservation_only",
+                "safe_burn": True,
+                "recovery_required": True,
+            }
+        ]
+        assert recovered._unknown_ids() == set()
+        with pytest.raises(NormalizedApiError) as raised:
+            recovered.new_runtime_order_binding(
+                VENUE,
+                symbol="SA609.CZCE",
+                account_id=ACCOUNT,
+                runtime_order_id="a-different-order-after-crash",
+                budget_capability=_reserve_budget(recovered, current_proof),
+            )
+        assert raised.value.code == "runtime_order_binding_recovery_required"
+    finally:
+        recovered.close()
+
+
+def test_managed_intent_cannot_allocate_a_second_sdk_orderref(tmp_path):
+    path = tmp_path / "managed-intent-binding.jsonl"
+    current_proof = proof(4)
+    runtime_order_id = "runtime-scope-intent-42"
+    managed_intent_id = "managed-intent-42"
+    session = make_session(path)
+    try:
+        session.arm_from_preflight(current_proof, lambda: context(current_proof))
+        budget = _reserve_budget(session, current_proof)
+        journal_before = path.read_bytes()
+        with pytest.raises(NormalizedApiError) as raised:
+            session.new_runtime_order_binding(
+                VENUE,
+                symbol="SA609.CZCE",
+                account_id=ACCOUNT,
+                managed_intent_id=managed_intent_id,
+                runtime_order_id=runtime_order_id,
+                budget_capability=budget,
+            )
+        assert raised.value.code == "ctp_order_identity_reservation_required"
+        assert path.read_bytes() == journal_before
+        assert session.get_runtime_order_bindings(VENUE, unresolved_only=False) == []
+    finally:
+        session.close()
+
+    recovered = make_session(path)
+    try:
+        recovered.arm_from_preflight(current_proof, lambda: context(current_proof))
+        assert recovered.get_runtime_order_bindings(VENUE, unresolved_only=False) == []
+    finally:
+        recovered.close()
+
+
+def test_managed_cancel_cannot_use_durable_orderref_as_dispatch_handoff(tmp_path):
+    path = tmp_path / "managed-cancel-identity.jsonl"
+    current_proof = proof(4)
+    session = make_session(path)
+    session.arm_from_preflight(current_proof, lambda: context(current_proof))
+    order, _order_budget, binding = bound_order_request(
+        session,
+        current_proof,
+        runtime_order_id="managed-cancel-target",
+        order_ref_number=43,
+    )
+    seed_historical_order_intent(session, order)
+    session.event(
+        VENUE,
+        order_update(client_order_id=binding["client_order_id"]),
+    )
+    native_cancel = Mock()
+    api = public_order_api(session, SimpleNamespace(cancel_order=native_cancel))
+    cancel = CancelOrderRequest(
+        symbol=order.symbol,
+        account_id=order.account_id,
+        client_order_id=binding["client_order_id"],
+        order_id="SYS1",
+        exchange_id="CZCE",
+        order_ref=binding["ctp_order_ref"],
+        runtime_order_id=binding["runtime_order_id"],
+        managed_cancel_intent_id="cancel.managed-cancel-intent",
+        runtime_action_id="cancel.managed-cancel-intent",
+    )
+    cancel_budget = _reserve_budget(session, current_proof)
+    journal_before = path.read_bytes()
+    try:
+        with pytest.raises(NormalizedApiError) as raised:
+            api.cancel_order(
+                VENUE,
+                cancel,
+                normalized=True,
+                budget_capability=cancel_budget,
+            )
+        assert raised.value.code == "ctp_cancel_dispatch_handoff_unavailable"
+        native_cancel.assert_not_called()
+        assert path.read_bytes() == journal_before
+        assert session.cancel_calls == 0
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("damage", ["duplicate_order", "truncated_tail"])
+def test_ctp_runtime_orderref_journal_collision_or_truncation_fails_closed(tmp_path, damage):
+    path = tmp_path / "orders.jsonl"
+    current_proof = proof(4)
+    session = make_session(path)
+    try:
+        session.arm_from_preflight(current_proof, lambda: context(current_proof))
+        session.new_runtime_order_binding(
+            VENUE,
+            symbol="SA609.CZCE",
+            account_id=ACCOUNT,
+            runtime_order_id="collision-probe",
+            budget_capability=_reserve_budget(session, current_proof),
+        )
+    finally:
+        session.close()
+
+    if damage == "duplicate_order":
+        row = next(
+            json.loads(line)
+            for line in path.read_text().splitlines()
+            if json.loads(line).get("event") == "client_id_reservation"
+        )
+        row["client_order_id"] = f"{(int(row['client_order_id']) + 1) % 10**12:012d}"
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(row) + "\n")
+    else:
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write('{"event":"client_id_reservation"')
+
+    with pytest.raises(NormalizedApiError) as raised:
+        make_session(path, market_data_only=False)
+    assert raised.value.code == "unreadable_journal"
+
+
+def test_ctp_runtime_orderref_reverse_reservation_collision_fails_closed(tmp_path):
+    path = tmp_path / "orders.jsonl"
+    current_proof = proof(4)
+    session = make_session(path)
+    try:
+        session.arm_from_preflight(current_proof, lambda: context(current_proof))
+        reserve_runtime_order(
+            session,
+            current_proof,
+            runtime_order_id="first-runtime-order",
+            order_ref_number=41,
+        )
+    finally:
+        session.close()
+
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    reservation = next(row for row in rows if row.get("event") == "client_id_reservation")
+    collision = dict(reservation, runtime_order_id="different-runtime-order")
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(collision) + "\n")
+
+    with pytest.raises(NormalizedApiError) as raised:
+        make_session(path, market_data_only=False)
+    assert raised.value.code == "unreadable_journal"
+
+
+@pytest.mark.parametrize("async_call", [False, True], ids=["sync", "async"])
+@pytest.mark.parametrize("reservation_kind", ["legacy", "runtime"], ids=["legacy_id", "bound_ref"])
+def test_managed_ctp_order_cannot_dispatch_without_runtime_binding(
+    tmp_path, async_call, reservation_kind
+):
+    path = tmp_path / f"missing-runtime-{async_call}-{reservation_kind}.jsonl"
+    session = make_session(path)
+    current_proof = proof(4)
+    session.arm_from_preflight(current_proof, lambda: context(current_proof))
+    if reservation_kind == "legacy":
+        budget = _reserve_budget(session, current_proof)
+        client_order_id = "000000000042"
+    else:
+        binding, budget = reserve_runtime_order(
+            session,
+            current_proof,
+            runtime_order_id="reserved-but-unbound-order",
+            order_ref_number=42,
+        )
+        client_order_id = binding["client_order_id"]
+    request = order_request(client_order_id=client_order_id)
+    sync_native = Mock(return_value=order_update(client_order_id=client_order_id))
+    async_native = AsyncMock(return_value=order_update(client_order_id=client_order_id))
+    api = public_order_api(
+        session,
+        SimpleNamespace(make_order=sync_native, async_make_order=async_native),
+    )
+    try:
+        if async_call:
+
+            async def run():
+                with pytest.raises(NormalizedApiError) as raised:
+                    await api.async_make_order(
+                        VENUE,
+                        request,
+                        normalized=True,
+                        budget_capability=budget,
+                    )
+                return raised.value
+
+            error = asyncio.run(run())
+            async_native.assert_not_awaited()
+        else:
+            with pytest.raises(NormalizedApiError) as raised:
+                api.make_order(
+                    VENUE,
+                    request,
+                    normalized=True,
+                    budget_capability=budget,
+                )
+            error = raised.value
+            sync_native.assert_not_called()
+        assert error.code == "ctp_order_identity_binding_missing_or_mismatch"
+        assert session.submit_calls == 0
+        assert not any(
+            json.loads(line).get("event") == "intent" for line in path.read_text().splitlines()
+        )
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("async_call", [False, True], ids=["sync", "async"])
+def test_managed_ctp_cancel_requires_runtime_action_identity_before_native_dispatch(
+    tmp_path, async_call
+):
+    path = tmp_path / f"missing-cancel-runtime-{async_call}.jsonl"
+    session = make_session(path)
+    current_proof = proof(4)
+    session.arm_from_preflight(current_proof, lambda: context(current_proof))
+    order, budget, binding = bound_order_request(
+        session,
+        current_proof,
+        runtime_order_id="cancel-target-order",
+        order_ref_number=43,
+    )
+    try:
+        seed_historical_order_intent(session, order)
+        session.event(
+            VENUE,
+            order_update(client_order_id=binding["client_order_id"]),
+        )
+        cancel = CancelOrderRequest(
+            symbol=order.symbol,
+            account_id=order.account_id,
+            client_order_id=binding["client_order_id"],
+            order_id="SYS1",
+            exchange_id="CZCE",
+            order_ref=binding["ctp_order_ref"],
+        )
+        sync_native = Mock(return_value=order_update(status="canceled", terminal=True))
+        async_native = AsyncMock(return_value=order_update(status="canceled", terminal=True))
+        api = public_order_api(
+            session,
+            SimpleNamespace(
+                cancel_order=sync_native,
+                async_cancel_order=async_native,
+            ),
+        )
+        if async_call:
+
+            async def run():
+                with pytest.raises(NormalizedApiError) as raised:
+                    await api.async_cancel_order(
+                        VENUE,
+                        cancel,
+                        normalized=True,
+                    )
+                return raised.value
+
+            error = asyncio.run(run())
+            async_native.assert_not_awaited()
+        else:
+            with pytest.raises(NormalizedApiError) as raised:
+                api.cancel_order(VENUE, cancel, normalized=True)
+            error = raised.value
+            sync_native.assert_not_called()
+        assert error.code == "ctp_runtime_cancel_identity_required"
+        assert session.cancel_calls == 0
+        assert not any(
+            json.loads(line).get("event") == "cancel_intent"
+            for line in path.read_text().splitlines()
+        )
+    finally:
+        session.close()
+
+
+def test_session_async_ctp_cancel_does_not_journal_unclaimed_action(tmp_path):
+    path = tmp_path / "async-cancel-action-id.jsonl"
+    session = make_session(path)
+    current_proof = proof(4)
+    session.arm_from_preflight(current_proof, lambda: context(current_proof))
+    order, _order_budget, binding = bound_order_request(
+        session,
+        current_proof,
+        runtime_order_id="async-cancel-target-order",
+        order_ref_number=44,
+    )
+    seed_historical_order_intent(session, order)
+    session.event(
+        VENUE,
+        order_update(client_order_id=binding["client_order_id"]),
+    )
+    cancel = CancelOrderRequest(
+        symbol=order.symbol,
+        account_id=order.account_id,
+        client_order_id=binding["client_order_id"],
+        order_id="SYS1",
+        exchange_id="CZCE",
+        order_ref=binding["ctp_order_ref"],
+        runtime_order_id=binding["runtime_order_id"],
+    )
+
+    runtime_action_id = session.next_runtime_action_id(
+        VENUE,
+        account_id=cancel.account_id,
+        runtime_order_id=cancel.runtime_order_id,
+    )
+    cancel = replace(cancel, runtime_action_id=runtime_action_id)
+    local_transport = AsyncMock()
+    cancel_budget = _reserve_budget(session, current_proof)
+    journal_before = path.read_bytes()
+    try:
+        with pytest.raises(NormalizedApiError) as raised:
+            asyncio.run(
+                session.async_invoke(
+                    "cancel_order",
+                    VENUE,
+                    cancel,
+                    local_transport,
+                    budget_capability=cancel_budget,
+                )
+            )
+        assert raised.value.code == "ctp_cancel_identity_binding_missing_or_mismatch"
+        local_transport.assert_not_awaited()
+        assert path.read_bytes() == journal_before
+        assert session.get_runtime_action_bindings(VENUE) == []
+    finally:
+        session.close()
+
+
+def test_unclaimed_ctp_cancel_attempt_is_not_rebuilt_as_sent_after_restart(tmp_path):
+    path = tmp_path / "orders.jsonl"
+    current_proof = proof(4)
+    runtime_order_id = "framework-order-cancel-1"
+    session = make_session(path)
+    try:
+        session.arm_from_preflight(current_proof, lambda: context(current_proof))
+        budget = _reserve_budget(session, current_proof)
+        binding = session.new_runtime_order_binding(
+            VENUE,
+            symbol="SA609.CZCE",
+            account_id=ACCOUNT,
+            runtime_order_id=runtime_order_id,
+            budget_capability=budget,
+        )
+        request = order_request(
+            client_order_id=binding["client_order_id"],
+            runtime_order_id=runtime_order_id,
+        )
+        seed_historical_order_intent(session, request)
+        session.event(
+            VENUE,
+            order_update(client_order_id=binding["client_order_id"]),
+        )
+        first_action_id = session.next_runtime_action_id(
+            VENUE,
+            account_id=ACCOUNT,
+            runtime_order_id=runtime_order_id,
+        )
+        cancel = CancelOrderRequest(
+            symbol=request.symbol,
+            account_id=ACCOUNT,
+            client_order_id=binding["client_order_id"],
+            order_id="SYS1",
+            exchange_id="CZCE",
+            order_ref=binding["ctp_order_ref"],
+            runtime_order_id=runtime_order_id,
+            runtime_action_id=first_action_id,
+        )
+        native_cancel = Mock()
+        assert_unhanded_cancel_stays_local(
+            session,
+            cancel,
+            native_cancel,
+            budget_capability=budget,
+        )
+        assert not any(
+            json.loads(line).get("event") == "cancel_intent"
+            for line in path.read_text().splitlines()
+        )
+        assert (
+            session.next_runtime_action_id(
+                VENUE,
+                account_id=ACCOUNT,
+                runtime_order_id=runtime_order_id,
+            )
+            == first_action_id
+        )
+    finally:
+        session.close()
+
+    recovered, _recovery_proof = prepare_from_journal(path)
+    try:
+        assert recovered.get_runtime_action_bindings(VENUE, runtime_order_id=runtime_order_id) == []
+        assert (
+            recovered.next_runtime_action_id(
+                VENUE,
+                account_id=ACCOUNT,
+                runtime_order_id=runtime_order_id,
+            )
+            == first_action_id
+        )
+    finally:
+        recovered.close()

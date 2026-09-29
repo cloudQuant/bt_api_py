@@ -357,10 +357,13 @@ def test_recovery_capability_retains_one_shot_plan_fields_after_redemption(
     artifact = _signed_recovery_artifact(payload, private_key)
     from bt_api_py import BtApi
 
+    journal = tmp_path / "recovery-redemption.jsonl"
+    journal.touch()
     api = BtApi(
         execution_config={
             "market_data_only": True,
-            "order_journal": str(tmp_path / "recovery-redemption.jsonl"),
+            "order_journal": str(journal),
+            "windows_ctp_journal_preprovisioned": True,
         }
     )
     capability = api.redeem_ctp_execution_approval(

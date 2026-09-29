@@ -6,9 +6,10 @@ These are frozen, Decimal-based dataclasses and StrEnum values consumed by
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, date, datetime
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
 from typing import Any
@@ -32,6 +33,303 @@ class Consistency(StrEnum):
 class TransportMode(StrEnum):
     DIRECT = "direct"
     ZMQ = "zmq"
+
+
+@dataclass(frozen=True, slots=True)
+class CtpOrderIdentityBinding:
+    """Non-authorizing I9 identity labels attached to a managed CTP order.
+
+    This value lets the SDK compare a request with an already mirrored
+    reservation. It is not an approval, provider receipt, or dispatch
+    capability.
+    """
+
+    environment: str
+    account_key: str
+    trading_day: str
+    scope_key: str
+    managed_intent_id: str
+    runtime_order_id: str
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.environment) is not str
+            or not self.environment
+            or self.environment != self.environment.strip()
+        ):
+            raise ValueError("CTP identity environment must be a non-empty trimmed string")
+        if (
+            type(self.account_key) is not str
+            or re.fullmatch(r"account:[0-9a-f]{64}", self.account_key, re.ASCII) is None
+        ):
+            raise ValueError("CTP identity account_key must be an account SHA-256 key")
+        if (
+            type(self.trading_day) is not str
+            or re.fullmatch(r"[0-9]{8}", self.trading_day, re.ASCII) is None
+        ):
+            raise ValueError("CTP identity trading_day must use YYYYMMDD")
+        try:
+            date(
+                int(self.trading_day[:4]),
+                int(self.trading_day[4:6]),
+                int(self.trading_day[6:8]),
+            )
+        except ValueError as error:
+            raise ValueError("CTP identity trading_day must be a calendar date") from error
+        if (
+            type(self.scope_key) is not str
+            or re.fullmatch(r"scope:[0-9a-f]{64}", self.scope_key, re.ASCII) is None
+        ):
+            raise ValueError("CTP identity scope_key must be a scope SHA-256 key")
+        if (
+            type(self.managed_intent_id) is not str
+            or re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", self.managed_intent_id, re.ASCII) is None
+        ):
+            raise ValueError("CTP identity managed_intent_id is invalid")
+        if (
+            type(self.runtime_order_id) is not str
+            or re.fullmatch(r"bt-managed-v1:[0-9a-f]{64}", self.runtime_order_id, re.ASCII) is None
+        ):
+            raise ValueError("CTP identity runtime_order_id is invalid")
+
+    @property
+    def dispatch_authorized(self) -> bool:
+        """Identity comparison never grants dispatch authority."""
+        return False
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the stable mapping form used inside typed order requests."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> CtpOrderIdentityBinding:
+        """Rebuild and validate the exact nested identity mapping."""
+        fields = {
+            "environment",
+            "account_key",
+            "trading_day",
+            "scope_key",
+            "managed_intent_id",
+            "runtime_order_id",
+        }
+        if not isinstance(value, Mapping) or set(value) != fields:
+            raise ValueError("CTP identity mapping has missing or unknown fields")
+        return cls(**dict(value))
+
+
+@dataclass(frozen=True, slots=True)
+class CtpCancelIdentityBinding:
+    """Versioned, non-authorizing echo of one I9 CTP cancel command.
+
+    This binds a typed request to the exact shared I9 command and its complete
+    CTP target. It is not a fresh approval, a claimed-row capability, a local
+    queue receipt, or permission to call a native client. The public cancel
+    path remains closed until those separate handoffs are implemented.
+    """
+
+    version: int
+    environment: str
+    account_id: str
+    instrument_id: str
+    account_key: str
+    trading_day: str
+    scope_key: str
+    managed_intent_id: str
+    runtime_order_id: str
+    order_ref: str
+    command_id: str
+    request_payload_sha256: str
+    managed_action_id: str
+    approval_use_id: str
+    approval_digest: str
+    session_binding_sha256: str
+    session_generation_id: str
+    dispatch_front_id: int
+    dispatch_session_id: int
+    native_request_id: int
+    native_action_ref: str | int
+    cancel_target_order_ref: str
+    cancel_target_exchange_id: str
+    cancel_target_order_sys_id: str
+    cancel_target_front_id: int
+    cancel_target_session_id: int
+    native_request_payload_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.version) is not int or self.version not in {1, 2}:
+            raise ValueError("unsupported CTP cancel identity version")
+        for name in (
+            "environment",
+            "account_id",
+            "instrument_id",
+            "command_id",
+            "managed_action_id",
+            "approval_use_id",
+            "session_generation_id",
+        ):
+            value = getattr(self, name)
+            if (
+                type(value) is not str
+                or not value
+                or value != value.strip()
+                or len(value) > 256
+                or not value.isascii()
+            ):
+                raise ValueError("invalid CTP cancel identity " + name)
+        for name in ("account_key", "scope_key"):
+            value = getattr(self, name)
+            prefix = "account:" if name == "account_key" else "scope:"
+            if (
+                type(value) is not str
+                or re.fullmatch(prefix + r"[0-9a-f]{64}", value, re.ASCII) is None
+            ):
+                raise ValueError("invalid CTP cancel identity " + name)
+        if (
+            type(self.trading_day) is not str
+            or re.fullmatch(r"[0-9]{8}", self.trading_day, re.ASCII) is None
+        ):
+            raise ValueError("invalid CTP cancel identity trading_day")
+        try:
+            date(
+                int(self.trading_day[:4]),
+                int(self.trading_day[4:6]),
+                int(self.trading_day[6:8]),
+            )
+        except ValueError as error:
+            raise ValueError("invalid CTP cancel identity trading_day") from error
+        if (
+            type(self.managed_intent_id) is not str
+            or re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", self.managed_intent_id, re.ASCII) is None
+        ):
+            raise ValueError("invalid CTP cancel identity managed_intent_id")
+        if (
+            type(self.runtime_order_id) is not str
+            or re.fullmatch(r"bt-managed-v1:[0-9a-f]{64}", self.runtime_order_id, re.ASCII) is None
+        ):
+            raise ValueError("invalid CTP cancel identity runtime_order_id")
+        for name in (
+            "request_payload_sha256",
+            "approval_digest",
+            "session_binding_sha256",
+        ):
+            if (
+                type(getattr(self, name)) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", getattr(self, name), re.ASCII) is None
+            ):
+                raise ValueError("invalid CTP cancel identity " + name)
+        for name, value in (
+            ("order_ref", self.order_ref),
+            ("cancel_target_order_ref", self.cancel_target_order_ref),
+        ):
+            if type(value) is not str or re.fullmatch(r"[0-9]{12}", value, re.ASCII) is None:
+                raise ValueError("invalid CTP cancel identity " + name)
+        if self.order_ref != self.cancel_target_order_ref:
+            raise ValueError("CTP cancel identity target OrderRef differs from reservation")
+        if (
+            re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", self.managed_action_id, re.ASCII) is None
+            or self.managed_action_id == self.managed_intent_id
+        ):
+            raise ValueError("CTP cancel action id is invalid or equals managed intent id")
+        if (
+            type(self.cancel_target_exchange_id) is not str
+            or not 1 <= len(self.cancel_target_exchange_id) <= 9
+            or not self.cancel_target_exchange_id.isascii()
+            or not self.cancel_target_exchange_id.isalnum()
+        ):
+            raise ValueError("invalid CTP cancel identity cancel_target_exchange_id")
+        if (
+            type(self.cancel_target_order_sys_id) is not str
+            or not 1 <= len(self.cancel_target_order_sys_id) <= 21
+            or not self.cancel_target_order_sys_id.isascii()
+            or self.cancel_target_order_sys_id != self.cancel_target_order_sys_id.strip()
+        ):
+            raise ValueError("invalid CTP cancel identity cancel_target_order_sys_id")
+        for name in (
+            "dispatch_front_id",
+            "dispatch_session_id",
+            "native_request_id",
+            "cancel_target_front_id",
+            "cancel_target_session_id",
+        ):
+            value = getattr(self, name)
+            if type(value) is not int or not 0 < value <= 2_147_483_647:
+                raise ValueError("invalid CTP cancel identity " + name)
+        if self.version == 1:
+            if (
+                self.native_request_payload_sha256 is not None
+                or type(self.native_action_ref) is not str
+                or re.fullmatch(r"[0-9]{1,12}", self.native_action_ref, re.ASCII) is None
+                or int(self.native_action_ref) != self.native_request_id
+            ):
+                raise ValueError("invalid legacy CTP cancel identity native action reference")
+        elif (
+            type(self.native_action_ref) is not int
+            or not 1 <= self.native_action_ref <= 2_147_483_647
+            or type(self.native_request_payload_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", self.native_request_payload_sha256, re.ASCII) is None
+        ):
+            raise ValueError("invalid CTP cancel identity v2 native payload binding")
+
+    @property
+    def dispatch_authorized(self) -> bool:
+        """An identity echo never grants local dispatch authority."""
+        return False
+
+    @property
+    def runtime_action_id(self) -> str:
+        """Return the I9 managed action identity expected by the SDK seam."""
+        return self.managed_action_id
+
+    @property
+    def managed_cancel_intent_id(self) -> str:
+        """Return the I9 managed action identity expected by the SDK seam."""
+        return self.managed_action_id
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the exact JSON-compatible nested mapping."""
+        value = asdict(self)
+        if self.version == 1:
+            value.pop("native_request_payload_sha256")
+        return value
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> CtpCancelIdentityBinding:
+        """Rebuild an exact v1 or v2 mapping, rejecting unknown or missing keys."""
+        fields = {
+            "version",
+            "environment",
+            "account_id",
+            "instrument_id",
+            "account_key",
+            "trading_day",
+            "scope_key",
+            "managed_intent_id",
+            "runtime_order_id",
+            "order_ref",
+            "command_id",
+            "request_payload_sha256",
+            "managed_action_id",
+            "approval_use_id",
+            "approval_digest",
+            "session_binding_sha256",
+            "session_generation_id",
+            "dispatch_front_id",
+            "dispatch_session_id",
+            "native_request_id",
+            "native_action_ref",
+            "cancel_target_order_ref",
+            "cancel_target_exchange_id",
+            "cancel_target_order_sys_id",
+            "cancel_target_front_id",
+            "cancel_target_session_id",
+        }
+        v2_fields = fields | {"native_request_payload_sha256"}
+        if not isinstance(value, Mapping):
+            raise ValueError("CTP cancel identity mapping has missing or unknown fields")
+        expected_fields = fields if value.get("version") == 1 else v2_fields
+        if set(value) != expected_fields:
+            raise ValueError("CTP cancel identity mapping has missing or unknown fields")
+        return cls(**dict(value))
 
 
 @dataclass(frozen=True)
@@ -432,10 +730,58 @@ class OrderRequest:
     execution_cycle_id: str | None = None
     execution_role: str | None = None
     strategy_identity_sha256: str | None = None
+    ctp_order_identity: CtpOrderIdentityBinding | None = None
+    managed_intent_id: str | None = None
+    hedge_flag: str | None = None
+    runtime_order_id: str | None = None
 
     def __post_init__(self) -> None:
         self._validate_core_fields()
         self._validate_intent_fields()
+        if (
+            self.ctp_order_identity is not None
+            and type(self.ctp_order_identity) is not CtpOrderIdentityBinding
+        ):
+            raise TypeError("ctp_order_identity must be a CtpOrderIdentityBinding or None")
+        if self.ctp_order_identity is not None and (
+            self.managed_intent_id not in (None, self.ctp_order_identity.managed_intent_id)
+            or self.runtime_order_id not in (None, self.ctp_order_identity.runtime_order_id)
+        ):
+            raise ValueError("CTP order scalar identity differs from nested identity")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible request mapping, including its nested identity labels."""
+        values = asdict(self)
+        values["side"] = self.side.value
+        values["order_type"] = self.order_type.value
+        values["quantity"] = format(self.quantity, "f")
+        values["price"] = format(self.price, "f") if self.price is not None else None
+        if self.ctp_order_identity is not None:
+            values["ctp_order_identity"] = self.ctp_order_identity.to_dict()
+        return values
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> OrderRequest:
+        """Rebuild a typed request from its stable mapping form.
+
+        Mappings written before ``ctp_order_identity`` was added remain valid;
+        the omitted field uses its ``None`` default.
+        """
+        if not isinstance(value, Mapping):
+            raise TypeError("order request data must be a mapping")
+        fields = dict(value)
+        identity = fields.get("ctp_order_identity")
+        if isinstance(identity, Mapping):
+            fields["ctp_order_identity"] = CtpOrderIdentityBinding.from_dict(identity)
+        elif identity is not None and type(identity) is not CtpOrderIdentityBinding:
+            raise TypeError("ctp_order_identity must be a mapping or CtpOrderIdentityBinding")
+        for name, enum_type in (("side", Side), ("order_type", OrderType)):
+            if name in fields and type(fields[name]) is str:
+                fields[name] = enum_type(fields[name])
+        for name in ("quantity", "price"):
+            if type(fields.get(name)) is str:
+                fields[name] = Decimal(fields[name])
+        return cls(**fields)
 
     def _validate_core_fields(self) -> None:
         if not self.symbol:
@@ -460,6 +806,11 @@ class OrderRequest:
             raise ValueError("offset must be open, close, close_today or close_yesterday")
         if self.position_mode not in {None, "net", "dual_side"}:
             raise ValueError("position_mode must be net or dual_side")
+        if self.hedge_flag is not None and (
+            not isinstance(self.hedge_flag, str)
+            or self.hedge_flag not in {"1", "2", "3", "5", "6", "7"}
+        ):
+            raise ValueError("hedge_flag must be a supported CTP hedge code")
         if not self.account_id:
             raise ValueError("account_id must be a non-empty string")
         if not self.client_order_id:
@@ -484,6 +835,25 @@ class OrderRequest:
             raise ValueError(
                 "strategy_identity_sha256 must be a lowercase SHA-256 hex digest or None"
             )
+        if self.runtime_order_id is not None and (
+            not isinstance(self.runtime_order_id, str)
+            or not self.runtime_order_id
+            or self.runtime_order_id != self.runtime_order_id.strip()
+            or len(self.runtime_order_id.encode("utf-8")) > 256
+        ):
+            raise ValueError("runtime_order_id must be a bounded non-empty string or None")
+        if self.managed_intent_id is not None and (
+            not isinstance(self.managed_intent_id, str)
+            or not self.managed_intent_id
+            or self.managed_intent_id != self.managed_intent_id.strip()
+            or len(self.managed_intent_id.encode("utf-8")) > 256
+        ):
+            raise ValueError("managed_intent_id must be a bounded non-empty string or None")
+        if self.managed_intent_id is not None:
+            if self.runtime_order_id is None:
+                raise ValueError("runtime_order_id is required with managed_intent_id")
+            if self.hedge_flag not in {"1", "2", "3"}:
+                raise ValueError("managed CTP requests require a supported exact hedge_flag")
         if self.order_type is OrderType.LIMIT and self.price is None:
             raise ValueError("limit order requires a price")
         if self.order_type is OrderType.MARKET and self.price is not None:
@@ -501,14 +871,97 @@ class CancelOrderRequest:
     front_id: int | None = None
     session_id: int | None = None
     order_ref: str | None = None
+    ctp_cancel_identity: CtpCancelIdentityBinding | None = None
+    runtime_action_id: str | None = None
+    runtime_order_id: str | None = None
+    managed_cancel_intent_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol:
             raise ValueError("symbol must be a non-empty string")
         if not self.account_id:
             raise ValueError("account_id must be a non-empty string")
-        if not self.order_id and not self.client_order_id and not self.order_ref:
-            raise ValueError("order_id, client_order_id or order_ref must be provided")
+        if (
+            not self.order_id
+            and not self.client_order_id
+            and not self.order_ref
+            and not self.runtime_order_id
+        ):
+            raise ValueError(
+                "order_id, client_order_id, order_ref or runtime_order_id must be provided"
+            )
+        for name in ("runtime_action_id", "runtime_order_id", "managed_cancel_intent_id"):
+            value = getattr(self, name)
+            if value is not None and (
+                type(value) is not str
+                or not value
+                or value != value.strip()
+                or len(value.encode("utf-8")) > 256
+            ):
+                raise ValueError(f"{name} must be a bounded non-empty string or None")
+        if self.managed_cancel_intent_id is not None and self.runtime_order_id is None:
+            raise ValueError("managed_cancel_intent_id requires runtime_order_id")
+        if (
+            self.managed_cancel_intent_id is not None
+            and self.runtime_action_id != self.managed_cancel_intent_id
+        ):
+            raise ValueError("managed cancel action and intent IDs must match")
+        binding = self.ctp_cancel_identity
+        if binding is None:
+            return
+        if type(binding) is not CtpCancelIdentityBinding:
+            raise TypeError("ctp_cancel_identity must be a CtpCancelIdentityBinding or None")
+        if (
+            self.runtime_order_id not in (None, binding.runtime_order_id)
+            or self.runtime_action_id not in (None, binding.managed_action_id)
+            or self.managed_cancel_intent_id not in (None, binding.managed_action_id)
+        ):
+            raise ValueError("CTP cancel scalar identity differs from nested identity")
+        if type(self.symbol) is not str or type(self.account_id) is not str:
+            raise ValueError("CTP cancel request symbol and account_id must be strings")
+        if self.account_id != binding.account_id:
+            raise ValueError("CTP cancel request account_id differs from nested identity")
+        if self.symbol != binding.instrument_id:
+            raise ValueError("CTP cancel request symbol differs from nested identity")
+        if self.idempotency_key is not None and type(self.idempotency_key) is not str:
+            raise ValueError("CTP cancel request idempotency_key must be a string or None")
+        if self.idempotency_key not in (None, "") and self.idempotency_key != binding.command_id:
+            raise ValueError("CTP cancel request idempotency_key differs from nested command")
+        scalar_matches = (
+            (self.order_id, binding.cancel_target_order_sys_id, "order_id"),
+            (self.client_order_id, binding.cancel_target_order_ref, "client_order_id"),
+            (self.order_ref, binding.cancel_target_order_ref, "order_ref"),
+            (self.exchange_id, binding.cancel_target_exchange_id, "exchange_id"),
+        )
+        for observed, expected, name in scalar_matches:
+            if observed is not None and observed != expected:
+                raise ValueError("CTP cancel request " + name + " differs from nested target")
+        for observed, expected, name in (
+            (self.front_id, binding.cancel_target_front_id, "front_id"),
+            (self.session_id, binding.cancel_target_session_id, "session_id"),
+        ):
+            if observed is not None and (type(observed) is not int or observed != expected):
+                raise ValueError("CTP cancel request " + name + " differs from nested target")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible request mapping preserving nested v1 identity."""
+        values = asdict(self)
+        if self.ctp_cancel_identity is not None:
+            values["ctp_cancel_identity"] = self.ctp_cancel_identity.to_dict()
+        return values
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> CancelOrderRequest:
+        """Rebuild the typed request without coercing identity integer fields."""
+        if not isinstance(value, Mapping):
+            raise TypeError("cancel order request data must be a mapping")
+        fields = dict(value)
+        identity = fields.get("ctp_cancel_identity")
+        if isinstance(identity, Mapping):
+            fields["ctp_cancel_identity"] = CtpCancelIdentityBinding.from_dict(identity)
+        elif identity is not None and type(identity) is not CtpCancelIdentityBinding:
+            raise TypeError("ctp_cancel_identity must be a mapping or CtpCancelIdentityBinding")
+        return cls(**fields)
 
 
 @dataclass(frozen=True)

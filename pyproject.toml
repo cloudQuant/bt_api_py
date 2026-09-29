@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bt_api_py"
-version = "0.15.4"
+version = "0.15.5"
 description = "Implement backtesting and trading of quantitative strategy"
 readme = "README.md"
 license = {text = "MIT"}
@@ -303,5 +303,5 @@ all = [
 ]
 core-reference = [
     "bt_api_binance>=2.0.0",
-    "bt_api_ctp>=2.0.2,<3.0",
+    "bt_api_ctp>=2.0.4,<3.0",
 ]

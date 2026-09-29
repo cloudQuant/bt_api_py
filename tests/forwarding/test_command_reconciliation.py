@@ -45,11 +45,19 @@ def test_wire_command_keeps_all_typed_order_intent_and_fingerprint() -> None:
 
 @pytest.mark.asyncio
 async def test_router_rejects_same_idempotency_key_with_different_fingerprint() -> None:
-    router = OrderRouter(MockBrokerAdapter())
+    adapter = MockBrokerAdapter()
+    adapter.exchange_name = "SIM___SPOT"
+    router = OrderRouter(
+        adapter,
+        write_enabled=True,
+        write_scope=("SIM", "SPOT", "paper"),
+    )
     await router.connect()
     first = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -60,6 +68,8 @@ async def test_router_rejects_same_idempotency_key_with_different_fingerprint() 
     conflicting = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=2,
@@ -98,12 +108,21 @@ def test_timeout_carries_command_correlation_for_reconciliation() -> None:
 
 def test_client_reconciles_terminal_command_status() -> None:
     bus = InMemoryForwardingBus()
-    router = OrderRouter(MockBrokerAdapter(), bus=bus)
+    adapter = MockBrokerAdapter()
+    adapter.exchange_name = "SIM___SPOT"
+    router = OrderRouter(
+        adapter,
+        bus=bus,
+        write_enabled=True,
+        write_scope=("SIM", "SPOT", "paper"),
+    )
     asyncio.run(router.connect())
     client = ForwardingClient(bus=bus, account_id="paper", strategy_id="s1")
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
