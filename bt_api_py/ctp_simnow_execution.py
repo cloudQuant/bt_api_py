@@ -357,12 +357,38 @@ def build_ctp_simnow_cancel_request(
     account_id: str,
     action_id: str,
     idempotency_key: str = "",
+    managed_cancel_intent_id: str | None = None,
 ) -> CancelOrderRequest:
     """Map a client/native order identity into the SDK's typed cancel request."""
     if not action_id or action_id != action_id.strip():
         raise ValueError("action_id must be non-empty and trimmed")
     if not identity.runtime_order_id:
         raise CtpSimNowExecutionError("ctp_runtime_cancel_identity_required")
+    if identity.managed_intent_id is not None:
+        if (
+            not isinstance(managed_cancel_intent_id, str)
+            or not _MANAGED_INTENT_ID.fullmatch(managed_cancel_intent_id)
+            or not isinstance(identity.order_ref, str)
+            or not _CTP_ORDER_REF.fullmatch(identity.order_ref)
+        ):
+            raise CtpSimNowExecutionError("ctp_managed_cancel_identity_required")
+        if identity.client_order_id not in (None, identity.order_ref):
+            raise CtpSimNowExecutionError("ctp_cancel_native_identity_mismatch")
+        return CancelOrderRequest(
+            symbol=identity.instrument_id,
+            account_id=account_id,
+            client_order_id=identity.order_ref,
+            idempotency_key=idempotency_key,
+            exchange_id=identity.exchange_id,
+            order_ref=identity.order_ref,
+            runtime_order_id=identity.runtime_order_id,
+            runtime_action_id=action_id,
+            managed_cancel_intent_id=managed_cancel_intent_id,
+        )
+    if _MANAGED_RUNTIME_ORDER_ID.fullmatch(identity.runtime_order_id):
+        raise CtpSimNowExecutionError("ctp_managed_cancel_identity_required")
+    if managed_cancel_intent_id is not None:
+        raise CtpSimNowExecutionError("ctp_managed_cancel_identity_mismatch")
     if not identity.order_sys_id and not (
         identity.order_ref and identity.front_id is not None and identity.session_id is not None
     ):
@@ -760,16 +786,62 @@ class CtpSimNowExecutionAdapter:
         return _map_ctp_simnow_order_result_with_ref(row, request, identity, order_ref)
 
     def build_cancel_request(
-        self, identity: CtpSimNowOrderIdentity, *, action_id: str
+        self,
+        identity: CtpSimNowOrderIdentity,
+        *,
+        action_id: str | None = None,
+        managed_cancel_intent_id: str | None = None,
     ) -> CancelOrderRequest:
         current, _session = self._require_scope()
         if identity.trading_day != current.trading_day:
             raise CtpSimNowExecutionError("ctp_cancel_trading_day_mismatch")
         ledger = self._api.get_execution_identity(self.exchange_name)
+        account_id = str(ledger.get("account_id") or current.account_fingerprint)
+        if identity.managed_intent_id is not None:
+            if not identity.runtime_order_id or not managed_cancel_intent_id:
+                raise CtpSimNowExecutionError("ctp_managed_cancel_identity_required")
+            rows = self._runtime_order_bindings(identity.runtime_order_id)
+            if len(rows) != 1:
+                raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+            bound_ref = self._validate_managed_order_binding(
+                rows[0],
+                runtime_order_id=identity.runtime_order_id,
+                managed_intent_id=identity.managed_intent_id,
+                instrument_id=identity.instrument_id,
+                account_id=account_id,
+                identity=current,
+                allowed_statuses=frozenset({"unresolved"}),
+            )
+            if identity.order_ref != bound_ref or identity.client_order_id not in (
+                None,
+                bound_ref,
+            ):
+                raise CtpSimNowExecutionError("ctp_runtime_cancel_reference_mismatch")
+            action_id_resolver = getattr(self._api, "next_runtime_action_id", None)
+            if not callable(action_id_resolver):
+                raise CtpSimNowExecutionError("ctp_runtime_action_binding_unavailable")
+            try:
+                bound_action_id = action_id_resolver(
+                    self.exchange_name,
+                    account_id=account_id,
+                    runtime_order_id=identity.runtime_order_id,
+                )
+            except Exception as exc:
+                raise CtpSimNowExecutionError("ctp_runtime_action_binding_unavailable") from exc
+            if action_id is not None and action_id != bound_action_id:
+                raise CtpSimNowExecutionError("ctp_runtime_action_binding_mismatch")
+            action_id = bound_action_id
+            if current != self.get_execution_identity():
+                raise CtpSimNowExecutionError("ctp_runtime_cancel_scope_mismatch")
+        elif managed_cancel_intent_id is not None:
+            raise CtpSimNowExecutionError("ctp_managed_cancel_identity_mismatch")
+        if not action_id:
+            raise ValueError("action_id must be non-empty and trimmed")
         return build_ctp_simnow_cancel_request(
             identity,
-            account_id=str(ledger.get("account_id") or current.account_fingerprint),
+            account_id=account_id,
             action_id=action_id,
+            managed_cancel_intent_id=managed_cancel_intent_id,
         )
 
     def arm_from_approval(self, *_: Any, **__: Any) -> None:
@@ -786,11 +858,19 @@ class CtpSimNowExecutionAdapter:
         raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
 
     def submit_order_action(
-        self, identity: CtpSimNowOrderIdentity, action_id: str
+        self,
+        identity: CtpSimNowOrderIdentity,
+        action_id: str | None = None,
+        *,
+        managed_cancel_intent_id: str | None = None,
     ) -> CtpSimNowCancelResult:
         """Refuse dispatch while approval context omits private credential binding."""
         self._require_scope()
-        self.build_cancel_request(identity, action_id=action_id)
+        self.build_cancel_request(
+            identity,
+            action_id=action_id,
+            managed_cancel_intent_id=managed_cancel_intent_id,
+        )
         raise CtpSimNowExecutionError("ctp_execution_credential_binding_unavailable")
 
     def query_order(self, identity: CtpSimNowOrderIdentity) -> CtpSimNowOrderResult:

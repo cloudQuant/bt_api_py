@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -10,11 +11,13 @@ from types import SimpleNamespace
 import pytest
 
 from bt_api_py import (
+    BtApi,
     CancelOrderRequest,
     CtpSimNowExecutionAdapter,
     CtpSimNowExecutionError,
     CtpSimNowOrderIdentity,
     CtpSimNowOrderRequest,
+    NormalizedApiError,
     build_ctp_simnow_cancel_request,
     map_ctp_simnow_cancel_result,
     map_ctp_simnow_order_result,
@@ -135,6 +138,10 @@ class FakeBtApi:
         self.runtime_order_bindings[runtime_order_id] = row
         return dict(row)
 
+    def next_runtime_action_id(self, _exchange_name, *, account_id, runtime_order_id):
+        self.calls.append(("next_runtime_action_id", account_id, runtime_order_id))
+        return "sdk-action-42"
+
     def query_order(self, _exchange_name, request, *, normalized=False):
         self.calls.append(("query_order", request, normalized))
         return self.query_result
@@ -191,6 +198,21 @@ def _managed_order_request(
         hedge_flag="2",
         runtime_order_id=runtime_order_id,
         managed_intent_id=managed_intent_id,
+    )
+
+
+def _managed_order_identity(runtime_order_id="bt-managed-v1:" + "b" * 64):
+    return CtpSimNowOrderIdentity(
+        instrument_id=INSTRUMENT,
+        exchange_id=EXCHANGE_ID,
+        client_order_id="000000009876",
+        order_ref="000000009876",
+        order_sys_id="sys-88",
+        front_id=17,
+        session_id=19,
+        trading_day=TRADING_DAY,
+        runtime_order_id=runtime_order_id,
+        managed_intent_id="intent-42",
     )
 
 
@@ -615,6 +637,92 @@ def test_cancel_request_maps_native_order_ids_and_sdk_action_id():
     assert request.runtime_order_id == "runtime-order-42"
     assert request.runtime_action_id == "cancel-42"
     assert request.idempotency_key == "sdk-idempotency-42"
+
+
+def test_btapi_exposes_scoped_runtime_action_id_preview():
+    api = object.__new__(BtApi)
+    api._execution_session = SimpleNamespace(
+        next_runtime_action_id=lambda venue, *, account_id, runtime_order_id: (
+            venue,
+            account_id,
+            runtime_order_id,
+        )
+    )
+    assert api.next_runtime_action_id(
+        "CTP___FUTURE", account_id="ctp-account-alias", runtime_order_id="runtime-order-42"
+    ) == ("CTP___FUTURE", "ctp-account-alias", "runtime-order-42")
+    api._execution_session = None
+    with pytest.raises(NormalizedApiError, match="execution_session_required"):
+        api.next_runtime_action_id(
+            "CTP___FUTURE", account_id="ctp-account-alias", runtime_order_id="runtime-order-42"
+        )
+
+
+def test_managed_cancel_binds_persisted_ref_and_sdk_action_id():
+    api = FakeBtApi()
+    adapter = _adapter(api)
+    identity = _managed_order_identity()
+    adapter.build_order_request(
+        _managed_order_request(runtime_order_id=identity.runtime_order_id),
+        budget_capability=object(),
+    )
+    api.runtime_order_bindings[identity.runtime_order_id]["status"] = "unresolved"
+
+    request = adapter.build_cancel_request(identity, managed_cancel_intent_id="cancel.intent-42")
+
+    assert request.order_id is None
+    assert request.client_order_id == request.order_ref == identity.order_ref
+    assert request.front_id is request.session_id is None
+    assert request.runtime_order_id == identity.runtime_order_id
+    assert request.runtime_action_id == "sdk-action-42"
+    assert request.managed_cancel_intent_id == "cancel.intent-42"
+    assert ("next_runtime_action_id", api.account_id, identity.runtime_order_id) in api.calls
+    assert not any(call[0] in {"make_order", "cancel_order"} for call in api.calls)
+
+
+def test_managed_cancel_rejects_unbound_or_mismatched_identity_without_dispatch():
+    api = FakeBtApi()
+    adapter = _adapter(api)
+    identity = _managed_order_identity()
+
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_unavailable"):
+        adapter.build_cancel_request(identity, managed_cancel_intent_id="cancel.intent-42")
+    adapter.build_order_request(
+        _managed_order_request(runtime_order_id=identity.runtime_order_id),
+        budget_capability=object(),
+    )
+    api.runtime_order_bindings[identity.runtime_order_id]["status"] = "unresolved"
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_managed_cancel_identity_required"):
+        adapter.build_cancel_request(identity)
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_managed_cancel_identity_required"):
+        adapter.build_cancel_request(
+            replace(identity, managed_intent_id=None), action_id="caller-action-42"
+        )
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_managed_cancel_identity_required"):
+        adapter.build_cancel_request(identity, managed_cancel_intent_id="invalid intent")
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_action_binding_mismatch"):
+        adapter.build_cancel_request(
+            identity,
+            action_id="caller-action-42",
+            managed_cancel_intent_id="cancel.intent-42",
+        )
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_cancel_reference_mismatch"):
+        adapter.build_cancel_request(
+            CtpSimNowOrderIdentity(
+                instrument_id=identity.instrument_id,
+                exchange_id=identity.exchange_id,
+                client_order_id="000000000111",
+                order_ref="000000000111",
+                order_sys_id=identity.order_sys_id,
+                front_id=identity.front_id,
+                session_id=identity.session_id,
+                trading_day=identity.trading_day,
+                runtime_order_id=identity.runtime_order_id,
+                managed_intent_id=identity.managed_intent_id,
+            ),
+            managed_cancel_intent_id="cancel.intent-42",
+        )
+    assert not any(call[0] in {"make_order", "cancel_order"} for call in api.calls)
 
 
 def test_typed_action_ack_is_never_promoted_to_cancelled_and_redacted_dict_is_unknown():

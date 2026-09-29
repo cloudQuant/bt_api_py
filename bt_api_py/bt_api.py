@@ -96,9 +96,7 @@ __all__ = ["BtApi"]
 
 DATANAME_SEPARATOR = "___"
 _NORMALIZED_WRITE_OPERATIONS = frozenset({"make_order", "cancel_order", "set_position_mode"})
-_SIMNOW_BOUND_PROFILES = frozenset(
-    {"config_front_pair", "set1_group1", "set1_group2"}
-)
+_SIMNOW_BOUND_PROFILES = frozenset({"config_front_pair", "set1_group1", "set1_group2"})
 _SIMNOW_RESTRICTED_PROFILES = _SIMNOW_BOUND_PROFILES | frozenset(
     {
         "set2_7x24",
