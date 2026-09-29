@@ -736,6 +736,50 @@ def seed_historical_order_intent(session, request):
     session.submit_calls += 1
 
 
+def assert_unhanded_order_stays_local(session, request, transport, *, budget_capability=None):
+    """A read-back identity cannot append an intent or invoke a fake native sender."""
+    journal_before = session.path.read_bytes()
+    submits_before = session.submit_calls
+    with pytest.raises(NormalizedApiError) as caught:
+        session.invoke(
+            "make_order",
+            VENUE,
+            request,
+            transport,
+            budget_capability=budget_capability,
+        )
+    assert caught.value.code in {
+        "ctp_order_identity_binding_missing_or_mismatch",
+        "ctp_order_dispatch_handoff_unavailable",
+    }
+    assert session.path.read_bytes() == journal_before
+    assert session.submit_calls == submits_before
+    transport.assert_not_called()
+    return caught.value
+
+
+def assert_unhanded_cancel_stays_local(session, request, transport, *, budget_capability=None):
+    """An unclaimed cancel cannot append a cancel intent or call a fake native sender."""
+    journal_before = session.path.read_bytes()
+    cancels_before = session.cancel_calls
+    with pytest.raises(NormalizedApiError) as caught:
+        session.invoke(
+            "cancel_order",
+            VENUE,
+            request,
+            transport,
+            budget_capability=budget_capability,
+        )
+    assert caught.value.code in {
+        "ctp_cancel_identity_binding_missing_or_mismatch",
+        "ctp_cancel_dispatch_handoff_unavailable",
+    }
+    assert session.path.read_bytes() == journal_before
+    assert session.cancel_calls == cancels_before
+    transport.assert_not_called()
+    return caught.value
+
+
 def barrier(session, snapshot, *, first_id=1, account_balance="100"):
     account = (
         {
@@ -1466,7 +1510,7 @@ def test_remote_identity_or_active_order_semantic_mismatch_is_manual(tmp_path, d
         session.close()
 
 
-def test_recovery_close_blocks_open_reverse_wrong_cycle_and_oversize(tmp_path):
+def test_recovery_close_plan_cannot_dispatch_without_worker_handoff(tmp_path):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, exposure="long")
     session, current_proof = prepare_from_journal(path)
@@ -1533,32 +1577,20 @@ def test_recovery_close_blocks_open_reverse_wrong_cycle_and_oversize(tmp_path):
             position_side="long",
             role="recovery_exit",
         )
-        allowed = replace(allowed, ctp_order_identity=identity_binding)
-        result = session.invoke(
-            "make_order",
-            VENUE,
+        allowed = replace(allowed, runtime_order_id=None, ctp_order_identity=identity_binding)
+        assert_unhanded_order_stays_local(
+            session,
             allowed,
-            Mock(
-                return_value=order_update(
-                    side="sell",
-                    quantity="2",
-                    client_order_id=allowed_binding["client_order_id"],
-                    order_id="SYS2",
-                    offset="close",
-                    position_side="long",
-                )
-            ),
+            transport,
             budget_capability=recovery_budget,
         )
-        assert result["status"] == "accepted"
-        with pytest.raises(NormalizedApiError):
-            session.invoke("make_order", VENUE, allowed, transport)
+        assert plan["allowed_closes"]
         transport.assert_not_called()
     finally:
         session.close()
 
 
-def test_public_sync_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
+def test_public_sync_recovery_exit_requires_worker_handoff_after_arm(tmp_path):
     session = breached_recovery_session(tmp_path / "sync-orders.jsonl")
     current_proof = session._arm_proof
     close, recovery_budget, close_binding = bound_order_request(
@@ -1601,27 +1633,29 @@ def test_public_sync_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
         ),
         index=2,
     )
+    journal_before = session.path.read_bytes()
     try:
         with pytest.raises(NormalizedApiError) as raised:
             api.make_order(VENUE, entry, normalized=True)
         assert raised.value.code == "execution_recovery_open_forbidden"
         submit.assert_not_called()
 
-        assert (
+        with pytest.raises(NormalizedApiError) as raised:
             api.make_order(
                 VENUE,
                 close,
                 normalized=True,
                 budget_capability=recovery_budget,
-            )["status"]
-            == "accepted"
-        )
-        submit.assert_called_once()
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        submit.assert_not_called()
+        assert session.path.read_bytes() == journal_before
+        assert session.submit_calls == 0
     finally:
         session.close()
 
 
-def test_public_async_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
+def test_public_async_recovery_exit_requires_worker_handoff_after_arm(tmp_path):
     session = breached_recovery_session(tmp_path / "async-orders.jsonl")
     current_proof = session._arm_proof
     close, recovery_budget, close_binding = bound_order_request(
@@ -1664,21 +1698,25 @@ def test_public_async_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
         ),
         index=2,
     )
+    journal_before = session.path.read_bytes()
 
     async def run():
         with pytest.raises(NormalizedApiError) as raised:
             await api.async_make_order(VENUE, entry, normalized=True)
-        assert raised.value.code == "execution_recovery_open_forbidden"
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         submit.assert_not_awaited()
 
-        result = await api.async_make_order(
-            VENUE,
-            close,
-            normalized=True,
-            budget_capability=recovery_budget,
-        )
-        assert result["status"] == "accepted"
-        submit.assert_awaited_once()
+        with pytest.raises(NormalizedApiError) as raised:
+            await api.async_make_order(
+                VENUE,
+                close,
+                normalized=True,
+                budget_capability=recovery_budget,
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        submit.assert_not_awaited()
+        assert session.path.read_bytes() == journal_before
+        assert session.submit_calls == 0
 
     try:
         asyncio.run(run())
@@ -1686,7 +1724,7 @@ def test_public_async_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
         session.close()
 
 
-def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path):
+def test_unhanded_cancel_preserves_allowance_and_refresh_rotates_token(tmp_path):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, active=True)
     session, current_proof = prepare_from_journal(path)
@@ -1722,19 +1760,9 @@ def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path)
                 runtime_order_id=runtime_order_id,
             ),
         )
-        session.invoke("cancel_order", VENUE, cancel, transport)
-        cancel = replace(
-            cancel,
-            runtime_action_id=session.next_runtime_action_id(
-                VENUE,
-                account_id=ACCOUNT,
-                runtime_order_id=runtime_order_id,
-            ),
-        )
-        with pytest.raises(NormalizedApiError) as raised:
-            session.invoke("cancel_order", VENUE, cancel, transport)
-        assert raised.value.code == "execution_recovery_foreign_cancel"
-        transport.assert_called_once_with()
+        assert_unhanded_cancel_stays_local(session, cancel, transport)
+        assert_unhanded_cancel_stays_local(session, cancel, transport)
+        assert session._recovery_mode is True
 
         session.pause_recovery()
         session.prepare_recovery(
@@ -1750,7 +1778,7 @@ def test_cancel_allowance_is_atomic_one_shot_and_refresh_rotates_token(tmp_path)
         session.close()
 
 
-def test_failed_recovery_transport_consumes_action_and_pauses_lease(tmp_path):
+def test_unhanded_cancel_never_reaches_failing_recovery_transport(tmp_path):
     path = tmp_path / "orders.jsonl"
     write_crashed_journal(path, active=True)
     session, current_proof = prepare_from_journal(path)
@@ -1782,19 +1810,15 @@ def test_failed_recovery_transport_consumes_action_and_pauses_lease(tmp_path):
                 runtime_order_id=cancel.runtime_order_id,
             ),
         )
-        result = session.invoke("cancel_order", VENUE, cancel, failed)
-        assert result["execution_unknown"] is True
-        assert session.config["market_data_only"] is True
-        assert session._recovery_mode is False
-        with pytest.raises(NormalizedApiError):
-            session.invoke("cancel_order", VENUE, cancel, retry)
-        failed.assert_called_once_with()
-        retry.assert_not_called()
+        assert_unhanded_cancel_stays_local(session, cancel, failed)
+        assert_unhanded_cancel_stays_local(session, cancel, retry)
+        assert session.config["market_data_only"] is False
+        assert session._recovery_mode is True
     finally:
         session.close()
 
 
-def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
+def test_sync_and_async_recovery_dispatch_stay_closed_without_handoff(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
     current_proof = session._arm_proof
     owner_budget = _reserve_budget(session, current_proof, mode="recovery")
@@ -1854,24 +1878,26 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
 
     async_transport = AsyncMock()
     owner_thread = threading.Thread(target=run_owner)
+    journal_before = session.path.read_bytes()
     try:
         owner_thread.start()
-        assert entered.wait(timeout=5)
-        assert session._recovery_dispatch_in_progress is True
+        owner_thread.join(timeout=5)
+        assert not owner_thread.is_alive()
+        owner_failure = owner_result.get_nowait()
+        assert isinstance(owner_failure, NormalizedApiError)
+        assert owner_failure.code == "ctp_order_dispatch_handoff_unavailable"
+        assert not entered.is_set()
+        assert session._recovery_dispatch_in_progress is False
 
         with pytest.raises(NormalizedApiError) as sync_error:
             session.invoke("make_order", VENUE, contender, Mock())
-        assert sync_error.value.code == "execution_recovery_action_in_progress"
+        assert sync_error.value.definite_reject is True
 
         with pytest.raises(NormalizedApiError) as async_error:
             asyncio.run(session.async_invoke("make_order", VENUE, contender, async_transport))
-        assert async_error.value.code == "execution_recovery_action_in_progress"
+        assert async_error.value.definite_reject is True
         async_transport.assert_not_awaited()
-
-        release.set()
-        owner_thread.join(timeout=5)
-        assert not owner_thread.is_alive()
-        assert owner_result.get_nowait()["status"] == "accepted"
+        assert session.path.read_bytes() == journal_before
         assert session._recovery_dispatch_in_progress is False
     finally:
         release.set()
@@ -1879,7 +1905,7 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
         session.close()
 
 
-def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
+def test_async_recovery_order_without_handoff_keeps_native_gate_idle(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
     current_proof = session._arm_proof
     owner_budget = _reserve_budget(session, current_proof, mode="recovery")
@@ -1918,35 +1944,32 @@ def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
         session,
         SimpleNamespace(async_make_order=blocked_transport, make_order=sync_transport),
     )
+    journal_before = session.path.read_bytes()
 
     async def run():
-        task = asyncio.create_task(
-            api.async_make_order(
+        with pytest.raises(NormalizedApiError) as raised:
+            await api.async_make_order(
                 VENUE,
                 owner,
                 normalized=True,
                 budget_capability=owner_budget,
             )
-        )
-        await asyncio.wait_for(entered.wait(), timeout=5)
-        assert session._recovery_dispatch_in_progress is True
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        assert not entered.is_set()
+        assert session._recovery_dispatch_in_progress is False
 
         with pytest.raises(NormalizedApiError) as raised:
             api.make_order(VENUE, contender, normalized=True)
-        assert raised.value.code == "execution_recovery_action_in_progress"
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         sync_transport.assert_not_called()
-
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
 
     try:
         asyncio.run(run())
         assert session._recovery_dispatch_in_progress is False
-        assert session.config["market_data_only"] is True
-        assert session._recovery_mode is False
-        assert feed.get_execution_gate_state()["armed"] is False
-        assert feed.disarm_calls[-1] == "execution_recovery_action_requires_refresh"
+        assert session.config["market_data_only"] is False
+        assert session._recovery_mode is True
+        assert feed.get_execution_gate_state()["armed"] is True
+        assert session.path.read_bytes() == journal_before
         assert stream in api._subscription_streams
         assert stream._running is True
         assert api._subscription_flags[f"{VENUE}_account"] is True
@@ -1966,7 +1989,7 @@ def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
         session.close()
 
 
-def test_failed_public_recovery_transport_disarms_native_gate_before_return(tmp_path):
+def test_public_recovery_transport_is_not_called_without_handoff(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
     current_proof = session._arm_proof
     recovery_budget = _reserve_budget(session, current_proof, mode="recovery")
@@ -1987,20 +2010,22 @@ def test_failed_public_recovery_transport_disarms_native_gate_before_return(tmp_
         ),
         index=2,
     )
+    journal_before = session.path.read_bytes()
     try:
-        result = api.make_order(
-            VENUE,
-            close,
-            normalized=True,
-            budget_capability=recovery_budget,
-        )
-        assert result["execution_unknown"] is True
+        with pytest.raises(NormalizedApiError) as raised:
+            api.make_order(
+                VENUE,
+                close,
+                normalized=True,
+                budget_capability=recovery_budget,
+            )
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         assert session._recovery_dispatch_in_progress is False
-        assert session.config["market_data_only"] is True
-        assert session._recovery_mode is False
-        assert feed.get_execution_gate_state()["armed"] is False
-        assert feed.disarm_calls[-1] == "execution_recovery_action_requires_refresh"
-        failed.assert_called_once_with(VENUE, close)
+        assert session.config["market_data_only"] is False
+        assert session._recovery_mode is True
+        assert feed.get_execution_gate_state()["armed"] is True
+        assert session.path.read_bytes() == journal_before
+        failed.assert_not_called()
         assert stream in api._subscription_streams
         assert stream._running is True
         assert api._subscription_flags[f"{VENUE}_account"] is True
@@ -2077,6 +2102,7 @@ def test_pending_private_ingress_blocks_write_before_transport(tmp_path):
             ),
             index=2,
         )
+        journal_before = session.path.read_bytes()
         with pytest.raises(NormalizedApiError) as raised:
             api.make_order(
                 VENUE,
@@ -2084,8 +2110,9 @@ def test_pending_private_ingress_blocks_write_before_transport(tmp_path):
                 normalized=True,
                 budget_capability=recovery_budget,
             )
-        assert raised.value.code == "execution_private_event_pending"
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
         transport.assert_not_called()
+        assert session.path.read_bytes() == journal_before
     finally:
         release_note.set()
         producer.join(timeout=5)
@@ -2838,7 +2865,7 @@ def test_ctp_runtime_orderref_binding_is_fsynced_and_orphan_retry_freezes(tmp_pa
         recovered.close()
 
 
-def test_managed_intent_binding_is_persisted_and_cannot_be_reused(tmp_path):
+def test_managed_intent_cannot_allocate_a_second_sdk_orderref(tmp_path):
     path = tmp_path / "managed-intent-binding.jsonl"
     current_proof = proof(4)
     runtime_order_id = "runtime-scope-intent-42"
@@ -2846,177 +2873,74 @@ def test_managed_intent_binding_is_persisted_and_cannot_be_reused(tmp_path):
     session = make_session(path)
     try:
         session.arm_from_preflight(current_proof, lambda: context(current_proof))
-        binding, budget = reserve_runtime_order(
-            session,
-            current_proof,
-            runtime_order_id=runtime_order_id,
-            managed_intent_id=managed_intent_id,
-            order_ref_number=42,
-        )
-        request = order_request(
-            client_order_id=binding["client_order_id"],
-            runtime_order_id=runtime_order_id,
-            managed_intent_id="managed-intent-other",
-            hedge_flag="2",
-        )
-        transport = Mock(return_value=order_update(client_order_id=binding["client_order_id"]))
-        api = public_order_api(session, SimpleNamespace(make_order=transport))
-        with pytest.raises(NormalizedApiError) as raised:
-            api.make_order(
-                VENUE,
-                replace(request, managed_intent_id=None),
-                normalized=True,
-                budget_capability=budget,
-            )
-        assert raised.value.code == "ctp_managed_order_identity_mismatch"
-        transport.assert_not_called()
-        with pytest.raises(NormalizedApiError) as raised:
-            api.make_order(
-                VENUE,
-                order_request(
-                    client_order_id="000000000099",
-                    runtime_order_id=runtime_order_id,
-                    managed_intent_id=managed_intent_id,
-                    hedge_flag="2",
-                ),
-                normalized=True,
-                budget_capability=budget,
-            )
-        assert raised.value.code == "ctp_runtime_order_binding_conflict"
-        transport.assert_not_called()
-        with pytest.raises(NormalizedApiError) as raised:
-            session.invoke(
-                "make_order",
-                VENUE,
-                request,
-                transport,
-                budget_capability=budget,
-            )
-        assert raised.value.code == "ctp_runtime_order_binding_conflict"
-        transport.assert_not_called()
-        with pytest.raises(NormalizedApiError) as raised:
-            session.new_runtime_order_binding(
-                VENUE,
-                symbol="SA609.CZCE",
-                account_id=ACCOUNT,
-                managed_intent_id="managed-intent-other",
-                runtime_order_id=runtime_order_id,
-                budget_capability=_reserve_budget(session, current_proof),
-            )
-        assert raised.value.code == "runtime_order_id_collision_or_recovery_required"
+        budget = _reserve_budget(session, current_proof)
+        journal_before = path.read_bytes()
         with pytest.raises(NormalizedApiError) as raised:
             session.new_runtime_order_binding(
                 VENUE,
                 symbol="SA609.CZCE",
                 account_id=ACCOUNT,
                 managed_intent_id=managed_intent_id,
-                runtime_order_id="different-runtime-for-same-intent",
-                budget_capability=_reserve_budget(session, current_proof),
+                runtime_order_id=runtime_order_id,
+                budget_capability=budget,
             )
-        assert raised.value.code == "managed_intent_runtime_order_conflict"
+        assert raised.value.code == "ctp_order_identity_reservation_required"
+        assert path.read_bytes() == journal_before
+        assert session.get_runtime_order_bindings(VENUE, unresolved_only=False) == []
     finally:
         session.close()
 
     recovered = make_session(path)
     try:
         recovered.arm_from_preflight(current_proof, lambda: context(current_proof))
-        rows = recovered.get_runtime_order_bindings(
-            VENUE, unresolved_only=False, runtime_order_id=runtime_order_id
-        )
-        assert len(rows) == 1
-        assert rows[0]["managed_intent_id"] == managed_intent_id
-        with pytest.raises(NormalizedApiError) as raised:
-            recovered.new_runtime_order_binding(
-                VENUE,
-                symbol="SA609.CZCE",
-                account_id=ACCOUNT,
-                managed_intent_id=managed_intent_id,
-                runtime_order_id=runtime_order_id,
-                budget_capability=_reserve_budget(recovered, current_proof),
-            )
-        assert raised.value.code == "runtime_order_binding_recovery_required"
+        assert recovered.get_runtime_order_bindings(VENUE, unresolved_only=False) == []
     finally:
         recovered.close()
 
 
-def test_managed_cancel_resolves_only_durable_orderref_and_sdk_action_id(tmp_path):
+def test_managed_cancel_cannot_use_durable_orderref_as_dispatch_handoff(tmp_path):
     path = tmp_path / "managed-cancel-identity.jsonl"
     current_proof = proof(4)
     session = make_session(path)
     session.arm_from_preflight(current_proof, lambda: context(current_proof))
-    order, order_budget, binding = bound_order_request(
+    order, _order_budget, binding = bound_order_request(
         session,
         current_proof,
         runtime_order_id="managed-cancel-target",
-        managed_intent_id="managed-cancel-intent",
         order_ref_number=43,
-        hedge_flag="1",
     )
-    session.invoke(
-        "make_order",
+    seed_historical_order_intent(session, order)
+    session.event(
         VENUE,
-        order,
-        lambda: order_update(client_order_id=binding["client_order_id"]),
-        budget_capability=order_budget,
+        order_update(client_order_id=binding["client_order_id"]),
     )
-    native_cancel = Mock(
-        return_value=order_update(
-            status="canceled",
-            terminal=True,
-            client_order_id=binding["client_order_id"],
-        )
-    )
+    native_cancel = Mock()
     api = public_order_api(session, SimpleNamespace(cancel_order=native_cancel))
-    # This API shell isolates request binding; native-gate lifecycle is covered
-    # by its dedicated contract tests.
-    api._finalize_ctp_execution_dispatch = lambda *_args: None
-    api._sync_ctp_gate_after_session_invoke = lambda *_args: None
     cancel = CancelOrderRequest(
         symbol=order.symbol,
         account_id=order.account_id,
+        client_order_id=binding["client_order_id"],
+        order_id="SYS1",
+        exchange_id="CZCE",
+        order_ref=binding["ctp_order_ref"],
         runtime_order_id=binding["runtime_order_id"],
         managed_cancel_intent_id="cancel.managed-cancel-intent",
+        runtime_action_id="cancel.managed-cancel-intent",
     )
+    cancel_budget = _reserve_budget(session, current_proof)
+    journal_before = path.read_bytes()
     try:
         with pytest.raises(NormalizedApiError) as raised:
             api.cancel_order(
                 VENUE,
-                replace(cancel, managed_cancel_intent_id=None),
+                cancel,
                 normalized=True,
-                budget_capability=_reserve_budget(session, current_proof),
+                budget_capability=cancel_budget,
             )
-        assert raised.value.code == "ctp_managed_cancel_identity_required"
-        with pytest.raises(NormalizedApiError) as raised:
-            api.cancel_order(
-                VENUE,
-                replace(cancel, order_ref="caller-order-ref"),
-                normalized=True,
-                budget_capability=_reserve_budget(session, current_proof),
-            )
-        assert raised.value.code == "ctp_runtime_cancel_reference_mismatch"
-        with pytest.raises(NormalizedApiError) as raised:
-            api.cancel_order(
-                VENUE,
-                replace(cancel, runtime_action_id="caller-action-id"),
-                normalized=True,
-                budget_capability=_reserve_budget(session, current_proof),
-            )
-        assert raised.value.code == "ctp_runtime_cancel_action_id_mismatch"
+        assert raised.value.code == "ctp_cancel_dispatch_handoff_unavailable"
         native_cancel.assert_not_called()
-        api.cancel_order(
-            VENUE,
-            cancel,
-            normalized=True,
-            budget_capability=_reserve_budget(session, current_proof),
-        )
-        dispatched_request = native_cancel.call_args.args[1]
-        assert dispatched_request.client_order_id == binding["client_order_id"]
-        assert dispatched_request.order_ref == binding["ctp_order_ref"]
-        assert dispatched_request.order_id is None
-        assert dispatched_request.runtime_order_id == binding["runtime_order_id"]
-        assert dispatched_request.runtime_action_id
-        assert dispatched_request.managed_cancel_intent_id == cancel.managed_cancel_intent_id
-        assert native_cancel.call_count == 1
+        assert path.read_bytes() == journal_before
+        assert session.cancel_calls == 0
     finally:
         session.close()
 
@@ -3208,23 +3132,21 @@ def test_managed_ctp_cancel_requires_runtime_action_identity_before_native_dispa
         session.close()
 
 
-def test_session_async_ctp_cancel_journals_runtime_action_id_for_local_transport(tmp_path):
+def test_session_async_ctp_cancel_does_not_journal_unclaimed_action(tmp_path):
     path = tmp_path / "async-cancel-action-id.jsonl"
     session = make_session(path)
     current_proof = proof(4)
     session.arm_from_preflight(current_proof, lambda: context(current_proof))
-    order, order_budget, binding = bound_order_request(
+    order, _order_budget, binding = bound_order_request(
         session,
         current_proof,
         runtime_order_id="async-cancel-target-order",
         order_ref_number=44,
     )
-    session.invoke(
-        "make_order",
+    seed_historical_order_intent(session, order)
+    session.event(
         VENUE,
-        order,
-        lambda: order_update(client_order_id=binding["client_order_id"]),
-        budget_capability=order_budget,
+        order_update(client_order_id=binding["client_order_id"]),
     )
     cancel = CancelOrderRequest(
         symbol=order.symbol,
@@ -3236,58 +3158,35 @@ def test_session_async_ctp_cancel_journals_runtime_action_id_for_local_transport
         runtime_order_id=binding["runtime_order_id"],
     )
 
-    observed_requests = []
-    observed_journal = []
-
-    async def local_transport():
-        cancel_row = next(
-            json.loads(line)
-            for line in path.read_text().splitlines()
-            if json.loads(line).get("event") == "cancel_intent"
-        )
-        observed_requests.append(cancel)
-        observed_journal.append(cancel_row)
-        return order_update(
-            status="canceled",
-            terminal=True,
-            client_order_id=binding["client_order_id"],
-        )
-
     runtime_action_id = session.next_runtime_action_id(
         VENUE,
         account_id=cancel.account_id,
         runtime_order_id=cancel.runtime_order_id,
     )
     cancel = replace(cancel, runtime_action_id=runtime_action_id)
+    local_transport = AsyncMock()
+    cancel_budget = _reserve_budget(session, current_proof)
+    journal_before = path.read_bytes()
     try:
-        result = asyncio.run(
-            session.async_invoke(
-                "cancel_order",
-                VENUE,
-                cancel,
-                local_transport,
-                budget_capability=_reserve_budget(session, current_proof),
+        with pytest.raises(NormalizedApiError) as raised:
+            asyncio.run(
+                session.async_invoke(
+                    "cancel_order",
+                    VENUE,
+                    cancel,
+                    local_transport,
+                    budget_capability=cancel_budget,
+                )
             )
-        )
-        assert result is not None
-        assert observed_requests == [cancel]
-        assert cancel.runtime_action_id == observed_journal[0]["runtime_action_id"]
-        assert observed_journal[0]["runtime_order_id"] == binding["runtime_order_id"]
-        assert session.get_runtime_action_bindings(
-            VENUE, runtime_order_id=binding["runtime_order_id"]
-        ) == [
-            {
-                "runtime_action_id": cancel.runtime_action_id,
-                "runtime_order_id": binding["runtime_order_id"],
-                "client_order_id": binding["client_order_id"],
-                "connection_generation": 4,
-            }
-        ]
+        assert raised.value.code == "ctp_cancel_identity_binding_missing_or_mismatch"
+        local_transport.assert_not_awaited()
+        assert path.read_bytes() == journal_before
+        assert session.get_runtime_action_bindings(VENUE) == []
     finally:
         session.close()
 
 
-def test_ctp_cancel_attempt_identity_is_journaled_and_rebuilt_after_restart(tmp_path):
+def test_unclaimed_ctp_cancel_attempt_is_not_rebuilt_as_sent_after_restart(tmp_path):
     path = tmp_path / "orders.jsonl"
     current_proof = proof(4)
     runtime_order_id = "framework-order-cancel-1"
@@ -3306,12 +3205,10 @@ def test_ctp_cancel_attempt_identity_is_journaled_and_rebuilt_after_restart(tmp_
             client_order_id=binding["client_order_id"],
             runtime_order_id=runtime_order_id,
         )
-        session.invoke(
-            "make_order",
+        seed_historical_order_intent(session, request)
+        session.event(
             VENUE,
-            request,
-            lambda: order_update(client_order_id=binding["client_order_id"]),
-            budget_capability=budget,
+            order_update(client_order_id=binding["client_order_id"]),
         )
         first_action_id = session.next_runtime_action_id(
             VENUE,
@@ -3328,68 +3225,38 @@ def test_ctp_cancel_attempt_identity_is_journaled_and_rebuilt_after_restart(tmp_
             runtime_order_id=runtime_order_id,
             runtime_action_id=first_action_id,
         )
-        result = session.invoke(
-            "cancel_order",
-            VENUE,
+        native_cancel = Mock()
+        assert_unhanded_cancel_stays_local(
+            session,
             cancel,
-            lambda: order_update(
-                status="canceled",
-                terminal=True,
-                client_order_id=binding["client_order_id"],
-            ),
+            native_cancel,
             budget_capability=budget,
         )
-        assert result["terminal_confirmed"] is True
-        journal_cancel = next(
-            json.loads(line)
+        assert not any(
+            json.loads(line).get("event") == "cancel_intent"
             for line in path.read_text().splitlines()
-            if json.loads(line).get("event") == "cancel_intent"
         )
-        assert journal_cancel["runtime_action_id"] == first_action_id
-        assert journal_cancel["runtime_order_id"] == runtime_order_id
-        next_action_id = session.next_runtime_action_id(
-            VENUE,
-            account_id=ACCOUNT,
-            runtime_order_id=runtime_order_id,
+        assert (
+            session.next_runtime_action_id(
+                VENUE,
+                account_id=ACCOUNT,
+                runtime_order_id=runtime_order_id,
+            )
+            == first_action_id
         )
-        assert next_action_id != first_action_id
     finally:
         session.close()
 
-    recovered = make_session(path)
+    recovered, _recovery_proof = prepare_from_journal(path)
     try:
-        recovered.arm_from_preflight(current_proof, lambda: context(current_proof))
-        assert (
-            recovered._runtime_action_attempts[
-                recovered._runtime_order_key(
-                    VENUE,
-                    {"account_id": ACCOUNT, "strategy_id": "iter22-midfreq"},
-                    runtime_order_id,
-                )
-            ]
-            == 1
-        )
+        assert recovered.get_runtime_action_bindings(VENUE, runtime_order_id=runtime_order_id) == []
         assert (
             recovered.next_runtime_action_id(
                 VENUE,
                 account_id=ACCOUNT,
                 runtime_order_id=runtime_order_id,
             )
-            == next_action_id
+            == first_action_id
         )
-        assert recovered.get_runtime_action_bindings(VENUE, runtime_order_id=runtime_order_id) == [
-            {
-                "runtime_action_id": first_action_id,
-                "runtime_order_id": runtime_order_id,
-                "client_order_id": binding["client_order_id"],
-                "connection_generation": 4,
-            }
-        ]
     finally:
         recovered.close()
-
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(journal_cancel) + "\n")
-    with pytest.raises(NormalizedApiError) as raised:
-        make_session(path, market_data_only=False)
-    assert raised.value.code == "unreadable_journal"
