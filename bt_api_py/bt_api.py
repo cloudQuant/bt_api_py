@@ -1312,6 +1312,33 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             runtime_order_id=runtime_order_id,
         )
 
+    def next_runtime_action_id(
+        self,
+        exchange_name: str,
+        *,
+        account_id: str | None,
+        runtime_order_id: str,
+    ) -> str:
+        """Preview the next scoped CTP cancel action id without persisting it.
+
+        The normalized ``cancel_order`` path derives and validates this same id
+        while holding the execution-session lock, then fsyncs the cancel intent
+        before dispatch. A concurrent cancel can consume the preview first; in
+        that case the typed request is rejected rather than rebound.
+        """
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "next_runtime_action_id",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        return session.next_runtime_action_id(
+            exchange_name,
+            account_id=account_id,
+            runtime_order_id=runtime_order_id,
+        )
+
     def get_execution_identity(self, exchange_name: str) -> dict[str, Any]:
         """Return the SDK-owned ledger identity used for typed order requests."""
         session = self._execution_session
