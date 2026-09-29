@@ -33,6 +33,11 @@ from ._contracts.errors import NormalizedApiError
 APPROVAL_SCHEMA_VERSION = "ctp-execution-approval-v1"
 RECOVERY_APPROVAL_SCHEMA_VERSION = "ctp-execution-recovery-approval-v1"
 ENTRY_APPROVAL_SCHEMA_VERSION = "ctp-execution-entry-approval-v1"
+SIMNOW_APPROVAL_SCHEMA_VERSION = "ctp-execution-approval-v2-simnow-binding"
+SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION = (
+    "ctp-execution-recovery-approval-v2-simnow-binding"
+)
+SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION = "ctp-execution-entry-approval-v2-simnow-binding"
 TRUST_ROOT_SCHEMA_VERSION = "ctp-execution-trust-root-v1"
 APPROVAL_ALGORITHM = "Ed25519"
 APPROVAL_PURPOSE = "ctp_execution_approval"
@@ -78,9 +83,15 @@ _APPROVAL_FIELDS = frozenset(
         "revocation_snapshot_version",
     }
 )
+_CREDENTIAL_BINDING_FIELDS = frozenset(
+    {"credential_binding_key_id", "credential_binding_hmac_sha256"}
+)
+_SIMNOW_APPROVAL_FIELDS = _APPROVAL_FIELDS | _CREDENTIAL_BINDING_FIELDS
 _ARTIFACT_FIELDS = frozenset({"schema_version", "algorithm", "payload", "signature"})
 _TRUST_ROOT_FIELDS = frozenset({"schema_version", "keys", "revocation_snapshot"})
-_TRUST_KEY_FIELDS = frozenset({"public_key", "role", "purposes", "not_before", "expires_at"})
+_TRUST_KEY_FIELDS = frozenset(
+    {"public_key", "role", "purposes", "not_before", "expires_at"}
+)
 _REVOCATION_FIELDS = frozenset(
     {
         "version",
@@ -123,6 +134,9 @@ _RECOVERY_APPROVAL_FIELDS = _APPROVAL_FIELDS | frozenset(
         "recovery_actions",
     }
 )
+_SIMNOW_RECOVERY_APPROVAL_FIELDS = _SIMNOW_APPROVAL_FIELDS | (
+    _RECOVERY_APPROVAL_FIELDS - _APPROVAL_FIELDS
+)
 # The entry variant keeps the ordinary execution purpose and adds exactly the
 # proof-bound material hashes the V2 bundle arm contract requires; a base
 # ordinary approval stays audit-only and can never mint an arm token.
@@ -132,6 +146,9 @@ _ENTRY_APPROVAL_FIELDS = _APPROVAL_FIELDS | frozenset(
         "source_hashes_sha256",
         "ctp_package_sha256",
     }
+)
+_SIMNOW_ENTRY_APPROVAL_FIELDS = _SIMNOW_APPROVAL_FIELDS | (
+    _ENTRY_APPROVAL_FIELDS - _APPROVAL_FIELDS
 )
 _CONTEXT_FIELDS = frozenset(
     {
@@ -156,6 +173,35 @@ _CONTEXT_FIELDS = frozenset(
         ),
     }
 )
+_SIMNOW_CONTEXT_FIELDS = _CONTEXT_FIELDS | _CREDENTIAL_BINDING_FIELDS
+_SIMNOW_BOUND_PROFILES = frozenset(
+    {"config_front_pair", "set1_group1", "set1_group2"}
+)
+_SIMNOW_RESTRICTED_PROFILES = _SIMNOW_BOUND_PROFILES | frozenset(
+    {
+        "set2_7x24",
+        "set1_group1_vpn",
+        "set2_7x24_4000x",
+        "set2_7x24_vpn",
+        "set1",
+        "set2",
+    }
+)
+_SIMNOW_SCHEMA_BASES = {
+    SIMNOW_APPROVAL_SCHEMA_VERSION: APPROVAL_SCHEMA_VERSION,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION: RECOVERY_APPROVAL_SCHEMA_VERSION,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION: ENTRY_APPROVAL_SCHEMA_VERSION,
+}
+_SIMNOW_SCHEMA_FIELDS = {
+    SIMNOW_APPROVAL_SCHEMA_VERSION: _SIMNOW_APPROVAL_FIELDS,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION: _SIMNOW_RECOVERY_APPROVAL_FIELDS,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION: _SIMNOW_ENTRY_APPROVAL_FIELDS,
+}
+_SIMNOW_SCHEMA_PURPOSES = {
+    SIMNOW_APPROVAL_SCHEMA_VERSION: APPROVAL_PURPOSE,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION: RECOVERY_APPROVAL_PURPOSE,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION: APPROVAL_PURPOSE,
+}
 _HASH_FIELDS = frozenset(
     {
         "strategy_identity_sha256",
@@ -177,6 +223,7 @@ _SAFE_ID = re.compile(r"^[\w][\w.:-]{0,255}$", re.ASCII)
 _MAX_APPROVAL_LIFETIME = timedelta(days=366)
 _CAPABILITY_SEAL = object()
 _CONTEXT_SEAL = object()
+_ENTRY_WRITE_GUARD_SEAL = object()
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -277,7 +324,9 @@ def _parse_time(value: Any, *, operation: str, code: str) -> datetime:
         _reject(operation, code)
     if parsed.tzinfo is None or parsed.utcoffset() != timedelta(0):
         _reject(operation, code)
-    canonical = parsed.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    canonical = (
+        parsed.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    )
     if canonical != text:
         _reject(operation, code)
     return parsed.astimezone(UTC)
@@ -320,7 +369,9 @@ def _decode_signature(value: Any) -> bytes:
 
 
 def _instrument(value: Any) -> dict[str, str]:
-    value = _strict_mapping(value, APPROVAL_OPERATION, "ctp_approval_invalid_instrument_scope")
+    value = _strict_mapping(
+        value, APPROVAL_OPERATION, "ctp_approval_invalid_instrument_scope"
+    )
     if set(value) != _INSTRUMENT_FIELDS:
         _reject(APPROVAL_OPERATION, "ctp_approval_invalid_instrument_scope")
     instrument_id = _strict_string(
@@ -370,6 +421,46 @@ def _decimal_string(value: Any) -> str:
 
 def _normalize_payload(value: Any) -> dict[str, Any]:
     value = _strict_mapping(value, APPROVAL_OPERATION, "ctp_approval_invalid_artifact")
+    schema_version = value.get("schema_version")
+    if schema_version in _SIMNOW_SCHEMA_BASES:
+        expected_fields = _SIMNOW_SCHEMA_FIELDS[schema_version]
+        if set(value) != expected_fields:
+            unknown = set(value) - expected_fields
+            _reject(
+                APPROVAL_OPERATION,
+                (
+                    "ctp_approval_unknown_payload_key"
+                    if unknown
+                    else "ctp_approval_missing_field"
+                ),
+            )
+        if value.get("purpose") != _SIMNOW_SCHEMA_PURPOSES[schema_version]:
+            _reject(APPROVAL_OPERATION, "ctp_approval_purpose_unsupported")
+        binding_key_id = _strict_string(
+            value.get("credential_binding_key_id"),
+            operation=APPROVAL_OPERATION,
+            code="ctp_credential_binding_invalid",
+            pattern=_SAFE_ID,
+            max_length=128,
+        )
+        binding_hmac = _hash(
+            value.get("credential_binding_hmac_sha256"), operation=APPROVAL_OPERATION
+        )
+        base = {
+            key: item
+            for key, item in value.items()
+            if key not in _CREDENTIAL_BINDING_FIELDS
+        }
+        base["schema_version"] = _SIMNOW_SCHEMA_BASES[schema_version]
+        normalized = _normalize_payload(base)
+        normalized.update(
+            {
+                "schema_version": schema_version,
+                "credential_binding_key_id": binding_key_id,
+                "credential_binding_hmac_sha256": binding_hmac,
+            }
+        )
+        return normalized
     if value.get("schema_version") == RECOVERY_APPROVAL_SCHEMA_VERSION:
         return _normalize_recovery_payload(value)
     if value.get("schema_version") == ENTRY_APPROVAL_SCHEMA_VERSION:
@@ -378,7 +469,11 @@ def _normalize_payload(value: Any) -> dict[str, Any]:
         unknown = set(value) - _APPROVAL_FIELDS
         _reject(
             APPROVAL_OPERATION,
-            ("ctp_approval_unknown_payload_key" if unknown else "ctp_approval_missing_field"),
+            (
+                "ctp_approval_unknown_payload_key"
+                if unknown
+                else "ctp_approval_missing_field"
+            ),
         )
     if value["schema_version"] != APPROVAL_SCHEMA_VERSION:
         _reject(APPROVAL_OPERATION, "ctp_approval_unknown_schema_version")
@@ -629,7 +724,9 @@ def recovery_plan_digest(plan: Any) -> str:
     if not isinstance(plan, Mapping) or "recovery_token_sha256" not in plan:
         _reject(APPROVAL_OPERATION, "ctp_recovery_plan_required")
     material = {
-        key: _jsonable(value) for key, value in plan.items() if key != "recovery_token_sha256"
+        key: _jsonable(value)
+        for key, value in plan.items()
+        if key != "recovery_token_sha256"
     }
     return hashlib.sha256(_canonical_json(material)).hexdigest()
 
@@ -639,7 +736,11 @@ def _normalize_recovery_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         unknown = set(value) - _RECOVERY_APPROVAL_FIELDS
         _reject(
             APPROVAL_OPERATION,
-            ("ctp_approval_unknown_payload_key" if unknown else "ctp_approval_missing_field"),
+            (
+                "ctp_approval_unknown_payload_key"
+                if unknown
+                else "ctp_approval_missing_field"
+            ),
         )
     if value["purpose"] != RECOVERY_APPROVAL_PURPOSE:
         _reject(APPROVAL_OPERATION, "ctp_approval_purpose_unsupported")
@@ -679,7 +780,8 @@ def _normalize_recovery_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     if len(action_ids) != len(set(action_ids)):
         _reject(APPROVAL_OPERATION, "ctp_recovery_duplicate_action_id")
     authorized = {
-        (item["exchange_id"], item["instrument_id"]) for item in result["authorized_instruments"]
+        (item["exchange_id"], item["instrument_id"])
+        for item in result["authorized_instruments"]
     }
     for action in normalized_actions:
         if (action["exchange_id"], action["instrument_id"]) not in authorized:
@@ -696,11 +798,13 @@ def _normalize_recovery_payload(value: Mapping[str, Any]) -> dict[str, Any]:
             _reject(APPROVAL_OPERATION, "ctp_recovery_action_identity_mismatch")
         if action["execution_cycle_id"] != result["execution_cycle_id"]:
             _reject(APPROVAL_OPERATION, "ctp_recovery_action_identity_mismatch")
-        if datetime.fromisoformat(action["expires_at"][:-1] + "+00:00") > datetime.fromisoformat(
-            result["expires_at"][:-1] + "+00:00"
-        ):
+        if datetime.fromisoformat(
+            action["expires_at"][:-1] + "+00:00"
+        ) > datetime.fromisoformat(result["expires_at"][:-1] + "+00:00"):
             _reject(APPROVAL_OPERATION, "ctp_recovery_action_expiry_mismatch")
-    if value["recovery_action_sha256"] != _recovery_action_digest_value(normalized_actions):
+    if value["recovery_action_sha256"] != _recovery_action_digest_value(
+        normalized_actions
+    ):
         _reject(APPROVAL_OPERATION, "ctp_recovery_action_digest_mismatch")
     result["recovery_actions"] = normalized_actions
     return result
@@ -713,7 +817,11 @@ def _normalize_entry_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         unknown = set(value) - _ENTRY_APPROVAL_FIELDS
         _reject(
             APPROVAL_OPERATION,
-            ("ctp_approval_unknown_payload_key" if unknown else "ctp_approval_missing_field"),
+            (
+                "ctp_approval_unknown_payload_key"
+                if unknown
+                else "ctp_approval_missing_field"
+            ),
         )
     if value["purpose"] != APPROVAL_PURPOSE:
         _reject(APPROVAL_OPERATION, "ctp_approval_purpose_unsupported")
@@ -729,7 +837,9 @@ def _normalize_entry_payload(value: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _iso(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    return (
+        value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    )
 
 
 def _normalize_context(value: Any) -> dict[str, Any]:
@@ -739,8 +849,11 @@ def _normalize_context(value: Any) -> dict[str, Any]:
             _reject(APPROVAL_OPERATION, "ctp_approval_context_untrusted")
         value = _thaw(value.values)
     else:
-        value = _strict_mapping(value, APPROVAL_OPERATION, "ctp_approval_context_required")
-    if set(value) != _CONTEXT_FIELDS:
+        value = _strict_mapping(
+            value, APPROVAL_OPERATION, "ctp_approval_context_required"
+        )
+    bound_context = set(value) == _SIMNOW_CONTEXT_FIELDS
+    if not bound_context and set(value) != _CONTEXT_FIELDS:
         _reject(APPROVAL_OPERATION, "ctp_approval_context_incomplete")
     source = _strict_string(
         value["source"],
@@ -752,13 +865,19 @@ def _normalize_context(value: Any) -> dict[str, Any]:
     if source != "synthetic_test" and not sealed:
         _reject(APPROVAL_OPERATION, "ctp_approval_context_untrusted")
     result = {"source": source}
+    payload_fields = _SIMNOW_CONTEXT_FIELDS if bound_context else _CONTEXT_FIELDS
+    payload_schema = (
+        SIMNOW_APPROVAL_SCHEMA_VERSION if bound_context else APPROVAL_SCHEMA_VERSION
+    )
     payload_like = {
-        field_name: value[field_name] for field_name in _CONTEXT_FIELDS if field_name != "source"
+        field_name: value[field_name]
+        for field_name in payload_fields
+        if field_name != "source"
     }
     normalized = _normalize_payload(
         {
             **payload_like,
-            "schema_version": APPROVAL_SCHEMA_VERSION,
+            "schema_version": payload_schema,
             "algorithm": APPROVAL_ALGORITHM,
             "approval_id": "context-approval",
             "nonce": "context-nonce",
@@ -772,13 +891,15 @@ def _normalize_context(value: Any) -> dict[str, Any]:
             "revocation_snapshot_version": 1,
         }
     )
-    for field_name in _CONTEXT_FIELDS - {"source"}:
+    for field_name in payload_fields - {"source"}:
         result[field_name] = normalized[field_name]
     return result
 
 
 def _normalize_revocation(value: Any) -> dict[str, Any]:
-    value = _strict_mapping(value, APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
+    value = _strict_mapping(
+        value, APPROVAL_OPERATION, "ctp_approval_trust_root_invalid"
+    )
     if set(value) != _REVOCATION_FIELDS:
         _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
     version = value["version"]
@@ -841,7 +962,9 @@ def _decode_public_key(value: Any) -> bytes:
 def _normalize_trust_root(value: Any) -> dict[str, Any]:
     if value is None:
         _reject(APPROVAL_OPERATION, "BLOCKED_OPERATOR_TRUST_ROOT")
-    value = _strict_mapping(value, APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
+    value = _strict_mapping(
+        value, APPROVAL_OPERATION, "ctp_approval_trust_root_invalid"
+    )
     if set(value) != _TRUST_ROOT_FIELDS:
         _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
     if value["schema_version"] != TRUST_ROOT_SCHEMA_VERSION:
@@ -857,7 +980,9 @@ def _normalize_trust_root(value: Any) -> dict[str, Any]:
             code="ctp_approval_trust_root_invalid",
             pattern=_SAFE_ID,
         )
-        entry = _strict_mapping(entry, APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
+        entry = _strict_mapping(
+            entry, APPROVAL_OPERATION, "ctp_approval_trust_root_invalid"
+        )
         if set(entry) != _TRUST_KEY_FIELDS:
             _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
         role = _strict_string(
@@ -870,7 +995,9 @@ def _normalize_trust_root(value: Any) -> dict[str, Any]:
         if (
             not isinstance(purposes, list)
             or not purposes
-            or any(not isinstance(item, str) or item != item.strip() for item in purposes)
+            or any(
+                not isinstance(item, str) or item != item.strip() for item in purposes
+            )
         ):
             _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
         if len(purposes) != len(set(purposes)):
@@ -890,7 +1017,10 @@ def _normalize_trust_root(value: Any) -> dict[str, Any]:
                 code="ctp_approval_trust_root_invalid",
             ),
         }
-        if not normalized_keys[key_id]["not_before"] <= normalized_keys[key_id]["expires_at"]:
+        if (
+            not normalized_keys[key_id]["not_before"]
+            <= normalized_keys[key_id]["expires_at"]
+        ):
             _reject(APPROVAL_OPERATION, "ctp_approval_trust_root_invalid")
     revocation = _normalize_revocation(value["revocation_snapshot"])
     result = {
@@ -941,7 +1071,7 @@ class CtpExecutionApprovalContext:
     copying those values into a mapping cannot establish runtime provenance.
     """
 
-    values: Mapping[str, Any]
+    values: Mapping[str, Any] = field(repr=False)
     _seal: object = field(repr=False, compare=False)
     _owner: object = field(repr=False, compare=False)
     _refresh: object = field(repr=False, compare=False)
@@ -1018,7 +1148,7 @@ def _refresh_runtime_context(
 class CtpExecutionApproval:
     """Immutable, cryptographically verified approval evidence."""
 
-    payload: Mapping[str, Any]
+    payload: Mapping[str, Any] = field(repr=False)
     payload_sha256: str
     trust_root_sha256: str
     signature: bytes = field(repr=False, compare=False)
@@ -1099,10 +1229,15 @@ class CtpExecutionApproval:
 
     @property
     def bindings(self) -> Mapping[str, Any]:
+        fields = (
+            _SIMNOW_CONTEXT_FIELDS
+            if self.payload.keys() >= _CREDENTIAL_BINDING_FIELDS
+            else _CONTEXT_FIELDS
+        )
         return MappingProxyType(
             {
                 field_name: self.payload[field_name]
-                for field_name in _CONTEXT_FIELDS
+                for field_name in fields
                 if field_name != "source" and field_name in self.payload
             }
         )
@@ -1144,6 +1279,7 @@ class CtpExecutionApprovalCapability:
         "_entry_used",
         "_settlement_used",
         "_context",
+        "_trust_root",
     )
 
     def __init__(
@@ -1153,6 +1289,7 @@ class CtpExecutionApprovalCapability:
         owner: object,
         approval: CtpExecutionApproval,
         context: Mapping[str, Any] | CtpExecutionApprovalContext | None = None,
+        trust_root: Mapping[str, Any] | None = None,
     ):
         if seal is not _CAPABILITY_SEAL:
             raise TypeError("opaque CTP approval capability required")
@@ -1171,6 +1308,7 @@ class CtpExecutionApprovalCapability:
         # references in its private refresh closure; recovery re-collects
         # those references before native arm and each managed write.
         self._context = context
+        self._trust_root = _freeze(trust_root)
 
     @property
     def approval_id(self) -> str:
@@ -1225,13 +1363,117 @@ def _new_capability(
     approval: CtpExecutionApproval,
     owner: object,
     context: Mapping[str, Any] | CtpExecutionApprovalContext | None = None,
+    *,
+    trust_root: Mapping[str, Any] | None = None,
 ) -> CtpExecutionApprovalCapability:
+    normalized_root = _normalize_trust_root(trust_root)
+    root_sha256 = hashlib.sha256(_canonical_json(_jsonable(normalized_root))).hexdigest()
+    if root_sha256 != approval.trust_root_sha256:
+        _reject("redeem_ctp_execution_approval", "ctp_approval_trust_root_mismatch")
     return CtpExecutionApprovalCapability(
-        seal=_CAPABILITY_SEAL, owner=owner, approval=approval, context=context
+        seal=_CAPABILITY_SEAL,
+        owner=owner,
+        approval=approval,
+        context=context,
+        trust_root=trust_root,
     )
 
 
-def _verify_signature(signature: bytes, payload_bytes: bytes, public_key: bytes) -> None:
+class _CtpExecutionEntryWriteGuard:
+    """SDK-sealed per-write revalidator for one redeemed normal-entry approval."""
+
+    __slots__ = (
+        "_seal",
+        "_owner",
+        "_session",
+        "_capability",
+        "_context",
+        "_approval_payload_sha256",
+        "_approval_signature_sha256",
+        "_trust_root_sha256",
+        "_proof_sha256",
+    )
+
+    def __init__(
+        self,
+        *,
+        seal: object,
+        owner: object,
+        session: object,
+        capability: CtpExecutionApprovalCapability,
+        proof_sha256: str,
+    ) -> None:
+        if seal is not _ENTRY_WRITE_GUARD_SEAL:
+            raise TypeError("SDK-issued CTP entry write guard required")
+        if (
+            type(capability) is not CtpExecutionApprovalCapability
+            or capability._seal is not _CAPABILITY_SEAL
+            or capability._owner is not owner
+            or not isinstance(proof_sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", proof_sha256)
+        ):
+            raise TypeError("redeemed CTP entry approval required")
+        self._seal = seal
+        self._owner = owner
+        self._session = session
+        self._capability = capability
+        self._context = capability._context
+        self._approval_payload_sha256 = capability._approval.payload_sha256
+        self._approval_signature_sha256 = hashlib.sha256(
+            capability._approval.signature
+        ).hexdigest()
+        self._trust_root_sha256 = capability._approval.trust_root_sha256
+        self._proof_sha256 = proof_sha256
+
+    def validate(self, operation: str, **context: Any) -> None:
+        if (
+            type(self) is not _CtpExecutionEntryWriteGuard
+            or self._seal is not _ENTRY_WRITE_GUARD_SEAL
+            or not callable(getattr(self._owner, "_validate_active_ctp_entry_authorization", None))
+        ):
+            _reject(operation, "ctp_entry_authorization_guard_invalid")
+        self._owner._validate_active_ctp_entry_authorization(
+            self,
+            operation=operation,
+            **context,
+        )
+
+
+def _new_ctp_entry_write_guard(
+    owner: object,
+    session: object,
+    capability: CtpExecutionApprovalCapability,
+    proof_sha256: str,
+) -> _CtpExecutionEntryWriteGuard:
+    """Create a non-forgeable-in-process guard from the SDK's one-shot grant."""
+
+    return _CtpExecutionEntryWriteGuard(
+        seal=_ENTRY_WRITE_GUARD_SEAL,
+        owner=owner,
+        session=session,
+        capability=capability,
+        proof_sha256=proof_sha256,
+    )
+
+
+def _is_ctp_entry_write_guard(value: object, *, session: object | None = None) -> bool:
+    return bool(
+        type(value) is _CtpExecutionEntryWriteGuard
+        and value._seal is _ENTRY_WRITE_GUARD_SEAL
+        and (session is None or value._session is session)
+    )
+
+
+def _is_ctp_execution_approval_capability(value: object) -> bool:
+    return bool(
+        type(value) is CtpExecutionApprovalCapability
+        and value._seal is _CAPABILITY_SEAL
+    )
+
+
+def _verify_signature(
+    signature: bytes, payload_bytes: bytes, public_key: bytes
+) -> None:
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     except (ImportError, ModuleNotFoundError):
@@ -1245,7 +1487,11 @@ def _verify_signature(signature: bytes, payload_bytes: bytes, public_key: bytes)
 def _coerce_now(value: datetime | None) -> datetime:
     if value is None:
         return datetime.now(UTC)
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() != timedelta(0):
+    if (
+        not isinstance(value, datetime)
+        or value.tzinfo is None
+        or value.utcoffset() != timedelta(0)
+    ):
         _reject(APPROVAL_OPERATION, "ctp_approval_clock_untrusted")
     return value.astimezone(UTC)
 
@@ -1263,7 +1509,23 @@ def _validate_time_window(payload: Mapping[str, Any], now: datetime) -> None:
 
 
 def _compare_context(payload: Mapping[str, Any], context: Mapping[str, Any]) -> None:
-    for field_name in _CONTEXT_FIELDS - {"source"}:
+    bound_payload = payload.keys() >= _CREDENTIAL_BINDING_FIELDS
+    profile = str(payload.get("environment_profile") or "").strip()
+    if profile in _SIMNOW_RESTRICTED_PROFILES and profile not in _SIMNOW_BOUND_PROFILES:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_scope_unsupported")
+    if profile in _SIMNOW_BOUND_PROFILES and not bound_payload:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_required")
+    if bound_payload and profile not in _SIMNOW_BOUND_PROFILES:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_scope_unsupported")
+    fields = _SIMNOW_CONTEXT_FIELDS if bound_payload else _CONTEXT_FIELDS
+    if bound_payload and context.keys() < _CREDENTIAL_BINDING_FIELDS:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_required")
+    if profile in _SIMNOW_BOUND_PROFILES and context.get("source") not in {
+        "sdk_runtime",
+        "deployment_manifest",
+    }:
+        _reject(APPROVAL_OPERATION, "ctp_approval_context_untrusted")
+    for field_name in fields - {"source"}:
         left = payload[field_name]
         right = context[field_name]
         if field_name == "authorized_instruments":
@@ -1296,7 +1558,9 @@ def verify_ctp_execution_approval(
         _reject(APPROVAL_OPERATION, "ctp_approval_invalid_artifact")
     payload_value = artifact_value.get("payload")
     payload_schema = (
-        payload_value.get("schema_version") if isinstance(payload_value, Mapping) else None
+        payload_value.get("schema_version")
+        if isinstance(payload_value, Mapping)
+        else None
     )
     if (
         artifact_value["schema_version"] != payload_schema
@@ -1305,6 +1569,7 @@ def verify_ctp_execution_approval(
             APPROVAL_SCHEMA_VERSION,
             RECOVERY_APPROVAL_SCHEMA_VERSION,
             ENTRY_APPROVAL_SCHEMA_VERSION,
+            *(_SIMNOW_SCHEMA_BASES.keys()),
         }
         or artifact_value["algorithm"] != APPROVAL_ALGORITHM
     ):
@@ -1343,7 +1608,9 @@ def verify_ctp_execution_approval(
     normalized_context = _normalize_context(context)
     _compare_context(normalized_payload, normalized_context)
     payload_sha256 = hashlib.sha256(payload_bytes).hexdigest()
-    root_sha256 = hashlib.sha256(_canonical_json(_jsonable(normalized_root))).hexdigest()
+    root_sha256 = hashlib.sha256(
+        _canonical_json(_jsonable(normalized_root))
+    ).hexdigest()
     return CtpExecutionApproval(
         payload=_freeze(normalized_payload),
         payload_sha256=payload_sha256,
@@ -1388,13 +1655,18 @@ def revalidate_ctp_execution_approval(
 ) -> CtpExecutionApproval:
     """Recheck a verified result immediately before durable redemption."""
 
-    if type(approval) is not CtpExecutionApproval or approval._seal is not _CAPABILITY_SEAL:
+    if (
+        type(approval) is not CtpExecutionApproval
+        or approval._seal is not _CAPABILITY_SEAL
+    ):
         _reject("redeem_ctp_execution_approval", "ctp_approval_opaque_required")
     artifact = {
         "schema_version": approval.payload["schema_version"],
         "algorithm": APPROVAL_ALGORITHM,
         "payload": _thaw(approval.payload),
-        "signature": base64.urlsafe_b64encode(approval.signature).decode("ascii").rstrip("="),
+        "signature": base64.urlsafe_b64encode(approval.signature)
+        .decode("ascii")
+        .rstrip("="),
     }
     return verify_ctp_execution_approval(
         _canonical_json(artifact), trust_root=trust_root, context=context, _now=_now
@@ -1428,9 +1700,13 @@ __all__ = [
     "APPROVAL_ALGORITHM",
     "APPROVAL_PURPOSE",
     "APPROVAL_SCHEMA_VERSION",
+    "ENTRY_APPROVAL_SCHEMA_VERSION",
     "RECOVERY_APPROVAL_PURPOSE",
     "RECOVERY_APPROVAL_SCHEMA_VERSION",
     "RECOVERY_APPROVAL_SCOPE_VERSION",
+    "SIMNOW_APPROVAL_SCHEMA_VERSION",
+    "SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION",
+    "SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION",
     "CtpExecutionApproval",
     "CtpExecutionApprovalCapability",
     "CtpExecutionApprovalContext",
