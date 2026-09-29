@@ -303,5 +303,5 @@ all = [
 ]
 core-reference = [
     "bt_api_binance>=2.0.0",
-    "bt_api_ctp>=2.0.3,<3.0",
+    "bt_api_ctp>=2.0.4,<3.0",
 ]

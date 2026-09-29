@@ -19,8 +19,8 @@ def test_core_reference_rejects_the_stale_ctp_wheel() -> None:
     )
     requirement = Requirement(requirement_text)
 
-    assert requirement.specifier.contains("2.0.2") is False
-    assert requirement.specifier.contains("2.0.3") is True
+    assert requirement.specifier.contains("2.0.3") is False
+    assert requirement.specifier.contains("2.0.4") is True
 
 
 def test_ctp_candidate_version_matches_the_sdk_minimum() -> None:
@@ -45,6 +45,6 @@ def test_ctp_candidate_version_matches_the_sdk_minimum() -> None:
     )
 
     assert f'__version__ = "{candidate}"' in package_init
-    assert candidate >= Version("2.0.3")
+    assert candidate >= Version("2.0.4")
     assert candidate >= required
     assert core_reference.specifier.contains(str(candidate))
