@@ -10,7 +10,7 @@ import queue
 import threading
 import time
 from collections import Counter, deque
-from dataclasses import replace
+from dataclasses import asdict, replace
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -624,7 +624,7 @@ def canonical_sha256(value):
 
 
 def seed_ctp_order_identity(session, request, *, index):
-    """Seed a committed-looking mirror for one synthetic managed CTP order."""
+    """Seed non-authorizing read-back identity for one synthetic CTP order."""
     account_ref = session._ctp_execution_identity["account_fingerprint"]
     environment = session._ctp_execution_identity["environment_profile"]
     strategy_id = session.config["strategy_id"]
@@ -641,7 +641,7 @@ def seed_ctp_order_identity(session, request, *, index):
     }
     account_key = "account:" + canonical_sha256(account_payload)
     scope_key = "scope:" + canonical_sha256(scope_payload)
-    managed_intent_id = f"intent.iter22.bundle.{index}"
+    managed_intent_id = request.managed_intent_id or f"intent.iter22.bundle.{index}"
     runtime_order_id = (
         "bt-managed-v1:"
         + hashlib.sha256(f"{request.account_id}:{request.client_order_id}".encode()).hexdigest()
@@ -698,7 +698,42 @@ def seed_ctp_order_identity(session, request, *, index):
 
 def bind_ctp_order_request(session, request, *, index):
     binding = seed_ctp_order_identity(session, request, index=index)
-    return replace(request, ctp_order_identity=binding)
+    return replace(
+        request,
+        ctp_order_identity=binding,
+        runtime_order_id=(
+            binding.runtime_order_id if request.managed_intent_id is not None else None
+        ),
+    )
+
+
+def seed_historical_order_intent(session, request):
+    """Write a prior-process C41 intent without invoking today's native path.
+
+    These recovery tests need durable history to reconcile; the synthetic
+    history is not an I9 claim, approval, queue receipt, or dispatch grant.
+    """
+    row = asdict(request)
+    row.update(
+        side=request.side.value,
+        order_type=request.order_type.value,
+        quantity=format(request.quantity, "f"),
+        price=format(request.price, "f") if request.price is not None else None,
+        size=format(request.quantity, "f"),
+        exchange_name=VENUE,
+        client_id_reserved=True,
+        strategy_id=session.config["strategy_id"],
+    )
+    session._journal("intent", row)
+    runtime_key = session._runtime_order_key(VENUE, row, request.runtime_order_id)
+    session.runtime_order_bindings[runtime_key]["status"] = "unresolved"
+    client_key = session._client_key(VENUE, request.account_id, request.client_order_id)
+    session.used_ids.add(client_key)
+    session.reserved_ids.discard(client_key)
+    state = session._state(VENUE, row, create=True)
+    state["_intent_persisted"] = True
+    state["strategy_id"] = session.config["strategy_id"]
+    session.submit_calls += 1
 
 
 def barrier(session, snapshot, *, first_id=1, account_balance="100"):
@@ -884,24 +919,12 @@ def write_crashed_journal(path, *, exposure=None, active=False, uncertain=False)
         client_order_id=binding["client_order_id"],
         runtime_order_id=runtime_order_id,
     )
-    request = bind_ctp_order_request(session, request, index=1)
-
-    def submit():
-        if uncertain:
-            raise TimeoutError("transport outcome unknown")
-        return order_update(side=side, client_order_id=binding["client_order_id"])
-
-    try:
-        session.invoke(
-            "make_order",
+    seed_historical_order_intent(session, request)
+    if not uncertain:
+        session.event(
             VENUE,
-            request,
-            submit,
-            budget_capability=budget,
+            order_update(side=side, client_order_id=binding["client_order_id"]),
         )
-    except NormalizedApiError:
-        if not uncertain:
-            raise
     if exposure is not None:
         session.event(
             VENUE,
@@ -966,19 +989,14 @@ def write_bundle_crashed_journal(path, *, instruments=BUNDLE_INSTRUMENTS[:2]):
                 client_order_id=client_order_id,
                 runtime_order_id=runtime_order_id,
             )
-            request = bind_ctp_order_request(session, request, index=index)
-            session.invoke(
-                "make_order",
+            seed_historical_order_intent(session, request)
+            session.event(
                 VENUE,
-                request,
-                lambda instrument=instrument, client_order_id=client_order_id, order_id=order_id: (
-                    bundle_order_update(
-                        instrument,
-                        client_order_id=client_order_id,
-                        order_id=order_id,
-                    )
+                bundle_order_update(
+                    instrument,
+                    client_order_id=client_order_id,
+                    order_id=order_id,
                 ),
-                budget_capability=budget,
             )
             session.event(
                 VENUE,
@@ -2114,14 +2132,18 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
-    writer_request = bind_ctp_order_request(writer, order_request(), index=1)
-    writer.invoke(
-        "make_order",
-        VENUE,
-        writer_request,
-        lambda: order_update(),
-        budget_capability=_reserve_budget(writer, old_proof),
+    entry_binding, _entry_budget = reserve_runtime_order(
+        writer,
+        old_proof,
+        runtime_order_id="ordinary-cycle-entry",
+        order_ref_number=1,
     )
+    writer_request = order_request(
+        client_order_id=entry_binding["client_order_id"],
+        runtime_order_id=entry_binding["runtime_order_id"],
+    )
+    seed_historical_order_intent(writer, writer_request)
+    writer.event(VENUE, order_update(client_order_id=writer_request.client_order_id))
     writer.event(
         VENUE,
         trade_update(client_order_id=writer_request.client_order_id),
@@ -2144,19 +2166,16 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
         position_side="long",
         role="exit",
     )
-    close_request = bind_ctp_order_request(writer, close_request, index=2)
-    writer.invoke(
-        "make_order",
+    seed_historical_order_intent(writer, close_request)
+    writer.event(
         VENUE,
-        close_request,
-        lambda: order_update(
+        order_update(
             side="sell",
             client_order_id=close_binding["client_order_id"],
             order_id="SYS2",
             offset="close",
             position_side="long",
         ),
-        budget_capability=close_budget,
     )
     writer.event(
         VENUE,
@@ -2285,14 +2304,18 @@ def test_ordinary_arm_rejects_terminal_fill_without_durable_trade(tmp_path):
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
-    writer_request = bind_ctp_order_request(writer, order_request(), index=1)
-    writer.invoke(
-        "make_order",
-        VENUE,
-        writer_request,
-        lambda: order_update(),
-        budget_capability=_reserve_budget(writer, old_proof),
+    entry_binding, _entry_budget = reserve_runtime_order(
+        writer,
+        old_proof,
+        runtime_order_id="terminal-without-trade-entry",
+        order_ref_number=1,
     )
+    writer_request = order_request(
+        client_order_id=entry_binding["client_order_id"],
+        runtime_order_id=entry_binding["runtime_order_id"],
+    )
+    seed_historical_order_intent(writer, writer_request)
+    writer.event(VENUE, order_update(client_order_id=writer_request.client_order_id))
     writer.event(
         VENUE,
         order_update(
@@ -3070,7 +3093,7 @@ def test_managed_ctp_order_cannot_dispatch_without_runtime_binding(
     session.arm_from_preflight(current_proof, lambda: context(current_proof))
     if reservation_kind == "legacy":
         budget = _reserve_budget(session, current_proof)
-        client_order_id = session.new_client_order_id(VENUE, account_id=ACCOUNT)
+        client_order_id = "000000000042"
     else:
         binding, budget = reserve_runtime_order(
             session,
@@ -3111,7 +3134,7 @@ def test_managed_ctp_order_cannot_dispatch_without_runtime_binding(
                 )
             error = raised.value
             sync_native.assert_not_called()
-        assert error.code == "ctp_runtime_order_identity_required"
+        assert error.code == "ctp_order_identity_binding_missing_or_mismatch"
         assert session.submit_calls == 0
         assert not any(
             json.loads(line).get("event") == "intent" for line in path.read_text().splitlines()
@@ -3135,12 +3158,10 @@ def test_managed_ctp_cancel_requires_runtime_action_identity_before_native_dispa
         order_ref_number=43,
     )
     try:
-        session.invoke(
-            "make_order",
+        seed_historical_order_intent(session, order)
+        session.event(
             VENUE,
-            order,
-            lambda: order_update(client_order_id=binding["client_order_id"]),
-            budget_capability=budget,
+            order_update(client_order_id=binding["client_order_id"]),
         )
         cancel = CancelOrderRequest(
             symbol=order.symbol,
