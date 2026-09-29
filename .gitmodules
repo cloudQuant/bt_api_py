@@ -75,3 +75,7 @@
 	path = bt_api/bt_api_gateway
 	url = https://github.com/cloudQuant/bt_api_gateway.git
 	branch = dev
+[submodule "bt_api/bt_api_transport_zmq"]
+	path = bt_api/bt_api_transport_zmq
+	url = https://github.com/cloudQuant/bt_api_transport_zmq.git
+	branch = dev
