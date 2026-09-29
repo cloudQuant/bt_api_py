@@ -483,8 +483,8 @@ class _ManagedFeed:
         return dict(self._gate_state)
 
 
-def _api_for_arm(tmp_path, *, state=None, risk=False):
-    session = _session(tmp_path, risk=risk)
+def _api_for_arm(tmp_path, *, state=None, risk=False, provisioned=False):
+    session = _session(tmp_path, risk=risk, provisioned=provisioned)
     session_state = state if state is not None else _ready_state()
     feed = _ManagedFeed(session_state)
     api = object.__new__(BtApi)
@@ -806,35 +806,30 @@ def test_public_arm_verifies_exact_v2_bundle_scope(monkeypatch, tmp_path):
         session.close()
 
 
-def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(monkeypatch, tmp_path):
-    session = _session(tmp_path)
+def test_v2_bundle_scopes_exact_czce_legs_but_cannot_dispatch_without_handoff(
+    monkeypatch, tmp_path
+):
+    session = _session(tmp_path, provisioned=True)
     transport = Mock(return_value={"status": "accepted", "order_id": "SYS1"})
     try:
         bundle = _bundle_proof()
         _arm_direct(session, proof=bundle, context=_context(bundle))
 
         for index, symbol in enumerate(BUNDLE_INSTRUMENTS, start=1):
-            request, budget, _binding = _bound_order(
+            request = _order_with_reserved_identity(
+                monkeypatch,
                 session,
-                bundle,
-                symbol.split(".", 1)[1],
-                order_ref_number=index,
-            )
-            session.invoke(
-                "make_order",
-                VENUE,
-                _order_with_reserved_identity(
-                    monkeypatch,
-                    session,
-                    _order(
-                        symbol.split(".", 1)[1],
-                        client_order_id=f"00000000000{index}",
-                    ),
-                    index=index,
+                _order(
+                    symbol.split(".", 1)[1],
+                    client_order_id=f"00000000000{index}",
                 ),
-                transport,
-                budget_capability=budget,
+                index=index,
             )
+            journal_before = session.path.read_bytes()
+            with pytest.raises(NormalizedApiError) as raised:
+                session.invoke("make_order", VENUE, request, transport)
+            assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+            assert session.path.read_bytes() == journal_before
         submit_calls = session.submit_calls
         with pytest.raises(NormalizedApiError) as raised:
             session.invoke(
@@ -845,8 +840,8 @@ def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(monkeypat
             )
 
         assert raised.value.code == "execution_arm_instrument_mismatch"
-        assert session.submit_calls == submit_calls == 3
-        assert transport.call_count == 3
+        assert session.submit_calls == submit_calls == 0
+        transport.assert_not_called()
     finally:
         session.close()
 
@@ -865,25 +860,17 @@ def test_v2_bundle_accepts_native_dce_option_spelling_and_rejects_case_changes(
     transport = Mock(return_value={"status": "accepted", "order_id": "SYS1"})
     try:
         _arm_direct(session, proof=proof, context=_context(proof))
-        request, budget, _binding = _bound_order(
+        request = _order_with_reserved_identity(
+            monkeypatch,
             session,
-            proof,
-            "m2701-C-3400",
-            order_ref_number=1,
-            exchange_id="DCE",
+            _order("m2701-C-3400", exchange_id="DCE"),
+            index=1,
         )
-        session.invoke(
-            "make_order",
-            VENUE,
-            _order_with_reserved_identity(
-                monkeypatch,
-                session,
-                _order("m2701-C-3400", exchange_id="DCE"),
-                index=1,
-            ),
-            transport,
-            budget_capability=budget,
-        )
+        journal_before = session.path.read_bytes()
+        with pytest.raises(NormalizedApiError) as accepted_scope:
+            session.invoke("make_order", VENUE, request, transport)
+        assert accepted_scope.value.code == "ctp_order_dispatch_handoff_unavailable"
+        assert session.path.read_bytes() == journal_before
         with pytest.raises(NormalizedApiError) as raised:
             session.invoke(
                 "make_order",
@@ -896,7 +883,7 @@ def test_v2_bundle_accepts_native_dce_option_spelling_and_rejects_case_changes(
                 transport,
             )
         assert raised.value.code == "execution_arm_instrument_mismatch"
-        assert transport.call_count == 1
+        transport.assert_not_called()
     finally:
         session.close()
 
@@ -1394,7 +1381,7 @@ def test_cross_instrument_order_rejects_before_journal_or_transport(tmp_path):
 
 def test_opaque_arm_grant_binds_the_authorized_strategy_cycle(monkeypatch, tmp_path):
     _install_account_stream(monkeypatch)
-    api, session, _state = _api_for_arm(tmp_path)
+    api, session, _state = _api_for_arm(tmp_path, provisioned=True)
     transport = Mock(return_value=_order_update())
     try:
         _arm(api, cycle="authorized-cycle")
@@ -1480,64 +1467,39 @@ def test_account_stream_start_and_stop_join_private_producer_outside_session_loc
         session.close()
 
 
-def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(monkeypatch, tmp_path):
-    session = _session(tmp_path)
+def test_armed_same_instrument_order_requires_worker_handoff(monkeypatch, tmp_path):
+    session = _session(tmp_path, provisioned=True)
     transport = Mock(return_value=_order_update())
     try:
         proof = _proof()
         _arm_direct(session, proof=proof)
-        request, budget, _binding = _bound_order(
-            session,
-            proof,
-            "SA609.CZCE",
-            order_ref_number=1,
-        )
+        request = _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1)
+        journal_before = session.path.read_bytes()
 
-        result = session.invoke(
-            "make_order",
-            VENUE,
-            _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1),
-            transport,
-            budget_capability=budget,
-        )
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke("make_order", VENUE, request, transport)
 
-        assert result["status"] == "accepted"
-        assert result["execution_unknown"] is False
-        assert session.submit_calls == 1
-        transport.assert_called_once_with()
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        assert session.submit_calls == 0
+        assert session.path.read_bytes() == journal_before
+        transport.assert_not_called()
         rows = [json.loads(line) for line in session.path.read_text().splitlines()]
-        assert [row["event"] for row in rows] == [
-            "client_id_reservation",
-            "ctp_budget_reservation_started",
-            "ctp_budget_reservation_committed",
-            "client_id_reservation",
-            "intent",
-            "ctp_budget_action_started",
-            "order_update",
-        ]
+        assert [row["event"] for row in rows] == ["client_id_reservation"]
     finally:
         session.close()
 
 
-def test_armed_tracked_same_instrument_cancel_remains_available(monkeypatch, tmp_path):
-    session = _session(tmp_path)
-    place = Mock(return_value=_order_update())
+def test_armed_reserved_orderref_cancel_requires_worker_handoff(tmp_path):
+    session = _session(tmp_path, provisioned=True)
     cancel = Mock(return_value=_order_update(status="canceled", terminal=True))
     try:
         proof = _proof()
         _arm_direct(session, proof=proof)
-        order_request, order_budget, binding = _bound_order(
+        _order_request, _order_budget, binding = _bound_order(
             session,
             proof,
             "SA609.CZCE",
             order_ref_number=1,
-        )
-        session.invoke(
-            "make_order",
-            VENUE,
-            _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1),
-            place,
-            budget_capability=order_budget,
         )
         request = CancelOrderRequest(
             symbol="SA609.CZCE",
@@ -1553,33 +1515,18 @@ def test_armed_tracked_same_instrument_cancel_remains_available(monkeypatch, tmp
                 runtime_order_id=binding["runtime_order_id"],
             ),
         )
-
-        result = session.invoke(
-            "cancel_order",
-            VENUE,
-            request,
-            cancel,
-            budget_capability=_reserve_budget(session, proof),
-        )
-
-        assert result["status"] == "canceled"
-        assert result["terminal_confirmed"] is True
-        assert session.cancel_calls == 1
-        cancel.assert_called_once_with()
+        journal_before = session.path.read_bytes()
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke("cancel_order", VENUE, request, cancel)
+        assert raised.value.code == "ctp_cancel_identity_binding_missing_or_mismatch"
+        assert session.cancel_calls == 0
+        assert session.path.read_bytes() == journal_before
+        cancel.assert_not_called()
         rows = [json.loads(line) for line in session.path.read_text().splitlines()]
         assert [row["event"] for row in rows] == [
-            "client_id_reservation",
             "ctp_budget_reservation_started",
             "ctp_budget_reservation_committed",
             "client_id_reservation",
-            "intent",
-            "ctp_budget_action_started",
-            "order_update",
-            "ctp_budget_reservation_started",
-            "ctp_budget_reservation_committed",
-            "cancel_intent",
-            "ctp_budget_action_started",
-            "order_update",
         ]
     finally:
         session.close()
@@ -1598,7 +1545,7 @@ def test_armed_cancel_rejects_untracked_and_cross_instrument_orders(tmp_path):
         )
         with pytest.raises(NormalizedApiError) as raised:
             session.invoke("cancel_order", VENUE, untracked, transport)
-        assert raised.value.code == "execution_arm_untracked_cancel"
+        assert raised.value.code == "ctp_cancel_identity_binding_missing_or_mismatch"
 
         other = CancelOrderRequest(
             symbol="SR609.CZCE",
