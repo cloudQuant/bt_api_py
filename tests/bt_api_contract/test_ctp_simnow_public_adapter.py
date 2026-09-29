@@ -35,7 +35,12 @@ class FakeBtApi:
     def __init__(self, *, profile="set1_group1", environment="demo"):
         self.profile = profile
         self.environment = environment
+        self.account_fingerprint = ACCOUNT
+        self.account_id = "ctp-account-alias"
+        self.trading_day = TRADING_DAY
+        self.connection_generation = 8
         self.calls = []
+        self.runtime_order_bindings = {}
         self.query_result = {"status": "accepted", "client_order_id": CLIENT_ORDER_ID}
         self.orders_result = SimpleNamespace(
             request_type="orders",
@@ -70,17 +75,65 @@ class FakeBtApi:
             "environment_profile": self.profile,
             "read_only_ready": True,
             "auto_settlement_confirm": False,
-            "account_fingerprint": ACCOUNT,
-            "trading_day": TRADING_DAY,
-            "connection_generation": 8,
+            "account_fingerprint": self.account_fingerprint,
+            "trading_day": self.trading_day,
+            "connection_generation": self.connection_generation,
         }
 
     def get_execution_identity(self, _exchange_name):
         return {
             "mode": "direct",
-            "account_fingerprint": ACCOUNT,
-            "account_id": "ctp-account-alias",
+            "account_fingerprint": self.account_fingerprint,
+            "account_id": self.account_id,
         }
+
+    def get_runtime_order_bindings(
+        self, _exchange_name, *, unresolved_only=True, runtime_order_id=None
+    ):
+        self.calls.append(("get_runtime_order_bindings", runtime_order_id))
+        row = self.runtime_order_bindings.get(runtime_order_id)
+        if row is None or (unresolved_only and row.get("status") != "unresolved"):
+            return []
+        return [dict(row)]
+
+    def new_runtime_order_binding(
+        self,
+        _exchange_name,
+        *,
+        symbol,
+        account_id,
+        runtime_order_id,
+        managed_intent_id,
+        budget_capability=None,
+    ):
+        self.calls.append(
+            (
+                "new_runtime_order_binding",
+                runtime_order_id,
+                managed_intent_id,
+                budget_capability,
+            )
+        )
+        if runtime_order_id in self.runtime_order_bindings:
+            raise AssertionError("adapter must not replace an existing reservation")
+        if any(
+            row.get("managed_intent_id") == managed_intent_id
+            for row in self.runtime_order_bindings.values()
+        ):
+            raise RuntimeError("managed intent already belongs to another runtime order")
+        row = {
+            "runtime_order_id": runtime_order_id,
+            "managed_intent_id": managed_intent_id,
+            "client_order_id": "000000009876",
+            "ctp_order_ref": "000000009876",
+            "symbol": symbol,
+            "account_id": account_id,
+            "connection_generation": self.connection_generation,
+            "trading_day": self.trading_day,
+            "status": "reserved",
+        }
+        self.runtime_order_bindings[runtime_order_id] = row
+        return dict(row)
 
     def query_order(self, _exchange_name, request, *, normalized=False):
         self.calls.append(("query_order", request, normalized))
@@ -122,6 +175,22 @@ def _order_identity(runtime_order_id="runtime-order-42"):
         session_id=19,
         trading_day=TRADING_DAY,
         runtime_order_id=runtime_order_id,
+    )
+
+
+def _managed_order_request(
+    *, runtime_order_id="bt-managed-v1:" + "a" * 64, managed_intent_id="intent-42"
+):
+    return CtpSimNowOrderRequest(
+        client_order_id=None,
+        instrument_id=INSTRUMENT,
+        exchange_id=EXCHANGE_ID,
+        side="buy",
+        quantity=Decimal("2"),
+        limit_price=Decimal("100"),
+        hedge_flag="2",
+        runtime_order_id=runtime_order_id,
+        managed_intent_id=managed_intent_id,
     )
 
 
@@ -205,6 +274,235 @@ def test_order_request_preserves_set1_hedge_flag_and_native_identity_mapping():
     assert mapped.identity.order_sys_id == "sys-88"
     assert (mapped.identity.front_id, mapped.identity.session_id) == (17, 19)
     assert mapped.status == "ACCEPTED" and not mapped.execution_unknown
+
+
+def test_managed_order_request_uses_the_durable_ref_and_exposes_port_binding():
+    api = FakeBtApi()
+    adapter = _adapter(api)
+    request = _managed_order_request()
+    budget_capability = object()
+
+    typed = adapter.build_order_request(request, budget_capability=budget_capability)
+    repeated = adapter.build_order_request(request, budget_capability=budget_capability)
+
+    assert typed.client_order_id == repeated.client_order_id == "000000009876"
+    assert len(typed.client_order_id) == 12 and typed.client_order_id.isascii()
+    assert typed.client_order_id.isdigit()
+    assert typed.runtime_order_id == request.runtime_order_id
+    assert typed.managed_intent_id == request.managed_intent_id
+    assert typed.hedge_flag == "2"
+    assert api.runtime_order_bindings[request.runtime_order_id]["status"] == "reserved"
+
+    resolver_binding = adapter.resolve_runtime_order_binding(request.runtime_order_id, True)
+    # The port callback can verify this staged reference but does not commit a
+    # BtApi order intent or change the durable row's state.
+    assert api.runtime_order_bindings[request.runtime_order_id]["status"] == "reserved"
+    assert resolver_binding == {
+        "runtime_order_id": request.runtime_order_id,
+        "connection_generation": 8,
+        "trading_day": TRADING_DAY,
+        "ctp_order_ref": "000000009876",
+        "client_order_id": "000000009876",
+        "managed_intent_id": request.managed_intent_id,
+    }
+
+    result_row = {
+        "client_order_id": "000000009876",
+        "order_ref": "000000009876",
+        "order_id": "sys-managed-88",
+        "instrument_id": INSTRUMENT,
+        "exchange_id": EXCHANGE_ID,
+        "trading_day": TRADING_DAY,
+        "status": "accepted",
+    }
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_unavailable"):
+        map_ctp_simnow_order_result(result_row, request, adapter.get_execution_identity())
+
+    # This represents BtApi's order-intent journal transition. Managed mapping
+    # must recover the OrderRef from that durable unresolved row, not accept one
+    # supplied by the caller.
+    api.runtime_order_bindings[request.runtime_order_id]["status"] = "unresolved"
+    mapped = adapter.map_order_result(result_row, request)
+    assert mapped.identity.runtime_order_id == request.runtime_order_id
+    assert mapped.identity.managed_intent_id == request.managed_intent_id
+    assert mapped.identity.order_ref == typed.client_order_id
+    reservations = [call for call in api.calls if call[0] == "new_runtime_order_binding"]
+    assert reservations == [
+        (
+            "new_runtime_order_binding",
+            request.runtime_order_id,
+            request.managed_intent_id,
+            budget_capability,
+        )
+    ]
+    assert not any(call[0] in {"make_order", "cancel_order"} for call in api.calls)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("managed_intent_id", "another-intent"),
+        ("account_id", "other-account"),
+        ("symbol", "cu2701"),
+        ("connection_generation", 9),
+        ("trading_day", "20260924"),
+        ("status", "unresolved"),
+        ("ctp_order_ref", "123"),
+        ("ctp_order_ref", None),
+        ("client_order_id", "000000001111"),
+    ],
+)
+def test_managed_order_request_rejects_foreign_scope_or_state_without_reallocation(field, value):
+    api = FakeBtApi()
+    request = _managed_order_request()
+    api.runtime_order_bindings[request.runtime_order_id] = {
+        "runtime_order_id": request.runtime_order_id,
+        "managed_intent_id": request.managed_intent_id,
+        "client_order_id": "000000009876",
+        "ctp_order_ref": "000000009876",
+        "symbol": INSTRUMENT,
+        "account_id": "ctp-account-alias",
+        "connection_generation": 8,
+        "trading_day": TRADING_DAY,
+        "status": "reserved",
+    }
+    api.runtime_order_bindings[request.runtime_order_id][field] = value
+
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_scope_mismatch"):
+        _adapter(api).build_order_request(request)
+
+    assert not any(call[0] == "new_runtime_order_binding" for call in api.calls)
+    assert not any(call[0] in {"make_order", "cancel_order"} for call in api.calls)
+
+
+def test_managed_runtime_binding_lookup_requires_sdk_order_intent_transition():
+    api = FakeBtApi()
+    adapter = _adapter(api)
+    request = _managed_order_request()
+    adapter.build_order_request(request, budget_capability=object())
+
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_scope_mismatch"):
+        adapter.resolve_runtime_order_binding(request.runtime_order_id, False)
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_scope_mismatch"):
+        adapter.resolve_runtime_order_binding(request.runtime_order_id, 1)
+
+    # Only the SDK's ordinary make_order intent journal performs this
+    # transition; the read-only port resolver must not synthesize it.
+    api.runtime_order_bindings[request.runtime_order_id]["status"] = "unresolved"
+    resolved = adapter.resolve_runtime_order_binding(request.runtime_order_id, False)
+    assert resolved["managed_intent_id"] == request.managed_intent_id
+    assert resolved["ctp_order_ref"] == "000000009876"
+    assert resolved["connection_generation"] == 8
+    assert resolved["trading_day"] == TRADING_DAY
+
+
+def test_port_resolver_cannot_reserve_without_typed_intent_context():
+    api = FakeBtApi()
+    adapter = _adapter(api)
+    runtime_order_id = "bt-managed-v1:" + "c" * 64
+
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_unavailable"):
+        adapter.resolve_runtime_order_binding(runtime_order_id, True)
+
+    assert api.runtime_order_bindings == {}
+    assert not any(call[0] == "new_runtime_order_binding" for call in api.calls)
+
+
+def test_managed_order_request_rejects_a_reused_intent_under_another_runtime_id():
+    api = FakeBtApi()
+    adapter = _adapter(api)
+    first = _managed_order_request()
+    second = _managed_order_request(
+        runtime_order_id="bt-managed-v1:" + "b" * 64,
+        managed_intent_id=first.managed_intent_id,
+    )
+
+    adapter.build_order_request(first, budget_capability=object())
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_unavailable"):
+        adapter.build_order_request(second, budget_capability=object())
+
+    assert len([call for call in api.calls if call[0] == "new_runtime_order_binding"]) == 2
+    assert second.runtime_order_id not in api.runtime_order_bindings
+    assert not any(call[0] in {"make_order", "cancel_order"} for call in api.calls)
+
+
+def test_managed_order_request_rejects_a_recovered_orphan_reservation_state():
+    api = FakeBtApi()
+    request = _managed_order_request()
+    first_adapter = _adapter(api)
+    first_adapter.build_order_request(request, budget_capability=object())
+
+    # Model the public getter output after journal replay of a crash between
+    # reservation fsync and intent fsync. Actual replay/recovery is covered by
+    # the _ExecutionSession journal tests.
+    api.runtime_order_bindings[request.runtime_order_id]["status"] = "reservation_only"
+    restarted_adapter = _adapter(api)
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_scope_mismatch"):
+        restarted_adapter.build_order_request(request, budget_capability=object())
+
+    assert len([call for call in api.calls if call[0] == "new_runtime_order_binding"]) == 1
+    assert api.runtime_order_bindings[request.runtime_order_id]["status"] == "reservation_only"
+    assert not any(call[0] in {"make_order", "cancel_order"} for call in api.calls)
+
+
+@pytest.mark.parametrize(
+    "scope_field,scope_value",
+    [
+        ("account_id", "other-account"),
+        ("trading_day", "20260924"),
+        ("connection_generation", 9),
+    ],
+)
+def test_managed_order_request_rejects_binding_from_another_active_scope(scope_field, scope_value):
+    api = FakeBtApi()
+    request = _managed_order_request()
+    api.runtime_order_bindings[request.runtime_order_id] = {
+        "runtime_order_id": request.runtime_order_id,
+        "managed_intent_id": request.managed_intent_id,
+        "client_order_id": "000000009876",
+        "ctp_order_ref": "000000009876",
+        "symbol": INSTRUMENT,
+        "account_id": api.account_id,
+        "connection_generation": api.connection_generation,
+        "trading_day": api.trading_day,
+        "status": "reserved",
+    }
+    api.runtime_order_bindings[request.runtime_order_id][scope_field] = scope_value
+
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_runtime_order_binding_scope_mismatch"):
+        _adapter(api).build_order_request(request)
+
+    assert not any(call[0] == "new_runtime_order_binding" for call in api.calls)
+    assert not any(call[0] in {"make_order", "cancel_order"} for call in api.calls)
+
+
+def test_managed_order_request_cannot_supply_its_own_reference():
+    with pytest.raises(CtpSimNowExecutionError, match="ctp_managed_order_ref_must_be_reserved"):
+        CtpSimNowOrderRequest(
+            client_order_id=CLIENT_ORDER_ID,
+            instrument_id=INSTRUMENT,
+            exchange_id=EXCHANGE_ID,
+            side="buy",
+            quantity=Decimal("1"),
+            limit_price=Decimal("100"),
+            runtime_order_id="bt-managed-v1:" + "a" * 64,
+            managed_intent_id="intent-42",
+        )
+
+
+def test_managed_native_submit_remains_closed_without_reserving_or_sending():
+    api = FakeBtApi()
+    request = _managed_order_request()
+
+    with pytest.raises(
+        CtpSimNowExecutionError, match="ctp_execution_credential_binding_unavailable"
+    ):
+        _adapter(api).submit_order_insert(request)
+
+    assert api.runtime_order_bindings == {}
+    assert not any(
+        call[0] in {"new_runtime_order_binding", "make_order", "cancel_order"} for call in api.calls
+    )
 
 
 def test_query_order_accepts_typed_normalized_result():

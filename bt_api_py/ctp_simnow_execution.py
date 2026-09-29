@@ -28,6 +28,9 @@ CTP_FUTURE = "CTP___FUTURE"
 OFFICIAL_SET1_PROFILES = frozenset({"set1_group1", "set1_group2"})
 _ACCOUNT_FINGERPRINT = re.compile(r"^acct_[0-9a-f]{16}$")
 _TRADING_DAY = re.compile(r"^[0-9]{8}$")
+_CTP_ORDER_REF = re.compile(r"^[0-9]{12}$")
+_MANAGED_INTENT_ID = re.compile(r"[A-Za-z0-9._:-]{1,256}")
+_MANAGED_RUNTIME_ORDER_ID = re.compile(r"bt-managed-v1:[0-9a-f]{64}")
 _HEDGE_FLAGS = frozenset({"1", "2", "3"})
 _TERMINAL_ORDER_STATUS = frozenset({"0", "2", "4", "5"})
 
@@ -54,7 +57,7 @@ class CtpSimNowSessionIdentity:
 
 @dataclass(frozen=True)
 class CtpSimNowOrderRequest:
-    client_order_id: str
+    client_order_id: str | None
     instrument_id: str
     exchange_id: str
     side: str
@@ -63,16 +66,20 @@ class CtpSimNowOrderRequest:
     offset: str = "open"
     hedge_flag: str = "1"
     runtime_order_id: str | None = None
+    managed_intent_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.client_order_id or self.client_order_id != self.client_order_id.strip():
-            raise ValueError("client_order_id must be non-empty and trimmed")
-        try:
-            order_ref_bytes = self.client_order_id.encode("ascii")
-        except UnicodeEncodeError:
-            raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable") from None
-        if b"\x00" in order_ref_bytes or len(order_ref_bytes) > 12:
-            raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
+        if self.managed_intent_id is None:
+            if not self.client_order_id or self.client_order_id != self.client_order_id.strip():
+                raise ValueError("client_order_id must be non-empty and trimmed")
+            try:
+                order_ref_bytes = self.client_order_id.encode("ascii")
+            except UnicodeEncodeError:
+                raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable") from None
+            if b"\x00" in order_ref_bytes or len(order_ref_bytes) > 12:
+                raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
+        elif self.client_order_id is not None:
+            raise CtpSimNowExecutionError("ctp_managed_order_ref_must_be_reserved")
         if self.runtime_order_id is not None and (
             not isinstance(self.runtime_order_id, str)
             or not self.runtime_order_id
@@ -80,6 +87,14 @@ class CtpSimNowOrderRequest:
             or len(self.runtime_order_id.encode("utf-8")) > 256
         ):
             raise ValueError("runtime_order_id must be a bounded non-empty string or None")
+        if self.managed_intent_id is not None and (
+            not isinstance(self.managed_intent_id, str)
+            or not self.managed_intent_id.isascii()
+            or not _MANAGED_INTENT_ID.fullmatch(self.managed_intent_id)
+            or not isinstance(self.runtime_order_id, str)
+            or not _MANAGED_RUNTIME_ORDER_ID.fullmatch(self.runtime_order_id)
+        ):
+            raise ValueError("managed orders require scoped runtime and intent ids")
         if not self.instrument_id or self.instrument_id != self.instrument_id.strip():
             raise ValueError("instrument_id must be non-empty and trimmed")
         if not self.exchange_id or self.exchange_id != self.exchange_id.strip():
@@ -111,6 +126,7 @@ class CtpSimNowOrderIdentity:
     session_id: int | None
     trading_day: str
     runtime_order_id: str | None = None
+    managed_intent_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -247,28 +263,50 @@ def _native_order_identity(
         ),
         trading_day=str(_value(row, "trading_day", "TradingDay") or fallback.trading_day),
         runtime_order_id=fallback.runtime_order_id,
+        managed_intent_id=fallback.managed_intent_id,
     )
 
 
 def map_ctp_simnow_order_result(
-    row: Any, request: CtpSimNowOrderRequest, identity: CtpSimNowSessionIdentity
+    row: Any,
+    request: CtpSimNowOrderRequest,
+    identity: CtpSimNowSessionIdentity,
 ) -> CtpSimNowOrderResult:
     """Bind CTP's OrderRef/front/session and optional OrderSysID to the request."""
+    if request.managed_intent_id is not None:
+        raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+    expected_order_ref = request.client_order_id
+    if not expected_order_ref:
+        raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
+    return _map_ctp_simnow_order_result_with_ref(row, request, identity, expected_order_ref)
+
+
+def _map_ctp_simnow_order_result_with_ref(
+    row: Any,
+    request: CtpSimNowOrderRequest,
+    identity: CtpSimNowSessionIdentity,
+    order_ref: str,
+) -> CtpSimNowOrderResult:
+    if not isinstance(order_ref, str) or (
+        request.managed_intent_id is not None and not _CTP_ORDER_REF.fullmatch(order_ref)
+    ):
+        raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
     return _map_order_row(
         row,
         fallback=CtpSimNowOrderIdentity(
             request.instrument_id,
             request.exchange_id,
-            request.client_order_id,
-            request.client_order_id,
+            order_ref,
+            order_ref,
             None,
             None,
             None,
             identity.trading_day,
             request.runtime_order_id,
+            request.managed_intent_id,
         ),
         identity=identity,
-        expected_client_order_id=request.client_order_id,
+        expected_client_order_id=order_ref,
     )
 
 
@@ -420,6 +458,19 @@ class CtpSimNowExecutionAdapter:
     configuration.  The adapter verifies that exact profile against current
     SDK session evidence and never reads environment variables or substitutes
     another SimNow family member.
+
+    The durable binding helper is an adapter seam, not a complete
+    ``CtpTraderClientPort`` integration.  A managed order must first pass
+    through ``build_order_request`` so the SDK journal has both the runtime
+    order ID and managed intent.  The normal BtApi order-intent journal then
+    moves that reservation from ``reserved`` to ``unresolved``.  A direct
+    native TraderClient submit bypasses those steps; this adapter does not
+    synthesize either transition and keeps native writes disabled.
+
+    This facade accepts only official ``set1_group*`` profiles. The managed
+    Backtrader port currently uses ``config_front_pair``; that profile mismatch
+    is another explicit integration blocker, so this resolver must not be
+    wired into that port as-is.
     """
 
     def __init__(self, api: Any, *, selected_profile: str, exchange_name: str = CTP_FUTURE):
@@ -497,18 +548,36 @@ class CtpSimNowExecutionAdapter:
     def get_execution_identity(self) -> CtpSimNowSessionIdentity:
         return self._require_scope()[0]
 
-    def build_order_request(self, request: CtpSimNowOrderRequest) -> OrderRequest:
-        """Build the typed SDK intent without dispatching a native write."""
+    def build_order_request(
+        self,
+        request: CtpSimNowOrderRequest,
+        *,
+        budget_capability: Any = None,
+    ) -> OrderRequest:
+        """Build the typed SDK intent and durable ref reservation, without dispatching.
+
+        The reservation remains ``reserved`` until BtApi records its order
+        intent; construction alone does not imply or authorize provider I/O.
+        """
         identity, _session = self._require_scope()
         ledger = self._api.get_execution_identity(self.exchange_name)
         account_id = str(ledger.get("account_id") or identity.account_fingerprint)
+        client_order_id = request.client_order_id
+        if request.managed_intent_id is not None:
+            binding = self._reserve_managed_order_reference(
+                request,
+                identity=identity,
+                account_id=account_id,
+                budget_capability=budget_capability,
+            )
+            client_order_id = str(binding["ctp_order_ref"])
         return OrderRequest(
             symbol=request.instrument_id,
             side=Side(request.side),
             order_type=OrderType.LIMIT,
             quantity=request.quantity,
             account_id=account_id,
-            client_order_id=request.client_order_id,
+            client_order_id=client_order_id,
             price=request.limit_price,
             time_in_force="DAY",
             quantity_unit="lots",
@@ -516,7 +585,179 @@ class CtpSimNowExecutionAdapter:
             exchange_id=request.exchange_id,
             hedge_flag=request.hedge_flag,
             runtime_order_id=request.runtime_order_id,
+            managed_intent_id=request.managed_intent_id,
         )
+
+    def _runtime_order_bindings(self, runtime_order_id: str) -> tuple[Mapping[str, Any], ...]:
+        getter = getattr(self._api, "get_runtime_order_bindings", None)
+        if not callable(getter):
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+        try:
+            rows = getter(
+                self.exchange_name,
+                unresolved_only=False,
+                runtime_order_id=runtime_order_id,
+            )
+        except Exception as exc:
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable") from exc
+        if not isinstance(rows, (tuple, list)) or len(rows) > 1:
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+        if not rows:
+            return ()
+        if not isinstance(rows[0], Mapping):
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+        return (rows[0],)
+
+    @staticmethod
+    def _validate_managed_order_binding(
+        binding: Mapping[str, Any],
+        *,
+        runtime_order_id: str,
+        managed_intent_id: str,
+        instrument_id: str | None,
+        account_id: str,
+        identity: CtpSimNowSessionIdentity,
+        allowed_statuses: frozenset[str],
+    ) -> str:
+        order_ref = binding.get("ctp_order_ref")
+        if (
+            binding.get("runtime_order_id") != runtime_order_id
+            or binding.get("managed_intent_id") != managed_intent_id
+            or not isinstance(managed_intent_id, str)
+            or not managed_intent_id.isascii()
+            or not _MANAGED_INTENT_ID.fullmatch(managed_intent_id)
+            or not _MANAGED_RUNTIME_ORDER_ID.fullmatch(runtime_order_id)
+            or (instrument_id is not None and binding.get("symbol") != instrument_id)
+            or binding.get("connection_generation") != identity.connection_generation
+            or binding.get("trading_day") != identity.trading_day
+            or binding.get("status") not in allowed_statuses
+            or (binding.get("account_id") is not None and binding.get("account_id") != account_id)
+            or not isinstance(order_ref, str)
+            or not _CTP_ORDER_REF.fullmatch(order_ref)
+            or binding.get("client_order_id") != order_ref
+        ):
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_scope_mismatch")
+        return order_ref
+
+    def _reserve_managed_order_reference(
+        self,
+        request: CtpSimNowOrderRequest,
+        *,
+        identity: CtpSimNowSessionIdentity,
+        account_id: str,
+        budget_capability: Any,
+    ) -> Mapping[str, Any]:
+        runtime_order_id = request.runtime_order_id
+        managed_intent_id = request.managed_intent_id
+        if not runtime_order_id or not managed_intent_id:
+            raise CtpSimNowExecutionError("ctp_managed_order_identity_required")
+        rows = self._runtime_order_bindings(runtime_order_id)
+        if not rows:
+            reserver = getattr(self._api, "new_runtime_order_binding", None)
+            if not callable(reserver):
+                raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+            try:
+                reserver(
+                    self.exchange_name,
+                    symbol=request.instrument_id,
+                    account_id=account_id,
+                    runtime_order_id=runtime_order_id,
+                    managed_intent_id=managed_intent_id,
+                    budget_capability=budget_capability,
+                )
+                rows = self._runtime_order_bindings(runtime_order_id)
+            except CtpSimNowExecutionError:
+                raise
+            except Exception as exc:
+                raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable") from exc
+        if len(rows) != 1:
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+        self._validate_managed_order_binding(
+            rows[0],
+            runtime_order_id=runtime_order_id,
+            managed_intent_id=managed_intent_id,
+            instrument_id=request.instrument_id,
+            account_id=account_id,
+            identity=identity,
+            allowed_statuses=frozenset({"reserved"}),
+        )
+        if identity != self.get_execution_identity():
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_scope_mismatch")
+        return rows[0]
+
+    def resolve_runtime_order_binding(
+        self, runtime_order_id: str, reserve: bool
+    ) -> Mapping[str, Any]:
+        """Resolve the SDK journal row in the shape required by the managed CTP port.
+
+        The port callback does not carry ``managed_intent_id``, so
+        ``build_order_request`` must first create the durable reservation from
+        the full typed request. Even with ``reserve=True``, this resolver only
+        validates and returns that already-fsynced row; it never guesses an
+        intent, creates a second identity source, or allocates from the native
+        client's in-memory counter.
+        """
+        if type(reserve) is not bool:
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_scope_mismatch")
+        identity, _session = self._require_scope()
+        if not isinstance(runtime_order_id, str) or not _MANAGED_RUNTIME_ORDER_ID.fullmatch(
+            runtime_order_id
+        ):
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_scope_mismatch")
+        ledger = self._api.get_execution_identity(self.exchange_name)
+        account_id = str(ledger.get("account_id") or identity.account_fingerprint)
+        rows = self._runtime_order_bindings(runtime_order_id)
+        if len(rows) != 1:
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+        binding = rows[0]
+        managed_intent_id = binding.get("managed_intent_id")
+        allowed_statuses = frozenset({"reserved"}) if reserve else frozenset({"unresolved"})
+        order_ref = self._validate_managed_order_binding(
+            binding,
+            runtime_order_id=runtime_order_id,
+            managed_intent_id=managed_intent_id,
+            instrument_id=None,
+            account_id=account_id,
+            identity=identity,
+            allowed_statuses=allowed_statuses,
+        )
+        if identity != self.get_execution_identity():
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_scope_mismatch")
+        return {
+            "runtime_order_id": runtime_order_id,
+            "connection_generation": identity.connection_generation,
+            "trading_day": identity.trading_day,
+            "ctp_order_ref": order_ref,
+            "client_order_id": order_ref,
+            "managed_intent_id": managed_intent_id,
+        }
+
+    def map_order_result(self, row: Any, request: CtpSimNowOrderRequest) -> CtpSimNowOrderResult:
+        """Map an SDK order row only through the active durable identity scope."""
+        if type(request) is not CtpSimNowOrderRequest:
+            raise CtpSimNowExecutionError("ctp_native_order_request_invalid")
+        identity, _session = self._require_scope()
+        if request.managed_intent_id is None:
+            return map_ctp_simnow_order_result(row, request, identity)
+        if not request.runtime_order_id:
+            raise CtpSimNowExecutionError("ctp_managed_order_identity_required")
+        ledger = self._api.get_execution_identity(self.exchange_name)
+        account_id = str(ledger.get("account_id") or identity.account_fingerprint)
+        rows = self._runtime_order_bindings(request.runtime_order_id)
+        if len(rows) != 1:
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_unavailable")
+        order_ref = self._validate_managed_order_binding(
+            rows[0],
+            runtime_order_id=request.runtime_order_id,
+            managed_intent_id=request.managed_intent_id,
+            instrument_id=request.instrument_id,
+            account_id=account_id,
+            identity=identity,
+            allowed_statuses=frozenset({"unresolved"}),
+        )
+        if identity != self.get_execution_identity():
+            raise CtpSimNowExecutionError("ctp_runtime_order_binding_scope_mismatch")
+        return _map_ctp_simnow_order_result_with_ref(row, request, identity, order_ref)
 
     def build_cancel_request(
         self, identity: CtpSimNowOrderIdentity, *, action_id: str
@@ -537,8 +778,10 @@ class CtpSimNowExecutionAdapter:
         raise CtpSimNowExecutionError("ctp_execution_credential_binding_unavailable")
 
     def submit_order_insert(self, request: CtpSimNowOrderRequest) -> CtpSimNowOrderResult:
-        """Refuse dispatch until private credentials and native reference mapping bind."""
+        """Keep native dispatch closed until private credentials are reviewed."""
         self._require_scope()
+        if request.managed_intent_id is not None:
+            raise CtpSimNowExecutionError("ctp_execution_credential_binding_unavailable")
         self.build_order_request(request)
         raise CtpSimNowExecutionError("ctp_native_order_ref_mapping_unavailable")
 
