@@ -500,7 +500,9 @@ def test_missing_i9_distribution_rejects_before_sdk_journal_or_authority_call(
         assert name == "bt_api_execution"
         raise PackageNotFoundError(name)
 
-    monkeypatch.setattr(execution_session_module.importlib_metadata, "version", missing_distribution)
+    monkeypatch.setattr(
+        execution_session_module.importlib_metadata, "version", missing_distribution
+    )
     session = session_for(journal)
 
     with pytest.raises(NormalizedApiError) as caught:
@@ -635,7 +637,9 @@ def test_unexpected_i9_distribution_version_fails_closed_before_import_or_read(
 ):
     journal = tmp_path / "sdk-execution.jsonl"
     authority = ReadOnlyAuthority(reservation())
-    monkeypatch.setattr(execution_session_module.importlib_metadata, "version", lambda _name: "0.1.0")
+    monkeypatch.setattr(
+        execution_session_module.importlib_metadata, "version", lambda _name: "0.1.0"
+    )
     session = session_for(journal)
 
     with pytest.raises(NormalizedApiError):
@@ -647,9 +651,7 @@ def test_unexpected_i9_distribution_version_fails_closed_before_import_or_read(
     assert authority.queue_calls == 0
 
 
-def test_mapping_is_not_accepted_as_installed_typed_authority_reservation(
-    tmp_path, monkeypatch
-):
+def test_mapping_is_not_accepted_as_installed_typed_authority_reservation(tmp_path, monkeypatch):
     row = {
         "account_key": ACCOUNT_KEY,
         "trading_day": TRADING_DAY,
@@ -1119,9 +1121,7 @@ def test_i9_cancel_readback_echo_is_exact_and_never_authorizes(tmp_path, monkeyp
             replace(cancel_request(idempotency_key=invalid_key), ctp_cancel_identity=binding)
 
 
-def test_i9_cancel_readback_rejects_missing_typed_projection_before_echo(
-    tmp_path, monkeypatch
-):
+def test_i9_cancel_readback_rejects_missing_typed_projection_before_echo(tmp_path, monkeypatch):
     install_fake_i9_cancel_contract(monkeypatch)
     command, projection = ctp_cancel_command()
     authority = ReadOnlyAuthority(

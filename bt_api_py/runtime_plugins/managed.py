@@ -67,9 +67,7 @@ def _typed_dispatch_resolution_contract(risk: Any) -> tuple[tuple[type, ...], An
         "DispatchTrackedOrderProof",
         "VerifiedDispatchResolution",
     )
-    missing = [
-        name for name in required_types if not isinstance(getattr(risk, name, None), type)
-    ]
+    missing = [name for name in required_types if not isinstance(getattr(risk, name, None), type)]
     gate_type = getattr(risk, "DurableRiskGate", None)
     if not isinstance(gate_type, type) or not callable(
         getattr(gate_type, "resolve_dispatch_freeze", None)
@@ -813,9 +811,7 @@ class ManagedExecutionRuntime:
                     "DISPATCH_FREEZE_RECONCILIATION_REQUIRED",
                     "risk capability lacks the typed dispatch proof contract",
                 )
-            proof = self.fake_dispatch_authority.create_resolution_proof(
-                intent_id, self.risk_gate
-            )
+            proof = self.fake_dispatch_authority.create_resolution_proof(intent_id, self.risk_gate)
             if type(proof) not in self.dispatch_resolution_proof_types:
                 raise RuntimePluginError(
                     "DISPATCH_RESOLUTION_PROOF_INVALID",

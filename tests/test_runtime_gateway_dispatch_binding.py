@@ -20,9 +20,7 @@ from bt_api_py.runtime_plugins.contracts import (
 
 
 class _Scope:
-    def __init__(
-        self, *, provider, environment, account_ref, strategy_id, trading_day=None
-    ):
+    def __init__(self, *, provider, environment, account_ref, strategy_id, trading_day=None):
         self.provider = provider
         self.environment = environment
         self.account_ref = account_ref
@@ -139,9 +137,7 @@ def _compose(monkeypatch, tmp_path, *, server_admission=None, writer_authority=N
     )
 
 
-def test_gateway_factory_passes_server_gates_to_the_actual_router(
-    monkeypatch, tmp_path
-):
+def test_gateway_factory_passes_server_gates_to_the_actual_router(monkeypatch, tmp_path):
     def server_admission(_principal, _command):
         return True
 
@@ -175,12 +171,8 @@ def test_gateway_factory_rejects_a_wrong_admission_gate(monkeypatch, tmp_path):
         _compose(monkeypatch, tmp_path, server_admission=object())
 
 
-def test_gateway_factory_rejects_writer_authority_for_another_database(
-    monkeypatch, tmp_path
-):
-    wrong_writer = SimpleNamespace(
-        database_path=Path(tmp_path / "other.sqlite3").resolve()
-    )
+def test_gateway_factory_rejects_writer_authority_for_another_database(monkeypatch, tmp_path):
+    wrong_writer = SimpleNamespace(database_path=Path(tmp_path / "other.sqlite3").resolve())
     with pytest.raises(ValueError, match="same SQLite database"):
         _compose(
             monkeypatch,

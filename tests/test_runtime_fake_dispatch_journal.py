@@ -143,9 +143,10 @@ def test_resolved_fake_dispatch_attestation_is_immutable_after_later_cancel(
     try:
         record = runtime.submit(intent, lambda current: _ack(current))
         assert record.state is execution.ExecutionState.ACKED
-        assert runtime.recovery_coordinator.freeze_status_for(
-            runtime.scope.key, intent.intent_id
-        ) == "RESOLVED"
+        assert (
+            runtime.recovery_coordinator.freeze_status_for(runtime.scope.key, intent.intent_id)
+            == "RESOLVED"
+        )
 
         cancelled = runtime.facade.reconcile(
             execution.ProviderObservation(
@@ -185,9 +186,10 @@ def test_unresolved_fake_dispatch_rejects_later_sdk_state_change(
     try:
         record = runtime.submit(intent, lambda current: _ack(current))
         assert record.state is execution.ExecutionState.ACKED
-        assert runtime.recovery_coordinator.freeze_status_for(
-            runtime.scope.key, intent.intent_id
-        ) == "PENDING"
+        assert (
+            runtime.recovery_coordinator.freeze_status_for(runtime.scope.key, intent.intent_id)
+            == "PENDING"
+        )
         # Leave the original dispatch unresolved, but exercise the production
         # release-attempt path during the recovery pass below.
         monkeypatch.setattr(
@@ -208,9 +210,10 @@ def test_unresolved_fake_dispatch_rejects_later_sdk_state_change(
             runtime.recover()
         assert error.value.code == "DISPATCH_FREEZE_RESOLUTION_FAILED"
         assert runtime.risk_gate.active_freeze_reasons(runtime.risk_scope) == [cause_id]
-        assert runtime.recovery_coordinator.freeze_status_for(
-            runtime.scope.key, intent.intent_id
-        ) == "RELEASE_ATTEMPTED"
+        assert (
+            runtime.recovery_coordinator.freeze_status_for(runtime.scope.key, intent.intent_id)
+            == "RELEASE_ATTEMPTED"
+        )
     finally:
         runtime.close()
 

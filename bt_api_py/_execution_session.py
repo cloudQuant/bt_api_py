@@ -3999,9 +3999,7 @@ class _ExecutionSession:
         ):
             raise reject("ctp_order_identity_requested_identity_invalid")
         try:
-            scope_type, store_type, reservation_type = (
-                _installed_i9_ctp_order_identity_types()
-            )
+            scope_type, store_type, reservation_type = _installed_i9_ctp_order_identity_types()
         except Exception:
             raise reject("ctp_order_identity_read_port_unavailable") from None
         try:
@@ -4132,18 +4130,14 @@ class _ExecutionSession:
         if type(request) is not CancelOrderRequest or request.ctp_cancel_identity is not None:
             raise reject("ctp_cancel_identity_request_invalid_or_caller_supplied")
         try:
-            scope_type, store_type, reservation_type = (
-                _installed_i9_ctp_order_identity_types()
-            )
+            scope_type, store_type, reservation_type = _installed_i9_ctp_order_identity_types()
             (
                 command_type,
                 correlation_type,
                 projection_type,
                 cancel_action_type,
                 target_order_type,
-            ) = (
-                _installed_i9_ctp_dispatch_command_types()
-            )
+            ) = _installed_i9_ctp_dispatch_command_types()
         except Exception:
             raise reject("ctp_cancel_identity_read_port_unavailable") from None
         try:
@@ -4243,9 +4237,15 @@ class _ExecutionSession:
                 (correlation.approval_use_id, command.approval_use_id),
                 (correlation.approval_digest, command.approval_digest),
                 (correlation.session_binding_sha256, command.session_binding_sha256),
-                (correlation.session_generation_id, command.session_binding.get("session_generation_id")),
+                (
+                    correlation.session_generation_id,
+                    command.session_binding.get("session_generation_id"),
+                ),
                 (correlation.dispatch_front_id, command.session_binding.get("dispatch_front_id")),
-                (correlation.dispatch_session_id, command.session_binding.get("dispatch_session_id")),
+                (
+                    correlation.dispatch_session_id,
+                    command.session_binding.get("dispatch_session_id"),
+                ),
                 (
                     correlation.native_request_payload_sha256,
                     command.native_request_payload_sha256,
@@ -4255,7 +4255,9 @@ class _ExecutionSession:
                 (correlation.cancel_target_front_id, command.cancel_target_front_id),
                 (correlation.cancel_target_session_id, command.cancel_target_session_id),
             )
-            if any(left != right or type(left) is not type(right) for left, right in command_fields):
+            if any(
+                left != right or type(left) is not type(right) for left, right in command_fields
+            ):
                 raise ValueError("I9 cancel correlation differs from command fields")
 
             target_values = {
@@ -4271,7 +4273,10 @@ class _ExecutionSession:
                     raise ValueError("I9 cancel payload target mismatch")
             if type(payload.get("ActionFlag")) is not str or payload["ActionFlag"] != "0":
                 raise ValueError("I9 cancel payload is not a native delete")
-            if type(payload.get("InstrumentID")) is not str or payload["InstrumentID"] != request.symbol:
+            if (
+                type(payload.get("InstrumentID")) is not str
+                or payload["InstrumentID"] != request.symbol
+            ):
                 raise ValueError("I9 cancel payload instrument differs from request")
             if "RequestID" in payload and (
                 type(payload["RequestID"]) is not int
@@ -4342,8 +4347,7 @@ class _ExecutionSession:
                 (target_order.session_id, command.cancel_target_session_id),
             )
             if any(
-                left != right or type(left) is not type(right)
-                for left, right in projection_values
+                left != right or type(left) is not type(right) for left, right in projection_values
             ):
                 raise ValueError("I9 cancel action projection target mismatch")
 

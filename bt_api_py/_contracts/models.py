@@ -199,14 +199,12 @@ class CtpCancelIdentityBinding:
             raise ValueError("invalid CTP cancel identity trading_day") from error
         if (
             type(self.managed_intent_id) is not str
-            or re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", self.managed_intent_id, re.ASCII)
-            is None
+            or re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", self.managed_intent_id, re.ASCII) is None
         ):
             raise ValueError("invalid CTP cancel identity managed_intent_id")
         if (
             type(self.runtime_order_id) is not str
-            or re.fullmatch(r"bt-managed-v1:[0-9a-f]{64}", self.runtime_order_id, re.ASCII)
-            is None
+            or re.fullmatch(r"bt-managed-v1:[0-9a-f]{64}", self.runtime_order_id, re.ASCII) is None
         ):
             raise ValueError("invalid CTP cancel identity runtime_order_id")
         for name in (
@@ -223,10 +221,7 @@ class CtpCancelIdentityBinding:
             ("order_ref", self.order_ref),
             ("cancel_target_order_ref", self.cancel_target_order_ref),
         ):
-            if (
-                type(value) is not str
-                or re.fullmatch(r"[0-9]{12}", value, re.ASCII) is None
-            ):
+            if type(value) is not str or re.fullmatch(r"[0-9]{12}", value, re.ASCII) is None:
                 raise ValueError("invalid CTP cancel identity " + name)
         if self.order_ref != self.cancel_target_order_ref:
             raise ValueError("CTP cancel identity target OrderRef differs from reservation")
@@ -901,9 +896,7 @@ class CancelOrderRequest:
         if isinstance(identity, Mapping):
             fields["ctp_cancel_identity"] = CtpCancelIdentityBinding.from_dict(identity)
         elif identity is not None and type(identity) is not CtpCancelIdentityBinding:
-            raise TypeError(
-                "ctp_cancel_identity must be a mapping or CtpCancelIdentityBinding"
-            )
+            raise TypeError("ctp_cancel_identity must be a mapping or CtpCancelIdentityBinding")
         return cls(**fields)
 
 

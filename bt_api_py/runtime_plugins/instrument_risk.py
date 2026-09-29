@@ -44,11 +44,7 @@ def _decimal_text(value: Decimal) -> str:
 
 
 def _text(value: object, name: str, *, pattern: re.Pattern[str] = _IDENTIFIER) -> str:
-    if (
-        not isinstance(value, str)
-        or value != value.strip()
-        or not pattern.fullmatch(value)
-    ):
+    if not isinstance(value, str) or value != value.strip() or not pattern.fullmatch(value):
         raise ValueError("invalid " + name)
     return value
 
@@ -74,11 +70,7 @@ def _decimal(
         result = value if isinstance(value, Decimal) else Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError) as error:
         raise ValueError("invalid " + name) from error
-    if (
-        not result.is_finite()
-        or (positive and result <= 0)
-        or (non_negative and result < 0)
-    ):
+    if not result.is_finite() or (positive and result <= 0) or (non_negative and result < 0):
         raise ValueError("invalid " + name)
     return result
 
@@ -142,13 +134,9 @@ class NormalizedInstrumentMetadata:
             "quote_to_account_fx",
             "fee_to_account_fx",
         ):
-            object.__setattr__(
-                self, name, _decimal(getattr(self, name), name, positive=True)
-            )
+            object.__setattr__(self, name, _decimal(getattr(self, name), name, positive=True))
         for name in ("taker_fee_bps", "fixed_fee", "max_slippage_bps"):
-            object.__setattr__(
-                self, name, _decimal(getattr(self, name), name, non_negative=True)
-            )
+            object.__setattr__(self, name, _decimal(getattr(self, name), name, non_negative=True))
         for name in ("min_quantity", "max_quantity"):
             object.__setattr__(self, name, _optional_decimal(getattr(self, name), name))
         if self.quantity_unit is not None:
@@ -163,15 +151,11 @@ class NormalizedInstrumentMetadata:
             and self.min_quantity > self.max_quantity
         ):
             raise ValueError("min_quantity cannot exceed max_quantity")
-        if (
-            self.quote_currency == self.account_currency
-            and self.quote_to_account_fx != Decimal("1")
+        if self.quote_currency == self.account_currency and self.quote_to_account_fx != Decimal(
+            "1"
         ):
             raise ValueError("quote_to_account_fx must be one for account currency")
-        if (
-            self.fee_currency == self.account_currency
-            and self.fee_to_account_fx != Decimal("1")
-        ):
+        if self.fee_currency == self.account_currency and self.fee_to_account_fx != Decimal("1"):
             raise ValueError("fee_to_account_fx must be one for account currency")
 
     @classmethod
@@ -220,9 +204,10 @@ class NormalizedInstrumentMetadata:
         if schema is not None and schema != _RECORD_SCHEMA:
             raise ValueError("invalid normalized metadata schema")
         serialized_currency = value.get("account_currency")
-        if serialized_currency is not None and _currency(
-            serialized_currency, "account_currency"
-        ) != account_currency:
+        if (
+            serialized_currency is not None
+            and _currency(serialized_currency, "account_currency") != account_currency
+        ):
             raise ValueError("record account currency does not match snapshot")
         return cls(
             instrument=value["instrument"],
@@ -252,16 +237,10 @@ class NormalizedInstrumentMetadata:
             "fixed_fee": _decimal_text(self.fixed_fee),
             "instrument": self.instrument,
             "lot_size": _decimal_text(self.lot_size),
-            "max_gross_notional_account": _decimal_text(
-                self.max_gross_notional_account
-            ),
-            "max_quantity": None
-            if self.max_quantity is None
-            else _decimal_text(self.max_quantity),
+            "max_gross_notional_account": _decimal_text(self.max_gross_notional_account),
+            "max_quantity": None if self.max_quantity is None else _decimal_text(self.max_quantity),
             "max_slippage_bps": _decimal_text(self.max_slippage_bps),
-            "min_quantity": None
-            if self.min_quantity is None
-            else _decimal_text(self.min_quantity),
+            "min_quantity": None if self.min_quantity is None else _decimal_text(self.min_quantity),
             "quote_currency": self.quote_currency,
             "quote_to_account_fx": _decimal_text(self.quote_to_account_fx),
             "schema": _RECORD_SCHEMA,
@@ -360,9 +339,7 @@ class SealedNormalizedInstrumentMetadataSnapshot:
         try:
             payloads = tuple(records)
         except TypeError as error:
-            raise ValueError(
-                "normalized metadata instruments must be iterable"
-            ) from error
+            raise ValueError("normalized metadata instruments must be iterable") from error
         account_currency = _currency(value["account_currency"], "account_currency")
         return cls(
             provider=value["provider"],
@@ -520,8 +497,7 @@ class SealedNormalizedInstrumentMetadataSnapshot:
                     expires_at_ns=self.expires_at_ns,
                     tick_size=item.tick_size,
                     quantity_step=item.lot_size,
-                    contract_multiplier=item.contract_multiplier
-                    * item.quote_to_account_fx,
+                    contract_multiplier=item.contract_multiplier * item.quote_to_account_fx,
                     max_gross_notional=item.max_gross_notional_account,
                     min_quantity=item.min_quantity,
                     max_quantity=item.max_quantity,
@@ -603,9 +579,7 @@ class _SnapshotBoundInstrumentRiskMapper:
             payload_fingerprint=_sha256(
                 _canonical_json(
                     {
-                        "instrument_digest": self._snapshot.instrument_digest(
-                            record.instrument
-                        ),
+                        "instrument_digest": self._snapshot.instrument_digest(record.instrument),
                         "risk_payload_fingerprint": mapped.payload_fingerprint,
                         "schema": _SNAPSHOT_SCHEMA,
                         "snapshot_digest": self._snapshot.digest,
@@ -627,9 +601,7 @@ class InstrumentRiskAdmission:
     metadata_digests: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "metadata_digests", MappingProxyType(dict(self.metadata_digests))
-        )
+        object.__setattr__(self, "metadata_digests", MappingProxyType(dict(self.metadata_digests)))
 
     def map_execution_intent(self, intent: Any) -> Any:
         return self.mapper(intent)
@@ -690,17 +662,13 @@ def compose_instrument_risk_admission(
             "instrument admission requires sealed metadata",
         )
     if clock_ns is not None and not callable(clock_ns):
-        raise RuntimePluginError(
-            "INSTRUMENT_RISK_CLOCK_INVALID", "clock_ns must be callable"
-        )
+        raise RuntimePluginError("INSTRUMENT_RISK_CLOCK_INVALID", "clock_ns must be callable")
     admission_clock = clock_ns or _wall_clock_ns
     snapshot: SealedNormalizedInstrumentMetadataSnapshot | None = None
     metadata_digests: Mapping[str, str] = {}
     try:
         if normalized_snapshot is not None:
-            if not isinstance(
-                normalized_snapshot, SealedNormalizedInstrumentMetadataSnapshot
-            ):
+            if not isinstance(normalized_snapshot, SealedNormalizedInstrumentMetadataSnapshot):
                 raise RuntimePluginError(
                     "INSTRUMENT_SNAPSHOT_INVALID",
                     "normalized_snapshot must be a sealed normalized metadata snapshot",

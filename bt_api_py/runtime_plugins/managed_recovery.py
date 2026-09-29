@@ -103,13 +103,9 @@ class DurableManagedRecoveryCoordinator:
     _SETTLEMENT_PENDING = "PENDING"
     _SETTLEMENT_CONFIRMED = "SETTLED"
     _SETTLEMENT_NOT_APPLICABLE = "NOT_APPLICABLE"
-    _CONFIRMED_STATES = frozenset(
-        {"ACKED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"}
-    )
+    _CONFIRMED_STATES = frozenset({"ACKED", "PARTIALLY_FILLED", "FILLED", "CANCELLED", "REJECTED"})
 
-    def __init__(
-        self, database_path: str | Path, *, timeout_seconds: float = 5.0
-    ) -> None:
+    def __init__(self, database_path: str | Path, *, timeout_seconds: float = 5.0) -> None:
         if not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         self._database_path = Path(database_path)
@@ -187,9 +183,7 @@ class DurableManagedRecoveryCoordinator:
             or record_scope_key != scope_key
             or record_fingerprint != fingerprint
         ):
-            raise ManagedRecoveryCoordinatorError(
-                "execution result identity does not match intent"
-            )
+            raise ManagedRecoveryCoordinatorError("execution result identity does not match intent")
         state_value = self._state_value(record)
         review_required = bool(getattr(record, "review_required", False))
         permit_reference = getattr(record, "permit_reference", None)
@@ -500,11 +494,7 @@ class DurableManagedRecoveryCoordinator:
                 raise ManagedRecoveryCoordinatorError(
                     "dispatch freeze cannot resolve before risk settlement is proven"
                 )
-            phase = (
-                self._FREEZE_RESOLVED
-                if target == self._FREEZE_RESOLVED
-                else str(row["phase"])
-            )
+            phase = self._FREEZE_RESOLVED if target == self._FREEZE_RESOLVED else str(row["phase"])
             connection.execute(
                 """
                 UPDATE managed_recovery_work
@@ -655,9 +645,7 @@ class DurableManagedRecoveryCoordinator:
                     (str(self._SCHEMA_VERSION), "schema_version"),
                 )
             elif str(row["value"]) != str(self._SCHEMA_VERSION):
-                raise ManagedRecoveryCoordinatorError(
-                    "unsupported managed recovery schema"
-                )
+                raise ManagedRecoveryCoordinatorError("unsupported managed recovery schema")
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -716,9 +704,7 @@ class DurableManagedRecoveryCoordinator:
             intent_id=str(row["intent_id"]),
             payload_sha256=str(row["payload_sha256"]),
             phase=str(row["phase"]),
-            record_state=None
-            if row["record_state"] is None
-            else str(row["record_state"]),
+            record_state=None if row["record_state"] is None else str(row["record_state"]),
             review_required=bool(row["review_required"]),
             freeze_status=str(row["freeze_status"]),
             risk_settlement_status=str(row["risk_settlement_status"]),
@@ -734,9 +720,7 @@ class DurableManagedRecoveryCoordinator:
         try:
             data = json.loads(str(row["data_json"]))
         except (TypeError, json.JSONDecodeError) as error:
-            raise ManagedRecoveryCoordinatorError(
-                "stored monitor event is unreadable"
-            ) from error
+            raise ManagedRecoveryCoordinatorError("stored monitor event is unreadable") from error
         if not isinstance(data, dict) or not all(isinstance(key, str) for key in data):
             raise ManagedRecoveryCoordinatorError("stored monitor event is invalid")
         return ManagedRecoveryEvent(
@@ -763,15 +747,9 @@ class DurableManagedRecoveryCoordinator:
             or not isinstance(fingerprint, str)
             or not fingerprint.strip()
         ):
-            raise ManagedRecoveryCoordinatorError(
-                "invalid managed execution intent identity"
-            )
-        if len(fingerprint) != 64 or any(
-            char not in "0123456789abcdef" for char in fingerprint
-        ):
-            raise ManagedRecoveryCoordinatorError(
-                "invalid managed execution intent fingerprint"
-            )
+            raise ManagedRecoveryCoordinatorError("invalid managed execution intent identity")
+        if len(fingerprint) != 64 or any(char not in "0123456789abcdef" for char in fingerprint):
+            raise ManagedRecoveryCoordinatorError("invalid managed execution intent fingerprint")
         return scope_key, intent_id, fingerprint
 
     @staticmethod
@@ -786,9 +764,7 @@ class DurableManagedRecoveryCoordinator:
     def _record_occurred_at(record: Any) -> float:
         updated_at_ns = getattr(record, "updated_at_ns", None)
         if not isinstance(updated_at_ns, int) or updated_at_ns <= 0:
-            raise ManagedRecoveryCoordinatorError(
-                "execution result lacks durable update time"
-            )
+            raise ManagedRecoveryCoordinatorError("execution result lacks durable update time")
         return updated_at_ns / 1_000_000_000
 
     @classmethod
@@ -832,25 +808,19 @@ class DurableManagedRecoveryCoordinator:
     @staticmethod
     def _assert_work_identity(row: sqlite3.Row, fingerprint: str) -> None:
         if str(row["payload_sha256"]) != fingerprint:
-            raise ManagedRecoveryCoordinatorError(
-                "intent id was reused with another payload"
-            )
+            raise ManagedRecoveryCoordinatorError("intent id was reused with another payload")
 
     @staticmethod
     def _canonical_json(data: dict[str, str]) -> str:
         try:
-            return json.dumps(
-                data, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-            )
+            return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         except (TypeError, ValueError) as error:
             raise ManagedRecoveryCoordinatorError(
                 "monitor event data is not serializable"
             ) from error
 
     @staticmethod
-    def _event_fingerprint(
-        scope_key: str, state: str, data_json: str, occurred_at: float
-    ) -> str:
+    def _event_fingerprint(scope_key: str, state: str, data_json: str, occurred_at: float) -> str:
         canonical = json.dumps(
             {
                 "scope_key": scope_key,
