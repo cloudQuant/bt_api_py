@@ -22,15 +22,27 @@ def _read_events(log_file) -> list[dict]:
     return events
 
 
+def _scoped_mock_router(adapter: MockBrokerAdapter, **kwargs) -> OrderRouter:
+    adapter.exchange_name = "SIM___SPOT"
+    return OrderRouter(
+        adapter,
+        write_enabled=True,
+        write_scope=("SIM", "SPOT", adapter.account_id),
+        **kwargs,
+    )
+
+
 @pytest.mark.asyncio
 async def test_place_order_success_emits_audit_event(tmp_path) -> None:
     log_file = tmp_path / "audit.jsonl"
     audit = AuditLogger(log_file=log_file)
-    router = OrderRouter(MockBrokerAdapter(), audit_logger=audit)
+    router = _scoped_mock_router(MockBrokerAdapter(), audit_logger=audit)
     await router.connect()
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -61,12 +73,14 @@ async def test_place_order_success_emits_audit_event(tmp_path) -> None:
 async def test_place_order_rejected_by_risk_emits_failure_audit(tmp_path) -> None:
     log_file = tmp_path / "audit.jsonl"
     audit = AuditLogger(log_file=log_file)
-    router = OrderRouter(MockBrokerAdapter(), audit_logger=audit)
+    router = _scoped_mock_router(MockBrokerAdapter(), audit_logger=audit)
     await router.connect()
     router.risk_rules.kill_switch = True
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -85,13 +99,15 @@ async def test_place_order_rejected_by_risk_emits_failure_audit(tmp_path) -> Non
 async def test_cancel_order_success_emits_audit_event(tmp_path) -> None:
     log_file = tmp_path / "audit.jsonl"
     audit = AuditLogger(log_file=log_file)
-    router = OrderRouter(MockBrokerAdapter(), audit_logger=audit)
+    router = _scoped_mock_router(MockBrokerAdapter(), audit_logger=audit)
     await router.connect()
     # 先下单创建订单，再用真实 order_id 撤单
     placed = await router.place_order(
         OrderCommand(
             strategy_id="s1",
             account_id="paper",
+            exchange="SIM",
+            market_type="SPOT",
             symbol="RB2510",
             side="buy",
             size=1,
@@ -105,6 +121,8 @@ async def test_cancel_order_success_emits_audit_event(tmp_path) -> None:
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -124,11 +142,13 @@ async def test_cancel_order_success_emits_audit_event(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_no_audit_logger_is_silent_noop(tmp_path) -> None:
     """未接入 audit_logger 时下单/撤单路径不报错、不落盘。"""
-    router = OrderRouter(MockBrokerAdapter())  # audit_logger=None
+    router = _scoped_mock_router(MockBrokerAdapter())  # audit_logger=None
     await router.connect()
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,

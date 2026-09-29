@@ -41,6 +41,22 @@ class FakeBtApi:
         return self.queue
 
 
+def _scoped_mock_router(
+    adapter: MockBrokerAdapter,
+    *,
+    exchange: str = "SIM",
+    market_type: str = "SPOT",
+    **kwargs,
+) -> OrderRouter:
+    adapter.exchange_name = f"{exchange}___{market_type}"
+    return OrderRouter(
+        adapter,
+        write_enabled=True,
+        write_scope=(exchange, market_type, adapter.account_id),
+        **kwargs,
+    )
+
+
 def test_market_data_hub_fans_out_to_multiple_consumers_and_replays() -> None:
     bus = InMemoryForwardingBus(replay_size=4)
     hub = MarketDataHub(bus)
@@ -305,12 +321,14 @@ def test_in_memory_bus_rejects_negative_sync_command_timeout() -> None:
 @pytest.mark.asyncio
 async def test_order_router_enforces_idempotency_and_publishes_private_events() -> None:
     bus = InMemoryForwardingBus()
-    router = OrderRouter(MockBrokerAdapter(), bus=bus)
+    router = _scoped_mock_router(MockBrokerAdapter(), bus=bus)
     await router.connect()
     strategy_events = bus.subscribe_private("strategy.s1.")
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -355,13 +373,15 @@ async def test_order_router_logs_account_state_refresh_failure(
 
     warnings: list[str] = []
     monkeypatch.setattr(router_module.logger, "warning", lambda message: warnings.append(message))
-    router = OrderRouter(AccountStateFailingAdapter(), bus=InMemoryForwardingBus())
+    router = _scoped_mock_router(AccountStateFailingAdapter(), bus=InMemoryForwardingBus())
     await router.connect()
 
     ack = await router.handle_command(
         OrderCommand(
             strategy_id="s1",
             account_id="paper",
+            exchange="SIM",
+            market_type="SPOT",
             symbol="RB2510",
             side="buy",
             size=1,
@@ -383,7 +403,7 @@ async def test_order_router_logs_account_state_refresh_failure(
 async def test_order_router_rejects_disallowed_symbol_before_adapter_call() -> None:
     bus = InMemoryForwardingBus()
     adapter = MockBrokerAdapter()
-    router = OrderRouter(
+    router = _scoped_mock_router(
         adapter,
         bus=bus,
         risk_rules=RiskRuleSet(allowed_symbols={"IF2510"}, max_order_size=10),
@@ -394,6 +414,8 @@ async def test_order_router_rejects_disallowed_symbol_before_adapter_call() -> N
         OrderCommand(
             strategy_id="s1",
             account_id="paper",
+            exchange="SIM",
+            market_type="SPOT",
             symbol="RB2510",
             side="buy",
             size=1,
@@ -408,7 +430,7 @@ async def test_order_router_rejects_disallowed_symbol_before_adapter_call() -> N
 
 @pytest.mark.asyncio
 async def test_order_router_rejects_invalid_side_instead_of_market_buy() -> None:
-    adapter = MockBrokerAdapter()
+    adapter = MockBrokerAdapter(account_id="a")
     placed: list[OrderRequest] = []
     original = adapter.place_order
 
@@ -417,7 +439,7 @@ async def test_order_router_rejects_invalid_side_instead_of_market_buy() -> None
         return await original(request)
 
     adapter.place_order = spy  # type: ignore[method-assign]
-    router = OrderRouter(adapter)
+    router = _scoped_mock_router(adapter, exchange="E")
     cmd = OrderCommand(
         strategy_id="s",
         account_id="a",
@@ -439,7 +461,7 @@ async def test_order_router_rejects_invalid_side_instead_of_market_buy() -> None
 
 @pytest.mark.asyncio
 async def test_order_router_rejects_invalid_order_type_instead_of_market() -> None:
-    adapter = MockBrokerAdapter()
+    adapter = MockBrokerAdapter(account_id="a")
     placed: list[OrderRequest] = []
     original = adapter.place_order
 
@@ -448,7 +470,7 @@ async def test_order_router_rejects_invalid_order_type_instead_of_market() -> No
         return await original(request)
 
     adapter.place_order = spy  # type: ignore[method-assign]
-    router = OrderRouter(adapter)
+    router = _scoped_mock_router(adapter, exchange="E")
     cmd = OrderCommand(
         strategy_id="s",
         account_id="a",
@@ -472,7 +494,7 @@ async def test_order_router_rejects_invalid_order_type_instead_of_market() -> No
 async def test_order_router_health_reports_adapter_risk_and_state_store(tmp_path) -> None:
     state_store = SQLiteStateStore(tmp_path / "forwarding.sqlite3")
     bus = InMemoryForwardingBus()
-    router = OrderRouter(
+    router = _scoped_mock_router(
         MockBrokerAdapter(),
         bus=bus,
         risk_rules=RiskRuleSet(
@@ -488,6 +510,8 @@ async def test_order_router_health_reports_adapter_risk_and_state_store(tmp_path
         command = OrderCommand(
             strategy_id="s1",
             account_id="paper",
+            exchange="SIM",
+            market_type="SPOT",
             symbol="RB2510",
             side="buy",
             size=1,
@@ -519,10 +543,12 @@ async def test_order_router_recovers_idempotent_ack_from_sqlite_state(tmp_path) 
     db_path = tmp_path / "forwarding.sqlite3"
     state_store = SQLiteStateStore(db_path)
     first_adapter = MockBrokerAdapter()
-    first_router = OrderRouter(first_adapter, state_store=state_store)
+    first_router = _scoped_mock_router(first_adapter, state_store=state_store)
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -536,7 +562,7 @@ async def test_order_router_recovers_idempotent_ack_from_sqlite_state(tmp_path) 
 
     second_state_store = SQLiteStateStore(db_path)
     second_adapter = MockBrokerAdapter()
-    second_router = OrderRouter(second_adapter, state_store=second_state_store)
+    second_router = _scoped_mock_router(second_adapter, state_store=second_state_store)
     second_ack = await second_router.handle_command(command)
     events = second_state_store.list_private_events("strategy.s1.")
     second_state_store.close()
@@ -659,7 +685,7 @@ async def test_forwarding_runtime_health_includes_market_and_router_state() -> N
 def test_forwarding_client_exposes_backtrader_style_market_and_order_api() -> None:
     bus = InMemoryForwardingBus()
     hub = MarketDataHub(bus)
-    router = OrderRouter(MockBrokerAdapter(), bus=bus)
+    router = _scoped_mock_router(MockBrokerAdapter(), bus=bus)
     client = ForwardingClient(
         bus=bus,
         exchange="SIM",
@@ -711,7 +737,7 @@ def test_forwarding_client_exposes_backtrader_style_market_and_order_api() -> No
 def test_forwarding_client_requires_explicit_side_and_order_type() -> None:
     bus = InMemoryForwardingBus()
     _hub = MarketDataHub(bus)
-    _router = OrderRouter(MockBrokerAdapter(), bus=bus)
+    _router = _scoped_mock_router(MockBrokerAdapter(), bus=bus)
     client = ForwardingClient(
         bus=bus,
         exchange="SIM",
@@ -1052,10 +1078,12 @@ async def test_router_does_not_cache_retryable_errors() -> None:
                 retryable=True,
             )
 
-    router = OrderRouter(FlakyAdapter())
+    router = _scoped_mock_router(FlakyAdapter())
     cmd = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -1125,10 +1153,12 @@ async def test_router_caches_terminal_rejects() -> None:
                 retryable=False,
             )
 
-    router = OrderRouter(TerminalAdapter())
+    router = _scoped_mock_router(TerminalAdapter())
     cmd = OrderCommand(
         strategy_id="s1",
         account_id="paper",
+        exchange="SIM",
+        market_type="SPOT",
         symbol="RB2510",
         side="buy",
         size=1,
@@ -1267,10 +1297,16 @@ async def test_sync_command_timeout_does_not_leave_ghost_order() -> None:
             return result
 
     adapter = BlockingAdapter()
-    router = OrderRouter(adapter)
+    router = _scoped_mock_router(adapter)
     bus = InMemoryForwardingBus()
     bus.set_command_handler(router.handle_command)
-    client = ForwardingClient(bus=bus, command_timeout=0.05)
+    client = ForwardingClient(
+        bus=bus,
+        exchange="SIM",
+        market_type="SPOT",
+        account_id="paper",
+        command_timeout=0.05,
+    )
 
     payload = {
         "bt_order_ref": 7,

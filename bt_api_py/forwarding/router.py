@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, is_dataclass
@@ -24,9 +25,92 @@ logger = get_logger("forwarding.router")
 _VALID_SIDES = frozenset({"buy", "sell"})
 _VALID_ORDER_TYPES = frozenset({"limit", "market"})
 _MAX_CACHED_ACKS = 10_000
-_TRADING_DISABLED_REASON = (
-    "forwarding trading is disabled; provider write was not attempted"
+_TRADING_DISABLED_REASON = "forwarding trading is disabled; provider write was not attempted"
+_WRITE_SCOPE_MISMATCH_REASON = (
+    "forwarding command scope does not match the configured adapter; "
+    "provider write was not attempted"
 )
+_SCOPE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+
+
+def _scope_token(value: object) -> str | None:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or not value.isascii()
+        or _SCOPE_TOKEN.fullmatch(value) is None
+    ):
+        return None
+    return value.upper()
+
+
+def _account_token(value: object) -> str | None:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or not value.isascii()
+        or any(not "!" <= character <= "~" for character in value)
+    ):
+        return None
+    return value
+
+
+def _looks_like_ctp(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    venue = value.split("___", 1)[0]
+    return "".join(venue.split()).upper() == "CTP"
+
+
+def _adapter_exchange_name(adapter: BrokerAdapter) -> str | None:
+    """Read only an adapter-owned static binding; unknown adapters fail closed."""
+    try:
+        values = vars(adapter)
+    except TypeError:
+        return None
+    candidates = [values[name] for name in ("exchange_name", "_exchange_name") if name in values]
+    if not candidates or any(value != candidates[0] for value in candidates):
+        return None
+    value = candidates[0]
+    return value if isinstance(value, str) else None
+
+
+def resolve_write_scope(
+    adapter: BrokerAdapter,
+    *,
+    expected_exchange: str | None,
+    expected_market_type: str | None,
+    expected_account_id: str | None,
+) -> tuple[tuple[str, str, str] | None, str]:
+    """Bind writes to explicit service scope and the adapter's static identity."""
+    adapter_exchange_name = _adapter_exchange_name(adapter)
+    if _looks_like_ctp(expected_exchange) or _looks_like_ctp(adapter_exchange_name):
+        return None, "CTP forwarding writes are not supported by the server router"
+
+    exchange = _scope_token(expected_exchange)
+    market_type = _scope_token(expected_market_type)
+    account_id = _account_token(expected_account_id)
+    if exchange is None or market_type is None or account_id is None:
+        return None, "explicit exchange, market type, and account scope are required"
+
+    if not isinstance(adapter_exchange_name, str) or adapter_exchange_name.count("___") != 1:
+        return None, "adapter has no trusted static exchange binding"
+    adapter_exchange, adapter_market_type = adapter_exchange_name.split("___", 1)
+    if (
+        _scope_token(adapter_exchange) != exchange
+        or _scope_token(adapter_market_type) != market_type
+    ):
+        return None, "configured scope does not match the adapter exchange binding"
+
+    try:
+        adapter_account_id = vars(adapter).get("account_id")
+    except TypeError:
+        adapter_account_id = None
+    if _account_token(adapter_account_id) != account_id:
+        return None, "configured account does not match the adapter account binding"
+    return (exchange, market_type, account_id), ""
 
 
 @dataclass(frozen=True)
@@ -105,7 +189,7 @@ class RiskRuleSet:
 
 
 class OrderRouter:
-    """Central account/order gateway for forwarded trading commands."""
+    """Central gateway whose mutations require an adapter-bound write scope."""
 
     def __init__(
         self,
@@ -116,7 +200,8 @@ class OrderRouter:
         state_store: SQLiteStateStore | None = None,
         audit_logger: Any | None = None,
         command_result_ttl_seconds: float = 3600.0,
-        write_enabled: bool = True,
+        write_enabled: bool = False,
+        write_scope: tuple[str, str, str] | None = None,
     ) -> None:
         """__init__ method"""
         self.adapter = adapter
@@ -124,7 +209,17 @@ class OrderRouter:
         self.risk_rules = risk_rules or RiskRuleSet()
         self.state_store = state_store
         self.audit_logger = audit_logger
-        self.write_enabled = bool(write_enabled)
+        if not isinstance(write_scope, tuple) or len(write_scope) != 3:
+            self.write_scope = None
+            self.write_scope_rejection_reason = "an explicit adapter-bound write scope is required"
+        else:
+            self.write_scope, self.write_scope_rejection_reason = resolve_write_scope(
+                adapter,
+                expected_exchange=write_scope[0],
+                expected_market_type=write_scope[1],
+                expected_account_id=write_scope[2],
+            )
+        self.write_enabled = bool(write_enabled and self.write_scope is not None)
         if command_result_ttl_seconds <= 0:
             raise ValueError("command_result_ttl_seconds must be > 0")
         self.command_result_ttl_seconds = float(command_result_ttl_seconds)
@@ -162,6 +257,12 @@ class OrderRouter:
             "state_store_enabled": self.state_store is not None,
             "bus_attached": self.bus is not None,
             "write_enabled": self.write_enabled,
+            "write_scope_bound": self.write_scope is not None,
+            "write_scope_rejection_reason": (
+                self.write_scope_rejection_reason
+                if not self.write_enabled and self.write_scope is None
+                else ""
+            ),
             "risk": {
                 "allowed_account_count": (
                     None
@@ -517,16 +618,28 @@ class OrderRouter:
         return cached
 
     def _reject_write_when_disabled(self, command: OrderCommand) -> CommandAck | None:
-        """Reject a mutating command before any cache, adapter, or provider I/O.
+        """Reject a mutation before cache or adapter I/O unless scope is bound.
 
         ``ZmqForwardingRuntime`` is intentionally read-only unless its gateway
-        configuration explicitly enables trading.  Keep this guard inside the
-        router as well as in the runtime so callers cannot bypass it by calling
-        ``place_order``/``cancel_order``/``cancel_all`` directly.
+        configuration explicitly enables trading and the configured scope
+        matches the adapter's static identity. Keep this guard in the router
+        so direct callers cannot bypass it via the mutation methods.
         """
-        if self.write_enabled:
+        if not self.write_enabled or self.write_scope is None:
+            ack = self._reject(command, _TRADING_DISABLED_REASON)
+            self._remember_ack(ack, command)
+            return ack
+        if (
+            self.write_scope is None
+            or (
+                command.exchange,
+                command.market_type,
+                command.account_id,
+            )
+            == self.write_scope
+        ):
             return None
-        ack = self._reject(command, _TRADING_DISABLED_REASON)
+        ack = self._reject(command, _WRITE_SCOPE_MISMATCH_REASON)
         self._remember_ack(ack, command)
         return ack
 

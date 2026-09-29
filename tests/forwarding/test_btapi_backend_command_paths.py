@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,6 +14,7 @@ from bt_api_py._contracts.models import (
     CancelAllRequest,
     CancelOrderRequest,
     CommandStatus,
+    CtpOrderIdentityBinding,
     ForwardingConfig,
     OrderRequest,
     OrderType,
@@ -155,6 +158,196 @@ def test_crypto_backend_rejects_unreconciled_order_commands_before_send(
             call()
         assert exc_info.value.definite_reject is True
     assert client.commands == []
+
+
+def _managed_ctp_identity() -> CtpOrderIdentityBinding:
+    return CtpOrderIdentityBinding(
+        environment="simnow",
+        account_key="account:" + "a" * 64,
+        trading_day="20260926",
+        scope_key="scope:" + "b" * 64,
+        managed_intent_id="intent-ctp-1",
+        runtime_order_id="bt-managed-v1:" + "c" * 64,
+    )
+
+
+@pytest.mark.parametrize("include_identity", [False, True])
+def test_ctp_forwarding_rejects_before_identity_can_be_dropped_or_transport_started(
+    monkeypatch: pytest.MonkeyPatch, include_identity: bool
+) -> None:
+    backend = ZmqBtApiBackend(_config())
+    ensure_client = Mock()
+    monkeypatch.setattr(backend, "_ensure_client", ensure_client)
+    native_intent = Mock()
+    monkeypatch.setattr(backend, "_native_intent", native_intent)
+    request = OrderRequest(
+        symbol="rb2610",
+        side=Side.BUY,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("1"),
+        price=Decimal("3500"),
+        account_id="acct-1",
+        client_order_id="000000000137",
+        quantity_unit="contracts",
+        ctp_order_identity=_managed_ctp_identity() if include_identity else None,
+    )
+
+    with pytest.raises(CapabilityNotSupportedError) as exc_info:
+        backend.make_order("CTP___FUTURE", request)
+
+    assert exc_info.value.definite_reject is True
+    assert "ctp_order_identity" in exc_info.value.detail
+    ensure_client.assert_not_called()
+    native_intent.assert_not_called()
+    ctp_capabilities = backend.get_capabilities("CTP___FUTURE")
+    assert all(not ctp_capabilities[name] for name in ("make_order", "cancel_order", "cancel_all"))
+    for exchange_name in ("MT5___FX", "SIM___SPOT"):
+        capabilities = backend.get_capabilities(exchange_name)
+        assert all(capabilities[name] for name in ("make_order", "cancel_order", "cancel_all"))
+
+
+def test_ctp_identity_json_round_trip_is_still_rejected_before_forwarding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = _managed_ctp_identity()
+    request = OrderRequest(
+        symbol="rb2610",
+        side=Side.SELL,
+        order_type=OrderType.LIMIT,
+        quantity=Decimal("2"),
+        price=Decimal("3501"),
+        account_id="acct-1",
+        client_order_id="000000000137",
+        idempotency_key="intent-ctp-1",
+        quantity_unit="contracts",
+        ctp_order_identity=identity,
+    )
+    restored = OrderRequest.from_dict(json.loads(json.dumps(request.to_dict())))
+    assert restored == request
+    assert restored.ctp_order_identity == identity
+
+    backend = ZmqBtApiBackend(_config())
+    send = Mock(side_effect=AssertionError("forwarding send"))
+    client = Mock()
+    client._send_command_sync = send
+    ensure_client = Mock(return_value=client)
+    monkeypatch.setattr(backend, "_ensure_client", ensure_client)
+    with pytest.raises(CapabilityNotSupportedError) as exc_info:
+        backend.make_order("CTP___FUTURE", restored)
+
+    assert exc_info.value.definite_reject is True
+    ensure_client.assert_not_called()
+    send.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["cancel_order", "cancel_all"])
+def test_ctp_cancel_mutations_reject_before_native_intent_or_transport(
+    monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    backend = ZmqBtApiBackend(_config())
+    send = Mock(side_effect=AssertionError("forwarding send"))
+    client = Mock()
+    client._send_command_sync = send
+    ensure_client = Mock(return_value=client)
+    native_intent = Mock()
+    monkeypatch.setattr(backend, "_ensure_client", ensure_client)
+    monkeypatch.setattr(backend, "_native_intent", native_intent)
+
+    with pytest.raises(CapabilityNotSupportedError) as exc_info:
+        if operation == "cancel_order":
+            backend.cancel_order(
+                "CTP___FUTURE",
+                CancelOrderRequest(
+                    account_id="acct-1",
+                    symbol="rb2610",
+                    order_id="sys-order-1",
+                    client_order_id="000000000137",
+                    exchange_id="SHFE",
+                    front_id=5,
+                    session_id=9,
+                    order_ref="000000000137",
+                ),
+            )
+        else:
+            backend.cancel_all(
+                "CTP___FUTURE",
+                CancelAllRequest(account_id="acct-1", symbol="rb2610"),
+            )
+
+    assert exc_info.value.operation == operation
+    assert exc_info.value.definite_reject is True
+    assert "I9 cancel-action authority" in exc_info.value.detail
+    ensure_client.assert_not_called()
+    native_intent.assert_not_called()
+    send.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "exchange_name",
+    [
+        " CTP___FUTURE",
+        "CTP ___FUTURE",
+        "C TP___FUTURE",
+        "CTP___ FUTURE",
+        "CTP___FUTURE ",
+    ],
+)
+@pytest.mark.parametrize("operation", ["make_order", "cancel_order", "cancel_all"])
+def test_ctp_whitespace_aliases_fail_closed_for_all_mutations_and_capabilities(
+    monkeypatch: pytest.MonkeyPatch, exchange_name: str, operation: str
+) -> None:
+    backend = ZmqBtApiBackend(_config())
+    send = Mock(side_effect=AssertionError("forwarding send"))
+    client = Mock()
+    client._send_command_sync = send
+    ensure_client = Mock(return_value=client)
+    native_intent = Mock()
+    monkeypatch.setattr(backend, "_ensure_client", ensure_client)
+    monkeypatch.setattr(backend, "_native_intent", native_intent)
+
+    with pytest.raises(CapabilityNotSupportedError) as exc_info:
+        if operation == "make_order":
+            backend.make_order(
+                exchange_name,
+                OrderRequest(
+                    symbol="rb2610",
+                    side=Side.BUY,
+                    order_type=OrderType.LIMIT,
+                    quantity=Decimal("1"),
+                    price=Decimal("3500"),
+                    account_id="acct-1",
+                    client_order_id="000000000137",
+                    quantity_unit="contracts",
+                    ctp_order_identity=_managed_ctp_identity(),
+                ),
+            )
+        elif operation == "cancel_order":
+            backend.cancel_order(
+                exchange_name,
+                CancelOrderRequest(
+                    account_id="acct-1",
+                    symbol="rb2610",
+                    order_id="sys-order-1",
+                    client_order_id="000000000137",
+                    exchange_id="SHFE",
+                    front_id=5,
+                    session_id=9,
+                    order_ref="000000000137",
+                ),
+            )
+        else:
+            backend.cancel_all(
+                exchange_name,
+                CancelAllRequest(account_id="acct-1", symbol="rb2610"),
+            )
+
+    assert exc_info.value.operation == operation
+    assert exc_info.value.definite_reject is True
+    ensure_client.assert_not_called()
+    native_intent.assert_not_called()
+    send.assert_not_called()
+    capabilities = backend.get_capabilities(exchange_name)
+    assert all(not capabilities[name] for name in ("make_order", "cancel_order", "cancel_all"))
 
 
 def test_backend_creates_and_reuses_clients_per_normalized_scope(

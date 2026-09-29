@@ -12,7 +12,7 @@ from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.forwarding.hub import MarketDataHub
 from bt_api_py.forwarding.memory import InMemoryForwardingBus, _run_awaitable_sync
 from bt_api_py.forwarding.private_event_pump import PrivateEventPump
-from bt_api_py.forwarding.router import OrderRouter, RiskRuleSet
+from bt_api_py.forwarding.router import OrderRouter, RiskRuleSet, resolve_write_scope
 from bt_api_py.forwarding.source_supervisor import SourceSupervisor
 from bt_api_py.forwarding.state import SQLiteStateStore
 from bt_api_py.forwarding.transport import ZmqCommandServer, ZmqEventPublisher
@@ -28,7 +28,8 @@ class ForwardingRuntime:
     risk_rules: RiskRuleSet | None = None
     state_store: SQLiteStateStore | None = None
     source: object | None = None
-    write_enabled: bool = True
+    write_enabled: bool = False
+    write_scope: tuple[str, str, str] | None = None
 
     def __post_init__(self) -> None:
         if self.bus is None:
@@ -40,6 +41,7 @@ class ForwardingRuntime:
             risk_rules=self.risk_rules,
             state_store=self.state_store,
             write_enabled=self.write_enabled,
+            write_scope=self.write_scope,
         )
         self.source_supervisor = SourceSupervisor(self.source) if self.source is not None else None
         account_id = str(getattr(self.adapter, "account_id", "default"))
@@ -83,6 +85,9 @@ class ZmqForwardingRuntime(ForwardingRuntime):
         enable_trading: bool = False,
         allow_remote: bool = False,
         allow_shared_private_endpoint: bool = False,
+        expected_exchange: str | None = None,
+        expected_market_type: str | None = None,
+        expected_account_id: str | None = None,
         bus: InMemoryForwardingBus | None = None,
         risk_rules: RiskRuleSet | None = None,
         state_store: SQLiteStateStore | None = None,
@@ -98,14 +103,22 @@ class ZmqForwardingRuntime(ForwardingRuntime):
             allow_remote=allow_remote,
             allow_shared_private_endpoint=allow_shared_private_endpoint,
         )
+        write_scope, scope_error = resolve_write_scope(
+            adapter,
+            expected_exchange=expected_exchange,
+            expected_market_type=expected_market_type,
+            expected_account_id=expected_account_id,
+        )
         super().__init__(
             adapter=adapter,
             bus=bus,
             risk_rules=risk_rules,
             state_store=state_store,
-            write_enabled=config.enable_trading,
+            write_enabled=config.enable_trading and write_scope is not None,
+            write_scope=write_scope,
         )
         self.config = config
+        self.write_scope_rejection_reason = scope_error
         self.market_endpoint = config.market_endpoint
         self.command_endpoint = config.command_endpoint
         self.private_endpoint = config.private_endpoint or config.market_endpoint
@@ -191,6 +204,11 @@ class ZmqForwardingRuntime(ForwardingRuntime):
             ),
             "market_publisher_active": self._market_publisher is not None,
             "private_publisher_active": self._private_publisher is not None,
+            "write_scope_rejection_reason": (
+                self.write_scope_rejection_reason
+                if self.config.enable_trading and self.write_scope is None
+                else ""
+            ),
         }
         return payload
 
