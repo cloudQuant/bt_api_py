@@ -617,8 +617,29 @@ class ZmqBtApiBackend:
             **values,
         )
 
+    @staticmethod
+    def _is_ctp_exchange_name(exchange_name: str) -> bool:
+        venue = str(exchange_name).split("___", 1)[0]
+        return "".join(venue.split()).upper() == "CTP"
+
+    @staticmethod
+    def _reject_unsupported_ctp_mutation(exchange_name: str, operation: str) -> None:
+        if not ZmqBtApiBackend._is_ctp_exchange_name(exchange_name):
+            return
+        detail = (
+            "CTP forwarding does not carry and revalidate ctp_order_identity"
+            if operation == "make_order"
+            else "CTP forwarding does not validate I9 cancel-action authority"
+        )
+        raise CapabilityNotSupportedError(
+            operation,
+            detail=f"{detail}; provider dispatch is disabled",
+            definite_reject=True,
+        )
+
     def make_order(self, exchange_name: str, request: OrderRequest) -> CommandAck:
         exchange, _ = self._scope(exchange_name)
+        self._reject_unsupported_ctp_mutation(exchange_name, "make_order")
         if exchange in _CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION:
             raise CapabilityNotSupportedError(
                 "make_order",
@@ -645,6 +666,14 @@ class ZmqBtApiBackend:
         return client._send_command_sync(command)
 
     def cancel_order(self, exchange_name: str, request: CancelOrderRequest) -> CommandAck:
+        if request.ctp_cancel_identity is not None:
+            raise CapabilityNotSupportedError(
+                "cancel_order",
+                detail="non-authorizing CTP cancel identity cannot be forwarded",
+                definite_reject=True,
+            )
+        self._scope(exchange_name)
+        self._reject_unsupported_ctp_mutation(exchange_name, "cancel_order")
         extra = self._native_intent("cancel_order", exchange_name, request)
         client = self._ensure_client(exchange_name)
         return client._send_command_sync(
@@ -663,6 +692,7 @@ class ZmqBtApiBackend:
 
     def cancel_all(self, exchange_name: str, request: CancelAllRequest) -> CommandAck:
         exchange, _ = self._scope(exchange_name)
+        self._reject_unsupported_ctp_mutation(exchange_name, "cancel_all")
         if exchange in _CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION:
             raise CapabilityNotSupportedError(
                 "cancel_all",
@@ -717,7 +747,8 @@ class ZmqBtApiBackend:
     def get_capabilities(self, exchange_name: str) -> dict[str, bool]:
         """Report only forwarding operations with a concrete implementation."""
         exchange, _ = self._scope(exchange_name)
-        native_gateway = exchange in {"CTP", "MT5"}
+        ctp_gateway = self._is_ctp_exchange_name(exchange_name)
+        native_gateway = ctp_gateway or exchange == "MT5"
         unreconciled_crypto = exchange in _CRYPTO_GATEWAYS_WITHOUT_ORDER_RECONCILIATION
         return {
             "subscribe": True,
@@ -734,9 +765,9 @@ class ZmqBtApiBackend:
             "get_position": True,
             "get_open_orders": True,
             "get_deals": not native_gateway,
-            "make_order": not unreconciled_crypto,
-            "cancel_order": True,
-            "cancel_all": not unreconciled_crypto,
+            "make_order": not ctp_gateway and not unreconciled_crypto,
+            "cancel_order": not ctp_gateway,
+            "cancel_all": not ctp_gateway and not unreconciled_crypto,
             "query_order": not (native_gateway or unreconciled_crypto),
             "get_command_status": True,
             "get_trades": False,

@@ -46,6 +46,7 @@ from ._contracts.models import (
     CancelOrderRequest,
     CommandStatus,
     Consistency,
+    CtpCancelIdentityBinding,
     FeeSchedule,
     ForwardingConfig,
     Freshness,
@@ -89,6 +90,20 @@ __all__ = ["BtApi"]
 
 DATANAME_SEPARATOR = "___"
 _NORMALIZED_WRITE_OPERATIONS = frozenset({"make_order", "cancel_order", "set_position_mode"})
+_SIMNOW_BOUND_PROFILES = frozenset({"config_front_pair", "set1_group1", "set1_group2"})
+_SIMNOW_RESTRICTED_PROFILES = _SIMNOW_BOUND_PROFILES | frozenset(
+    {
+        "set2_7x24",
+        "set1_group1_vpn",
+        "set2_7x24_4000x",
+        "set2_7x24_vpn",
+        "set1",
+        "set2",
+    }
+)
+_CTP_CREDENTIAL_BINDING_FIELDS = frozenset(
+    {"credential_binding_key_id", "credential_binding_hmac_sha256"}
+)
 _CTP_TRANSITION_LOCK_INIT = threading.Lock()
 _CTP_INTERNAL_AUTHORIZATION_SEAL = object()
 _CTP_CONTROLLED_TEST_AUTHORITY_SEAL = object()
@@ -1096,7 +1111,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         """Allocate a numeric client reference before the caller binds its order.
 
         Allocation reserves the value locally; only a persisted order intent
-        consumes it. Decimal references also fit CTP's native OrderRef contract.
+        consumes it. Bound managed CTP sessions must consume an existing
+        code-owned OrderRef reservation instead of using this local allocator.
         """
         if self._execution_session is not None:
             return self._execution_session.new_client_order_id(
@@ -1104,9 +1120,79 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 account_id=account_id,
                 strategy_id=strategy_id,
             )
+        if _is_ctp_exchange(exchange_name):
+            raise NormalizedApiError(
+                "new_client_order_id",
+                "ctp_order_identity_reservation_required",
+                definite_reject=True,
+            )
         import time
 
         return f"{time.time_ns() % 10**12:012d}"
+
+    def consume_ctp_order_identity_reservation(
+        self,
+        exchange_name: str,
+        *,
+        scope: Any,
+        identity_store: Any,
+        managed_intent_id: str,
+        runtime_order_id: str,
+    ):
+        """Candidate-only mirror of an existing I9 CTP OrderRef.
+
+        The I9 store must already own the committed reservation. This
+        candidate API only validates and fsyncs that exact identity into the
+        SDK execution journal; it never calls an OrderRef allocator, queue, or
+        native sender. The mirror is not authenticated authority provenance
+        and is not a binding for a later OrderRequest or cancel. Do not use it
+        to enable managed dispatch; a same-row prepared request, queue receipt,
+        and single-worker contract are still required.
+        """
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "consume_ctp_order_identity_reservation",
+                "execution_session_unavailable",
+                definite_reject=True,
+            )
+        return session.consume_ctp_order_identity_reservation(
+            exchange_name,
+            scope=scope,
+            identity_store=identity_store,
+            managed_intent_id=managed_intent_id,
+            runtime_order_id=runtime_order_id,
+        )
+
+    def consume_ctp_cancel_dispatch_command(
+        self,
+        exchange_name: str,
+        *,
+        scope: Any,
+        identity_store: Any,
+        command_id: str,
+        request: CancelOrderRequest,
+    ) -> CtpCancelIdentityBinding:
+        """Read back one exact I9 CTP cancel command as a non-authorizing echo.
+
+        The result is identity only. It does not claim the I9 worker row,
+        reverify fresh approval, consume a queue receipt, or enable the public
+        cancel path.
+        """
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "consume_ctp_cancel_dispatch_command",
+                "execution_session_unavailable",
+                definite_reject=True,
+            )
+        return session.consume_ctp_cancel_dispatch_command(
+            exchange_name,
+            scope=scope,
+            identity_store=identity_store,
+            command_id=command_id,
+            request=request,
+        )
 
     def get_execution_identity(self, exchange_name: str) -> dict[str, Any]:
         """Return the SDK-owned ledger identity used for typed order requests."""
@@ -4218,6 +4304,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         evidence: Any = None,
         source: str = "sdk_runtime",
         deployment_manifest: Mapping[str, Any] | None = None,
+        credential_binding_verifier: Any = None,
     ) -> CtpExecutionApprovalContext:
         """Collect a sealed approval context from this running deployment.
 
@@ -4230,6 +4317,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         """
 
         operation = "build_ctp_execution_approval_context"
+        from ._ctp_credential_binding import _is_verifier, _new_scope
+
+        if credential_binding_verifier is not None and not _is_verifier(
+            credential_binding_verifier, owner=self
+        ):
+            raise NormalizedApiError(
+                operation, "ctp_credential_binding_trust_required", definite_reject=True
+            )
         if source not in {"sdk_runtime", "deployment_manifest"}:
             raise NormalizedApiError(
                 operation, "ctp_approval_context_untrusted", definite_reject=True
@@ -4348,6 +4443,62 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "evidence_sha256": _approval_material_digest(evidence),
                 }
             )
+            if environment_profile in _SIMNOW_BOUND_PROFILES:
+                if not _is_verifier(credential_binding_verifier, owner=self):
+                    raise NormalizedApiError(
+                        operation, "ctp_credential_binding_required", definite_reject=True
+                    )
+                front_scope = self._ctp_credential_binding_fronts(
+                    exchange_name,
+                    feed,
+                    state,
+                    credential_binding_verifier,
+                    operation=operation,
+                )
+                binding_scope = _new_scope(
+                    {
+                        "account_fingerprint": account_fingerprint,
+                        "account_fingerprint_sha256": front_scope["account_fingerprint_sha256"],
+                        "trading_day": trading_day,
+                        "connection_generation": generation,
+                        "environment_profile": environment_profile,
+                        "td_front": front_scope["td_front"],
+                        "md_front": front_scope["md_front"],
+                        "td_front_sha256": hashlib.sha256(
+                            front_scope["td_front"].encode("utf-8", "strict")
+                        ).hexdigest(),
+                        "md_front_sha256": hashlib.sha256(
+                            front_scope["md_front"].encode("utf-8", "strict")
+                        ).hexdigest(),
+                        "backtrader_sha256": values["backtrader_sha256"],
+                        "backtrader_runtime_sha256": credential_binding_verifier.package_sha256,
+                        "bt_api_py_sha256": values["bt_api_py_sha256"],
+                        "bt_api_ctp_sha256": values["bt_api_ctp_sha256"],
+                        "bt_api_base_sha256": values["bt_api_base_sha256"],
+                        "native_sha256": values["native_sha256"],
+                        "dependency_hashes_sha256": values["dependency_hashes_sha256"],
+                        "configuration_sha256": values["configuration_sha256"],
+                        "strategy_identity_sha256": values["strategy_identity_sha256"],
+                        "preflight_sha256": values["preflight_sha256"],
+                        "evidence_sha256": values["evidence_sha256"],
+                        "md_connection_generation": front_scope["md_connection_generation"],
+                        "md_stream_generation": front_scope["md_stream_generation"],
+                    }
+                )
+                values.update(
+                    credential_binding_verifier.refresh(
+                        binding_scope, owner=self, operation=operation
+                    )
+                )
+            elif (
+                credential_binding_verifier is not None
+                or environment_profile in _SIMNOW_RESTRICTED_PROFILES
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_credential_binding_scope_unsupported",
+                    definite_reject=True,
+                )
             normalized = _normalize_context(_new_runtime_context(values))
         except NormalizedApiError as exc:
             raise NormalizedApiError(operation, exc.code, definite_reject=True) from None
@@ -4368,6 +4519,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 evidence=evidence,
                 source=source,
                 deployment_manifest=deployment_manifest,
+                credential_binding_verifier=credential_binding_verifier,
             )
 
         return _new_runtime_context(
@@ -4442,6 +4594,320 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         if type(context) is CtpExecutionApprovalContext:
             return _refresh_runtime_context(context, self)
         return context
+
+    def create_ctp_credential_binding_verifier(self, adapter: object) -> Any:
+        """Seal one reviewed runtime adapter for this BtApi owner."""
+
+        operation = "create_ctp_credential_binding_verifier"
+        if self.transport_mode is not TransportMode.DIRECT:
+            raise NormalizedApiError(
+                operation, "ctp_credential_binding_trust_required", definite_reject=True
+            )
+        from ._ctp_credential_binding import _new_reviewed_verifier
+
+        return _new_reviewed_verifier(self, adapter)
+
+    def _create_ctp_credential_binding_verifier_for_test(
+        self, provider: object, *, authority: object
+    ) -> Any:
+        """Create an owner-bound credential binding verifier for fake tests only."""
+
+        operation = "create_ctp_credential_binding_verifier"
+        if not _is_ctp_controlled_test_authority(authority):
+            raise NormalizedApiError(
+                operation, "ctp_credential_binding_trust_required", definite_reject=True
+            )
+        from ._ctp_credential_binding import _new_test_verifier
+
+        return _new_test_verifier(self, provider)
+
+    def _ctp_credential_binding_fronts(
+        self,
+        exchange_name: str,
+        feed: Any,
+        state: Mapping[str, Any],
+        verifier: Any,
+        *,
+        operation: str,
+    ) -> dict[str, Any]:
+        """Resolve the one exact owner feed and its active authenticated TD/MD pair."""
+
+        code = "ctp_credential_binding_active_front_unavailable"
+        feeds = tuple(getattr(self, "exchange_feeds", {}).values())
+        if not feeds or sum(candidate is feed for candidate in feeds) != 1:
+            raise NormalizedApiError(operation, code, definite_reject=True)
+
+        if getattr(verifier, "_is_controlled_test_verifier", False):
+            trader = getattr(feed, "_trader", None)
+            md_client = getattr(feed, "_md_client", None)
+            matching_traders = [
+                getattr(candidate, "_trader", None)
+                for candidate in feeds
+                if getattr(candidate, "_trader", None) is not None
+            ]
+            if not trader or sum(candidate is trader for candidate in matching_traders) != 1:
+                raise NormalizedApiError(operation, code, definite_reject=True)
+            td_broker_id = str(getattr(trader, "_bound_broker_id", "") or "").strip()
+            td_user_id = str(getattr(trader, "_bound_user_id", "") or "").strip()
+            if not td_broker_id or not td_user_id:
+                raise NormalizedApiError(operation, code, definite_reject=True)
+            account_fingerprint_sha256 = hashlib.sha256(
+                f"{td_broker_id}:{td_user_id}".encode("utf-8", "strict")
+            ).hexdigest()
+            td_front = str(getattr(trader, "front", "") or "").strip()
+            md_front = str(getattr(md_client, "front", "") or "").strip()
+            td_generation = getattr(trader, "_connection_generation", None)
+            md_generation = getattr(md_client, "connection_generation", None)
+            stream_generation = getattr(feed, "_md_stream_generation", None)
+            if (
+                not td_front
+                or td_front != str(getattr(trader, "_bound_front", "") or "").strip()
+                or td_front != str(getattr(trader, "_session_native_front", "") or "").strip()
+                or td_front != str(getattr(feed, "_execution_bound_td_front", "") or "").strip()
+                or getattr(trader, "_account_fingerprint", None) != account_fingerprint_sha256[:16]
+                or state.get("account_fingerprint") != f"acct_{account_fingerprint_sha256[:16]}"
+                or not md_front
+                or md_front != str(getattr(feed, "_execution_bound_md_front", "") or "").strip()
+                or type(td_generation) is not int
+                or td_generation != state.get("connection_generation")
+                or type(md_generation) is not int
+                or md_generation <= 0
+                or type(stream_generation) is not int
+                or stream_generation <= 0
+            ):
+                raise NormalizedApiError(operation, code, definite_reject=True)
+            return {
+                "td_front": td_front,
+                "md_front": md_front,
+                "account_fingerprint_sha256": account_fingerprint_sha256,
+                "md_connection_generation": md_generation,
+                "md_stream_generation": stream_generation,
+            }
+
+        try:
+            feed_type = ("bt_api_ctp.feeds.live_ctp_feed", "CtpRequestDataFuture")
+            if (type(feed).__module__, type(feed).__name__) != feed_type:
+                raise ValueError
+            matching_feeds = [
+                candidate
+                for candidate in feeds
+                if (type(candidate).__module__, type(candidate).__name__) == feed_type
+            ]
+            if len(matching_feeds) != 1 or matching_feeds[0] is not feed:
+                raise ValueError
+            trader = getattr(feed, "trader_client", None) or getattr(feed, "_trader", None)
+            if (type(trader).__module__, type(trader).__name__) != (
+                "bt_api_ctp.ctp.client",
+                "TraderClient",
+            ):
+                raise ValueError
+            owner_traders = []
+            for candidate in feeds:
+                candidate_trader = getattr(candidate, "trader_client", None) or getattr(
+                    candidate, "_trader", None
+                )
+                if (type(candidate_trader).__module__, type(candidate_trader).__name__) == (
+                    "bt_api_ctp.ctp.client",
+                    "TraderClient",
+                ):
+                    owner_traders.append(candidate_trader)
+            if len(owner_traders) != 1 or owner_traders[0] is not trader:
+                raise ValueError
+            td_front = str(getattr(trader, "front", "") or "").strip()
+            td_generation = getattr(trader, "_connection_generation", None)
+            if (
+                not td_front
+                or td_front != str(getattr(trader, "_bound_front", "") or "").strip()
+                or td_front != str(getattr(trader, "_session_native_front", "") or "").strip()
+                or td_front != str(getattr(feed, "_execution_bound_td_front", "") or "").strip()
+                or type(td_generation) is not int
+                or td_generation <= 0
+                or type(state.get("connection_generation")) is not int
+                or td_generation != state.get("connection_generation")
+            ):
+                raise ValueError
+
+            ingress = getattr(self, "_ctp_market_ingress_queues", {}).get(exchange_name)
+            streams = getattr(self, "_subscription_streams", None)
+            if ingress is None or not isinstance(streams, (list, tuple)):
+                raise ValueError
+            candidates = [
+                stream
+                for stream in streams
+                if str(getattr(stream, "stream_name", "")) == "ctp_market_stream"
+                and getattr(stream, "data_queue", None) is ingress
+                and getattr(stream, "_running", None) is True
+            ]
+            if len(candidates) != 1:
+                raise ValueError
+            stream = candidates[0]
+            if (
+                type(stream).__module__ != feed_type[0]
+                or type(stream).__name__ != "CtpMarketStream"
+                or str(getattr(getattr(stream, "state", None), "value", "")) != "authenticated"
+            ):
+                raise ValueError
+            md_client = getattr(stream, "_md_client", None)
+            if (type(md_client).__module__, type(md_client).__name__) != (
+                "bt_api_ctp.ctp.client",
+                "MdClient",
+            ) or getattr(md_client, "is_ready", False) is not True:
+                raise ValueError
+            identity_snapshot_descriptor = inspect.getattr_static(
+                type(md_client), "active_md_identity", None
+            )
+            if (
+                type(identity_snapshot_descriptor) is not property
+                or not callable(identity_snapshot_descriptor.fget)
+                or identity_snapshot_descriptor.fset is not None
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_credential_binding_active_md_identity_unavailable",
+                    definite_reject=True,
+                )
+            from importlib import import_module
+
+            # The SDK property is one lock-protected snapshot: its producer
+            # returns None unless the active identity still matches the
+            # current login request and connection generation.
+            try:
+                identity_module = import_module("bt_api_ctp.md_identity")
+            except Exception:
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_credential_binding_active_md_identity_unavailable",
+                    definite_reject=True,
+                ) from None
+            identity_type = getattr(identity_module, "MdIdentityObservation", None)
+            md_identity_matches = getattr(identity_module, "md_identity_matches", None)
+            md_identity = getattr(md_client, "active_md_identity", None)
+            identity_fields = {
+                "front",
+                "broker_id",
+                "user_id",
+                "connection_generation",
+                "request_id",
+                "trading_day",
+                "authenticated",
+            }
+            if (
+                not isinstance(identity_type, type)
+                or not callable(md_identity_matches)
+                or type(md_identity) is not identity_type
+                or set(getattr(identity_type, "__dataclass_fields__", {})) != identity_fields
+                or getattr(getattr(identity_type, "__dataclass_params__", None), "frozen", False)
+                is not True
+                or getattr(md_identity, "authenticated", None) is not True
+            ):
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_credential_binding_active_md_identity_unavailable",
+                    definite_reject=True,
+                )
+            md_front_value = getattr(md_client, "front", None)
+            feed_md_front = getattr(feed, "_execution_bound_md_front", None)
+            stream_md_front = getattr(stream, "md_front", None)
+            md_front = md_front_value.strip() if type(md_front_value) is str else ""
+            md_bound_front = getattr(md_client, "_bound_front", None)
+            md_generation = getattr(md_client, "connection_generation", None)
+            stream_generation = getattr(stream, "_connection_generation", None)
+            md_broker_id = str(getattr(md_identity, "broker_id", "") or "").strip()
+            md_user_id = str(getattr(md_identity, "user_id", "") or "").strip()
+            md_bound_broker_id = getattr(md_client, "_bound_broker_id", None)
+            md_bound_user_id = getattr(md_client, "_bound_user_id", None)
+            identity_broker_id = getattr(md_identity, "broker_id", None)
+            identity_user_id = getattr(md_identity, "user_id", None)
+            td_broker_id = str(getattr(trader, "_bound_broker_id", "") or "").strip()
+            td_user_id = str(getattr(trader, "_bound_user_id", "") or "").strip()
+            identity_generation = getattr(md_identity, "connection_generation", None)
+            identity_request_id = getattr(md_identity, "request_id", None)
+            identity_front = getattr(md_identity, "front", None)
+            identity_trading_day = getattr(md_identity, "trading_day", None)
+            profile = state.get("environment_profile")
+            feed_profile = getattr(feed, "_execution_bound_profile", None)
+            stream_profile = getattr(stream, "ctp_env_profile", None)
+            account_fingerprint_sha256 = hashlib.sha256(
+                f"{td_broker_id}:{td_user_id}".encode("utf-8", "strict")
+            ).hexdigest()
+            expected_account_fingerprint = str(
+                getattr(trader, "_account_fingerprint", "") or ""
+            ).strip()
+            identity_matches = False
+            try:
+                identity_matches = md_identity_matches(
+                    md_identity,
+                    expected_front=md_front,
+                    expected_broker_id=td_broker_id,
+                    expected_user_id=td_user_id,
+                    expected_connection_generation=md_generation,
+                    expected_request_id=identity_request_id,
+                )
+            except (TypeError, ValueError):
+                identity_matches = False
+            if (
+                not md_front
+                or md_front_value != md_front
+                or type(feed_md_front) is not str
+                or feed_md_front != md_front
+                or type(stream_md_front) is not str
+                or stream_md_front != md_front
+                or type(md_bound_front) is not str
+                or md_bound_front != md_front
+                or type(md_generation) is not int
+                or md_generation <= 0
+                or type(identity_front) is not str
+                or identity_front != md_front
+                or type(identity_generation) is not int
+                or identity_generation <= 0
+                or identity_generation != md_generation
+                or type(identity_request_id) is not int
+                or identity_request_id <= 0
+                or type(identity_trading_day) is not str
+                or type(state.get("trading_day")) is not str
+                or identity_trading_day != state.get("trading_day")
+                or type(identity_broker_id) is not str
+                or type(identity_user_id) is not str
+                or type(md_bound_broker_id) is not str
+                or type(md_bound_user_id) is not str
+                or not md_bound_broker_id
+                or not md_bound_user_id
+                or md_bound_broker_id != md_broker_id
+                or md_bound_user_id != md_user_id
+                or identity_matches is not True
+                or not td_broker_id
+                or not td_user_id
+                or md_broker_id != td_broker_id
+                or md_user_id != td_user_id
+                or type(profile) is not str
+                or not profile
+                or profile != profile.strip()
+                or type(feed_profile) is not str
+                or feed_profile != profile
+                or type(stream_profile) is not str
+                or stream_profile != profile
+                or not expected_account_fingerprint
+                or expected_account_fingerprint != account_fingerprint_sha256[:16]
+                or state.get("account_fingerprint") != f"acct_{account_fingerprint_sha256[:16]}"
+                or type(stream_generation) is not int
+                or stream_generation <= 0
+                or type(getattr(stream, "_observed_client_generation", None)) is not int
+                or getattr(stream, "_observed_client_generation", None) != md_generation
+            ):
+                raise NormalizedApiError(
+                    operation, "ctp_credential_binding_scope_mismatch", definite_reject=True
+                )
+            return {
+                "td_front": td_front,
+                "md_front": md_front,
+                "account_fingerprint_sha256": account_fingerprint_sha256,
+                "md_connection_generation": md_generation,
+                "md_stream_generation": stream_generation,
+            }
+        except NormalizedApiError:
+            raise
+        except Exception:
+            raise NormalizedApiError(operation, code, definite_reject=True) from None
 
     @staticmethod
     def _canonical_ctp_approval_context_value(value: Any) -> str:
@@ -8128,6 +8594,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param symbol: 交易对
         :param order_id: 订单ID
         """
+        if isinstance(symbol, CancelOrderRequest):
+            self._reject_unhanded_ctp_cancel_identity(exchange_name, symbol)
+        for value in kwargs.values():
+            if isinstance(value, CancelOrderRequest):
+                self._reject_unhanded_ctp_cancel_identity(exchange_name, value)
         if kwargs.pop("normalized", False):
             budget_capability = kwargs.pop("budget_capability", None)
             request = (
@@ -8166,10 +8637,40 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             if isinstance(symbol, CancelOrderRequest)
             else CancelOrderRequest(symbol=symbol, account_id="legacy", order_id=order_id)
         )
+        if isinstance(request, CancelOrderRequest):
+            self._reject_unhanded_ctp_cancel_identity(exchange_name, request)
         if self.transport_mode is TransportMode.ZMQ:
             self._reject_zmq_legacy_options("cancel_order", extra_data, kwargs)
             return self._backend.cancel_order(exchange_name, request)
         return self._backend.cancel_order(exchange_name, request, extra_data=extra_data, **kwargs)
+
+    def _reject_unhanded_ctp_cancel_identity(
+        self,
+        exchange_name: str,
+        request: CancelOrderRequest,
+    ) -> None:
+        """Reject every public route carrying an I9 identity echo.
+
+        The parent candidate has no trusted claim/approval/queue handoff from
+        the shared I9 worker into this SDK path. The echo is therefore never
+        permission to reach a backend or native client.
+        """
+        if not isinstance(request, CancelOrderRequest) or request.ctp_cancel_identity is None:
+            return
+        if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_cancel_identity_venue_mismatch",
+                definite_reject=True,
+            )
+        session = self._execution_session
+        if session is not None:
+            session._require_ctp_cancel_identity_binding("cancel_order", request)
+        raise NormalizedApiError(
+            "cancel_order",
+            "ctp_cancel_dispatch_handoff_unavailable",
+            definite_reject=True,
+        )
 
     def cancel_all(
         self,
@@ -8643,6 +9144,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 )
 
     async def async_cancel_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        for value in (*args, *kwargs.values()):
+            if isinstance(value, CancelOrderRequest):
+                self._reject_unhanded_ctp_cancel_identity(exchange_name, value)
         if kwargs.pop("normalized", False):
             budget_capability = kwargs.pop("budget_capability", None)
             if len(args) != 1 or not isinstance(args[0], CancelOrderRequest) or kwargs:

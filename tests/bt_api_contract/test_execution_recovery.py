@@ -8,6 +8,7 @@ import json
 import queue
 import threading
 from collections import Counter, deque
+from dataclasses import replace
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -18,10 +19,12 @@ import pytest
 from bt_api_py import (
     BtApi,
     CancelOrderRequest,
+    CtpOrderIdentityBinding,
     NormalizedApiError,
     OrderRequest,
     TransportMode,
 )
+from bt_api_py import _execution_session as execution_session_module
 from bt_api_py import bt_api as bt_api_module
 from bt_api_py._contracts.models import OrderType, Side
 from bt_api_py._direct_backend import DirectBackend
@@ -35,6 +38,15 @@ STRATEGY_IDENTITY = "7" * 64
 CYCLE = "cycle-iter22"
 BUNDLE_SCOPE_VERSION = "ctp-contract-bundle-v1"
 BUNDLE_INSTRUMENTS = ["CZCE.SA701", "CZCE.SA701C1080", "CZCE.SA701P1080"]
+
+
+@pytest.fixture(autouse=True)
+def isolate_execution_ledger_registry(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        execution_session_module,
+        "_ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
 
 
 class _RecoveryNativeAuthorization:
@@ -314,7 +326,7 @@ def order_request(
     )
 
 
-def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE):
+def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE, ctp_order_identity=None):
     exchange_id, symbol = instrument.split(".", 1)
     return OrderRequest(
         symbol=symbol,
@@ -332,6 +344,7 @@ def bundle_order_request(instrument, *, client_order_id, cycle=CYCLE):
         execution_cycle_id=cycle,
         execution_role="entry",
         strategy_identity_sha256=STRATEGY_IDENTITY,
+        ctp_order_identity=ctp_order_identity,
     )
 
 
@@ -534,6 +547,84 @@ def canonical_sha256(value):
     ).hexdigest()
 
 
+def seed_ctp_order_identity(session, request, *, index):
+    """Seed a committed-looking mirror for one synthetic managed CTP order."""
+    account_ref = session._ctp_execution_identity["account_fingerprint"]
+    environment = session._ctp_execution_identity["environment_profile"]
+    strategy_id = session.config["strategy_id"]
+    trading_day = session._arm_proof["trading_day"]
+    account_payload = {
+        "provider": "CTP",
+        "environment": environment,
+        "account_ref": account_ref,
+    }
+    scope_payload = {
+        **account_payload,
+        "strategy_id": strategy_id,
+        "trading_day": trading_day,
+    }
+    account_key = "account:" + canonical_sha256(account_payload)
+    scope_key = "scope:" + canonical_sha256(scope_payload)
+    managed_intent_id = f"intent.iter22.bundle.{index}"
+    runtime_order_id = (
+        "bt-managed-v1:"
+        + hashlib.sha256(f"{request.account_id}:{request.client_order_id}".encode()).hexdigest()
+    )
+    created_at_ns = 1_780_000_000_000_000_000 + index
+    mirror_type = execution_session_module.CtpOrderIdentityReservationMirror
+    mirror = mirror_type(
+        account_key=account_key,
+        trading_day=trading_day,
+        scope_key=scope_key,
+        managed_intent_id=managed_intent_id,
+        runtime_order_id=runtime_order_id,
+        order_ref=request.client_order_id,
+        created_at_ns=created_at_ns,
+    )
+    mirror_key = (account_key, trading_day, scope_key, managed_intent_id)
+    session._journal(
+        "client_id_reservation",
+        {
+            "exchange_name": VENUE,
+            "account_id": request.account_id,
+            "client_order_id": request.client_order_id,
+            "managed_intent_id": managed_intent_id,
+            "runtime_order_id": runtime_order_id,
+            "trading_day": trading_day,
+            "strategy_id": strategy_id,
+            "ctp_order_identity_authority": (
+                execution_session_module._CTP_ORDER_IDENTITY_MIRROR_AUTHORITY
+            ),
+            "ctp_order_identity_scope": scope_payload,
+            "ctp_order_identity_reservation": {
+                "account_key": account_key,
+                "trading_day": trading_day,
+                "scope_key": scope_key,
+                "managed_intent_id": managed_intent_id,
+                "runtime_order_id": runtime_order_id,
+                "order_ref": request.client_order_id,
+                "created_at_ns": created_at_ns,
+            },
+        },
+    )
+    session._ctp_order_identity_mirrors[mirror_key] = mirror
+    client_key = session._client_key(VENUE, request.account_id, request.client_order_id)
+    session.reserved_ids.add(client_key)
+    return CtpOrderIdentityBinding(
+        environment=environment,
+        account_key=account_key,
+        trading_day=trading_day,
+        scope_key=scope_key,
+        managed_intent_id=managed_intent_id,
+        runtime_order_id=runtime_order_id,
+    )
+
+
+def bind_ctp_order_request(session, request, *, index):
+    binding = seed_ctp_order_identity(session, request, index=index)
+    return replace(request, ctp_order_identity=binding)
+
+
 def barrier(session, snapshot, *, first_id=1, account_balance="100"):
     account = (
         {
@@ -708,6 +799,7 @@ def write_crashed_journal(path, *, exposure=None, active=False, uncertain=False)
         side=Side.SELL if side == "sell" else Side.BUY,
         position_side=position_side,
     )
+    request = bind_ctp_order_request(session, request, index=1)
 
     def submit():
         if uncertain:
@@ -766,6 +858,7 @@ def write_bundle_crashed_journal(path, *, instruments=BUNDLE_INSTRUMENTS[:2]):
                 instrument,
                 client_order_id=client_order_id,
             )
+            request = bind_ctp_order_request(session, request, index=index)
             session.invoke(
                 "make_order",
                 VENUE,
@@ -799,6 +892,34 @@ def write_bundle_crashed_journal(path, *, instruments=BUNDLE_INSTRUMENTS[:2]):
             )
     finally:
         session.close()
+
+
+def test_managed_ctp_order_without_consumed_mirror_stops_before_fake_transport(tmp_path):
+    path = tmp_path / "unbound-order.jsonl"
+    session = make_session(path)
+    old_proof = proof(3)
+    session.arm_from_preflight(old_proof, lambda: context(old_proof))
+    request = order_request(client_order_id="000000000090")
+    journal_before = path.read_bytes() if path.exists() else None
+    request_id_calls = []
+    transport_calls = []
+
+    try:
+        with pytest.raises(NormalizedApiError) as caught:
+            session.invoke(
+                "make_order",
+                VENUE,
+                request,
+                lambda: transport_calls.append(True),
+                pre_dispatch=lambda _context: request_id_calls.append(True),
+            )
+    finally:
+        session.close()
+
+    assert caught.value.code == "ctp_order_identity_binding_missing_or_mismatch"
+    assert (path.read_bytes() if path.exists() else None) == journal_before
+    assert request_id_calls == []
+    assert transport_calls == []
 
 
 def breached_recovery_session(path):
@@ -1264,6 +1385,10 @@ def test_recovery_close_blocks_open_reverse_wrong_cycle_and_oversize(tmp_path):
                 client_order_id="000000000002",
             ),
         )
+        identity_binding = seed_ctp_order_identity(session, rejected[0], index=2)
+        rejected = tuple(
+            replace(request, ctp_order_identity=identity_binding) for request in rejected
+        )
         for request in rejected:
             with pytest.raises(NormalizedApiError):
                 session.invoke("make_order", VENUE, request, transport)
@@ -1278,6 +1403,7 @@ def test_recovery_close_blocks_open_reverse_wrong_cycle_and_oversize(tmp_path):
             role="recovery_exit",
             client_order_id="000000000002",
         )
+        allowed = replace(allowed, ctp_order_identity=identity_binding)
         result = session.invoke(
             "make_order",
             VENUE,
@@ -1314,14 +1440,22 @@ def test_public_sync_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
         )
     )
     api = public_order_api(session, SimpleNamespace(make_order=submit))
-    entry = order_request(client_order_id="000000000003")
-    close = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    entry = bind_ctp_order_request(
+        session,
+        order_request(client_order_id="000000000003"),
+        index=3,
+    )
+    close = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
     try:
         with pytest.raises(NormalizedApiError) as raised:
@@ -1348,14 +1482,22 @@ def test_public_async_recovery_exit_bypasses_entry_loss_latch_only(tmp_path):
         )
     )
     api = public_order_api(session, SimpleNamespace(async_make_order=submit))
-    entry = order_request(client_order_id="000000000003")
-    close = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    entry = bind_ctp_order_request(
+        session,
+        order_request(client_order_id="000000000003"),
+        index=3,
+    )
+    close = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
 
     async def run():
@@ -1459,21 +1601,29 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
     entered = threading.Event()
     release = threading.Event()
     owner_result: queue.Queue[Any] = queue.Queue()
-    owner = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    owner = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
-    contender = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000003",
+    contender = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000003",
+        ),
+        index=3,
     )
 
     def transport():
@@ -1524,21 +1674,29 @@ def test_sync_recovery_dispatch_blocks_sync_and_async_contenders(tmp_path):
 def test_async_recovery_cancel_releases_claim_and_disarms_native_gate(tmp_path):
     session = breached_recovery_session(tmp_path / "orders.jsonl")
     entered = asyncio.Event()
-    owner = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    owner = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
-    contender = order_request(
-        side=Side.SELL,
-        quantity="1",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000003",
+    contender = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="1",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000003",
+        ),
+        index=3,
     )
     sync_transport = Mock()
 
@@ -1598,13 +1756,17 @@ def test_failed_public_recovery_transport_disarms_native_gate_before_return(tmp_
         session,
         SimpleNamespace(make_order=failed),
     )
-    close = order_request(
-        side=Side.SELL,
-        quantity="2",
-        offset="close",
-        position_side="long",
-        role="recovery_exit",
-        client_order_id="000000000002",
+    close = bind_ctp_order_request(
+        session,
+        order_request(
+            side=Side.SELL,
+            quantity="2",
+            offset="close",
+            position_side="long",
+            role="recovery_exit",
+            client_order_id="000000000002",
+        ),
+        index=2,
     )
     try:
         result = api.make_order(VENUE, close, normalized=True)
@@ -1666,13 +1828,17 @@ def test_pending_private_ingress_blocks_write_before_transport(tmp_path):
     producer.start()
     try:
         assert note_entered.wait(timeout=5)
-        close = order_request(
-            side=Side.SELL,
-            quantity="1",
-            offset="close",
-            position_side="long",
-            role="recovery_exit",
-            client_order_id="000000000002",
+        close = bind_ctp_order_request(
+            session,
+            order_request(
+                side=Side.SELL,
+                quantity="1",
+                offset="close",
+                position_side="long",
+                role="recovery_exit",
+                client_order_id="000000000002",
+            ),
+            index=2,
         )
         with pytest.raises(NormalizedApiError) as raised:
             api.make_order(VENUE, close, normalized=True)
@@ -1724,10 +1890,11 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
+    writer_request = bind_ctp_order_request(writer, order_request(), index=1)
     writer.invoke(
         "make_order",
         VENUE,
-        order_request(),
+        writer_request,
         lambda: order_update(),
         budget_capability=_reserve_budget(writer, old_proof),
     )
@@ -1743,6 +1910,7 @@ def test_ordinary_arm_allows_durable_cycle_only_after_entry_and_exit_net_flat(
         role="exit",
         client_order_id="000000000002",
     )
+    close_request = bind_ctp_order_request(writer, close_request, index=2)
     writer.invoke(
         "make_order",
         VENUE,
@@ -1883,10 +2051,11 @@ def test_ordinary_arm_rejects_terminal_fill_without_durable_trade(tmp_path):
     old_proof = proof(3)
     writer = make_session(path)
     writer.arm_from_preflight(old_proof, lambda: context(old_proof))
+    writer_request = bind_ctp_order_request(writer, order_request(), index=1)
     writer.invoke(
         "make_order",
         VENUE,
-        order_request(),
+        writer_request,
         lambda: order_update(),
         budget_capability=_reserve_budget(writer, old_proof),
     )

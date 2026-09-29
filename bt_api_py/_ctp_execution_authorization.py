@@ -33,6 +33,9 @@ from ._contracts.errors import NormalizedApiError
 APPROVAL_SCHEMA_VERSION = "ctp-execution-approval-v1"
 RECOVERY_APPROVAL_SCHEMA_VERSION = "ctp-execution-recovery-approval-v1"
 ENTRY_APPROVAL_SCHEMA_VERSION = "ctp-execution-entry-approval-v1"
+SIMNOW_APPROVAL_SCHEMA_VERSION = "ctp-execution-approval-v2-simnow-binding"
+SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION = "ctp-execution-recovery-approval-v2-simnow-binding"
+SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION = "ctp-execution-entry-approval-v2-simnow-binding"
 TRUST_ROOT_SCHEMA_VERSION = "ctp-execution-trust-root-v1"
 APPROVAL_ALGORITHM = "Ed25519"
 APPROVAL_PURPOSE = "ctp_execution_approval"
@@ -78,6 +81,10 @@ _APPROVAL_FIELDS = frozenset(
         "revocation_snapshot_version",
     }
 )
+_CREDENTIAL_BINDING_FIELDS = frozenset(
+    {"credential_binding_key_id", "credential_binding_hmac_sha256"}
+)
+_SIMNOW_APPROVAL_FIELDS = _APPROVAL_FIELDS | _CREDENTIAL_BINDING_FIELDS
 _ARTIFACT_FIELDS = frozenset({"schema_version", "algorithm", "payload", "signature"})
 _TRUST_ROOT_FIELDS = frozenset({"schema_version", "keys", "revocation_snapshot"})
 _TRUST_KEY_FIELDS = frozenset({"public_key", "role", "purposes", "not_before", "expires_at"})
@@ -133,6 +140,12 @@ _ENTRY_APPROVAL_FIELDS = _APPROVAL_FIELDS | frozenset(
         "ctp_package_sha256",
     }
 )
+_SIMNOW_RECOVERY_APPROVAL_FIELDS = _SIMNOW_APPROVAL_FIELDS | (
+    _RECOVERY_APPROVAL_FIELDS - _APPROVAL_FIELDS
+)
+_SIMNOW_ENTRY_APPROVAL_FIELDS = _SIMNOW_APPROVAL_FIELDS | (
+    _ENTRY_APPROVAL_FIELDS - _APPROVAL_FIELDS
+)
 _CONTEXT_FIELDS = frozenset(
     {
         "source",
@@ -156,6 +169,33 @@ _CONTEXT_FIELDS = frozenset(
         ),
     }
 )
+_SIMNOW_CONTEXT_FIELDS = _CONTEXT_FIELDS | _CREDENTIAL_BINDING_FIELDS
+_SIMNOW_BOUND_PROFILES = frozenset({"config_front_pair", "set1_group1", "set1_group2"})
+_SIMNOW_RESTRICTED_PROFILES = _SIMNOW_BOUND_PROFILES | frozenset(
+    {
+        "set2_7x24",
+        "set1_group1_vpn",
+        "set2_7x24_4000x",
+        "set2_7x24_vpn",
+        "set1",
+        "set2",
+    }
+)
+_SIMNOW_SCHEMA_BASES = {
+    SIMNOW_APPROVAL_SCHEMA_VERSION: APPROVAL_SCHEMA_VERSION,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION: RECOVERY_APPROVAL_SCHEMA_VERSION,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION: ENTRY_APPROVAL_SCHEMA_VERSION,
+}
+_SIMNOW_SCHEMA_FIELDS = {
+    SIMNOW_APPROVAL_SCHEMA_VERSION: _SIMNOW_APPROVAL_FIELDS,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION: _SIMNOW_RECOVERY_APPROVAL_FIELDS,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION: _SIMNOW_ENTRY_APPROVAL_FIELDS,
+}
+_SIMNOW_SCHEMA_PURPOSES = {
+    SIMNOW_APPROVAL_SCHEMA_VERSION: APPROVAL_PURPOSE,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION: RECOVERY_APPROVAL_PURPOSE,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION: APPROVAL_PURPOSE,
+}
 _HASH_FIELDS = frozenset(
     {
         "strategy_identity_sha256",
@@ -370,6 +410,38 @@ def _decimal_string(value: Any) -> str:
 
 def _normalize_payload(value: Any) -> dict[str, Any]:
     value = _strict_mapping(value, APPROVAL_OPERATION, "ctp_approval_invalid_artifact")
+    schema_version = value.get("schema_version")
+    if schema_version in _SIMNOW_SCHEMA_BASES:
+        expected_fields = _SIMNOW_SCHEMA_FIELDS[schema_version]
+        if set(value) != expected_fields:
+            unknown = set(value) - expected_fields
+            _reject(
+                APPROVAL_OPERATION,
+                "ctp_approval_unknown_payload_key" if unknown else "ctp_approval_missing_field",
+            )
+        if value.get("purpose") != _SIMNOW_SCHEMA_PURPOSES[schema_version]:
+            _reject(APPROVAL_OPERATION, "ctp_approval_purpose_unsupported")
+        binding_key_id = _strict_string(
+            value.get("credential_binding_key_id"),
+            operation=APPROVAL_OPERATION,
+            code="ctp_credential_binding_invalid",
+            pattern=re.compile(r"^[\w][\w.:-]{0,127}$", re.ASCII),
+            max_length=128,
+        )
+        binding_hmac = _hash(
+            value.get("credential_binding_hmac_sha256"), operation=APPROVAL_OPERATION
+        )
+        base = {key: item for key, item in value.items() if key not in _CREDENTIAL_BINDING_FIELDS}
+        base["schema_version"] = _SIMNOW_SCHEMA_BASES[schema_version]
+        normalized = _normalize_payload(base)
+        normalized.update(
+            {
+                "schema_version": schema_version,
+                "credential_binding_key_id": binding_key_id,
+                "credential_binding_hmac_sha256": binding_hmac,
+            }
+        )
+        return normalized
     if value.get("schema_version") == RECOVERY_APPROVAL_SCHEMA_VERSION:
         return _normalize_recovery_payload(value)
     if value.get("schema_version") == ENTRY_APPROVAL_SCHEMA_VERSION:
@@ -740,7 +812,8 @@ def _normalize_context(value: Any) -> dict[str, Any]:
         value = _thaw(value.values)
     else:
         value = _strict_mapping(value, APPROVAL_OPERATION, "ctp_approval_context_required")
-    if set(value) != _CONTEXT_FIELDS:
+    bound_context = set(value) == _SIMNOW_CONTEXT_FIELDS
+    if not bound_context and set(value) != _CONTEXT_FIELDS:
         _reject(APPROVAL_OPERATION, "ctp_approval_context_incomplete")
     source = _strict_string(
         value["source"],
@@ -752,13 +825,16 @@ def _normalize_context(value: Any) -> dict[str, Any]:
     if source != "synthetic_test" and not sealed:
         _reject(APPROVAL_OPERATION, "ctp_approval_context_untrusted")
     result = {"source": source}
+    payload_fields = _SIMNOW_CONTEXT_FIELDS if bound_context else _CONTEXT_FIELDS
     payload_like = {
-        field_name: value[field_name] for field_name in _CONTEXT_FIELDS if field_name != "source"
+        field_name: value[field_name] for field_name in payload_fields if field_name != "source"
     }
     normalized = _normalize_payload(
         {
             **payload_like,
-            "schema_version": APPROVAL_SCHEMA_VERSION,
+            "schema_version": (
+                SIMNOW_APPROVAL_SCHEMA_VERSION if bound_context else APPROVAL_SCHEMA_VERSION
+            ),
             "algorithm": APPROVAL_ALGORITHM,
             "approval_id": "context-approval",
             "nonce": "context-nonce",
@@ -772,7 +848,7 @@ def _normalize_context(value: Any) -> dict[str, Any]:
             "revocation_snapshot_version": 1,
         }
     )
-    for field_name in _CONTEXT_FIELDS - {"source"}:
+    for field_name in payload_fields - {"source"}:
         result[field_name] = normalized[field_name]
     return result
 
@@ -1099,10 +1175,15 @@ class CtpExecutionApproval:
 
     @property
     def bindings(self) -> Mapping[str, Any]:
+        fields = (
+            _SIMNOW_CONTEXT_FIELDS
+            if self.payload.keys() >= _CREDENTIAL_BINDING_FIELDS
+            else _CONTEXT_FIELDS
+        )
         return MappingProxyType(
             {
                 field_name: self.payload[field_name]
-                for field_name in _CONTEXT_FIELDS
+                for field_name in fields
                 if field_name != "source" and field_name in self.payload
             }
         )
@@ -1263,7 +1344,23 @@ def _validate_time_window(payload: Mapping[str, Any], now: datetime) -> None:
 
 
 def _compare_context(payload: Mapping[str, Any], context: Mapping[str, Any]) -> None:
-    for field_name in _CONTEXT_FIELDS - {"source"}:
+    bound_payload = payload.keys() >= _CREDENTIAL_BINDING_FIELDS
+    profile = str(payload.get("environment_profile") or "").strip()
+    if profile in _SIMNOW_RESTRICTED_PROFILES and profile not in _SIMNOW_BOUND_PROFILES:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_scope_unsupported")
+    if profile in _SIMNOW_BOUND_PROFILES and not bound_payload:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_required")
+    if bound_payload and profile not in _SIMNOW_BOUND_PROFILES:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_scope_unsupported")
+    fields = _SIMNOW_CONTEXT_FIELDS if bound_payload else _CONTEXT_FIELDS
+    if bound_payload and not context.keys() >= _CREDENTIAL_BINDING_FIELDS:
+        _reject(APPROVAL_OPERATION, "ctp_credential_binding_required")
+    if profile in _SIMNOW_BOUND_PROFILES and context.get("source") not in {
+        "sdk_runtime",
+        "deployment_manifest",
+    }:
+        _reject(APPROVAL_OPERATION, "ctp_approval_context_untrusted")
+    for field_name in fields - {"source"}:
         left = payload[field_name]
         right = context[field_name]
         if field_name == "authorized_instruments":
@@ -1305,6 +1402,7 @@ def verify_ctp_execution_approval(
             APPROVAL_SCHEMA_VERSION,
             RECOVERY_APPROVAL_SCHEMA_VERSION,
             ENTRY_APPROVAL_SCHEMA_VERSION,
+            *_SIMNOW_SCHEMA_BASES,
         }
         or artifact_value["algorithm"] != APPROVAL_ALGORITHM
     ):
@@ -1428,9 +1526,13 @@ __all__ = [
     "APPROVAL_ALGORITHM",
     "APPROVAL_PURPOSE",
     "APPROVAL_SCHEMA_VERSION",
+    "ENTRY_APPROVAL_SCHEMA_VERSION",
     "RECOVERY_APPROVAL_PURPOSE",
     "RECOVERY_APPROVAL_SCHEMA_VERSION",
     "RECOVERY_APPROVAL_SCOPE_VERSION",
+    "SIMNOW_APPROVAL_SCHEMA_VERSION",
+    "SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION",
+    "SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION",
     "CtpExecutionApproval",
     "CtpExecutionApprovalCapability",
     "CtpExecutionApprovalContext",

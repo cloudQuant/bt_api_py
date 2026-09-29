@@ -8,12 +8,14 @@ equivalent: production code must receive an independently signed artifact.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -242,6 +244,464 @@ def test_runtime_context_builder_seals_and_recomputes_identity(monkeypatch, sign
         _signed_artifact(payload, private_key), trust_root=root, context=context
     )
     assert verified.bindings["connection_generation"] == 9
+
+
+def test_simnow_context_binds_signed_approval_to_current_feed_pair(monkeypatch, signing_material):
+    from bt_api_py._ctp_execution_authorization import (
+        SIMNOW_APPROVAL_SCHEMA_VERSION,
+        verify_ctp_execution_approval,
+    )
+    from bt_api_py.bt_api import _issue_ctp_controlled_test_authority_for_core
+
+    private_key, root = signing_material
+    api = object.__new__(BtApi)
+    api.transport_mode = TransportMode.DIRECT
+    bound_broker_id = "broker-test"
+    bound_user_id = "user-test"
+    account_fingerprint_sha256 = hashlib.sha256(
+        f"{bound_broker_id}:{bound_user_id}".encode("utf-8", "strict")
+    ).hexdigest()
+    trader = SimpleNamespace(
+        front="tcp://td.example:40001",
+        _bound_front="tcp://td.example:40001",
+        _session_native_front="tcp://td.example:40001",
+        _bound_broker_id=bound_broker_id,
+        _bound_user_id=bound_user_id,
+        _account_fingerprint=account_fingerprint_sha256[:16],
+        _connection_generation=9,
+    )
+    md_client = SimpleNamespace(front="tcp://md.example:40002", connection_generation=2)
+    feed = SimpleNamespace(
+        _trader=trader,
+        _md_client=md_client,
+        _execution_bound_td_front="tcp://td.example:40001",
+        _execution_bound_md_front="tcp://md.example:40002",
+        _md_stream_generation=3,
+        get_environment_info=lambda: {
+            "verified": True,
+            "environment": "demo",
+            "profile": "config_front_pair",
+        },
+    )
+    api.exchange_feeds = {"CTP___FUTURE": feed}
+    monkeypatch.setattr(
+        api,
+        "_ctp_execution_runtime_identity",
+        lambda: {"native_sha256": "a" * 64, "ctp_package_sha256": "b" * 64},
+    )
+    monkeypatch.setattr(
+        api,
+        "_ctp_execution_runtime_python_identity",
+        lambda: {
+            "backtrader_sha256": "c" * 64,
+            "bt_api_py_sha256": "d" * 64,
+            "bt_api_base_sha256": "e" * 64,
+            "dependency_hashes_sha256": "f" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        api,
+        "get_ctp_session_state",
+        lambda _exchange: {
+            "account_fingerprint": f"acct_{account_fingerprint_sha256[:16]}",
+            "trading_day": "20260911",
+            "connection_generation": 9,
+            "environment_profile": "config_front_pair",
+        },
+    )
+    monkeypatch.setattr(
+        api,
+        "get_environment_info",
+        lambda _exchange: {"verified": True, "environment": "demo"},
+    )
+    verifier = api._create_ctp_credential_binding_verifier_for_test(
+        lambda: {
+            "credential_binding_key_id": "local-test-key",
+            "credential_binding_hmac_sha256": "1" * 64,
+        },
+        authority=_issue_ctp_controlled_test_authority_for_core(),
+    )
+    import bt_api_py._ctp_credential_binding as credential_binding_module
+
+    original_new_scope = credential_binding_module._new_scope
+    captured_scope = {}
+
+    def capture_scope(scope_values):
+        captured_scope.update(scope_values)
+        return original_new_scope(scope_values)
+
+    monkeypatch.setattr(credential_binding_module, "_new_scope", capture_scope)
+    context = api.build_ctp_execution_approval_context(
+        _context(),
+        exchange_name="CTP___FUTURE",
+        configuration={"mode": "simulation"},
+        strategy_source=b"strategy-source",
+        preflight={"complete": True},
+        evidence={"complete": True},
+        credential_binding_verifier=verifier,
+    )
+    values = context.as_dict()
+    assert values["credential_binding_key_id"] == "local-test-key"
+    assert values["credential_binding_hmac_sha256"] != "1" * 64
+    assert "account_fingerprint_sha256" not in values
+    assert captured_scope["account_fingerprint"] == f"acct_{account_fingerprint_sha256[:16]}"
+    assert captured_scope["account_fingerprint_sha256"] == account_fingerprint_sha256
+    with pytest.raises(NormalizedApiError) as invalid_full_digest:
+        original_new_scope(
+            {
+                **captured_scope,
+                "account_fingerprint_sha256": "0" * 64,
+            }
+        )
+    assert invalid_full_digest.value.code == "ctp_credential_binding_scope_invalid"
+
+    now = datetime.now(UTC)
+    payload = {key: value for key, value in values.items() if key != "source"}
+    payload.update(
+        {
+            "schema_version": SIMNOW_APPROVAL_SCHEMA_VERSION,
+            "algorithm": ALGORITHM,
+            "approval_id": "approval-simnow-1",
+            "nonce": "nonce-simnow-1",
+            "issuer_key_id": KEY_ID,
+            "issuer_role": "independent_operator",
+            "purpose": "ctp_execution_approval",
+            "issued_at": _iso(now - timedelta(seconds=1)),
+            "not_before": _iso(now - timedelta(seconds=1)),
+            "expires_at": _iso(now + timedelta(minutes=5)),
+            "revocation_snapshot_version": 3,
+        }
+    )
+    payload_bytes = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    signature = private_key.sign(payload_bytes)
+    artifact = json.dumps(
+        {
+            "schema_version": SIMNOW_APPROVAL_SCHEMA_VERSION,
+            "algorithm": ALGORITHM,
+            "payload": payload,
+            "signature": base64.urlsafe_b64encode(signature).decode("ascii").rstrip("="),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    verified = verify_ctp_execution_approval(artifact, trust_root=root, context=context)
+    assert verified.bindings["credential_binding_key_id"] == "local-test-key"
+    assert (
+        verified.bindings["credential_binding_hmac_sha256"]
+        == values["credential_binding_hmac_sha256"]
+    )
+
+    api.exchange_feeds["CTP___OTHER"] = SimpleNamespace(_trader=trader)
+    with pytest.raises(NormalizedApiError) as ambiguous:
+        api.build_ctp_execution_approval_context(
+            _context(),
+            exchange_name="CTP___FUTURE",
+            configuration={"mode": "simulation"},
+            strategy_source=b"strategy-source",
+            preflight={"complete": True},
+            evidence={"complete": True},
+            credential_binding_verifier=verifier,
+        )
+    assert ambiguous.value.code == "ctp_credential_binding_active_front_unavailable"
+    del api.exchange_feeds["CTP___OTHER"]
+
+    trader.front = "tcp://td.example:40003"
+    trader._bound_front = trader.front
+    trader._session_native_front = trader.front
+    feed._execution_bound_td_front = trader.front
+    refreshed = api._refresh_ctp_execution_approval_context(context)
+    assert (
+        refreshed.as_dict()["credential_binding_hmac_sha256"]
+        != values["credential_binding_hmac_sha256"]
+    )
+    with pytest.raises(NormalizedApiError) as raised:
+        verify_ctp_execution_approval(artifact, trust_root=root, context=refreshed)
+    assert raised.value.code == "ctp_approval_context_mismatch"
+
+
+def _fake_live_md_credential_binding_case(
+    monkeypatch,
+    *,
+    request_id=77,
+    generation=2,
+    install_identity=True,
+    read_only_identity_snapshot=True,
+):
+    from bt_api_ctp.md_identity import MdIdentityObservation, md_identity_matches
+
+    from bt_api_py.bt_api import BtApi
+
+    identity_module = ModuleType("bt_api_ctp.md_identity")
+    if install_identity:
+        identity_module.MdIdentityObservation = MdIdentityObservation
+    identity_module.md_identity_matches = md_identity_matches
+    ctp_package = ModuleType("bt_api_ctp")
+    ctp_package.__path__ = []
+    ctp_package.__package__ = "bt_api_ctp"
+    ctp_package.md_identity = identity_module
+    ctp_package_client = ModuleType("bt_api_ctp.ctp")
+    ctp_package_client.__path__ = []
+    ctp_package_client.__package__ = "bt_api_ctp.ctp"
+    client_module = ModuleType("bt_api_ctp.ctp.client")
+    client_module.__package__ = "bt_api_ctp.ctp"
+    ctp_package.ctp = ctp_package_client
+    ctp_package_client.client = client_module
+    monkeypatch.setitem(sys.modules, "bt_api_ctp", ctp_package)
+    monkeypatch.setitem(sys.modules, "bt_api_ctp.md_identity", identity_module)
+    monkeypatch.setitem(sys.modules, "bt_api_ctp.ctp", ctp_package_client)
+    monkeypatch.setitem(sys.modules, "bt_api_ctp.ctp.client", client_module)
+
+    feed_type = type(
+        "CtpRequestDataFuture",
+        (),
+        {"__module__": "bt_api_ctp.feeds.live_ctp_feed"},
+    )
+    stream_type = type(
+        "CtpMarketStream",
+        (),
+        {"__module__": "bt_api_ctp.feeds.live_ctp_feed"},
+    )
+    trader_type = type("TraderClient", (), {"__module__": "bt_api_ctp.ctp.client"})
+
+    def active_md_identity(md_client):
+        return getattr(md_client, "_test_active_md_identity", None)
+
+    md_client_attributes = {"__module__": "bt_api_ctp.ctp.client"}
+    if read_only_identity_snapshot:
+        md_client_attributes["active_md_identity"] = property(active_md_identity)
+    md_client_type = type("MdClient", (), md_client_attributes)
+
+    broker_id = "broker-test"
+    user_id = "user-test"
+    td_front = "tcp://td.example:40001"
+    md_front = "tcp://md.example:40002"
+    profile = "simnow_demo"
+    trading_day = "20260926"
+    account_sha256 = hashlib.sha256(f"{broker_id}:{user_id}".encode()).hexdigest()
+    identity = object.__new__(MdIdentityObservation)
+    for name, value in {
+        "front": md_front,
+        "broker_id": broker_id,
+        "user_id": user_id,
+        "connection_generation": generation,
+        "request_id": request_id,
+        "trading_day": trading_day,
+        "authenticated": True,
+    }.items():
+        object.__setattr__(identity, name, value)
+    trader = trader_type()
+    trader.front = td_front
+    trader._bound_front = td_front
+    trader._session_native_front = td_front
+    trader._bound_broker_id = broker_id
+    trader._bound_user_id = user_id
+    trader._account_fingerprint = account_sha256[:16]
+    trader._connection_generation = 9
+    md_client = md_client_type()
+    md_client.front = md_front
+    md_client._bound_front = md_front
+    md_client._bound_broker_id = broker_id
+    md_client._bound_user_id = user_id
+    md_client.is_ready = True
+    md_client.connection_generation = generation
+    if read_only_identity_snapshot:
+        md_client._test_active_md_identity = identity if install_identity else None
+    else:
+        md_client.active_md_identity = identity if install_identity else None
+    ingress = object()
+    stream = stream_type()
+    stream.stream_name = "ctp_market_stream"
+    stream.data_queue = ingress
+    stream._running = True
+    stream.state = SimpleNamespace(value="authenticated")
+    stream._md_client = md_client
+    stream.md_front = md_front
+    stream.ctp_env_profile = profile
+    stream._connection_generation = 3
+    stream._observed_client_generation = generation
+    feed = feed_type()
+    feed._trader = trader
+    feed._execution_bound_td_front = td_front
+    feed._execution_bound_md_front = md_front
+    feed._execution_bound_profile = profile
+    api = object.__new__(BtApi)
+    api.exchange_feeds = {"CTP___FUTURE": feed}
+    api._ctp_market_ingress_queues = {"CTP___FUTURE": ingress}
+    api._subscription_streams = [stream]
+    state = {
+        "account_fingerprint": f"acct_{account_sha256[:16]}",
+        "trading_day": trading_day,
+        "connection_generation": 9,
+        "environment_profile": profile,
+    }
+    return api, feed, stream, md_client, state
+
+
+def test_md_credential_binding_compares_request_and_generation_independently(monkeypatch):
+    """The private adapter may echo typed facts; it does not arm or dispatch."""
+    api, feed, _stream, _md, state = _fake_live_md_credential_binding_case(
+        monkeypatch, request_id=77, generation=2
+    )
+    result = api._ctp_credential_binding_fronts(
+        "CTP___FUTURE", feed, state, object(), operation="test_md_credential_binding"
+    )
+    assert result["md_connection_generation"] == 2
+    assert result["md_front"] == "tcp://md.example:40002"
+
+
+@pytest.mark.parametrize(
+    "change,expected_code",
+    [
+        ("request_id_bool", "ctp_credential_binding_scope_mismatch"),
+        ("generation_bool", "ctp_credential_binding_scope_mismatch"),
+        ("state_generation_bool", "ctp_credential_binding_active_front_unavailable"),
+        ("bound_front", "ctp_credential_binding_scope_mismatch"),
+        ("bound_broker_id", "ctp_credential_binding_scope_mismatch"),
+        ("bound_user_id", "ctp_credential_binding_scope_mismatch"),
+        ("profile", "ctp_credential_binding_scope_mismatch"),
+        ("missing_identity", "ctp_credential_binding_active_md_identity_unavailable"),
+        ("mutable_identity_snapshot", "ctp_credential_binding_active_md_identity_unavailable"),
+    ],
+)
+def test_md_credential_binding_rejects_unverified_identity_mutation(
+    monkeypatch, change, expected_code
+):
+    request_id = True if change == "request_id_bool" else 77
+    generation = True if change == "generation_bool" else 2
+    api, feed, stream, md_client, state = _fake_live_md_credential_binding_case(
+        monkeypatch,
+        request_id=request_id,
+        generation=generation,
+        install_identity=change != "missing_identity",
+        read_only_identity_snapshot=change != "mutable_identity_snapshot",
+    )
+    if change == "bound_front":
+        md_client._bound_front = "tcp://md.example:40003"
+    elif change == "bound_broker_id":
+        md_client._bound_broker_id = "other-broker"
+    elif change == "bound_user_id":
+        md_client._bound_user_id = "other-user"
+    elif change == "profile":
+        stream.ctp_env_profile = "different_profile"
+    elif change == "state_generation_bool":
+        state["connection_generation"] = True
+    with pytest.raises(NormalizedApiError) as rejected:
+        api._ctp_credential_binding_fronts(
+            "CTP___FUTURE", feed, state, object(), operation="test_md_credential_binding"
+        )
+    assert rejected.value.code == expected_code
+
+
+def test_reviewed_credential_binding_refresh_checks_full_account_digest(tmp_path, monkeypatch):
+    import importlib
+    import sys
+
+    package_root = tmp_path / "backtrader_runtime"
+    package_root.mkdir()
+    (package_root / "__init__.py").write_text("\n", encoding="utf-8")
+    module_path = package_root / "_ctp_credential_binding.py"
+    module_path.write_text(
+        """from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class CtpReviewedCredentialBindingRefreshResult:
+    scope_sha256: str
+    key_id: str
+    hmac_sha256: str = field(repr=False)
+    account_fingerprint: str = field(repr=False)
+    account_fingerprint_sha256: str = field(repr=False)
+    td_front: str = field(repr=False)
+    md_front: str = field(repr=False)
+    runtime_config_sha256: str = field(repr=False)
+    registration_sha256: str = field(repr=False)
+    backtrader_runtime_sha256: str = field(repr=False)
+
+
+class CtpReviewedCredentialBindingRefreshAdapter:
+    def __init__(self, full_digest_override=None):
+        self.full_digest_override = full_digest_override
+
+    def refresh(self, scope):
+        return CtpReviewedCredentialBindingRefreshResult(
+            scope_sha256=scope.scope_sha256,
+            key_id="fake-key-v1",
+            hmac_sha256="b" * 64,
+            account_fingerprint=scope.account_fingerprint,
+            account_fingerprint_sha256=(
+                self.full_digest_override or scope.account_fingerprint_sha256
+            ),
+            td_front=scope.td_front,
+            md_front=scope.md_front,
+            runtime_config_sha256="c" * 64,
+            registration_sha256="d" * 64,
+            backtrader_runtime_sha256=scope.backtrader_runtime_sha256,
+        )
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    for name in (
+        "backtrader_runtime._ctp_credential_binding",
+        "backtrader_runtime",
+    ):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    importlib.invalidate_caches()
+    adapter_module = importlib.import_module("backtrader_runtime._ctp_credential_binding")
+
+    api = object.__new__(BtApi)
+    api.transport_mode = TransportMode.DIRECT
+    valid_adapter = adapter_module.CtpReviewedCredentialBindingRefreshAdapter()
+    valid_verifier = api.create_ctp_credential_binding_verifier(valid_adapter)
+    import bt_api_py._ctp_credential_binding as sdk_binding
+
+    account_digest = hashlib.sha256(b"broker-test:user-test").hexdigest()
+    scope_values = {
+        "account_fingerprint": f"acct_{account_digest[:16]}",
+        "account_fingerprint_sha256": account_digest,
+        "trading_day": "20260911",
+        "connection_generation": 9,
+        "environment_profile": "config_front_pair",
+        "td_front": "tcp://td.example:40001",
+        "md_front": "tcp://md.example:40002",
+        "td_front_sha256": hashlib.sha256(b"tcp://td.example:40001").hexdigest(),
+        "md_front_sha256": hashlib.sha256(b"tcp://md.example:40002").hexdigest(),
+        "backtrader_sha256": "1" * 64,
+        "backtrader_runtime_sha256": valid_verifier.package_sha256,
+        "bt_api_py_sha256": "2" * 64,
+        "bt_api_ctp_sha256": "3" * 64,
+        "bt_api_base_sha256": "4" * 64,
+        "native_sha256": "5" * 64,
+        "dependency_hashes_sha256": "6" * 64,
+        "configuration_sha256": "7" * 64,
+        "strategy_identity_sha256": "8" * 64,
+        "preflight_sha256": "9" * 64,
+        "evidence_sha256": "a" * 64,
+        "md_connection_generation": 2,
+        "md_stream_generation": 3,
+    }
+    scope = sdk_binding._new_scope(scope_values)
+    result = valid_verifier.refresh(
+        scope,
+        owner=api,
+        operation="build_ctp_execution_approval_context",
+    )
+    assert result["credential_binding_key_id"] == "fake-key-v1"
+    assert result["credential_binding_hmac_sha256"] == "b" * 64
+
+    invalid_adapter = adapter_module.CtpReviewedCredentialBindingRefreshAdapter(
+        full_digest_override="e" * 64
+    )
+    invalid_verifier = api.create_ctp_credential_binding_verifier(invalid_adapter)
+    with pytest.raises(NormalizedApiError) as mismatch:
+        invalid_verifier.refresh(
+            scope,
+            owner=api,
+            operation="build_ctp_execution_approval_context",
+        )
+    assert mismatch.value.code == "ctp_credential_binding_scope_mismatch"
 
 
 def test_runtime_context_builder_rejects_unmatched_deployment_manifest(monkeypatch):
