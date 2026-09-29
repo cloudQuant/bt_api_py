@@ -951,23 +951,8 @@ def test_forwarding_extra_roundtrip_reaches_existing_gateway_runtime():
     assert normalized["filled"] == 0.01 and normalized["position_id"] == "position-10"
 
 
-def test_ctp_cancel_references_survive_wire_and_runtime_payload():
-    from bt_api_base.gateway.config import GatewayConfig
-    from bt_api_base.gateway.runtime import GatewayRuntime
-
+def test_ctp_cancel_references_do_not_authorize_forwarding_dispatch():
     from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
-    from bt_api_py.forwarding.schema import OrderCommand
-
-    runtime = GatewayRuntime(
-        GatewayConfig(exchange_type="CTP", asset_type="FUTURE", account_id="a", enable_trading=True)
-    )
-    runtime.adapter = SimpleNamespace(
-        cancel_order=Mock(return_value={"order_id": "sys-9", "status": "canceled"})
-    )
-
-    class Client:
-        def _send_command_sync(self, command):
-            return runtime._handle_command(OrderCommand.from_dict(command.to_dict()))
 
     backend = ZmqBtApiBackend(
         ForwardingConfig(
@@ -978,25 +963,32 @@ def test_ctp_cancel_references_survive_wire_and_runtime_payload():
             strategy_id="s",
         )
     )
-    backend._client = Client()
-    backend.cancel_order(
-        "CTP___FUTURE",
-        CancelOrderRequest(
-            symbol="rb2701",
-            account_id="a",
-            order_id="sys-9",
-            client_order_id="123456789012",
-            order_ref="123456789012",
-            front_id=3,
-            session_id=4,
-            exchange_id="SHFE",
-        ),
-    )
-    payload = runtime.adapter.cancel_order.call_args.args[0]
-    assert payload["order_id"] == "sys-9" and payload["order_ref"] == "123456789012"
-    assert (
-        payload["front_id"] == 3 and payload["session_id"] == 4 and payload["exchange_id"] == "SHFE"
-    )
+    send = Mock(side_effect=AssertionError("forwarding send"))
+    client = Mock()
+    client._send_command_sync = send
+    backend._client = client
+    native_intent = Mock()
+    backend._native_intent = native_intent
+
+    with pytest.raises(CapabilityNotSupportedError) as exc_info:
+        backend.cancel_order(
+            "CTP___FUTURE",
+            CancelOrderRequest(
+                symbol="rb2701",
+                account_id="a",
+                order_id="sys-9",
+                client_order_id="000000000137",
+                order_ref="000000000137",
+                front_id=3,
+                session_id=4,
+                exchange_id="SHFE",
+            ),
+        )
+
+    assert exc_info.value.definite_reject is True
+    assert "I9 cancel-action authority" in exc_info.value.detail
+    native_intent.assert_not_called()
+    send.assert_not_called()
 
 
 @pytest.mark.parametrize(

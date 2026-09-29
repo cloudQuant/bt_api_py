@@ -19,15 +19,22 @@ from collections import defaultdict, deque
 from collections.abc import Mapping
 from contextlib import contextmanager, suppress
 from copy import deepcopy
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from dataclasses import asdict, dataclass, replace
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation, localcontext
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from threading import RLock
 from typing import Any, Protocol, cast
 
 from ._contracts.errors import NormalizedApiError
-from ._contracts.models import QueryOrderRequest
+from ._contracts.models import (
+    CancelOrderRequest,
+    CtpCancelIdentityBinding,
+    CtpOrderIdentityBinding,
+    OrderRequest,
+    QueryOrderRequest,
+)
 from ._ctp_budget import (
     BUDGET_MAX_CNY,
     BUDGET_ORDINARY_MAX_CNY,
@@ -58,6 +65,303 @@ class _PosixLocker(Protocol):
     LOCK_NB: int
 
     def flock(self, fd: int, operation: int) -> None: ...
+
+
+class _CtpOrderIdentityReader(Protocol):
+    """Read-only portion of the independent I9 CTP identity authority."""
+
+    def read_ctp_order_identity(self, scope: Any, managed_intent_id: str) -> Any: ...
+
+
+class _CtpDispatchCommandReader(_CtpOrderIdentityReader, Protocol):
+    """Read-only portion of the exact shared I9 CTP cancel command ledger."""
+
+    def read_ctp_dispatch_command(self, scope: Any, command_id: str) -> Any: ...
+
+    def read_ctp_dispatch_projection(self, scope: Any, command_id: str) -> Any: ...
+
+
+_CTP_ORDER_REF_PATTERN = re.compile(r"^[0-9]{12}$", re.ASCII)
+_CTP_RUNTIME_ORDER_ID_PATTERN = re.compile(r"^bt-managed-v1:[0-9a-f]{64}$", re.ASCII)
+_CTP_MANAGED_INTENT_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$", re.ASCII)
+_CTP_AUTHORITY_DIGEST_PATTERN = re.compile(r"^(?:account|scope):[0-9a-f]{64}$", re.ASCII)
+_CTP_ORDER_IDENTITY_MIRROR_AUTHORITY = "bt_api_execution.CtpOrderIdentityReservation.v1"
+
+
+@dataclass(frozen=True, slots=True)
+class CtpOrderIdentityReservationMirror:
+    """Candidate-only SDK-journal echo of an already committed I9 reservation.
+
+    This value is identity evidence only. It does not authorize, stage, queue,
+    or dispatch a native CTP request, and it is not sufficient identity proof
+    for a later managed OrderRequest or cancel.
+    """
+
+    account_key: str
+    trading_day: str
+    scope_key: str
+    managed_intent_id: str
+    runtime_order_id: str
+    order_ref: str
+    created_at_ns: int
+
+
+def _installed_i9_ctp_order_identity_types():
+    """Return the exact supported installed I9 DTO and store classes.
+
+    This is a narrow API-version/type check. It does not authenticate package
+    files, the Python process, or code already running in the process.
+    """
+    if importlib_metadata.version("bt_api_execution") != "0.2.0":
+        raise ValueError("unsupported bt_api_execution distribution version")
+    from bt_api_execution.contracts import ExecutionScope as I9ExecutionScope
+    from bt_api_execution.store import (
+        CtpOrderIdentityReservation as I9CtpOrderIdentityReservation,
+    )
+    from bt_api_execution.store import SqliteExecutionStore as I9SqliteExecutionStore
+
+    if (
+        I9ExecutionScope.__module__ != "bt_api_execution.contracts"
+        or I9CtpOrderIdentityReservation.__module__ != "bt_api_execution.store"
+        or I9SqliteExecutionStore.__module__ != "bt_api_execution.store"
+    ):
+        raise ValueError("unexpected bt_api_execution CTP identity class origin")
+    return I9ExecutionScope, I9SqliteExecutionStore, I9CtpOrderIdentityReservation
+
+
+def _installed_i9_ctp_dispatch_command_types():
+    """Return exact I9 command/readback DTO types supported by this candidate."""
+    if importlib_metadata.version("bt_api_execution") != "0.2.0":
+        raise ValueError("unsupported bt_api_execution distribution version")
+    from bt_api_execution.store import CtpCancelActionProjection as I9CtpCancelActionProjection
+    from bt_api_execution.store import CtpDispatchCommand as I9CtpDispatchCommand
+    from bt_api_execution.store import CtpDispatchCorrelationKey as I9CtpDispatchCorrelationKey
+    from bt_api_execution.store import CtpDispatchProjection as I9CtpDispatchProjection
+    from bt_api_execution.store import CtpTargetOrderProjection as I9CtpTargetOrderProjection
+
+    if any(
+        value.__module__ != "bt_api_execution.store"
+        for value in (
+            I9CtpDispatchCommand,
+            I9CtpDispatchCorrelationKey,
+            I9CtpDispatchProjection,
+            I9CtpCancelActionProjection,
+            I9CtpTargetOrderProjection,
+        )
+    ):
+        raise ValueError("unexpected bt_api_execution CTP dispatch class origin")
+    return (
+        I9CtpDispatchCommand,
+        I9CtpDispatchCorrelationKey,
+        I9CtpDispatchProjection,
+        I9CtpCancelActionProjection,
+        I9CtpTargetOrderProjection,
+    )
+
+
+def _ctp_order_identity_scope_values(scope, *, expected_type):
+    """Validate and return the exact typed I9 scope identity fields."""
+    if type(scope) is not expected_type:
+        raise ValueError("typed I9 CTP execution scope required")
+    provider = getattr(scope, "provider", None)
+    environment = getattr(scope, "environment", None)
+    account_ref = getattr(scope, "account_ref", None)
+    strategy_id = getattr(scope, "strategy_id", None)
+    trading_day = getattr(scope, "trading_day", None)
+    account_key = getattr(scope, "account_key", None)
+    scope_key = getattr(scope, "key", None)
+    if (
+        type(provider) is not str
+        or provider.casefold() != "ctp"
+        or type(environment) is not str
+        or not environment
+        or environment != environment.strip()
+        or type(account_ref) is not str
+        or not account_ref
+        or account_ref != account_ref.strip()
+        or type(strategy_id) is not str
+        or not strategy_id
+        or strategy_id != strategy_id.strip()
+        or type(trading_day) is not str
+        or not re.fullmatch(r"[0-9]{8}", trading_day, re.ASCII)
+        or type(account_key) is not str
+        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(account_key)
+        or not account_key.startswith("account:")
+        or type(scope_key) is not str
+        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(scope_key)
+        or not scope_key.startswith("scope:")
+    ):
+        raise ValueError("I9 CTP execution scope is incomplete")
+    try:
+        date(int(trading_day[:4]), int(trading_day[4:6]), int(trading_day[6:8]))
+    except ValueError as error:
+        raise ValueError("I9 CTP execution scope trading day is invalid") from error
+    account_payload = {
+        "provider": provider,
+        "environment": environment,
+        "account_ref": account_ref,
+    }
+    scope_payload = {
+        **account_payload,
+        "strategy_id": strategy_id,
+        "trading_day": trading_day,
+    }
+    account_digest = hashlib.sha256(
+        json.dumps(
+            account_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    scope_digest = hashlib.sha256(
+        json.dumps(
+            scope_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if account_key != "account:" + account_digest or scope_key != "scope:" + scope_digest:
+        raise ValueError("I9 CTP execution scope digest is inconsistent")
+    return {
+        "provider": provider.upper(),
+        "environment": environment,
+        "account_ref": account_ref,
+        "strategy_id": strategy_id,
+        "trading_day": trading_day,
+        "account_key": account_key,
+        "scope_key": scope_key,
+        "scope_payload": scope_payload,
+    }
+
+
+def _ctp_order_identity_reservation_values(
+    value, *, expected_type, scope_values, managed_intent_id, runtime_order_id
+):
+    """Validate the I9 immutable reservation DTO without allocating a Ref."""
+    if type(value) is not expected_type:
+        raise ValueError("typed I9 CTP OrderRef reservation required")
+    names = (
+        "account_key",
+        "trading_day",
+        "scope_key",
+        "managed_intent_id",
+        "runtime_order_id",
+        "order_ref",
+        "created_at_ns",
+    )
+    values = tuple(getattr(value, name, None) for name in names)
+    if (
+        any(type(item) is not str or not item for item in values[:6])
+        or type(values[6]) is not int
+        or values[6] <= 0
+        or values[0] != scope_values["account_key"]
+        or values[1] != scope_values["trading_day"]
+        or values[2] != scope_values["scope_key"]
+        or values[3] != managed_intent_id
+        or values[4] != runtime_order_id
+        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(values[0])
+        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(values[2])
+        or not _CTP_MANAGED_INTENT_PATTERN.fullmatch(values[3])
+        or not _CTP_RUNTIME_ORDER_ID_PATTERN.fullmatch(values[4])
+        or not _CTP_ORDER_REF_PATTERN.fullmatch(values[5])
+    ):
+        raise ValueError("I9 CTP OrderRef reservation conflicts with the requested identity")
+    try:
+        date(int(values[1][:4]), int(values[1][4:6]), int(values[1][6:8]))
+    except ValueError as error:
+        raise ValueError("I9 CTP OrderRef reservation trading day is invalid") from error
+    return CtpOrderIdentityReservationMirror(*values)
+
+
+def _ctp_order_identity_mirror_payload(row):
+    """Validate the JSON-safe reservation echo restored from the SDK journal."""
+    value = row.get("ctp_order_identity_reservation")
+    expected_fields = {
+        "account_key",
+        "trading_day",
+        "scope_key",
+        "managed_intent_id",
+        "runtime_order_id",
+        "order_ref",
+        "created_at_ns",
+    }
+    scope = row.get("ctp_order_identity_scope")
+    scope_fields = {"provider", "environment", "account_ref", "strategy_id", "trading_day"}
+    if (
+        row.get("ctp_order_identity_authority") != _CTP_ORDER_IDENTITY_MIRROR_AUTHORITY
+        or not isinstance(value, dict)
+        or set(value) != expected_fields
+        or not isinstance(scope, dict)
+        or set(scope) != scope_fields
+        or any(type(scope.get(name)) is not str or not scope[name] for name in scope_fields)
+        or type(value.get("created_at_ns")) is not int
+        or value["created_at_ns"] <= 0
+        or any(type(value.get(name)) is not str for name in expected_fields - {"created_at_ns"})
+        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(value["account_key"])
+        or not _CTP_AUTHORITY_DIGEST_PATTERN.fullmatch(value["scope_key"])
+        or not _CTP_MANAGED_INTENT_PATTERN.fullmatch(value["managed_intent_id"])
+        or not _CTP_RUNTIME_ORDER_ID_PATTERN.fullmatch(value["runtime_order_id"])
+        or not _CTP_ORDER_REF_PATTERN.fullmatch(value["order_ref"])
+        or row.get("client_order_id") != value["order_ref"]
+        or row.get("runtime_order_id") != value["runtime_order_id"]
+        or row.get("managed_intent_id") != value["managed_intent_id"]
+        or row.get("trading_day") != value["trading_day"]
+        or scope["provider"].upper() != "CTP"
+        or scope["trading_day"] != value["trading_day"]
+        or scope["strategy_id"] != row.get("strategy_id")
+        or scope["account_ref"] != row.get("account_id")
+        or len(value["trading_day"]) != 8
+        or not value["trading_day"].isascii()
+        or not value["trading_day"].isdigit()
+    ):
+        raise ValueError("invalid CTP OrderRef mirror journal row")
+    try:
+        date(
+            int(value["trading_day"][:4]),
+            int(value["trading_day"][4:6]),
+            int(value["trading_day"][6:8]),
+        )
+    except ValueError as error:
+        raise ValueError("invalid CTP OrderRef mirror journal trading day") from error
+    scope_account_key = (
+        "account:"
+        + hashlib.sha256(
+            json.dumps(
+                {
+                    "provider": scope["provider"],
+                    "environment": scope["environment"],
+                    "account_ref": scope["account_ref"],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+                allow_nan=False,
+            ).encode("utf-8")
+        ).hexdigest()
+    )
+    scope_key = (
+        "scope:"
+        + hashlib.sha256(
+            json.dumps(
+                scope, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
+            ).encode("utf-8")
+        ).hexdigest()
+    )
+    if scope_account_key != value["account_key"] or scope_key != value["scope_key"]:
+        raise ValueError("CTP OrderRef mirror scope digest mismatch")
+    return CtpOrderIdentityReservationMirror(
+        value["account_key"],
+        value["trading_day"],
+        value["scope_key"],
+        value["managed_intent_id"],
+        value["runtime_order_id"],
+        value["order_ref"],
+        value["created_at_ns"],
+    )
 
 
 _TERMINAL = {"completed", "canceled", "expired", "rejected"}
@@ -1678,6 +1982,11 @@ class _ExecutionSession:
         self.pending = defaultdict(deque)
         self.trade_ids = set()
         self.accounts = {}
+        self._ctp_order_identity_mirrors = {}
+        # Exact I9 cancel command echoes live only for this process. They are
+        # readback labels, are not persisted as SDK authority, and never make
+        # a cancel eligible for native dispatch.
+        self._ctp_cancel_identity_mirrors = {}
         self.submit_calls = 0
         self.cancel_calls = 0
         self.persistence_failed = False
@@ -3610,6 +3919,582 @@ class _ExecutionSession:
             str(row.get("trade_id") or ""),
         )
 
+    def _load_ctp_order_identity_mirror(self, row, embedded_identity, client_key):
+        """Restore an exact authority echo from this session's existing journal."""
+        if row.get("ctp_order_identity_authority") is None:
+            return
+        if (
+            str((embedded_identity or {}).get("provider") or "").upper() != "CTP"
+            or row.get("exchange_name") is None
+            or self._provider(row.get("exchange_name")) != "CTP"
+            or row.get("account_id") != (embedded_identity or {}).get("account_id")
+            or row.get("strategy_id") != self.config["strategy_id"]
+        ):
+            raise ValueError("invalid CTP OrderRef mirror execution identity")
+        mirror = _ctp_order_identity_mirror_payload(row)
+        key = (
+            mirror.account_key,
+            mirror.trading_day,
+            mirror.scope_key,
+            mirror.managed_intent_id,
+        )
+        existing = self._ctp_order_identity_mirrors.get(key)
+        if existing is not None and existing != mirror:
+            raise ValueError("conflicting CTP OrderRef mirror history")
+        if existing is None:
+            if client_key in self.reserved_ids or client_key in self.used_ids:
+                raise ValueError("CTP OrderRef mirror conflicts with SDK reservation history")
+            for prior in self._ctp_order_identity_mirrors.values():
+                if prior.account_key == mirror.account_key and (
+                    prior.runtime_order_id == mirror.runtime_order_id
+                    or prior.order_ref == mirror.order_ref
+                ):
+                    raise ValueError("conflicting account-wide CTP OrderRef mirror history")
+        self._ctp_order_identity_mirrors[key] = mirror
+
+    def consume_ctp_order_identity_reservation(
+        self,
+        venue,
+        *,
+        scope,
+        identity_store: _CtpOrderIdentityReader,
+        managed_intent_id,
+        runtime_order_id,
+    ):
+        """Mirror an exact I9 OrderRef reservation; never allocate or dispatch.
+
+        ``identity_store`` is intentionally read-only at this boundary. A
+        caller must first commit the reservation in I9; any SDK journal or
+        identity mismatch rejects before this method returns an OrderRef.
+        This candidate does not authenticate the authority object's code
+        origin, bind the mirror to a later SDK OrderRequest, or prove a shared
+        I9 dispatch row. The returned value is not execution approval,
+        dispatch identity proof, or a provider receipt.
+        """
+        operation = "consume_ctp_order_identity_reservation"
+
+        def reject(code):
+            return NormalizedApiError(operation, code, definite_reject=True)
+
+        if (
+            self.closed
+            or self.path is None
+            or self.config.get("require_order_journal") is not True
+            or self.config.get("market_data_only") is True
+        ):
+            raise reject("ctp_order_identity_durable_writer_required")
+        if (
+            type(venue) is not str
+            or not venue
+            or self._provider(venue) != "CTP"
+            or venue != self._arm_venue
+            or not isinstance(self._ctp_execution_identity, Mapping)
+        ):
+            raise reject("ctp_order_identity_execution_scope_unavailable")
+        if (
+            type(managed_intent_id) is not str
+            or not _CTP_MANAGED_INTENT_PATTERN.fullmatch(managed_intent_id)
+            or type(runtime_order_id) is not str
+            or not _CTP_RUNTIME_ORDER_ID_PATTERN.fullmatch(runtime_order_id)
+        ):
+            raise reject("ctp_order_identity_requested_identity_invalid")
+        try:
+            scope_type, store_type, reservation_type = (
+                _installed_i9_ctp_order_identity_types()
+            )
+        except Exception:
+            raise reject("ctp_order_identity_read_port_unavailable") from None
+        try:
+            scope_values = _ctp_order_identity_scope_values(scope, expected_type=scope_type)
+        except Exception:
+            raise reject("ctp_order_identity_scope_invalid") from None
+        identity = self._ctp_execution_identity
+        arm_proof = self._arm_proof
+        account_fingerprint = identity.get("account_fingerprint")
+        if (
+            scope_values["account_ref"] != account_fingerprint
+            or identity.get("account_id") != account_fingerprint
+            or scope_values["strategy_id"] != self.config.get("strategy_id")
+            or scope_values["environment"]
+            not in {identity.get("environment"), identity.get("environment_profile")}
+            or not isinstance(arm_proof, Mapping)
+            or arm_proof.get("account_fingerprint") != account_fingerprint
+            or arm_proof.get("trading_day") != scope_values["trading_day"]
+        ):
+            raise reject("ctp_order_identity_active_scope_mismatch")
+        if type(identity_store) is not store_type:
+            raise reject("ctp_order_identity_read_port_unavailable")
+        reader = getattr(identity_store, "read_ctp_order_identity", None)
+        if not callable(reader):
+            raise reject("ctp_order_identity_read_port_unavailable")
+        try:
+            reservation = reader(scope, managed_intent_id)
+            if reservation is None:
+                raise ValueError("I9 reservation missing")
+            mirror = _ctp_order_identity_reservation_values(
+                reservation,
+                expected_type=reservation_type,
+                scope_values=scope_values,
+                managed_intent_id=managed_intent_id,
+                runtime_order_id=runtime_order_id,
+            )
+        except Exception:
+            raise reject("ctp_order_identity_authority_read_or_binding_invalid") from None
+        key = (
+            mirror.account_key,
+            mirror.trading_day,
+            mirror.scope_key,
+            mirror.managed_intent_id,
+        )
+        with self.mutex:
+            if self.closed or self.persistence_failed:
+                raise reject("ctp_order_identity_execution_session_unavailable")
+            existing = self._ctp_order_identity_mirrors.get(key)
+            if existing is not None:
+                if existing != mirror:
+                    raise reject("ctp_order_identity_sdk_mirror_conflict")
+                return existing
+            for prior in self._ctp_order_identity_mirrors.values():
+                if prior.account_key == mirror.account_key and (
+                    prior.runtime_order_id == mirror.runtime_order_id
+                    or prior.order_ref == mirror.order_ref
+                ):
+                    raise reject("ctp_order_identity_account_ref_conflict")
+            account_id = identity.get("account_id")
+            client_key = self._client_key(venue, account_id, mirror.order_ref)
+            if client_key in self.reserved_ids or client_key in self.used_ids:
+                raise reject("ctp_order_identity_sdk_ref_conflict")
+            row = {
+                "exchange_name": venue,
+                "account_id": account_id,
+                "client_order_id": mirror.order_ref,
+                "managed_intent_id": mirror.managed_intent_id,
+                "runtime_order_id": mirror.runtime_order_id,
+                "trading_day": mirror.trading_day,
+                "ctp_order_identity_authority": _CTP_ORDER_IDENTITY_MIRROR_AUTHORITY,
+                "ctp_order_identity_scope": dict(scope_values["scope_payload"]),
+                "ctp_order_identity_reservation": {
+                    "account_key": mirror.account_key,
+                    "trading_day": mirror.trading_day,
+                    "scope_key": mirror.scope_key,
+                    "managed_intent_id": mirror.managed_intent_id,
+                    "runtime_order_id": mirror.runtime_order_id,
+                    "order_ref": mirror.order_ref,
+                    "created_at_ns": mirror.created_at_ns,
+                },
+            }
+            try:
+                self._journal("client_id_reservation", row)
+            except Exception:
+                raise reject("ctp_order_identity_sdk_mirror_persistence_failed") from None
+            self.reserved_ids.add(client_key)
+            self._ctp_order_identity_mirrors[key] = mirror
+            return mirror
+
+    def consume_ctp_cancel_dispatch_command(
+        self,
+        venue,
+        *,
+        scope,
+        identity_store: _CtpDispatchCommandReader,
+        command_id,
+        request: CancelOrderRequest,
+    ) -> CtpCancelIdentityBinding:
+        """Echo an exact I9 cancel row into an in-memory, non-authorizing DTO.
+
+        This only reads a committed command and its read model. It does not
+        allocate an action/ref, claim a worker row, verify fresh approval,
+        publish/consume a queue receipt, or call a native adapter. The public
+        cancel path remains rejected even after this echo is returned.
+        """
+        operation = "consume_ctp_cancel_dispatch_command"
+
+        def reject(code):
+            return NormalizedApiError(operation, code, definite_reject=True)
+
+        if (
+            self.closed
+            or self.path is None
+            or self.config.get("require_order_journal") is not True
+            or self.config.get("market_data_only") is True
+        ):
+            raise reject("ctp_cancel_identity_durable_writer_required")
+        if (
+            type(venue) is not str
+            or not venue
+            or self._provider(venue) != "CTP"
+            or venue != self._arm_venue
+            or not isinstance(self._ctp_execution_identity, Mapping)
+        ):
+            raise reject("ctp_cancel_identity_execution_scope_unavailable")
+        if type(command_id) is not str or not _CTP_MANAGED_INTENT_PATTERN.fullmatch(command_id):
+            raise reject("ctp_cancel_identity_command_id_invalid")
+        if type(request) is not CancelOrderRequest or request.ctp_cancel_identity is not None:
+            raise reject("ctp_cancel_identity_request_invalid_or_caller_supplied")
+        try:
+            scope_type, store_type, reservation_type = (
+                _installed_i9_ctp_order_identity_types()
+            )
+            (
+                command_type,
+                correlation_type,
+                projection_type,
+                cancel_action_type,
+                target_order_type,
+            ) = (
+                _installed_i9_ctp_dispatch_command_types()
+            )
+        except Exception:
+            raise reject("ctp_cancel_identity_read_port_unavailable") from None
+        try:
+            scope_values = _ctp_order_identity_scope_values(scope, expected_type=scope_type)
+        except Exception:
+            raise reject("ctp_cancel_identity_scope_invalid") from None
+
+        identity = self._ctp_execution_identity
+        arm_proof = self._arm_proof
+        account_fingerprint = identity.get("account_fingerprint")
+        if (
+            scope_values["account_ref"] != account_fingerprint
+            or identity.get("account_id") != account_fingerprint
+            or scope_values["strategy_id"] != self.config.get("strategy_id")
+            or scope_values["environment"]
+            not in {identity.get("environment"), identity.get("environment_profile")}
+            or request.account_id != account_fingerprint
+            or not isinstance(arm_proof, Mapping)
+            or arm_proof.get("account_fingerprint") != account_fingerprint
+            or arm_proof.get("trading_day") != scope_values["trading_day"]
+        ):
+            raise reject("ctp_cancel_identity_active_scope_mismatch")
+        if type(identity_store) is not store_type:
+            raise reject("ctp_cancel_identity_read_port_unavailable")
+        read_reservation = getattr(identity_store, "read_ctp_order_identity", None)
+        read_command = getattr(identity_store, "read_ctp_dispatch_command", None)
+        read_projection = getattr(identity_store, "read_ctp_dispatch_projection", None)
+        if not all(callable(value) for value in (read_reservation, read_command, read_projection)):
+            raise reject("ctp_cancel_identity_read_port_unavailable")
+
+        try:
+            command = read_command(scope, command_id)
+            if type(command) is not command_type:
+                raise ValueError("typed I9 CTP command missing")
+            correlation = command.correlation_key
+            if type(correlation) is not correlation_type:
+                raise ValueError("typed I9 CTP correlation missing")
+            projection = read_projection(scope, command_id)
+            if type(projection) is not projection_type:
+                raise ValueError("typed I9 CTP command readback missing")
+
+            managed_intent_id = correlation.reservation_managed_intent_id
+            runtime_order_id = correlation.runtime_order_id
+            reservation = read_reservation(scope, managed_intent_id)
+            if reservation is None:
+                raise ValueError("I9 OrderRef reservation missing")
+            reserved = _ctp_order_identity_reservation_values(
+                reservation,
+                expected_type=reservation_type,
+                scope_values=scope_values,
+                managed_intent_id=managed_intent_id,
+                runtime_order_id=runtime_order_id,
+            )
+
+            payload = command.request_payload
+            session_binding = command.session_binding
+            native_payload = getattr(command, "native_request_payload", None)
+            if (
+                not isinstance(payload, Mapping)
+                or not isinstance(native_payload, Mapping)
+                or not isinstance(session_binding, Mapping)
+            ):
+                raise ValueError("I9 cancel command mappings are unavailable")
+            if (
+                type(correlation.version) is not int
+                or correlation.version != 2
+                or correlation.operation != "CANCEL"
+                or command.operation != "CANCEL"
+                or command.command_id != command_id
+                or command.status != "READY"
+                or command.account_key != scope_values["account_key"]
+                or command.scope_key != scope_values["scope_key"]
+                or command.trading_day != scope_values["trading_day"]
+                or command.request_payload_sha256 != correlation.request_payload_sha256
+                or command.native_request_payload_sha256
+                != correlation.native_request_payload_sha256
+                or correlation.reservation_managed_intent_id != reserved.managed_intent_id
+                or command.order_ref is not None
+                or command.cancel_target_order_ref != reserved.order_ref
+                or type(command.created_at_ns) is not int
+                or command.created_at_ns <= 0
+                or projection.command_id != command_id
+                or projection.operation != "CANCEL"
+                or projection.command_status != command.status
+            ):
+                raise ValueError("I9 cancel command identity/readback mismatch")
+
+            command_fields = (
+                (correlation.account_key, command.account_key),
+                (correlation.scope_key, command.scope_key),
+                (correlation.trading_day, command.trading_day),
+                (correlation.command_id, command.command_id),
+                (correlation.request_payload_sha256, command.request_payload_sha256),
+                (correlation.reservation_managed_intent_id, reserved.managed_intent_id),
+                (correlation.runtime_order_id, reserved.runtime_order_id),
+                (correlation.order_ref, reserved.order_ref),
+                (correlation.approval_use_id, command.approval_use_id),
+                (correlation.approval_digest, command.approval_digest),
+                (correlation.session_binding_sha256, command.session_binding_sha256),
+                (correlation.session_generation_id, command.session_binding.get("session_generation_id")),
+                (correlation.dispatch_front_id, command.session_binding.get("dispatch_front_id")),
+                (correlation.dispatch_session_id, command.session_binding.get("dispatch_session_id")),
+                (
+                    correlation.native_request_payload_sha256,
+                    command.native_request_payload_sha256,
+                ),
+                (correlation.cancel_target_exchange_id, command.cancel_target_exchange_id),
+                (correlation.cancel_target_order_sys_id, command.cancel_target_order_sys_id),
+                (correlation.cancel_target_front_id, command.cancel_target_front_id),
+                (correlation.cancel_target_session_id, command.cancel_target_session_id),
+            )
+            if any(left != right or type(left) is not type(right) for left, right in command_fields):
+                raise ValueError("I9 cancel correlation differs from command fields")
+
+            target_values = {
+                "OrderRef": command.cancel_target_order_ref,
+                "ExchangeID": command.cancel_target_exchange_id,
+                "OrderSysID": command.cancel_target_order_sys_id,
+                "FrontID": command.cancel_target_front_id,
+                "SessionID": command.cancel_target_session_id,
+            }
+            for name, expected in target_values.items():
+                observed = payload.get(name)
+                if type(observed) is not type(expected) or observed != expected:
+                    raise ValueError("I9 cancel payload target mismatch")
+            if type(payload.get("ActionFlag")) is not str or payload["ActionFlag"] != "0":
+                raise ValueError("I9 cancel payload is not a native delete")
+            if type(payload.get("InstrumentID")) is not str or payload["InstrumentID"] != request.symbol:
+                raise ValueError("I9 cancel payload instrument differs from request")
+            if "RequestID" in payload and (
+                type(payload["RequestID"]) is not int
+                or payload["RequestID"] != correlation.native_request_id
+            ):
+                raise ValueError("I9 cancel payload RequestID differs from correlation")
+            if "OrderActionRef" in payload:
+                raise ValueError("I9 logical cancel payload contains caller ActionRef")
+            if (
+                type(correlation.native_request_id) is not int
+                or correlation.native_request_id <= 0
+                or type(correlation.native_action_ref) is not int
+                or not 1 <= correlation.native_action_ref <= 2_147_483_647
+                or correlation.managed_action_id == correlation.reservation_managed_intent_id
+            ):
+                raise ValueError("I9 cancel action identity is invalid")
+            if "RequestID" in payload and (
+                type(payload["RequestID"]) is not int
+                or payload["RequestID"] != correlation.native_request_id
+            ):
+                raise ValueError("I9 logical cancel payload RequestID differs from correlation")
+            expected_native_payload = dict(payload)
+            expected_native_payload["OrderActionRef"] = correlation.native_action_ref
+            native_payload_digest = hashlib.sha256(
+                json.dumps(
+                    expected_native_payload,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            actual_native_payload_digest = hashlib.sha256(
+                json.dumps(
+                    dict(native_payload),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            if (
+                dict(native_payload) != expected_native_payload
+                or any(
+                    type(native_payload.get(name)) is not type(value)
+                    for name, value in expected_native_payload.items()
+                )
+                or set(native_payload) != set(expected_native_payload)
+                or native_payload_digest != command.native_request_payload_sha256
+                or actual_native_payload_digest != command.native_request_payload_sha256
+            ):
+                raise ValueError("I9 native cancel payload differs from Store-issued ActionRef")
+
+            cancel_action = projection.cancel_action
+            if type(cancel_action) is not cancel_action_type:
+                raise ValueError("I9 typed cancel action projection is missing")
+            target_order = cancel_action.target_order
+            if type(target_order) is not target_order_type:
+                raise ValueError("I9 typed cancel target projection is missing")
+            projection_values = (
+                (cancel_action.managed_action_id, correlation.managed_action_id),
+                (target_order.managed_intent_id, reserved.managed_intent_id),
+                (target_order.runtime_order_id, reserved.runtime_order_id),
+                (target_order.order_ref, reserved.order_ref),
+                (target_order.exchange_id, command.cancel_target_exchange_id),
+                (target_order.order_sys_id, command.cancel_target_order_sys_id),
+                (target_order.front_id, command.cancel_target_front_id),
+                (target_order.session_id, command.cancel_target_session_id),
+            )
+            if any(
+                left != right or type(left) is not type(right)
+                for left, right in projection_values
+            ):
+                raise ValueError("I9 cancel action projection target mismatch")
+
+            payload_digest = hashlib.sha256(
+                json.dumps(
+                    dict(payload),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            if payload_digest != command.request_payload_sha256:
+                raise ValueError("I9 cancel payload digest mismatch")
+            binding_digest = hashlib.sha256(
+                json.dumps(
+                    dict(session_binding),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            if binding_digest != command.session_binding_sha256:
+                raise ValueError("I9 cancel session-binding digest mismatch")
+
+            binding = CtpCancelIdentityBinding(
+                version=2,
+                environment=scope_values["environment"],
+                account_id=account_fingerprint,
+                instrument_id=payload["InstrumentID"],
+                account_key=reserved.account_key,
+                trading_day=reserved.trading_day,
+                scope_key=reserved.scope_key,
+                managed_intent_id=reserved.managed_intent_id,
+                runtime_order_id=reserved.runtime_order_id,
+                order_ref=reserved.order_ref,
+                command_id=command.command_id,
+                request_payload_sha256=command.request_payload_sha256,
+                managed_action_id=correlation.managed_action_id,
+                approval_use_id=command.approval_use_id,
+                approval_digest=command.approval_digest,
+                session_binding_sha256=command.session_binding_sha256,
+                session_generation_id=correlation.session_generation_id,
+                dispatch_front_id=correlation.dispatch_front_id,
+                dispatch_session_id=correlation.dispatch_session_id,
+                native_request_id=correlation.native_request_id,
+                native_action_ref=correlation.native_action_ref,
+                cancel_target_order_ref=command.cancel_target_order_ref,
+                cancel_target_exchange_id=command.cancel_target_exchange_id,
+                cancel_target_order_sys_id=command.cancel_target_order_sys_id,
+                cancel_target_front_id=command.cancel_target_front_id,
+                cancel_target_session_id=command.cancel_target_session_id,
+                native_request_payload_sha256=command.native_request_payload_sha256,
+            )
+            # Constructing the bound DTO checks every simultaneously supplied
+            # legacy scalar before the echo enters session state.
+            bound_request = replace(request, ctp_cancel_identity=binding)
+            del bound_request
+        except Exception:
+            raise reject("ctp_cancel_identity_authority_read_or_binding_invalid") from None
+
+        mirror_key = (
+            reserved.account_key,
+            reserved.trading_day,
+            reserved.scope_key,
+            reserved.managed_intent_id,
+        )
+        with self.mutex:
+            if self.closed or self.persistence_failed:
+                raise reject("ctp_cancel_identity_execution_session_unavailable")
+            if type(self._ctp_order_identity_mirrors) is not dict:
+                raise reject("ctp_cancel_identity_order_mirror_missing")
+            order_mirror = self._ctp_order_identity_mirrors.get(mirror_key)
+            if (
+                type(order_mirror) is not CtpOrderIdentityReservationMirror
+                or order_mirror != reserved
+            ):
+                raise reject("ctp_cancel_identity_order_mirror_missing")
+            if type(self._ctp_cancel_identity_mirrors) is not dict:
+                raise reject("ctp_cancel_identity_mirror_unavailable")
+            existing = self._ctp_cancel_identity_mirrors.get(command_id)
+            if existing is not None and existing != binding:
+                raise reject("ctp_cancel_identity_mirror_conflict")
+            self._ctp_cancel_identity_mirrors[command_id] = binding
+            return binding
+
+    def _require_ctp_cancel_identity_binding(self, operation, request):
+        """Match an incoming request to the in-memory I9 echo, without dispatch."""
+        if type(request) is not CancelOrderRequest:
+            raise NormalizedApiError(
+                operation, "ctp_cancel_identity_binding_missing_or_mismatch", definite_reject=True
+            )
+        binding = request.ctp_cancel_identity
+        identity = self._ctp_execution_identity
+        proof = self._arm_proof
+        if (
+            type(binding) is not CtpCancelIdentityBinding
+            or binding.version != 2
+            or not isinstance(identity, Mapping)
+            or not isinstance(proof, Mapping)
+            or type(getattr(self, "_ctp_cancel_identity_mirrors", None)) is not dict
+        ):
+            raise NormalizedApiError(
+                operation, "ctp_cancel_identity_binding_missing_or_mismatch", definite_reject=True
+            )
+        account_id = identity.get("account_id")
+        account_ref = identity.get("account_fingerprint")
+        if (
+            type(account_ref) is not str
+            or account_id != account_ref
+            or request.account_id != account_id
+            or binding.account_id != account_id
+            or binding.trading_day != proof.get("trading_day")
+            or proof.get("account_fingerprint") != account_ref
+            or binding.environment
+            not in {identity.get("environment"), identity.get("environment_profile")}
+        ):
+            raise NormalizedApiError(
+                operation, "ctp_cancel_identity_binding_missing_or_mismatch", definite_reject=True
+            )
+        mirror = self._ctp_cancel_identity_mirrors.get(binding.command_id)
+        if type(mirror) is not CtpCancelIdentityBinding or mirror != binding:
+            raise NormalizedApiError(
+                operation, "ctp_cancel_identity_binding_missing_or_mismatch", definite_reject=True
+            )
+        order_key = (
+            binding.account_key,
+            binding.trading_day,
+            binding.scope_key,
+            binding.managed_intent_id,
+        )
+        order_mirror = self._ctp_order_identity_mirrors.get(order_key)
+        if (
+            type(order_mirror) is not CtpOrderIdentityReservationMirror
+            or order_mirror.runtime_order_id != binding.runtime_order_id
+            or order_mirror.order_ref != binding.order_ref
+        ):
+            raise NormalizedApiError(
+                operation, "ctp_cancel_identity_order_mirror_missing", definite_reject=True
+            )
+        try:
+            # Re-run the model's conflict checks in case an object was forged
+            # without its constructor or changed through unsafe deserialization.
+            replace(request, ctp_cancel_identity=binding)
+        except Exception:
+            raise NormalizedApiError(
+                operation, "ctp_cancel_identity_binding_missing_or_mismatch", definite_reject=True
+            ) from None
+        return binding
+
     def _load_journal(self):
         if self.path is None or not self.path.exists():
             return
@@ -3705,6 +4590,7 @@ class _ExecutionSession:
                         client_id,
                         row,
                     )
+                    self._load_ctp_order_identity_mirror(row, embedded_identity, client_key)
                     reservation_cancel_events.setdefault(client_key, []).append(
                         {"event": event, "exchange_name": venue, "client_order_id": client_id}
                     )
@@ -4418,6 +5304,7 @@ class _ExecutionSession:
                 "execution_identity_missing_or_mismatch",
                 definite_reject=True,
             )
+        self._require_ctp_order_identity_binding(operation, request)
         authorization = self._ctp_execution_authorization_context
         if authorization is not None and (
             strategy_identity != authorization.get("strategy_identity_sha256")
@@ -4440,6 +5327,119 @@ class _ExecutionSession:
         if role == "recovery_exit" and not self._recovery_mode:
             raise NormalizedApiError(
                 operation, "execution_recovery_not_armed", definite_reject=True
+            )
+
+    def _require_ctp_order_identity_binding(self, operation, request):
+        """Match a managed CTP request to its non-authorizing local mirror."""
+        binding = getattr(request, "ctp_order_identity", None)
+        identity = self._ctp_execution_identity
+        proof = self._arm_proof
+        if (
+            type(request) is not OrderRequest
+            or type(binding) is not CtpOrderIdentityBinding
+            or not isinstance(identity, Mapping)
+            or not isinstance(proof, Mapping)
+            or type(self._ctp_order_identity_mirrors) is not dict
+            or type(self.reserved_ids) is not set
+            or type(self.used_ids) is not set
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_order_identity_binding_missing_or_mismatch",
+                definite_reject=True,
+            )
+
+        account_ref = identity.get("account_fingerprint")
+        account_id = identity.get("account_id")
+        trading_day = proof.get("trading_day")
+        strategy_id = self.config.get("strategy_id")
+        if (
+            type(account_ref) is not str
+            or not account_ref
+            or account_id != account_ref
+            or request.account_id != account_id
+            or type(trading_day) is not str
+            or type(strategy_id) is not str
+            or not strategy_id
+            or proof.get("account_fingerprint") != account_ref
+            or binding.trading_day != trading_day
+            or binding.environment
+            not in {identity.get("environment"), identity.get("environment_profile")}
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_order_identity_binding_missing_or_mismatch",
+                definite_reject=True,
+            )
+
+        scope_payload = {
+            "provider": "CTP",
+            "environment": binding.environment,
+            "account_ref": account_ref,
+            "strategy_id": strategy_id,
+            "trading_day": trading_day,
+        }
+        account_payload = {
+            "provider": "CTP",
+            "environment": binding.environment,
+            "account_ref": account_ref,
+        }
+        account_key = (
+            "account:"
+            + hashlib.sha256(
+                json.dumps(
+                    account_payload,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+        )
+        scope_key = (
+            "scope:"
+            + hashlib.sha256(
+                json.dumps(
+                    scope_payload,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+        )
+        if binding.account_key != account_key or binding.scope_key != scope_key:
+            raise NormalizedApiError(
+                operation,
+                "ctp_order_identity_binding_missing_or_mismatch",
+                definite_reject=True,
+            )
+
+        mirror_key = (
+            binding.account_key,
+            binding.trading_day,
+            binding.scope_key,
+            binding.managed_intent_id,
+        )
+        mirror = self._ctp_order_identity_mirrors.get(mirror_key)
+        client_key = self._client_key(self._arm_venue, request.account_id, request.client_order_id)
+        if (
+            type(mirror) is not CtpOrderIdentityReservationMirror
+            or mirror.account_key != binding.account_key
+            or mirror.trading_day != binding.trading_day
+            or mirror.scope_key != binding.scope_key
+            or mirror.managed_intent_id != binding.managed_intent_id
+            or mirror.runtime_order_id != binding.runtime_order_id
+            or mirror.order_ref != request.client_order_id
+            or type(mirror.created_at_ns) is not int
+            or mirror.created_at_ns <= 0
+            or client_key not in self.reserved_ids
+            or client_key in self.used_ids
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_order_identity_binding_missing_or_mismatch",
+                definite_reject=True,
             )
 
     def _recovery_cancel_matches(self, request, allowed):
@@ -7636,6 +8636,16 @@ class _ExecutionSession:
             return result
 
     def new_client_order_id(self, venue, account_id=None, strategy_id=None):
+        bound_ctp_identity = self._provider(self._arm_venue) == "CTP" and isinstance(
+            self._ctp_execution_identity, Mapping
+        )
+        managed_ctp_venue = self._arm_managed and self._provider(venue) == "CTP"
+        if bound_ctp_identity or managed_ctp_venue:
+            raise NormalizedApiError(
+                "new_client_order_id",
+                "ctp_order_identity_reservation_required",
+                definite_reject=True,
+            )
         with self.mutex:
             self.require_write("new_client_order_id", placement=True, venue=venue)
             identity = self._ledger_identity(venue, account_id)
@@ -8303,6 +9313,17 @@ class _ExecutionSession:
         budget_capability=None,
     ):
         """Persist intent and capture merge state before a transport call."""
+        if (
+            operation == "cancel_order"
+            and self._provider(venue) == "CTP"
+            and getattr(request, "ctp_cancel_identity", None) is not None
+        ):
+            self._require_ctp_cancel_identity_binding(operation, request)
+            raise NormalizedApiError(
+                operation,
+                "ctp_cancel_dispatch_handoff_unavailable",
+                definite_reject=True,
+            )
         request_row = asdict(request)
         emergency_cancel = False
         budget_action_id = None

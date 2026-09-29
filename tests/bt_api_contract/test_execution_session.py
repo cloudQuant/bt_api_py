@@ -36,6 +36,15 @@ SYMBOL = "BTC-USDT-SWAP"
 MIGRATION_FINGERPRINT = hashlib.sha256(b"bt-api-py\0OKX\0fixture-okx-public").hexdigest()
 
 
+@pytest.fixture(autouse=True)
+def isolate_execution_ledger_registry(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        execution_session_module,
+        "_ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
+
+
 def credential_settings(venue):
     if venue.startswith("OKX___"):
         return {
@@ -2577,7 +2586,8 @@ def test_configure_execution_is_idempotent_but_cannot_swap_journal(factory):
         api.configure_execution({"order_journal": "different.jsonl"})
 
 
-def _child_hold_session(path, connection):
+def _child_hold_session(path, connection, registry_root):
+    execution_session_module._ledger_registry_root = lambda: Path(registry_root)
     api = BtApi(debug=False)
     api.configure_execution(
         {
@@ -2596,12 +2606,18 @@ def test_process_lock_blocks_another_process_and_crash_releases_it(factory, tmp_
     context = multiprocessing.get_context("spawn")
     parent, child = context.Pipe()
     path = str(tmp_path / "process.jsonl")
-    process = context.Process(target=_child_hold_session, args=(path, child))
+    child_registry_root = tmp_path / "execution-ledgers"
+    process = context.Process(
+        target=_child_hold_session,
+        args=(path, child, str(child_registry_root)),
+    )
     process.start()
     try:
         assert parent.poll(20) and parent.recv()
-        with pytest.raises(NormalizedApiError, match="locked_or_unavailable"):
+        with pytest.raises(NormalizedApiError) as locked:
             factory(path)
+        assert locked.value.code == "authenticated_account_execution_session_locked"
+        assert locked.value.definite_reject is True
     finally:
         process.terminate()
         process.join(20)

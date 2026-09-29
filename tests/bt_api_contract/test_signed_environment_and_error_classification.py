@@ -117,6 +117,10 @@ def request(client_order_id):
 def execution_api(monkeypatch, tmp_path):
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
     monkeypatch.setattr(
+        "bt_api_py._execution_session._ledger_registry_root",
+        lambda: tmp_path / "execution-ledgers",
+    )
+    monkeypatch.setattr(
         "bt_api_py.bt_api.ExchangeRegistry.create_feed",
         lambda exchange_name, data_queue, **kwargs: SimpleNamespace(
             get_environment_info=lambda: {

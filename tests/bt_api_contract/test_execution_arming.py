@@ -8,6 +8,7 @@ import queue
 import sys
 import threading
 import time
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
@@ -18,10 +19,12 @@ import pytest
 from bt_api_py import (
     BtApi,
     CancelOrderRequest,
+    CtpOrderIdentityBinding,
     NormalizedApiError,
     OrderRequest,
     TransportMode,
 )
+from bt_api_py import _execution_session as execution_session_module
 from bt_api_py import bt_api as bt_api_module
 from bt_api_py._contracts import CapabilityNotSupportedError
 from bt_api_py._contracts.models import OrderType, Side
@@ -36,6 +39,50 @@ PROFILE = "simnow_demo"
 STRATEGY_IDENTITY = "7" * 64
 BUNDLE_SCOPE_VERSION = "ctp-contract-bundle-v1"
 BUNDLE_INSTRUMENTS = ["CZCE.SA701", "CZCE.SA701C1080", "CZCE.SA701P1080"]
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeI9ExecutionScope:
+    provider: str
+    environment: str
+    account_ref: str
+    strategy_id: str
+    trading_day: str
+    account_key: str
+    key: str
+
+
+_FakeI9ExecutionScope.__module__ = "bt_api_execution.contracts"
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeI9OrderIdentityReservation:
+    account_key: str
+    trading_day: str
+    scope_key: str
+    managed_intent_id: str
+    runtime_order_id: str
+    order_ref: str
+    created_at_ns: int
+
+
+_FakeI9OrderIdentityReservation.__module__ = "bt_api_execution.store"
+
+
+class _FakeI9ExecutionStore:
+    def __init__(self, reservation):
+        self.reservation = reservation
+        self.reads = []
+
+    def read_ctp_order_identity(self, scope, managed_intent_id):
+        self.reads.append((scope, managed_intent_id))
+        if managed_intent_id != self.reservation.managed_intent_id:
+            raise AssertionError("fake I9 store received a different managed intent")
+        return self.reservation
+
+
+_FakeI9ExecutionStore.__name__ = "SqliteExecutionStore"
+_FakeI9ExecutionStore.__module__ = "bt_api_execution.store"
 
 
 def _proof(**changes):
@@ -98,6 +145,88 @@ def _session(tmp_path, *, risk=False, journal=True, require_journal=True):
         },
         exchange_names=(VENUE,),
     )
+
+
+def _identity_digest(payload):
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _order_with_reserved_identity(monkeypatch, session, request, *, index):
+    """Build the ordinary CTP request fixture from a fake committed I9 reservation."""
+    identity = session._ctp_execution_identity
+    trading_day = session._arm_proof["trading_day"]
+    environment = identity["environment_profile"]
+    account_ref = identity["account_fingerprint"]
+    strategy_id = session.config["strategy_id"]
+    account_payload = {
+        "provider": "CTP",
+        "environment": environment,
+        "account_ref": account_ref,
+    }
+    scope_payload = {
+        **account_payload,
+        "strategy_id": strategy_id,
+        "trading_day": trading_day,
+    }
+    account_key = "account:" + _identity_digest(account_payload)
+    scope_key = "scope:" + _identity_digest(scope_payload)
+    scope = _FakeI9ExecutionScope(
+        provider="CTP",
+        environment=environment,
+        account_ref=account_ref,
+        strategy_id=strategy_id,
+        trading_day=trading_day,
+        account_key=account_key,
+        key=scope_key,
+    )
+    managed_intent_id = f"intent.execution-arming.{index}"
+    runtime_order_id = "bt-managed-v1:" + _identity_digest(
+        {"scope_key": scope_key, "managed_intent_id": managed_intent_id}
+    )
+    reservation = _FakeI9OrderIdentityReservation(
+        account_key=account_key,
+        trading_day=trading_day,
+        scope_key=scope_key,
+        managed_intent_id=managed_intent_id,
+        runtime_order_id=runtime_order_id,
+        order_ref=request.client_order_id,
+        created_at_ns=1_780_000_000_000_000_000 + index,
+    )
+    store = _FakeI9ExecutionStore(reservation)
+    monkeypatch.setattr(
+        execution_session_module,
+        "_installed_i9_ctp_order_identity_types",
+        lambda: (
+            _FakeI9ExecutionScope,
+            _FakeI9ExecutionStore,
+            _FakeI9OrderIdentityReservation,
+        ),
+    )
+    mirror = session.consume_ctp_order_identity_reservation(
+        VENUE,
+        scope=scope,
+        identity_store=store,
+        managed_intent_id=managed_intent_id,
+        runtime_order_id=runtime_order_id,
+    )
+    assert mirror.order_ref == request.client_order_id
+    assert store.reads == [(scope, managed_intent_id)]
+    binding = CtpOrderIdentityBinding(
+        environment=environment,
+        account_key=account_key,
+        trading_day=trading_day,
+        scope_key=scope_key,
+        managed_intent_id=managed_intent_id,
+        runtime_order_id=runtime_order_id,
+    )
+    return replace(request, ctp_order_identity=binding)
 
 
 def _budget_evidence(session, proof_value):
@@ -639,7 +768,7 @@ def test_public_arm_verifies_exact_v2_bundle_scope(monkeypatch, tmp_path):
         session.close()
 
 
-def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(tmp_path):
+def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(monkeypatch, tmp_path):
     session = _session(tmp_path)
     transport = Mock(return_value={"status": "accepted", "order_id": "SYS1"})
     try:
@@ -650,9 +779,14 @@ def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(tmp_path)
             session.invoke(
                 "make_order",
                 VENUE,
-                _order(
-                    symbol.split(".", 1)[1],
-                    client_order_id=f"00000000000{index}",
+                _order_with_reserved_identity(
+                    monkeypatch,
+                    session,
+                    _order(
+                        symbol.split(".", 1)[1],
+                        client_order_id=f"00000000000{index}",
+                    ),
+                    index=index,
                 ),
                 transport,
                 budget_capability=_reserve_budget(session, bundle),
@@ -674,6 +808,7 @@ def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(tmp_path)
 
 
 def test_v2_bundle_accepts_native_dce_option_spelling_and_rejects_case_changes(
+    monkeypatch,
     tmp_path,
 ):
     instruments = ["DCE.m2701", "DCE.m2701-C-3400"]
@@ -689,7 +824,12 @@ def test_v2_bundle_accepts_native_dce_option_spelling_and_rejects_case_changes(
         session.invoke(
             "make_order",
             VENUE,
-            _order("m2701-C-3400", exchange_id="DCE"),
+            _order_with_reserved_identity(
+                monkeypatch,
+                session,
+                _order("m2701-C-3400", exchange_id="DCE"),
+                index=1,
+            ),
             transport,
             budget_capability=_reserve_budget(session, proof),
         )
@@ -1191,7 +1331,12 @@ def test_opaque_arm_grant_binds_the_authorized_strategy_cycle(monkeypatch, tmp_p
             session.invoke(
                 "make_order",
                 VENUE,
-                _order("SA609.CZCE", cycle="different-cycle"),
+                _order_with_reserved_identity(
+                    monkeypatch,
+                    session,
+                    _order("SA609.CZCE", cycle="different-cycle"),
+                    index=1,
+                ),
                 transport,
             )
 
@@ -1263,7 +1408,7 @@ def test_account_stream_start_and_stop_join_private_producer_outside_session_loc
         session.close()
 
 
-def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(tmp_path):
+def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(monkeypatch, tmp_path):
     session = _session(tmp_path)
     transport = Mock(return_value=_order_update())
     try:
@@ -1273,7 +1418,7 @@ def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(tmp_
         result = session.invoke(
             "make_order",
             VENUE,
-            _order("SA609.CZCE"),
+            _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1),
             transport,
             budget_capability=_reserve_budget(session, proof),
         )
@@ -1284,6 +1429,7 @@ def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(tmp_
         transport.assert_called_once_with()
         rows = [json.loads(line) for line in session.path.read_text().splitlines()]
         assert [row["event"] for row in rows] == [
+            "client_id_reservation",
             "ctp_budget_reservation_started",
             "ctp_budget_reservation_committed",
             "intent",
@@ -1294,7 +1440,7 @@ def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(tmp_
         session.close()
 
 
-def test_armed_tracked_same_instrument_cancel_remains_available(tmp_path):
+def test_armed_tracked_same_instrument_cancel_remains_available(monkeypatch, tmp_path):
     session = _session(tmp_path)
     place = Mock(return_value=_order_update())
     cancel = Mock(return_value=_order_update(status="canceled", terminal=True))
@@ -1304,7 +1450,7 @@ def test_armed_tracked_same_instrument_cancel_remains_available(tmp_path):
         session.invoke(
             "make_order",
             VENUE,
-            _order("SA609.CZCE"),
+            _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1),
             place,
             budget_capability=_reserve_budget(session, proof),
         )
@@ -1330,6 +1476,7 @@ def test_armed_tracked_same_instrument_cancel_remains_available(tmp_path):
         cancel.assert_called_once_with()
         rows = [json.loads(line) for line in session.path.read_text().splitlines()]
         assert [row["event"] for row in rows] == [
+            "client_id_reservation",
             "ctp_budget_reservation_started",
             "ctp_budget_reservation_committed",
             "intent",
