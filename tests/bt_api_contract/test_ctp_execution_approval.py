@@ -1766,9 +1766,7 @@ def test_credential_binding_consumes_native_active_md_identity():
     assert result == {
         "td_front": "tcp://approved-td",
         "md_front": "tcp://approved-md",
-        "account_fingerprint_sha256": hashlib.sha256(
-            b"broker-123:user-456"
-        ).hexdigest(),
+        "account_fingerprint_sha256": hashlib.sha256(b"broker-123:user-456").hexdigest(),
         "md_connection_generation": 11,
         "md_stream_generation": 4,
     }

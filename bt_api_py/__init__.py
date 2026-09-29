@@ -7,6 +7,7 @@ and traditional financial markets (CTP, Interactive Brokers).
 from __future__ import annotations
 
 import os as _os
+from importlib import import_module as _import_module
 
 # 版本单一源：从 pyproject.toml 经 importlib.metadata 读取。
 from importlib.metadata import PackageNotFoundError
@@ -166,21 +167,6 @@ from bt_api_py.cross_venue import (
     round_trip_cost,
     signed_funding_cashflow,
 )
-from bt_api_py.ctp_simnow_execution import (
-    OFFICIAL_SET1_PROFILES,
-    CtpSimNowCancelResult,
-    CtpSimNowExecutionAdapter,
-    CtpSimNowExecutionError,
-    CtpSimNowOrderIdentity,
-    CtpSimNowOrderRequest,
-    CtpSimNowOrderResult,
-    CtpSimNowQueryResult,
-    CtpSimNowReadObservation,
-    CtpSimNowSessionIdentity,
-    build_ctp_simnow_cancel_request,
-    map_ctp_simnow_cancel_result,
-    map_ctp_simnow_order_result,
-)
 from bt_api_py.forwarding import (
     MAX_MESSAGE_BYTES,
     BtApiForwardingAdapter,
@@ -209,12 +195,35 @@ if not _LIGHT_IMPORT:
     from bt_api_py.bt_api import BtApi
 
 
+_SIMNOW_EXPORTS = frozenset(
+    {
+        "OFFICIAL_SET1_PROFILES",
+        "CtpSimNowCancelResult",
+        "CtpSimNowExecutionAdapter",
+        "CtpSimNowExecutionError",
+        "CtpSimNowOrderIdentity",
+        "CtpSimNowOrderRequest",
+        "CtpSimNowOrderResult",
+        "CtpSimNowQueryResult",
+        "CtpSimNowReadObservation",
+        "CtpSimNowSessionIdentity",
+        "build_ctp_simnow_cancel_request",
+        "map_ctp_simnow_cancel_result",
+        "map_ctp_simnow_order_result",
+    }
+)
+
+
 def __getattr__(name: str):
     if name == "BtApi":
         from bt_api_py.bt_api import BtApi as _BtApi
 
         globals()["BtApi"] = _BtApi
         return _BtApi
+    if name in _SIMNOW_EXPORTS:
+        value = getattr(_import_module("bt_api_py.ctp_simnow_execution"), name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
