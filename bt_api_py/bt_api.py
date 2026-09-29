@@ -67,14 +67,21 @@ from ._ctp_execution_authorization import (
     RECOVERY_APPROVAL_PURPOSE,
     RECOVERY_APPROVAL_SCHEMA_VERSION,
     RECOVERY_APPROVAL_SCOPE_VERSION,
+    SIMNOW_APPROVAL_SCHEMA_VERSION,
+    SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION,
+    SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION,
     CtpExecutionApproval,
     CtpExecutionApprovalCapability,
     CtpExecutionApprovalContext,
+    _is_ctp_entry_write_guard,
+    _is_ctp_execution_approval_capability,
     _jsonable,
     _new_capability,
+    _new_ctp_entry_write_guard,
     _new_runtime_context,
     _normalize_context,
     _refresh_runtime_context,
+    _thaw,
     current_ctp_execution_revocation_snapshot,
     recovery_action_digest,
     recovery_plan_digest,
@@ -191,6 +198,7 @@ class _CtpExecutionArmAuthorization:
         "_preflight_epoch",
         "_used",
         "_approval_capability",
+        "_entry_write_guard",
         "_recovery_plan_sha256",
         "_recovery_action_sha256",
         "_recovery_token_sha256",
@@ -208,6 +216,7 @@ class _CtpExecutionArmAuthorization:
         execution_cycle_id: str,
         preflight_epoch: int,
         approval_capability: CtpExecutionApprovalCapability | None = None,
+        entry_write_guard: object | None = None,
         recovery_plan_sha256: str | None = None,
         recovery_action_sha256: str | None = None,
         recovery_token_sha256: str | None = None,
@@ -223,6 +232,7 @@ class _CtpExecutionArmAuthorization:
         self._preflight_epoch = preflight_epoch
         self._used = False
         self._approval_capability = approval_capability
+        self._entry_write_guard = entry_write_guard
         self._recovery_plan_sha256 = recovery_plan_sha256
         self._recovery_action_sha256 = recovery_action_sha256
         self._recovery_token_sha256 = recovery_token_sha256
@@ -670,7 +680,7 @@ def _serialized_ctp_execution_transition(
 def _canonical_ctp_account_fingerprint(value: Any) -> str:
     """Map the native short hash to the public receipt identity."""
     fingerprint = str(value or "").strip().lower()
-    digest = fingerprint.removeprefix("acct_")
+    digest = fingerprint[5:] if fingerprint.startswith("acct_") else fingerprint
     if len(digest) != 16 or any(character not in "0123456789abcdef" for character in digest):
         return ""
     return f"acct_{digest}"
@@ -1192,6 +1202,255 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             identity_store=identity_store,
             command_id=command_id,
             request=request,
+        )
+
+    def new_runtime_order_binding(
+        self,
+        exchange_name: str,
+        *,
+        symbol: str,
+        account_id: str | None = None,
+        managed_intent_id: str | None = None,
+        runtime_order_id: str | None = None,
+        budget_capability: Any = None,
+        recovery_action: bool = False,
+    ) -> dict[str, Any]:
+        """Atomically reserve a runtime order identity and its 12-digit CTP OrderRef."""
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "new_runtime_order_binding",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        binding_options: dict[str, Any] = {}
+        if managed_intent_id is not None:
+            binding_options["managed_intent_id"] = managed_intent_id
+        return session.new_runtime_order_binding(
+            exchange_name,
+            symbol=symbol,
+            account_id=account_id,
+            runtime_order_id=runtime_order_id,
+            budget_capability=budget_capability,
+            recovery_action=recovery_action,
+            **binding_options,
+        )
+
+    @staticmethod
+    def _require_ctp_managed_order_identity(
+        operation: str, exchange_name: str, request: OrderRequest, session: Any
+    ) -> None:
+        if session is None or str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            return
+        identity = request.ctp_order_identity
+        if identity is not None:
+            if request.runtime_order_id not in (
+                None,
+                identity.runtime_order_id,
+            ) or request.managed_intent_id not in (None, identity.managed_intent_id):
+                raise NormalizedApiError(
+                    operation, "ctp_managed_order_identity_mismatch", definite_reject=True
+                )
+            return
+        if request.managed_intent_id is not None:
+            raise NormalizedApiError(
+                operation, "ctp_order_identity_binding_missing_or_mismatch", definite_reject=True
+            )
+        if not request.runtime_order_id:
+            # Preserve the older runtime-binding error from the session itself.
+            return
+        bindings = session.get_runtime_order_bindings(
+            exchange_name,
+            unresolved_only=False,
+            runtime_order_id=request.runtime_order_id,
+        )
+        bound_intent_id = bindings[0].get("managed_intent_id") if len(bindings) == 1 else None
+        if (
+            (bound_intent_id is not None and request.managed_intent_id != bound_intent_id)
+            or (request.managed_intent_id is not None and bound_intent_id is None)
+            or (request.managed_intent_id is not None and request.hedge_flag not in {"1", "2", "3"})
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_managed_order_identity_mismatch",
+                definite_reject=True,
+            )
+
+    @staticmethod
+    def _bind_ctp_managed_cancel_identity(
+        exchange_name: str, request: CancelOrderRequest, session: Any
+    ) -> CancelOrderRequest:
+        if session is None or str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            return request
+        identity = request.ctp_cancel_identity
+        if identity is not None:
+            if (
+                request.runtime_order_id not in (None, identity.runtime_order_id)
+                or request.runtime_action_id not in (None, identity.managed_action_id)
+                or request.managed_cancel_intent_id not in (None, identity.managed_action_id)
+            ):
+                raise NormalizedApiError(
+                    "cancel_order", "ctp_managed_cancel_identity_mismatch", definite_reject=True
+                )
+            return replace(
+                request,
+                runtime_order_id=identity.runtime_order_id,
+                runtime_action_id=identity.managed_action_id,
+                managed_cancel_intent_id=identity.managed_action_id,
+                client_order_id=identity.order_ref,
+                order_ref=identity.order_ref,
+            )
+        if request.managed_cancel_intent_id is not None:
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_cancel_identity_binding_missing_or_mismatch",
+                definite_reject=True,
+            )
+        if not request.runtime_order_id:
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_runtime_cancel_identity_required",
+                definite_reject=True,
+            )
+        bindings = session.get_runtime_order_bindings(
+            exchange_name,
+            unresolved_only=False,
+            runtime_order_id=request.runtime_order_id,
+        )
+        if len(bindings) != 1:
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_runtime_order_binding_unavailable",
+                definite_reject=True,
+            )
+        binding = bindings[0]
+        if binding.get("managed_intent_id") is not None:
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_cancel_identity_binding_missing_or_mismatch",
+                definite_reject=True,
+            )
+        if (
+            binding.get("status") != "unresolved"
+            or not binding.get("client_order_id")
+            or (
+                binding.get("managed_intent_id") is not None
+                and not request.managed_cancel_intent_id
+            )
+            or (
+                binding.get("managed_intent_id") is None
+                and request.managed_cancel_intent_id is not None
+            )
+        ):
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_managed_cancel_identity_required",
+                definite_reject=True,
+            )
+        durable_order_ref = binding["ctp_order_ref"]
+        supplied_refs = (
+            request.order_id,
+            request.client_order_id,
+            request.order_ref,
+        )
+        if any(value is not None and value != durable_order_ref for value in supplied_refs):
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_runtime_cancel_reference_mismatch",
+                definite_reject=True,
+            )
+        if binding.get("managed_intent_id") is not None and (
+            request.front_id is not None or request.session_id is not None
+        ):
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_runtime_cancel_native_reference_forbidden",
+                definite_reject=True,
+            )
+        runtime_action_id = session.next_runtime_action_id(
+            exchange_name,
+            account_id=request.account_id,
+            runtime_order_id=request.runtime_order_id,
+        )
+        if request.runtime_action_id not in (None, runtime_action_id):
+            raise NormalizedApiError(
+                "cancel_order",
+                "ctp_runtime_cancel_action_id_mismatch",
+                definite_reject=True,
+            )
+        return replace(
+            request,
+            order_id=None,
+            client_order_id=durable_order_ref,
+            order_ref=durable_order_ref,
+            runtime_action_id=runtime_action_id,
+        )
+
+    def get_runtime_order_bindings(
+        self,
+        exchange_name: str,
+        *,
+        unresolved_only: bool = True,
+        runtime_order_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Read persisted CTP runtime/OrderRef joins for the active account scope."""
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "get_runtime_order_bindings",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        return session.get_runtime_order_bindings(
+            exchange_name,
+            unresolved_only=unresolved_only,
+            runtime_order_id=runtime_order_id,
+        )
+
+    def get_runtime_action_bindings(
+        self,
+        exchange_name: str,
+        *,
+        runtime_order_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Read persisted CTP cancel-attempt joins for the active account scope."""
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "get_runtime_action_bindings",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        return session.get_runtime_action_bindings(
+            exchange_name,
+            runtime_order_id=runtime_order_id,
+        )
+
+    def next_runtime_action_id(
+        self,
+        exchange_name: str,
+        *,
+        account_id: str | None,
+        runtime_order_id: str,
+    ) -> str:
+        """Preview the next scoped CTP cancel action id without persisting it.
+
+        The normalized ``cancel_order`` path derives and validates this same id
+        while holding the execution-session lock, then fsyncs the cancel intent
+        before dispatch. A concurrent cancel can consume the preview first; in
+        that case the typed request is rejected rather than rebound.
+        """
+        session = self._execution_session
+        if session is None:
+            raise NormalizedApiError(
+                "next_runtime_action_id",
+                "execution_session_required",
+                definite_reject=True,
+            )
+        return session.next_runtime_action_id(
+            exchange_name,
+            account_id=account_id,
+            runtime_order_id=runtime_order_id,
         )
 
     def get_execution_identity(self, exchange_name: str) -> dict[str, Any]:
@@ -2528,6 +2787,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         """Opt-in SDK result contract; never expose credentials in normalized errors."""
         from ._normalization import normalize_error, normalize_result
 
+        def finalize_dispatch(context: Any) -> None:
+            self._finalize_ctp_execution_dispatch(session, exchange_name, context)
+
         def invoke() -> Any:
             failure = None
             try:
@@ -2569,6 +2831,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     }
                 if operation in {"get_position_mode", "get_account_config"}:
                     raise CapabilityNotSupportedError(operation, detail="market-data-only session")
+            if operation in _NORMALIZED_WRITE_OPERATIONS:
+                self._reject_simnow_profile_write(exchange_name, operation)
             self._validate_required_environment(exchange_name, operation=operation)
             if session is not None and operation in {
                 "make_order",
@@ -2591,7 +2855,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                         request,
                         invoke,
                         preauthorize=acquire_write,
-                        pre_dispatch=session.finalize_dispatch,
+                        pre_dispatch=finalize_dispatch,
                         budget_capability=budget_capability,
                     )
                 finally:
@@ -2617,6 +2881,26 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         # Do not wrap an already normalized failure a second time, and detach
         # exception chaining before it crosses the public API boundary.
         raise failure from None
+
+    def _finalize_ctp_execution_dispatch(
+        self,
+        session: Any,
+        exchange_name: str,
+        context: Any,
+    ) -> None:
+        """Run the last SDK gate and require a sealed guard for every managed CTP write.
+
+        Feed implementation details cannot weaken the SDK boundary: legacy and
+        custom CTP feeds are subject to the same entry authorization check as
+        the bundled native feed.  Recovery dispatch keeps its separate guard.
+        """
+
+        if (
+            isinstance(context, dict)
+            and str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() == "CTP"
+        ):
+            context["_native_ctp_entry_guard_required"] = True
+        session.finalize_dispatch(context)
 
     async def _async_backend_call(
         self,
@@ -2737,7 +3021,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             # that outlives a cancelled async invocation instead of silently
             # allowing a stale thread to reach the lower transport.
             context["_async_handoff"] = True
-            session.finalize_dispatch(context)
+            self._finalize_ctp_execution_dispatch(
+                session,
+                exchange_name,
+                context,
+            )
 
         def bind_handoff_context(context: Any) -> None:
             handoff_context["context"] = context
@@ -2771,6 +3059,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
 
         if session is not None and session.config["market_data_only"]:
             raise NormalizedApiError(operation, "market_data_only", definite_reject=True)
+        if operation in _NORMALIZED_WRITE_OPERATIONS:
+            self._reject_simnow_profile_write(exchange_name, operation)
         self._validate_required_environment(exchange_name, operation=operation)
         if session is not None:
             acquire_write = release_write = None
@@ -2789,7 +3079,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     request,
                     invoke,
                     preauthorize=acquire_write,
-                    pre_dispatch=session.finalize_dispatch,
+                    pre_dispatch=lambda context: self._finalize_ctp_execution_dispatch(
+                        session,
+                        exchange_name,
+                        context,
+                    ),
                     budget_capability=budget_capability,
                     on_context=(bind_handoff_context if needs_managed_handoff else None),
                 )
@@ -3434,6 +3728,40 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             raise NormalizedApiError(operation, "single_ctp_session_required", definite_reject=True)
         return session, exchange_names[0]
 
+    def _reject_simnow_native_execution(
+        self,
+        environment_profile: Any,
+        operation: str,
+        *,
+        schema_version: str | None = None,
+    ) -> None:
+        """Keep all known SimNow profiles outside generic native-write routes."""
+        if str(
+            environment_profile or ""
+        ).strip() in _SIMNOW_RESTRICTED_PROFILES or schema_version in {
+            SIMNOW_APPROVAL_SCHEMA_VERSION,
+            SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION,
+            SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION,
+        }:
+            raise NormalizedApiError(
+                operation,
+                "ctp_simnow_execution_not_admitted",
+                definite_reject=True,
+            )
+
+    def _reject_simnow_profile_write(self, exchange_name: str, operation: str) -> None:
+        """Check cached CTP profile state before a generic write can dispatch."""
+        if str(exchange_name).partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
+            return
+        exchange_feeds = getattr(self, "exchange_feeds", None)
+        feed = exchange_feeds.get(exchange_name) if isinstance(exchange_feeds, Mapping) else None
+        state_reader = getattr(feed, "get_session_state", None)
+        if not callable(state_reader):
+            return
+        state = state_reader()
+        profile = state.get("environment_profile") if isinstance(state, Mapping) else None
+        self._reject_simnow_native_execution(profile, operation)
+
     def init_exchange(self, exchange_kwargs: dict[str, Any]) -> None:
         """根据 exchange_kwargs 初始化并添加交易所。
 
@@ -4017,6 +4345,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
 
         normalized, proof_sha256 = _execution_arm_proof(proof)
+        self._reject_simnow_native_execution(normalized.get("environment_profile"), operation)
         feed = self.exchange_feeds.get(exchange_name)
         capability = getattr(self, "_ctp_execution_capability", None)
         method = getattr(feed, "arm_execution_gate", None)
@@ -4305,6 +4634,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         source: str = "sdk_runtime",
         deployment_manifest: Mapping[str, Any] | None = None,
         credential_binding_verifier: Any = None,
+        credential_binding_provider: Any = None,
     ) -> CtpExecutionApprovalContext:
         """Collect a sealed approval context from this running deployment.
 
@@ -4313,12 +4643,25 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         identities by copying strings into a mapping.  Application material
         is supplied as raw bytes, paths, or JSON values and hashed by the SDK.
         ``deployment_manifest`` can pin the locally observed runtime hashes,
-        but it cannot replace them.
+        but it cannot replace them. Official SimNow set1 contexts also require
+        an SDK-sealed ``credential_binding_verifier`` created from the reviewed
+        deployment adapter. Bare callbacks and mappings are rejected. The
+        verifier is refreshed with the current native session, front and
+        artifact scope before approval transitions. This remains a nominal
+        package-provenance boundary, not an in-process sandbox.
         """
 
         operation = "build_ctp_execution_approval_context"
         from ._ctp_credential_binding import _is_verifier, _new_scope
 
+        if credential_binding_provider is not None:
+            if credential_binding_verifier is not None or not _is_verifier(
+                credential_binding_provider, owner=self
+            ):
+                raise NormalizedApiError(
+                    operation, "ctp_credential_binding_trust_required", definite_reject=True
+                )
+            credential_binding_verifier = credential_binding_provider
         if credential_binding_verifier is not None and not _is_verifier(
             credential_binding_verifier, owner=self
         ):
@@ -4964,6 +5307,246 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     definite_reject=True,
                 )
 
+    def _ctp_entry_approval_proof(
+        self,
+        approval_capability: CtpExecutionApprovalCapability,
+    ) -> dict[str, Any]:
+        """Build the exact native arm proof from one redeemed entry approval."""
+
+        payload = approval_capability._approval.payload
+        primary = payload["primary_instrument"]
+        authorized = [
+            f"{item['exchange_id']}.{item['instrument_id']}"
+            for item in payload["authorized_instruments"]
+        ]
+        return {
+            "account_fingerprint": payload["account_fingerprint"],
+            "trading_day": payload["trading_day"],
+            "instrument": f"{primary['exchange_id']}.{primary['instrument_id']}",
+            "connection_generation": payload["connection_generation"],
+            "environment_profile": payload["environment_profile"],
+            "receipt_sha256": payload["receipt_sha256"],
+            "native_sha256": payload["native_sha256"],
+            "ctp_package_sha256": payload["ctp_package_sha256"],
+            "source_hashes_sha256": payload["source_hashes_sha256"],
+            "dependency_hashes_sha256": payload["dependency_hashes_sha256"],
+            "preflight_sha256": payload["preflight_sha256"],
+            "scope_version": _CTP_EXECUTION_RECOVERY_BUNDLE_SCOPE_VERSION,
+            "authorized_instruments": authorized,
+        }
+
+    def _validate_active_ctp_entry_authorization(
+        self,
+        guard: object,
+        *,
+        operation: str,
+        **_write_context: Any,
+    ) -> None:
+        """Revalidate one ordinary entry approval at every managed write edge."""
+
+        if not _is_ctp_entry_write_guard(guard):
+            raise NormalizedApiError(
+                operation,
+                "ctp_entry_authorization_guard_invalid",
+                definite_reject=True,
+            )
+        session, exchange_name = self._sole_ctp_execution_venue(operation)
+        if (
+            guard._owner is not self
+            or guard._session is not session
+            or session._entry_write_guard is not guard
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_entry_authorization_guard_invalid",
+                definite_reject=True,
+            )
+        capability = guard._capability
+        if (
+            not _is_ctp_execution_approval_capability(capability)
+            or capability._owner is not self
+            or capability._entry_used is not True
+            or capability.purpose != APPROVAL_PURPOSE
+            or capability.schema_version != ENTRY_APPROVAL_SCHEMA_VERSION
+            or capability._context is not guard._context
+            or capability._context is None
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_authorization_required",
+                definite_reject=True,
+            )
+        self._reject_simnow_native_execution(
+            capability.bindings.get("environment_profile"),
+            operation,
+            schema_version=capability.schema_version,
+        )
+
+        approval = capability._approval
+        try:
+            payload_sha256 = hashlib.sha256(
+                json.dumps(
+                    _jsonable(approval.payload),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            signature_sha256 = hashlib.sha256(approval.signature).hexdigest()
+            frozen_trust_root = _thaw(capability._trust_root)
+            trust_root_sha256 = hashlib.sha256(
+                json.dumps(
+                    _jsonable(frozen_trust_root),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_authorization_material_unavailable",
+                definite_reject=True,
+            ) from None
+        if (
+            payload_sha256 != approval.payload_sha256
+            or payload_sha256 != guard._approval_payload_sha256
+            or signature_sha256 != guard._approval_signature_sha256
+            or approval.trust_root_sha256 != guard._trust_root_sha256
+            or trust_root_sha256 != guard._trust_root_sha256
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_authorization_material_mismatch",
+                definite_reject=True,
+            )
+
+        context = capability._context
+        if type(context) is not CtpExecutionApprovalContext:
+            raise NormalizedApiError(
+                operation,
+                "ctp_approval_context_untrusted",
+                definite_reject=True,
+            )
+        try:
+            refreshed_context = _refresh_runtime_context(context, self)
+            current_approval = self._revalidate_ctp_execution_approval(
+                approval,
+                trust_root=frozen_trust_root,
+                context=refreshed_context,
+            )
+        except NormalizedApiError:
+            raise
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_authorization_material_unavailable",
+                definite_reject=True,
+            ) from None
+        if (
+            current_approval.payload_sha256 != guard._approval_payload_sha256
+            or hashlib.sha256(current_approval.signature).hexdigest()
+            != guard._approval_signature_sha256
+            or current_approval.trust_root_sha256 != guard._trust_root_sha256
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_authorization_material_mismatch",
+                definite_reject=True,
+            )
+
+        now = datetime.now(UTC)
+        snapshot = approval.revocation_snapshot
+        snapshot_expires = snapshot.get("expires_at") if isinstance(snapshot, Mapping) else None
+        if not isinstance(snapshot_expires, str):
+            raise NormalizedApiError(
+                operation,
+                "ctp_approval_revocation_snapshot_stale",
+                definite_reject=True,
+            )
+        try:
+            if now >= datetime.fromisoformat(snapshot_expires[:-1] + "+00:00"):
+                raise NormalizedApiError(
+                    operation,
+                    "ctp_approval_revocation_snapshot_stale",
+                    definite_reject=True,
+                )
+        except ValueError:
+            raise NormalizedApiError(
+                operation,
+                "ctp_approval_revocation_snapshot_stale",
+                definite_reject=True,
+            ) from None
+        try:
+            snapshot_sha256 = hashlib.sha256(
+                json.dumps(
+                    _jsonable(snapshot),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+        except Exception:
+            raise NormalizedApiError(
+                operation,
+                "ctp_approval_revocation_snapshot_stale",
+                definite_reject=True,
+            ) from None
+        if (
+            approval.approval_id in session._ctp_approval_revoked_ids
+            or approval.nonce in session._ctp_approval_revoked_nonces
+            or approval.revocation_snapshot_version
+            < session._ctp_approval_revocation_snapshot_version
+            or session._ctp_approval_revocation_snapshot_version
+            != approval.revocation_snapshot_version
+            or session._ctp_approval_revocation_snapshot_sha256 != snapshot_sha256
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_approval_revoked",
+                definite_reject=True,
+            )
+
+        from ._execution_session import _execution_arm_proof
+
+        proof, proof_sha256 = _execution_arm_proof(self._ctp_entry_approval_proof(capability))
+        if (
+            proof_sha256 != guard._proof_sha256
+            or not isinstance(session._arm_proof, Mapping)
+            or dict(session._arm_proof) != proof
+            or session._arm_proof_sha256 != proof_sha256
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_authorization_context_mismatch",
+                definite_reject=True,
+            )
+        current_context = self._ctp_execution_arm_context(exchange_name)
+        error = session._arm_context_error(proof, current_context, require_account_stream=True)
+        if error is not None:
+            raise NormalizedApiError(operation, error, definite_reject=True)
+        gate = self._ctp_execution_gate_state(exchange_name, operation=operation)
+        if (
+            gate.get("managed") is not True
+            or gate.get("armed") is not True
+            or gate.get("connection_generation") != proof["connection_generation"]
+            or gate.get("trading_day") != proof["trading_day"]
+            or gate.get("instrument") != proof["instrument"]
+            or gate.get("scope_version") != proof["scope_version"]
+            or tuple(gate.get("authorized_instruments") or ())
+            != tuple(proof["authorized_instruments"])
+            or gate.get("environment_profile") != proof["environment_profile"]
+            or gate.get("proof_sha256") != proof_sha256
+        ):
+            raise NormalizedApiError(
+                operation,
+                "ctp_execution_gate_state_mismatch",
+                definite_reject=True,
+            )
+
     def _latch_ctp_recovery_failure(self, session: Any, error: BaseException) -> None:
         """Fence the current generation after a recovery authority failure."""
 
@@ -5097,7 +5680,12 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             context=context,
             transition=session.consume_ctp_execution_approval,
         )
-        return _new_capability(approval, self, context=context)
+        return _new_capability(
+            approval,
+            self,
+            context=context,
+            trust_root=trust_root,
+        )
 
     def preauthorize_ctp_execution_approval(
         self,
@@ -5473,11 +6061,20 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_execution_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            approval_capability.bindings.get("environment_profile"),
+            operation,
+            schema_version=approval_capability.schema_version,
+        )
         session, exchange_name = self._sole_ctp_execution_venue(operation)
         if (
             approval_capability._owner is not self
             or approval_capability.purpose != RECOVERY_APPROVAL_PURPOSE
-            or approval_capability.schema_version != RECOVERY_APPROVAL_SCHEMA_VERSION
+            or approval_capability.schema_version
+            not in {
+                RECOVERY_APPROVAL_SCHEMA_VERSION,
+                SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION,
+            }
             or approval_capability.recovery_scope_version != RECOVERY_APPROVAL_SCOPE_VERSION
             or approval_capability._recovery_used
         ):
@@ -5585,6 +6182,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_execution_authorization_unavailable",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            approval_capability.bindings.get("environment_profile"),
+            operation,
+            schema_version=approval_capability.schema_version,
+        )
         try:
             native_authorization = issuer(
                 core_capability,
@@ -5629,7 +6231,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             type(approval_capability) is not CtpExecutionApprovalCapability
             or approval_capability._owner is not self
             or approval_capability.purpose != RECOVERY_APPROVAL_PURPOSE
-            or approval_capability.schema_version != RECOVERY_APPROVAL_SCHEMA_VERSION
+            or approval_capability.schema_version
+            not in {
+                RECOVERY_APPROVAL_SCHEMA_VERSION,
+                SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION,
+            }
             or approval_capability.recovery_scope_version != RECOVERY_APPROVAL_SCOPE_VERSION
             or not approval_capability._recovery_used
             or approval_capability.recovery_token_sha256 != recovery_token_sha256
@@ -5816,7 +6422,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         # inspect native/package files through their transitive runtime
         # identity collectors.  The final helper below must remain a pure
         # comparison of the observed values plus current short-lived state.
-        final_authorized_plan, final_remaining_plan = session._recovery_authorized_plan_state()
+        (
+            final_authorized_plan,
+            final_remaining_plan,
+        ) = session._recovery_authorized_plan_state()
         final_plan = session._recovery_plan
         if final_authorized_plan is None:
             final_authorized_plan = final_plan
@@ -5875,7 +6484,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             type(approval_capability) is not CtpExecutionApprovalCapability
             or approval_capability._owner is not self
             or approval_capability.purpose != RECOVERY_APPROVAL_PURPOSE
-            or approval_capability.schema_version != RECOVERY_APPROVAL_SCHEMA_VERSION
+            or approval_capability.schema_version
+            not in {
+                RECOVERY_APPROVAL_SCHEMA_VERSION,
+                SIMNOW_RECOVERY_APPROVAL_SCHEMA_VERSION,
+            }
             or approval_capability.recovery_scope_version != RECOVERY_APPROVAL_SCOPE_VERSION
             or not approval_capability._recovery_used
             or approval_capability.recovery_token_sha256 != recovery_token_sha256
@@ -5885,6 +6498,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_execution_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            approval_capability.bindings.get("environment_profile"),
+            operation,
+            schema_version=approval_capability.schema_version,
+        )
 
         now = datetime.now(UTC)
         try:
@@ -6029,6 +6647,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             or authorization._api is not self
             or authorization._venue != exchange_name
             or authorization._used
+            or (
+                authorization._approval_capability is not None
+                and authorization._approval_capability.purpose == APPROVAL_PURPOSE
+                and not _is_ctp_entry_write_guard(
+                    authorization._entry_write_guard,
+                    session=session,
+                )
+            )
         ):
             raise NormalizedApiError(
                 operation,
@@ -6036,6 +6662,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 definite_reject=True,
             )
         proof = dict(authorization._proof)
+        self._reject_simnow_native_execution(
+            authorization._context.get("environment_profile"), operation
+        )
         # A valid token is one-shot even when a later recovery or stream gate
         # rejects it.  Re-arming requires a newly issued authority after a
         # fresh state/preflight check.
@@ -6065,9 +6694,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
         private_event_revision = session.recovery_private_event_revision()
         private_ingress_revision = session.recovery_private_ingress_revision()
-        private_ingress_epoch, private_ingress_pending = self._ctp_private_ingress_snapshot(
-            exchange_name
-        )
+        (
+            private_ingress_epoch,
+            private_ingress_pending,
+        ) = self._ctp_private_ingress_snapshot(exchange_name)
         if private_ingress_pending:
             raise NormalizedApiError(
                 operation,
@@ -6108,6 +6738,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 prepare_execution=prepare_execution,
                 rollback_execution=rollback_execution,
                 prepare_execution_outside_mutex=True,
+                execution_write_guard=authorization._entry_write_guard,
                 authorization_context={
                     "strategy_identity_sha256": authorization._strategy_identity_sha256,
                     "execution_cycle_id": authorization._execution_cycle_id,
@@ -6185,6 +6816,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 definite_reject=True,
             )
         session, exchange_name = self._sole_ctp_execution_venue(operation)
+        self._reject_simnow_profile_write(exchange_name, operation)
         if session.config.get("market_data_only") is True:
             raise NormalizedApiError(
                 operation,
@@ -6239,6 +6871,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_settlement_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            authorization._context.get("environment_profile"), operation
+        )
         # A terminal-write grant is one-shot even if a later environment or
         # transport check rejects it.
         authorization._used = True
@@ -6249,6 +6884,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 definite_reject=True,
             )
         current_context = self._ctp_settlement_context(exchange_name, operation=operation)
+        self._reject_simnow_native_execution(current_context.get("environment_profile"), operation)
         if any(
             current_context.get(field) != authorization._context.get(field)
             for field in (
@@ -6407,6 +7043,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_execution_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            authorization._context.get("environment_profile"), operation
+        )
         authorization._used = True
         if authorization._preflight_epoch != self._ctp_execution_authorization_epoch_value():
             raise NormalizedApiError(
@@ -6416,6 +7055,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
         proof = dict(authorization._proof)
         current_context = self._ctp_execution_arm_context(exchange_name)
+        self._reject_simnow_native_execution(current_context.get("environment_profile"), operation)
         if session._arm_context_error(proof, current_context) is not None or any(
             current_context.get(field) != authorization._context.get(field)
             for field in (
@@ -6434,9 +7074,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
         private_event_revision = session.recovery_private_event_revision()
         private_ingress_revision = session.recovery_private_ingress_revision()
-        private_ingress_epoch, private_ingress_pending = self._ctp_private_ingress_snapshot(
-            exchange_name
-        )
+        (
+            private_ingress_epoch,
+            private_ingress_pending,
+        ) = self._ctp_private_ingress_snapshot(exchange_name)
         if private_ingress_pending:
             raise NormalizedApiError(
                 operation,
@@ -6583,6 +7224,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_execution_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            authorization.bindings.get("environment_profile"),
+            operation,
+            schema_version=authorization.schema_version,
+        )
         if budget_capability is not None:
             session, _exchange_name = self._sole_ctp_execution_venue(operation)
             session.attach_ctp_budget_reservation(
@@ -6622,11 +7268,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_execution_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            approval_capability.bindings.get("environment_profile"),
+            operation,
+            schema_version=approval_capability.schema_version,
+        )
         session, exchange_name = self._sole_ctp_execution_venue(operation)
         if (
             approval_capability._owner is not self
             or approval_capability.purpose != APPROVAL_PURPOSE
-            or approval_capability.schema_version != ENTRY_APPROVAL_SCHEMA_VERSION
+            or approval_capability.schema_version
+            not in {ENTRY_APPROVAL_SCHEMA_VERSION, SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION}
             or approval_capability._entry_used
         ):
             raise NormalizedApiError(
@@ -6680,27 +7332,14 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "ctp_execution_authorization_material_mismatch",
                     definite_reject=True,
                 )
-        primary = payload["primary_instrument"]
-        authorized = [
-            f"{item['exchange_id']}.{item['instrument_id']}"
-            for item in payload["authorized_instruments"]
-        ]
-        proof = {
-            "account_fingerprint": payload["account_fingerprint"],
-            "trading_day": payload["trading_day"],
-            "instrument": f"{primary['exchange_id']}.{primary['instrument_id']}",
-            "connection_generation": payload["connection_generation"],
-            "environment_profile": payload["environment_profile"],
-            "receipt_sha256": payload["receipt_sha256"],
-            "native_sha256": payload["native_sha256"],
-            "ctp_package_sha256": payload["ctp_package_sha256"],
-            "source_hashes_sha256": payload["source_hashes_sha256"],
-            "dependency_hashes_sha256": payload["dependency_hashes_sha256"],
-            "preflight_sha256": payload["preflight_sha256"],
-            "scope_version": _CTP_EXECUTION_RECOVERY_BUNDLE_SCOPE_VERSION,
-            "authorized_instruments": authorized,
-        }
-        normalized, _proof_sha256 = _execution_arm_proof(proof)
+        proof = self._ctp_entry_approval_proof(approval_capability)
+        normalized, proof_sha256 = _execution_arm_proof(proof)
+        entry_write_guard = _new_ctp_entry_write_guard(
+            self,
+            session,
+            approval_capability,
+            proof_sha256,
+        )
         if exchange_name.partition(DATANAME_SEPARATOR)[0].upper() != "CTP":
             raise NormalizedApiError(
                 operation,
@@ -6749,6 +7388,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             execution_cycle_id=payload["execution_cycle_id"],
             preflight_epoch=self._ctp_execution_authorization_epoch_value(),
             approval_capability=approval_capability,
+            entry_write_guard=entry_write_guard,
         )
 
     @_serialized_ctp_execution_transition
@@ -6793,11 +7433,17 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_settlement_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            approval_capability.bindings.get("environment_profile"),
+            operation,
+            schema_version=approval_capability.schema_version,
+        )
         session, exchange_name = self._sole_ctp_execution_venue(operation)
         if (
             approval_capability._owner is not self
             or approval_capability.purpose != APPROVAL_PURPOSE
-            or approval_capability.schema_version != ENTRY_APPROVAL_SCHEMA_VERSION
+            or approval_capability.schema_version
+            not in {ENTRY_APPROVAL_SCHEMA_VERSION, SIMNOW_ENTRY_APPROVAL_SCHEMA_VERSION}
             or approval_capability._settlement_used
         ):
             raise NormalizedApiError(
@@ -6812,6 +7458,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         if now >= expires_at:
             raise NormalizedApiError(operation, "ctp_approval_expired", definite_reject=True)
         current_context = self._ctp_settlement_context(exchange_name, operation=operation)
+        self._reject_simnow_native_execution(current_context.get("environment_profile"), operation)
         expected = {
             "account_fingerprint": payload["account_fingerprint"],
             "trading_day": payload["trading_day"],
@@ -6878,8 +7525,12 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "ctp_settlement_authorization_required",
                 definite_reject=True,
             )
+        self._reject_simnow_native_execution(
+            authorization._context.get("environment_profile"), operation
+        )
         authorization._used = True
         current_context = self._ctp_settlement_context(exchange_name, operation=operation)
+        self._reject_simnow_native_execution(current_context.get("environment_profile"), operation)
         if any(
             current_context.get(field) != authorization._context.get(field)
             for field in (
@@ -7149,6 +7800,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 "confirm_ctp_settlement",
                 detail=f"{exchange_name} is not a CTP provider",
             )
+        self._reject_simnow_profile_write(exchange_name, "confirm_ctp_settlement")
         raise NormalizedApiError(
             "confirm_ctp_settlement",
             "ctp_settlement_authorization_required",
@@ -8471,6 +9123,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         仅当 order_type 能推导 side（``side-type``）时兼容，裸 ``limit``/``market``
         无法推导 side 时抛 ``LegacyOrderApiError``。
         """
+        self._reject_simnow_profile_write(exchange_name, "make_order")
         if kwargs.pop("normalized", False):
             budget_capability = kwargs.pop("budget_capability", None)
             if not isinstance(symbol, OrderRequest):
@@ -8478,6 +9131,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "make_order", "typed_request_required", definite_reject=True
                 )
             request = symbol
+            self._require_ctp_managed_order_identity(
+                "make_order", exchange_name, request, self._execution_session
+            )
             resolved_request, mode_guarded = self._begin_position_mode_placement(
                 exchange_name,
                 request,
@@ -8524,6 +9180,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 self._end_position_mode_placement(exchange_name)
 
     def _make_order_typed(self, exchange_name: str, request: OrderRequest) -> Any:
+        self._reject_simnow_profile_write(exchange_name, "make_order")
         return self._backend.make_order(exchange_name, request)
 
     def _make_order_legacy(
@@ -8594,6 +9251,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param symbol: 交易对
         :param order_id: 订单ID
         """
+        self._reject_simnow_profile_write(exchange_name, "cancel_order")
         if isinstance(symbol, CancelOrderRequest):
             self._reject_unhanded_ctp_cancel_identity(exchange_name, symbol)
         for value in kwargs.values():
@@ -8606,6 +9264,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 if isinstance(symbol, CancelOrderRequest)
                 else CancelOrderRequest(symbol=symbol, account_id="legacy", order_id=order_id)
             )
+            session = self._execution_session
+            request = self._bind_ctp_managed_cancel_identity(exchange_name, request, session)
             return self._normalized_call(
                 "cancel_order",
                 exchange_name,
@@ -8632,6 +9292,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
+        self._reject_simnow_profile_write(exchange_name, "cancel_order")
         request = (
             symbol
             if isinstance(symbol, CancelOrderRequest)
@@ -8683,6 +9344,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         :param exchange_name: 交易所标识
         :param symbol: 交易对 (None 表示所有品种)
         """
+        self._reject_simnow_profile_write(exchange_name, "cancel_all")
         if self._execution_session is not None:
             raise CapabilityNotSupportedError(
                 "cancel_all",
@@ -9065,6 +9727,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
 
     async def async_make_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        self._reject_simnow_profile_write(exchange_name, "async_make_order")
         if kwargs.pop("normalized", False):
             budget_capability = kwargs.pop("budget_capability", None)
             if len(args) != 1 or not isinstance(args[0], OrderRequest) or kwargs:
@@ -9072,6 +9735,9 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "async_make_order", "typed_request_required", definite_reject=True
                 )
             request = args[0]
+            self._require_ctp_managed_order_identity(
+                "async_make_order", exchange_name, request, self._execution_session
+            )
             resolved_request, mode_guarded = await asyncio.to_thread(
                 self._begin_position_mode_placement,
                 exchange_name,
@@ -9144,6 +9810,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 )
 
     async def async_cancel_order(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        self._reject_simnow_profile_write(exchange_name, "async_cancel_order")
         for value in (*args, *kwargs.values()):
             if isinstance(value, CancelOrderRequest):
                 self._reject_unhanded_ctp_cancel_identity(exchange_name, value)
@@ -9154,6 +9821,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                     "async_cancel_order", "typed_request_required", definite_reject=True
                 )
             request = args[0]
+            session = self._execution_session
+            request = self._bind_ctp_managed_cancel_identity(exchange_name, request, session)
             return await self._async_normalized_call(
                 "cancel_order",
                 exchange_name,
@@ -9195,6 +9864,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         return result
 
     async def async_cancel_all(self, exchange_name: str, *args: Any, **kwargs: Any) -> Any:
+        self._reject_simnow_profile_write(exchange_name, "async_cancel_all")
         if self._execution_session is not None:
             raise CapabilityNotSupportedError(
                 "async_cancel_all",

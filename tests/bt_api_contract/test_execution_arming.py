@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -128,14 +128,18 @@ def _context(proof=None, **changes):
     return result
 
 
-def _session(tmp_path, *, risk=False, journal=True, require_journal=True):
+def _session(tmp_path, *, risk=False, journal=True, require_journal=True, provisioned=False):
+    journal_path = tmp_path / f"orders-{time.time_ns()}.jsonl" if journal else None
+    if journal_path is not None and provisioned:
+        # Windows CTP tests exercise the provisioned-file path. This fixture is
+        # structural only; it does not establish target-FS power-loss durability.
+        journal_path.touch()
     return _ExecutionSession(
         {
             "market_data_only": True,
             "require_order_journal": require_journal,
-            "order_journal": (
-                str(tmp_path / f"orders-{time.time_ns()}.jsonl") if journal else None
-            ),
+            "order_journal": str(journal_path) if journal_path is not None else None,
+            "windows_ctp_journal_preprovisioned": provisioned,
             "account_ids": {},
             "required_environments": {VENUE: "demo"},
             "strategy_id": "iter22-midfreq",
@@ -306,6 +310,40 @@ def _budget_evidence(session, proof_value):
 
 def _reserve_budget(session, proof_value, *, mode="ordinary"):
     return session.reserve_ctp_execution_budget(_budget_evidence(session, proof_value), mode=mode)
+
+
+def _bound_order(
+    session,
+    proof_value,
+    symbol,
+    *,
+    order_ref_number,
+    exchange_id="CZCE",
+    cycle="cycle-1",
+):
+    runtime_order_id = f"test-runtime-order-{order_ref_number}"
+    budget = _reserve_budget(session, proof_value)
+    now_ns = time.time_ns()
+    deterministic_ns = ((now_ns // 10**12) + 1) * 10**12 + order_ref_number
+    with patch("bt_api_py._execution_session.time.time_ns", return_value=deterministic_ns):
+        binding = session.new_runtime_order_binding(
+            VENUE,
+            symbol=symbol,
+            account_id=ACCOUNT_FINGERPRINT,
+            runtime_order_id=runtime_order_id,
+            budget_capability=budget,
+        )
+    return (
+        _order(
+            symbol,
+            client_order_id=binding["client_order_id"],
+            runtime_order_id=runtime_order_id,
+            exchange_id=exchange_id,
+            cycle=cycle,
+        ),
+        budget,
+        binding,
+    )
 
 
 def _ready_state(**changes):
@@ -776,6 +814,12 @@ def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(monkeypat
         _arm_direct(session, proof=bundle, context=_context(bundle))
 
         for index, symbol in enumerate(BUNDLE_INSTRUMENTS, start=1):
+            request, budget, _binding = _bound_order(
+                session,
+                bundle,
+                symbol.split(".", 1)[1],
+                order_ref_number=index,
+            )
             session.invoke(
                 "make_order",
                 VENUE,
@@ -789,7 +833,7 @@ def test_v2_bundle_allows_only_exact_czce_contract_legs_before_journal(monkeypat
                     index=index,
                 ),
                 transport,
-                budget_capability=_reserve_budget(session, bundle),
+                budget_capability=budget,
             )
         submit_calls = session.submit_calls
         with pytest.raises(NormalizedApiError) as raised:
@@ -817,10 +861,17 @@ def test_v2_bundle_accepts_native_dce_option_spelling_and_rejects_case_changes(
         scope_version=BUNDLE_SCOPE_VERSION,
         authorized_instruments=instruments,
     )
-    session = _session(tmp_path)
+    session = _session(tmp_path, provisioned=True)
     transport = Mock(return_value={"status": "accepted", "order_id": "SYS1"})
     try:
         _arm_direct(session, proof=proof, context=_context(proof))
+        request, budget, _binding = _bound_order(
+            session,
+            proof,
+            "m2701-C-3400",
+            order_ref_number=1,
+            exchange_id="DCE",
+        )
         session.invoke(
             "make_order",
             VENUE,
@@ -831,7 +882,7 @@ def test_v2_bundle_accepts_native_dce_option_spelling_and_rejects_case_changes(
                 index=1,
             ),
             transport,
-            budget_capability=_reserve_budget(session, proof),
+            budget_capability=budget,
         )
         with pytest.raises(NormalizedApiError) as raised:
             session.invoke(
@@ -1276,6 +1327,7 @@ def test_armed_placement_still_runs_account_risk_guards(
 def _order(
     symbol,
     client_order_id="000000000001",
+    runtime_order_id=None,
     exchange_id="CZCE",
     cycle="cycle-1",
 ):
@@ -1294,7 +1346,27 @@ def _order(
         execution_cycle_id=cycle,
         execution_role="entry",
         strategy_identity_sha256=STRATEGY_IDENTITY,
+        runtime_order_id=runtime_order_id,
     )
+
+
+def test_i9_order_identity_mirror_cannot_dispatch_without_worker_handoff(monkeypatch, tmp_path):
+    session = _session(tmp_path, provisioned=True)
+    transport = Mock(return_value=_order_update())
+    try:
+        _arm_direct(session)
+        request = _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1)
+        before = session.path.read_bytes()
+
+        with pytest.raises(NormalizedApiError) as raised:
+            session.invoke("make_order", VENUE, request, transport)
+
+        assert raised.value.code == "ctp_order_dispatch_handoff_unavailable"
+        assert session.path.read_bytes() == before
+        assert session.submit_calls == 0
+        transport.assert_not_called()
+    finally:
+        session.close()
 
 
 def test_cross_instrument_order_rejects_before_journal_or_transport(tmp_path):
@@ -1414,13 +1486,19 @@ def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(monk
     try:
         proof = _proof()
         _arm_direct(session, proof=proof)
+        request, budget, _binding = _bound_order(
+            session,
+            proof,
+            "SA609.CZCE",
+            order_ref_number=1,
+        )
 
         result = session.invoke(
             "make_order",
             VENUE,
             _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1),
             transport,
-            budget_capability=_reserve_budget(session, proof),
+            budget_capability=budget,
         )
 
         assert result["status"] == "accepted"
@@ -1432,6 +1510,7 @@ def test_armed_same_instrument_order_uses_normal_journal_and_transport_path(monk
             "client_id_reservation",
             "ctp_budget_reservation_started",
             "ctp_budget_reservation_committed",
+            "client_id_reservation",
             "intent",
             "ctp_budget_action_started",
             "order_update",
@@ -1447,19 +1526,32 @@ def test_armed_tracked_same_instrument_cancel_remains_available(monkeypatch, tmp
     try:
         proof = _proof()
         _arm_direct(session, proof=proof)
+        order_request, order_budget, binding = _bound_order(
+            session,
+            proof,
+            "SA609.CZCE",
+            order_ref_number=1,
+        )
         session.invoke(
             "make_order",
             VENUE,
             _order_with_reserved_identity(monkeypatch, session, _order("SA609.CZCE"), index=1),
             place,
-            budget_capability=_reserve_budget(session, proof),
+            budget_capability=order_budget,
         )
         request = CancelOrderRequest(
             symbol="SA609.CZCE",
             account_id=ACCOUNT_FINGERPRINT,
-            client_order_id="000000000001",
+            client_order_id=binding["client_order_id"],
             order_id="SYS1",
             exchange_id="CZCE",
+            order_ref=binding["ctp_order_ref"],
+            runtime_order_id=binding["runtime_order_id"],
+            runtime_action_id=session.next_runtime_action_id(
+                VENUE,
+                account_id=ACCOUNT_FINGERPRINT,
+                runtime_order_id=binding["runtime_order_id"],
+            ),
         )
 
         result = session.invoke(
@@ -1479,6 +1571,7 @@ def test_armed_tracked_same_instrument_cancel_remains_available(monkeypatch, tmp
             "client_id_reservation",
             "ctp_budget_reservation_started",
             "ctp_budget_reservation_committed",
+            "client_id_reservation",
             "intent",
             "ctp_budget_action_started",
             "order_update",

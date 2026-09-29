@@ -731,6 +731,9 @@ class OrderRequest:
     execution_role: str | None = None
     strategy_identity_sha256: str | None = None
     ctp_order_identity: CtpOrderIdentityBinding | None = None
+    managed_intent_id: str | None = None
+    hedge_flag: str | None = None
+    runtime_order_id: str | None = None
 
     def __post_init__(self) -> None:
         self._validate_core_fields()
@@ -740,6 +743,11 @@ class OrderRequest:
             and type(self.ctp_order_identity) is not CtpOrderIdentityBinding
         ):
             raise TypeError("ctp_order_identity must be a CtpOrderIdentityBinding or None")
+        if self.ctp_order_identity is not None and (
+            self.managed_intent_id not in (None, self.ctp_order_identity.managed_intent_id)
+            or self.runtime_order_id not in (None, self.ctp_order_identity.runtime_order_id)
+        ):
+            raise ValueError("CTP order scalar identity differs from nested identity")
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible request mapping, including its nested identity labels."""
@@ -798,6 +806,11 @@ class OrderRequest:
             raise ValueError("offset must be open, close, close_today or close_yesterday")
         if self.position_mode not in {None, "net", "dual_side"}:
             raise ValueError("position_mode must be net or dual_side")
+        if self.hedge_flag is not None and (
+            not isinstance(self.hedge_flag, str)
+            or self.hedge_flag not in {"1", "2", "3", "5", "6", "7"}
+        ):
+            raise ValueError("hedge_flag must be a supported CTP hedge code")
         if not self.account_id:
             raise ValueError("account_id must be a non-empty string")
         if not self.client_order_id:
@@ -822,6 +835,25 @@ class OrderRequest:
             raise ValueError(
                 "strategy_identity_sha256 must be a lowercase SHA-256 hex digest or None"
             )
+        if self.runtime_order_id is not None and (
+            not isinstance(self.runtime_order_id, str)
+            or not self.runtime_order_id
+            or self.runtime_order_id != self.runtime_order_id.strip()
+            or len(self.runtime_order_id.encode("utf-8")) > 256
+        ):
+            raise ValueError("runtime_order_id must be a bounded non-empty string or None")
+        if self.managed_intent_id is not None and (
+            not isinstance(self.managed_intent_id, str)
+            or not self.managed_intent_id
+            or self.managed_intent_id != self.managed_intent_id.strip()
+            or len(self.managed_intent_id.encode("utf-8")) > 256
+        ):
+            raise ValueError("managed_intent_id must be a bounded non-empty string or None")
+        if self.managed_intent_id is not None:
+            if self.runtime_order_id is None:
+                raise ValueError("runtime_order_id is required with managed_intent_id")
+            if self.hedge_flag not in {"1", "2", "3"}:
+                raise ValueError("managed CTP requests require a supported exact hedge_flag")
         if self.order_type is OrderType.LIMIT and self.price is None:
             raise ValueError("limit order requires a price")
         if self.order_type is OrderType.MARKET and self.price is not None:
@@ -840,19 +872,51 @@ class CancelOrderRequest:
     session_id: int | None = None
     order_ref: str | None = None
     ctp_cancel_identity: CtpCancelIdentityBinding | None = None
+    runtime_action_id: str | None = None
+    runtime_order_id: str | None = None
+    managed_cancel_intent_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.symbol:
             raise ValueError("symbol must be a non-empty string")
         if not self.account_id:
             raise ValueError("account_id must be a non-empty string")
-        if not self.order_id and not self.client_order_id and not self.order_ref:
-            raise ValueError("order_id, client_order_id or order_ref must be provided")
+        if (
+            not self.order_id
+            and not self.client_order_id
+            and not self.order_ref
+            and not self.runtime_order_id
+        ):
+            raise ValueError(
+                "order_id, client_order_id, order_ref or runtime_order_id must be provided"
+            )
+        for name in ("runtime_action_id", "runtime_order_id", "managed_cancel_intent_id"):
+            value = getattr(self, name)
+            if value is not None and (
+                type(value) is not str
+                or not value
+                or value != value.strip()
+                or len(value.encode("utf-8")) > 256
+            ):
+                raise ValueError(f"{name} must be a bounded non-empty string or None")
+        if self.managed_cancel_intent_id is not None and self.runtime_order_id is None:
+            raise ValueError("managed_cancel_intent_id requires runtime_order_id")
+        if (
+            self.managed_cancel_intent_id is not None
+            and self.runtime_action_id != self.managed_cancel_intent_id
+        ):
+            raise ValueError("managed cancel action and intent IDs must match")
         binding = self.ctp_cancel_identity
         if binding is None:
             return
         if type(binding) is not CtpCancelIdentityBinding:
             raise TypeError("ctp_cancel_identity must be a CtpCancelIdentityBinding or None")
+        if (
+            self.runtime_order_id not in (None, binding.runtime_order_id)
+            or self.runtime_action_id not in (None, binding.managed_action_id)
+            or self.managed_cancel_intent_id not in (None, binding.managed_action_id)
+        ):
+            raise ValueError("CTP cancel scalar identity differs from nested identity")
         if type(self.symbol) is not str or type(self.account_id) is not str:
             raise ValueError("CTP cancel request symbol and account_id must be strings")
         if self.account_id != binding.account_id:

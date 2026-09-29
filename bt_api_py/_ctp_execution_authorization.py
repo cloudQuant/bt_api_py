@@ -217,6 +217,7 @@ _SAFE_ID = re.compile(r"^[\w][\w.:-]{0,255}$", re.ASCII)
 _MAX_APPROVAL_LIFETIME = timedelta(days=366)
 _CAPABILITY_SEAL = object()
 _CONTEXT_SEAL = object()
+_ENTRY_WRITE_GUARD_SEAL = object()
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -826,6 +827,7 @@ def _normalize_context(value: Any) -> dict[str, Any]:
         _reject(APPROVAL_OPERATION, "ctp_approval_context_untrusted")
     result = {"source": source}
     payload_fields = _SIMNOW_CONTEXT_FIELDS if bound_context else _CONTEXT_FIELDS
+
     payload_like = {
         field_name: value[field_name] for field_name in payload_fields if field_name != "source"
     }
@@ -1017,7 +1019,7 @@ class CtpExecutionApprovalContext:
     copying those values into a mapping cannot establish runtime provenance.
     """
 
-    values: Mapping[str, Any]
+    values: Mapping[str, Any] = field(repr=False)
     _seal: object = field(repr=False, compare=False)
     _owner: object = field(repr=False, compare=False)
     _refresh: object = field(repr=False, compare=False)
@@ -1094,7 +1096,7 @@ def _refresh_runtime_context(
 class CtpExecutionApproval:
     """Immutable, cryptographically verified approval evidence."""
 
-    payload: Mapping[str, Any]
+    payload: Mapping[str, Any] = field(repr=False)
     payload_sha256: str
     trust_root_sha256: str
     signature: bytes = field(repr=False, compare=False)
@@ -1225,6 +1227,7 @@ class CtpExecutionApprovalCapability:
         "_entry_used",
         "_settlement_used",
         "_context",
+        "_trust_root",
     )
 
     def __init__(
@@ -1234,6 +1237,7 @@ class CtpExecutionApprovalCapability:
         owner: object,
         approval: CtpExecutionApproval,
         context: Mapping[str, Any] | CtpExecutionApprovalContext | None = None,
+        trust_root: Mapping[str, Any] | None = None,
     ):
         if seal is not _CAPABILITY_SEAL:
             raise TypeError("opaque CTP approval capability required")
@@ -1252,6 +1256,7 @@ class CtpExecutionApprovalCapability:
         # references in its private refresh closure; recovery re-collects
         # those references before native arm and each managed write.
         self._context = context
+        self._trust_root = _freeze(trust_root)
 
     @property
     def approval_id(self) -> str:
@@ -1306,10 +1311,107 @@ def _new_capability(
     approval: CtpExecutionApproval,
     owner: object,
     context: Mapping[str, Any] | CtpExecutionApprovalContext | None = None,
+    *,
+    trust_root: Mapping[str, Any] | None = None,
 ) -> CtpExecutionApprovalCapability:
+    normalized_root = _normalize_trust_root(trust_root)
+    root_sha256 = hashlib.sha256(_canonical_json(_jsonable(normalized_root))).hexdigest()
+    if root_sha256 != approval.trust_root_sha256:
+        _reject("redeem_ctp_execution_approval", "ctp_approval_trust_root_mismatch")
     return CtpExecutionApprovalCapability(
-        seal=_CAPABILITY_SEAL, owner=owner, approval=approval, context=context
+        seal=_CAPABILITY_SEAL,
+        owner=owner,
+        approval=approval,
+        context=context,
+        trust_root=trust_root,
     )
+
+
+class _CtpExecutionEntryWriteGuard:
+    """SDK-sealed per-write revalidator for one redeemed normal-entry approval."""
+
+    __slots__ = (
+        "_seal",
+        "_owner",
+        "_session",
+        "_capability",
+        "_context",
+        "_approval_payload_sha256",
+        "_approval_signature_sha256",
+        "_trust_root_sha256",
+        "_proof_sha256",
+    )
+
+    def __init__(
+        self,
+        *,
+        seal: object,
+        owner: object,
+        session: object,
+        capability: CtpExecutionApprovalCapability,
+        proof_sha256: str,
+    ) -> None:
+        if seal is not _ENTRY_WRITE_GUARD_SEAL:
+            raise TypeError("SDK-issued CTP entry write guard required")
+        if (
+            type(capability) is not CtpExecutionApprovalCapability
+            or capability._seal is not _CAPABILITY_SEAL
+            or capability._owner is not owner
+            or not isinstance(proof_sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", proof_sha256)
+        ):
+            raise TypeError("redeemed CTP entry approval required")
+        self._seal = seal
+        self._owner = owner
+        self._session = session
+        self._capability = capability
+        self._context = capability._context
+        self._approval_payload_sha256 = capability._approval.payload_sha256
+        self._approval_signature_sha256 = hashlib.sha256(capability._approval.signature).hexdigest()
+        self._trust_root_sha256 = capability._approval.trust_root_sha256
+        self._proof_sha256 = proof_sha256
+
+    def validate(self, operation: str, **context: Any) -> None:
+        if (
+            type(self) is not _CtpExecutionEntryWriteGuard
+            or self._seal is not _ENTRY_WRITE_GUARD_SEAL
+            or not callable(getattr(self._owner, "_validate_active_ctp_entry_authorization", None))
+        ):
+            _reject(operation, "ctp_entry_authorization_guard_invalid")
+        self._owner._validate_active_ctp_entry_authorization(
+            self,
+            operation=operation,
+            **context,
+        )
+
+
+def _new_ctp_entry_write_guard(
+    owner: object,
+    session: object,
+    capability: CtpExecutionApprovalCapability,
+    proof_sha256: str,
+) -> _CtpExecutionEntryWriteGuard:
+    """Create a non-forgeable-in-process guard from the SDK's one-shot grant."""
+
+    return _CtpExecutionEntryWriteGuard(
+        seal=_ENTRY_WRITE_GUARD_SEAL,
+        owner=owner,
+        session=session,
+        capability=capability,
+        proof_sha256=proof_sha256,
+    )
+
+
+def _is_ctp_entry_write_guard(value: object, *, session: object | None = None) -> bool:
+    return bool(
+        type(value) is _CtpExecutionEntryWriteGuard
+        and value._seal is _ENTRY_WRITE_GUARD_SEAL
+        and (session is None or value._session is session)
+    )
+
+
+def _is_ctp_execution_approval_capability(value: object) -> bool:
+    return bool(type(value) is CtpExecutionApprovalCapability and value._seal is _CAPABILITY_SEAL)
 
 
 def _verify_signature(signature: bytes, payload_bytes: bytes, public_key: bytes) -> None:

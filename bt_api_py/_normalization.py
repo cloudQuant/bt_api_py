@@ -2232,6 +2232,69 @@ def trade(row, exchange_name, symbol=None):
     return result
 
 
+def _ctp_cancel_metadata(result, request):
+    """Project only bounded native action identity/evidence into the SDK row."""
+    getter = getattr(result, "get_extra_data", None)
+    if not callable(getter):
+        return {}
+    try:
+        extra = getter()
+    except Exception:
+        return {}
+    if not isinstance(extra, dict):
+        return {}
+    envelope = extra.get("ctp_cancel")
+    if not isinstance(envelope, dict):
+        return {}
+    evidence = envelope.get("evidence")
+    if not isinstance(evidence, dict):
+        as_dict = getattr(evidence, "as_dict", None)
+        if callable(as_dict):
+            try:
+                evidence = as_dict()
+            except Exception:
+                evidence = None
+    safe_fields = (
+        "request_id",
+        "order_action_ref",
+        "status",
+        "account_fingerprint",
+        "trading_day",
+        "connection_generation",
+        "order_ref",
+        "order_sys_id",
+        "front_id",
+        "session_id",
+        "instrument_id",
+        "exchange_id",
+        "action_flag",
+        "evidence_source",
+        "evidence_received",
+        "callback_received",
+        "error_code",
+        "reason",
+        "observed_at_utc",
+    )
+    projected = (
+        {key: evidence[key] for key in safe_fields if key in evidence}
+        if isinstance(evidence, dict)
+        else {}
+    )
+    # CtpRequestData exposes a redacted dictionary, not the immutable native
+    # evidence object. Without the raw account binding this cannot be promoted
+    # into matching callback evidence at the public normalization boundary.
+    status = "unknown"
+    if projected:
+        projected["status"] = status
+    return {
+        "cancel_action_id": getattr(request, "idempotency_key", "") or "",
+        "native_request_id": envelope.get("request_id"),
+        "order_action_ref": envelope.get("order_action_ref"),
+        "cancel_status": status,
+        "cancel_evidence": projected,
+    }
+
+
 def normalize_result(operation, result, exchange_name, symbol=None, request=None):
     source = rows(
         result,
@@ -2313,7 +2376,20 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
     if operation in {"make_order", "query_order", "cancel_order"}:
         if not source:
             raise ValueError("order_response_missing")
-        return order(source[0], exchange_name, symbol, request, operation)
+        normalized = order(source[0], exchange_name, symbol, request, operation)
+        if operation == "cancel_order" and str(exchange_name).startswith("CTP___"):
+            cancel_metadata = _ctp_cancel_metadata(result, request)
+            normalized.update(cancel_metadata)
+            # An order-action callback only resolves that request, never the
+            # resting order's state. Even a matching rejection does not prove
+            # the current order state; a separate typed order query must do so.
+            normalized.update(
+                status="submitted",
+                execution_unknown=True,
+                terminal_confirmed=False,
+                definite_reject=False,
+            )
+        return normalized
     if operation == "get_open_orders":
         return [order(row, exchange_name, symbol) for row in source]
     if operation == "get_deals":
