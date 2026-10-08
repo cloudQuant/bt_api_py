@@ -26,5 +26,9 @@
 !service.sh
 !service.bat
 !service.py
+!collector_entry.py
+!collector_control.py
+!status_collector.bat
+!stop_collector.bat
 !deploy/
 !deploy/**

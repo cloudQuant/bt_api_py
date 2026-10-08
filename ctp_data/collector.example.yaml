@@ -4,8 +4,9 @@
 #   1. 复制为 collector.yaml（copy / cp，该文件已被 .gitignore 忽略）
 #   2. 把 data_root 改成你机器上的采集数据目录
 #   3. 账号/前置地址不要写在这里：放到仓库根目录的 .env（同样被忽略），
-#      启动脚本会自动 `set -a; source .env; set +a`
-#   4. 用启动脚本运行：sh ctp_data/start_collector.sh
+#      Windows 启动入口使用 python-dotenv 读取；Linux/macOS 由 shell 加载。
+#   4. Windows 后台启动：ctp_data\start_collector.bat
+#      Linux/macOS：sh ctp_data/start_collector.sh
 #
 # 不连行情的校验命令（改完配置先跑一遍）：
 #   python -m bt_api_ctp.collector --config ctp_data/collector.yaml --check-calendar
@@ -97,3 +98,8 @@ ctp:
   app_id: ""
   auth_code: ""
   login_timeout_sec: 30
+  # 合约查询按回调空闲时间超时，同时限制总耗时；超时不接受不完整合约集合。
+  instrument_query_timeout_sec: 60
+  instrument_query_max_duration_sec: 600
+  instrument_query_retries: 1
+  instrument_query_retry_backoff_sec: 2

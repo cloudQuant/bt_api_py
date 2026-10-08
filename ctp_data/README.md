@@ -8,7 +8,9 @@
 |------|---------|------|
 | `README.md` | ✅ | 本文档 |
 | `start_collector.sh` | ✅ | macOS / Linux 启动脚本 |
-| `start_collector.bat` | ✅ | Windows 启动脚本 |
+| `start_collector.bat` | ✅ | Windows 后台常驻启动入口 |
+| `status_collector.bat` / `stop_collector.bat` | ✅ | 查看状态 / 优雅停止 |
+| `collector_entry.py` / `collector_control.py` | ✅ | Windows 环境准备、后台进程管理 |
 | `collector.example.yaml` | ✅ | 配置模板，不含敏感信息 |
 | `.gitignore` | ✅ | 忽略规则 |
 | `collector.yaml` | ❌ | 本机配置，从模板复制 |
@@ -59,21 +61,33 @@ chmod +x ctp_data/start_collector.sh   # 只需一次
 ```
 
 ```bat
-:: Windows
+:: Windows：启动后台常驻服务，命令返回后可关闭终端
 ctp_data\start_collector.bat
+
+:: 查看运行状态、PID 和日志位置
+ctp_data\status_collector.bat
+
+:: 优雅停止，等待数据刷盘和报告完成
+ctp_data\stop_collector.bat
+
+:: 调试：只在当前控制台运行一个采集时段
+ctp_data\start_collector.bat --foreground
 ```
 
-两个脚本行为一致，依次做四件事：
+Windows 默认启动隐藏的常驻调度器，盘中启动立即采集，休市时等待下一次有效开盘。
+重复运行启动脚本会返回已有服务的状态，避免重复占用账号。后台进程以当前用户运行，
+关闭启动终端后继续工作；重启电脑后的自启动需另行安装第 5 节的系统托管任务。
 
-1. 从仓库根目录加载 `.env`（collector 自身不读 `.env`）；
-2. 挑一个 **能 `import bt_api_ctp`** 的 python（PATH 上的 `python` 常常不是装了依赖的那个）；
-3. `cd` 到仓库根目录；
-4. 前台运行 `python -m bt_api_ctp.collector --config ctp_data/collector.yaml --until-close --wait-open`。
+后台控制状态保存在 `ctp_data/.runtime/`，调度日志为 `ctp_data/service.log`，启动异常与
+采集控制台输出为 `ctp_data/service-console.log`，采集日志仍在 `<data_root>/logs/`。
+`--restart` 会先优雅停止旧服务再启动新服务；停止默认最多等待 300 秒，可用
+`--stop-timeout` 调整。全市场压缩需要磁盘处理时间，超时会保留停止请求，不强杀进程。
 
-**前台运行到收盘**：脚本会一直阻塞，按当前时段自动跑到该时段结束（白盘 → 15:15，夜盘 → 02:30）
-再退出，并生成当天的 `report.json`。
+macOS/Linux 的 `start_collector.sh` 与 Windows 的 `--foreground` 模式均为单时段采集：
+按当前时段运行到收盘（白盘 → 15:15，夜盘 → 02:30），然后生成当天的 `report.json`。
+各入口都会准备环境、优先仓库源码，并将相对数据路径解析到仓库根目录。
 
-启动时会打印实际生效的路径，用于核对数据落盘位置与使用的代码版本：
+macOS/Linux 启动时会打印实际生效的路径，用于核对数据落盘位置与使用的代码版本：
 
 ```
 [start_collector] 解释器：/path/to/python
@@ -85,6 +99,15 @@ ctp_data\start_collector.bat
 
 路径都不是写死的：脚本按自身所在位置推导 `仓库根`，再解析配置里的 `data_root`
 （相对路径 = 相对仓库根），因此把整个仓库换目录或换机器都不需要改任何东西。
+
+Windows **前台模式**按 **Ctrl+C**（或 **Ctrl+Break**）可以取消登录、合约查询、查询重试和订阅等待。
+启动阶段取消会清理已打开的 CTP 会话；已有 tick 时，先关闭行情回调，再刷盘、压缩并生成
+`report.json`。收盘压缩仍需等磁盘工作完成，不应强杀进程。修改代码前已经运行的进程需要
+重新启动，才能使用新的退出逻辑。
+
+脚本会检查完整采集 CLI 的依赖，导入失败时显示异常；显式设置 `PYTHON` 后不会再静默
+切换到其它解释器。可运行 `ctp_data\start_collector.bat --check-calendar` 检查启动脚本与
+配置，该命令不会连接 CTP。
 
 `bt_api_ctp` 那一行尤其要留意：**它显示 site-packages 里的路径就说明跑的是安装版，
 改过插件代码不会生效**。脚本在源码存在时会自动把 `<仓库根>/bt_api/bt_api_ctp/src`
@@ -115,18 +138,22 @@ ctp_data\start_collector.bat
 
 | 需求 | macOS / Linux | Windows |
 |------|---------------|---------|
-| 追加参数 | `sh ctp_data/start_collector.sh -v` | `ctp_data\start_collector.bat -v` |
-| 替换默认参数 | `COLLECTOR_ARGS='--once --duration 60' sh ctp_data/start_collector.sh` | `set COLLECTOR_ARGS=--once --duration 60 & ctp_data\start_collector.bat` |
+| 追加采集参数 | `sh ctp_data/start_collector.sh -v` | `ctp_data\start_collector.bat --foreground -v` |
+| 指定采集时长 | `COLLECTOR_ARGS='--once --duration 60' sh ctp_data/start_collector.sh` | `ctp_data\start_collector.bat --foreground --duration 60` |
 | 指定解释器 | `PYTHON=/path/to/python sh ctp_data/start_collector.sh` | `set PYTHON=C:\path\to\python.exe & ...` |
-| 只要日历/分片自检 | `sh ctp_data/start_collector.sh --check-calendar` | 同左 |
-| 夜盘（要求当晚有夜盘） | `COLLECTOR_ARGS='--night --until-close --wait-open' sh ...` | 同左 |
+| 日历自检 | `sh ctp_data/start_collector.sh --check-calendar` | `ctp_data\start_collector.bat --check-calendar` |
+| 常驻调度参数 | `sh ctp_data/service.sh --lead 600` | `ctp_data\start_collector.bat --lead 600` |
+| 夜盘单时段 | `COLLECTOR_ARGS='--night --until-close --wait-open' sh ...` | `ctp_data\start_collector.bat --foreground --night` |
 
 注意事项：
 
 - 默认参数里已有 `--until-close`，而 CLI 不允许 `--until-close` 与 `--duration` 同时出现。
-  要指定时长请用 `COLLECTOR_ARGS` 整体替换。
+  macOS/Linux 要指定时长请用 `COLLECTOR_ARGS` 整体替换；Windows 前台入口显式
+  传入 `--duration` 时会自动省略默认的 `--until-close`。
 - `--night` 是**启动前预检**：只有"当晚确实有夜盘"才继续，周日与节假日前一晚会被直接拒绝。
-- `.env` 只支持简单的 `KEY=VALUE`（`#` 开头为注释，值不要含空格），Windows 批处理尤其如此。
+- Windows 通过 `python-dotenv` 读取 `.env`，支持引号、空格及密码中的 shell 特殊字符；
+  当前进程显式设置的环境变量优先。`COLLECTOR_ARGS` 用于前台单次采集，
+  `COLLECTOR_SERVICE_ARGS` 用于后台常驻调度器。
 - **手工直接跑 CLI 时必须在仓库根目录执行**：`data_root` 是相对路径，脚本会自动 `cd` 到仓库根，
   但绕过脚本时它会解析到当前工作目录。用启动脚本没有这个问题。
 - **账号不需要写进 `collector.yaml`**：取值顺序是 `yaml → 环境变量 → 代码默认值`，
@@ -135,6 +162,14 @@ ctp_data\start_collector.bat
 - `pa.io_thread_count()`（pyarrow 的 IO 线程池）不受 `OMP_NUM_THREADS` 影响，保持等于核数；
   采集路径上没有密集 IO 计算，实测无影响。
 
+合约发现阶段会逐交易所打印结果及汇总。`ctp.instrument_query_timeout_sec` 默认 60 秒，
+表示多久没有收到回调才超时；`instrument_query_max_duration_sec` 默认 600 秒，限制单次
+查询总耗时。查询超时后关闭会话，由常驻服务重新建立连接重试，避免旧请求与新请求交叠。
+只有六个交易所（或配置分片）的查询全部完成，才进入行情订阅，防止静默漏采。
+`ctp.login_timeout_sec` 同时控制交易和行情登录等待，默认 30 秒。
+当前行情前置返回成功登录但请求编号为 0、账号字段为空；采集器兼容这一响应以接收行情。
+兼容响应不提供已关联的账号身份，非空账号不匹配、登录报错或无效交易日仍会被拒绝。
+
 ---
 
 ## 4. 停止
@@ -142,6 +177,7 @@ ctp_data\start_collector.bat
 | 方式 | 效果 |
 |------|------|
 | 前台 `Ctrl+C` | 优雅停机：停订阅 → flush 缓冲 → 压缩收尾 → 写 `report.json` |
+| Windows `stop_collector.bat` | 通过停止标记通知后台服务及采集进程，等数据收尾完成 |
 | 后台 `kill -INT <pid>` | 同上 |
 | `kill -9` | ❌ 硬杀：`report.json` 不会生成；待压缩段文件留在 `.staging/`，由下一次运行认领合并 |
 
@@ -180,12 +216,13 @@ sh ctp_data/service.sh --dry-run      # 只打印调度计划、不采集（部�
 
 | 场景 | 行为 |
 |------|------|
+| 盘中启动 | 立即启动当前时段采集，包括跨午夜夜盘 |
 | 开盘前 15 分钟 | 拉起与 `start_collector.sh` 相同的采集命令（夜盘段自动加 `--night`） |
 | 采集正常结束（exit 0） | 推进到下一个时段 |
 | 非交易日 / 当晚无夜盘（exit 3） | 视为正常跳过，不重试，推进到下一时段 |
 | 采集失败（其他非 0） | 等 `--retry-backoff`（默认 300s）重试，默认最多 2 次，然后放弃本时段 |
 | 配置错误（exit 2） | 立即退出（重试无意义），交给服务管理器告警 |
-| 收到 SIGTERM / SIGINT | 转成 SIGINT 交给正在跑的采集进程，等它 finalize 完再退出 |
+| 停止命令 / SIGTERM / SIGINT | 写入共享停止标记，采集进程完成 finalize 后服务退出 |
 
 可选参数：`--lead 900`（提前秒数）、`--retry 2`、`--retry-backoff 300`、`--config <yaml>`、
 `--log-file <path>`（5MB × 3 轮转）、`--once`（只处理一个时段，便于验证）。
@@ -197,8 +234,8 @@ sh ctp_data/service.sh --dry-run      # 只打印调度计划、不采集（部�
 | Ubuntu | [`deploy/systemd/ctp-tick-collector.service`](deploy/systemd/ctp-tick-collector.service) | 改好 `User`/路径 → `cp` 到 `/etc/systemd/system/` → `systemctl enable --now ctp-tick-collector`；日志 `journalctl -u ctp-tick-collector -f` |
 | Win11 | [`deploy/windows/ctp-tick-collector.xml`](deploy/windows/ctp-tick-collector.xml) | 按文件头注释改 4 处 → `schtasks /Create /XML ctp-tick-collector.xml /TN "ctp-tick-collector"`；日志 `<仓库>\ctp_data\service.log` |
 
-> systemd 单元刻意用 `KillMode=mixed`：只给常驻进程发 SIGTERM，由它转成 SIGINT 交给采集进程。
-> 不要用默认的 `control-group`——那样 SIGTERM 会直接打死采集进程，`finalize()` 不会执行。
+> systemd 单元用 `KillMode=mixed`，给常驻进程时间通知采集进程完成数据收尾。
+> Windows 托管任务使用 `service.bat --foreground`，让任务计划程序持续监控调度器。
 
 ### 5.2 外部调度器（另一种模型）
 

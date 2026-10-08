@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-16"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
   Win11 常驻采集服务（任务计划程序）
 
@@ -6,7 +6,7 @@
 
     1. <UserId>            当前登录用户名，如 DESKTOP-ABC\yunjinqi
     2. <Command>           cmd.exe（保持不动）
-    3. <Arguments>         你的仓库路径，如 /c "D:\code\bt_api_py\ctp_data\service.bat"
+    3. <Arguments>         你的仓库路径；保留前台模式参数以便任务持续监控服务
     4. <WorkingDirectory>  同一个仓库路径，如 D:\code\bt_api_py
 
   导入（管理员 PowerShell / CMD）：
@@ -14,7 +14,7 @@
 
   查看/停止/删除：
     schtasks /Query /TN "ctp-tick-collector" /V /FO LIST
-    schtasks /End   /TN "ctp-tick-collector"
+    ctp_data\stop_collector.bat
     schtasks /Delete /TN "ctp-tick-collector" /F
 
   说明：
@@ -77,7 +77,7 @@
   <Actions Context="Author">
     <Exec>
       <Command>cmd.exe</Command>
-      <Arguments>/c "D:\code\bt_api_py\ctp_data\service.bat"</Arguments>
+      <Arguments>/d /c ""D:\code\bt_api_py\ctp_data\service.bat" --foreground"</Arguments>
       <WorkingDirectory>D:\code\bt_api_py</WorkingDirectory>
     </Exec>
   </Actions>
