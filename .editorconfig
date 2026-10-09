@@ -1,0 +1,17 @@
+# Keep text files readable on Windows, macOS and Linux: declare the encoding so
+# editors never fall back to the system ANSI code page (GBK on zh-CN Windows).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+
+# Markdown carries Chinese prose. A BOM is what makes Windows Notepad, PowerShell 5.1
+# and JetBrains (whose default project encoding follows the system code page) decode it
+# as UTF-8; CommonMark consumers (GitHub, mkdocs, PyPI) strip the BOM before parsing.
+[*.md]
+charset = utf-8-bom
+
+# cmd.exe mis-parses LF-only batch files with multi-line `if (...)` blocks.
+[*.bat]
+end_of_line = crlf

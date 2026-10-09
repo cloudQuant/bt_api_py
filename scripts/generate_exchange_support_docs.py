@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import json
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,12 @@ def replace_marker_block(text: str, marker: str, body: str) -> str:
     return f"{prefix}{begin}\n{body}\n{end}{suffix}"
 
 
+def read_markdown(path: Path) -> tuple[str, bytes]:
+    """Read text with newline translation, keeping the file's own BOM choice."""
+    bom = codecs.BOM_UTF8 if path.read_bytes().startswith(codecs.BOM_UTF8) else b""
+    return path.read_text(encoding="utf-8-sig"), bom
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
@@ -70,12 +77,12 @@ def main() -> int:
     body = render(load_data())
     dirty = False
     for path, marker in TARGETS:
-        original = path.read_text(encoding="utf-8")
+        original, bom = read_markdown(path)
         updated = replace_marker_block(original, marker, body)
         if updated != original:
             dirty = True
             if not args.check:
-                path.write_text(updated, encoding="utf-8")
+                path.write_bytes(bom + updated.encode("utf-8"))
     if args.check and dirty:
         print("Exchange support documentation is out of date.")
         return 1

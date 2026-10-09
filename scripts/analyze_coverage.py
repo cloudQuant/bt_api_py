@@ -170,7 +170,7 @@ def main():
     print(report)
 
     # Save report
-    with open("coverage_analysis.md", "w") as f:
+    with open("coverage_analysis.md", "w", encoding="utf-8-sig") as f:
         f.write(report)
 
     print("\nReport saved to: coverage_analysis.md")

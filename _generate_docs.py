@@ -448,7 +448,7 @@ def main():
 
         # Write README.md
         readme_path = Path(f"bt_api/{pkg}/README.md")
-        readme_path.write_text(readme_content)
+        readme_path.write_text(readme_content, encoding="utf-8-sig")
         print(f"  ✓ Updated README.md")
 
         # Create docs directory
@@ -494,7 +494,7 @@ ticker = feed.get_ticker("{info['symbol_example']}")
 
 See source code in `src/{pkg}/` for detailed API documentation.
 """
-        (docs_dir / "index.md").write_text(index_content)
+        (docs_dir / "index.md").write_text(index_content, encoding="utf-8-sig")
 
         # Create .github/workflows
         workflow_dir = Path(f"bt_api/{pkg}/.github/workflows")
