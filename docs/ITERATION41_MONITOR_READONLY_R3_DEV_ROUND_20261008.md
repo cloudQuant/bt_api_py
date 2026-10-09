@@ -1,4 +1,4 @@
-# Iteration 41 monitor read-only service R3: accepted dev round
+﻿# Iteration 41 monitor read-only service R3: accepted dev round
 
 Date: 2026-10-08
 
