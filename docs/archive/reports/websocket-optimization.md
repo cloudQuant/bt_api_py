@@ -1,4 +1,4 @@
-# Advanced WebSocket Optimization for bt_api_py
+﻿# Advanced WebSocket Optimization for bt_api_py
 
 This document describes the comprehensive WebSocket optimization system implemented for bt_api_py, providing production-grade connection management, error handling, and performance monitoring for 73+ exchanges.
 

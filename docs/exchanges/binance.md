@@ -1,4 +1,4 @@
-# Binance Integration Guide
+﻿# Binance Integration Guide
 
 Complete guide for integrating with Binance exchange.
 

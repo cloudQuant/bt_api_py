@@ -1,4 +1,4 @@
-# Performance Monitoring and Logging System
+﻿# Performance Monitoring and Logging System
 
 This directory contains the comprehensive monitoring and logging system for bt_api_py, designed for production trading environments with real-time observability.
 

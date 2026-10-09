@@ -1,4 +1,4 @@
-# Network-Dependent Tests
+﻿# Network-Dependent Tests
 
 These tests require **real network access**, exchange API credentials, or external
 services (SimNow CTP, Binance, OKX, etc.). They are excluded from the normal

@@ -1,4 +1,4 @@
-# WebSocket Streaming Guide
+﻿# WebSocket Streaming Guide
 
 Real-time data streaming with bt_api_py WebSocket connections.
 

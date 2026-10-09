@@ -1,4 +1,4 @@
-# Documentation maintenance notes
+﻿# Documentation maintenance notes
 
 The active documentation must describe the package currently in this checkout, not a historical plugin count or a removed source-tree layout.
 

@@ -1,4 +1,4 @@
-# BtApi
+﻿# BtApi
 
 `BtApi` is the single public façade. It builds a `DirectBackend` by default; passing `transport_mode=TransportMode.ZMQ` and a `ForwardingConfig` activates the forwarding backend.
 

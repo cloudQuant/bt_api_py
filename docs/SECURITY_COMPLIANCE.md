@@ -1,4 +1,4 @@
-# Security Compliance and Audit Framework
+﻿# Security Compliance and Audit Framework
 
 bt_api_py includes a comprehensive security compliance and audit framework designed to meet the stringent requirements of financial industry regulations including PCI DSS Level 1, SOX 404, MiFID II, GDPR, ISO 27001, NIST Cybersecurity Framework, and SOC 2 Type II compliance.
 

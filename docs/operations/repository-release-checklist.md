@@ -1,4 +1,4 @@
-# Repository Release Checklist
+﻿# Repository Release Checklist
 
 Checklist executed before tagging or publishing a `bt_api_py` release. Each item
 must be verifiable from a machine-readable artifact or a command, not from a

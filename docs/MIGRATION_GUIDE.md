@@ -1,4 +1,4 @@
-# bt_api_py Architecture Modernization
+﻿# bt_api_py Architecture Modernization
 
 This document describes the comprehensive architectural optimization of bt_api_py, transforming it from a monolithic synchronous framework to a modern, asynchronous, microservices-based architecture.
 

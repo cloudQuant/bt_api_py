@@ -1,4 +1,4 @@
-# Exchange Integration Patterns and Specifications
+﻿# Exchange Integration Patterns and Specifications
 
 ## Overview
 

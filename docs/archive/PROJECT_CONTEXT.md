@@ -1,4 +1,4 @@
-# bt_api_py Project Context Analysis
+﻿# bt_api_py Project Context Analysis
 
 ## Executive Summary
 

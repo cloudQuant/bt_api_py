@@ -1,4 +1,4 @@
-# Enhanced Test Architecture for bt_api_py
+﻿# Enhanced Test Architecture for bt_api_py
 
 ## 1. Test Coverage Analysis Tool
 

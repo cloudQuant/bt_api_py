@@ -1,4 +1,4 @@
-# bt_api_py
+﻿# bt_api_py
 
 `bt_api_py` provides one `BtApi` façade over installed exchange plugins and an optional ZeroMQ forwarding boundary. The active documentation describes the current package contract; archived plans and historical venue claims are not release guarantees.
 
