@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ForwardingClient 实时事件缓存上限
+﻿# BMAD 质量迭代计划 - ForwardingClient 实时事件缓存上限
 
 日期: 2026-06-17
 

@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ForwardingClient 断开连接清理事件缓存
+﻿# BMAD 质量迭代计划 - ForwardingClient 断开连接清理事件缓存
 
 日期: 2026-06-17
 

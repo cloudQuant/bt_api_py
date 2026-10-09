@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Forwarding Timeout 参数校验
+﻿# BMAD 质量迭代计划 - Forwarding Timeout 参数校验
 
 日期: 2026-06-17
 

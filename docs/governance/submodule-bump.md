@@ -1,4 +1,4 @@
-# 子模块升级协议（Submodule Bump）
+﻿# 子模块升级协议（Submodule Bump）
 
 > 状态：生效中（迭代03 M5，2026-08-23）。pilot 仓见决策门 D6：
 > `bt_api_base`、`bt_api_binance`、`bt_api_okx`。扩大范围需新决策。

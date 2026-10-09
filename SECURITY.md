@@ -1,4 +1,4 @@
-# Security Policy（安全策略）
+﻿# Security Policy（安全策略）
 
 **语言**: [English](#english) | [中文](#中文)
 

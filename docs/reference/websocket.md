@@ -1,4 +1,4 @@
-# WebSocket 订阅参考
+﻿# WebSocket 订阅参考
 
 WebSocket 实时行情推送功能说明。
 

@@ -1,4 +1,4 @@
-# Contributing to bt_api_py
+﻿# Contributing to bt_api_py
 
 Thank you for your interest in contributing to bt_api_py! This guide will help you get started.
 

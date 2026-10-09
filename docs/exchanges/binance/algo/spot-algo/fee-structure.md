@@ -1,4 +1,4 @@
-# Algo Fee Structure
+﻿# Algo Fee Structure
 
 > 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo/spot-algo)
 

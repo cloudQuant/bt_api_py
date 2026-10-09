@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Forwarding Schema 消息大小边界
+﻿# BMAD 质量迭代计划 - Forwarding Schema 消息大小边界
 
 日期: 2026-06-17
 

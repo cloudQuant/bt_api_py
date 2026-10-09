@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ZmqForwardingRuntime stop_sync 幂等性
+﻿# BMAD 质量迭代计划 - ZmqForwardingRuntime stop_sync 幂等性
 
 日期: 2026-06-17
 

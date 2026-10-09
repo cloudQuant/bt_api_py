@@ -1,4 +1,4 @@
-# 使用 BtApi
+﻿# 使用 BtApi
 
 ## 选择 transport
 

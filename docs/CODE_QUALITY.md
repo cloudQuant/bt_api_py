@@ -1,4 +1,4 @@
-# bt_api_py Code Quality Standards
+﻿# bt_api_py Code Quality Standards
 
 本文档记录项目的代码质量标准、工具链及近期优化，遵循行业最佳实践。
 

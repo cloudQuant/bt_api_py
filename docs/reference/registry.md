@@ -1,4 +1,4 @@
-# 交易所注册表
+﻿# 交易所注册表
 
 `ExchangeRegistry` 是 bt_api_py 实现"即插即用"架构的核心，基于 Registry 设计模式管理所有交易所的 Feed 类、WebSocket 流类和余额处理函数。
 

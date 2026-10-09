@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Backtrader Forwarding 超时配置一致性
+﻿# BMAD 质量迭代计划 - Backtrader Forwarding 超时配置一致性
 
 日期: 2026-06-17
 

@@ -1,4 +1,4 @@
-# Binance Spot API 文档
+﻿# Binance Spot API 文档
 
 > 来源: [binance/binance-spot-api-docs](<https://github.com/binance/binance-spot-api-docs)> (master branch)
 >

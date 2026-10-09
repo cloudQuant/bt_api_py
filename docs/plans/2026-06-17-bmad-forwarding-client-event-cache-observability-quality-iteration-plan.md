@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ForwardingClient 实时事件缓存可观测性
+﻿# BMAD 质量迭代计划 - ForwardingClient 实时事件缓存可观测性
 
 日期: 2026-06-17
 

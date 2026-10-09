@@ -1,4 +1,4 @@
-# 2026-06-17 BMad Residual Runtime Cleanup 迭代计划
+﻿# 2026-06-17 BMad Residual Runtime Cleanup 迭代计划
 
 ## 背景
 

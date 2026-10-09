@@ -1,4 +1,4 @@
-# bt_api_py 开发指南
+﻿# bt_api_py 开发指南
 
 生成日期：2026-03-07  
 项目类型：Python Library  

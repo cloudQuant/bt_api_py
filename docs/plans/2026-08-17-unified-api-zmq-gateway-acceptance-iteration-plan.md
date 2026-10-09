@@ -1,4 +1,4 @@
-# BtApi Single Business API and ZMQ Gateway Acceptance Iteration Implementation Plan
+﻿# BtApi Single Business API and ZMQ Gateway Acceptance Iteration Implementation Plan
 
 > **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 

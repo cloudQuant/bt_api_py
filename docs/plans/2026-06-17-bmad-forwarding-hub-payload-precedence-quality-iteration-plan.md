@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - MarketDataHub 显式字段优先级
+﻿# BMAD 质量迭代计划 - MarketDataHub 显式字段优先级
 
 日期: 2026-06-17
 

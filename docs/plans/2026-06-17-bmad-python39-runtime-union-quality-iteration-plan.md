@@ -1,4 +1,4 @@
-# 2026-06-17 BMad Python 3.9 Runtime Union Quality 迭代计划
+﻿# 2026-06-17 BMad Python 3.9 Runtime Union Quality 迭代计划
 
 ## 背景
 

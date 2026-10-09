@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Backtrader ForwardingStore stats 代理
+﻿# BMAD 质量迭代计划 - Backtrader ForwardingStore stats 代理
 
 日期: 2026-06-17
 

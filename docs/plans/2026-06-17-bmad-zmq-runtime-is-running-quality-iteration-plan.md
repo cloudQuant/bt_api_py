@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ZmqForwardingRuntime is_running 状态属性
+﻿# BMAD 质量迭代计划 - ZmqForwardingRuntime is_running 状态属性
 
 日期: 2026-06-17
 

@@ -1,4 +1,4 @@
-# 项目概览
+﻿# 项目概览
 
 `bt_api_py` 是一个 Python API 门面：它负责加载已安装的交易所插件、维护 legacy Feed 兼容层，并提供可选的 Forwarding/ZMQ 运行时边界。
 

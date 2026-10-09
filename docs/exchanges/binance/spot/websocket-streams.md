@@ -1,4 +1,4 @@
-# Binance Spot WebSocket 行情数据流
+﻿# Binance Spot WebSocket 行情数据流
 
 > 来源: https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md
 

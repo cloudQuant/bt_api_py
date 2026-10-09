@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   提交前请确认：普通贡献目标分支为 dev；master 仅接受 promotion 与 hotfix。
   完整路由表见 docs/governance/branch-model.md
 -->

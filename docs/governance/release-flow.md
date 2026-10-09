@@ -1,4 +1,4 @@
-# 发布流程（Release Flow）
+﻿# 发布流程（Release Flow）
 
 > 状态：本地候选身份合同已实施，外部发布仍为 **NO-GO**（迭代07，2026-09-20）。
 > 本流程由 `.github/workflows/publish.yml` 与 `scripts/ci/release_candidate.py` 机械强制。

@@ -1,4 +1,4 @@
-# Code Quality Improvements Report
+﻿# Code Quality Improvements Report
 
 本文档记录 2025-03 对 bt_api_py 项目执行的代码质量改进及后续建议。
 

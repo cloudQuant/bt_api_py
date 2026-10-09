@@ -1,4 +1,4 @@
-# 2026-06-17 BMad CI Python 3.9 Smoke Quality 迭代计划
+﻿# 2026-06-17 BMad CI Python 3.9 Smoke Quality 迭代计划
 
 ## 背景
 

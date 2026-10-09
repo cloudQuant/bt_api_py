@@ -1,4 +1,4 @@
-# M4 五类草稿 PR 演练证据（2026-08-23）
+﻿# M4 五类草稿 PR 演练证据（2026-08-23）
 
 > 执行人角色：管理员/triage（@cloudQuant）。观察期模式：`PR Governance` report-only。
 > 通过标准（计划 M4/M6）：所有 required 候选 summary 在适用与不适用路径均稳定出现，无 `Waiting for status` 卡死。

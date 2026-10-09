@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - MarketDataHub publish_bar 完整性
+﻿# BMAD 质量迭代计划 - MarketDataHub publish_bar 完整性
 
 日期: 2026-06-17
 

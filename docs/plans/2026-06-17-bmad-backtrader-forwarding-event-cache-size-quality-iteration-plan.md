@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Backtrader ForwardingStore 透传 event_cache_size
+﻿# BMAD 质量迭代计划 - Backtrader ForwardingStore 透传 event_cache_size
 
 日期: 2026-06-17
 

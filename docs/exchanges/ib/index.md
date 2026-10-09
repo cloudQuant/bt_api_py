@@ -1,4 +1,4 @@
-# IBKR Web API Documentation
+﻿# IBKR Web API Documentation
 
 > Source: https://www.interactivebrokers.com/campus/ibkr-api-page/web-api/
 > Last Updated: 2026-02-26

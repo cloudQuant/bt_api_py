@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ZmqForwardingRuntime thread 启动失败清理
+﻿# BMAD 质量迭代计划 - ZmqForwardingRuntime thread 启动失败清理
 
 日期: 2026-06-17
 

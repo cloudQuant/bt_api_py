@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ZmqForwardingRuntime start_sync 失败回滚
+﻿# BMAD 质量迭代计划 - ZmqForwardingRuntime start_sync 失败回滚
 
 日期: 2026-06-17
 

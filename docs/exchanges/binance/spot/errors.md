@@ -1,4 +1,4 @@
-# Binance Spot API 错误码
+﻿# Binance Spot API 错误码
 
 > 来源: https://github.com/binance/binance-spot-api-docs/blob/master/errors.md
 

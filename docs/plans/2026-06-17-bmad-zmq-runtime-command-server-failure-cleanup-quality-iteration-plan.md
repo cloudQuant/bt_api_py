@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - ZmqForwardingRuntime command server 失败回滚覆盖
+﻿# BMAD 质量迭代计划 - ZmqForwardingRuntime command server 失败回滚覆盖
 
 日期: 2026-06-17
 

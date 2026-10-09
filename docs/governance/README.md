@@ -1,4 +1,4 @@
-# 项目治理（Project Governance）
+﻿# 项目治理（Project Governance）
 
 本目录是 bt_api_py 社区协作与发布治理的唯一权威文档集。
 

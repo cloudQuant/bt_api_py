@@ -1,4 +1,4 @@
-# M1 Bootstrap 链路证据（2026-08-23）
+﻿# M1 Bootstrap 链路证据（2026-08-23）
 
 > 执行人角色：管理员（@cloudQuant）。所有 SHA 均可经 `git log` / GitHub API 复核。
 > 对应计划：`docs/迭代计划/迭代03-开源项目治理与社区PR协作/正式迭代计划.md` M1 步骤 1–6。

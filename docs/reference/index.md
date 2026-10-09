@@ -1,4 +1,4 @@
-# API 参考
+﻿# API 参考
 
 bt_api_py 完整 Python API 参考文档，由源代码自动生成。
 

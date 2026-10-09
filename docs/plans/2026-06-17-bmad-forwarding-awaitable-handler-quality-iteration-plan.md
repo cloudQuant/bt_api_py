@@ -1,4 +1,4 @@
-# 2026-06-17 BMad Forwarding Awaitable Handler Quality 迭代计划
+﻿# 2026-06-17 BMad Forwarding Awaitable Handler Quality 迭代计划
 
 ## 背景
 

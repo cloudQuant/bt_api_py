@@ -1,4 +1,4 @@
-# Binance API 文档
+﻿# Binance API 文档
 
 > bt_api_py 对 Binance 交易所的完整支持文档
 

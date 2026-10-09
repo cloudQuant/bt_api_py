@@ -1,4 +1,4 @@
-docs:
+﻿docs:
   en: |
     # {PACKAGE_NAME}
 

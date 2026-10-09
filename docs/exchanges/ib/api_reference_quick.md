@@ -1,4 +1,4 @@
-# IBKR Web API 快速参考
+﻿# IBKR Web API 快速参考
 
 > 最后更新: 2026-02-26
 

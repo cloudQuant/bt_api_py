@@ -1,4 +1,4 @@
-# 拆分方案卡：`bt_api_py/_execution_session.py`
+﻿# 拆分方案卡：`bt_api_py/_execution_session.py`
 
 > 职责定位：执行会话与恢复编排　|　现状 **8251 行**（迭代07 M5-Task14 产出，本轮仅出方案不改代码）
 

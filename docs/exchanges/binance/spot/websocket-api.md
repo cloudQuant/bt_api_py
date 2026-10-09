@@ -1,4 +1,4 @@
-# Binance Spot WebSocket API
+﻿# Binance Spot WebSocket API
 
 > 来源: https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-api.md
 

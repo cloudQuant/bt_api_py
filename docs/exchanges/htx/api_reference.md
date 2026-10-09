@@ -1,4 +1,4 @@
-# HTX (Huobi) API 文档
+﻿# HTX (Huobi) API 文档
 
 ## 文档信息
 

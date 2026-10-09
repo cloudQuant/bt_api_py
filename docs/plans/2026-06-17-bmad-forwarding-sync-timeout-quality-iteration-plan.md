@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Forwarding 同步命令超时边界
+﻿# BMAD 质量迭代计划 - Forwarding 同步命令超时边界
 
 日期: 2026-06-17
 

@@ -1,4 +1,4 @@
-# 分支模型与 PR 路由（Branch Model）
+﻿# 分支模型与 PR 路由（Branch Model）
 
 > 状态：生效中（迭代03，2026-08-23）。本文与 `CONTRIBUTING.md`、根 `README.md`
 > 的贡献章节、`.github/pull_request_template.md` 保持同一口径；发现不一致时以

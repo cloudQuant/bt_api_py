@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Forwarding 消息大小限制公共 API
+﻿# BMAD 质量迭代计划 - Forwarding 消息大小限制公共 API
 
 日期: 2026-06-17
 

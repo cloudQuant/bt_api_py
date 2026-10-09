@@ -1,4 +1,4 @@
-# Binance Spot REST API
+﻿# Binance Spot REST API
 
 > 来源: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md
 

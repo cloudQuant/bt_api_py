@@ -1,4 +1,4 @@
-# SBE Market Data Streams
+﻿# SBE Market Data Streams
 
 > 来源: https://github.com/binance/binance-spot-api-docs/blob/master/sbe-market-data-streams.md
 

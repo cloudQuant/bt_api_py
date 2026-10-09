@@ -1,4 +1,4 @@
-# Binance Algo Trading API 文档
+﻿# Binance Algo Trading API 文档
 
 > 来源: [Binance Algo Trading API](https://developers.binance.com/docs/algo)
 >

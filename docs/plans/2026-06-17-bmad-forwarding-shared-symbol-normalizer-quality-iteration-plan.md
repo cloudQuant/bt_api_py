@@ -1,4 +1,4 @@
-# BMAD 质量迭代计划 - Forwarding 共享 Symbol 归一化规则
+﻿# BMAD 质量迭代计划 - Forwarding 共享 Symbol 归一化规则
 
 日期: 2026-06-17
 

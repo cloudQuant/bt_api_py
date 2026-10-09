@@ -1,4 +1,4 @@
-# ENUM Definitions
+﻿# ENUM Definitions
 
 > 来源: https://github.com/binance/binance-spot-api-docs/blob/master/enums.md
 
