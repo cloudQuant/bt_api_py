@@ -9713,6 +9713,13 @@ class _ExecutionSession:
             result["commission_normalized"] = True
             result["fee_in_account_currency"] = True
             result["commission_source"] = "exchange"
+            # Resolved fee evidence clears any previously sticky order-level
+            # flag: venues whose order responses carry no commission (Binance
+            # REST orders) mark the flag on the first fill and only the trade
+            # stream can resolve it afterwards.  A later unresolved order
+            # poll must not re-flag an order whose fee is already proven.
+            state["fee_resolved"] = True
+            state["fee_unresolved"] = False
             if trade:
                 result["commission"] = result.pop("fee")
         else:
@@ -9721,7 +9728,9 @@ class _ExecutionSession:
                 result.pop(field, None)
             result["commission_source"] = "unresolved"
             result["fee_in_account_currency"] = False
-            if _number(result.get("size" if trade else "filled")) > 0:
+            if _number(result.get("size" if trade else "filled")) > 0 and not state.get(
+                "fee_resolved"
+            ):
                 state["fee_unresolved"] = True
         return result
 
@@ -9851,6 +9860,7 @@ class _ExecutionSession:
                     **update,
                     _EXPLICIT_IDENTITY_FIELDS: sorted(_explicit_identity_fields(state)),
                     "fee_unresolved": state.get("fee_unresolved", False),
+                    "fee_resolved": state.get("fee_resolved", False),
                     "update_origin": origin if isinstance(origin, str) else None,
                 },
                 allow_read_only=allow_read_only_journal,
