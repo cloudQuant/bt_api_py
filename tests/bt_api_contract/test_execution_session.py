@@ -590,6 +590,10 @@ def test_failed_loss_refresh_blocks_summary_and_placement_until_recovered(factor
 def test_loss_snapshot_blocks_placement_while_refresh_is_in_progress(factory):
     api = factory(config={"account_maximum_loss_bps": "100"})
     assert api.get_account_risk_snapshot(initialize_baseline=True)["durable"] is True
+    # The verified record must already be stale for the in-flight refresh to
+    # be a placement blocker: a fresh record with a routine background read
+    # running is not a blocker (it would reject risk-reduction orders).
+    api._execution_session.risk_last_verified_monotonic_ns -= int(10**12)
     api._backend.account_results[VENUE]["details"][0].update(availEq="90", eq="90")
     entered = threading.Event()
     release = threading.Event()
@@ -619,6 +623,37 @@ def test_loss_snapshot_blocks_placement_while_refresh_is_in_progress(factory):
     with pytest.raises(NormalizedApiError, match="account_maximum_loss_breached"):
         api.make_order(VENUE, request("123456789017"), normalized=True)
     assert api._backend.placed == []
+
+
+def test_fresh_risk_record_is_not_blocked_by_a_routine_background_refresh(factory):
+    api = factory(config={"account_maximum_loss_bps": "100"})
+    assert api.get_account_risk_snapshot(initialize_baseline=True)["durable"] is True
+    entered = threading.Event()
+    release = threading.Event()
+    original_get_account = api._backend.get_account
+
+    def blocking_get_account(venue, **kwargs):
+        if venue == BINANCE_VENUE and not entered.is_set():
+            entered.set()
+            assert release.wait(2)
+        return original_get_account(venue, **kwargs)
+
+    api._backend.get_account = blocking_get_account
+    risk_thread, risk_done, _risk_outcome = start_thread(api.get_account_risk_snapshot)
+    assert entered.wait(2)
+
+    # The verified record is still inside its max age: placements (including
+    # risk-reduction orders) must not be rejected merely because the periodic
+    # refresh is running.
+    summary = api.get_execution_summary()
+    assert "account_risk_refresh_in_progress" not in summary["evidence_errors"]
+    assert summary["trading_blocked"] is False
+    assert api.make_order(VENUE, request(), normalized=True)["status"] == "accepted"
+    assert len(api._backend.placed) == 1
+
+    release.set()
+    assert risk_done.wait(2)
+    risk_thread.join(timeout=2)
 
 
 def test_account_risk_snapshot_ttl_blocks_until_a_successful_refresh(factory):

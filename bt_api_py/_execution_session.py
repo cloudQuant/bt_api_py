@@ -8512,17 +8512,26 @@ class _ExecutionSession:
         """Return the current placement blocker for an unverified risk snapshot."""
         if self.config["account_maximum_loss_bps"] is None:
             return None
-        if self.risk_check_in_progress:
-            return "account_risk_refresh_in_progress"
         if self.risk_record is None:
             return None
         verified_at = self.risk_last_verified_monotonic_ns
         if type(verified_at) is not int or verified_at <= 0:
+            # A record exists but has never been verified in this process:
+            # both an in-progress refresh and an explicit resync are blockers.
+            if self.risk_check_in_progress:
+                return "account_risk_refresh_in_progress"
             return "account_risk_snapshot_refresh_required"
         now = time.monotonic_ns() if now_monotonic_ns is None else now_monotonic_ns
         if type(now) is not int or now < verified_at:
             return "account_risk_snapshot_clock_invalid"
         if now - verified_at > self._risk_max_age_ns():
+            # Only a verified-but-stale record needs the refresh to finish
+            # before placements resume.  A fresh verified record with the
+            # periodic refresh merely in flight is not a blocker: rejecting
+            # risk-reduction orders (or marking the summary blocked) because
+            # a routine background read is running is not a risk decrease.
+            if self.risk_check_in_progress:
+                return "account_risk_refresh_in_progress"
             return "account_risk_snapshot_stale"
         return None
 
