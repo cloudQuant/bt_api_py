@@ -2219,6 +2219,159 @@ def test_unknown_never_resubmits_and_queries_by_client_reference(factory, error)
     assert not api.get_execution_summary()["unknown_ids"]
 
 
+def test_inflight_submission_is_not_polled_before_its_outcome_is_known(factory):
+    api = factory()
+    started = threading.Event()
+    release = threading.Event()
+
+    def place_order(venue, req):
+        api._backend.placed.append((venue, req))
+        started.set()
+        if not release.wait(5):
+            raise TimeoutError("test dispatch was not released")
+        return response(
+            client_order_id=req.client_order_id, symbol=req.symbol, side=req.side.value
+        )
+
+    api._backend.make_order = place_order
+    submit_thread, submit_done, submit = start_thread(
+        lambda: api.make_order(VENUE, request(), normalized=True)
+    )
+    try:
+        assert started.wait(2)
+        # The intent state exists but the placement outcome does not. A
+        # reconciliation query now could race the venue and report a
+        # misleading "not found" for a healthy in-flight order.
+        api.poll_event(VENUE)
+        assert api._backend.queried == []
+    finally:
+        release.set()
+        submit_thread.join(5)
+    assert submit_done.is_set() and "error" not in submit
+
+
+def test_not_found_reconciliation_error_clears_once_the_venue_confirms(factory):
+    api = factory()
+    api._backend.place_result = TimeoutError("dispatch outcome unknown")
+    api.make_order(VENUE, request(), normalized=True)
+    api._backend.query_result = NormalizedApiError("query_order", "-2013")
+    due(api)
+    api.poll_event(VENUE)
+    summary = api.get_execution_summary()
+    assert set(summary["reconciliation_errors"]) == {request().client_order_id}
+    assert summary["trading_blocked"] is True
+    # The venue stream then resolves the order it previously did not know:
+    # the stale "not found" observation must not keep blocking execution.
+    update = api._execution_session.event(
+        VENUE,
+        {
+            "kind": "order",
+            "symbol": SYMBOL,
+            "client_order_id": request().client_order_id,
+            "order_id": "28625225585",
+            "status": "completed",
+            "terminal_confirmed": True,
+            "filled": 2,
+            "avg_price": 60001,
+            "side": "buy",
+        },
+    )
+    assert update["terminal_confirmed"] is True
+    summary = api.get_execution_summary()
+    assert summary["reconciliation_errors"] == {}
+
+
+def _completed_order_event(client_id="123456789012", **changes):
+    row = {
+        "kind": "order",
+        "symbol": SYMBOL,
+        "client_order_id": client_id,
+        "order_id": "123",
+        "status": "completed",
+        "terminal_confirmed": True,
+        "filled": 2,
+        "avg_price": 60000,
+        "side": "buy",
+    }
+    row.update(changes)
+    return row
+
+
+def _fee_trade_event(client_id="123456789012", fee="0.1", trade_id="trade-1", **changes):
+    row = {
+        "kind": "trade",
+        "symbol": SYMBOL,
+        "client_order_id": client_id,
+        "order_id": "123",
+        "trade_id": trade_id,
+        "fee": fee,
+        "fee_currency": "USDT",
+        "size": 2,
+    }
+    row.update(changes)
+    return row
+
+
+def test_reopened_journal_reconstructs_resolved_fee_evidence(factory, tmp_path):
+    path = tmp_path / "fee-reopen.jsonl"
+    first = factory(path)
+    first.make_order(VENUE, request(), normalized=True)
+    session = first._execution_session
+    session.event(VENUE, _completed_order_event())
+    assert first.get_execution_summary()["fee_unresolved_orders"] == [
+        request().client_order_id
+    ]
+    session.event(VENUE, _fee_trade_event())
+    assert first.get_execution_summary()["fee_unresolved_orders"] == []
+    first.close()
+
+    second = factory(path)
+    assert second.get_execution_summary()["fee_unresolved_orders"] == []
+    second.close()
+
+
+def test_legacy_trade_rows_with_exchange_commission_reconstruct_resolved_fees(
+    factory, tmp_path
+):
+    path = tmp_path / "fee-legacy.jsonl"
+    first = factory(path)
+    first.make_order(VENUE, request(), normalized=True)
+    session = first._execution_session
+    session.event(VENUE, _completed_order_event())
+    session.event(VENUE, _fee_trade_event())
+    first.close()
+
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        row = json.loads(line)
+        if row.get("event") == "trade":
+            # Journals written before the flags were persisted on trade rows.
+            row.pop("fee_unresolved", None)
+            row.pop("fee_resolved", None)
+        rows.append(row)
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    second = factory(path)
+    assert second.get_execution_summary()["fee_unresolved_orders"] == []
+    second.close()
+
+
+def test_reopened_journal_keeps_unresolved_fee_flag_without_a_resolving_trade(
+    factory, tmp_path
+):
+    path = tmp_path / "fee-unresolved.jsonl"
+    first = factory(path)
+    first.make_order(VENUE, request(), normalized=True)
+    first._execution_session.event(VENUE, _completed_order_event())
+    first.close()
+
+    second = factory(path)
+    assert second.get_execution_summary()["fee_unresolved_orders"] == [
+        request().client_order_id
+    ]
+    second.close()
+
+
 @pytest.mark.parametrize(
     "result",
     [

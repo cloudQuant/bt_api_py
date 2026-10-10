@@ -4965,6 +4965,9 @@ class _ExecutionSession:
                             attempt_key = self._runtime_order_key(venue, row, target_runtime_id)
                             self._runtime_action_attempts[attempt_key] += 1
                 state = self._state(venue, row, create=True)
+                # Restart reconciliation must start promptly: hydrated states
+                # have no in-flight submission to race.
+                state["next_poll"] = 0.0
                 self._identity(
                     state,
                     {
@@ -5008,7 +5011,17 @@ class _ExecutionSession:
                             binding["status"] = "terminal" if state["terminal"] else "unresolved"
                     if state["terminal"]:
                         self.historical_unknown.difference_update(state["recovery_ids"])
-                if row.get("fee_unresolved"):
+                if row.get("fee_resolved") or (
+                    event in {"trade", "trade_update", "order_update"}
+                    and row.get("commission_source") == "exchange"
+                ):
+                    # Reconstruct the exact live mutations: a resolved fee
+                    # clears the sticky order-level flag.  ``commission_source
+                    # == "exchange"`` covers trade rows written before the fee
+                    # flags were persisted on them.
+                    state["fee_resolved"] = True
+                    state["fee_unresolved"] = False
+                elif row.get("fee_unresolved"):
                     state["fee_unresolved"] = True
             for state in self.orders.values():
                 if not state.get("terminal"):
@@ -9570,7 +9583,10 @@ class _ExecutionSession:
                 "side": row.get("side"),
                 "size": row.get("size", row.get("quantity")),
                 "terminal": False,
-                "next_poll": 0.0,
+                # Do not poll before the placement outcome exists: a query
+                # racing an in-flight submission can report "not found" and
+                # poison the reconciliation state of a healthy order.
+                "next_poll": time.monotonic() + self.config["order_poll_interval"],
                 "strategy_id": row.get("strategy_id"),
                 "strategy_identity_sha256": row.get("strategy_identity_sha256"),
                 "execution_arm_proof_sha256": row.get("execution_arm_proof_sha256"),
@@ -9872,6 +9888,13 @@ class _ExecutionSession:
                 "terminal_confirmed": False,
                 "journal_error": True,
             }
+        if not update.get("execution_unknown") and (
+            str(update.get("order_id") or "") or update.get("terminal_confirmed") is True
+        ):
+            # A venue-authored update proves this order exists; an earlier
+            # reconciliation query that raced the in-flight submission (for
+            # example a "not found" answer) is stale evidence.
+            state.pop("reconciliation_error", None)
         state["terminal"] = bool(update.get("terminal_confirmed"))
         state["last_update"] = dict(update)
         state["_last_update_origin"] = origin
@@ -10730,6 +10753,11 @@ class _ExecutionSession:
                     "trade",
                     {
                         **update,
+                        # Persist the order-level fee flags together with the
+                        # trade that resolved them so a restart can reconstruct
+                        # the cleared state instead of resurrecting the flag.
+                        "fee_unresolved": state.get("fee_unresolved", False),
+                        "fee_resolved": state.get("fee_resolved", False),
                         _EXPLICIT_IDENTITY_FIELDS: sorted(_explicit_identity_fields(state)),
                     },
                 )
