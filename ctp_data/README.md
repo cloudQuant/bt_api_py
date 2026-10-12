@@ -23,6 +23,31 @@
 
 ---
 
+## 0. 长期运行一条命令（速查）
+
+在**仓库根目录**（`D:\bt_api_py`）执行，启动常驻调度器后采集自动覆盖每个交易日的夜盘与白盘，
+命令返回后可关闭终端：
+
+```bat
+:: Windows —— 后台常驻（隐藏进程，开机后随时可执行，重复运行只会返回已有服务状态）
+ctp_data\start_collector.bat
+
+:: 配套：查看状态与 PID / 优雅停止（等刷盘、压缩、report.json 完成）/ 重启
+ctp_data\start_collector.bat --status
+ctp_data\start_collector.bat --stop
+ctp_data\start_collector.bat --restart
+```
+
+```bash
+# macOS / Linux —— 等价入口
+sh ctp_data/service.sh
+```
+
+启动前先用 `ctp_data\start_collector.bat --check-calendar` 自检（不连行情）；
+想只跑一个时段做调试用 `--foreground`。参数含义、平台托管自启动、外部调度器方案见第 2 节和第 5 节。
+
+---
+
 ## 1. 首次准备
 
 ```bash
