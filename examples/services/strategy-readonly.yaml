@@ -1,0 +1,55 @@
+# Offline configuration example. References must be resolved by an authorized deployment.
+config_schema_version: 6
+process_role: strategy_client
+registration:
+  strategy_ref: strategy-s001
+clients:
+  gateway:
+    config_schema_version: 1
+    settings:
+      bindings:
+        - mount: store.market
+          service_id: market-main
+          instance_id: market-gateway
+          scope_ref: public-market-access
+          transport_ref: market-zmq
+        - mount: store.account
+          account_ref: account-a01
+          service_id: account-a01
+          instance_id: account-gateway
+          scope_ref: account-a01
+          transport_ref: account-zmq
+  monitor:
+    config_schema_version: 1
+    settings:
+      bindings:
+        - mount: runtime.telemetry
+          service_id: monitor-main
+          instance_id: operations-monitor
+          scope_ref: current-strategy
+          transport_ref: monitor-zmq
+          required: false
+      options:
+        heartbeat_interval_seconds: 5
+communication:
+  config_schema_version: 1
+  profiles:
+    market-zmq:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_connect: tcp://127.0.0.1:7600
+        market_connect: tcp://127.0.0.1:7602
+      security_profile_ref: local-market-access
+    account-zmq:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_connect: tcp://127.0.0.1:7601
+      security_profile_ref: local-account-a01
+    monitor-zmq:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_connect: tcp://127.0.0.1:7603
+      security_profile_ref: local-monitor-access

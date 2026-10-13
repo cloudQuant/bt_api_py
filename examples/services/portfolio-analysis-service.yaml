@@ -1,0 +1,27 @@
+# Offline configuration example. References must be resolved by an authorized deployment.
+service_config_schema_version: 1
+process_role: service
+service_id: portfolio-analysis
+scope_ref: authorized-analysis-portfolios
+transport_ref: analysis-listener
+registration_policy_ref: analysis-grants
+service_requirements_ref: analysis-readiness
+components:
+  risk:
+    config_schema_version: 2
+    settings:
+      instance_id: analysis-risk
+      bind_ports: [service.risk_analysis]
+      options:
+        role: portfolio_analytics
+        model_profile_ref: standard-analysis-v1
+        allowed_source_modes: [research, imported, paper]
+communication:
+  config_schema_version: 1
+  profiles:
+    analysis-listener:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_bind: tcp://127.0.0.1:7604
+      security_profile_ref: analysis-server

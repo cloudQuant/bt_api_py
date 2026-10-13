@@ -1,0 +1,26 @@
+# Offline configuration example. References must be resolved by an authorized deployment.
+client_config_schema_version: 1
+process_role: application_client
+registration:
+  application_ref: ai-for-investor
+clients:
+  risk:
+    config_schema_version: 1
+    settings:
+      bindings:
+        - mount: application.risk_analysis
+          service_id: portfolio-analysis
+          instance_id: analysis-risk
+          portfolio_ref: research-p01
+          scope_ref: research-p01-analysis
+          transport_ref: analysis-zmq
+          required: true
+communication:
+  config_schema_version: 1
+  profiles:
+    analysis-zmq:
+      backend: zmq
+      config_schema_version: 1
+      endpoints:
+        rpc_connect: tcp://127.0.0.1:7604
+      security_profile_ref: afi-analysis-access

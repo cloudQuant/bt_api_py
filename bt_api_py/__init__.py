@@ -167,22 +167,26 @@ from bt_api_py.cross_venue import (
     round_trip_cost,
     signed_funding_cashflow,
 )
-from bt_api_py.forwarding import (
-    MAX_MESSAGE_BYTES,
-    BtApiForwardingAdapter,
-    ForwardingClient,
-    ForwardingRuntime,
-    InMemoryForwardingBus,
-    MarketDataHub,
-    MarketEvent,
-    OrderCommand,
-    OrderRouter,
-    PrivateEvent,
-    SQLiteStateStore,
-    ZmqForwardingClient,
-    ZmqForwardingRuntime,
+
+# Legacy exports remain available until the explicit migration boundary, but
+# ordinary clients/config validation must not import their ZMQ implementation.
+_FORWARDING_EXPORTS = frozenset(
+    {
+        "MAX_MESSAGE_BYTES",
+        "BtApiForwardingAdapter",
+        "ForwardingClient",
+        "ForwardingRuntime",
+        "InMemoryForwardingBus",
+        "MarketDataHub",
+        "MarketEvent",
+        "OrderCommand",
+        "OrderRouter",
+        "PrivateEvent",
+        "SQLiteStateStore",
+        "ZmqForwardingClient",
+        "ZmqForwardingRuntime",
+    }
 )
-from bt_api_py.gateway import GatewayClient
 
 _LIGHT_IMPORT = str(_os.getenv("BT_API_PY_LIGHT_IMPORT") or "").strip().lower() in {
     "1",
@@ -215,6 +219,11 @@ _SIMNOW_EXPORTS = frozenset(
 
 
 def __getattr__(name: str):
+    if name in _FORWARDING_EXPORTS or name == "GatewayClient":
+        module_name = "bt_api_py.gateway" if name == "GatewayClient" else "bt_api_py.forwarding"
+        value = getattr(_import_module(module_name), name)
+        globals()[name] = value
+        return value
     if name == "BtApi":
         from bt_api_py.bt_api import BtApi as _BtApi
 
