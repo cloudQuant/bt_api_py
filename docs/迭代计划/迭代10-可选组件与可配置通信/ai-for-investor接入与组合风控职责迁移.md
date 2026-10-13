@@ -4,6 +4,8 @@
 
 本次只读审阅 `D:/source_code/ai-for-investor` 当前公开源码。该 checkout 在 master，HEAD 为 `0203154fa7cb831f45b5213fa3666a3983198e7d`，存在大量原有索引/工作区差异；以下链接是可见源码观察，不证明它们等于干净 HEAD。没有修改其文件、分支或索引，没有读取真实配置、凭据、数据库，也没有运行服务或策略。后续开发遵守已有 dev 工作区、小轮验收和逐仓提交原则，实施前先核定 AFI 原有工作区状态。
 
+本次整体复核的完整仓库定位统一见正式计划第 2 节；第 5.6 节是角色/端口/配置的唯一合同入口，第 11.3 节是发行与切换的唯一执行顺序。本文件补充 AFI 产品语义，不另定义一套配置和授权规则。
+
 ## 1 决策与边界
 
 建议把 ai-for-investor（下称 AFI）定位为投资工作台和面向前端的应用后端：负责组合定义、研究/AI 交互、身份、审批、展示和应用流程；依赖四包提供共享领域服务。四个包分别可用，不要求用户为查看一个行情页面同时部署四个服务，也不把服务实现在 AFI 里再保留一份。
@@ -11,12 +13,14 @@
 | 模块 | 权威职责和数据 | AFI 保留什么 |
 |---|---|---|
 | `bt_api_gateway` | provider 会话/凭据使用、合约目录、共享行情订阅、账户原始事实和读取快照、恢复/查询调度 | 独立 Gateway 管理页、用户订阅偏好和有权限的控制请求；HTTP/WS 展示适配 |
-| `bt_api_execution` | 订单意图、订单/成交状态、策略归属/虚拟持仓、未知结果/对账、受支持订单组进度 | 交易工作台、手工/AI 目标确认、订单投影和应用流程；不另建 OMS |
-| `bt_api_risk` | 账户最终准入与预留、组政策、权威政策版本/静态预算；独立 worker 的通用估值/收益及组合风险分析 | 风险工作台、组合成员定义、政策草稿/审批交互、报告解释；不保留本地备用规则或预览计算引擎 |
+| `bt_api_execution` | 订单意图、订单/成交状态、策略/人工 book 归属、未知结果/对账、受支持订单组；托管 paper 使用隔离模拟端口 | 交易工作台、手工/AI 目标确认、订单投影和应用流程；不另建 OMS 或长期模拟成交账本 |
+| `bt_api_risk` | 账户风险政策准入与预留、组政策、权威政策版本/静态预算；独立 worker 的通用估值/收益及组合风险分析 | 风险工作台、组合成员定义、政策草稿/审批交互、报告解释；不保留本地备用规则或预览计算引擎 |
 | `bt_api_monitor` | 遥测/业务事件消费、告警规则/去重/状态、运行健康、授权控制请求与结果关联 | 告警展示、用户投递偏好和确认操作；不以应用轮询再维护一套权威告警引擎 |
 | AFI 自有业务 | 用户/权限、研究/回测任务、投资目标、组合目录、原始手工/批量导入记录及来源、审批与应用审计 | 继续属于 AFI；不得将用户历史数据随运行器删除 |
 
 本期不增加第五个“portfolio 服务包”。展示组合是业务目录，账户事实来自 G、真实订单与归属来自 E、派生估值及风险来自 R，M 消费这些事实。通用估值/收益内核在 R 内独立分层并使用可选分析依赖，不能塞到账户派发循环里。以后只有多个产品确实需要共享独立投资账簿权威时，再评估单独的组合会计服务。
+
+E/合格 OMS 的账户 owner 始终负责基础授权、参数/能力检查及最终派发；R 启用后提供必须满足的额外风险准入和预留，不能因为客户端未申请 R 查询就绕过。AFI 不单独增加“所有写操作必须部署 R”的隐含规则；需要风险保护的部署显式声明该政策和必需依赖，无 R 的入口必须明确不提供共享风险限额保证。M 未部署时对应监控/告警功能不可用，不影响 owner 自身订单事实持久化。
 
 投资信号、资产配置优化、AI 对话、Brinson/Fama-French 等专门绩效研究不因名称含“风险”就全部移入 R。AFI 可保留这些产品特有工作流/研究编排及暂未由 R 提供的专属模型；一旦同一模型由 R 提供，就迁出计算实现，AFI 只留输入编排、权限、解释和展示。共享行情、估值/收益基线和已迁移风险模型只能有一份实现；使用经过验证且版本固定的数值库，不重复手写一套数学内核。当前 AFI 已声明 [fincore 依赖](D:/source_code/ai-for-investor/src/backend/pyproject.toml:36)，是否复用某个具体算法需逐项核对数值语义。
 
@@ -41,6 +45,8 @@ NautilusTrader 将订单/持仓执行、风险检查和组合派生统计分开�
 
 目前 live `/portfolio` 工作区聚合与 PortfolioLedger 是不同数据面，没有据此确认已存在通用多账户/策略 membership 目录；模型 source_type 字符串也不证明来源隔离。分析结果的 ok/degraded 是报告状态。sizing 的 [API 默认 5 个观测](D:/source_code/ai-for-investor/src/backend/app/api/risk_analytics.py:165)与 [内核默认 30 个](D:/source_code/ai-for-investor/src/backend/app/services/risk_analytics/position_sizing.py:12)还可能使入口结果不一致，迁移时统一显式参数而非保留隐式差异。
 
+此次再核对到实际 paper 执行路径：[DirectOrderService](D:/source_code/ai-for-investor/src/backend/app/services/direct_order_service.py:28)调用 [PaperTradingService.submit_order](D:/source_code/ai-for-investor/src/backend/app/services/paper_trading_service.py:853)，后者模拟成交并更新订单/持仓/现金；[PaperRuntimeService](D:/source_code/ai-for-investor/src/backend/app/services/paper_runtime_service.py:570)另有 pre-order、submit_with_pretrade_risk 和 post-fill 检查，[scheduler](D:/source_code/ai-for-investor/src/backend/app/services/paper_runtime_scheduler.py:37)在应用进程创建任务。限定源码检索未见前述纸面下单入口调用 submit_with_pretrade_risk，不能因为有 gate 方法就宣称全部下单经过它。该实际路径纳入 AFI13，不能只迁移纸面规则页面。
+
 ## 3 部署、配置和安全委托
 
 ```mermaid
@@ -61,15 +67,34 @@ flowchart LR
 
 图表示逻辑职责。首版账户 G 私有 worker 与 E/R admission 同进程，公共行情 hub、分析 worker、M 可分别部署；独立 G 只读部署仍可用。R 的账户、组政策、`portfolio_analytics` 角色采用固定白名单工厂配置，科学计算与同步 admission 分进程，避免大任务阻塞下单。政策权威目录是 R 的持久化职责，首版固定唯一管理者，不需要新增分布式共识/自动主备。
 
+R 三种执行/分析角色的具体名称为 account_admission、group_policy、portfolio_analytics；policy_catalog 是控制面角色，账户/组按类型引用不可变政策版本，详见主计划第 5.6 节。目录不参与每单 RPC；owner 已确认的有效政策持久保留，目录不可达不自动取消该政策，政策失效/过期或必要事实不满足则停止新增。分析失败不把已启用账户 risk 解释成已关闭。
+
 AFI 后端只安装 SDK/base 和选择的 transport；`application_client` 是应用代理身份，不能伪装成任意 strategy 注册。在 P9A 固定接口集合：market/account read、order query/intent、risk analysis、policy control、monitor query、owner control；每个 binding 指向服务/实例/scope/transport，不复制 provider 连接配置。浏览器继续 HTTPS/WS，不直接接 ZMQ。服务器 components 清单仍表示显式部署即激活，未列出能力不会被应用访问自动启动。
 
-普通研究、回测和导入记录管理不要求四包。使用组合风险分析时才要求相应分析服务；可只部署分析 worker 并提交 imported/research 输入，不登录交易账户。没有配置时 UI 显示“未配置”，不可达显示“不可用”，过期显示“陈旧”，权限不足显示“无权限”；已有 AFI 本地模型迁出后不再暗中回退。只配置 Gateway 可读取市场/账户，但没有 E/R 合同不开放受管交易。
+使用 SDK client_config_schema_version: 1，而不解析 Backtrader 的根 v6/Cerebro 配置；主计划提供独立 AFI/分析服务示例。服务取数/组协调出站调用配置在服务根 clients 中，按 service principal 授权。AFI worker 的客户端会话与策略 run 分开；人工交易使用稳定 manual_book_ref，对应 E 的归属账和 R 预算，应用代策略控制保留真实 actor，不抢占策略单活代次。所有写入/控制能力都显式申请，不能把写动作装进只读 risk/monitor 查询接口。
+
+普通研究、回测和导入记录管理不要求四包。使用组合风险分析时才要求相应分析服务；可只部署分析 worker 并提交 imported/research 输入，不登录交易账户。没有配置时 UI 显示“未配置”，不可达显示“不可用”，过期显示“陈旧”，权限不足显示“无权限”；已有 AFI 本地模型迁出后不再暗中回退。只配置 Gateway 可读取市场/账户；受管交易另外要求 E/合格 OMS 的写闭环，以及部署明确选定的风险政策合同。
 
 权限需要贯穿应用和服务：AFI 先校验用户对组合、账户、策略的对象权限，再用可信应用身份加有界委托发送请求；服务校验签发方、真实操作者、动作/scope、有效期和防重放信息。不能只靠自报 user_id、ROUTER identity、前端按钮或拥有一个应用主密钥取得全部账户。现有 [workspace 服务用户检查](D:/source_code/ai-for-investor/src/backend/app/services/workspace_service.py:567)可复用思路；[部分 Gateway API](D:/source_code/ai-for-investor/src/backend/app/api/live_trading/api.py:147)虽有登录依赖，调用 manager 时仍需补上对象级作用域。
 
 部署端管理 provider secret_ref，只有实际 session owner 解析。AFI 不再持久化 provider 密钥副本或向策略环境复制，浏览器拿不到可解析秘密的权限；迁移覆盖 [现有 credential JSON 写入路径](D:/source_code/ai-for-investor/src/backend/app/services/live_trading/manager.py:978)，其底层采用 [owner-only 文件权限](D:/source_code/ai-for-investor/src/backend/app/services/live_trading/manager.py:220)，不据此声称加密。本轮不操作现有秘密。IB Client Portal 等外部程序和人工登录交互仍属部署/产品流程，登录界面可在 AFI 发起；会话事实归 G。需要长期运行的外部程序由部署端管理，不依赖 AFI worker 生命周期。
 
 AFI 的 [ws_gateway.py](D:/source_code/ai-for-investor/src/backend/app/services/ws_gateway.py:16)是浏览器主题转发，可保留并强化逐用户授权、有界队列/重连基线；它不是交易 Gateway。该类自身 validator 只检查 token 非空，JWT 身份和 topic ACL 在 [topics 入口](D:/source_code/ai-for-investor/src/backend/app/api/data/topics.py:97)执行，不能把转发类当独立认证边界。应用失联不改变已授权策略的订单路由，不要求已接管的每个订单再次同步调用 AFI；审批授权须有服务端可验证的有限寿命和撤销语义。
+
+### 3.1 普通回测、托管 paper 和真实账户
+
+| 场景 | 撮合/记账责任 | 组件依赖及隔离 |
+|---|---|---|
+| 普通 Backtrader 离线回测/本地模拟 | 既有模拟 Broker、commission scheme、Analyzer | 无需四包/网络；AFI 只编排研究任务。框架内的模拟算法不因抽取共享服务而删除 |
+| 手工/批量导入账本 | AFI 保留原始记录；R 按需给出派生报告 | 不产生订单，无 E 依赖；缺分析服务仅关闭共享分析功能 |
+| AFI 持续托管 paper 账户 | E 的独立 paper/simulator adapter 负责模拟撮合、订单/持仓/现金/费用及恢复；模拟模型版本固定 | E 是此功能的显式依赖；E-only 可下单，若选 R 则 pre-trade 及 post-fill 事实都在实际执行链，若选 M 则接收事件；行情可来自独立只读 G，绝无 live 写会话 |
+| venue demo/testnet 与 live | 对应环境的真实 provider port/账户 owner | demo 是外部测试账户，不是本地 paper；分别验证授权与实际行为，不能用 paper fill 证明 provider PASS |
+
+托管 paper 从 AFI 抽取到 E 的模拟端口，以现有行为作迁移基线，不在本期新增复杂撮合算法。模拟账户/执行域、账户 ID、订单号、journal、预算、游标及授权与 live 完全分开；数据源可读取 live 公共行情，但不能因此取得 live 账户写权。无 E 时该托管功能明确不可用，不偷偷退回 AFI 模拟器；普通离线回测仍可运行。
+
+模拟事实生产、快照和撮合周期由对应固定 paper owner 托管，AFI 多 worker 不各自启动一份。AFI 保留实验/工作区状态、启停请求、复盘日程和用户界面，使用服务报告更新产品记录；策略进程由已有部署/进程管理入口启动，AFI 不兼任账户 owner。停止实验不清除未决模拟订单，paper 重启先恢复账本。无需在本期建设新的调度平台。
+
+旧 paper 账本按主计划第 11.3 节保留订单/实验身份、现金/费用/成本和未决状态并核对守恒，不能通过重置初始资金掩盖迁移差异；无法等价转换时保留只读历史并拒绝连续运行，新实验明确另建。未配置 M 不影响 E 自身持久订单事实；事件按有界保留期管理，后接入 M 不声称补齐过期历史。AFI12/AFI13 分别覆盖数据保留和实际交易入口。
 
 ## 4 组合风控产品如何组织
 
@@ -96,6 +121,8 @@ AFI 的 [ws_gateway.py](D:/source_code/ai-for-investor/src/backend/app/services/
 - 快照携带各来源的 as_of、接收时间、cursor/epoch、覆盖范围、账户/订单对账状态，以及价格、FX、合约元数据版本。跨账户聚合不假装原子同一时刻；登记最大允许时间偏差，超界报 degraded 或拒绝依赖判断。
 - research/imported/paper/live 不混合冒充实盘总账。组合报告可比较多种来源，但不得把模型价格、日志缓存或手工导入视为账户权威；缓存必须保留来源与陈旧状态。
 
+G 的策略可见流只是权限过滤；E/合格 OMS 才提供成交归属与人工 book/策略持仓，R 只派生报告、M 只观察。E 原币成本/费用/已实现 PnL 与 R 报告币估值/收益分别标口径；各源保留自己的 cursor/epoch，不把联合页面写成跨库原子快照。预算不是真实现金，页面“可交易金额”必须说明是账户资金、策略记账余额还是参考额度。
+
 ### 5.2 数值和模型
 
 | 能力 | 合同及本期优先级 |
@@ -113,6 +140,8 @@ AFI 的 [ws_gateway.py](D:/source_code/ai-for-investor/src/backend/app/services/
 
 分析请求固定 input_snapshot_id/digest、组合版本、模型版本及参数，返回 job_id、状态、覆盖率/数据质量、结果和原因。采用有界队列、按用户/组合的并发配额、超时/取消及结果保留策略；重算产生新报告，旧报告保留。分析 job_id 的幂等不能替代交易 intent_id 的幂等。同步准入需要的风险字段必须有独立可验证的新鲜度合同，不能直接相信历史报告。
 
+数据传输遵循主计划的有界上传/分页合同，大数据不能塞进超过 wire 上限的单条消息；输入引用由服务签发并校验租户/组合，不接用户任意文件路径或 URL。实时分析只通过已授予的 G/E 取数端口，模型执行不创建 provider 会话。
+
 ### 5.3 政策、预算和控制
 
 政策流程为 draft → reviewed/approved → published → 每账户 active/rejected/pending。草稿和审批交互在 AFI，权威不可变版本、授权校验和生效记录在 R；保存操作者、变更前后值、理由、适用范围、版本和时间。首版按受控重启/维护窗口激活，服务恢复后确认实际版本，避免与主计划“不做热更新”的边界冲突。不同账户允许暂时不同版本，页面如实展示。
@@ -123,7 +152,7 @@ AFI 的 [ws_gateway.py](D:/source_code/ai-for-investor/src/backend/app/services/
 
 这种分配约束的是可授予额度，不保证市场价格变化后组合市值风险永不越限。异步 VaR/相关性和 M 告警只提供观测/处置触发；跨账户冻结/减险可能部分成功，不承诺同一时刻完成。动态全局风险原子准入、自动跨账户资金划拨另行设计，不能混入本期的“组合支持”。
 
-手工单、AI 确认目标、策略单共用账户唯一入口。AFI 提交稳定 intent_id、目标/审批版本、scope、有效期和真实操作者；E 持久化并检查同 ID 同内容，断线或 AFI 重启按原 ID 查询。目标转订单须明确账户/策略归属、当前持仓和已在途订单，目标过期/事实不完整时重新评估，不机械重复补足。审批是必要业务条件，不替代 R 最终准入；AI 不能自批加杠杆或解除冻结。
+手工单、AI 确认目标、策略单共用账户唯一入口。AFI 提交稳定 intent_id、目标/审批版本、scope、有效期和真实操作者；E 持久化并检查同 ID 同内容，断线或 AFI 重启按原 ID 查询。目标转订单须明确账户/策略归属、当前持仓和已在途订单，目标过期/事实不完整时重新评估，不机械重复补足。审批是必要业务条件，不替代 owner 基础检查和已启用的 R 风险准入；AI 不能自批加杠杆或解除冻结。
 
 一次用户操作先生成并持久保留 client_operation_id，HTTP 重试沿用同一 Idempotency-Key。AFI 在发送 RPC 前，以 tenant/操作者/操作键的唯一约束持久化规范化内容摘要及 intent_id 映射；多 worker 并发只能得到同一映射，同键不同内容拒绝。该表属于应用请求记录，不维护第二套订单状态机；服务受理后仍以 E journal 为准。新业务决定才创建新操作键，不能把未知请求当作新决定重发。
 
@@ -138,6 +167,7 @@ AFI 的 [ws_gateway.py](D:/source_code/ai-for-investor/src/backend/app/services/
 | `services/gateway/{runtime,manual,launch_builder,health}`、manager 内 Gateway runtime/会话状态 | G 服务 + SDK 代理，交易控制转 E/R | 保留 API/页面/DTO 映射；删除本地会话 owner、旧 GatewayRuntime 导入与解析失败回 direct；IB 浏览器登录说明和部署请求可保留 |
 | `quote_service` 的 provider 订阅/自动连接 | G 共享订阅与合约数据 | 保留 watchlist/用户偏好和浏览器扇出；删除重复行情连接与账户登录 |
 | `direct_order_service`、manager 的订单/批量撤平控制 | E 意图/查询/有界控制端口 | 保留确认交互、应用请求映射；删除 raw ZMQ/provider 派发，现有函数名可作为薄 API facade，不能藏第二套执行器 |
+| `paper_trading_service`、`paper_trading_positions`、PaperRuntimeService 的 pre/post-fill 规则、paper_runtime_scheduler 的事实生产 | E paper adapter 管模拟撮合和账本，选用 R/M 时分别接规则/告警；固定 paper owner 产快照 | AFI 保留实验/复盘编排和 SDK/API 适配，删除长期模拟成交/现金账本权威及重复规则任务；按实际手工/AI/策略入口验证，不只测试 gate 方法 |
 | `live_trading/service.py` 的 CCXTStore/Data/后台策略路径 | 先核对活动消费者，连接/订单分别接 G/E；策略进程编排仍可属于 AFI | 静态搜索未发现 submit_live_strategy 的活动调用，不据此直接恢复它；若无消费者则退役，若保留须同样迁移，不留旁路 |
 | RiskControlService、TradingRiskGuard 通用规则/计数、RiskGateService 的重复市场风险判断 | R 准入/政策；风险事件接 M | 保留 AI 信心解释、人审和研究就绪业务规则；删除共享风险公式、内存额度和本地备用预览；检查 paper risk rule 实际入口一起迁移 |
 | `risk_analytics/*`、`portfolio_ledger_analytics` 共用风险/估值/收益计算、portfolio API 重复聚合 | R 独立分析 worker 和统一输入/输出合同 | 保留研究编排与产品专用绩效展示；已抽取内核删除，API 只调用服务并投影，不复制数值实现 |
@@ -149,13 +179,13 @@ AFI 的 [ws_gateway.py](D:/source_code/ai-for-investor/src/backend/app/services/
 
 1. **P9A：合同和基线。** 按真实路由/调用登记消费者、单位、源身份、旧数据/政策和权限；准备脱敏固定数值基准、版本兼容矩阵及转换拒绝条件。应用与服务均不反向 import 对方业务代码，DTO/端口按主计划留 base，SDK 提供轻量适配。
 2. **P9B：先只读。** 接 G 共享资源、R 分析 worker 和 M 基本事实；改组合/Gateway 页面。相同冻结输入做只读影子对比，差异逐项解释，不能为匹配旧错误而保留重复计数/错误符号。先迁离线输入，再真实账户读取，分别标证据；策略归属视图等待 P4 的实际归属事实，不用全账户仓位假造。仍有旧写客户端的账户不能仅因读页面迁好就切掉原会话，等待该账户读写闭包就绪。
-3. **P9C：政策和写链路。** 单账户少量策略接版本政策/审批/同一 owner，覆盖手工与 AI 意图；之后扩多账户及已验收组模板。迁移前停止新增并核对在途订单/预留/残差，保留原业务 ID；不直接把日志交易当已确认完整账户账本。
+3. **P9C：政策和写链路。** 单账户少量策略接版本政策/审批/同一 owner，覆盖手工与 AI 意图及独立 paper 执行域；之后扩多账户及已验收组模板。读写首次开放分别以 AFI01 为门禁。迁移按主计划第 11.3 节停止旧客户端、核实 writer 失效、导入/核对状态和新 epoch 重登记，保留原业务 ID；不直接把日志交易当已确认完整账户账本。
 4. **P9D：删除旧领域实现。** 每功能在新链路通过后移除旧运行器、内存规则、直发命令、活动任务及旧状态写入。保留原始导入、历史审批、订单关联和必要只读历史数据；AFI DB 中的服务投影是可重建缓存，不能再被当权威修改。P9D 先清理 AFI 依赖，不等待 P7R；旧公共 gateway/forwarding 物理删除由 P7R 统筹，必须等 AFI 读写/启动消费者在 P9B/P9C 切换或退役，且 P9D 完成对应旧依赖清理；不能只迁读端就删除仍供旧发单使用的 wire。
 5. **逐仓交付。** 子包先在各自 dev 验收/提交，父仓更新 gitlink 和兼容版本，AFI/Backtrader 再集成指定已提交版本。回退只选有已验证数据/政策兼容性的完整版本，不能降级仍持有新订单/预留的数据库或恢复第二 owner；不能安全回退时保持止增并按恢复政策处理。
 
 ## 7 验收与范围控制
 
-正式计划新增 P9A–P9D 和 AFI01–AFI12。原 CFG/GW/EXE/RISK/MON/ARB/DIM/MIG 案例仍有效；AFI 集成必须走真实 HTTP → SDK → 独立服务正常入口，前端截图或 fake API 不能证明风控拦截、账户共享或实盘可用。跨机器与 provider 行为继续分别按 DIST/VENUE 验收，不创建另一套平行验收基础设施。
+正式计划包含 P9A–P9D 和 AFI01–AFI13。此次补齐 CFG06、REG04、BT02、MIG04、AFI13，并加强 MIG03 切换合同。原案例仍有效；AFI 集成必须走真实 HTTP → SDK → 独立服务正常入口，前端截图或 fake API 不能证明风控拦截、账户共享或实盘可用。AFI01 是 P9B 读入口及 P9C 写/控制入口的发布前门禁，失败不能仅记录为后续待修。跨机器与 provider 行为仍分别按 DIST/VENUE 验收，不创建另一套平行验收基础设施。
 
 优先交付顺序是：可信组合只读总览和独立 Gateway → 统一分析口径与数据质量 → 版本政策和账户准入 → 手工/AI/策略共用执行入口 → 监控控制闭环与旧实现删除。后续高阶组合优化、复杂衍生品全量情景模型、动态全局预算、自动主备及 HFT 都需独立范围和证据，不借本次改造宣称完成。
 
