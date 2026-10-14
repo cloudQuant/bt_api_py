@@ -11,6 +11,7 @@ from bt_api_base.service_protocol import (
     WireRole,
     WireScope,
 )
+from bt_api_transport_zmq.service_v2 import service_reply_fits
 
 from bt_api_py.service_account_consumer import (
     ServiceAccountConsumer,
@@ -65,6 +66,12 @@ class _ConsumerHarness:
             },
             policy_version="account-consumer-policy-v1",
             requirements_version="account-consumer-requirements-v1",
+            reply_size_checker=lambda request, payload, hint: service_reply_fits(
+                _PEER,
+                request,
+                payload,
+                max_message_bytes=min(1_048_576, hint or 1_048_576),
+            ),
         )
         self.registry.register_handler("gateway-a", "account.read_after", self._read_after)
         self.registry.register_handler("gateway-a", "account.ack", self._ack)

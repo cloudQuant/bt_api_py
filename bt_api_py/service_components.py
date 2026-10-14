@@ -22,7 +22,7 @@ from typing import Any, Protocol
 
 from bt_api_base.service_protocol import WireScope
 
-from .service_registry import ServiceCallContext, ServiceCapability
+from .service_registry import ServiceCallContext, ServiceCapability, ServiceResultTooLargeError
 
 
 class ServiceComponentError(ValueError):
@@ -607,6 +607,11 @@ def build_component(
             if registration_bound
             else None
         )
+        gateway_event_journal_error_type = (
+            getattr(prepared.module, "GatewayEventJournalError", None)
+            if spec.component == "gateway"
+            else None
+        )
         if registration_bound and (
             market_registration_type is None
             or not callable(getattr(adapter, "register_registration", None))
@@ -638,13 +643,24 @@ def build_component(
                         registration_id=context.registration_id,
                     )
                 if spec.component == "gateway":
-                    return _adapter.handle(  # type: ignore[attr-defined]
-                        _operation,
-                        principal_ref=context.principal_ref,
-                        identity=context.identity,
-                        scope=context.scope,
-                        arguments=arguments,
-                    )
+                    try:
+                        return _adapter.handle(  # type: ignore[attr-defined]
+                            _operation,
+                            principal_ref=context.principal_ref,
+                            identity=context.identity,
+                            scope=context.scope,
+                            arguments=arguments,
+                            result_fits=context.result_fits,
+                        )
+                    except Exception as error:
+                        if (
+                            _operation == "account.read_after"
+                            and isinstance(gateway_event_journal_error_type, type)
+                            and type(error) is gateway_event_journal_error_type
+                            and getattr(error, "code", None) == "CONSUMER_PAGE_TOO_LARGE"
+                        ):
+                            raise ServiceResultTooLargeError() from None
+                        raise
                 return _adapter.handle(  # type: ignore[attr-defined]
                     _operation,
                     principal_ref=context.principal_ref,

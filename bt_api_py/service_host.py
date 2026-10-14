@@ -230,6 +230,7 @@ class ServiceHost:
         self._components: list[ServiceComponent] = []
         self._pending_resources: list[tuple[str, str, ComponentResources]] = []
         self._registry: ServiceRegistry | None = None
+        self._reply_size_checker: Callable[[Any, Mapping[str, Any], int | None], bool] | None = None
         self._server: Any = None
         self._upstream: ServiceClientRuntime | None = None
         self._upstream_registration_summary: RegistrationSummary | None = None
@@ -345,6 +346,7 @@ class ServiceHost:
                     CurveServerCredentials,
                     ServiceTransportStartupCleanupError,
                     ZmqServiceServer,
+                    service_reply_fits,
                     validate_service_server_configuration,
                 )
 
@@ -363,6 +365,28 @@ class ServiceHost:
                     high_water_mark=listener_options["high_water_mark"],
                     max_message_bytes=listener_options["max_message_bytes"],
                 )
+                listener_max_message_bytes = listener_options["max_message_bytes"]
+
+                def reply_size_checker(
+                    request: Any,
+                    payload: Mapping[str, Any],
+                    client_limit: int | None,
+                    *,
+                    service_identity: WireIdentity = self._authority.identity,
+                    server_limit: int = listener_max_message_bytes,
+                    checker: Callable[..., bool] = service_reply_fits,
+                ) -> bool:
+                    effective_limit = (
+                        server_limit if client_limit is None else min(server_limit, client_limit)
+                    )
+                    return checker(
+                        service_identity,
+                        request,
+                        payload,
+                        max_message_bytes=effective_limit,
+                    )
+
+                self._reply_size_checker = reply_size_checker
             except ImportError:
                 raise ServiceHostError("TRANSPORT_UNAVAILABLE") from None
             except Exception:
@@ -491,6 +515,7 @@ class ServiceHost:
                     policy_version=self._authority.registration_policy_version,
                     requirements_version=self._authority.service_requirements_version,
                     ready=False,
+                    reply_size_checker=self._reply_size_checker,
                 )
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry

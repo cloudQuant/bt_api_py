@@ -168,6 +168,32 @@ class AccountProjectionStoreTests(unittest.TestCase):
         self.assertEqual(result.projection["values"], ("compacted-baseline",))
         self.assertTrue(result.pending_ack)
 
+    def test_snapshot_only_page_commits_baseline_before_contiguous_tail(self) -> None:
+        baseline = self._apply(
+            _reply(
+                None,
+                snapshot=_snapshot(5, ["bounded-baseline"]),
+                latest_cursor=7,
+                offered_cursor=5,
+            )
+        )
+        self.assertEqual(baseline.cursor, 5)
+        self.assertEqual(baseline.projection["values"], ("bounded-baseline",))
+        self.assertTrue(baseline.pending_ack)
+        tail = _reply(
+            5,
+            events=[_event(6, "tail-6"), _event(7, "tail-7")],
+            acknowledged_cursor=5,
+        )
+        with self.assertRaisesRegex(AccountProjectionError, "ACK_PENDING"):
+            self._apply(tail, requested=5)
+        self.store.mark_acknowledged(_EPOCH, 5)
+        with self.assertRaisesRegex(AccountProjectionError, "CURSOR_GAP"):
+            self._apply(_reply(5, latest_cursor=7), requested=5)
+        final = self._apply(tail, requested=5)
+        self.assertEqual(final.cursor, 7)
+        self.assertEqual(final.projection["values"], ("bounded-baseline", "tail-6", "tail-7"))
+
     def test_exact_duplicate_is_idempotent_and_excludes_mutable_remote_status(self) -> None:
         calls = 0
 

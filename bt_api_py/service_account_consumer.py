@@ -24,7 +24,11 @@ from bt_api_py.service_account_projection import (
     AccountProjectionStore,
 )
 from bt_api_py.service_deployment import MOUNT_PORTS
-from bt_api_py.service_runtime import ServiceAccountBindingView, ServiceClientRuntime
+from bt_api_py.service_runtime import (
+    ServiceAccountBindingView,
+    ServiceClientRuntime,
+    ServiceRuntimeError,
+)
 
 _ACCOUNT_READ_PORT = "service.account_read"
 _REQUIRED_OPERATIONS = frozenset({"account.read_after", "account.ack", "account.progress"})
@@ -273,7 +277,12 @@ class ServiceAccountConsumer:
                 arguments,
                 account_ref=self._account_ref,
                 scope_ref=self._scope_ref,
+                max_reply_message_bytes=expected_signature[-1],
             )
+        except ServiceRuntimeError as error:
+            if error.code == "REPLY_TOO_LARGE":
+                raise ServiceAccountConsumerError("REPLY_TOO_LARGE") from None
+            raise ServiceAccountConsumerError("ACCOUNT_SERVICE_CALL_FAILED") from None
         except Exception:
             raise ServiceAccountConsumerError("ACCOUNT_SERVICE_CALL_FAILED") from None
         self._current_binding(expected_signature=expected_signature)
@@ -450,6 +459,7 @@ def _rpc_binding_signature(
         identity.principal_ref,
         identity.actor_ref,
         identity.delegate_ref,
+        binding.max_message_bytes,
     )
 
 

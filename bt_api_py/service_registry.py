@@ -27,6 +27,7 @@ from typing import Any, ClassVar
 from bt_api_base.service_protocol import (
     MAX_JSON_DEPTH,
     MAX_REFERENCE_BYTES,
+    MAX_WIRE_MESSAGE_BYTES,
     WIRE_PROTOCOL_VERSION,
     WireEnvelope,
     WireIdentity,
@@ -63,6 +64,7 @@ SERVICE_ERROR_CODES = frozenset(
         "NOT_REGISTERED",
         "OK",
         "POLICY_REQUIREMENT_UNMET",
+        "REPLY_TOO_LARGE",
         "SCOPE_DENIED",
         "STALE_EPOCH",
         "UNKNOWN_OPERATION",
@@ -165,6 +167,16 @@ class ServiceCallContext:
     scope: WireScope
     registration_id: str
     principal_ref: str
+    result_fits: Callable[[Mapping[str, Any]], bool] | None = None
+
+
+class ServiceResultTooLargeError(RuntimeError):
+    """A trusted adapter could not fit a bounded response page."""
+
+    code = "REPLY_TOO_LARGE"
+
+    def __init__(self) -> None:
+        super().__init__(self.code)
 
 
 def validate_capabilities_and_grants(
@@ -250,6 +262,8 @@ class ServiceRegistry:
         ready: bool = True,
         max_sessions: int = _MAX_SESSIONS,
         max_registration_keys: int = _DEFAULT_REGISTRATION_KEYS,
+        reply_size_checker: Callable[[WireEnvelope, Mapping[str, Any], int | None], bool]
+        | None = None,
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
@@ -266,7 +280,11 @@ class ServiceRegistry:
             or not 1 <= max_registration_keys <= _MAX_REGISTRATION_KEYS
         ):
             raise ValueError("max_registration_keys must be between 1 and 16384")
-        if type(ready) is not bool or not callable(clock):
+        if (
+            type(ready) is not bool
+            or not callable(clock)
+            or (reply_size_checker is not None and not callable(reply_size_checker))
+        ):
             raise TypeError("ready or clock is invalid")
         capability_map, trusted_grants = validate_capabilities_and_grants(capabilities, grants)
 
@@ -277,6 +295,7 @@ class ServiceRegistry:
         self.max_sessions = max_sessions
         self.max_registration_keys = max_registration_keys
         self._clock = clock
+        self._reply_size_checker = reply_size_checker
         self._capabilities = capability_map
         self._grants = trusted_grants
         self._handlers: dict[
@@ -1050,16 +1069,21 @@ class ServiceRegistry:
         return self._renew_or_unregister(principal, request, renew=False)
 
     def _dispatch(self, principal: str, request: WireEnvelope) -> Mapping[str, Any]:
-        payload = self._payload_fields(
-            request,
-            frozenset({"registration_id", "service_epoch", "instance_id", "arguments"}),
-        )
+        payload = request.payload
+        required_fields = {"registration_id", "service_epoch", "instance_id", "arguments"}
+        allowed_fields = required_fields | {"max_reply_message_bytes"}
         if (
-            payload is None
+            not isinstance(payload, Mapping)
+            or set(payload) not in (required_fields, allowed_fields)
             or not _text(payload["registration_id"])
             or not _text(payload["service_epoch"])
             or not _text(payload["instance_id"])
             or not isinstance(payload["arguments"], Mapping)
+        ):
+            return self._failure("INVALID_REQUEST")
+        reply_limit = payload.get("max_reply_message_bytes")
+        if "max_reply_message_bytes" in payload and (
+            type(reply_limit) is not int or not 1 <= reply_limit <= MAX_WIRE_MESSAGE_BYTES
         ):
             return self._failure("INVALID_REQUEST")
         if payload["service_epoch"] != self._epoch:
@@ -1110,6 +1134,8 @@ class ServiceRegistry:
             handler = self._handlers.get((instance_id, operation))
             if handler is None:
                 return self._failure("CAPABILITY_UNAVAILABLE")
+            if reply_limit is not None and self._reply_size_checker is None:
+                return self._failure("CAPABILITY_UNAVAILABLE")
             # Do not dispatch a write operation unless the durable strategy
             # claim still matches the exact run bound to this registration.
             if (
@@ -1118,21 +1144,52 @@ class ServiceRegistry:
                 and not self._strategy_claim_exists(scope, row["registration_id"])
             ):
                 return self._failure("DUPLICATE_ACTIVE_RUN")
-            context = ServiceCallContext(identity, scope, row["registration_id"], principal)
+
+            def result_fits(result: Mapping[str, Any]) -> bool:
+                normalized_result = self._normalize_result(result)
+                encoded_result = json.dumps(
+                    normalized_result,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ).encode("utf-8", errors="strict")
+                if len(encoded_result) > _MAX_RESULT_BYTES:
+                    return False
+                checker = self._reply_size_checker
+                if checker is None:
+                    return True
+                complete_payload = {"ok": True, "code": "OK", "result": normalized_result}
+                fits = checker(request, complete_payload, reply_limit)
+                if type(fits) is not bool:
+                    raise TypeError("reply size checker must return bool")
+                return fits
+
+            context = ServiceCallContext(
+                identity,
+                scope,
+                row["registration_id"],
+                principal,
+                result_fits,
+            )
             arguments = MappingProxyType(dict(payload["arguments"]))
         try:
             result = handler(context, arguments)
             if not isinstance(result, Mapping):
                 return self._failure("HANDLER_FAILED")
-            normalized = json.dumps(
-                self._normalize_result(result),
-                ensure_ascii=False,
-                allow_nan=False,
-                separators=(",", ":"),
-            ).encode("utf-8", errors="strict")
-            if len(normalized) > _MAX_RESULT_BYTES:
+            if not result_fits(result):
+                # The handler may already have committed an external effect.
+                # A final reply-size failure cannot prove that retry is safe.
                 return self._failure("HANDLER_FAILED")
-            return self._success(json.loads(normalized.decode("utf-8")))
+            return self._success(self._normalize_result(result))
+        except ServiceResultTooLargeError as error:
+            if (
+                type(error) is ServiceResultTooLargeError
+                and capability.port == "service.account_read"
+                and operation == "account.read_after"
+                and operation not in write_ops
+            ):
+                return self._failure("REPLY_TOO_LARGE")
+            return self._failure("HANDLER_FAILED")
         except Exception:
             return self._failure("HANDLER_FAILED")
 

@@ -602,7 +602,7 @@ class AccountProjectionStore:
         expected_next = previous_sequence if events else batch_base
         if next_cursor != expected_next or expected_next > latest_cursor:
             raise AccountProjectionError("INVALID_BATCH")
-        if not events and latest_cursor > next_cursor:
+        if not events and snapshot is None and latest_cursor > next_cursor:
             raise AccountProjectionError("CURSOR_GAP")
 
         progress = normalized["consumer_progress"]
@@ -666,7 +666,7 @@ class AccountProjectionStore:
         if batch.events:
             if batch.events[0]["sequence"] != base + 1:
                 raise AccountProjectionError("CURSOR_GAP")
-        elif batch.latest_cursor > batch.next_cursor:
+        elif batch.snapshot is None and batch.latest_cursor > batch.next_cursor:
             raise AccountProjectionError("CURSOR_GAP")
         return base
 

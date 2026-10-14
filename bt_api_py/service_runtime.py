@@ -20,6 +20,7 @@ from types import MappingProxyType
 from typing import Any
 
 from bt_api_base.service_protocol import (
+    MAX_WIRE_MESSAGE_BYTES,
     RequestReplyTransport,
     WireEnvelope,
     WireHeader,
@@ -245,6 +246,7 @@ class ServiceAccountBindingView:
     operations: frozenset[str]
     transport_ref: str
     timeout: float
+    max_message_bytes: int = MAX_WIRE_MESSAGE_BYTES
 
 
 @dataclass(frozen=True)
@@ -478,6 +480,7 @@ class ServiceClientRuntime:
         if len(matches) != 1 or not required_operations <= matches[0].operations:
             raise ServiceRuntimeError("ACCOUNT_BINDING_UNAVAILABLE")
         binding = matches[0]
+        max_message_bytes = self._profile_max_message_bytes(binding.transport_ref)
         return ServiceAccountBindingView(
             mount=binding.mount,
             service_id=binding.service_id,
@@ -490,6 +493,7 @@ class ServiceClientRuntime:
             operations=binding.operations,
             transport_ref=binding.transport_ref,
             timeout=binding.timeout,
+            max_message_bytes=max_message_bytes,
         )
 
     def start(self) -> RegistrationSummary:
@@ -550,11 +554,17 @@ class ServiceClientRuntime:
         account_ref: str | None = None,
         portfolio_ref: str | None = None,
         scope_ref: str | None = None,
+        max_reply_message_bytes: int | None = None,
     ) -> Mapping[str, Any]:
         self._assert_owner_thread()
         self._require_healthy()
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
+        if max_reply_message_bytes is not None and (
+            type(max_reply_message_bytes) is not int
+            or not 1 <= max_reply_message_bytes <= MAX_WIRE_MESSAGE_BYTES
+        ):
+            raise ServiceRuntimeError("INVALID_REPLY_MESSAGE_LIMIT")
         matches = [
             b
             for b in self._bindings
@@ -570,22 +580,34 @@ class ServiceClientRuntime:
         binding = matches[0]
         if operation not in binding.operations:
             raise ServiceRuntimeError("ACTION_NOT_GRANTED")
+        reply_limit = max_reply_message_bytes
+        tracked_account_read = (
+            operation == "account.read_after"
+            and isinstance(arguments, Mapping)
+            and arguments.get("track_delivery") is True
+        )
+        if reply_limit is not None or tracked_account_read:
+            profile_limit = self._profile_max_message_bytes(binding.transport_ref)
+            reply_limit = profile_limit if reply_limit is None else min(profile_limit, reply_limit)
         remaining = binding.lease_deadline - self._monotonic_now()
         if remaining <= 0:
             self._expire_binding(binding)
             self._require_healthy()
             raise ServiceRuntimeError("LEASE_EXPIRED")
+        payload = {
+            "registration_id": binding.registration_id,
+            "service_epoch": binding.service_epoch,
+            "instance_id": binding.instance_id,
+            "arguments": dict(arguments),
+        }
+        if reply_limit is not None:
+            payload["max_reply_message_bytes"] = reply_limit
         return self._rpc(
             binding.service_id,
             binding.transport_ref,
             binding.scope,
             operation,
-            {
-                "registration_id": binding.registration_id,
-                "service_epoch": binding.service_epoch,
-                "instance_id": binding.instance_id,
-                "arguments": dict(arguments),
-            },
+            payload,
             control=False,
             timeout=min(binding.timeout, remaining * 0.8),
         )
@@ -1039,6 +1061,14 @@ class ServiceClientRuntime:
                 else None,
             )
         )
+
+    def _profile_max_message_bytes(self, transport_ref: str) -> int:
+        profile = self._config["communication"]["profiles"].get(transport_ref)
+        options = profile.get("options") if isinstance(profile, Mapping) else None
+        value = options.get("max_message_bytes") if isinstance(options, Mapping) else None
+        if type(value) is not int or not 1 <= value <= MAX_WIRE_MESSAGE_BYTES:
+            raise ServiceRuntimeError("INVALID_ACCOUNT_TRANSPORT_OPTIONS")
+        return value
 
     def _record_unknown_registration(self, registration_key: str) -> None:
         self._unknown_registration_count += 1
