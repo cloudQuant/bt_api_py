@@ -27,12 +27,20 @@ import bt_api_py.service_registry as service_registry_module
 from bt_api_py import service_components
 from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_service_config
-from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedServiceAuthority
+from bt_api_py.service_host import (
+    ServiceHost,
+    ServiceHostError,
+    TrustedServiceAuthority,
+    TrustedServiceClients,
+)
 from bt_api_py.service_registry import (
     PrincipalGrant,
     ResourceGrant,
     ServiceCallContext,
+    ServiceCapability,
+    ServiceRegistry,
 )
+from bt_api_py.service_runtime import RegistrationSummary
 
 _CLIENT_IDENTITY = WireIdentity(WireRole.STRATEGY_CLIENT, "curve-principal", "strategy-client-a")
 _REQUEST_SCOPE = WireScope(
@@ -85,6 +93,8 @@ def _service_config(
     scope_ref: str = "root-scope-v1",
     security_ref: str = "listener-security-v1",
     clients: dict[str, Any] | None = None,
+    client_endpoint: str = "tcp://127.0.0.1:7999",
+    listener_endpoint: str | None = None,
 ) -> Any:
     raw: dict[str, Any] = {
         "service_config_schema_version": 1,
@@ -101,7 +111,7 @@ def _service_config(
                 "listener-v1": {
                     "backend": "zmq",
                     "config_schema_version": 1,
-                    "endpoints": {"rpc_bind": _endpoint()},
+                    "endpoints": {"rpc_bind": listener_endpoint or _endpoint()},
                     "security_profile_ref": security_ref,
                     "options": {"high_water_mark": 32, "max_message_bytes": 65_536},
                 },
@@ -113,7 +123,7 @@ def _service_config(
         raw["communication"]["profiles"]["upstream-connect"] = {
             "backend": "zmq",
             "config_schema_version": 1,
-            "endpoints": {"rpc_connect": "tcp://127.0.0.1:7999"},
+            "endpoints": {"rpc_connect": client_endpoint},
             "security_profile_ref": "upstream-security-v1",
             "options": {
                 "request_timeout_ms": 2000,
@@ -147,6 +157,196 @@ def _gateway_component(*, instance_id: str = "gateway-session") -> dict[str, Any
             },
         },
     }
+
+
+def _account_read_component(*, instance_id: str = "account-reader") -> dict[str, Any]:
+    return {
+        "config_schema_version": 2,
+        "settings": {
+            "instance_id": instance_id,
+            "bind_ports": ["service.account_read"],
+            "options": {
+                "role": "account_session_worker",
+                "account_session_ref": "trusted-session-v1",
+            },
+        },
+    }
+
+
+def _outbound_client(service_id: str, endpoint: str, *, required: bool = True) -> dict[str, Any]:
+    return {
+        "gateway": {
+            "config_schema_version": 1,
+            "settings": {
+                "bindings": [
+                    {
+                        "mount": "upstream.account",
+                        "service_id": service_id,
+                        "instance_id": "account-reader",
+                        "scope_ref": "account-grant-v1",
+                        "account_ref": "account-a",
+                        "transport_ref": "upstream-connect",
+                        "required": required,
+                    }
+                ]
+            },
+        }
+    }
+
+
+class _RegistryTransport:
+    def __init__(self, registry, principal_ref: str, peer: WireIdentity, events: list[str]):
+        self.registry = registry
+        self.principal_ref = principal_ref
+        self.peer = peer
+        self.events = events
+        self.closed = False
+        self.fail_unregister = False
+
+    def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
+        assert timeout > 0
+        if self.fail_unregister and request.header.operation == "service.unregister":
+            result = {"ok": False, "code": "SERVICE_UNAVAILABLE", "result": {}}
+        else:
+            result = self.registry.handle(self.principal_ref, request)
+        self.events.append(request.header.operation)
+        return WireEnvelope(
+            replace(
+                request.header,
+                kind=WireMessageKind.REPLY,
+                message_id=f"reply-{request.header.message_id}",
+                correlation_id=request.header.message_id,
+                identity=self.peer,
+            ),
+            result,
+        )
+
+    def close(self) -> None:
+        self.events.append("transport.close")
+        self.closed = True
+
+
+def _outbound_setup(
+    tmp_path,
+    *,
+    ready: bool = True,
+    component_close=None,
+    client_required: bool = True,
+    remote_ready: bool = True,
+):
+    remote_endpoint = _endpoint()
+    downstream = _service_config(
+        {"monitor": _monitor_component()},
+        clients=_outbound_client("account-service", remote_endpoint, required=client_required),
+        client_endpoint=remote_endpoint,
+    )
+    upstream_config = _service_config(
+        {"gateway": _account_read_component()},
+        service_id="account-service",
+        listener_endpoint=remote_endpoint,
+    )
+    authority = _authority(downstream)
+    peer = WireIdentity(WireRole.SERVICE, "upstream-principal", "account-service")
+    account_capability = ServiceCapability(
+        "account-reader", "service.account_read", frozenset({"account.snapshot"})
+    )
+    remote_registry = ServiceRegistry(
+        tmp_path / "upstream-registry.sqlite3",
+        service_id="account-service",
+        capabilities=(account_capability,),
+        grants={
+            authority.identity.principal_ref: (
+                PrincipalGrant(
+                    authority.identity,
+                    (
+                        ResourceGrant(
+                            "account-reader",
+                            "service.account_read",
+                            "account-grant-v1",
+                            _SCOPE_TEMPLATE,
+                            account_capability.operations,
+                        ),
+                    ),
+                ),
+            )
+        },
+        policy_version="upstream-policy-v1",
+        requirements_version="upstream-requirements-v1",
+        ready=remote_ready,
+    )
+    account_reads: list[tuple[WireScope, dict[str, Any]]] = []
+
+    def account_snapshot(context, arguments):
+        account_reads.append((context.scope, dict(arguments)))
+        return {"account_ref": context.scope.account_ref, "balance": 125.0}
+
+    remote_registry.register_handler("account-reader", "account.snapshot", account_snapshot)
+    events: list[str] = []
+
+    def transport_factory(_profile, resolved_peer):
+        assert resolved_peer == peer
+        events.append("transport.open")
+        return _RegistryTransport(
+            remote_registry, authority.identity.principal_ref, resolved_peer, events
+        )
+
+    bundle = TrustedServiceClients(
+        scope_resolver=lambda scope_ref: (
+            _SCOPE_TEMPLATE
+            if scope_ref == "account-grant-v1"
+            else pytest.fail("unexpected scope reference")
+        ),
+        peer_resolver=lambda service_id: (
+            peer if service_id == "account-service" else pytest.fail("unexpected service reference")
+        ),
+        transport_factory=transport_factory,
+    )
+    base_resources, outbox = _monitor_resources(tmp_path / "downstream-outbox.sqlite3")
+    if not ready or component_close is not None:
+        resources = ComponentResources.owned(
+            base_resources.values,
+            ready=lambda: ready,
+            close=component_close or base_resources.close,
+        )
+    else:
+        resources = base_resources
+    calls: list[str] = []
+    host_ref: list[ServiceHost] = []
+
+    def resource_provider(component, instance_id, options, scope):
+        calls.append(component)
+        events.append("provider.call")
+        assert host_ref[0].upstream is not None
+        assert host_ref[0].upstream.healthy is True
+        assert scope is authority.scope
+        assert dict(options) == {}
+        return resources
+
+    host = ServiceHost(
+        downstream,
+        authority,
+        tmp_path / "downstream-registry.sqlite3",
+        resource_provider,
+        service_directory={
+            downstream.service_id: downstream,
+            upstream_config.service_id: upstream_config,
+        },
+        trusted_clients=bundle,
+    )
+    host_ref.append(host)
+    return (
+        host,
+        downstream,
+        upstream_config,
+        authority,
+        peer,
+        remote_registry,
+        resources,
+        outbox,
+        calls,
+        events,
+        account_reads,
+    )
 
 
 def _authority(config: Any) -> TrustedServiceAuthority:
@@ -557,7 +757,7 @@ def test_transport_startup_cleanup_failure_is_retained_and_retried_by_host(tmp_p
     assert host.summary["start_failure"] == "TRANSPORT_STARTUP_CLEANUP_FAILED"
     assert host.summary["cleanup_failures"] == ("listener_close",)
     assert host._server is partial_server
-    assert host._registry is None
+    assert host._registry is not None and host._registry.ready is False
     assert close_attempts == [1]
 
     host.close()
@@ -872,3 +1072,276 @@ def test_adapter_build_failure_retains_unattached_resource_for_cleanup_retry(tmp
     assert host.state == "closed"
     assert host._pending_resources == []
     assert close_attempts == [1, 1]
+
+
+def test_outbound_runtime_starts_before_resources_and_uses_trusted_transport(tmp_path):
+    (
+        host,
+        _downstream,
+        _upstream_config,
+        _authority_value,
+        _peer,
+        remote_registry,
+        _resources,
+        outbox,
+        provider_calls,
+        events,
+        account_reads,
+    ) = _outbound_setup(tmp_path)
+    try:
+        host.start()
+
+        assert host.upstream is not None
+        assert host.upstream.healthy is True
+        assert host.healthy is True
+        assert provider_calls == ["monitor"]
+        assert events.index("transport.open") < events.index("provider.call")
+        assert {"service.discover", "service.register"} <= set(events)
+
+        result = host.upstream.call(
+            "upstream.account",
+            "account.snapshot",
+            {},
+            account_ref="account-a",
+            scope_ref="account-grant-v1",
+        )
+        assert result == {"account_ref": "account-a", "balance": 125.0}
+        assert account_reads == [(_SCOPE_TEMPLATE, {})]
+        transport = next(iter(host.upstream._transports.values()))
+        transport.fail_unregister = True
+        host.close()
+        assert host.state == "closed"
+        assert host.upstream is None
+        assert host.summary["last_upstream_cleanup"] == {
+            "local_state": "closed",
+            "cleanup_failures": 1,
+            "unregister_uncertainties": 1,
+            "unknown_registration_count": 0,
+        }
+    finally:
+        host.close()
+        remote_registry.close()
+
+
+def test_invalid_outbound_directory_fails_before_client_or_component_io(tmp_path):
+    endpoint = _endpoint()
+    config = _service_config(
+        {"monitor": _monitor_component()},
+        clients=_outbound_client("missing-account-service", endpoint),
+        client_endpoint=endpoint,
+    )
+    provider_calls: list[str] = []
+    transport_calls: list[str] = []
+    authority = _authority(config)
+    bundle = TrustedServiceClients(
+        scope_resolver=lambda _reference: pytest.fail("scope resolution is runtime I/O"),
+        peer_resolver=lambda _reference: pytest.fail("peer resolution is runtime I/O"),
+        transport_factory=lambda *_args: transport_calls.append("open"),
+    )
+    host = ServiceHost(
+        config,
+        authority,
+        tmp_path / "registry.sqlite3",
+        lambda component, *_args: provider_calls.append(component),
+        service_directory={config.service_id: config},
+        trusted_clients=bundle,
+    )
+
+    with pytest.raises(ServiceHostError) as exc_info:
+        host.start()
+
+    assert exc_info.value.code == "OUTBOUND_DEPLOYMENT_INVALID"
+    assert provider_calls == []
+    assert transport_calls == []
+    assert not (tmp_path / "registry.sqlite3").exists()
+    assert host.upstream is None
+
+
+def test_configured_clients_require_bundle_and_unused_bundle_is_rejected(tmp_path):
+    endpoint = _endpoint()
+    config = _service_config(
+        {"monitor": _monitor_component()},
+        clients=_outbound_client("account-service", endpoint),
+        client_endpoint=endpoint,
+    )
+    upstream_config = _service_config(
+        {"gateway": _account_read_component()},
+        service_id="account-service",
+        listener_endpoint=endpoint,
+    )
+    directory = {config.service_id: config, upstream_config.service_id: upstream_config}
+    provider_calls: list[str] = []
+
+    missing_bundle = ServiceHost(
+        config,
+        _authority(config),
+        tmp_path / "missing-bundle.sqlite3",
+        lambda component, *_args: provider_calls.append(component),
+        service_directory=directory,
+    )
+    with pytest.raises(ServiceHostError) as exc_info:
+        missing_bundle.start()
+    assert exc_info.value.code == "TRUSTED_CLIENTS_REQUIRED"
+    assert provider_calls == []
+
+    no_clients = _service_config({"monitor": _monitor_component()})
+    unused_bundle = TrustedServiceClients(
+        scope_resolver=lambda _reference: _SCOPE_TEMPLATE,
+        peer_resolver=lambda _service_id: WireIdentity(WireRole.SERVICE, "peer", "account-service"),
+        transport_factory=lambda *_args: pytest.fail("unused bundle must not open transports"),
+    )
+    unused = ServiceHost(
+        no_clients,
+        _authority(no_clients),
+        tmp_path / "unused-bundle.sqlite3",
+        lambda component, *_args: provider_calls.append(component),
+        trusted_clients=unused_bundle,
+    )
+    with pytest.raises(ServiceHostError) as exc_info:
+        unused.start()
+    assert exc_info.value.code == "UNUSED_TRUSTED_CLIENTS"
+    assert provider_calls == []
+    assert not (tmp_path / "missing-bundle.sqlite3").exists()
+    assert not (tmp_path / "unused-bundle.sqlite3").exists()
+
+
+def test_optional_upstream_degradation_does_not_withdraw_local_readiness(tmp_path):
+    (
+        host,
+        _downstream,
+        _upstream_config,
+        _authority_value,
+        _peer,
+        remote_registry,
+        _resources,
+        _outbox,
+        provider_calls,
+        _events,
+        _account_reads,
+    ) = _outbound_setup(tmp_path, client_required=False, remote_ready=False)
+    try:
+        host.start()
+
+        assert host.upstream is not None
+        assert host.upstream.healthy is True
+        assert host.summary["upstream"]["degraded_count"] == 1
+        assert host.healthy is True
+        assert provider_calls == ["monitor"]
+        assert host._registry is not None and host._registry.ready is True
+    finally:
+        host.close()
+        remote_registry.close()
+
+
+def test_upstream_maintenance_clamps_poll_and_explicit_recovery_restores_readiness(
+    tmp_path, monkeypatch
+):
+    (
+        host,
+        _downstream,
+        _upstream_config,
+        _authority_value,
+        _peer,
+        remote_registry,
+        _resources,
+        outbox,
+        _provider_calls,
+        events,
+        account_reads,
+    ) = _outbound_setup(tmp_path)
+    service_v2 = importlib.import_module("bt_api_transport_zmq.service_v2")
+    poll_timeouts: list[int] = []
+    monkeypatch.setattr(
+        service_v2.ZmqServiceServer,
+        "serve_once",
+        lambda _server, timeout: poll_timeouts.append(timeout) or False,
+    )
+    try:
+        host.start()
+        runtime = host.upstream
+        assert runtime is not None
+        monkeypatch.setattr(runtime, "next_maintenance_delay", lambda: 0.125)
+
+        with pytest.raises(ServiceHostError) as exc_info:
+            host.serve_once(True)
+        assert exc_info.value.code == "INVALID_TIMEOUT"
+        assert poll_timeouts == []
+
+        assert host.serve_once(2_000) is False
+        assert poll_timeouts == [125]
+        assert host._registry is not None and host._registry.ready is True
+
+        # Model a required lease loss without manufacturing a transport result.
+        # Runtime.maintain observes the failed session and the host still polls
+        # once so service discovery/unregister remain reachable.
+        runtime._state = "failed"
+        assert host.serve_once(2_000) is False
+        assert poll_timeouts == [125, 125]
+        assert host._registry.ready is False
+        assert runtime.state == "failed"
+        assert events.count("transport.open") == 1
+        assert account_reads == []
+
+        monkeypatch.delattr(runtime, "next_maintenance_delay")
+        summary = host.recover_upstreams()
+        assert isinstance(summary, RegistrationSummary)
+        assert runtime.state == "registered"
+        assert host.healthy is True
+        assert host._registry.ready is True
+        assert events.count("transport.open") == 2
+        assert account_reads == []
+
+        value = runtime.call(
+            "upstream.account",
+            "account.snapshot",
+            {},
+            account_ref="account-a",
+            scope_ref="account-grant-v1",
+        )
+        assert value["balance"] == 125.0
+        assert len(account_reads) == 1
+    finally:
+        host.close()
+        remote_registry.close()
+
+
+def test_component_close_failure_keeps_upstream_until_component_retry(tmp_path):
+    close_attempts: list[int] = []
+
+    def fail_first_close():
+        close_attempts.append(1)
+        if len(close_attempts) == 1:
+            raise OSError("private component close detail")
+
+    (
+        host,
+        _downstream,
+        _upstream_config,
+        _authority_value,
+        _peer,
+        remote_registry,
+        _resources,
+        outbox,
+        _provider_calls,
+        events,
+        _account_reads,
+    ) = _outbound_setup(tmp_path, ready=False, component_close=fail_first_close)
+    try:
+        with pytest.raises(ServiceHostError) as exc_info:
+            host.start()
+        assert exc_info.value.code == "START_CLEANUP_FAILED"
+        assert host.state == "close_failed"
+        assert host._components
+        assert host.upstream is not None and host.upstream.state == "registered"
+        assert events.count("transport.close") == 0
+
+        host.close()
+        assert host.state == "closed"
+        assert host._components == []
+        assert close_attempts == [1, 1]
+        assert host.upstream is None
+        assert events.count("transport.close") == 1
+    finally:
+        if host.state != "closed":
+            host.close()
+        remote_registry.close()

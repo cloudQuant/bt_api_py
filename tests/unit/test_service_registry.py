@@ -334,6 +334,43 @@ def test_registration_idempotency_conflict_and_strategy_write_claim_survive_rest
         restarted.close()
 
 
+def test_registration_receipt_reports_remaining_lease_without_resetting_duplicate(
+    tmp_path: Path,
+) -> None:
+    now = [100.0]
+    registry = _make_registry(tmp_path / "remaining.sqlite", clock=lambda: now[0])
+    try:
+        first = _register(registry)
+        assert first["ok"] is True
+        assert first["result"]["expires_at"] == 110.0
+        assert first["result"]["lease_remaining_seconds"] == 10.0
+
+        now[0] = 104.25
+        duplicate = _register(registry)
+        assert duplicate["ok"] is True
+        assert duplicate["result"]["registration_id"] == first["result"]["registration_id"]
+        assert duplicate["result"]["expires_at"] == first["result"]["expires_at"]
+        assert duplicate["result"]["lease_remaining_seconds"] == pytest.approx(5.75)
+
+        renewed = registry.handle(
+            "curve-a",
+            _next_request(
+                "service.renew",
+                {
+                    "registration_id": first["result"]["registration_id"],
+                    "service_epoch": first["result"]["service_epoch"],
+                },
+                identity=_identity(),
+                scope=_strategy_scope(),
+            ),
+        )
+        assert renewed["ok"] is True
+        assert renewed["result"]["expires_at"] == 114.25
+        assert renewed["result"]["lease_remaining_seconds"] == 10.0
+    finally:
+        registry.close()
+
+
 def test_concurrent_strategy_writer_registrations_are_serialized(tmp_path: Path) -> None:
     registry = _make_registry(tmp_path / "concurrent-writer.sqlite")
     try:

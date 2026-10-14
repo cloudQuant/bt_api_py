@@ -839,7 +839,7 @@ class ServiceRegistry:
                     (previous["registration_id"], self._epoch),
                 ).fetchone()
                 if active is not None and active["expires_at"] > now:
-                    return self._success(self._registration_result(active))
+                    return self._success(self._registration_result(active, now=now))
             else:
                 key_count = self._db.execute("SELECT COUNT(*) FROM registration_keys").fetchone()[0]
                 if key_count >= self.max_registration_keys:
@@ -894,7 +894,7 @@ class ServiceRegistry:
             row = self._db.execute(
                 "SELECT * FROM sessions WHERE registration_id=?", (registration_id,)
             ).fetchone()
-        return self._success(self._registration_result(row))
+        return self._success(self._registration_result(row, now=now))
 
     def _claim_strategy_write(
         self, scope: WireScope, now: float, registration_id: str
@@ -943,11 +943,15 @@ class ServiceRegistry:
             )
         return None
 
-    def _registration_result(self, row: sqlite3.Row) -> dict[str, Any]:
+    def _registration_result(self, row: sqlite3.Row, *, now: float) -> dict[str, Any]:
+        lease_remaining = float(row["expires_at"]) - now
+        if not math.isfinite(lease_remaining) or lease_remaining <= 0:
+            raise ValueError("registration receipt would contain an expired lease")
         return {
             "registration_id": row["registration_id"],
             "service_epoch": row["service_epoch"],
             "expires_at": row["expires_at"],
+            "lease_remaining_seconds": lease_remaining,
             "operations": json.loads(row["operations_json"]),
             "policy_version": row["policy_version"],
             "requirements_version": row["requirements_version"],
@@ -1001,7 +1005,7 @@ class ServiceRegistry:
                 )
                 updated = dict(row)
                 updated["expires_at"] = expires_at
-                result = self._registration_result(updated)  # type: ignore[arg-type]
+                result = self._registration_result(updated, now=now)  # type: ignore[arg-type]
                 return self._success(result)
             self._db.execute(
                 "UPDATE strategy_write_claims SET active_registration_id=NULL "

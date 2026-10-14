@@ -1,24 +1,31 @@
 """Fail-closed lifecycle owner for fixed SDK service components.
 
 Construction is pure. ``start`` validates the trusted references, imports only
-the selected fixed component packages, resolves trusted resources, creates a
-not-ready SQLite registry, and finally binds the CURVE-authenticated ZMQv2
-listener on the calling thread. The current round supports local read adapters
-and explicitly rejects outbound client bindings before resource acquisition;
-it does not silently ignore them.
+the selected fixed component packages, starts any explicitly wired upstream
+service clients, resolves trusted resources, creates a not-ready SQLite
+registry, and finally binds the CURVE-authenticated ZMQv2 listener on the
+calling thread. Outbound wiring comes only from a trusted code bundle; the
+manifest cannot name Python modules or executable factories.
 """
 
 from __future__ import annotations
 
 import re
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field
+from math import floor, isfinite
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_base.service_protocol import (
+    RequestReplyTransport,
+    WireIdentity,
+    WireRole,
+    WireScope,
+)
 
 from .service_components import (
     ComponentResources,
@@ -40,6 +47,7 @@ from .service_registry import (
     ServiceRegistryStartupCleanupError,
     validate_capabilities_and_grants,
 )
+from .service_runtime import RegistrationSummary, ServiceClientRuntime
 
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -130,6 +138,44 @@ class TrustedServiceAuthority:
         object.__setattr__(self, "grants", MappingProxyType(grants))
 
 
+@dataclass(frozen=True, slots=True)
+class TrustedServiceClients:
+    """Trusted adapters for resolving and opening configured service clients.
+
+    These callables are supplied by operator-owned application code. Parsed
+    YAML can select service IDs, refs, and fixed ports, but cannot create or
+    import a resolver, peer identity, or transport implementation.
+    """
+
+    scope_resolver: Callable[[str], WireScope]
+    peer_resolver: Callable[[str], WireIdentity]
+    transport_factory: Callable[[Mapping[str, Any], WireIdentity], RequestReplyTransport]
+    requested_operations: Mapping[str, frozenset[str]] | None = None
+
+    def __post_init__(self) -> None:
+        if not callable(self.scope_resolver):
+            raise ServiceHostError("INVALID_TRUSTED_CLIENTS")
+        if not callable(self.peer_resolver):
+            raise ServiceHostError("INVALID_TRUSTED_CLIENTS")
+        if not callable(self.transport_factory):
+            raise ServiceHostError("INVALID_TRUSTED_CLIENTS")
+        requested = self.requested_operations
+        if requested is None:
+            return
+        if not isinstance(requested, Mapping):
+            raise ServiceHostError("INVALID_TRUSTED_CLIENTS")
+        snapshot = dict(requested)
+        if any(
+            type(mount) is not str
+            or type(operations) is not frozenset
+            or not operations
+            or any(type(operation) is not str for operation in operations)
+            for mount, operations in snapshot.items()
+        ):
+            raise ServiceHostError("INVALID_TRUSTED_CLIENTS")
+        object.__setattr__(self, "requested_operations", MappingProxyType(snapshot))
+
+
 class ServiceHost:
     """Own one selected service's registry, fixed components, and listener.
 
@@ -147,6 +193,7 @@ class ServiceHost:
         resource_provider: ServiceResourceProvider,
         *,
         service_directory: Mapping[str, ServiceConfig] | None = None,
+        trusted_clients: TrustedServiceClients | None = None,
     ) -> None:
         if type(config) is not ServiceConfig:
             raise ServiceHostError("PARSED_SERVICE_CONFIG_REQUIRED")
@@ -162,6 +209,8 @@ class ServiceHost:
             raise ServiceHostError("REGISTRY_PATH_REQUIRED")
         if service_directory is not None and not isinstance(service_directory, Mapping):
             raise ServiceHostError("INVALID_SERVICE_DIRECTORY")
+        if trusted_clients is not None and type(trusted_clients) is not TrustedServiceClients:
+            raise ServiceHostError("INVALID_TRUSTED_CLIENTS")
 
         self._config = config
         self._authority = authority
@@ -170,6 +219,7 @@ class ServiceHost:
         self._service_directory = (
             None if service_directory is None else MappingProxyType(dict(service_directory))
         )
+        self._trusted_clients = trusted_clients
         try:
             self._specs = component_specs(config.components)
         except ServiceComponentError as exc:
@@ -181,6 +231,10 @@ class ServiceHost:
         self._pending_resources: list[tuple[str, str, ComponentResources]] = []
         self._registry: ServiceRegistry | None = None
         self._server: Any = None
+        self._upstream: ServiceClientRuntime | None = None
+        self._upstream_registration_summary: RegistrationSummary | None = None
+        self._upstream_faulted = False
+        self._last_upstream_cleanup: Mapping[str, Any] | None = None
         self._endpoint: str | None = None
         self._start_failure: str | None = None
         self._last_cleanup_failures: tuple[str, ...] = ()
@@ -213,6 +267,8 @@ class ServiceHost:
                 "start_failure": self._start_failure,
                 "cleanup_failures": self._last_cleanup_failures,
                 "cleanup_history": tuple(self._cleanup_history),
+                "upstream": self._upstream_summary(),
+                "last_upstream_cleanup": self._last_upstream_cleanup,
             }
         )
 
@@ -275,6 +331,33 @@ class ServiceHost:
                 raise ServiceHostError("TRANSPORT_UNAVAILABLE") from None
             except Exception:
                 raise ServiceHostError("TRANSPORT_CONFIGURATION_INVALID") from None
+
+            # Runtime construction is pure. Keep the runtime reference before
+            # starting it so a partial registration/transport failure remains
+            # available to the common retryable cleanup path.
+            if self._config.clients:
+                bundle = self._trusted_clients
+                if bundle is None:
+                    raise ServiceHostError("TRUSTED_CLIENTS_REQUIRED")
+                try:
+                    self._upstream = ServiceClientRuntime(
+                        self._config,
+                        identity=self._authority.identity,
+                        scope_resolver=bundle.scope_resolver,
+                        peer_resolver=bundle.peer_resolver,
+                        transport_factory=bundle.transport_factory,
+                        requested_operations=bundle.requested_operations,
+                    )
+                except Exception:
+                    raise ServiceHostError("UPSTREAM_CONFIGURATION_INVALID") from None
+                try:
+                    self._upstream_registration_summary = self._upstream.start()
+                    self._upstream_faulted = not self._upstream.healthy
+                except BaseException as exc:
+                    self._upstream_faulted = True
+                    if not isinstance(exc, Exception):
+                        raise
+                    raise ServiceHostError("UPSTREAM_START_FAILED") from None
 
             built_by_instance: dict[str, ServiceComponent] = {}
             for item in self._prepared:
@@ -382,19 +465,38 @@ class ServiceHost:
         self._check_owner_thread()
         if self._state != "started" or self._server is None:
             raise ServiceHostError("HOST_NOT_STARTED")
+        if type(timeout_ms) is not int or timeout_ms < 0:
+            raise ServiceHostError("INVALID_TIMEOUT")
         try:
-            # Readiness is a live invariant, not only a startup check. A
-            # failed/false check withdraws business registration and dispatch,
-            # while registry discovery and unregister remain available.
+            # Renewal and polling share this owner thread. If renewal fails,
+            # keep polling so discovery/unregister and other control traffic
+            # remain available while business operations are withdrawn.
+            if self._upstream is not None:
+                try:
+                    self.maintain()
+                except ServiceHostError as exc:
+                    if exc.code != "UPSTREAM_MAINTENANCE_FAILED":
+                        raise
             self._refresh_registry_readiness()
-            return self._server.serve_once(timeout_ms)
+            delay = self.next_maintenance_delay()
+            bounded_timeout = timeout_ms
+            if delay is not None:
+                if type(delay) not in (int, float) or not isfinite(delay) or delay < 0:
+                    self._upstream_faulted = True
+                    self._refresh_registry_readiness()
+                    bounded_timeout = 0
+                else:
+                    delay_ms = delay * 1000
+                    if isfinite(delay_ms):
+                        bounded_timeout = min(timeout_ms, max(0, floor(delay_ms)))
+            return self._server.serve_once(bounded_timeout)
         except ServiceHostError:
             raise
         except Exception:
             raise ServiceHostError("SERVE_FAILED") from None
 
     def close(self) -> None:
-        """Mark the registry unready and close listener/components/registry."""
+        """Mark the registry unready and close owned resources in reverse order."""
 
         if self._state == "closed":
             return
@@ -424,19 +526,33 @@ class ServiceHost:
             raise ServiceHostError("LISTENER_ENDPOINT_MISSING")
 
     def _validate_outbound_bindings(self) -> None:
-        if not self._config.clients:
+        has_clients = bool(self._config.clients)
+        if not has_clients:
+            if self._trusted_clients is not None:
+                raise ServiceHostError("UNUSED_TRUSTED_CLIENTS")
             return
         if self._service_directory is None:
             raise ServiceHostError("OUTBOUND_DIRECTORY_REQUIRED")
-        directory = dict(self._service_directory)
-        directory[self._config.service_id] = self._config
+        # Directory validation still runs first, so a malformed deployment is
+        # rejected consistently before reporting a missing code bundle.
+        missing_bundle = self._trusted_clients is None
+        directory = self._service_directory
+        configured_self = directory.get(self._config.service_id)
+        if type(configured_self) is not ServiceConfig:
+            raise ServiceHostError("OUTBOUND_DEPLOYMENT_INVALID")
+        try:
+            if configured_self.to_public_dict() != self._config.to_public_dict():
+                raise ServiceHostError("OUTBOUND_DEPLOYMENT_INVALID")
+        except ServiceHostError:
+            raise
+        except Exception:
+            raise ServiceHostError("OUTBOUND_DEPLOYMENT_INVALID") from None
         try:
             validate_deployment(directory)
         except Exception:
             raise ServiceHostError("OUTBOUND_DEPLOYMENT_INVALID") from None
-        # Static graph validation does not create authenticated client
-        # connections. Do not silently discard manifest outbound bindings.
-        raise ServiceHostError("OUTBOUND_WIRING_UNSUPPORTED")
+        if missing_bundle:
+            raise ServiceHostError("TRUSTED_CLIENTS_REQUIRED")
 
     def _listener_profile(self) -> Mapping[str, Any]:
         try:
@@ -450,6 +566,12 @@ class ServiceHost:
         return profile
 
     def _all_components_ready(self) -> bool:
+        if self._upstream is not None:
+            try:
+                if self._upstream_faulted or self._upstream.healthy is not True:
+                    return False
+            except Exception:
+                return False
         for component in self._components:
             try:
                 if component.readiness() is not True:
@@ -457,6 +579,141 @@ class ServiceHost:
             except Exception:
                 return False
         return True
+
+    @property
+    def upstream(self) -> ServiceClientRuntime | None:
+        """Read-only access to the selected upstream runtime for trusted wiring."""
+
+        return self._upstream
+
+    @property
+    def healthy(self) -> bool:
+        """Whether the local registry can currently serve business requests."""
+
+        return self._state == "started" and self._all_components_ready()
+
+    def maintain(self) -> RegistrationSummary:
+        """Synchronously maintain due upstream leases on the owner thread."""
+
+        self._check_owner_thread()
+        if self._state != "started":
+            raise ServiceHostError("HOST_NOT_STARTED")
+        upstream = self._upstream
+        if upstream is None:
+            return RegistrationSummary((), 0, ())
+        try:
+            summary = upstream.maintain()
+            self._upstream_registration_summary = summary
+            self._upstream_faulted = upstream.healthy is not True
+        except Exception:
+            self._upstream_faulted = True
+            with suppress(ServiceHostError):
+                self._refresh_registry_readiness()
+            raise ServiceHostError("UPSTREAM_MAINTENANCE_FAILED") from None
+        self._refresh_registry_readiness()
+        return summary
+
+    def next_maintenance_delay(self) -> float | None:
+        """Return seconds until the next upstream renewal is due."""
+
+        self._check_owner_thread()
+        if self._state != "started":
+            raise ServiceHostError("HOST_NOT_STARTED")
+        upstream = self._upstream
+        if upstream is None:
+            return None
+        try:
+            return upstream.next_maintenance_delay()
+        except Exception:
+            self._upstream_faulted = True
+            with suppress(ServiceHostError):
+                self._refresh_registry_readiness()
+            return 0.0
+
+    def recover_upstreams(self) -> RegistrationSummary:
+        """Explicitly replace an upstream registration session, without replay."""
+
+        self._check_owner_thread()
+        if self._state != "started":
+            raise ServiceHostError("HOST_NOT_STARTED")
+        upstream = self._upstream
+        if upstream is None:
+            raise ServiceHostError("NO_UPSTREAM_CLIENTS")
+        try:
+            summary = upstream.recover()
+            self._upstream_registration_summary = summary
+            self._upstream_faulted = upstream.healthy is not True
+        except Exception:
+            self._upstream_faulted = True
+            with suppress(ServiceHostError):
+                self._refresh_registry_readiness()
+            raise ServiceHostError("UPSTREAM_RECOVERY_FAILED") from None
+        self._refresh_registry_readiness()
+        return summary
+
+    def _upstream_summary(self) -> Mapping[str, Any] | None:
+        upstream = self._upstream
+        if upstream is None:
+            return None
+        try:
+            healthy = upstream.healthy is True and not self._upstream_faulted
+            state = upstream.state
+            registration = self._upstream_registration_summary
+            degraded_count = 0 if registration is None else registration.degraded_count
+            degradation_codes = () if registration is None else registration.degradation_codes
+            cleanup_failures = self._runtime_counter(upstream, "cleanup_failures")
+            unregister_uncertainties = self._runtime_counter(upstream, "unregister_uncertainties")
+            unknown_registration_count = self._runtime_counter(
+                upstream, "unknown_registration_count"
+            )
+        except Exception:
+            healthy = False
+            state = "unavailable"
+            degraded_count = 0
+            degradation_codes = ()
+            cleanup_failures = 0
+            unregister_uncertainties = 0
+            unknown_registration_count = 0
+        return MappingProxyType(
+            {
+                "state": state,
+                "healthy": healthy,
+                "degraded_count": max(0, degraded_count),
+                "degradation_codes": tuple(degradation_codes),
+                "cleanup_failures": cleanup_failures,
+                "unregister_uncertainties": unregister_uncertainties,
+                "unknown_registration_count": unknown_registration_count,
+            }
+        )
+
+    @staticmethod
+    def _runtime_counter(runtime: ServiceClientRuntime, name: str) -> int:
+        try:
+            value = getattr(runtime, name)
+        except Exception:
+            return 0
+        return value if type(value) is int and value >= 0 else 0
+
+    @classmethod
+    def _upstream_cleanup_observation(cls, runtime: ServiceClientRuntime) -> Mapping[str, Any]:
+        try:
+            state = runtime.state
+            if state not in {"new", "registered", "failed", "close_failed", "closed"}:
+                state = "unavailable"
+        except Exception:
+            state = "unavailable"
+        return MappingProxyType(
+            {
+                "local_state": state,
+                "cleanup_failures": cls._runtime_counter(runtime, "cleanup_failures"),
+                "unregister_uncertainties": cls._runtime_counter(
+                    runtime, "unregister_uncertainties"
+                ),
+                "unknown_registration_count": cls._runtime_counter(
+                    runtime, "unknown_registration_count"
+                ),
+            }
+        )
 
     def _refresh_registry_readiness(self) -> None:
         registry = self._registry
@@ -520,6 +777,9 @@ class ServiceHost:
                 failures.append("listener_close")
             else:
                 self._server = None
+        if self._server is not None:
+            # Do not tear down resources while the listener may still dispatch.
+            return tuple(failures)
 
         # A resource returned by the most recent provider call may not yet
         # have become a ServiceComponent because adapter construction failed.
@@ -540,6 +800,24 @@ class ServiceHost:
                 failures.append(f"component_close:{component.component}:{component.instance_id}")
             else:
                 del self._components[index]
+
+        component_resources_remain = bool(self._pending_resources or self._components)
+        upstream = self._upstream
+        if upstream is not None and not component_resources_remain:
+            try:
+                upstream.close()
+            except BaseException:
+                failures.append("upstream_close")
+            else:
+                self._last_upstream_cleanup = self._upstream_cleanup_observation(upstream)
+                if upstream.state == "closed":
+                    self._upstream = None
+                    self._upstream_registration_summary = None
+                    self._upstream_faulted = False
+                else:
+                    failures.append("upstream_close")
+            if self._upstream is upstream:
+                self._last_upstream_cleanup = self._upstream_cleanup_observation(upstream)
 
         if registry is not None:
             try:
@@ -579,4 +857,9 @@ def _component_summary(spec: Any, component: ServiceComponent | None) -> Mapping
     )
 
 
-__all__ = ["ServiceHost", "ServiceHostError", "TrustedServiceAuthority"]
+__all__ = [
+    "ServiceHost",
+    "ServiceHostError",
+    "TrustedServiceAuthority",
+    "TrustedServiceClients",
+]
