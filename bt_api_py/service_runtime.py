@@ -220,6 +220,23 @@ class ServiceMarketBindingView:
 
 
 @dataclass(frozen=True)
+class ServiceAccountBindingView:
+    """Validated, immutable account-read routing details for the SDK facade."""
+
+    mount: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    account_ref: str
+    registration_id: str
+    service_epoch: str
+    rpc_scope: WireScope
+    operations: frozenset[str]
+    transport_ref: str
+    timeout: float
+
+
+@dataclass(frozen=True)
 class RegistrationSummary:
     bindings: tuple[RegisteredBinding, ...]
     degraded_count: int
@@ -411,6 +428,57 @@ class ServiceClientRuntime:
             security_profile_ref=security_ref,
             high_water_mark=high_water_mark,
             max_message_bytes=max_message_bytes,
+        )
+
+    def account_binding_view(
+        self,
+        mount: str,
+        account_ref: str,
+        *,
+        required_operations: frozenset[str],
+    ) -> ServiceAccountBindingView:
+        """Return a trusted frozen view for one registered account-read mount."""
+
+        self._assert_owner_thread()
+        self._require_healthy()
+        if self._state != "registered":
+            raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
+        if (
+            type(mount) is not str
+            or mount not in MOUNT_PORTS
+            or "service.account_read" not in MOUNT_PORTS[mount]
+        ):
+            raise ServiceRuntimeError("INVALID_ACCOUNT_MOUNT")
+        if type(account_ref) is not str or not account_ref:
+            raise ServiceRuntimeError("INVALID_ACCOUNT_REF")
+        if (
+            type(required_operations) is not frozenset
+            or not required_operations
+            or not required_operations <= PORT_OPERATIONS["service.account_read"]
+        ):
+            raise ServiceRuntimeError("INVALID_ACCOUNT_OPERATIONS")
+        matches = [
+            binding
+            for binding in self._bindings
+            if binding.active
+            and binding.mount == mount
+            and binding.scope.account_ref == account_ref
+        ]
+        if len(matches) != 1 or not required_operations <= matches[0].operations:
+            raise ServiceRuntimeError("ACCOUNT_BINDING_UNAVAILABLE")
+        binding = matches[0]
+        return ServiceAccountBindingView(
+            mount=binding.mount,
+            service_id=binding.service_id,
+            instance_id=binding.instance_id,
+            scope_ref=binding.scope_ref,
+            account_ref=account_ref,
+            registration_id=binding.registration_id,
+            service_epoch=binding.service_epoch,
+            rpc_scope=binding.scope,
+            operations=binding.operations,
+            transport_ref=binding.transport_ref,
+            timeout=binding.timeout,
         )
 
     def start(self) -> RegistrationSummary:

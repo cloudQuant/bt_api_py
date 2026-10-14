@@ -502,6 +502,26 @@ def build_component(
             raise ServiceComponentError("UNDECLARED_INTERNAL_PORT")
 
         adapter: object | None = None
+        account_worker: object | None = None
+        account_worker_selected = (
+            spec.component == "gateway"
+            and spec.options.get("role") == "account_session_worker"
+            and "service.provider_session" in resources.internal_ports
+        )
+        if account_worker_selected:
+            try:
+                worker_module = importlib.import_module("bt_api_gateway.account_session_worker")
+            except Exception:
+                raise ServiceComponentError("ACCOUNT_SESSION_WORKER_UNAVAILABLE") from None
+            worker_type = getattr(worker_module, "GatewayAccountSessionWorker", None)
+            account_worker = resources.internal_ports["service.provider_session"]
+            if not isinstance(worker_type, type) or type(account_worker) is not worker_type:
+                raise ServiceComponentError("ACCOUNT_SESSION_WORKER_INVALID")
+            start_worker = getattr(account_worker, "start", None)
+            worker_maintain = getattr(account_worker, "maintain", None)
+            if not callable(start_worker) or not callable(worker_maintain):
+                raise ServiceComponentError("ACCOUNT_SESSION_WORKER_INVALID")
+
         if public_ports:
             values = resources.values
             module = prepared.module
@@ -511,11 +531,13 @@ def build_component(
                     adapter = constructor(values["hub"])
                 else:
                     constructor = getattr(module, "GatewayReadService", None)
-                    adapter = constructor(
-                        values["journal"],
-                        accounts=values["accounts"],
-                        principals=values["principals"],
-                    )
+                    constructor_args = {
+                        "accounts": values["accounts"],
+                        "principals": values["principals"],
+                    }
+                    if account_worker is not None:
+                        constructor_args["state_worker"] = account_worker
+                    adapter = constructor(values["journal"], **constructor_args)
             elif spec.component == "monitor":
                 constructor = getattr(module, "MonitorReadService", None)
                 adapter = constructor(values["outbox"], values["targets"])
@@ -627,7 +649,32 @@ def build_component(
                 except Exception:
                     return False
 
-        return ServiceComponent(
+        if account_worker is not None:
+
+            def maintain_account_worker(
+                _active_registration_ids: frozenset[str],
+                *,
+                maintain_worker: Callable[[], object] = worker_maintain,
+            ) -> object:
+                # Provider ownership belongs to the service instance, not to
+                # any strategy lease. Maintain it even when no clients remain.
+                return maintain_worker()
+
+            maintain = maintain_account_worker
+
+            def account_worker_readiness(
+                *,
+                resource_ready: Callable[[], bool] = resources.ready,
+                session_worker: object = account_worker,
+            ) -> bool:
+                try:
+                    return resource_ready() is True and session_worker.ready is True
+                except Exception:
+                    return False
+
+            readiness = account_worker_readiness
+
+        component = ServiceComponent(
             component=spec.component,
             instance_id=spec.instance_id,
             capabilities=tuple(capabilities),
@@ -637,6 +684,22 @@ def build_component(
             close=resources.close,
             maintain=maintain,
         )
+        if account_worker is not None:
+            # Adapter construction above validates the provider session's
+            # trusted account/journal/ACL scope bindings. Do not connect to
+            # the provider until that pure construction has succeeded.
+            try:
+                start_worker()
+            except Exception:
+                raise ServiceComponentError("ACCOUNT_SESSION_WORKER_START_FAILED") from None
+            try:
+                if account_worker.ready is not True:
+                    raise ServiceComponentError("ACCOUNT_SESSION_WORKER_NOT_READY")
+            except ServiceComponentError:
+                raise
+            except Exception:
+                raise ServiceComponentError("ACCOUNT_SESSION_WORKER_NOT_READY") from None
+        return component
     except BaseException:
         if not tracked_by_caller:
             try:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import socket
 from dataclasses import replace
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -177,6 +178,20 @@ def _account_read_component(*, instance_id: str = "account-reader") -> dict[str,
         "settings": {
             "instance_id": instance_id,
             "bind_ports": ["service.account_read"],
+            "options": {
+                "role": "account_session_worker",
+                "account_session_ref": "trusted-session-v1",
+            },
+        },
+    }
+
+
+def _account_session_worker_component() -> dict[str, Any]:
+    return {
+        "config_schema_version": 2,
+        "settings": {
+            "instance_id": "gateway-session",
+            "bind_ports": ["service.account_read", "service.provider_session"],
             "options": {
                 "role": "account_session_worker",
                 "account_session_ref": "trusted-session-v1",
@@ -405,6 +420,233 @@ def _authority(config: Any) -> TrustedServiceAuthority:
         curve_secret_key=server_secret,
         principals={client_public: "curve-principal"},
         grants={"curve-principal": (PrincipalGrant(_CLIENT_IDENTITY, grants),)},
+    )
+
+
+def _account_worker_setup(
+    tmp_path: Path,
+    *,
+    fail_read: bool = False,
+    failed_close_attempts: int = 0,
+    invalid_worker_mapping: bool = False,
+    refresh_interval_seconds: float = 10.0,
+    max_staleness_seconds: float = 5.0,
+):
+    from datetime import datetime
+
+    from bt_api_base.account_protocol import (
+        AccountBalance,
+        AccountKey,
+        AccountObservation,
+        AccountResourceKey,
+        AccountValuation,
+    )
+    from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
+    from bt_api_gateway.event_journal import GatewayEventJournal
+    from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal
+    from bt_api_gateway.service_component import SUPPORTED_OPERATIONS, GatewayServiceAccountScope
+    from bt_api_gateway.session_guard import LocalAccountSessionGuard
+
+    class Clock:
+        def __init__(self) -> None:
+            self.wall_datetime = datetime.now(UTC).replace(microsecond=0)
+            self.wall_seconds = self.wall_datetime.timestamp()
+            self.monotonic_seconds = 100.0
+
+        def wall(self) -> float:
+            return self.wall_seconds
+
+        def monotonic(self) -> float:
+            return self.monotonic_seconds
+
+        def utc_text(self) -> str:
+            return self.wall_datetime.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    clock = Clock()
+    account_key = AccountKey(
+        provider="synthetic-provider",
+        venue="synthetic-venue",
+        environment="paper",
+        account_id="account-a",
+    )
+    resource_key = AccountResourceKey(product_type="spot", margin_pool="default")
+    observed_at = clock.utc_text()
+    observation = AccountObservation(
+        account_key=account_key,
+        observation_id="observation-1",
+        coverage=(resource_key,),
+        balances=(
+            AccountBalance(
+                resource=resource_key,
+                currency="USD",
+                total="100",
+                available="80",
+                locked="20",
+                observed_at_utc=observed_at,
+            ),
+        ),
+        positions=(),
+        valuation=AccountValuation(
+            currency="USD",
+            available_cash="80",
+            equity="100",
+            observed_at_utc=observed_at,
+        ),
+        started_at_utc=observed_at,
+        completed_at_utc=observed_at,
+        consistency="provider_atomic",
+        balances_complete=True,
+        positions_complete=True,
+    )
+
+    class Provider:
+        def __init__(self) -> None:
+            self.account_key = account_key
+            self.connect_calls = 0
+            self.read_calls = 0
+            self.close_calls = 0
+            self.connected_generation: str | None = None
+            self.closed = False
+            self.fail_reads = fail_read
+
+        def connect(self, *, account_key, generation: str, timeout: float) -> None:
+            assert account_key == self.account_key
+            assert generation
+            assert timeout > 0
+            self.connect_calls += 1
+            self.connected_generation = generation
+            self.closed = False
+
+        def read_account(self, *, generation: str, timeout: float) -> AccountObservation:
+            assert timeout > 0
+            self.read_calls += 1
+            if self.fail_reads:
+                raise RuntimeError("private provider read detail")
+            assert generation == self.connected_generation
+            return observation
+
+        def close(self) -> bool:
+            self.close_calls += 1
+            if self.close_calls <= failed_close_attempts:
+                raise RuntimeError("private provider close detail")
+            self.closed = True
+            return True
+
+    provider = Provider()
+    journal = GatewayEventJournal(tmp_path / "account-state.sqlite3")
+    guard_directory = tmp_path / "account-guards"
+    guard_directory.mkdir(exist_ok=True)
+    guard = LocalAccountSessionGuard(guard_directory, account_key.account_key_id, "host-owner-v1")
+    worker = GatewayAccountSessionWorker(
+        provider,
+        journal,
+        account_key=account_key,
+        journal_account_scope="journal-account-a",
+        state_scope="shared-account-facts-v1",
+        guard=guard,
+        required_coverage=(resource_key,),
+        refresh_interval_seconds=refresh_interval_seconds,
+        max_staleness_seconds=max_staleness_seconds,
+        request_timeout_seconds=2.0,
+        clock=clock.wall,
+        monotonic_clock=clock.monotonic,
+    )
+    account = GatewayServiceAccountScope(
+        account_ref="account-a",
+        execution_domain_ref="paper:demo",
+        journal_account_scope=(
+            "journal-account-mismatch" if invalid_worker_mapping else "journal-account-a"
+        ),
+        shared_account_facts_scope="shared-account-facts-v1",
+        shared_fact_strategy_refs=frozenset({"strategy-a", "strategy-b"}),
+    )
+    principal = GatewayPrincipal(
+        principal_id="curve-principal",
+        account_scopes=frozenset({"journal-account-a"}),
+        strategy_scopes=frozenset({"shared-account-facts-v1"}),
+        allowed_kinds=frozenset({GatewayCommandKind.READ}),
+    )
+    config = _service_config(
+        {"gateway": _account_session_worker_component()},
+        service_id="gateway-service",
+    )
+    service_authority = WireScope(execution_domain_ref="paper:demo")
+    client_public, _client_secret = zmq.curve_keypair()
+    server_public, server_secret = zmq.curve_keypair()
+    templates = {
+        strategy_ref: WireScope("paper:demo", account_ref="account-a", strategy_ref=strategy_ref)
+        for strategy_ref in ("strategy-a", "strategy-b")
+    }
+    grants = tuple(
+        ResourceGrant(
+            instance_id="gateway-session",
+            port="service.account_read",
+            scope_ref=f"account-{strategy_ref}-grant-v1",
+            scope=scope,
+            operations=SUPPORTED_OPERATIONS,
+        )
+        for strategy_ref, scope in templates.items()
+    )
+    authority = TrustedServiceAuthority(
+        identity=WireIdentity(WireRole.SERVICE, "gateway-service", config.service_id),
+        scope=service_authority,
+        scope_ref=config.scope_ref,
+        scope_version="scope-v1",
+        security_ref="listener-security-v1",
+        security_version="security-v1",
+        registration_policy_ref=config.registration_policy_ref,
+        registration_policy_version="policy-v1",
+        service_requirements_ref=config.service_requirements_ref,
+        service_requirements_version="requirements-v1",
+        curve_public_key=server_public,
+        curve_secret_key=server_secret,
+        principals={client_public: "curve-principal"},
+        grants={"curve-principal": (PrincipalGrant(_CLIENT_IDENTITY, grants),)},
+    )
+
+    close_attempts: list[int] = []
+
+    def close_resources() -> None:
+        close_attempts.append(len(close_attempts) + 1)
+        worker.close()
+
+    resources = ComponentResources.owned(
+        {
+            "journal": journal,
+            "accounts": {"account-a": account},
+            "principals": {"curve-principal": principal},
+        },
+        ready=lambda: True,
+        close=close_resources,
+        internal_ports={"service.provider_session": worker},
+    )
+
+    def resource_provider(component, instance_id, options, scope):
+        assert component == "gateway"
+        assert instance_id == "gateway-session"
+        assert dict(options) == {
+            "role": "account_session_worker",
+            "account_session_ref": "trusted-session-v1",
+        }
+        assert scope is authority.scope
+        return resources
+
+    host = ServiceHost(
+        config,
+        authority,
+        tmp_path / "gateway-registry.sqlite3",
+        resource_provider,
+    )
+    return (
+        host,
+        config,
+        authority,
+        worker,
+        provider,
+        clock,
+        resources,
+        close_attempts,
+        templates,
     )
 
 
@@ -1768,3 +2010,260 @@ def test_market_publisher_close_failure_retains_hub_until_explicit_retry(tmp_pat
     assert publisher_closes == [1, 1]
     assert resource_close_events == ["resource.close"]
     assert events == ["rpc.close", "publisher.close", "publisher.close"]
+
+
+def test_account_session_worker_shares_one_read_across_strategies_and_survives_one_unregister(
+    tmp_path,
+):
+    (
+        host,
+        _config,
+        _authority_value,
+        worker,
+        provider,
+        _clock,
+        _resources,
+        _close_attempts,
+        _templates,
+    ) = _account_worker_setup(tmp_path)
+    from bt_api_gateway.service_component import SUPPORTED_OPERATIONS
+
+    try:
+        host.start()
+        assert worker.ready is True
+        assert provider.connect_calls == 1
+        assert provider.read_calls == 1
+        registry = host._registry
+        assert registry is not None and registry.ready is True
+
+        registered: dict[str, tuple[dict[str, Any], WireScope]] = {}
+        for strategy_ref in ("strategy-a", "strategy-b"):
+            scope = WireScope(
+                "paper:demo",
+                account_ref="account-a",
+                strategy_ref=strategy_ref,
+                run_id=f"run-{strategy_ref}",
+            )
+            grant_ref = f"account-{strategy_ref}-grant-v1"
+            reply = registry.handle(
+                "curve-principal",
+                _request(
+                    "service.register",
+                    {
+                        "registration_key": f"registration-{strategy_ref}",
+                        "client_session_id": f"client-session-{strategy_ref}",
+                        "instance_id": "gateway-session",
+                        "port": "service.account_read",
+                        "scope_ref": grant_ref,
+                        "operations": tuple(sorted(SUPPORTED_OPERATIONS)),
+                    },
+                    schema_id="sdk.service.control",
+                    identity=_CLIENT_IDENTITY,
+                    scope=scope,
+                ),
+            )
+            assert reply["code"] == "OK"
+            registered[strategy_ref] = (reply["result"], scope)
+
+        generation = worker.session_generation
+        for strategy_ref in ("strategy-a", "strategy-b"):
+            registration, scope = registered[strategy_ref]
+            reply = registry.handle(
+                "curve-principal",
+                _request(
+                    "account.snapshot",
+                    {
+                        "registration_id": registration["registration_id"],
+                        "service_epoch": registration["service_epoch"],
+                        "instance_id": "gateway-session",
+                        "arguments": {"limit": 1},
+                    },
+                    schema_id="sdk.service.call",
+                    identity=_CLIENT_IDENTITY,
+                    scope=scope,
+                ),
+            )
+            assert reply["code"] == "OK"
+            result = reply["result"]
+            assert result["state_status"]["ready"] is True
+            assert result["state_status"]["session_generation"] == generation
+            assert result["snapshot"]["payload"]["session_generation"] == generation
+
+        assert provider.connect_calls == 1
+        assert provider.read_calls == 1
+
+        registration, scope = registered["strategy-a"]
+        unregistered = registry.handle(
+            "curve-principal",
+            _request(
+                "service.unregister",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                },
+                schema_id="sdk.service.control",
+                identity=_CLIENT_IDENTITY,
+                scope=scope,
+            ),
+        )
+        assert unregistered["code"] == "OK"
+        assert host.serve_once(0) is False
+        assert provider.close_calls == 0
+        assert provider.connect_calls == 1
+        assert provider.read_calls == 1
+
+        registration, scope = registered["strategy-b"]
+        remaining_read = registry.handle(
+            "curve-principal",
+            _request(
+                "account.snapshot",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                    "instance_id": "gateway-session",
+                    "arguments": {"limit": 1},
+                },
+                schema_id="sdk.service.call",
+                identity=_CLIENT_IDENTITY,
+                scope=scope,
+            ),
+        )
+        assert remaining_read["code"] == "OK"
+        assert provider.close_calls == 0
+        assert provider.read_calls == 1
+    finally:
+        host.close()
+
+    assert provider.close_calls == 1
+    assert provider.closed is True
+
+
+def test_account_session_start_failure_closes_tracked_worker_resources(tmp_path):
+    (
+        host,
+        _config,
+        _authority_value,
+        worker,
+        provider,
+        _clock,
+        _resources,
+        close_attempts,
+        _templates,
+    ) = _account_worker_setup(tmp_path, fail_read=True)
+
+    with pytest.raises(ServiceHostError) as exc_info:
+        host.start()
+
+    assert exc_info.value.code == "ACCOUNT_SESSION_WORKER_START_FAILED"
+    assert host.state == "failed"
+    assert worker.state == "closed"
+    assert provider.connect_calls == 1
+    assert provider.read_calls == 1
+    assert provider.close_calls == 1
+    assert provider.closed is True
+    assert close_attempts == [1]
+    assert host._pending_resources == []
+
+
+def test_account_session_invalid_mapping_fails_before_provider_connect(tmp_path):
+    (
+        host,
+        _config,
+        _authority_value,
+        worker,
+        provider,
+        _clock,
+        _resources,
+        close_attempts,
+        _templates,
+    ) = _account_worker_setup(tmp_path, invalid_worker_mapping=True)
+
+    with pytest.raises(ServiceHostError) as exc_info:
+        host.start()
+
+    assert exc_info.value.code == "START_FAILED"
+    assert host.state == "failed"
+    assert provider.connect_calls == 0
+    assert provider.read_calls == 0
+    assert worker.state == "closed"
+    assert provider.close_calls == 0
+    assert close_attempts == [1]
+
+
+def test_account_session_provider_close_failure_retains_host_resources_for_retry(tmp_path):
+    (
+        host,
+        _config,
+        _authority_value,
+        worker,
+        provider,
+        _clock,
+        _resources,
+        close_attempts,
+        _templates,
+    ) = _account_worker_setup(tmp_path, failed_close_attempts=1)
+    try:
+        host.start()
+
+        with pytest.raises(ServiceHostError) as exc_info:
+            host.close()
+
+        assert exc_info.value.code == "CLOSE_FAILED"
+        assert host.state == "close_failed"
+        assert host._components
+        assert worker.state == "close_failed"
+        assert provider.close_calls == 1
+        assert provider.closed is False
+        assert len(close_attempts) == 1
+
+        host.close()
+        assert host.state == "closed"
+        assert host._components == []
+        assert worker.state == "closed"
+        assert provider.close_calls == 2
+        assert provider.closed is True
+        assert close_attempts == [1, 2]
+    finally:
+        if host.state != "closed":
+            host.close()
+
+
+def test_expired_account_baseline_withdraws_readiness_and_maintains_without_reconnect(
+    tmp_path,
+):
+    (
+        host,
+        _config,
+        _authority_value,
+        worker,
+        provider,
+        clock,
+        _resources,
+        _close_attempts,
+        _templates,
+    ) = _account_worker_setup(
+        tmp_path,
+        refresh_interval_seconds=1.0,
+        max_staleness_seconds=5.0,
+    )
+    try:
+        host.start()
+        registry = host._registry
+        assert registry is not None and registry.ready is True
+        assert worker.ready is True
+
+        provider.fail_reads = True
+        clock.monotonic_seconds += 6.0
+        assert host.serve_once(0) is False
+
+        assert provider.connect_calls == 1
+        assert provider.read_calls == 2
+        assert worker.state == "refresh_failed"
+        assert worker.ready is False
+        assert host.healthy is False
+        assert registry.ready is False
+        assert provider.read_calls == 2
+    finally:
+        host.close()
+
+    assert provider.close_calls == 1
