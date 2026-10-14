@@ -72,7 +72,7 @@ PORT_OPERATIONS = MappingProxyType(
         "service.risk_policy": frozenset(
             {"policy.read", "policy.draft", "policy.approve", "policy.publish", "policy.receipt"}
         ),
-        "service.telemetry_ingress": frozenset({"telemetry.append"}),
+        "service.telemetry_ingress": frozenset({"telemetry.append", "events.append"}),
         "service.monitor_query": frozenset({"monitor.query", "monitor.read_after"}),
         "service.monitor_control": frozenset({"monitor.acknowledge", "monitor.control"}),
         "service.owner_control": frozenset(
@@ -87,6 +87,7 @@ PORT_OPERATIONS = MappingProxyType(
 _DEFAULT_ACCOUNT_READ_OPERATIONS = frozenset(
     {"account.read_after", "account.snapshot", "account.head"}
 )
+_DEFAULT_TELEMETRY_INGRESS_OPERATIONS = frozenset({"telemetry.append"})
 
 
 class ServiceRuntimeError(RuntimeError):
@@ -965,6 +966,11 @@ class ServiceClientRuntime:
             # for existing read-only clients and grants. Consumers opt in to
             # ACK/progress explicitly through requested_operations.
             operations = operations.intersection(_DEFAULT_ACCOUNT_READ_OPERATIONS)
+        elif port == "service.telemetry_ingress":
+            # Durable facts use a distinct event operation. Existing clients
+            # keep the generic telemetry operation unless they explicitly opt
+            # in to events.append through requested_operations.
+            operations = operations.intersection(_DEFAULT_TELEMETRY_INGRESS_OPERATIONS)
         if not operations:
             raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         if port == "service.order_entry" and not {"orders.submit", "orders.cancel"} <= operations:

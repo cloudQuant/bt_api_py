@@ -190,7 +190,8 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         "portfolio_analytics": frozenset({"service.risk_analysis"}),
         "policy_catalog": frozenset({"service.risk_policy"}),
     },
-    # The plan defines Monitor ports but no Monitor options.role value.
+    # Ordinary Monitor remains roleless; durable fact ingress is a separate
+    # explicit role that can bind only its telemetry ingress port.
     "monitor": {
         None: frozenset(
             {
@@ -198,7 +199,8 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
                 "service.monitor_query",
                 "service.monitor_control",
             }
-        )
+        ),
+        "durable_ingress": frozenset({"service.telemetry_ingress"}),
     },
 }
 _SERVICE_PORTS: Final[frozenset[str]] = frozenset(
@@ -837,9 +839,14 @@ def _parse_component(name: str, raw: object) -> tuple[dict[str, Any], str | None
     _require_dict(options_raw, f"{path}.settings.options")
     role: str | None
     if name == "monitor":
-        _check_keys(options_raw, set(), f"{path}.settings.options")
-        role = None
-        allowed_ports = _COMPONENT_PORTS[name][None]
+        if "role" not in options_raw:
+            _check_keys(options_raw, set(), f"{path}.settings.options")
+            role = None
+        else:
+            role = _required_ref(options_raw, "role", f"{path}.settings.options")
+            if role not in _COMPONENT_PORTS[name]:
+                _fail("UNKNOWN_COMPONENT_ROLE", f"{path}.settings.options.role")
+        allowed_ports = _COMPONENT_PORTS[name][role]
     else:
         role = _required_ref(options_raw, "role", f"{path}.settings.options")
         role_ports = _COMPONENT_PORTS[name]
@@ -862,7 +869,24 @@ def _validate_component_options(
 ) -> dict[str, Any]:
     options_path = f"{path}.settings.options"
     if component == "monitor":
-        return {}
+        if role is None:
+            return {}
+        fields = {"role", "max_events", "max_bytes", "max_event_bytes"}
+        _check_keys(raw, fields, options_path)
+        result = {
+            "role": role,
+            "max_events": 10_000,
+            "max_bytes": 64 * 1024 * 1024,
+            "max_event_bytes": 64 * 1024,
+        }
+        for key in ("max_events", "max_bytes", "max_event_bytes"):
+            if key not in raw:
+                continue
+            value = _int(raw[key], f"{options_path}.{key}")
+            if value <= 0:
+                _fail("INVALID_VALUE", f"{options_path}.{key}")
+            result[key] = value
+        return result
     if component == "gateway":
         fields = {"role", "account_session_ref"} if role == "account_session_worker" else {"role"}
         _check_keys(raw, fields, options_path)

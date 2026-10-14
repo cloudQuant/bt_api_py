@@ -1,13 +1,14 @@
-"""Fixed, lazy factories for the SDK's selected read-service components.
+"""Fixed, lazy factories for the SDK's selected service components.
 
 This module contains no domain-package imports at module load time.  A
 component package is imported only when its fixed name appears in a parsed
 service manifest.  The manifest can select a built-in component; it cannot
 name Python modules, factories, handlers, or backend objects.
 
-The current runtime exposes only the implemented read adapters.  Other
-manifest ports are either explicitly internal objects supplied by the trusted
-resource provider or fail closed before the listener is opened.
+The current runtime exposes implemented read adapters and the explicitly
+selected durable monitor ingress role. Other manifest ports are either
+internal objects supplied by the trusted resource provider or fail closed
+before the listener is opened.
 """
 
 from __future__ import annotations
@@ -311,7 +312,19 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             internal_ports=frozenset(),
             validator_module_name="bt_api_gateway.service_component",
-        )
+        ),
+        (
+            "monitor",
+            "durable_ingress",
+        ): _Builtin(
+            module_name="bt_api_monitor.service_ingress",
+            operations_attribute=("MONITOR_INGRESS_OPERATIONS",),
+            resource_keys=frozenset({"outbox", "targets"}),
+            public_ports=MappingProxyType(
+                {"service.telemetry_ingress": frozenset({"events.append"})}
+            ),
+            internal_ports=frozenset(),
+        ),
     }
 )
 
@@ -471,7 +484,7 @@ def build_component(
     resource_provider: ServiceResourceProvider,
     on_resources: Callable[[ComponentResources], None] | None = None,
 ) -> ServiceComponent:
-    """Resolve trusted resources and construct one fixed read adapter."""
+    """Resolve trusted resources and construct one fixed adapter."""
 
     if type(prepared) is not PreparedComponent or type(scope) is not WireScope:
         raise ServiceComponentError("INVALID_COMPONENT_BUILD")
@@ -546,8 +559,16 @@ def build_component(
                         constructor_args["state_worker"] = account_worker
                     adapter = constructor(values["journal"], **constructor_args)
             elif spec.component == "monitor":
-                constructor = getattr(module, "MonitorReadService", None)
-                adapter = constructor(values["outbox"], values["targets"])
+                if spec.options.get("role") == "durable_ingress":
+                    constructor = getattr(module, "MonitorIngressService", None)
+                    constructor_options = dict(prepared.options)
+                    constructor_options.pop("role", None)
+                    adapter = constructor(
+                        values["outbox"], values["targets"], **constructor_options
+                    )
+                else:
+                    constructor = getattr(module, "MonitorReadService", None)
+                    adapter = constructor(values["outbox"], values["targets"])
             elif spec.component == "risk":
                 constructor = getattr(module, "RiskReadService", None)
                 adapter = constructor(values["gate"], values["targets"])
@@ -661,6 +682,14 @@ def build_component(
                         ):
                             raise ServiceResultTooLargeError() from None
                         raise
+                if spec.component == "monitor" and spec.options.get("role") == "durable_ingress":
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        principal_ref=context.principal_ref,
+                        identity=context.identity,
+                        scope=context.scope,
+                        arguments=arguments,
+                    )
                 return _adapter.handle(  # type: ignore[attr-defined]
                     _operation,
                     principal_ref=context.principal_ref,
