@@ -1140,13 +1140,16 @@ def test_unready_component_rolls_back_listener_and_closes_components_in_reverse_
     )
     authority = _authority(config)
     monitor_resources, _outbox = _monitor_resources(tmp_path / "monitor.db", ready=False)
+    # The account-session role requires the trusted provider to hand over a real
+    # GatewayAccountSessionWorker; reuse the standard fixture worker.
+    gateway_worker = _account_worker_setup(tmp_path)[3]
     closed: list[str] = []
 
     def provider(component, instance_id, options, scope):
         if component == "gateway":
             return ComponentResources.owned(
                 {},
-                internal_ports={"service.provider_session": object()},
+                internal_ports={"service.provider_session": gateway_worker},
                 ready=lambda: True,
                 close=lambda: closed.append("gateway"),
             )

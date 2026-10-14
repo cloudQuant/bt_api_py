@@ -1184,8 +1184,11 @@ class ServiceRegistry:
         except ServiceResultTooLargeError as error:
             if (
                 type(error) is ServiceResultTooLargeError
-                and capability.port == "service.account_read"
-                and operation == "account.read_after"
+                and (capability.port, operation)
+                in {
+                    ("service.account_read", "account.read_after"),
+                    ("service.monitor_query", "telemetry.snapshot"),
+                }
                 and operation not in write_ops
             ):
                 return self._failure("REPLY_TOO_LARGE")

@@ -5,8 +5,8 @@ component package is imported only when its fixed name appears in a parsed
 service manifest.  The manifest can select a built-in component; it cannot
 name Python modules, factories, handlers, or backend objects.
 
-The current runtime exposes implemented read adapters and the explicitly
-selected durable monitor ingress role. Other manifest ports are either
+The current runtime exposes implemented read adapters and explicitly
+selected monitor ingress roles. Other manifest ports are either
 internal objects supplied by the trusted resource provider or fail closed
 before the listener is opened.
 """
@@ -325,6 +325,18 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             internal_ports=frozenset(),
         ),
+        ("monitor", "telemetry_ingress"): _Builtin(
+            module_name="bt_api_monitor.service_telemetry",
+            operations_attribute=("TELEMETRY_OPERATIONS",),
+            resource_keys=frozenset({"targets"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.telemetry_ingress": frozenset({"telemetry.append"}),
+                    "service.monitor_query": frozenset({"telemetry.snapshot"}),
+                }
+            ),
+            internal_ports=frozenset(),
+        ),
     }
 )
 
@@ -559,7 +571,12 @@ def build_component(
                         constructor_args["state_worker"] = account_worker
                     adapter = constructor(values["journal"], **constructor_args)
             elif spec.component == "monitor":
-                if spec.options.get("role") == "durable_ingress":
+                if spec.options.get("role") == "telemetry_ingress":
+                    constructor = getattr(module, "MonitorTelemetryService", None)
+                    constructor_options = dict(prepared.options)
+                    constructor_options.pop("role", None)
+                    adapter = constructor(values["targets"], **constructor_options)
+                elif spec.options.get("role") == "durable_ingress":
                     constructor = getattr(module, "MonitorIngressService", None)
                     constructor_options = dict(prepared.options)
                     constructor_options.pop("role", None)
@@ -690,6 +707,24 @@ def build_component(
                         scope=context.scope,
                         arguments=arguments,
                     )
+                if spec.component == "monitor" and spec.options.get("role") == "telemetry_ingress":
+                    try:
+                        return _adapter.handle(  # type: ignore[attr-defined]
+                            _operation,
+                            principal_ref=context.principal_ref,
+                            identity=context.identity,
+                            scope=context.scope,
+                            arguments=arguments,
+                            result_fits=context.result_fits,
+                        )
+                    except Exception as error:
+                        if (
+                            type(error)
+                            is getattr(prepared.module, "MonitorTelemetryServiceError", None)
+                            and error.code == "SNAPSHOT_TOO_LARGE"
+                        ):
+                            raise ServiceResultTooLargeError() from None
+                        raise
                 return _adapter.handle(  # type: ignore[attr-defined]
                     _operation,
                     principal_ref=context.principal_ref,

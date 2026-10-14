@@ -73,7 +73,9 @@ PORT_OPERATIONS = MappingProxyType(
             {"policy.read", "policy.draft", "policy.approve", "policy.publish", "policy.receipt"}
         ),
         "service.telemetry_ingress": frozenset({"telemetry.append", "events.append"}),
-        "service.monitor_query": frozenset({"monitor.query", "monitor.read_after"}),
+        "service.monitor_query": frozenset(
+            {"monitor.query", "monitor.read_after", "telemetry.snapshot"}
+        ),
         "service.monitor_control": frozenset({"monitor.acknowledge", "monitor.control"}),
         "service.owner_control": frozenset(
             {"owner.session", "owner.stop_new", "owner.cancel", "owner.reduce"}

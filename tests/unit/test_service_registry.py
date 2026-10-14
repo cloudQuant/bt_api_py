@@ -922,6 +922,7 @@ def test_handler_exceptions_are_finite_and_registry_bounds_are_enforced(tmp_path
                     "NOT_REGISTERED",
                     "OK",
                     "POLICY_REQUIREMENT_UNMET",
+                    "REPLY_TOO_LARGE",
                     "SCOPE_DENIED",
                     "STALE_EPOCH",
                     "UNKNOWN_OPERATION",

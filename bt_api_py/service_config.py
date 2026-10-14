@@ -190,8 +190,8 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         "portfolio_analytics": frozenset({"service.risk_analysis"}),
         "policy_catalog": frozenset({"service.risk_policy"}),
     },
-    # Ordinary Monitor remains roleless; durable fact ingress is a separate
-    # explicit role that can bind only its telemetry ingress port.
+    # Legacy Monitor reads remain roleless. Explicit ingress roles bind only
+    # their fixed ordinary-telemetry or durable-event capabilities.
     "monitor": {
         None: frozenset(
             {
@@ -201,6 +201,7 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
             }
         ),
         "durable_ingress": frozenset({"service.telemetry_ingress"}),
+        "telemetry_ingress": frozenset({"service.telemetry_ingress", "service.monitor_query"}),
     },
 }
 _SERVICE_PORTS: Final[frozenset[str]] = frozenset(
@@ -210,6 +211,9 @@ _SERVICE_PORTS: Final[frozenset[str]] = frozenset(
 _CLIENT_SETTINGS_FIELDS: Final[frozenset[str]] = frozenset({"bindings", "options"})
 _CLIENT_OPTIONS: Final[frozenset[str]] = frozenset(
     {"request_timeout_ms", "heartbeat_interval_seconds"}
+)
+_MONITOR_CLIENT_OPTIONS: Final[frozenset[str]] = _CLIENT_OPTIONS.union(
+    {"telemetry_queue_max_events", "telemetry_queue_max_bytes"}
 )
 _PROFILE_OPTIONS: Final[frozenset[str]] = frozenset(
     {"request_timeout_ms", "high_water_mark", "max_message_bytes"}
@@ -557,7 +561,8 @@ def _parse_client_block(raw: object, role: str, alias: str, path: str) -> dict[s
         _fail("CLIENT_ALIAS_MOUNT_MISMATCH", f"{path}.settings.bindings")
     _check_binding_conflicts(bindings, f"{path}.settings.bindings")
     options_raw = settings.get("options", {})
-    options = _parse_options(options_raw, _CLIENT_OPTIONS, f"{path}.settings.options")
+    allowed_options = _MONITOR_CLIENT_OPTIONS if alias == "monitor" else _CLIENT_OPTIONS
+    options = _parse_options(options_raw, allowed_options, f"{path}.settings.options")
     normalized_options = dict(options)
     normalized_options.setdefault("request_timeout_ms", 2000)
     normalized_settings: dict[str, Any] = {"bindings": bindings}
@@ -639,6 +644,8 @@ def _parse_options(raw: object, allowed: frozenset[str], path: str) -> dict[str,
             "max_message_bytes",
             "max_concurrent_tasks",
             "max_input_bytes",
+            "telemetry_queue_max_events",
+            "telemetry_queue_max_bytes",
         }:
             lower, upper = {
                 "request_timeout_ms": (1, 120_000),
@@ -646,6 +653,8 @@ def _parse_options(raw: object, allowed: frozenset[str], path: str) -> dict[str,
                 "max_message_bytes": (1, 1_048_576),
                 "max_concurrent_tasks": (1, 64),
                 "max_input_bytes": (1, 67_108_864),
+                "telemetry_queue_max_events": (1, 4096),
+                "telemetry_queue_max_bytes": (1, 4 * 1024 * 1024),
             }[key]
             number = _int(value, value_path)
             if number < lower or number > upper:
@@ -871,6 +880,22 @@ def _validate_component_options(
     if component == "monitor":
         if role is None:
             return {}
+        if role == "telemetry_ingress":
+            defaults = {
+                "max_streams": 256,
+                "max_bytes": 1024 * 1024,
+                "heartbeat_timeout_seconds": 30,
+                "retention_seconds": 300,
+            }
+            _check_keys(raw, {"role", *defaults}, options_path)
+            result = {"role": role, **defaults}
+            for key in defaults:
+                if key in raw:
+                    value = _int(raw[key], f"{options_path}.{key}")
+                    if value <= 0:
+                        _fail("INVALID_VALUE", f"{options_path}.{key}")
+                    result[key] = value
+            return result
         fields = {"role", "max_events", "max_bytes", "max_event_bytes"}
         _check_keys(raw, fields, options_path)
         result = {
