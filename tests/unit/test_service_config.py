@@ -659,6 +659,61 @@ def test_binding_references_endpoints_and_required_types(
     assert exc_info.value.code == expected_code
 
 
+@pytest.mark.parametrize(
+    "endpoints",
+    [
+        {"rpc_connect": "tcp://127.0.0.1:7101"},
+        {"market_connect": "tcp://127.0.0.1:7102"},
+    ],
+    ids=("missing-market-stream", "missing-rpc-control"),
+)
+@pytest.mark.parametrize(
+    ("mount", "role"),
+    [
+        ("store.market", "strategy_client"),
+        ("application.market", "application_client"),
+    ],
+)
+def test_market_mount_requires_rpc_and_market_endpoints(
+    endpoints: dict[str, str], mount: str, role: str
+) -> None:
+    raw = _strategy_config([_client_binding(mount)], role=role)
+    raw["communication"]["profiles"]["rpc"]["endpoints"] = endpoints
+
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_client_config(raw)
+
+    assert exc_info.value.code == "MISSING_ENDPOINT"
+    assert exc_info.value.path == "$.clients.bindings[0].transport_ref"
+
+
+def test_service_upstream_market_mount_requires_rpc_and_market_endpoints() -> None:
+    service = _service_config()
+    service["clients"] = {
+        "gateway": {
+            "config_schema_version": 1,
+            "settings": {
+                "bindings": [
+                    _client_binding(
+                        "upstream.market",
+                        service_id="market-upstream",
+                        transport_ref="outbound",
+                    )
+                ]
+            },
+        }
+    }
+    service["communication"]["profiles"]["outbound"] = _read_profile(
+        "market_connect", "tcp://127.0.0.1:7202"
+    )
+
+    with pytest.raises(ServiceConfigError) as exc_info:
+        parse_service_config(service)
+
+    assert exc_info.value.code == "MISSING_ENDPOINT"
+    assert exc_info.value.path == "$.clients.bindings[0].transport_ref"
+
+
 def test_duplicate_account_scope_and_writer_conflicts_are_rejected() -> None:
     first = _client_binding("store.account", account_ref="account-a", scope_ref="scope-a")
     second = _client_binding(

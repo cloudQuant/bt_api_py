@@ -753,10 +753,12 @@ def _validate_bindings_references(
         if profile is None:
             _fail("UNKNOWN_REFERENCE", f"$.clients.bindings[{index}].transport_ref")
         endpoints = profile["endpoints"]
-        required_endpoint = (
-            "market_connect" if binding["mount"].endswith(".market") else "rpc_connect"
+        required_endpoints = (
+            ("rpc_connect", "market_connect")
+            if binding["mount"].endswith(".market")
+            else ("rpc_connect",)
         )
-        if required_endpoint not in endpoints:
+        if any(name not in endpoints for name in required_endpoints):
             _fail("MISSING_ENDPOINT", f"$.clients.bindings[{index}].transport_ref")
     if role == "service" and clients and not profiles:
         _fail("MISSING_FIELD", "$.communication.profiles")
