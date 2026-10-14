@@ -901,3 +901,51 @@ def test_transport_printable_principal_refs_are_not_limited_to_registry_ids(
         assert result["ok"] is True
     finally:
         registry.close()
+
+
+@pytest.mark.parametrize("close_before_error", [False, True])
+def test_registry_close_retains_owner_lock_until_file_close_retry_succeeds(
+    tmp_path: Path, close_before_error: bool
+) -> None:
+    registry = _make_registry(tmp_path / "retry-close.sqlite")
+    owner_key = registry._owner_key
+    owner_file = registry._owner_file
+    assert owner_key is not None
+    assert owner_file is not None
+
+    class FailFirstClose:
+        def __init__(self, wrapped: Any) -> None:
+            self.wrapped = wrapped
+            self.close_attempts = 0
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.wrapped, name)
+
+        def close(self) -> None:
+            self.close_attempts += 1
+            if self.close_attempts == 1:
+                if close_before_error:
+                    self.wrapped.close()
+                raise OSError("private close detail")
+            self.wrapped.close()
+
+    retry_file = FailFirstClose(owner_file)
+    registry._owner_file = retry_file
+
+    with pytest.raises(OSError):
+        registry.close()
+
+    assert registry.ready is False
+    assert registry._closed is False
+    assert registry._db is None
+    assert registry._owner_file is retry_file
+    assert registry._owner_key == owner_key
+    assert owner_key in ServiceRegistry._owned_paths
+
+    registry.close()
+
+    assert registry._closed is True
+    assert registry._owner_file is None
+    assert registry._owner_key is None
+    assert owner_key not in ServiceRegistry._owned_paths
+    assert retry_file.close_attempts == 2

@@ -167,8 +167,55 @@ class ServiceCallContext:
     principal_ref: str
 
 
+def validate_capabilities_and_grants(
+    capabilities: tuple[ServiceCapability, ...],
+    grants: Mapping[str, tuple[PrincipalGrant, ...]],
+) -> tuple[
+    Mapping[tuple[str, str], ServiceCapability],
+    Mapping[str, tuple[PrincipalGrant, ...]],
+]:
+    """Purely validate and snapshot code capabilities against trusted grants.
+
+    Service composition calls this before acquiring component resources; the
+    registry constructor reuses the same checks before opening its database.
+    It performs no I/O and does not alter registration or lease behavior.
+    """
+
+    if type(capabilities) is not tuple or not capabilities:
+        raise TypeError("capabilities must be a non-empty tuple")
+    if any(type(capability) is not ServiceCapability for capability in capabilities):
+        raise TypeError("capabilities must contain ServiceCapability values")
+    capability_map = {(item.instance_id, item.port): item for item in capabilities}
+    if len(capability_map) != len(capabilities):
+        raise ValueError("capability instance/port pairs must be unique")
+
+    trusted_grants: dict[str, tuple[PrincipalGrant, ...]] = {}
+    if not isinstance(grants, Mapping):
+        raise TypeError("grants must be a mapping")
+    for principal, entries in grants.items():
+        if not _principal_ref(principal) or type(entries) is not tuple:
+            raise ValueError("principal grant mapping is invalid")
+        if any(type(entry) is not PrincipalGrant for entry in entries):
+            raise TypeError("principal grants must contain PrincipalGrant values")
+        for entry in entries:
+            for resource in entry.resources:
+                capability = capability_map.get((resource.instance_id, resource.port))
+                if capability is None or not resource.operations.issubset(capability.operations):
+                    raise ValueError("resource grant exceeds declared capability")
+        trusted_grants[principal] = entries
+    return MappingProxyType(capability_map), MappingProxyType(trusted_grants)
+
+
 class ServiceRegistryBusyError(RuntimeError):
     """Another live registry owner already holds this database path."""
+
+
+class ServiceRegistryStartupCleanupError(RuntimeError):
+    """A failed registry startup could not close every resource it acquired."""
+
+    def __init__(self, registry: ServiceRegistry) -> None:
+        self.registry = registry
+        super().__init__("service registry startup cleanup failed; retry close")
 
 
 class _StaleOwnerError(RuntimeError):
@@ -221,30 +268,7 @@ class ServiceRegistry:
             raise ValueError("max_registration_keys must be between 1 and 16384")
         if type(ready) is not bool or not callable(clock):
             raise TypeError("ready or clock is invalid")
-        if type(capabilities) is not tuple or not capabilities:
-            raise TypeError("capabilities must be a non-empty tuple")
-        if any(type(capability) is not ServiceCapability for capability in capabilities):
-            raise TypeError("capabilities must contain ServiceCapability values")
-        capability_map = {(item.instance_id, item.port): item for item in capabilities}
-        if len(capability_map) != len(capabilities):
-            raise ValueError("capability instance/port pairs must be unique")
-
-        trusted_grants: dict[str, tuple[PrincipalGrant, ...]] = {}
-        if not isinstance(grants, Mapping):
-            raise TypeError("grants must be a mapping")
-        for principal, entries in grants.items():
-            if not _principal_ref(principal) or type(entries) is not tuple:
-                raise ValueError("principal grant mapping is invalid")
-            if any(type(entry) is not PrincipalGrant for entry in entries):
-                raise TypeError("principal grants must contain PrincipalGrant values")
-            for entry in entries:
-                for resource in entry.resources:
-                    capability = capability_map.get((resource.instance_id, resource.port))
-                    if capability is None or not resource.operations.issubset(
-                        capability.operations
-                    ):
-                        raise ValueError("resource grant exceeds declared capability")
-            trusted_grants[principal] = entries
+        capability_map, trusted_grants = validate_capabilities_and_grants(capabilities, grants)
 
         self.service_id = service_id
         self.policy_version = policy_version
@@ -253,8 +277,8 @@ class ServiceRegistry:
         self.max_sessions = max_sessions
         self.max_registration_keys = max_registration_keys
         self._clock = clock
-        self._capabilities = MappingProxyType(capability_map)
-        self._grants = MappingProxyType(trusted_grants)
+        self._capabilities = capability_map
+        self._grants = trusted_grants
         self._handlers: dict[
             tuple[str, str], Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]]
         ] = {}
@@ -300,10 +324,25 @@ class ServiceRegistry:
                     (self._epoch,),
                 )
         except BaseException:
+            self._ready = False
+            cleanup_failed = False
             if self._db is not None:
-                self._db.close()
+                try:
+                    self._db.close()
+                except BaseException:
+                    cleanup_failed = True
+                else:
+                    self._db = None
+            # Keep the owner lock while a database connection remains open;
+            # the host can retry both resources through the retained object.
+            if self._db is None:
+                try:
+                    self._release_owner_lock()
+                except BaseException:
+                    cleanup_failed = True
+            if cleanup_failed:
+                raise ServiceRegistryStartupCleanupError(self) from None
             self._closed = True
-            self._release_owner_lock()
             raise
 
     @property
@@ -375,10 +414,11 @@ class ServiceRegistry:
             if key in self._owned_paths:
                 raise ServiceRegistryBusyError("registry database already has a live owner")
             self._owned_paths.add(key)
-        owner_file = None
+        self._owner_key = key
         try:
             # Keep this descriptor open until close() to retain the OS lock.
             owner_file = open(key + ".service_registry.lock", "a+b")  # noqa: SIM115
+            self._owner_file = owner_file
             owner_file.seek(0, os.SEEK_END)
             if owner_file.tell() == 0:
                 owner_file.write(b"\0")
@@ -392,38 +432,34 @@ class ServiceRegistry:
                 import fcntl
 
                 fcntl.flock(owner_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            self._owner_key = key
-            self._owner_file = owner_file
         except OSError:
-            if owner_file is not None:
-                owner_file.close()
-            with self._owner_guard:
-                self._owned_paths.discard(key)
             raise ServiceRegistryBusyError("registry database already has a live owner") from None
 
     def _release_owner_lock(self) -> None:
         owner_file = self._owner_file
         owner_key = self._owner_key
-        self._owner_file = None
-        self._owner_key = None
         if owner_file is not None:
             try:
-                if os.name == "nt":
-                    import msvcrt
+                # close() may have closed the descriptor before reporting an
+                # error. Retrying cleanup must not seek that closed file.
+                if not owner_file.closed:
+                    if os.name == "nt":
+                        import msvcrt
 
-                    owner_file.seek(0)
-                    msvcrt.locking(owner_file.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
+                        owner_file.seek(0)
+                        msvcrt.locking(owner_file.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
 
-                    fcntl.flock(owner_file.fileno(), fcntl.LOCK_UN)
+                        fcntl.flock(owner_file.fileno(), fcntl.LOCK_UN)
             except OSError:
                 pass
-            finally:
-                owner_file.close()
+            owner_file.close()
+            self._owner_file = None
         if owner_key is not None:
             with self._owner_guard:
                 self._owned_paths.discard(owner_key)
+            self._owner_key = None
 
     @contextmanager
     def _transaction(self, *, check_epoch: bool = True) -> Iterator[None]:
@@ -501,11 +537,14 @@ class ServiceRegistry:
 
     def close(self) -> None:
         with self._lock:
-            if not self._closed:
-                if self._db is not None:
-                    self._db.close()
-                self._closed = True
-                self._release_owner_lock()
+            if self._closed:
+                return
+            self._ready = False
+            if self._db is not None:
+                self._db.close()
+                self._db = None
+            self._release_owner_lock()
+            self._closed = True
 
     def handle(self, authenticated_principal: str, request: WireEnvelope) -> Mapping[str, Any]:
         """Authorize and handle one already-decoded v2 request envelope."""
