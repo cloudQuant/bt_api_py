@@ -531,6 +531,30 @@ class ServiceRegistry:
             self._ensure_open()
             self._ready = ready
 
+    def active_registration_ids(self, *, instance_id: str) -> frozenset[str]:
+        """Return this instance's current leases for local resource maintenance.
+
+        This is an owner-side API, never a remotely callable registry operation.
+        Expiration uses the registry's authoritative clock and transaction even
+        when no client is sending requests. Readiness does not revoke a lease;
+        unregister, expiry, epoch and policy changes do. A read failure must
+        propagate rather than masquerade as an empty set and release resources.
+        """
+
+        if not _text(instance_id) or not any(
+            capability.instance_id == instance_id for capability in self._capabilities.values()
+        ):
+            raise ValueError("instance_id is not a declared capability")
+        with self._transaction():
+            self._expire_sessions(self._now())
+            rows = self._db.execute(
+                "SELECT registration_id FROM sessions "
+                "WHERE instance_id=? AND service_epoch=? "
+                "AND policy_version=? AND requirements_version=?",
+                (instance_id, self._epoch, self.policy_version, self.requirements_version),
+            ).fetchall()
+            return frozenset(row["registration_id"] for row in rows)
+
     def _ensure_open(self) -> None:
         if self._closed or self._db is None:
             raise RuntimeError("registry is closed")

@@ -235,6 +235,12 @@ class ServiceHost:
         self._upstream_registration_summary: RegistrationSummary | None = None
         self._upstream_faulted = False
         self._last_upstream_cleanup: Mapping[str, Any] | None = None
+        self._market_publisher: Any = None
+        self._market_transport_module: Any = None
+        self._market_startup_cleanup_error_type: type[BaseException] | None = None
+        self._market_endpoint: str | None = None
+        self._market_active_registration_count = 0
+        self._component_maintenance_faults: set[str] = set()
         self._endpoint: str | None = None
         self._start_failure: str | None = None
         self._last_cleanup_failures: tuple[str, ...] = ()
@@ -245,6 +251,12 @@ class ServiceHost:
         """The transport's bound endpoint after successful startup."""
 
         return self._endpoint
+
+    @property
+    def market_endpoint(self) -> str | None:
+        """The market PUB endpoint after successful market-hub startup."""
+
+        return self._market_endpoint
 
     @property
     def state(self) -> str:
@@ -269,6 +281,13 @@ class ServiceHost:
                 "cleanup_history": tuple(self._cleanup_history),
                 "upstream": self._upstream_summary(),
                 "last_upstream_cleanup": self._last_upstream_cleanup,
+                "market": MappingProxyType(
+                    {
+                        "endpoint": self._market_endpoint,
+                        "active_registrations": self._market_active_registration_count,
+                        "maintenance_failures": tuple(sorted(self._component_maintenance_faults)),
+                    }
+                ),
             }
         )
 
@@ -287,7 +306,24 @@ class ServiceHost:
 
             # Package validators run for every selected component before the
             # first call to the trusted resource provider.
-            self._prepared = order_components(validate_components(self._specs))
+            ordered = order_components(validate_components(self._specs))
+            market_items = tuple(
+                item for item in ordered if "service.market_source" in item.operations_by_port
+            )
+            if len(market_items) > 1:
+                raise ServiceHostError("MULTIPLE_MARKET_SOURCE_COMPONENTS")
+            selected_endpoints = self._listener_profile()["endpoints"]
+            if "market_bind" in selected_endpoints and not market_items:
+                raise ServiceHostError("MARKET_ENDPOINT_WITHOUT_COMPONENT")
+            if market_items and "market_bind" not in selected_endpoints:
+                raise ServiceHostError("MARKET_ENDPOINT_MISSING")
+            # Resolve the market hub first. Its trusted audience is checked
+            # before opening either of the two service listeners.
+            self._prepared = (
+                (market_items[0],) + tuple(item for item in ordered if item not in market_items)
+                if market_items
+                else ordered
+            )
             planned_capabilities = tuple(
                 ServiceCapability(item.spec.instance_id, port, operations)
                 for item in self._prepared
@@ -331,6 +367,39 @@ class ServiceHost:
                 raise ServiceHostError("TRANSPORT_UNAVAILABLE") from None
             except Exception:
                 raise ServiceHostError("TRANSPORT_CONFIGURATION_INVALID") from None
+
+            market_transport_module = None
+            if market_items:
+                market_endpoint = listener_profile["endpoints"].get("market_bind")
+                market_options = listener_profile["options"]
+                if type(market_endpoint) is not str:
+                    raise ServiceHostError("MARKET_ENDPOINT_MISSING")
+                if self._authority.identity.delegate_ref is not None:
+                    raise ServiceHostError("MARKET_IDENTITY_INVALID")
+                if self._authority.scope != WireScope(
+                    execution_domain_ref=self._authority.scope.execution_domain_ref
+                ):
+                    raise ServiceHostError("MARKET_SCOPE_INVALID")
+                try:
+                    from bt_api_transport_zmq import (
+                        market_v2 as market_transport_module,  # type: ignore[import-not-found]
+                    )
+
+                    market_transport_module.validate_publisher_configuration(
+                        market_endpoint,
+                        self._authority.identity,
+                        self._authority.scope,
+                        self._authority.principals,
+                        credentials=server_credentials,
+                        high_water_mark=market_options.get("high_water_mark", 1000),
+                        max_message_bytes=market_options.get("max_message_bytes", 1_048_576),
+                    )
+                except ImportError:
+                    raise ServiceHostError("MARKET_TRANSPORT_UNAVAILABLE") from None
+                except Exception:
+                    raise ServiceHostError("MARKET_TRANSPORT_CONFIGURATION_INVALID") from None
+                self._market_transport_module = market_transport_module
+                self._market_startup_cleanup_error_type = ServiceTransportStartupCleanupError
 
             # Runtime construction is pure. Keep the runtime reference before
             # starting it so a partial registration/transport failure remains
@@ -378,8 +447,8 @@ class ServiceHost:
                     item,
                     scope=self._authority.scope,
                     resource_provider=self._resource_provider,
-                    on_resources=lambda resource, component=item.spec.component, instance=item.spec.instance_id: (
-                        self._pending_resources.append((component, instance, resource))
+                    on_resources=lambda resource, prepared_item=item: self._track_resources(
+                        prepared_item, resource
                     ),
                 )
                 self._components.append(component)
@@ -489,7 +558,12 @@ class ServiceHost:
                     delay_ms = delay * 1000
                     if isfinite(delay_ms):
                         bounded_timeout = min(timeout_ms, max(0, floor(delay_ms)))
-            return self._server.serve_once(bounded_timeout)
+            self._maintain_components()
+            self._refresh_registry_readiness()
+            handled = self._server.serve_once(bounded_timeout)
+            self._maintain_components()
+            self._refresh_registry_readiness()
+            return handled
         except ServiceHostError:
             raise
         except Exception:
@@ -565,7 +639,118 @@ class ServiceHost:
             raise ServiceHostError("LISTENER_PROFILE_INVALID")
         return profile
 
+    def _track_resources(self, item: PreparedComponent, resources: ComponentResources) -> None:
+        """Retain resources before binding a validated market publisher."""
+
+        self._pending_resources.append((item.spec.component, item.spec.instance_id, resources))
+        if "service.market_source" not in item.operations_by_port:
+            return
+        if set(resources.values) != {"hub"}:
+            raise ServiceHostError("MARKET_RESOURCE_KEYS_INVALID")
+        hub = resources.values["hub"]
+        expected_hub_type = getattr(item.module, "GatewayMarketHub", None)
+        if not isinstance(expected_hub_type, type) or type(hub) is not expected_hub_type:
+            raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
+        self._validate_market_hub_audience(hub)
+
+        module = self._market_transport_module
+        if module is None or self._market_startup_cleanup_error_type is None:
+            raise ServiceHostError("MARKET_TRANSPORT_UNAVAILABLE")
+        profile = self._listener_profile()
+        endpoints = profile.get("endpoints")
+        options = profile.get("options")
+        endpoint = endpoints.get("market_bind") if isinstance(endpoints, Mapping) else None
+        if type(endpoint) is not str:
+            raise ServiceHostError("MARKET_ENDPOINT_MISSING")
+        if not isinstance(options, Mapping):
+            raise ServiceHostError("MARKET_PROFILE_INVALID")
+        try:
+            from bt_api_transport_zmq.service_v2 import CurveServerCredentials
+
+            credentials = CurveServerCredentials(
+                public_key=self._authority.curve_public_key,
+                secret_key=self._authority.curve_secret_key,
+            )
+            publisher = module.ZmqMarketPublisher(
+                endpoint,
+                self._authority.identity,
+                self._authority.scope,
+                self._authority.principals,
+                credentials=credentials,
+                high_water_mark=options.get("high_water_mark", 1000),
+                max_message_bytes=options.get("max_message_bytes", 1_048_576),
+            )
+        except BaseException as exc:
+            cleanup_error = self._market_startup_cleanup_error_type
+            if isinstance(exc, cleanup_error):
+                self._market_publisher = exc.transport
+                raise ServiceHostError("MARKET_PUBLISHER_STARTUP_CLEANUP_FAILED") from None
+            if not isinstance(exc, Exception):
+                raise
+            raise ServiceHostError("MARKET_PUBLISHER_START_FAILED") from None
+
+        # Retain before calling into the trusted hub: if the callback setter
+        # fails, startup cleanup still owns the live publisher.
+        self._market_publisher = publisher
+        self._market_endpoint = publisher.endpoint
+        try:
+            hub.set_publisher(publisher.publish)
+        except Exception:
+            raise ServiceHostError("MARKET_HUB_BINDING_FAILED") from None
+
+    def _validate_market_hub_audience(self, hub: object) -> None:
+        """Check the trusted hub's complete authority before opening sockets."""
+
+        try:
+            identity = hub.identity
+            service_scope = hub.service_scope
+            key_universe = hub.key_universe
+            principal_allowed_keys = hub.principal_allowed_keys
+            authorized_principals = hub.authorized_principals
+        except Exception:
+            raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID") from None
+        if (
+            type(identity) is not WireIdentity
+            or type(service_scope) is not WireScope
+            or identity != self._authority.identity
+            or service_scope != self._authority.scope
+        ):
+            raise ServiceHostError("MARKET_HUB_AUTHORITY_MISMATCH")
+        if type(key_universe) is not frozenset or not key_universe:
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        if not isinstance(principal_allowed_keys, Mapping):
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        expected_principals = frozenset(self._authority.principals.values())
+        if frozenset(principal_allowed_keys) != expected_principals:
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        if (
+            type(authorized_principals) is not frozenset
+            or authorized_principals != expected_principals
+        ):
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        for principal_ref in expected_principals:
+            allowed = principal_allowed_keys.get(principal_ref)
+            if type(allowed) is not frozenset or allowed != key_universe:
+                raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID")
+        validate_audience = getattr(hub, "validate_audience", None)
+        if not callable(validate_audience):
+            raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
+        try:
+            validate_audience(expected_principals, self._authority.identity, self._authority.scope)
+        except Exception:
+            raise ServiceHostError("MARKET_HUB_AUDIENCE_INVALID") from None
+        if not callable(getattr(hub, "set_publisher", None)):
+            raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
+        try:
+            readiness = hub.ready  # type: ignore[attr-defined]
+        except Exception:
+            raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID") from None
+        if type(readiness) is not bool:
+            raise ServiceHostError("MARKET_HUB_CONFIGURATION_INVALID")
+
     def _all_components_ready(self) -> bool:
+        if self._component_maintenance_faults:
+            return False
         if self._upstream is not None:
             try:
                 if self._upstream_faulted or self._upstream.healthy is not True:
@@ -727,6 +912,38 @@ class ServiceHost:
         except Exception:
             raise ServiceHostError("READINESS_UPDATE_FAILED") from None
 
+    def _maintain_components(self) -> None:
+        """Prune per-registration component state using current registry leases."""
+
+        registry = self._registry
+        if registry is None:
+            return
+        active_market_registrations = 0
+        for component in self._components:
+            maintain = component.maintain
+            if maintain is None:
+                continue
+            try:
+                active_ids = registry.active_registration_ids(instance_id=component.instance_id)
+                if type(active_ids) is not frozenset or any(
+                    type(registration_id) is not str for registration_id in active_ids
+                ):
+                    raise TypeError("invalid registry registration projection")
+                maintain(active_ids)
+            except Exception:
+                self._component_maintenance_faults.add(component.instance_id)
+            else:
+                self._component_maintenance_faults.discard(component.instance_id)
+            if (
+                any(
+                    capability.port == "service.market_source"
+                    for capability in component.capabilities
+                )
+                and component.instance_id not in self._component_maintenance_faults
+            ):
+                active_market_registrations = len(active_ids)
+        self._market_active_registration_count = active_market_registrations
+
     def _dispatch_request(self, authenticated_principal: str, request: Any) -> Mapping[str, Any]:
         """Recheck component readiness at the exact listener dispatch point."""
 
@@ -781,27 +998,44 @@ class ServiceHost:
             # Do not tear down resources while the listener may still dispatch.
             return tuple(failures)
 
+        market_publisher = self._market_publisher
+        market_publisher_failed = False
+        if market_publisher is not None:
+            try:
+                market_publisher.close()
+            except BaseException:
+                failures.append("market_publisher_close")
+                market_publisher_failed = True
+            else:
+                self._market_publisher = None
+                self._market_endpoint = None
+
         # A resource returned by the most recent provider call may not yet
         # have become a ServiceComponent because adapter construction failed.
-        for index in range(len(self._pending_resources) - 1, -1, -1):
-            component_name, instance_id, resource = self._pending_resources[index]
-            try:
-                resource.close()
-            except BaseException:
-                failures.append(f"resource_close:{component_name}:{instance_id}")
-            else:
-                del self._pending_resources[index]
+        if not market_publisher_failed:
+            for index in range(len(self._pending_resources) - 1, -1, -1):
+                component_name, instance_id, resource = self._pending_resources[index]
+                try:
+                    resource.close()
+                except BaseException:
+                    failures.append(f"resource_close:{component_name}:{instance_id}")
+                else:
+                    del self._pending_resources[index]
 
-        for index in range(len(self._components) - 1, -1, -1):
-            component = self._components[index]
-            try:
-                component.close()
-            except BaseException:
-                failures.append(f"component_close:{component.component}:{component.instance_id}")
-            else:
-                del self._components[index]
+            for index in range(len(self._components) - 1, -1, -1):
+                component = self._components[index]
+                try:
+                    component.close()
+                except BaseException:
+                    failures.append(
+                        f"component_close:{component.component}:{component.instance_id}"
+                    )
+                else:
+                    del self._components[index]
 
-        component_resources_remain = bool(self._pending_resources or self._components)
+        component_resources_remain = bool(
+            market_publisher_failed or self._pending_resources or self._components
+        )
         upstream = self._upstream
         if upstream is not None and not component_resources_remain:
             try:

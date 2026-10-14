@@ -196,6 +196,9 @@ class ServiceComponent:
     internal_ports: Mapping[str, object]
     readiness: Callable[[], bool] = field(repr=False, compare=False)
     close: Callable[[], None] = field(repr=False, compare=False)
+    maintain: Callable[[frozenset[str]], object] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if type(self.capabilities) is not tuple or any(
@@ -213,6 +216,8 @@ class ServiceComponent:
         internal = _copy_string_mapping(self.internal_ports, "INVALID_INTERNAL_PORTS")
         if not callable(self.readiness) or not callable(self.close):
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
+        if self.maintain is not None and not callable(self.maintain):
+            raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
         object.__setattr__(self, "handlers", MappingProxyType(handlers))
         object.__setattr__(self, "internal_ports", MappingProxyType(internal))
 
@@ -224,6 +229,7 @@ class _Builtin:
     resource_keys: frozenset[str]
     public_ports: Mapping[str, frozenset[str]]
     internal_ports: frozenset[str]
+    validator_module_name: str | None = None
 
 
 _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
@@ -274,6 +280,43 @@ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
     }
 )
 
+_ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
+    {
+        (
+            "gateway",
+            "market_hub",
+        ): _Builtin(
+            module_name="bt_api_gateway.market_hub",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"hub"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.market_source": frozenset(
+                        {
+                            "market.subscribe",
+                            "market.unsubscribe",
+                            "market.snapshot",
+                            "market.head",
+                            "market.read_after",
+                        }
+                    )
+                }
+            ),
+            internal_ports=frozenset(),
+            validator_module_name="bt_api_gateway.service_component",
+        )
+    }
+)
+
+
+def _builtin_for_spec(spec: ComponentSpec) -> _Builtin | None:
+    role = spec.options.get("role")
+    if type(role) is str:
+        role_builtin = _ROLE_BUILTINS.get((spec.component, role))
+        if role_builtin is not None:
+            return role_builtin
+    return _BUILTINS.get(spec.component)
+
 
 def component_specs(components: Mapping[str, Any]) -> tuple[ComponentSpec, ...]:
     """Snapshot normalized component selections from a parsed service config."""
@@ -319,17 +362,25 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
     prepared: list[PreparedComponent] = []
     seen_instances: set[str] = set()
     for spec in specs:
-        if type(spec) is not ComponentSpec or spec.component not in _BUILTINS:
+        if type(spec) is not ComponentSpec:
             raise ServiceComponentError("UNKNOWN_COMPONENT")
         if spec.instance_id in seen_instances:
             raise ServiceComponentError("DUPLICATE_COMPONENT_INSTANCE")
         seen_instances.add(spec.instance_id)
-        builtin = _BUILTINS[spec.component]
+        builtin = _builtin_for_spec(spec)
+        if builtin is None:
+            raise ServiceComponentError("UNKNOWN_COMPONENT")
         try:
             module = importlib.import_module(builtin.module_name)
         except Exception:
             raise ServiceComponentError("BUILTIN_COMPONENT_UNAVAILABLE") from None
-        validator = getattr(module, "validate_service_options", None)
+        validator_module = module
+        if builtin.validator_module_name is not None:
+            try:
+                validator_module = importlib.import_module(builtin.validator_module_name)
+            except Exception:
+                raise ServiceComponentError("BUILTIN_COMPONENT_UNAVAILABLE") from None
+        validator = getattr(validator_module, "validate_service_options", None)
         if not callable(validator):
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
         try:
@@ -384,7 +435,11 @@ def order_components(prepared: Sequence[PreparedComponent]) -> tuple[PreparedCom
         if dependency is None:
             continue
         target = by_instance.get(dependency)
-        if target is None or target.spec.component != "gateway":
+        if (
+            target is None
+            or target.spec.component != "gateway"
+            or target.spec.options.get("role") != "account_session_worker"
+        ):
             raise ServiceComponentError("PROVIDER_SESSION_REFERENCE_INVALID")
         dependencies[item.spec.instance_id].add(dependency)
 
@@ -416,7 +471,9 @@ def build_component(
     if not callable(resource_provider):
         raise ServiceComponentError("RESOURCE_PROVIDER_REQUIRED")
     spec = prepared.spec
-    builtin = _BUILTINS[spec.component]
+    builtin = _builtin_for_spec(spec)
+    if builtin is None:
+        raise ServiceComponentError("UNKNOWN_COMPONENT")
     resources: ComponentResources | None = None
     tracked_by_caller = False
     try:
@@ -449,12 +506,16 @@ def build_component(
             values = resources.values
             module = prepared.module
             if spec.component == "gateway":
-                constructor = getattr(module, "GatewayReadService", None)
-                adapter = constructor(
-                    values["journal"],
-                    accounts=values["accounts"],
-                    principals=values["principals"],
-                )
+                if spec.options.get("role") == "market_hub":
+                    constructor = getattr(module, "GatewayMarketService", None)
+                    adapter = constructor(values["hub"])
+                else:
+                    constructor = getattr(module, "GatewayReadService", None)
+                    adapter = constructor(
+                        values["journal"],
+                        accounts=values["accounts"],
+                        principals=values["principals"],
+                    )
             elif spec.component == "monitor":
                 constructor = getattr(module, "MonitorReadService", None)
                 adapter = constructor(values["outbox"], values["targets"])
@@ -501,6 +562,19 @@ def build_component(
             str,
             Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]],
         ] = {}
+        registration_bound = (
+            spec.component == "gateway" and spec.options.get("role") == "market_hub"
+        )
+        market_registration_type = (
+            getattr(prepared.module, "GatewayMarketRegistration", None)
+            if registration_bound
+            else None
+        )
+        if registration_bound and (
+            market_registration_type is None
+            or not callable(getattr(adapter, "register_registration", None))
+        ):
+            raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
         for operation in all_operations:
 
             def handler(
@@ -511,6 +585,21 @@ def build_component(
                 _operation: str = operation,
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
+                if registration_bound:
+                    registration = market_registration_type(
+                        principal_ref=context.principal_ref,
+                        execution_domain_ref=context.scope.execution_domain_ref,
+                        strategy_ref=context.scope.strategy_ref,
+                        run_id=context.scope.run_id,
+                    )
+                    _adapter.register_registration(context.registration_id, registration)  # type: ignore[attr-defined]
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        principal_ref=context.principal_ref,
+                        scope=context.scope,
+                        arguments=arguments,
+                        registration_id=context.registration_id,
+                    )
                 return _adapter.handle(  # type: ignore[attr-defined]
                     _operation,
                     principal_ref=context.principal_ref,
@@ -520,14 +609,33 @@ def build_component(
 
             handlers[operation] = handler
 
+        maintain = None
+        readiness = resources.ready
+        if registration_bound:
+            candidate_maintain = getattr(adapter, "maintain", None)
+            if not callable(candidate_maintain):
+                raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+            maintain = candidate_maintain
+
+            def readiness(
+                *,
+                resource_ready: Callable[[], bool] = resources.ready,
+                market_adapter: object = adapter,
+            ) -> bool:
+                try:
+                    return resource_ready() is True and market_adapter.ready is True  # type: ignore[attr-defined]
+                except Exception:
+                    return False
+
         return ServiceComponent(
             component=spec.component,
             instance_id=spec.instance_id,
             capabilities=tuple(capabilities),
             handlers=handlers,
             internal_ports=internal_ports,
-            readiness=resources.ready,
+            readiness=readiness,
             close=resources.close,
+            maintain=maintain,
         )
     except BaseException:
         if not tracked_by_caller:

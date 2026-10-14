@@ -11,6 +11,7 @@ from typing import Any
 import bt_api_monitor.service_component as monitor_service_component
 import pytest
 import zmq
+from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import (
     WIRE_PROTOCOL_VERSION,
     WireEnvelope,
@@ -26,7 +27,7 @@ from bt_api_monitor.service_component import MONITOR_READ_OPERATIONS, MonitorRea
 import bt_api_py.service_registry as service_registry_module
 from bt_api_py import service_components
 from bt_api_py.service_components import ComponentResources
-from bt_api_py.service_config import parse_service_config
+from bt_api_py.service_config import ServiceConfigError, parse_service_config
 from bt_api_py.service_host import (
     ServiceHost,
     ServiceHostError,
@@ -57,7 +58,14 @@ _SCOPE_TEMPLATE = WireScope(
 _SENT_AT = "2026-10-14T00:00:00Z"
 
 
-def _request(operation: str, payload: dict[str, Any], *, schema_id: str) -> WireEnvelope:
+def _request(
+    operation: str,
+    payload: dict[str, Any],
+    *,
+    schema_id: str,
+    identity: WireIdentity = _CLIENT_IDENTITY,
+    scope: WireScope = _REQUEST_SCOPE,
+) -> WireEnvelope:
     _request.next_id += 1
     return WireEnvelope(
         header=WireHeader(
@@ -65,8 +73,8 @@ def _request(operation: str, payload: dict[str, Any], *, schema_id: str) -> Wire
             kind=WireMessageKind.REQUEST,
             message_id=f"host-test-{_request.next_id}",
             correlation_id=None,
-            identity=_CLIENT_IDENTITY,
-            scope=_REQUEST_SCOPE,
+            identity=identity,
+            scope=scope,
             operation=operation,
             schema_id=schema_id,
             schema_version=1,
@@ -95,6 +103,7 @@ def _service_config(
     clients: dict[str, Any] | None = None,
     client_endpoint: str = "tcp://127.0.0.1:7999",
     listener_endpoint: str | None = None,
+    market_endpoint: str | None = None,
 ) -> Any:
     raw: dict[str, Any] = {
         "service_config_schema_version": 1,
@@ -111,7 +120,10 @@ def _service_config(
                 "listener-v1": {
                     "backend": "zmq",
                     "config_schema_version": 1,
-                    "endpoints": {"rpc_bind": listener_endpoint or _endpoint()},
+                    "endpoints": {
+                        "rpc_bind": listener_endpoint or _endpoint(),
+                        **({"market_bind": market_endpoint} if market_endpoint else {}),
+                    },
                     "security_profile_ref": security_ref,
                     "options": {"high_water_mark": 32, "max_message_bytes": 65_536},
                 },
@@ -169,6 +181,17 @@ def _account_read_component(*, instance_id: str = "account-reader") -> dict[str,
                 "role": "account_session_worker",
                 "account_session_ref": "trusted-session-v1",
             },
+        },
+    }
+
+
+def _market_hub_component(*, instance_id: str = "market-source") -> dict[str, Any]:
+    return {
+        "config_schema_version": 2,
+        "settings": {
+            "instance_id": instance_id,
+            "bind_ports": ["service.market_source"],
+            "options": {"role": "market_hub"},
         },
     }
 
@@ -383,6 +406,105 @@ def _authority(config: Any) -> TrustedServiceAuthority:
         principals={client_public: "curve-principal"},
         grants={"curve-principal": (PrincipalGrant(_CLIENT_IDENTITY, grants),)},
     )
+
+
+def _market_authority(config: Any) -> tuple[TrustedServiceAuthority, WireScope]:
+    from bt_api_gateway.market_hub import MARKET_OPERATIONS
+
+    client_public, _client_secret = zmq.curve_keypair()
+    server_public, server_secret = zmq.curve_keypair()
+    service_scope = WireScope("paper:demo")
+    registration_template = WireScope(
+        "paper:demo",
+        strategy_ref="strategy-client-a",
+    )
+    capability = ResourceGrant(
+        instance_id="market-source",
+        port="service.market_source",
+        scope_ref="market-grant-v1",
+        scope=registration_template,
+        operations=MARKET_OPERATIONS,
+    )
+    authority = TrustedServiceAuthority(
+        identity=WireIdentity(WireRole.SERVICE, "market-service", config.service_id),
+        scope=service_scope,
+        scope_ref=config.scope_ref,
+        scope_version="scope-v1",
+        security_ref="listener-security-v1",
+        security_version="security-v1",
+        registration_policy_ref=config.registration_policy_ref,
+        registration_policy_version="policy-v1",
+        service_requirements_ref=config.service_requirements_ref,
+        service_requirements_version="requirements-v1",
+        curve_public_key=server_public,
+        curve_secret_key=server_secret,
+        principals={client_public: "curve-principal"},
+        grants={"curve-principal": (PrincipalGrant(_CLIENT_IDENTITY, (capability,)),)},
+    )
+    return authority, registration_template
+
+
+def _market_key() -> MarketSubscriptionKey:
+    return MarketSubscriptionKey(
+        source_ref="source-v1",
+        entitlement_ref="entitlement-v1",
+        instrument=MarketInstrumentKey(
+            provider="synthetic-provider",
+            venue="synthetic-venue",
+            environment="paper",
+            product_type="future",
+            instrument_id="instrument-1",
+            native_symbol="SYNTH1",
+        ),
+        channel="trades",
+    )
+
+
+def _market_resource(
+    authority: TrustedServiceAuthority,
+    *,
+    mismatched_principal: bool = False,
+    close_events: list[str] | None = None,
+) -> tuple[ComponentResources, Any, MarketSubscriptionKey]:
+    from bt_api_gateway.market_hub import GatewayMarketHub
+
+    key = _market_key()
+
+    class Provider:
+        def __init__(self) -> None:
+            self.subscribed: list[MarketSubscriptionKey] = []
+            self.generations: list[str] = []
+            self.unsubscribed: list[object] = []
+
+        def subscribe(self, market_key: MarketSubscriptionKey, *, generation: str) -> object:
+            self.subscribed.append(market_key)
+            self.generations.append(generation)
+            return market_key
+
+        def unsubscribe(self, handle: object) -> None:
+            self.unsubscribed.append(handle)
+
+    provider = Provider()
+    principal_ref = "other-principal" if mismatched_principal else "curve-principal"
+    hub = GatewayMarketHub(
+        provider,
+        key_universe={key},
+        principal_allowed_keys={principal_ref: {key}},
+        service_identity=authority.identity,
+        service_scope=authority.scope,
+    )
+
+    def close_hub() -> None:
+        if close_events is not None:
+            close_events.append("resource.close")
+        hub.close()
+
+    resources = ComponentResources.owned(
+        {"hub": hub},
+        ready=lambda: True,
+        close=close_hub,
+    )
+    return resources, provider, key
 
 
 def _monitor_resources(
@@ -1345,3 +1467,304 @@ def test_component_close_failure_keeps_upstream_until_component_retry(tmp_path):
         if host.state != "closed":
             host.close()
         remote_registry.close()
+
+
+def test_market_source_uses_registry_registration_and_idle_lease_pruning(tmp_path, monkeypatch):
+    from bt_api_gateway.market_hub import MARKET_OPERATIONS
+
+    market_transport = importlib.import_module("bt_api_transport_zmq.market_v2")
+    service_transport = importlib.import_module("bt_api_transport_zmq.service_v2")
+    market_endpoint = _endpoint()
+    config = _service_config(
+        {"gateway": _market_hub_component()},
+        service_id="market-service",
+        market_endpoint=market_endpoint,
+    )
+    authority, grant_scope = _market_authority(config)
+    resources, provider, key = _market_resource(authority)
+    events: list[str] = []
+
+    class Publisher:
+        def __init__(self, endpoint, *_args, **_kwargs):
+            self.endpoint = endpoint
+            self.closed = False
+            events.append("publisher.open")
+
+        def publish(self, _event):
+            events.append("publisher.publish")
+
+        def close(self):
+            events.append("publisher.close")
+            self.closed = True
+
+    monkeypatch.setattr(market_transport, "ZmqMarketPublisher", Publisher)
+    monkeypatch.setattr(service_transport.ZmqServiceServer, "serve_once", lambda _s, _t: False)
+    host = ServiceHost(
+        config,
+        authority,
+        tmp_path / "market-registry.sqlite3",
+        lambda *_args: resources,
+    ).start()
+    try:
+        registry = host._registry
+        assert registry is not None and registry.ready is True
+        assert host.market_endpoint == market_endpoint
+        assert host.healthy is True
+        component = host._components[0]
+        assert {
+            (capability.port, capability.operations) for capability in component.capabilities
+        } == {("service.market_source", MARKET_OPERATIONS)}
+        assert set(component.handlers) == set(MARKET_OPERATIONS)
+
+        client_scope = WireScope(
+            grant_scope.execution_domain_ref,
+            strategy_ref=grant_scope.strategy_ref,
+            run_id="run-market-1",
+        )
+        registration_reply = registry.handle(
+            "curve-principal",
+            _request(
+                "service.register",
+                {
+                    "registration_key": "market-registration",
+                    "client_session_id": "market-client-session",
+                    "instance_id": "market-source",
+                    "port": "service.market_source",
+                    "scope_ref": "market-grant-v1",
+                    "operations": tuple(sorted(MARKET_OPERATIONS)),
+                },
+                schema_id="sdk.service.control",
+                identity=_CLIENT_IDENTITY,
+                scope=client_scope,
+            ),
+        )
+        assert registration_reply["code"] == "OK"
+        registration = registration_reply["result"]
+        registration_id = registration["registration_id"]
+
+        def call_market(operation: str, arguments: dict[str, Any]):
+            return registry.handle(
+                "curve-principal",
+                _request(
+                    operation,
+                    {
+                        "registration_id": registration_id,
+                        "service_epoch": registration["service_epoch"],
+                        "instance_id": "market-source",
+                        "arguments": arguments,
+                    },
+                    schema_id="sdk.service.call",
+                    identity=_CLIENT_IDENTITY,
+                    scope=client_scope,
+                ),
+            )
+
+        subscribed = call_market("market.subscribe", {"key": key.to_dict()})
+        assert subscribed["code"] == "OK"
+        hub = resources.values["hub"]
+        assert hub.registration_active(key, registration_id) is True
+        assert hub.registration_active(key, "payload-controlled-id") is False
+        assert provider.subscribed == [key]
+        assert len(provider.generations) == 1
+        assert isinstance(provider.generations[0], str) and provider.generations[0]
+
+        spoofed = call_market(
+            "market.unsubscribe",
+            {"key": key.to_dict(), "registration_id": "payload-controlled-id"},
+        )
+        assert spoofed["code"] == "HANDLER_FAILED"
+        assert hub.registration_active(key, registration_id) is True
+
+        active_reads: list[str] = []
+        original_active_ids = registry.active_registration_ids
+
+        def observe_active_ids(*, instance_id: str):
+            active_reads.append(instance_id)
+            return original_active_ids(instance_id=instance_id)
+
+        monkeypatch.setattr(registry, "active_registration_ids", observe_active_ids)
+        assert host.serve_once(0) is False
+        assert active_reads == ["market-source", "market-source"]
+        assert host.summary["market"]["active_registrations"] == 1
+
+        maintenance_failure = {"enabled": True}
+
+        def fail_registry_projection(*, instance_id: str):
+            active_reads.append(instance_id)
+            if maintenance_failure["enabled"]:
+                raise OSError("private registry read detail")
+            return original_active_ids(instance_id=instance_id)
+
+        monkeypatch.setattr(registry, "active_registration_ids", fail_registry_projection)
+        assert host.serve_once(0) is False
+        assert registry.ready is False
+        assert host.healthy is False
+        assert host.summary["market"]["maintenance_failures"] == ("market-source",)
+
+        maintenance_failure["enabled"] = False
+        assert host.serve_once(0) is False
+        assert registry.ready is True
+        assert host.healthy is True
+        assert host.summary["market"]["active_registrations"] == 1
+
+        unregister_reply = registry.handle(
+            "curve-principal",
+            _request(
+                "service.unregister",
+                {
+                    "registration_id": registration_id,
+                    "service_epoch": registration["service_epoch"],
+                },
+                schema_id="sdk.service.control",
+                identity=_CLIENT_IDENTITY,
+                scope=client_scope,
+            ),
+        )
+        assert unregister_reply["code"] == "OK"
+        assert host.serve_once(0) is False
+        assert active_reads == ["market-source"] * 8
+        assert hub.registration_active(key, registration_id) is False
+        assert provider.unsubscribed == [key]
+        assert host.summary["market"]["active_registrations"] == 0
+    finally:
+        host.close()
+    assert host.state == "closed"
+    assert events.count("publisher.open") == 1
+    assert events.count("publisher.close") == 1
+
+
+def test_invalid_market_audience_is_rejected_before_either_listener_binds(tmp_path, monkeypatch):
+    market_transport = importlib.import_module("bt_api_transport_zmq.market_v2")
+    service_transport = importlib.import_module("bt_api_transport_zmq.service_v2")
+    config = _service_config(
+        {"gateway": _market_hub_component()},
+        service_id="market-service",
+        market_endpoint=_endpoint(),
+    )
+    authority, _grant_scope = _market_authority(config)
+    resource_close_events: list[str] = []
+    resources, _provider, _key = _market_resource(
+        authority,
+        mismatched_principal=True,
+        close_events=resource_close_events,
+    )
+    provider_calls: list[str] = []
+    bind_attempts: list[str] = []
+
+    def forbidden_publisher(*_args, **_kwargs):
+        bind_attempts.append("market")
+        raise AssertionError("publisher must not be constructed for a malformed audience")
+
+    def forbidden_listener(*_args, **_kwargs):
+        bind_attempts.append("rpc")
+        raise AssertionError("RPC listener must not be constructed for a malformed audience")
+
+    monkeypatch.setattr(market_transport, "ZmqMarketPublisher", forbidden_publisher)
+    monkeypatch.setattr(service_transport, "ZmqServiceServer", forbidden_listener)
+    host = ServiceHost(
+        config,
+        authority,
+        tmp_path / "market-registry.sqlite3",
+        lambda component, *_args: provider_calls.append(component) or resources,
+    )
+
+    with pytest.raises(ServiceHostError) as exc_info:
+        host.start()
+
+    assert exc_info.value.code == "MARKET_HUB_AUDIENCE_INVALID"
+    assert provider_calls == ["gateway"]
+    assert bind_attempts == []
+    assert resource_close_events == ["resource.close"]
+    assert host._server is None
+    assert host._market_publisher is None
+    assert host._registry is None
+    assert host.state == "failed"
+
+
+def test_market_bind_without_selected_market_component_fails_before_provider(tmp_path):
+    config = _service_config(
+        {"monitor": _monitor_component()},
+        market_endpoint=_endpoint(),
+    )
+    provider_calls: list[str] = []
+    host = ServiceHost(
+        config,
+        _authority(config),
+        tmp_path / "registry.sqlite3",
+        lambda component, *_args: provider_calls.append(component),
+    )
+
+    with pytest.raises(ServiceHostError) as exc_info:
+        host.start()
+
+    assert exc_info.value.code == "MARKET_ENDPOINT_WITHOUT_COMPONENT"
+    assert provider_calls == []
+    assert not (tmp_path / "registry.sqlite3").exists()
+
+
+def test_market_component_without_market_bind_is_rejected_by_parser():
+    with pytest.raises(ServiceConfigError):
+        _service_config({"gateway": _market_hub_component()})
+
+
+def test_market_publisher_close_failure_retains_hub_until_explicit_retry(tmp_path, monkeypatch):
+    market_transport = importlib.import_module("bt_api_transport_zmq.market_v2")
+    service_transport = importlib.import_module("bt_api_transport_zmq.service_v2")
+    market_endpoint = _endpoint()
+    config = _service_config(
+        {"gateway": _market_hub_component()},
+        service_id="market-service",
+        market_endpoint=market_endpoint,
+    )
+    authority, _grant_scope = _market_authority(config)
+    resource_close_events: list[str] = []
+    resources, _provider, _key = _market_resource(authority, close_events=resource_close_events)
+    events: list[str] = []
+    publisher_closes: list[int] = []
+
+    class RetainedPublisher:
+        def __init__(self, endpoint, *_args, **_kwargs):
+            self.endpoint = endpoint
+
+        def publish(self, _event):
+            return None
+
+        def close(self):
+            events.append("publisher.close")
+            publisher_closes.append(1)
+            if len(publisher_closes) == 1:
+                raise OSError("private publisher cleanup detail")
+
+    original_server_close = service_transport.ZmqServiceServer.close
+
+    def observed_server_close(server):
+        events.append("rpc.close")
+        return original_server_close(server)
+
+    monkeypatch.setattr(market_transport, "ZmqMarketPublisher", RetainedPublisher)
+    monkeypatch.setattr(service_transport.ZmqServiceServer, "close", observed_server_close)
+    host = ServiceHost(
+        config,
+        authority,
+        tmp_path / "market-registry.sqlite3",
+        lambda *_args: resources,
+    ).start()
+
+    with pytest.raises(ServiceHostError) as exc_info:
+        host.close()
+
+    assert exc_info.value.code == "CLOSE_FAILED"
+    assert host.state == "close_failed"
+    assert host._server is None
+    assert host._market_publisher is not None
+    assert host._components
+    assert resource_close_events == []
+    assert events == ["rpc.close", "publisher.close"]
+
+    host.close()
+    assert host.state == "closed"
+    assert host._market_publisher is None
+    assert host._components == []
+    assert publisher_closes == [1, 1]
+    assert resource_close_events == ["resource.close"]
+    assert events == ["rpc.close", "publisher.close", "publisher.close"]

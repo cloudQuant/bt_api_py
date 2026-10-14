@@ -192,6 +192,106 @@ def _business(
     return dict(response)
 
 
+def test_active_registration_maintenance_expires_without_client_traffic(tmp_path: Path) -> None:
+    now = [100.0]
+    registry = _make_registry(tmp_path / "maintenance.sqlite", clock=lambda: now[0])
+    try:
+        registration = _register(registry)["result"]
+        registration_id = registration["registration_id"]
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset(
+            {registration_id}
+        )
+        # Temporary unready state must not silently revoke an existing lease.
+        registry.set_ready(False)
+        now[0] = 109.999
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset(
+            {registration_id}
+        )
+        now[0] = 110.0
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset()
+        # Resource cleanup must not erase the durable trading-writer claim.
+        registry.set_ready(True)
+        replacement = _register(registry, key="next", scope=_strategy_scope(run_id="other-run"))
+        assert replacement["code"] == "DUPLICATE_ACTIVE_RUN"
+    finally:
+        registry.close()
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        registry.active_registration_ids(instance_id="account-instance")
+
+
+def test_active_registration_maintenance_observes_renew_and_unregister(tmp_path: Path) -> None:
+    now = [100.0]
+    registry = _make_registry(tmp_path / "renew-maintenance.sqlite", clock=lambda: now[0])
+    try:
+        registration = _register(registry)["result"]
+        payload = {key: registration[key] for key in ("registration_id", "service_epoch")}
+        now[0] = 109.0
+        renewal = registry.handle(
+            "curve-a",
+            _next_request("service.renew", payload, identity=_identity(), scope=_strategy_scope()),
+        )
+        assert renewal["ok"] is True
+        now[0] = 110.0
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset(
+            {registration["registration_id"]}
+        )
+        unregistration = registry.handle(
+            "curve-a",
+            _next_request(
+                "service.unregister", payload, identity=_identity(), scope=_strategy_scope()
+            ),
+        )
+        assert unregistration["ok"] is True
+        assert registry.active_registration_ids(instance_id="account-instance") == frozenset()
+    finally:
+        registry.close()
+
+
+def test_active_registration_maintenance_is_instance_scoped(tmp_path: Path) -> None:
+    operations = frozenset({"account.read"})
+    capabilities = tuple(
+        ServiceCapability(instance, "service.account_read", operations)
+        for instance in ("instance-a", "instance-b")
+    )
+    resources = tuple(
+        ResourceGrant(
+            instance, "service.account_read", instance, _strategy_scope(run_id=None), operations
+        )
+        for instance in ("instance-a", "instance-b")
+    )
+    registry = ServiceRegistry(
+        tmp_path / "instances.sqlite",
+        service_id="service",
+        capabilities=capabilities,
+        grants={"curve-a": (PrincipalGrant(_identity(), resources),)},
+        policy_version="p1",
+        requirements_version="r1",
+    )
+    try:
+        first = _register(
+            registry, instance_id="instance-a", scope_ref="instance-a", operations=("account.read",)
+        )["result"]
+        second = _register(
+            registry,
+            key="registration-b",
+            instance_id="instance-b",
+            scope_ref="instance-b",
+            operations=("account.read",),
+        )["result"]
+        assert registry.active_registration_ids(instance_id="instance-a") == frozenset(
+            {first["registration_id"]}
+        )
+        assert registry.active_registration_ids(instance_id="instance-b") == frozenset(
+            {second["registration_id"]}
+        )
+        with pytest.raises(ValueError, match="declared capability"):
+            registry.active_registration_ids(instance_id="missing")
+        registry.policy_version = "p2"
+        assert registry.active_registration_ids(instance_id="instance-a") == frozenset()
+    finally:
+        registry.close()
+
+
 def test_discovery_and_dispatch_bind_authenticated_identity_scope_and_operations(
     tmp_path: Path,
 ) -> None:

@@ -199,6 +199,27 @@ class RegisteredBinding:
 
 
 @dataclass(frozen=True)
+class ServiceMarketBindingView:
+    """Validated, immutable market-transport details for the SDK facade."""
+
+    mount: str
+    service_id: str
+    instance_id: str
+    scope_ref: str
+    registration_id: str
+    service_epoch: str
+    rpc_scope: WireScope
+    operations: frozenset[str]
+    transport_ref: str
+    timeout: float
+    peer: WireIdentity
+    market_endpoint: str
+    security_profile_ref: str
+    high_water_mark: int
+    max_message_bytes: int
+
+
+@dataclass(frozen=True)
 class RegistrationSummary:
     bindings: tuple[RegisteredBinding, ...]
     degraded_count: int
@@ -324,6 +345,73 @@ class ServiceClientRuntime:
     @property
     def bindings(self) -> tuple[RegisteredBinding, ...]:
         return tuple(self._bindings)
+
+    def market_binding_view(
+        self, mount: str, *, required_operations: frozenset[str]
+    ) -> ServiceMarketBindingView:
+        """Return a trusted frozen profile view for one registered market mount."""
+
+        self._assert_owner_thread()
+        self._require_healthy()
+        if self._state != "registered":
+            raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
+        if (
+            type(mount) is not str
+            or mount not in MOUNT_PORTS
+            or "service.market_source" not in MOUNT_PORTS[mount]
+        ):
+            raise ServiceRuntimeError("INVALID_MARKET_MOUNT")
+        if (
+            type(required_operations) is not frozenset
+            or not required_operations
+            or not required_operations <= PORT_OPERATIONS["service.market_source"]
+        ):
+            raise ServiceRuntimeError("INVALID_MARKET_OPERATIONS")
+        matches = [
+            binding for binding in self._bindings if binding.active and binding.mount == mount
+        ]
+        if len(matches) != 1 or not required_operations <= matches[0].operations:
+            raise ServiceRuntimeError("MARKET_BINDING_UNAVAILABLE")
+        binding = matches[0]
+        peer = self._peers.get(binding.service_id)
+        profile = self._config["communication"]["profiles"].get(binding.transport_ref)
+        if type(peer) is not WireIdentity or peer.role is not WireRole.SERVICE:
+            raise ServiceRuntimeError("INVALID_PEER")
+        if not isinstance(profile, Mapping) or profile.get("backend") != "zmq":
+            raise ServiceRuntimeError("UNKNOWN_BACKEND")
+        endpoints = profile.get("endpoints")
+        options = profile.get("options")
+        endpoint = endpoints.get("market_connect") if isinstance(endpoints, Mapping) else None
+        security_ref = profile.get("security_profile_ref")
+        high_water_mark = options.get("high_water_mark") if isinstance(options, Mapping) else None
+        max_message_bytes = (
+            options.get("max_message_bytes") if isinstance(options, Mapping) else None
+        )
+        if not isinstance(endpoint, str) or not endpoint:
+            raise ServiceRuntimeError("MARKET_ENDPOINT_REQUIRED")
+        if not isinstance(security_ref, str) or not security_ref:
+            raise ServiceRuntimeError("SECURITY_PROFILE_UNAVAILABLE")
+        if type(high_water_mark) is not int or high_water_mark <= 0:
+            raise ServiceRuntimeError("INVALID_MARKET_TRANSPORT_OPTIONS")
+        if type(max_message_bytes) is not int or max_message_bytes <= 0:
+            raise ServiceRuntimeError("INVALID_MARKET_TRANSPORT_OPTIONS")
+        return ServiceMarketBindingView(
+            mount=binding.mount,
+            service_id=binding.service_id,
+            instance_id=binding.instance_id,
+            scope_ref=binding.scope_ref,
+            registration_id=binding.registration_id,
+            service_epoch=binding.service_epoch,
+            rpc_scope=binding.scope,
+            operations=binding.operations,
+            transport_ref=binding.transport_ref,
+            timeout=binding.timeout,
+            peer=peer,
+            market_endpoint=endpoint,
+            security_profile_ref=security_ref,
+            high_water_mark=high_water_mark,
+            max_message_bytes=max_message_bytes,
+        )
 
     def start(self) -> RegistrationSummary:
         self._assert_owner_thread()
