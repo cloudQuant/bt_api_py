@@ -858,7 +858,7 @@ def test_unsupported_public_port_fails_before_any_resource_resolution(tmp_path):
     assert host.state == "failed"
 
 
-def test_declared_order_entry_is_not_advertised_without_a_real_write_adapter(tmp_path):
+def test_declared_order_entry_requires_trusted_write_resources(tmp_path):
     config = _service_config(
         {
             "execution": {
@@ -883,9 +883,42 @@ def test_declared_order_entry_is_not_advertised_without_a_real_write_adapter(tmp
     with pytest.raises(ServiceHostError) as exc_info:
         host.start()
 
-    assert exc_info.value.code == "UNSUPPORTED_PUBLIC_PORT"
-    assert calls == []
+    # The write port is only advertised once the trusted provider hands over
+    # the store, targets, dispatch port and admission policy.
+    assert exc_info.value.code == "INVALID_COMPONENT_RESOURCES"
+    assert calls == ["execution"]
     assert not (tmp_path / "registry.sqlite3").exists()
+
+
+def test_order_entry_resources_must_match_the_declared_keys_exactly(tmp_path):
+    config = _service_config(
+        {
+            "execution": {
+                "config_schema_version": 2,
+                "settings": {
+                    "instance_id": "execution-owner",
+                    "bind_ports": ["service.order_entry"],
+                    "options": {"role": "account_owner"},
+                },
+            }
+        },
+        service_id="execution-service",
+    )
+    host = ServiceHost(
+        config,
+        _authority(config),
+        tmp_path / "registry.sqlite3",
+        lambda _component, *_args: ComponentResources.owned(
+            {"store": object()},
+            ready=lambda: True,
+            close=lambda: None,
+        ),
+    )
+
+    with pytest.raises(ServiceHostError) as exc_info:
+        host.start()
+
+    assert exc_info.value.code == "RESOURCE_KEYS_MISMATCH"
 
 
 def test_risk_factory_advertises_only_the_adapter_class_read_operation():

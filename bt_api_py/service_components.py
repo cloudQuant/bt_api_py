@@ -19,7 +19,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
 from bt_api_base.service_protocol import WireScope
 
@@ -337,7 +337,25 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             internal_ports=frozenset(),
         ),
+        ("execution", "account_owner"): _Builtin(
+            module_name="bt_api_execution.service_order_entry",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"store", "targets", "dispatch", "admission"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
+                    "service.order_query": frozenset({"orders.query"}),
+                }
+            ),
+            internal_ports=frozenset({"service.owner_control"}),
+            validator_module_name="bt_api_execution.service_component",
+        ),
     }
+)
+
+
+_ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
+    {"order_gate", "cancel_gate", "allow_unprotected"}
 )
 
 
@@ -589,6 +607,28 @@ def build_component(
             elif spec.component == "risk":
                 constructor = getattr(module, "RiskReadService", None)
                 adapter = constructor(values["gate"], values["targets"])
+            elif spec.component == "execution" and spec.options.get("role") == "account_owner":
+                constructor = getattr(module, "ExecutionOrderEntryService", None)
+                admission = values["admission"]
+                if not isinstance(admission, Mapping) or set(admission) - _ADMISSION_KEYS:
+                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
+                order_gate = admission.get("order_gate")
+                cancel_gate = admission.get("cancel_gate")
+                allow_unprotected = admission.get("allow_unprotected", False)
+                if type(allow_unprotected) is not bool:
+                    raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
+                if order_gate is None and cancel_gate is None and not allow_unprotected:
+                    # A provider-capable write route must not silently become
+                    # unprotected; the composition root states its policy.
+                    raise ServiceComponentError("ADMISSION_POLICY_REQUIRED")
+                adapter = constructor(
+                    values["store"],
+                    values["targets"],
+                    values["dispatch"],
+                    admission_gate=order_gate,
+                    cancel_admission_gate=cancel_gate,
+                    allow_unprotected=allow_unprotected,
+                )
             elif spec.component == "execution":
                 constructor = getattr(module, "ExecutionReadService", None)
                 adapter = constructor(values["store"], values["targets"])
@@ -725,6 +765,14 @@ def build_component(
                         ):
                             raise ServiceResultTooLargeError() from None
                         raise
+                if spec.component == "execution" and spec.options.get("role") == "account_owner":
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        principal_ref=context.principal_ref,
+                        identity=context.identity,
+                        scope=context.scope,
+                        arguments=arguments,
+                    )
                 return _adapter.handle(  # type: ignore[attr-defined]
                     _operation,
                     principal_ref=context.principal_ref,
