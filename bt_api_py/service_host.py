@@ -466,7 +466,20 @@ class ServiceHost:
                 for component in self._components
                 for capability in component.capabilities
             )
-            if capabilities != planned_capabilities:
+            # History is a trusted resource capability, known only after the
+            # market hub is resolved. All other planned capabilities stay exact.
+            if len(capabilities) != len(planned_capabilities) or any(
+                actual.instance_id != planned.instance_id
+                or actual.port != planned.port
+                or (
+                    actual.operations != planned.operations
+                    and not (
+                        planned.port == "service.market_source"
+                        and actual.operations == planned.operations - {"market.history"}
+                    )
+                )
+                for actual, planned in zip(capabilities, planned_capabilities, strict=True)
+            ):
                 raise ServiceHostError("CAPABILITY_PLAN_MISMATCH")
 
             try:

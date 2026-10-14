@@ -287,7 +287,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             "market_hub",
         ): _Builtin(
             module_name="bt_api_gateway.market_hub",
-            operations_attribute=("SUPPORTED_OPERATIONS",),
+            operations_attribute=("ALL_MARKET_OPERATIONS",),
             resource_keys=frozenset({"hub"}),
             public_ports=MappingProxyType(
                 {
@@ -298,6 +298,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "market.snapshot",
                             "market.head",
                             "market.read_after",
+                            "market.history",
                         }
                     )
                 }
@@ -575,6 +576,14 @@ def build_component(
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()
         for port, operations in prepared.operations_by_port.items():
+            if spec.component == "gateway" and spec.options.get("role") == "market_hub":
+                configured_operations = getattr(adapter, "supported_operations", None)
+                if type(configured_operations) is not frozenset or configured_operations not in (
+                    operations,
+                    operations - {"market.history"},
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = configured_operations
             if operations.intersection(all_operations):
                 raise ServiceComponentError("DUPLICATE_COMPONENT_OPERATION")
             all_operations.update(operations)

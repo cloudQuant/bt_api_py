@@ -45,6 +45,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "market.snapshot",
                 "market.head",
                 "market.read_after",
+                "market.history",
             }
         ),
         "service.account_read": frozenset(

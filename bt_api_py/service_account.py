@@ -93,6 +93,7 @@ class ServiceAccountClient:
         account_ref: str,
         expected_account: AccountKey,
         required_coverage: tuple[AccountResourceKey, ...],
+        require_open_orders: bool = False,
         monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(runtime, ServiceClientRuntime):
@@ -114,6 +115,8 @@ class ServiceAccountClient:
             or len(set(required_coverage)) != len(required_coverage)
         ):
             raise ServiceAccountError("INVALID_REQUIRED_COVERAGE")
+        if type(require_open_orders) is not bool:
+            raise ServiceAccountError("INVALID_REQUIRE_OPEN_ORDERS")
         if not callable(monotonic_clock):
             raise ServiceAccountError("INVALID_MONOTONIC_CLOCK")
 
@@ -122,6 +125,7 @@ class ServiceAccountClient:
         self._account_ref = account_ref
         self._expected_account = expected_account
         self._required_coverage = required_coverage
+        self._require_open_orders = require_open_orders
         self._monotonic_clock = monotonic_clock
         self._owner_thread_id = threading.get_ident()
         self._closed = False
@@ -154,6 +158,12 @@ class ServiceAccountClient:
         """Required complete resource set, fixed for this facade's lifetime."""
 
         return self._required_coverage
+
+    @property
+    def require_open_orders(self) -> bool:
+        """Whether this facade requires a complete open-orders baseline."""
+
+        return self._require_open_orders
 
     @property
     def healthy(self) -> bool:
@@ -369,20 +379,38 @@ class ServiceAccountClient:
         payload = snapshot.get("payload")
         if not isinstance(payload, Mapping) or set(payload) != _STATE_PAYLOAD_FIELDS:
             self._reject("INVALID_ACCOUNT_STATE_PAYLOAD")
+        schema_version = payload.get("schema_version")
         if (
             payload.get("schema_id") != "sdk.account.state"
-            or type(payload.get("schema_version")) is not int
-            or payload.get("schema_version") != 1
-            or type(payload.get("session_generation")) is not str
+            or type(schema_version) is not int
+            or schema_version not in {1, 2}
+        ):
+            self._reject("INVALID_ACCOUNT_STATE_SCHEMA")
+        if (
+            type(payload.get("session_generation")) is not str
             or not payload.get("session_generation")
             or payload.get("session_generation") != generation
         ):
             self._reject("ACCOUNT_GENERATION_MISMATCH")
         observation_raw = payload.get("observation")
+        if not isinstance(observation_raw, Mapping):
+            self._reject("INVALID_ACCOUNT_OBSERVATION")
+        has_open_orders = "open_orders" in observation_raw
+        has_open_orders_complete = "open_orders_complete" in observation_raw
+        if schema_version == 1 and (has_open_orders or has_open_orders_complete):
+            self._reject("ACCOUNT_STATE_SCHEMA_MISMATCH")
+        if schema_version == 2 and not (has_open_orders and has_open_orders_complete):
+            self._reject("ACCOUNT_STATE_SCHEMA_MISMATCH")
         try:
             observation = AccountObservation.from_dict(observation_raw)
         except Exception:
             self._reject("INVALID_ACCOUNT_OBSERVATION")
+        if schema_version == 2 and observation.open_orders is None:
+            self._reject("ACCOUNT_STATE_SCHEMA_MISMATCH")
+        if self.require_open_orders and (
+            observation.open_orders is None or not observation.open_orders_complete
+        ):
+            self._reject("ACCOUNT_OPEN_ORDERS_INCOMPLETE")
         if observation.account_key != self.expected_account:
             self._reject("ACCOUNT_IDENTITY_MISMATCH")
         if frozenset(observation.coverage) != frozenset(self.required_coverage):

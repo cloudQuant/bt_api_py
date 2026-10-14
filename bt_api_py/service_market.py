@@ -17,6 +17,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
+from bt_api_base.market_history_protocol import MarketHistoryPage, MarketHistoryRequest
 from bt_api_base.market_protocol import (
     MARKET_EVENT_OPERATION,
     MARKET_EVENT_SCHEMA,
@@ -55,6 +56,7 @@ _MAX_POLL_TIMEOUT_MS = 60_000
 _MAX_QUEUE_CAPACITY = 100_000
 _MAX_QUEUE_BYTES = 64 * 1024 * 1024
 _MAX_READ_AFTER_LIMIT = 1_000
+_HISTORY_OPERATION = "market.history"
 
 
 class ServiceMarketError(RuntimeError):
@@ -368,6 +370,56 @@ class ServiceMarketClient:
         if self._recovery_required:
             raise ServiceMarketError("RECOVERY_REQUIRED")
         return None
+
+    def history(self, request: MarketHistoryRequest) -> MarketHistoryPage:
+        """Read one bounded historical bar page without changing the live cursor."""
+
+        self._assert_owner()
+        if self._state != "started":
+            raise ServiceMarketError("CLIENT_NOT_STARTED")
+        if self._resync_required:
+            raise ServiceMarketError("RESYNC_REQUIRED")
+        if self._recovery_required:
+            raise ServiceMarketError("RECOVERY_REQUIRED")
+        if not self.healthy:
+            raise ServiceMarketError("CLIENT_UNHEALTHY")
+        if type(request) is not MarketHistoryRequest:
+            raise ServiceMarketError("INVALID_HISTORY_REQUEST")
+        if request.key != self.key:
+            raise ServiceMarketError("HISTORY_KEY_MISMATCH")
+
+        self._maintain_runtime()
+        binding = self._check_binding()
+        if _HISTORY_OPERATION not in binding.operations:
+            raise ServiceMarketError("HISTORY_UNAVAILABLE")
+
+        result = self._rpc(_HISTORY_OPERATION, request.to_dict())
+
+        # Lease maintenance can run while the RPC is in flight. Do not accept
+        # a page across a service restart or any other binding replacement.
+        try:
+            self._maintain_runtime()
+            current_binding = self._get_binding()
+        except ServiceMarketError:
+            self._recovery_required = True
+            raise
+        if current_binding.service_epoch != binding.service_epoch:
+            self._recovery_required = True
+            raise ServiceMarketError("HISTORY_EPOCH_CHANGED")
+        if not _same_binding(binding, current_binding):
+            self._recovery_required = True
+            raise ServiceMarketError("RUNTIME_BINDING_CHANGED")
+        if _HISTORY_OPERATION not in current_binding.operations:
+            self._recovery_required = True
+            raise ServiceMarketError("HISTORY_UNAVAILABLE")
+
+        try:
+            page = MarketHistoryPage.from_dict(result)
+        except Exception:
+            raise ServiceMarketError("INVALID_HISTORY_REPLY") from None
+        if page.request != request:
+            raise ServiceMarketError("HISTORY_REQUEST_MISMATCH")
+        return page
 
     def drain(self, max_events: int = 100) -> tuple[WireEnvelope, ...]:
         """Drain buffered events and pump owner-thread lease maintenance.

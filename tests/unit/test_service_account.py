@@ -10,6 +10,7 @@ from bt_api_base.account_protocol import (
     AccountBalance,
     AccountKey,
     AccountObservation,
+    AccountOpenOrder,
     AccountPosition,
     AccountResourceKey,
 )
@@ -144,6 +145,24 @@ def _observation(
     )
 
 
+def _open_order() -> AccountOpenOrder:
+    observed = "2026-10-14T00:00:00Z"
+    return AccountOpenOrder(
+        resource=_SPOT,
+        instrument=_instrument("spot", "asset-a"),
+        order_id="order-1",
+        side="buy",
+        position_side="net",
+        order_type="limit",
+        status="open",
+        quantity="1",
+        filled_quantity="0",
+        qty_unit="base_units",
+        created_at_utc=observed,
+        observed_at_utc=observed,
+    )
+
+
 def _reply(
     observation: AccountObservation | None = None,
     *,
@@ -153,11 +172,14 @@ def _reply(
     fresh_for_seconds: float = 60.0,
     cursor: int = 7,
     snapshot_id: str = "snapshot-1",
+    schema_version: int | None = None,
     events=(),
     next_cursor: int | None = None,
     latest_cursor: int | None = None,
 ) -> dict[str, object]:
     observation = observation or _observation()
+    if schema_version is None:
+        schema_version = 1 if observation.open_orders is None else 2
     return {
         "requested_cursor": None,
         "snapshot": {
@@ -167,7 +189,7 @@ def _reply(
             "cursor": cursor,
             "payload": {
                 "schema_id": "sdk.account.state",
-                "schema_version": 1,
+                "schema_version": schema_version,
                 "session_generation": generation,
                 "observation": observation.to_dict(),
             },
@@ -228,7 +250,7 @@ class LocalControlTransport:
         self.closed = True
 
 
-def _make_client(tmp_path):
+def _make_client(tmp_path, *, require_open_orders: bool = False):
     capability = ServiceCapability("account-instance", "service.account_read", _OPERATIONS)
     grant = ResourceGrant(
         "account-instance",
@@ -304,6 +326,7 @@ def _make_client(tmp_path):
         account_ref=_ACCOUNT_REF,
         expected_account=_ACCOUNT,
         required_coverage=_COVERAGE,
+        require_open_orders=require_open_orders,
         monotonic_clock=clock,
     )
     return client, runtime, registry, source, transport, clock
@@ -328,6 +351,8 @@ def test_refresh_preserves_provider_units_and_cached_view_is_immutable(tmp_path)
         assert client.snapshot() is view
         assert client.healthy is True
         assert view.observation.valuation is None
+        assert view.observation.open_orders is None
+        assert view.observation.open_orders_complete is False
         assert [(row.currency, row.total) for row in view.observation.balances] == [
             ("USD", "100"),
             ("USDT", "250"),
@@ -355,6 +380,80 @@ def test_refresh_preserves_provider_units_and_cached_view_is_immutable(tmp_path)
         _close_all(client, runtime, registry)
 
 
+@pytest.mark.parametrize("orders", [(_open_order(),), ()])
+def test_v2_open_orders_preserves_nonempty_and_complete_empty_state(tmp_path, orders):
+    client, runtime, registry, source, _transport, _clock = _make_client(tmp_path)
+    try:
+        observation = replace(
+            _observation(),
+            open_orders=orders,
+            open_orders_complete=True,
+        )
+        source.response = _reply(observation)
+        view = client.refresh()
+        assert view.observation.open_orders == orders
+        assert view.observation.open_orders_complete is True
+        assert client.snapshot() is view
+    finally:
+        _close_all(client, runtime, registry)
+
+
+@pytest.mark.parametrize(
+    ("observation", "schema_version"),
+    [
+        (_observation(), 1),
+        (
+            replace(
+                _observation(),
+                open_orders=(),
+                open_orders_complete=False,
+            ),
+            2,
+        ),
+    ],
+)
+def test_required_open_orders_rejects_missing_or_incomplete_state(
+    tmp_path, observation, schema_version
+):
+    client, runtime, registry, source, _transport, _clock = _make_client(
+        tmp_path, require_open_orders=True
+    )
+    try:
+        source.response = _reply(observation, schema_version=schema_version)
+        with pytest.raises(ServiceAccountError) as error:
+            client.refresh()
+        assert error.value.code == "ACCOUNT_OPEN_ORDERS_INCOMPLETE"
+        assert client.healthy is False
+    finally:
+        _close_all(client, runtime, registry)
+
+
+@pytest.mark.parametrize(
+    ("observation", "schema_version"),
+    [
+        (
+            replace(
+                _observation(),
+                open_orders=(_open_order(),),
+                open_orders_complete=True,
+            ),
+            1,
+        ),
+        (_observation(), 2),
+    ],
+)
+def test_open_orders_presence_must_match_schema_version(tmp_path, observation, schema_version):
+    client, runtime, registry, source, _transport, _clock = _make_client(tmp_path)
+    try:
+        source.response = _reply(observation, schema_version=schema_version)
+        with pytest.raises(ServiceAccountError) as error:
+            client.refresh()
+        assert error.value.code == "ACCOUNT_STATE_SCHEMA_MISMATCH"
+        assert client.healthy is False
+    finally:
+        _close_all(client, runtime, registry)
+
+
 def test_runtime_binding_and_validation_policy_are_read_only(tmp_path):
     client, runtime, registry, _source, _transport, _clock = _make_client(tmp_path)
     try:
@@ -363,6 +462,7 @@ def test_runtime_binding_and_validation_policy_are_read_only(tmp_path):
             "account_ref": "paper:other-account",
             "expected_account": _OTHER_ACCOUNT,
             "required_coverage": (_SPOT,),
+            "require_open_orders": True,
         }
         for name, replacement in replacements.items():
             with pytest.raises(AttributeError):
@@ -372,6 +472,7 @@ def test_runtime_binding_and_validation_policy_are_read_only(tmp_path):
         assert client.account_ref == _ACCOUNT_REF
         assert client.expected_account == _ACCOUNT
         assert client.required_coverage == _COVERAGE
+        assert client.require_open_orders is False
         assert client.refresh().observation.account_key == _ACCOUNT
     finally:
         _close_all(client, runtime, registry)
