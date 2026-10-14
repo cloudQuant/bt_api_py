@@ -2035,6 +2035,9 @@ def test_account_session_worker_shares_one_read_across_strategies_and_survives_o
         assert provider.read_calls == 1
         registry = host._registry
         assert registry is not None and registry.ready is True
+        account_read_capability = host._components[0].capabilities[0]
+        assert account_read_capability.operations == SUPPORTED_OPERATIONS
+        assert account_read_capability.write_operations == frozenset()
 
         registered: dict[str, tuple[dict[str, Any], WireScope]] = {}
         for strategy_ref in ("strategy-a", "strategy-b"):
@@ -2093,6 +2096,87 @@ def test_account_session_worker_shares_one_read_across_strategies_and_survives_o
         assert provider.read_calls == 1
 
         registration, scope = registered["strategy-a"]
+        tracked_read = registry.handle(
+            "curve-principal",
+            _request(
+                "account.read_after",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                    "instance_id": "gateway-session",
+                    "arguments": {"cursor": 0, "limit": 1, "track_delivery": True},
+                },
+                schema_id="sdk.service.call",
+                identity=_CLIENT_IDENTITY,
+                scope=scope,
+            ),
+        )
+        assert tracked_read["code"] == "OK"
+        progress = tracked_read["result"]["consumer_progress"]
+        assert set(progress) == {"stream_epoch", "offered_cursor", "acknowledged_cursor"}
+        assert progress["offered_cursor"] == tracked_read["result"]["next_cursor"]
+
+        progress_reply = registry.handle(
+            "curve-principal",
+            _request(
+                "account.progress",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                    "instance_id": "gateway-session",
+                    "arguments": {},
+                },
+                schema_id="sdk.service.call",
+                identity=_CLIENT_IDENTITY,
+                scope=scope,
+            ),
+        )
+        assert progress_reply["code"] == "OK"
+        assert progress_reply["result"]["consumer_progress"] == progress
+
+        acknowledged = registry.handle(
+            "curve-principal",
+            _request(
+                "account.ack",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                    "instance_id": "gateway-session",
+                    "arguments": {
+                        "stream_epoch": progress["stream_epoch"],
+                        "cursor": progress["offered_cursor"],
+                    },
+                },
+                schema_id="sdk.service.call",
+                identity=_CLIENT_IDENTITY,
+                scope=scope,
+            ),
+        )
+        assert acknowledged["code"] == "OK"
+        acknowledged_progress = acknowledged["result"]["consumer_progress"]
+        assert acknowledged_progress == {
+            **progress,
+            "acknowledged_cursor": progress["offered_cursor"],
+        }
+
+        persisted_progress = registry.handle(
+            "curve-principal",
+            _request(
+                "account.progress",
+                {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                    "instance_id": "gateway-session",
+                    "arguments": {},
+                },
+                schema_id="sdk.service.call",
+                identity=_CLIENT_IDENTITY,
+                scope=scope,
+            ),
+        )
+        assert persisted_progress["code"] == "OK"
+        assert persisted_progress["result"]["consumer_progress"] == acknowledged_progress
+
         unregistered = registry.handle(
             "curve-principal",
             _request(

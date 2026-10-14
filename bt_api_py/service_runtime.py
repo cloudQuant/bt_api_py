@@ -49,7 +49,13 @@ PORT_OPERATIONS = MappingProxyType(
             }
         ),
         "service.account_read": frozenset(
-            {"account.snapshot", "account.head", "account.read_after", "account.ack"}
+            {
+                "account.snapshot",
+                "account.head",
+                "account.read_after",
+                "account.ack",
+                "account.progress",
+            }
         ),
         "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
         "service.order_query": frozenset(
@@ -75,6 +81,10 @@ PORT_OPERATIONS = MappingProxyType(
             {"reservations.reserve", "reservations.query", "reservations.release"}
         ),
     }
+)
+
+_DEFAULT_ACCOUNT_READ_OPERATIONS = frozenset(
+    {"account.read_after", "account.snapshot", "account.head"}
 )
 
 
@@ -928,6 +938,11 @@ class ServiceClientRuntime:
             if not wanted <= operations:
                 raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
             operations = wanted
+        elif port == "service.account_read":
+            # New server capabilities must not silently expand registrations
+            # for existing read-only clients and grants. Consumers opt in to
+            # ACK/progress explicitly through requested_operations.
+            operations = operations.intersection(_DEFAULT_ACCOUNT_READ_OPERATIONS)
         if not operations:
             raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         if port == "service.order_entry" and not {"orders.submit", "orders.cancel"} <= operations:

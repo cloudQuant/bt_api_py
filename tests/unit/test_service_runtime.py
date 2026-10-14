@@ -150,6 +150,53 @@ def _registry(path, calls, *, handler=None, lease_seconds=30, clock=None):
     return registry
 
 
+_LEGACY_ACCOUNT_READ_OPERATIONS = frozenset(
+    {"account.read_after", "account.snapshot", "account.head"}
+)
+_ACK_ACCOUNT_READ_OPERATIONS = frozenset(
+    _LEGACY_ACCOUNT_READ_OPERATIONS | {"account.ack", "account.progress"}
+)
+
+
+def _account_operation_registry(path, calls, *, granted_operations):
+    capability = ServiceCapability(
+        "gateway-a", "service.account_read", _ACK_ACCOUNT_READ_OPERATIONS
+    )
+    registry = ServiceRegistry(
+        path,
+        service_id="account-service",
+        capabilities=(capability,),
+        grants={
+            CLIENT.principal_ref: (
+                PrincipalGrant(
+                    CLIENT,
+                    (
+                        ResourceGrant(
+                            "gateway-a",
+                            "service.account_read",
+                            "account-a",
+                            SCOPE,
+                            granted_operations,
+                        ),
+                    ),
+                ),
+            )
+        },
+        policy_version="access-v1",
+        requirements_version="readiness-v1",
+    )
+
+    for operation in _ACK_ACCOUNT_READ_OPERATIONS:
+        registry.register_handler(
+            "gateway-a",
+            operation,
+            lambda context, arguments, *, _operation=operation: (
+                calls.append((context, _operation, dict(arguments))) or {"operation": _operation}
+            ),
+        )
+    return registry
+
+
 class LocalTransport:
     def __init__(self, registry, principal_ref=CLIENT.principal_ref):
         self.registry = registry
@@ -907,6 +954,91 @@ def test_optional_monitor_failure_keeps_registered_read_proxy(tmp_path):
         with pytest.raises(ServiceRuntimeError):
             runtime.call("store.account", "account.snapshot", {}, account_ref="account-b")
         assert len(calls) == 1
+    finally:
+        runtime.close()
+        registry.close()
+
+
+def test_account_read_defaults_do_not_expand_to_new_server_ack_operations(tmp_path):
+    calls = []
+    registry = _account_operation_registry(
+        tmp_path / "account-read-legacy-grant.sqlite",
+        calls,
+        granted_operations=_LEGACY_ACCOUNT_READ_OPERATIONS,
+    )
+    transport = LocalTransport(registry)
+    runtime = _runtime(_config(), lambda *_: transport)
+    try:
+        summary = runtime.start()
+        assert summary.degraded_count == 0
+        assert runtime.bindings[0].operations == _LEGACY_ACCOUNT_READ_OPERATIONS
+        assert runtime.call("store.account", "account.snapshot", {}) == {
+            "operation": "account.snapshot"
+        }
+
+        sent_before = len(transport.requests)
+        with pytest.raises(ServiceRuntimeError, match="AMBIGUOUS_OR_MISSING_ROUTE"):
+            runtime.call("store.account", "account.ack", {"cursor": 1})
+        assert len(transport.requests) == sent_before
+        assert [call[1] for call in calls] == ["account.snapshot"]
+    finally:
+        runtime.close()
+        registry.close()
+
+
+def test_account_ack_operations_require_explicit_request_and_grant(tmp_path):
+    calls = []
+    registry = _account_operation_registry(
+        tmp_path / "account-read-ack-grant.sqlite",
+        calls,
+        granted_operations=_ACK_ACCOUNT_READ_OPERATIONS,
+    )
+    transport = LocalTransport(registry)
+    runtime = _runtime(
+        _config(),
+        lambda *_: transport,
+        requested_operations={"store.account": _ACK_ACCOUNT_READ_OPERATIONS},
+    )
+    try:
+        summary = runtime.start()
+        assert summary.degraded_count == 0
+        assert runtime.bindings[0].operations == _ACK_ACCOUNT_READ_OPERATIONS
+        assert runtime.call("store.account", "account.ack", {"cursor": 1}) == {
+            "operation": "account.ack"
+        }
+        assert runtime.call("store.account", "account.progress", {}) == {
+            "operation": "account.progress"
+        }
+        assert [call[1] for call in calls] == ["account.ack", "account.progress"]
+    finally:
+        runtime.close()
+        registry.close()
+
+
+def test_explicit_account_ack_request_without_operation_grant_fails_registration(tmp_path):
+    registry = _account_operation_registry(
+        tmp_path / "account-read-ack-denied.sqlite",
+        [],
+        granted_operations=_LEGACY_ACCOUNT_READ_OPERATIONS,
+    )
+    transport = LocalTransport(registry)
+    runtime = _runtime(
+        _config(),
+        lambda *_: transport,
+        requested_operations={"store.account": frozenset({"account.ack"})},
+    )
+    try:
+        with pytest.raises(ServiceRuntimeError):
+            runtime.start()
+        assert runtime.state == "failed"
+        registration_requests = [
+            request
+            for request in transport.requests
+            if request.header.operation == "service.register"
+        ]
+        assert len(registration_requests) == 1
+        assert registration_requests[0].payload["operations"] == ("account.ack",)
+        assert not any(request.header.operation == "account.ack" for request in transport.requests)
     finally:
         runtime.close()
         registry.close()

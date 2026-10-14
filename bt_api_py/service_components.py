@@ -241,7 +241,13 @@ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
             public_ports=MappingProxyType(
                 {
                     "service.account_read": frozenset(
-                        {"account.read_after", "account.snapshot", "account.head"}
+                        {
+                            "account.read_after",
+                            "account.snapshot",
+                            "account.head",
+                            "account.ack",
+                            "account.progress",
+                        }
                     )
                 }
             ),
@@ -630,6 +636,14 @@ def build_component(
                         scope=context.scope,
                         arguments=arguments,
                         registration_id=context.registration_id,
+                    )
+                if spec.component == "gateway":
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        principal_ref=context.principal_ref,
+                        identity=context.identity,
+                        scope=context.scope,
+                        arguments=arguments,
                     )
                 return _adapter.handle(  # type: ignore[attr-defined]
                     _operation,
