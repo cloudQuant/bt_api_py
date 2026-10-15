@@ -1,0 +1,115 @@
+{
+  "artifact": "fixed SDK risk-exposure Host candidate",
+  "evidence_level": "LOCAL_SPAWNED_SERVICEHOST_FIXED_SOURCE_SNAPSHOT_SYNTHETIC_PROVIDER_NOT_COMPLETE_RISK02",
+  "source_kind": "historical fixed source snapshot with explicit owned-file overlays; not all source is claimed committed",
+  "base_root_spec": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r8-root-spec.json",
+  "base_root_spec_sha256": "a2e4a379863e863e529fcd899b4a4a66edb7c89f3ae87170d036b7dcd80f06ff",
+  "base_source_snapshot": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r8-source\\source-snapshot.json",
+  "base_source_snapshot_sha256": "cf5aaff7f8a0413343bb3fcbbc906ed91f43a20b68015e479bf53c29fc7a61d0",
+  "candidate_root": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source",
+  "candidate_root_spec": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-root-spec.json",
+  "candidate_root_spec_sha256": "ae6cd135e2a228cf29048cc5b1deb883ce0b59e7fa800b80f484536fd98d725a",
+  "candidate_source_snapshot": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\source-snapshot.json",
+  "candidate_source_snapshot_sha256": "c9eafeaea8918cf86fca8b73c6d4cc14d928e54992aed0aec0e592d9561cea45",
+  "source_sha256_entry_count": 368,
+  "source_git_context_at_overlay_capture": {
+    "sdk_head": "577009e41da7b14c2bf4eb900a026509493e1194",
+    "sdk_branch": "dev",
+    "execution_source_commit": "743a0b9feef5b625fbd98269e8ab374f4d80adc8",
+    "execution_artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src",
+    "risk_source_head": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+    "base_source_heads": {
+      "D:\\bt_api_py": "213f1114f69416bbad250f1a226e5fa1ccc2638e",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+      "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53"
+    }
+  },
+  "overlays": [
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_risk_order_entry.py",
+      "candidate_relative_path": "sdk\\bt_api_py\\service_risk_order_entry.py",
+      "baseline_r8_sha256": "dea50da0492fd8dfe026defb0589ec87bb92a464d2210b9f8f6ad3813e198eff",
+      "candidate_sha256": "dea50da0492fd8dfe026defb0589ec87bb92a464d2210b9f8f6ad3813e198eff",
+      "candidate_size_bytes": 145784,
+      "changed_from_r8": false,
+      "method": "copied exact bytes from existing SDK dev checkout",
+      "source_git_head": "577009e41da7b14c2bf4eb900a026509493e1194",
+      "git_status_short": "M bt_api_py/service_risk_order_entry.py"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_risk_order_journal.py",
+      "candidate_relative_path": "sdk\\bt_api_py\\service_risk_order_journal.py",
+      "baseline_r8_sha256": "988282c825e8c17f28bb9ec3175fe4a3e98da81418815db57a5d5b200a75a568",
+      "candidate_sha256": "68389c09f427f183d19a47c5dcad2931e0ba61cf7535c6af7286d70e53c46187",
+      "candidate_size_bytes": 224074,
+      "changed_from_r8": true,
+      "method": "copied exact bytes from existing SDK dev checkout",
+      "source_git_head": "577009e41da7b14c2bf4eb900a026509493e1194",
+      "git_status_short": "M bt_api_py/service_risk_order_journal.py"
+    },
+    {
+      "source": "D:\\bt_api_py\\tests\\unit\\test_service_risk_order_exposure_integration.py",
+      "candidate_relative_path": "sdk\\tests\\unit\\test_service_risk_order_exposure_integration.py",
+      "baseline_r8_sha256": "002308d4cac7307e10fb6bb74913e9fd993eb28e6fbe649229490fd003d3decb",
+      "candidate_sha256": "56a7e228644bdadb25588f525dc5823e02f7788d18826238b0394d61822609f1",
+      "candidate_size_bytes": 66853,
+      "changed_from_r8": true,
+      "method": "copied exact bytes from existing SDK dev checkout",
+      "source_git_head": "577009e41da7b14c2bf4eb900a026509493e1194",
+      "git_status_short": "?? tests/unit/test_service_risk_order_exposure_integration.py"
+    }
+  ],
+  "required_dependency_closure": [
+    {
+      "path": "sdk/bt_api_py/service_risk_order_entry.py",
+      "reason": "production risk order entry and query/proof logic"
+    },
+    {
+      "path": "sdk/bt_api_py/service_risk_order_journal.py",
+      "reason": "production SQLite command/event/proof journal"
+    },
+    {
+      "path": "sdk/bt_api_py/service_components.py",
+      "reason": "normal ServiceHost account_owner component construction; exact fixed r8 candidate bytes"
+    },
+    {
+      "path": "sdk/tests/unit/test_service_risk_order_exposure_integration.py",
+      "reason": "spawned ServiceHost/CURVE integration node"
+    },
+    {
+      "path": "sdk/tests/unit/test_service_risk_only_order_integration.py",
+      "reason": "shared trusted fixture/config/endpoint helpers imported by the exposure integration test"
+    },
+    {
+      "path": "sdk/tests/unit/_spawned_process_helpers.py",
+      "reason": "committed bounded spawn/cleanup helpers imported by both test modules"
+    },
+    {
+      "path": "sdk/bt_api_py/service_config.py and other ServiceHost/runtime/registry dependencies",
+      "reason": "fixed r8 source snapshot entries in the 368-file source manifest"
+    }
+  ],
+  "non_dependency_note": "The TrustedRiskPolicyBinding class is in the pinned service_components implementation and is used internally by that module; its __all__ export is not imported by the exposure test or its base fixture. No current-checkout export overlay is required.",
+  "host_node": [
+    "tests/unit/test_service_risk_order_exposure_integration.py::test_spawned_live_gross_terminal_and_post_ack_order_exposure_lifecycle"
+  ],
+  "pytest_options": [
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short"
+  ],
+  "python": "C:/Anaconda3/python.exe",
+  "fresh_output": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-host",
+  "do_not_reuse": [
+    "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r8",
+    "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r8"
+  ]
+}

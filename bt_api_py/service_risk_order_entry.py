@@ -24,14 +24,20 @@ from bt_api_risk import (
     AccountScope,
     DispatchClaimBinding,
     DispatchEvidenceClass,
+    DispatchExposureResolutionProof,
+    DispatchExposureResolutionReceiptStatus,
     DispatchResolutionReceipt,
     DispatchResolutionReceiptStatus,
     DispatchTrackedOrderProof,
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
     InstrumentRiskRegistry,
+    OrderExposureObservationProof,
+    OrderExposureState,
+    OrderFillFact,
     PermitInvalidError,
     RiskAdmissionDeniedError,
+    fill_ids_sha256,
 )
 
 from bt_api_py._contracts.models import OrderRequest, OrderType, QueryOrderRequest, Side
@@ -47,6 +53,7 @@ from .service_risk_order_journal import (
     RiskOrderCommand,
     RiskOrderJournal,
     RiskOrderJournalError,
+    RiskOrderJournalEvent,
     RiskOrderWriterFence,
     canonical_json,
     sha256_text,
@@ -91,6 +98,7 @@ _WIRE_SCOPE_FIELDS_SET = frozenset((*_WIRE_SCOPE_FIELDS, "run_id"))
 _ORDER_PROVENANCE_SCHEMA = "bt-api-order-source-provenance-v1"
 _ORDER_PROVENANCE_SCHEMA_V2 = "bt-api-order-source-provenance-v2"
 _RISK_ORDER_CONTRACT_SCHEMA_V2 = "bt-api-risk-provider-contract-v2"
+_FILL_SOURCE_RECORD_SCHEMA = "bt-api-provider-source-row-v1"
 _SUPPORTED_PROVIDER_TIME_IN_FORCE = frozenset(
     {("GTC",), ("IOC",), ("GTC", "IOC")}
 )
@@ -200,6 +208,7 @@ _SOURCE_ALIASES = {
         "trade_symbol",
     ),
     "side": ("side", "order_side", "trade_side", "S"),
+    "price": ("price", "limit_price", "order_price", "Price"),
 }
 _PERMITTED_ROLES = frozenset(
     {WireRole.STRATEGY_CLIENT, WireRole.APPLICATION_CLIENT, WireRole.SERVICE}
@@ -950,14 +959,85 @@ class RiskOrderEntryService:
             return False
         try:
             receipt = self._gate.dispatch_resolution_receipt(command.permit_id)
-            return self._journal.has_resolved_ack_history(
+            if self._journal.has_resolved_ack_history(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+                receipt=receipt,
+            ):
+                return True
+        except Exception:
+            pass
+        try:
+            receipt = self._gate.dispatch_exposure_resolution_receipt(command.permit_id)
+            return (
+                receipt.status is DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+                and self._journal.has_resolved_terminal_exposure_history(
+                    fence,
+                    principal_ref=command.principal_ref,
+                    intent_id=command.intent_id,
+                    receipt=receipt,
+                )
+            )
+        except Exception:
+            return False
+
+    def _resolved_claim_for_query(
+        self, fence: RiskOrderWriterFence, command: RiskOrderCommand
+    ) -> DispatchClaimBinding:
+        """Return the claim only from the exact resolved receipt and ACK history.
+
+        ``dispatch_claim_binding`` is deliberately active-latch-only. Once an
+        ACK has resolved the dispatch freeze, later provider observations must
+        use the claim carried by Risk's durable receipt and validate that
+        receipt against the immutable journal history under the current writer
+        fence.
+        """
+
+        permit_id = command.permit_id
+        if permit_id is None:
+            raise RiskOrderEntryError("ACKED_PERMIT_REFERENCE_MISSING")
+        receipt: DispatchResolutionReceipt | None = None
+        try:
+            receipt = self._gate.dispatch_resolution_receipt(permit_id)
+        except PermitInvalidError:
+            # Positive-fill terminal resolutions use the distinct exposure
+            # receipt below; infrastructure errors remain fail-closed.
+            pass
+        if receipt is not None and (
+            receipt.status is DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+            and receipt.dispatch_latch_active is False
+            and receipt.claim.scope == command.scope
+            and receipt.claim.permit_id == permit_id
+            and receipt.claim.intent_id == command.risk_intent_id
+            and self._journal.has_resolved_ack_history(
                 fence,
                 principal_ref=command.principal_ref,
                 intent_id=command.intent_id,
                 receipt=receipt,
             )
-        except Exception:
-            return False
+        ):
+            return receipt.claim
+
+        try:
+            receipt = self._gate.dispatch_exposure_resolution_receipt(permit_id)
+        except PermitInvalidError as error:
+            raise RiskOrderEntryError("ACKED_RISK_RECEIPT_INVALID") from error
+        if (
+            receipt.status is DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+            and receipt.dispatch_latch_active is False
+            and receipt.claim.scope == command.scope
+            and receipt.claim.permit_id == permit_id
+            and receipt.claim.intent_id == command.risk_intent_id
+            and self._journal.has_resolved_terminal_exposure_history(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+                receipt=receipt,
+            )
+        ):
+            return receipt.claim
+        raise RiskOrderEntryError("ACKED_RISK_RECEIPT_INVALID")
 
     def _binding_for_command(
         self, command: RiskOrderCommand
@@ -1337,6 +1417,7 @@ class RiskOrderEntryService:
                 command,
                 target=target,
                 contract=contract,
+                claim=claim,
                 request=request,
                 acknowledgement=acknowledgement,
                 order=order,
@@ -1371,6 +1452,27 @@ class RiskOrderEntryService:
             )
 
         if not _is_complete_open_zero_fill(order, fills, order_observation, fill_observation):
+            if (
+                allow_resolution
+                and contract.exposure_ready
+                and order_observation.get("exposure_state")
+                in {OrderExposureState.FILLED.value, OrderExposureState.CANCELLED.value}
+                and Decimal(str(fill_observation.get("filled_quantity", "0"))) > 0
+            ):
+                return self._resolve_terminal_exposure(
+                    fence,
+                    command,
+                    target=target,
+                    admission=admission,
+                    contract=contract,
+                    claim=claim,
+                    request=request,
+                    order=order,
+                    fills=fills,
+                    order_event=order_event,
+                    fill_event=fill_event,
+                    reconciliation_sha=reconciliation_sha,
+                )
             return self._settle_and_unknown(
                 fence,
                 command,
@@ -1452,6 +1554,94 @@ class RiskOrderEntryService:
                 fence, command, "DISPATCH_PROOF_RESOLUTION_UNCERTAIN", permit_id=claim.permit_id
             )
 
+    def _resolve_terminal_exposure(
+        self,
+        fence: RiskOrderWriterFence,
+        command: RiskOrderCommand,
+        *,
+        target: RiskOrderTarget,
+        admission: DurableRiskAdmissionAdapter,
+        contract: RiskBtApiProviderContract,
+        claim: DispatchClaimBinding,
+        request: OrderRequest,
+        order: object,
+        fills: object,
+        order_event: RiskOrderJournalEvent,
+        fill_event: RiskOrderJournalEvent,
+        reconciliation_sha: str,
+    ) -> RiskOrderCommand:
+        """Resolve a first, complete positive-fill terminal provider observation."""
+
+        try:
+            admission.ensure_settled(claim.permit_id)
+            exposure_id, exposure_sha = self._journal.store_terminal_exposure_reference(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+                claim=claim,
+                provider_order_id=str(order["order_id"]),
+                accepted_request_sha256=command.order_request_sha256,
+                order_event=order_event,
+                fill_event=fill_event,
+                reconciliation_evidence_sha256=reconciliation_sha,
+            )
+            facts = _v2_order_facts(
+                order,
+                fills,
+                command=command,
+                request=request,
+                contract=contract,
+            )
+            observation = _order_exposure_proof(
+                command,
+                target=target,
+                contract=contract,
+                claim=claim,
+                facts=facts,
+                order_payload=order_event.payload,
+                fill_payload=fill_event.payload,
+                journal_revision=fill_event.revision,
+                journal_record_sha256=fill_event.record_sha256,
+                exposure_reservation_id=exposure_id,
+                exposure_reservation_sha256=exposure_sha,
+                writer_owner_id=fence.owner_id,
+                writer_fencing_token=fence.fencing_token,
+                writer_fence_sha256=fence.fence_sha256,
+                dispatch_proof_sha256=None,
+            )
+            proof = DispatchExposureResolutionProof(
+                claim=claim,
+                evidence_class=_evidence_class(claim.scope),
+                dispatch_attempt_count=1,
+                reconciliation_evidence_sha256=reconciliation_sha,
+                observation=observation,
+            )
+            receipt = admission.resolve_dispatch_exposure(proof)
+            self._journal.append_terminal_exposure_ack(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+                receipt=receipt,
+                proof=proof,
+            )
+            return self._journal.get_command(
+                target.account_scope, command.principal_ref, command.intent_id
+            ) or command
+        except RiskAdmissionDeniedError as error:
+            return self._mark_unknown(
+                fence,
+                command,
+                "RISK_EXPOSURE_REJECTED_" + error.code,
+                permit_id=claim.permit_id,
+            )
+        except Exception:
+            return self._mark_unknown(
+                fence,
+                command,
+                "DISPATCH_EXPOSURE_RESOLUTION_UNCERTAIN",
+                permit_id=claim.permit_id,
+            )
+
     def _query(
         self,
         *,
@@ -1478,6 +1668,7 @@ class RiskOrderEntryService:
             has_resolved_ack = command.state in {
                 "ACKED_TRACKED",
                 "PROVIDER_QUERY",
+                "EXPOSURE_APPLIED",
                 "UNKNOWN",
             } and self._has_resolved_ack_history(fence, command)
             if command.state == "ACKED_TRACKED" and not has_resolved_ack:
@@ -1524,13 +1715,25 @@ class RiskOrderEntryService:
                 command = self._recover_claimed(fence, command)
             if command.state in {"REJECTED", "ADMISSION_DENIED", "NO_DISPATCH"}:
                 return _command_reply(command, target.account_scope)
+            if (
+                has_resolved_ack
+                and command.state == "ACKED_TRACKED"
+                and command.latest_event.get("public_state")
+                in {OrderExposureState.FILLED.value, OrderExposureState.CANCELLED.value}
+            ):
+                # A complete first terminal observation is already durable in
+                # Risk and the journal; it needs no follow-up provider read.
+                return _command_reply(command, target.account_scope)
             if contract is None or not contract.write_ready:
                 return _command_reply(command, target.account_scope)
             if has_resolved_ack:
-                # The initial dispatch latch was already resolved. Later fills
-                # remain in Risk's original settled reservation until Risk02
-                # consumes a separate complete exposure observation.
+                # The provider remains authoritative for later order/fill facts.
+                # Persist the complete normalized observation first; Risk then
+                # consumes that exact journal revision while this account fence
+                # remains held.
                 try:
+                    if command.permit_id is None:
+                        raise RiskOrderEntryError("ACKED_PERMIT_REFERENCE_MISSING")
                     request = OrderRequest.from_dict(command.order_request)
                     order = self._bt_api.query_order(
                         command.exchange_name,
@@ -1548,23 +1751,102 @@ class RiskOrderEntryService:
                         client_order_id=command.client_order_id,
                         account_id=command.provider_account_id,
                     )
+                    claim = self._resolved_claim_for_query(fence, command)
                     observed = _followup_observation(
-                        command, contract=contract, order=order, fills=fills
+                        command,
+                        target=target,
+                        contract=contract,
+                        claim=claim,
+                        order=order,
+                        fills=fills,
                     )
-                    state = (
-                        "ACKED_TRACKED"
-                        if _is_complete_open_zero_fill(order, fills, None, None)
-                        else "UNKNOWN"
+                    v2_facts = (
+                        _v2_order_facts(
+                            order,
+                            fills,
+                            command=command,
+                            request=request,
+                            contract=contract,
+                        )
+                        if contract.exposure_ready
+                        else None
                     )
-                    observed["public_state"] = state
+                    if v2_facts is None:
+                        observed["public_state"] = (
+                            "ACKED_TRACKED"
+                            if _is_complete_open_zero_fill(order, fills, None, None)
+                            else "UNKNOWN"
+                        )
+                    else:
+                        observed["public_state"] = "UNKNOWN"
                     observed["dispatch_attempt_count"] = 1
-                    self._journal.append_event(
+                    query_event = self._journal.append_event(
                         fence,
                         principal_ref=principal_ref,
                         intent_id=intent_id,
                         event_type="PROVIDER_QUERY",
                         payload=observed,
                     )
+                    if v2_facts is not None:
+                        receipt = self._gate.dispatch_resolution_receipt(command.permit_id)
+                        if (
+                            receipt.status is not DispatchResolutionReceiptStatus.ACKED_TRACKED_RESOLVED
+                            or receipt.dispatch_latch_active
+                            or receipt.proof is None
+                            or receipt.claim != claim
+                        ):
+                            raise RiskOrderEntryError("ACKED_RISK_RECEIPT_INVALID")
+                        tracked_order = receipt.proof
+                        reference_id = tracked_order.exposure_reservation_id
+                        reference_sha = tracked_order.exposure_reservation_sha256
+                        proof = _order_exposure_proof(
+                            command,
+                            target=target,
+                            contract=contract,
+                            claim=claim,
+                            facts=v2_facts,
+                            order_payload=query_event.payload,
+                            fill_payload=query_event.payload,
+                            journal_revision=query_event.revision,
+                            journal_record_sha256=query_event.record_sha256,
+                            exposure_reservation_id=reference_id,
+                            exposure_reservation_sha256=reference_sha,
+                            writer_owner_id=fence.owner_id,
+                            writer_fencing_token=fence.fencing_token,
+                            writer_fence_sha256=fence.fence_sha256,
+                            dispatch_proof_sha256=tracked_order.fingerprint,
+                        )
+                        snapshot = self._gate.apply_order_exposure_observation(proof)
+                        applied_payload = {
+                            "dispatch_attempt_count": 1,
+                            "filled_gross_notional": _decimal_text(snapshot.filled_gross_notional),
+                            "filled_quantity": _decimal_text(
+                                snapshot.cumulative_filled_quantity
+                            ),
+                            "journal_record_sha256": query_event.record_sha256,
+                            "journal_revision": query_event.revision,
+                            "leaves_quantity": _decimal_text(snapshot.leaves_quantity),
+                            "notional_unit": snapshot.notional_unit,
+                            "open_gross_notional": _decimal_text(snapshot.open_gross_notional),
+                            "order_revision": snapshot.order_revision,
+                            "permit_id": claim.permit_id,
+                            "proof_sha256": snapshot.proof_sha256,
+                            "provider_order_id": tracked_order.provider_order_id,
+                            "public_state": snapshot.state.value,
+                            "risk_intent_id": claim.intent_id,
+                            "trade_count": v2_facts["fill_trade_count"]
+                            if "fill_trade_count" in v2_facts
+                            else len(v2_facts["fill_facts"]),
+                        }
+                        if snapshot.state is OrderExposureState.UNKNOWN:
+                            applied_payload["reason_code"] = "PROVIDER_ORDER_STATE_UNKNOWN"
+                        self._journal.append_event(
+                            fence,
+                            principal_ref=principal_ref,
+                            intent_id=intent_id,
+                            event_type="EXPOSURE_APPLIED",
+                            payload=applied_payload,
+                        )
                 except Exception:
                     latest = self._journal.get_command(
                         target.account_scope, principal_ref, intent_id
@@ -1945,8 +2227,13 @@ def _command_reply(
         "ADMISSION_DENIED": "REJECTED",
         "NO_DISPATCH": "REJECTED",
     }.get(command.state, command.state)
-    if command.state == "PROVIDER_QUERY":
+    if command.state in {"PROVIDER_QUERY", "EXPOSURE_APPLIED"}:
         state = command.latest_event.get("public_state", "UNKNOWN")
+    elif command.state == "ACKED_TRACKED" and command.latest_event.get("public_state") in {
+        OrderExposureState.FILLED.value,
+        OrderExposureState.CANCELLED.value,
+    }:
+        state = command.latest_event["public_state"]
     latest = command.latest_event
     record = {
         "intent_id": command.intent_id,
@@ -1968,7 +2255,7 @@ def _command_reply(
         "review_required": state == "UNKNOWN",
         "created_at_ns": command.created_at_ns,
         "updated_at_ns": command.updated_at_ns,
-        "is_terminal": state == "REJECTED",
+        "is_terminal": state in {"REJECTED", OrderExposureState.FILLED.value, OrderExposureState.CANCELLED.value},
     }
     if ok is None:
         ok = state not in {"REJECTED"}
@@ -2366,6 +2653,282 @@ def _field_value(provenance: Mapping[str, Any], field: str) -> Any:
     return None
 
 
+def _validate_provenance_snapshot(value: object, operation: str) -> dict[str, Any]:
+    """Validate the normalizer's finite, source-bound v2 projection."""
+
+    if type(value) is not NormalizationProvenance or value.operation != operation:
+        raise RiskOrderEntryError("PROVIDER_SOURCE_PROVENANCE_MISSING")
+    projected = value.to_dict()
+    if (
+        projected.get("schema") != _ORDER_PROVENANCE_SCHEMA_V2
+        or type(projected.get("source_fields")) is not list
+        or projected["source_fields"] != sorted(set(projected["source_fields"]))
+        or type(projected.get("envelope_fields")) is not list
+        or projected["envelope_fields"] != sorted(set(projected["envelope_fields"]))
+        or type(projected.get("source_values")) is not dict
+        or type(projected.get("envelope_values")) is not dict
+        or set(projected["source_values"]) - set(projected["source_fields"])
+        or set(projected["envelope_values"]) - set(projected["envelope_fields"])
+    ):
+        raise RiskOrderEntryError("PROVIDER_SOURCE_PROVENANCE_INVALID")
+    for values in (projected["source_values"], projected["envelope_values"]):
+        if any(type(key) is not str or type(item) not in (str, int, bool) for key, item in values.items()):
+            raise RiskOrderEntryError("PROVIDER_SOURCE_PROVENANCE_INVALID")
+    digest = projected.get("source_sha256")
+    expected = sha256_text(
+        canonical_json(
+            {
+                "envelope_values": projected["envelope_values"],
+                "operation": operation,
+                "schema": projected["schema"],
+                "source_fields": projected["source_fields"],
+                "source_values": projected["source_values"],
+            }
+        )
+    )
+    if digest != expected:
+        raise RiskOrderEntryError("PROVIDER_SOURCE_PROVENANCE_INVALID")
+    return projected
+
+
+def _v2_order_facts(
+    order: object,
+    fills: object,
+    *,
+    command: RiskOrderCommand,
+    request: OrderRequest,
+    contract: RiskBtApiProviderContract,
+) -> dict[str, Any]:
+    """Validate explicit provider revisions and immutable complete fill facts."""
+
+    if not contract.exposure_ready:
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_CONTRACT_UNAVAILABLE")
+    order_prov = _validate_provenance_snapshot(
+        getattr(order, "normalization_provenance", None), "query_order"
+    )
+    fill_prov = _validate_provenance_snapshot(
+        getattr(fills, "normalization_provenance", None), "get_deals"
+    )
+    order_values = order_prov["source_values"]
+    fill_envelope = fill_prov["envelope_values"]
+    order_revision = order_values.get(contract.order_revision_field)
+    fill_watermark = fill_envelope.get(contract.fill_watermark_field)
+    if (
+        type(order_revision) is not int
+        or order_revision <= 0
+        or type(fill_watermark) is not int
+        or fill_watermark <= 0
+        or fill_watermark < order_revision
+    ):
+        raise RiskOrderEntryError("PROVIDER_ORDER_REVISION_UNVERIFIED")
+    status_raw = _field_value(order_prov, "status")
+    status_map = dict(contract.provider_status_mapping)
+    status = (
+        None
+        if status_raw is None
+        else status_map.get(str(status_raw).lower().replace("-", "_"))
+    )
+    states = {
+        "accepted": OrderExposureState.ACKED,
+        "partial": OrderExposureState.PARTIALLY_FILLED,
+        "completed": OrderExposureState.FILLED,
+        "canceled": OrderExposureState.CANCELLED,
+        "unknown": OrderExposureState.UNKNOWN,
+    }
+    exposure_state = states.get(status or "", OrderExposureState.UNKNOWN)
+    if (
+        type(order) is not NormalizedRecord
+        or type(fills) is not NormalizedRecords
+        or order.get("execution_unknown") is not False
+        or str(order.get("status")) != status
+        or fills.source_alignment_valid is not True
+        or len(fills.row_provenance) != len(fills)
+        or not contract.complete_order_snapshot
+        or not contract.complete_fill_history
+    ):
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_OBSERVATION_INCOMPLETE")
+    raw_filled = _field_value(order_prov, "filled_quantity")
+    raw_quantity = _field_value(order_prov, "quantity")
+    try:
+        filled = Decimal(str(raw_filled))
+        quantity = Decimal(str(raw_quantity))
+        normalized_filled = Decimal(str(order.get("filled")))
+        source_price = Decimal(str(_field_value(order_prov, "price")))
+    except (InvalidOperation, TypeError, ValueError):
+        raise RiskOrderEntryError("PROVIDER_FILL_QUANTITY_UNVERIFIED") from None
+    if (
+        not filled.is_finite()
+        or filled < 0
+        or quantity != request.quantity
+        or request.price is None
+        or source_price != request.price
+        or filled != normalized_filled
+        or order.get("order_id") != _field_value(order_prov, "provider_order_id")
+        or order.get("client_order_id") != command.client_order_id
+    ):
+        raise RiskOrderEntryError("PROVIDER_ORDER_FIELD_MISMATCH")
+
+    row_provenance = tuple(fills.row_provenance)
+    if len(fills) != len(row_provenance):
+        raise RiskOrderEntryError("PROVIDER_FILL_HISTORY_ALIGNMENT_INVALID")
+    fill_facts: list[OrderFillFact] = []
+    fill_rows: list[dict[str, Any]] = []
+    for index, (normalized, raw_prov_value) in enumerate(
+        zip(fills, row_provenance, strict=True)
+    ):
+        raw_prov = _validate_provenance_snapshot(raw_prov_value, "get_deals")
+        values = raw_prov["source_values"]
+        trade_id = _first_source_value(values, ("trade_id", "fill_id", "deal_id", "tradeId", "id", "TradeID"))
+        provider_order_id = _first_source_value(
+            values, ("order_id", "external_order_id", "orderId", "ordId", "OrderSysID")
+        )
+        client_order_id = _first_source_value(
+            values, ("client_order_id", "clOrdId", "OrderRef")
+        )
+        account_id = _first_source_value(values, ("account_id", "AccountID", "InvestorID"))
+        instrument = _first_source_value(
+            values,
+            ("symbol", "symbol_name", "instrument", "instrument_id", "data_name", "instId", "InstrumentID", "trade_symbol"),
+        )
+        side_raw = _first_source_value(values, ("side", "order_side", "trade_side", "S"))
+        quantity_raw = _first_source_value(
+            values, ("quantity", "size", "trade_volume", "qty", "fillSz", "volume", "Volume")
+        )
+        price_raw = _first_source_value(
+            values, ("trade_price", "price", "fillPx", "Price")
+        )
+        revision = values.get(contract.fill_revision_field)
+        fee_raw = values.get(contract.fee_amount_field)
+        fee_currency = values.get(contract.fee_currency_field)
+        if (
+            type(trade_id) is not str
+            or not trade_id
+            or type(revision) is not int
+            or revision <= 0
+            or revision > fill_watermark
+            or str(provider_order_id) != str(order.get("order_id"))
+            or str(client_order_id) != command.client_order_id
+            or str(account_id) != command.provider_account_id
+            or str(instrument) != request.symbol
+            or str(side_raw).upper() != request.side.value.upper()
+            or type(fee_currency) is not str
+            or not fee_currency
+        ):
+            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_UNVERIFIED")
+        try:
+            fill_quantity = Decimal(str(quantity_raw))
+            fill_price = Decimal(str(price_raw))
+            fee_amount = Decimal(str(fee_raw))
+            normalized_fee = Decimal(str(normalized.get("fee")))
+        except (InvalidOperation, TypeError, ValueError):
+            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_INVALID") from None
+        if (
+            not fill_quantity.is_finite()
+            or fill_quantity <= 0
+            or not fill_price.is_finite()
+            or fill_price <= 0
+            or not fee_amount.is_finite()
+            or not normalized_fee.is_finite()
+            or normalized_fee != fee_amount
+            or str(normalized.get("trade_id")) != trade_id
+            or str(normalized.get("order_id")) != str(provider_order_id)
+            or str(normalized.get("client_order_id")) != command.client_order_id
+            or str(normalized.get("account_id")) != command.provider_account_id
+            or str(normalized.get("symbol")) != request.symbol
+            or str(normalized.get("side")).upper() != request.side.value.upper()
+            or str(normalized.get("fee_currency")).upper() != fee_currency.upper()
+        ):
+            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_MISMATCH")
+        # The row identity must survive a later observation with a newer
+        # envelope watermark.  The full provider-observation digest below
+        # continues to bind each envelope; this digest binds the immutable
+        # explicit source row only, so previously observed fills remain the
+        # same facts when another fill is appended.
+        digest = _fill_source_record_sha256(raw_prov)
+        fill_facts.append(
+            OrderFillFact(
+                trade_id=trade_id,
+                quantity=fill_quantity,
+                price=fill_price,
+                side=request.side.value.upper(),
+                position_effect="OPEN",
+                fee_amount=fee_amount,
+                fee_currency=fee_currency.upper(),
+                source_record_sha256=digest,
+                source_revision=revision,
+            )
+        )
+        fill_rows.append(
+            {
+                "normalization_provenance": raw_prov,
+                "record": {
+                    **_safe_normalized_fill(normalized),
+                    "source_record_sha256": digest,
+                    "source_revision": revision,
+                },
+                "source_revision": revision,
+            }
+        )
+    fill_tuple = tuple(sorted(fill_facts, key=lambda item: item.trade_id))
+    fill_qty = sum((item.quantity for item in fill_tuple), Decimal(0))
+    if fill_qty != filled or len({item.trade_id for item in fill_tuple}) != len(fill_tuple):
+        raise RiskOrderEntryError("PROVIDER_FILL_HISTORY_MISMATCH")
+    if exposure_state is OrderExposureState.ACKED and filled != 0:
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    if exposure_state is OrderExposureState.PARTIALLY_FILLED and not (
+        0 < filled < quantity
+    ):
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    if exposure_state is OrderExposureState.FILLED and filled != quantity:
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    if exposure_state is OrderExposureState.CANCELLED and filled > quantity:
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    leaves = (
+        quantity - filled
+        if exposure_state in {OrderExposureState.ACKED, OrderExposureState.PARTIALLY_FILLED}
+        else Decimal(0)
+    )
+    return {
+        "fill_facts": fill_tuple,
+        "fill_rows": fill_rows,
+        "fill_watermark_revision": fill_watermark,
+        "filled_quantity": filled,
+        "leaves_quantity": leaves,
+        "order_revision": order_revision,
+        "valuation_price": source_price,
+        "state": exposure_state,
+    }
+
+
+def _first_source_value(values: Mapping[str, Any], names: tuple[str, ...]) -> Any:
+    for name in names:
+        if name in values:
+            return values[name]
+    return None
+
+
+def _fill_source_record_sha256(provenance: Mapping[str, Any]) -> str:
+    """Hash stable explicit fill-row provenance, excluding envelope watermarks."""
+
+    if (
+        provenance.get("operation") != "get_deals"
+        or provenance.get("schema") != _ORDER_PROVENANCE_SCHEMA_V2
+        or type(provenance.get("source_fields")) is not list
+        or type(provenance.get("source_values")) is not dict
+    ):
+        raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_UNVERIFIED")
+    return sha256_text(
+        canonical_json(
+            {
+                "schema": _FILL_SOURCE_RECORD_SCHEMA,
+                "operation": "get_deals",
+                "source_fields": provenance["source_fields"],
+                "source_values": provenance["source_values"],
+            }
+        )
+    )
+
+
 def _verify_order_source_fields(
     order: object,
     command: RiskOrderCommand,
@@ -2432,9 +2995,10 @@ def _verify_order_source_fields(
         raise RiskOrderEntryError("PROVIDER_ORDER_STATE_UNVERIFIED")
     status_key = str(source_status).lower().replace("-", "_")
     status_map = dict(contract.provider_status_mapping)
-    if status_map.get(status_key) != "accepted":
+    normalized_status = status_map.get(status_key)
+    if normalized_status is None:
         raise RiskOrderEntryError("PROVIDER_ORDER_STATE_UNVERIFIED")
-    if str(order.get("status")) != "accepted":
+    if str(order.get("status")) != normalized_status:
         raise RiskOrderEntryError("PROVIDER_ORDER_STATE_UNVERIFIED")
     source_filled = _field_value(provenance, "filled_quantity")
     try:
@@ -2454,6 +3018,7 @@ def _observation_payloads(
     *,
     target: RiskOrderTarget,
     contract: RiskBtApiProviderContract,
+    claim: DispatchClaimBinding,
     request: OrderRequest,
     acknowledgement: Mapping[str, Any] | None,
     order: object,
@@ -2478,15 +3043,34 @@ def _observation_payloads(
         client_order_id=command.client_order_id,
         account_id=command.provider_account_id,
     )
-    if Decimal(str(_field_value(order_provenance, "filled_quantity"))) != 0:
+    v2_facts = (
+        _v2_order_facts(
+            order,
+            fills,
+            command=command,
+            request=request,
+            contract=contract,
+        )
+        if contract.exposure_ready
+        else None
+    )
+    if v2_facts is None and Decimal(str(_field_value(order_provenance, "filled_quantity"))) != 0:
         raise RiskOrderEntryError("PROVIDER_ORDER_NOT_ZERO_FILL")
+    metadata_facts = (
+        _provider_metadata_facts(target, contract, request.symbol)
+        if v2_facts is not None
+        else None
+    )
+    source_alias_map_sha256 = _source_alias_map_sha256() if v2_facts is not None else None
 
     order_values = {
         "account_id": command.provider_account_id,
         "client_order_id": command.client_order_id,
         "collection_provenance": order.collection_provenance.to_dict(),
         "complete": True,
-        "filled_quantity": 0,
+        "filled_quantity": (
+            _decimal_text(v2_facts["filled_quantity"]) if v2_facts is not None else 0
+        ),
         "instrument": request.symbol,
         "provider_contract_sha256": contract.fingerprint,
         "provider_order_id": str(order["order_id"]),
@@ -2511,7 +3095,14 @@ def _observation_payloads(
         "normalizer_schema": order_provenance["schema"],
         "acknowledgement": _safe_acknowledgement(acknowledgement),
     }
-    if len(fills) != 0:
+    if v2_facts is not None:
+        order_observation["order_revision"] = v2_facts["order_revision"]
+        order_observation["exposure_state"] = v2_facts["state"].value
+        order_observation["metadata_facts"] = metadata_facts
+        order_observation["source_alias_map_sha256"] = source_alias_map_sha256
+        order_observation["claim_digest"] = claim.claim_digest
+        order_observation["risk_intent_id"] = claim.intent_id
+    if len(fills) != 0 and v2_facts is None:
         raise RiskOrderEntryError("PROVIDER_FILL_HISTORY_NONEMPTY")
     fill_observation = {
         "account_id": command.provider_account_id,
@@ -2519,8 +3110,12 @@ def _observation_payloads(
         "complete": True,
         "normalization_provenance": fill_provenance,
         "operation": "get_deals",
-        "record_count": 0,
-        "records": [],
+        "record_count": len(v2_facts["fill_rows"]) if v2_facts is not None else 0,
+        "records": (
+            [item["record"] for item in v2_facts["fill_rows"]]
+            if v2_facts is not None
+            else []
+        ),
         "provider_contract_sha256": contract.fingerprint,
         "schema": fill_schema,
         "source_alignment_valid": fills.source_alignment_valid,
@@ -2532,9 +3127,22 @@ def _observation_payloads(
         "envelope_values": fill_provenance["envelope_values"],
         "source_sha256": fill_provenance["source_sha256"],
         "normalizer_schema": fill_provenance["schema"],
-        "filled_quantity": 0,
-        "trade_count": 0,
+        "filled_quantity": (
+            _decimal_text(v2_facts["filled_quantity"]) if v2_facts is not None else 0
+        ),
+        "trade_count": len(fills) if v2_facts is not None else 0,
     }
+    if v2_facts is not None:
+        fill_observation["fill_row_provenance"] = [
+            item["normalization_provenance"] for item in v2_facts["fill_rows"]
+        ]
+        fill_observation["fill_watermark_revision"] = v2_facts[
+            "fill_watermark_revision"
+        ]
+        fill_observation["metadata_facts"] = metadata_facts
+        fill_observation["source_alias_map_sha256"] = source_alias_map_sha256
+        fill_observation["claim_digest"] = claim.claim_digest
+        fill_observation["risk_intent_id"] = claim.intent_id
     order_observation["provider_observation_sha256"] = sha256_text(
         canonical_json(order_observation)
     )
@@ -2545,7 +3153,9 @@ def _observation_payloads(
 def _followup_observation(
     command: RiskOrderCommand,
     *,
+    target: RiskOrderTarget,
     contract: RiskBtApiProviderContract,
+    claim: DispatchClaimBinding,
     order: object,
     fills: object,
 ) -> dict[str, Any]:
@@ -2570,6 +3180,23 @@ def _followup_observation(
         account_id=command.provider_account_id,
     )
     zero_open = _is_complete_open_zero_fill(order, fills, None, None)
+    v2_facts = (
+        _v2_order_facts(
+            order,
+            fills,
+            command=command,
+            request=request,
+            contract=contract,
+        )
+        if contract.exposure_ready
+        else None
+    )
+    metadata_facts = (
+        _provider_metadata_facts(target, contract, request.symbol)
+        if v2_facts is not None
+        else None
+    )
+    source_alias_map_sha256 = _source_alias_map_sha256() if v2_facts is not None else None
     record = {
         "account_id": command.provider_account_id,
         "client_order_id": command.client_order_id,
@@ -2581,13 +3208,19 @@ def _followup_observation(
         "provider_contract_sha256": contract.fingerprint,
         "provider_order_id": str(order.get("order_id") or ""),
         "record": _safe_normalized_order(order),
-        "records": [_safe_normalized_order(item) for item in fills],
-        "record_count": len(fills),
+        "records": (
+            [item["record"] for item in v2_facts["fill_rows"]]
+            if v2_facts is not None
+            else [_safe_normalized_order(item) for item in fills]
+        ),
+        "record_count": len(v2_facts["fill_rows"]) if v2_facts is not None else len(fills),
         "source_alignment_valid": order.source_alignment_valid,
         "source_row_count": order.source_row_count,
         "fill_source_alignment_valid": fills.source_alignment_valid,
         "fill_source_row_count": len(fills),
-        "public_state": "ACKED_TRACKED" if zero_open else "UNKNOWN",
+        "public_state": (
+            "UNKNOWN" if v2_facts is not None else ("ACKED_TRACKED" if zero_open else "UNKNOWN")
+        ),
         "schema": {"order": order_schema, "fills": fill_schema},
         "source_fields": {
             "order": order_prov["source_fields"],
@@ -2612,13 +3245,178 @@ def _followup_observation(
         "normalizer_schema": contract.normalizer_schema,
         "status": str(order.get("status") or "unknown"),
         "watermark": {"order": order_watermark, "fills": fill_watermark},
-        "quantity": str(order.get("size") or "0"),
+        "quantity": _decimal_text(request.quantity),
         "instrument": str(order.get("symbol") or ""),
         "side": str(order.get("side") or ""),
         "trade_count": len(fills),
     }
+    if v2_facts is not None:
+        record["fill_row_provenance"] = [
+            item["normalization_provenance"] for item in v2_facts["fill_rows"]
+        ]
+        record["fill_watermark_revision"] = v2_facts["fill_watermark_revision"]
+        record["order_revision"] = v2_facts["order_revision"]
+        record["exposure_state"] = v2_facts["state"].value
+        record["filled_quantity"] = _decimal_text(v2_facts["filled_quantity"])
+        record["metadata_facts"] = metadata_facts
+        record["source_alias_map_sha256"] = source_alias_map_sha256
+        record["dispatch_claim_digest"] = claim.claim_digest
+        record["risk_intent_id"] = claim.intent_id
     record["provider_observation_sha256"] = sha256_text(canonical_json(record))
     return record
+
+
+def _provider_metadata_facts(
+    target: RiskOrderTarget,
+    contract: RiskBtApiProviderContract,
+    instrument: str,
+) -> dict[str, Any]:
+    metadata = target.registry.get(instrument)
+    if metadata is None or metadata.valuation_unit is None:
+        raise RiskOrderEntryError("INSTRUMENT_VALUATION_METADATA_UNAVAILABLE")
+    contract_payload = contract.to_payload()
+    contract_payload["fingerprint"] = contract.fingerprint
+    contract_payload["quote_currency_by_instrument"] = dict(
+        contract.quote_currency_by_instrument
+    )
+    metadata_payload = metadata.to_payload()
+    metadata_payload["metadata_sha256"] = metadata.digest
+    return {
+        "provider_contract_sha256": contract.fingerprint,
+        "provider_contract": contract_payload,
+        "instrument_metadata": metadata_payload,
+    }
+
+
+def _source_alias_map_sha256() -> str:
+    return sha256_text(canonical_json({key: list(value) for key, value in _SOURCE_ALIASES.items()}))
+
+
+def _order_exposure_proof(
+    command: RiskOrderCommand,
+    *,
+    target: RiskOrderTarget,
+    contract: RiskBtApiProviderContract,
+    claim: DispatchClaimBinding,
+    facts: Mapping[str, Any],
+    order_payload: Mapping[str, Any],
+    fill_payload: Mapping[str, Any],
+    journal_revision: int,
+    journal_record_sha256: str,
+    exposure_reservation_id: str,
+    exposure_reservation_sha256: str,
+    writer_owner_id: str,
+    writer_fencing_token: int,
+    writer_fence_sha256: str,
+    dispatch_proof_sha256: str | None,
+) -> OrderExposureObservationProof:
+    """Build Risk's typed exposure fact from the exact normalized source rows."""
+
+    request = OrderRequest.from_dict(dict(command.order_request))
+    metadata = target.registry.get(request.symbol)
+    if metadata is None or metadata.valuation_unit is None:
+        raise RiskOrderEntryError("INSTRUMENT_VALUATION_METADATA_UNAVAILABLE")
+    metadata_facts = _provider_metadata_facts(target, contract, request.symbol)
+    if (
+        dict(order_payload.get("metadata_facts", {})) != metadata_facts
+        or dict(fill_payload.get("metadata_facts", {})) != metadata_facts
+        or order_payload.get("source_alias_map_sha256") != _source_alias_map_sha256()
+    ):
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_METADATA_BINDING_INVALID")
+    quote_currency = contract.quote_currency(request.symbol)
+    valuation_unit = metadata.valuation_unit
+    if quote_currency is None or quote_currency != valuation_unit:
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_FX_UNSUPPORTED")
+    if (
+        metadata.expires_at_ns <= time.time_ns()
+        or metadata.as_of_ns > time.time_ns()
+        or type(facts.get("order_revision")) is not int
+        or type(facts.get("fill_watermark_revision")) is not int
+    ):
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_FACTS_STALE")
+    multiplier = metadata.contract_multiplier
+    filled_quantity = Decimal(facts["filled_quantity"])
+    leaves_quantity = Decimal(facts["leaves_quantity"])
+    valuation_price = Decimal(facts["valuation_price"])
+    filled_gross = sum(
+        (item.quantity * item.price * multiplier for item in facts["fill_facts"]),
+        Decimal(0),
+    )
+    leaves_gross = leaves_quantity * valuation_price * multiplier
+    observed_at_ns = time.time_ns()
+    valid_until_ns = min(metadata.expires_at_ns, observed_at_ns + 60_000_000_000)
+    if valid_until_ns <= observed_at_ns:
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_FACTS_STALE")
+    valuation_facts_sha256 = sha256_text(
+        canonical_json(
+            {
+                "fill_fingerprints": [item.fingerprint for item in facts["fill_facts"]],
+                "instrument_metadata_sha256": metadata.digest,
+                "instrument_multiplier": _decimal_text(multiplier),
+                "leaves_valuation_price": _decimal_text(valuation_price),
+                "quote_currency": quote_currency,
+                "valuation_unit": valuation_unit,
+            }
+        )
+    )
+    return OrderExposureObservationProof(
+        scope=claim.scope,
+        permit_id=claim.permit_id,
+        intent_id=claim.intent_id,
+        intent_hash=claim.intent_hash,
+        dispatch_claim_digest=claim.claim_digest,
+        dispatch_proof_sha256=dispatch_proof_sha256,
+        provider_order_id=str(order_payload.get("provider_order_id") or order_payload.get("order_id")),
+        accepted_request_sha256=command.order_request_sha256,
+        exposure_reservation_id=exposure_reservation_id,
+        exposure_reservation_sha256=exposure_reservation_sha256,
+        order_revision=facts["order_revision"],
+        journal_revision=journal_revision,
+        journal_record_sha256=journal_record_sha256,
+        observation_sha256=str(order_payload["provider_observation_sha256"]),
+        fill_history_sha256=str(fill_payload["provider_observation_sha256"]),
+        source_alias_map_sha256=str(order_payload["source_alias_map_sha256"]),
+        state=facts["state"],
+        requested_quantity=request.quantity,
+        cumulative_filled_quantity=filled_quantity,
+        leaves_quantity=leaves_quantity,
+        filled_gross_notional=filled_gross,
+        leaves_gross_notional=leaves_gross,
+        leaves_valuation_price=valuation_price if leaves_quantity > 0 else None,
+        notional_unit=valuation_unit,
+        complete_order_snapshot=True,
+        complete_fill_history=True,
+        fill_watermark_revision=facts["fill_watermark_revision"],
+        source_contract_ref=contract.profile_id,
+        source_contract_version=contract.fingerprint,
+        provider_profile_version=contract.profile_id,
+        normalizer_schema_version=contract.normalizer_schema,
+        order_side=request.side.value.upper(),
+        position_effect="OPEN",
+        fills=tuple(facts["fill_facts"]),
+        fill_trade_count=len(facts["fill_facts"]),
+        fill_ids_sha256=fill_ids_sha256(tuple(facts["fill_facts"])),
+        instrument_id=metadata.instrument,
+        instrument_version=metadata.metadata_version,
+        instrument_multiplier=multiplier,
+        quote_currency=quote_currency,
+        valuation_unit=valuation_unit,
+        instrument_metadata_sha256=metadata.digest,
+        instrument_metadata_observed_at_ns=metadata.as_of_ns,
+        instrument_metadata_valid_until_ns=metadata.expires_at_ns,
+        valuation_facts_sha256=valuation_facts_sha256,
+        valuation_observed_at_ns=metadata.as_of_ns,
+        valuation_valid_until_ns=metadata.expires_at_ns,
+        fx_pair=None,
+        fx_rate=None,
+        fx_observed_at_ns=None,
+        fx_valid_until_ns=None,
+        observed_at_ns=observed_at_ns,
+        valid_until_ns=valid_until_ns,
+        writer_owner_id=writer_owner_id,
+        writer_fencing_token=writer_fencing_token,
+        writer_fence_sha256=writer_fence_sha256,
+    )
 
 
 def _safe_normalized_order(order: Mapping[str, Any] | None) -> dict[str, Any] | None:
@@ -2640,6 +3438,31 @@ def _safe_normalized_order(order: Mapping[str, Any] | None) -> dict[str, Any] | 
     result = {}
     for key in keys:
         value = order.get(key)
+        if value is None or type(value) in (str, int, bool):
+            result[key] = value
+        elif isinstance(value, (float, Decimal)):
+            result[key] = str(value)
+    return result
+
+
+def _safe_normalized_fill(fill: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if fill is None:
+        return None
+    keys = (
+        "account_id",
+        "client_order_id",
+        "order_id",
+        "symbol",
+        "side",
+        "trade_id",
+        "size",
+        "price",
+        "fee",
+        "fee_currency",
+    )
+    result = {}
+    for key in keys:
+        value = fill.get(key)
         if value is None or type(value) in (str, int, bool):
             result[key] = value
         elif isinstance(value, (float, Decimal)):

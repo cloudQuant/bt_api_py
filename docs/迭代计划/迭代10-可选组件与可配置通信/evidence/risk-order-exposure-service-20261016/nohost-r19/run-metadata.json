@@ -1,0 +1,64 @@
+{
+  "evidence": "IN_PROCESS_NO_HOST_SYNTHETIC_RISK_ORDER_EXPOSURE_LIFECYCLE",
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-B",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\temp\\iteration10-risk-exposure-nohost-sdk-20261016-r19\\pytest.ini",
+    "--noconftest",
+    "-q",
+    "--junitxml",
+    "D:\\temp\\iteration10-risk-exposure-nohost-sdk-20261016-r19\\junit.xml",
+    "tests/unit/test_service_risk_order_exposure_integration.py::test_in_process_live_gross_ack_partial_unknown_cancel_lifecycle",
+    "tests/unit/test_service_risk_order_exposure_integration.py::test_post_ack_unknown_requires_exact_persisted_event_shape"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "python_version": "Python 3.11.5",
+  "pythonpath": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src;D:\\bt_api_py\\bt_api\\bt_api_monitor\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src;D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src",
+  "env_flags": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "started_utc": "2026-10-15T21:02:38.6785372Z",
+  "finished_utc": "2026-10-15T21:02:44.1445607Z",
+  "exit_code": 0,
+  "stdout_path": "D:\\temp\\iteration10-risk-exposure-nohost-sdk-20261016-r19\\stdout.log",
+  "stderr_path": "D:\\temp\\iteration10-risk-exposure-nohost-sdk-20261016-r19\\stderr.log",
+  "junit_path": "D:\\temp\\iteration10-risk-exposure-nohost-sdk-20261016-r19\\junit.xml",
+  "source_pins_before": [
+    {
+      "size": 145784,
+      "sha256": "DEA50DA0492FD8DFE026DEFB0589EC87BB92A464D2210B9F8F6AD3813E198EFF",
+      "path": "bt_api_py/service_risk_order_entry.py"
+    },
+    {
+      "size": 224074,
+      "sha256": "68389C09F427F183D19A47C5DCAD2931E0BA61CF7535C6AF7286D70E53C46187",
+      "path": "bt_api_py/service_risk_order_journal.py"
+    },
+    {
+      "size": 66853,
+      "sha256": "56A7E228644BDADB25588F525DC5823E02F7788D18826238B0394D61822609F1",
+      "path": "tests/unit/test_service_risk_order_exposure_integration.py"
+    }
+  ],
+  "source_pins_after": [
+    {
+      "size": 145784,
+      "sha256": "DEA50DA0492FD8DFE026DEFB0589EC87BB92A464D2210B9F8F6AD3813E198EFF",
+      "path": "bt_api_py/service_risk_order_entry.py"
+    },
+    {
+      "size": 224074,
+      "sha256": "68389C09F427F183D19A47C5DCAD2931E0BA61CF7535C6AF7286D70E53C46187",
+      "path": "bt_api_py/service_risk_order_journal.py"
+    },
+    {
+      "size": 66853,
+      "sha256": "56A7E228644BDADB25588F525DC5823E02F7788D18826238B0394D61822609F1",
+      "path": "tests/unit/test_service_risk_order_exposure_integration.py"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-host\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-host\\pytest-tmp",
+    "tests/unit/test_service_risk_order_exposure_integration.py::test_spawned_live_gross_terminal_and_post_ack_order_exposure_lifecycle"
+  ],
+  "cwd": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk;D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src;D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src;D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src;D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src;D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src;D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T21:08:35.639035+00:00"
+}

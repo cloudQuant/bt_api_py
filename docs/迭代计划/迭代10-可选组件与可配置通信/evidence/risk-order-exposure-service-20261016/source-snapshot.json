@@ -1,0 +1,2225 @@
+{
+  "evidence": "PRE_EXECUTION_SOURCE_SNAPSHOT_ONLY",
+  "source_reference_run": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r7",
+  "snapshot_heads": {
+    "D:\\bt_api_py": "213f1114f69416bbad250f1a226e5fa1ccc2638e",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+    "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53"
+  },
+  "execution_source_commit": "743a0b9feef5b625fbd98269e8ab374f4d80adc8",
+  "changed_test_pin": "56a7e228644bdadb25588f525dc5823e02f7788d18826238b0394d61822609f1",
+  "files": [
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\balance_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\balance_manager.py",
+      "sha256": "9523efbe14860525b6911d37f4dedaa53a789a536a0f3454ce6fddc4e09a0cc9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\bt_api.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\bt_api.py",
+      "sha256": "a3fbe7928d2be64feaf0f4544fcc084e438144bf6266d336ead5719786efa29f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\cross_venue.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\cross_venue.py",
+      "sha256": "7a33b3aa872e79266eafc15ed8dc07d1fcb1da49cbd98e1bb1856b31aa95d8c2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\ctp_close_plan.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\ctp_close_plan.py",
+      "sha256": "d365a681b47782645871b812b0534c627aa23d883cf6feb462135b148a0695eb",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\ctp_env_selector.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\ctp_env_selector.py",
+      "sha256": "3c9068cd984a50987e1e587c6f9e85645c7ddaac6b9b1a7f412548d08a37dde0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\ctp_simnow_execution.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\ctp_simnow_execution.py",
+      "sha256": "0c51e0342fc47542f65f4fc37b376fcd662c55149399a9c5f001d71f9b41be6b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\data_downloader.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\data_downloader.py",
+      "sha256": "1bedb90078ffdfe48d59506ba95c3ce34b3f5afa52095e0e0a4f6a54dad88564",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\doctor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\doctor.py",
+      "sha256": "ae23433de03bb90b8ecf9ef5f9a8659847ee9bdb7cb15835193ec3b864aaeaa3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\exceptions.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\exceptions.py",
+      "sha256": "eed1d3b9cf7d2953cde1d2b979eefe917bcfad896b22bb1e6444451d3dc368cc",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_account.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_account.py",
+      "sha256": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_account_consumer.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_account_consumer.py",
+      "sha256": "ab826191d444465e33900d316a709158ca3dacd6328727e10ce2be46ef9d2f58",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_account_projection.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_account_projection.py",
+      "sha256": "ab32d2cf59a87093c9567bf9ea22ae541448c5a8ffcb822f6d50c0c0a497da14",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_components.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_components.py",
+      "sha256": "c46855416d0e1bdb8b0a36e91b563c098d1fdd46079fe1de97c08917b19c1356",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_config.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_config.py",
+      "sha256": "6518fb59849db9624edea84a532d8b03e9c4c3dee14322c05e9c5eb85252ac1b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_config_io.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_config_io.py",
+      "sha256": "54890a5c41bfe0046b8a39fac40d08a2fcf6caa8a38df6b5fc6a739e9918e4b4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_deployment.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_deployment.py",
+      "sha256": "0184ef0647df85b76a94c14c330129325c4ab5f4910e06cac2edae80584caa31",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_execution.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_execution.py",
+      "sha256": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_execution_account_books.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_execution_account_books.py",
+      "sha256": "c4261c122968bd8bf47b4e4958bc295481cfe6f43e4441d596ef1a161f0a64af",
+      "method": "213f1114 committed blob reconstructed to exact r7 checkout pin"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_execution_group.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_execution_group.py",
+      "sha256": "8f718bfd4ceb8f4bfe1e59f645764990b5f31f5118926051042cb882592c1ff2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_execution_group_authority.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_execution_group_authority.py",
+      "sha256": "5d2de5abfbb841429f9ea5d9e2c6852022d9dc854957ebc6a87ddc2a057d1091",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_execution_group_client.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_execution_group_client.py",
+      "sha256": "37a20e823c82980b55a347ae4b366429e4215bdbfd85f58f324743aadc59ffe7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_execution_group_proofs.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_execution_group_proofs.py",
+      "sha256": "e1a9b3157081de231dcdc44f82a0eec7911e3ed7f8b5e3eab18d2926f4541250",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_execution_monitor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_execution_monitor.py",
+      "sha256": "6e10bc4bb3978d9011d796e903639ac7896168719a9f6e442302895787f4537d",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_group_reservations.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_group_reservations.py",
+      "sha256": "9be82fad857df28f8eff99505af19e5d541d3cf689a5ab55a573d9291de47a2b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_host.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_host.py",
+      "sha256": "9bb985bef5f8582bdb3878e5738e2e646bd25741c9077170f4592b1679a17778",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_market.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_market.py",
+      "sha256": "5b7a357693ef4ddc50ef397f4bfc67ca7116ab2809850c03ee07f05a18bc75b6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_market_monitor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_market_monitor.py",
+      "sha256": "de2831bd99d0103d09cb7018140f548c61a43945faa223e2787fd78e380a4f52",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_monitor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_monitor.py",
+      "sha256": "6fbc850967e8417b5f9e669b3fce8aee23b3987df37099787d316995cc67abd6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_monitor_control.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_monitor_control.py",
+      "sha256": "d2f3ac6abc804632778d612a8944f0195da6798d5275ad696802f62c6a9e3c45",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_registry.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_registry.py",
+      "sha256": "9d1f4d81c3656bfd6aa5732ae6a8542db68e7d03ac349aa05bc90967fae633a1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_risk_order_entry.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_risk_order_entry.py",
+      "sha256": "dea50da0492fd8dfe026defb0589ec87bb92a464d2210b9f8f6ad3813e198eff",
+      "method": "explicit reviewed SDK risk-lifecycle source overlay"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_risk_order_journal.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_risk_order_journal.py",
+      "sha256": "68389c09f427f183d19a47c5dcad2931e0ba61cf7535c6af7286d70e53c46187",
+      "method": "explicit reviewed SDK risk-lifecycle source overlay"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_runtime.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_runtime.py",
+      "sha256": "3511ce8e18ce7b1e352ccaee2c75606c8a86725606e557f9ef3930c5b1208197",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\service_telemetry.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\service_telemetry.py",
+      "sha256": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_compat.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_compat.py",
+      "sha256": "c6ec2a276107cc41e7987a43607aec58c35d28d5de504db7e5c83c50801fb500",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_ctp_budget.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_ctp_budget.py",
+      "sha256": "9e773dd36ccb8eab8d55a36303afd7558dad22972cb23e6ee162764c85b225ca",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_ctp_credential_binding.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_ctp_credential_binding.py",
+      "sha256": "94356cdf93be9c557a2e9d5f5f6fe717f2a008d8b38904efe688bf4093ec9e37",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_ctp_execution_authorization.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_ctp_execution_authorization.py",
+      "sha256": "cc6a1bb05b3d14af425e99a3296514ebc46276312bbd7e3e89b83eafb0a8cb37",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_ctp_probe.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_ctp_probe.py",
+      "sha256": "987ab6b197cfa2e0756ccd29e12c2c9ec2f014d40b4298f76efd38b429db8d40",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_direct_backend.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_direct_backend.py",
+      "sha256": "003a016bd883a56acf420988a1c8acddf5021d7a06909e1dcc752a81bc681073",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_execution_session.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_execution_session.py",
+      "sha256": "8668d18c7b178e16e748c6a202df236032d9b931bdc30086963d24c8ef0ed5a1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_feed_adapter.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_feed_adapter.py",
+      "sha256": "321f2703d713d17b3ee3c752341f04a64b7c10e7693fbd97a7095659c7b0ac27",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_normalization.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_normalization.py",
+      "sha256": "90bde31374395e49eef13886c1b6c345cd002e85974798c91fbc19c2aaf37a25",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_operation_backend.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_operation_backend.py",
+      "sha256": "9a71b8d9909655b2c5197ecba80ff75fb91ff2e6b0594ed6817715c8cb3ae684",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_plugin_catalog.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_plugin_catalog.py",
+      "sha256": "2b8e5562cfecea1f0c39d3684486cdb2ef4e6df46c5a851ac8c57822c999addb",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\__init__.py",
+      "sha256": "bab4d2b9383a9326cb0930025c96872e468ae99d78bf7539b6c354cab1ab20ba",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\backtrader\\btapibroker.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\backtrader\\btapibroker.py",
+      "sha256": "322debf4285f67ef95201c0d96ac7c195f0860801da6e239fdb405a794da741b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\backtrader\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\backtrader\\__init__.py",
+      "sha256": "6a3c12aca427989860f6249feed8c2df380f7ce4dac3b0bad85b6b97cace911f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\base.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\base.py",
+      "sha256": "c74222813bd8b73a7c2426059f340dea2c5500ae606ef91b969e9e7436556333",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\errors.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\errors.py",
+      "sha256": "b0e5ed38c6c54800534285444c6a43ee983e12ca9389233c2d95c9afe872bba2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\feed_bridge.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\feed_bridge.py",
+      "sha256": "652fd3f0f00996901cc1a44a929cf627eaea75e69691ec53c2d59d9db9c9940d",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\gateway_bridge.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\gateway_bridge.py",
+      "sha256": "034e7d8a58a6832f890f66ad48ead7068d907aff6c06b60f6be40416b09e0e5b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\loader.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\loader.py",
+      "sha256": "ffbdd8c8be34ae2af771d3c9e265a238dbe8cc491b3a099eab39be4867fa1f38",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\mock.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\mock.py",
+      "sha256": "0fc308a8f25c0900bebe3559cdef08885f6b664cb54d36967fe070fa630ed4ce",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\registry.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\registry.py",
+      "sha256": "f5fb7efd6bc2715968ffcacea95b129c3a2d2c696399b29d1efcfac6ded18722",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\types.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\types.py",
+      "sha256": "0eeb98b8a24a50d78ee8e893d8e8ed516776d87af1b3af8c928b90ca29316c19",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\brokers\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\brokers\\__init__.py",
+      "sha256": "35ce5848de6d3e48478a89f8b7ab04b522713892593454c67fa201798f1e1fce",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\certification\\audit.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\certification\\audit.py",
+      "sha256": "3bf20e2fd51e07d89dd16c9f401def88b2521e48d6d3e7657190bab14a675a54",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\certification\\scenarios.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\certification\\scenarios.py",
+      "sha256": "65c684dc41effbbbc15ab0b6e485947f850cb64bd23ff5d8045b83b1b0419eee",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\certification\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\certification\\__init__.py",
+      "sha256": "ab6a4abbe7d32dced1176f6d2fd0eac1cea20134e40050f6fbf6ead965164b58",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\configs\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\configs\\__init__.py",
+      "sha256": "9965dc39111c5c53330b91988f63e5d7273d81c0243c506e513ecdfeaa3dd9ae",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\btapi_adapter.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\btapi_adapter.py",
+      "sha256": "c9892076fbb3ead022c363a20e18d55ea15276b6d5325570ecaac569d8219762",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\btapi_backend.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\btapi_backend.py",
+      "sha256": "3f41d052e54633bcee439237a6cf7cf8af6157b0646fc470d7261102b41eb92b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\btapi_bridge.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\btapi_bridge.py",
+      "sha256": "7a34f2c8ef90eadcfc4867444f06b668ca099228ae6b8d1ce69443078dd76171",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\client.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\client.py",
+      "sha256": "2e90c9ce295fe0cc6d44fa1dee9b18c08c7ebdfbb37222500761f659d6e0b023",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\hub.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\hub.py",
+      "sha256": "15cbe9329ed734a64a1d3a0f1c19d4aadffb9b317785ae21157d95952e31400a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\memory.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\memory.py",
+      "sha256": "4df10e68b66d5445d2e04793cee9219e50bb883ac8ca196750e5749b0afc98f1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\private_event_pump.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\private_event_pump.py",
+      "sha256": "b03e4e7db06868ffa8d05a26c9bda6d9a85de7252aeaaa6c9c960b782dbc035c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\router.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\router.py",
+      "sha256": "ae5215f1c36d2d6951b0b4fb19d1efaa6bd88fb91eb7d99ef8317bb256a3a55b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\schema.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\schema.py",
+      "sha256": "60f0a2f1fb06db0f562dc502d7ceb521379556db9cc16d328d59ab0b5bacd4f6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\service.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\service.py",
+      "sha256": "7a84f886e9d590ba29e4b00b380af50b99e4ca206d06e90cb9ac50247c5cacd5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\source_supervisor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\source_supervisor.py",
+      "sha256": "df1d9c8903aba2f3e89e8fb2a622a779ba936c2ad87d3ea5a67550509dc06aa6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\state.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\state.py",
+      "sha256": "09cf2408cfbf496ae140a487ee671131a549bad8ff015dc69dd816023e1bcde4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\transport.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\transport.py",
+      "sha256": "256ef497faae316de362a550ebca6897addc56d87e8b2420276333f5cac42285",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\forwarding\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\forwarding\\__init__.py",
+      "sha256": "767bf95bae111ed2941ccccab6b04e60bac2348345dc3bf1c0b2cb668a7754c5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\gateway\\client.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\gateway\\client.py",
+      "sha256": "25893a98d0519101a745538c17627f2542083f0aa428d9756742d461710dee28",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\gateway\\config.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\gateway\\config.py",
+      "sha256": "5cd1cc8203de82dbfbc437912bb7dc6a08753595fd38aa5a2cd61c47e88dcf85",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\gateway\\safety.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\gateway\\safety.py",
+      "sha256": "ec5635cc62000367d8226f7aeb634b9ce987af338fc0554aac4846301c39cbaa",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\gateway\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\gateway\\__init__.py",
+      "sha256": "e813cd7a29584783c203ce9025fb412a1818140763748371403dca672ff9a8a1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\collector.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\collector.py",
+      "sha256": "d71a42d0bbcac999fa333ccd18e7684e47d4dbf2d96fdfe7286366eeadfc7be7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\config.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\config.py",
+      "sha256": "a0fe2685afae9b54996ebf6a16d748ea7adf22712e9c770907e42e0d58a7aa42",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\decorators.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\decorators.py",
+      "sha256": "0ff21eca092608a24de333f2f59ba3b298b61519557fe133b1aa4b019d0e6c5f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\elk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\elk.py",
+      "sha256": "af45ee743b760ff73a03e686287ca9e26daad84e09ade6165bda29c3bfb0cb9a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\exchange_health.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\exchange_health.py",
+      "sha256": "d127f2db85550a9aec72a7c84a5d5243163ce67d480719cfb6b8b0af150887d5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\grafana.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\grafana.py",
+      "sha256": "1c326ae12345ff4beab041060e8ef6dbedfcfddace6ee58c052d62302c5d2154",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\metrics.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\metrics.py",
+      "sha256": "c1f116af942dc321eeac5e350cf0e6de3149692d720616ad0aa7280385ca38e0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\prometheus.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\prometheus.py",
+      "sha256": "504d2ba9b772416ef45e769b906f88d61fa9bc9cf38cb450fcc536fdec72f25e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\system_metrics.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\system_metrics.py",
+      "sha256": "f6c48fb62a2e8c3816d296c159f4f587577c1da672e2176ea6c2ba46fdb8e5dc",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\monitoring\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\monitoring\\__init__.py",
+      "sha256": "7e396e1a7fba5810a70f1a613416428e4791f89c3198872a114388e03eab7a5c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\__init__.py",
+      "sha256": "f491aa8cfe777930505bf8ae0b990c3aa9dbb36e45c5faa5e76d7bfe9c189ae6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\containers\\risk_events.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\containers\\risk_events.py",
+      "sha256": "43632993f29d92c250c66654d75a6072871558aef9d02fbebc302547259dbaaf",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\containers\\risk_metrics.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\containers\\risk_metrics.py",
+      "sha256": "e260265e54900c20ea5efd4b2c597606e8ec3e4f320290def44b4504434d1458",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\containers\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\containers\\__init__.py",
+      "sha256": "40c2259ab241fa6faa5dad9ad0541e0968e9a946de20a53f039ceaf99ec53d07",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\actions.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\actions.py",
+      "sha256": "ffd8f07ad46686745f64dc6627827b688ca0cebe5bc20b619a30516db88a06c8",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\compliance_limits.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\compliance_limits.py",
+      "sha256": "8731b2ee8b9b935b4f098b62c7d36ce9a17a82838bcff82e3f06ccec93ba038c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\compliance_risk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\compliance_risk.py",
+      "sha256": "6ea411378e4821382baf27c8bd1d80b5328b7802864d0704cafe95bfd2edf9c9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\credit_risk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\credit_risk.py",
+      "sha256": "3fae221afba73d08b08b2583c00e26c7482f26ae5b003a81256864d28957579f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\limits_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\limits_manager.py",
+      "sha256": "411bd2e841295cf9808d6fc3df201eda7415661ed3fac06caec4f903805e1fd9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\limits_types.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\limits_types.py",
+      "sha256": "77a2599084d55784a7921705e8be511f5c90eca52e9383cc91588144107874cd",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\liquidity_risk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\liquidity_risk.py",
+      "sha256": "ac1e6e3f21a48b6b877e9dc6f39e4574e5ed0939cf7c76d63db44caaa8b80183",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\margin_limits.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\margin_limits.py",
+      "sha256": "63a9caf8c0806d18f05155f2c7e5279b6771021da16bb197fd2910b0bf34142e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\market_risk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\market_risk.py",
+      "sha256": "78fe12ca72a4545dacbdb4c9da3b5df6aa492c9ecc8bcd5eb63085d0d9bd2470",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\operational_risk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\operational_risk.py",
+      "sha256": "99cb2c6f3b89f2a3c57dfc6626073b0229aba47fe6074aba1255588599e51ac8",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\order_limits.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\order_limits.py",
+      "sha256": "eeb785887861bd186aa9dddd18c5a22d5bb9a6a245662d7d3d3a40ab8b8a8050",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\policy_engine.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\policy_engine.py",
+      "sha256": "f1e5ba1157bbf9f9e3f9e1190dbcba1b14ed71759966ae04566cdf364093462c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\policy_types.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\policy_types.py",
+      "sha256": "9918a80cad0da259ebd2ac9f7722a7ae51f74cec62c278e943fe15860c3c5ee7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\position_limits.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\position_limits.py",
+      "sha256": "da12687e11f63014fbf02453e4b77bd5187e30c1f38f53537aea65cbf88fe2f4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\position_risk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\position_risk.py",
+      "sha256": "abe1e9bf9e6a87624bf4340578a5af8224fabb378300b34d191c61d449dca1f0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\risk_assessor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\risk_assessor.py",
+      "sha256": "c652da48da1e78f79ca03bb65abe983c3f349210c997f968a244f86640fb0c05",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\risk_calculator.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\risk_calculator.py",
+      "sha256": "55cf1d25959ce8448416f5a76eaa5e4b54082aa9568da1e6d4c3bf836600c4e5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\risk_limits.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\risk_limits.py",
+      "sha256": "5ea996fd2305bcc0cf980eb246df7dd9a4c41659e1ef94086f2369e2917d2dfb",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\risk_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\risk_manager.py",
+      "sha256": "1c9f93787279b75ea8b6095b47328b58686b3967f59233f26f9c5dca0eeba5d9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\core\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\core\\__init__.py",
+      "sha256": "3951c85fcfaf8ac5a806056797fa6a6ccdc2310c81dd492d7ab97a169db06eb1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\ml_models\\anomaly_detector.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\ml_models\\anomaly_detector.py",
+      "sha256": "811b3eb33159ecf0ef02cf2e3e919d847ac8f8b9165b7bed7da0214e85671d72",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\ml_models\\anomaly_detectors.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\ml_models\\anomaly_detectors.py",
+      "sha256": "83c2a234e8a601e714650dc18909673c720129ee668bab0250d4abcc62bc7303",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\ml_models\\anomaly_types.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\ml_models\\anomaly_types.py",
+      "sha256": "da61760f9005e8fe2e4e814d7545845c573c0b38429feb554e518a7a411d2510",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\ml_models\\ensemble_model.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\ml_models\\ensemble_model.py",
+      "sha256": "7aee6dd9287a3d8f8d21a72e490c5623b2d2694f4a504729d14de7ffa6ce6e32",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\ml_models\\ml_base.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\ml_models\\ml_base.py",
+      "sha256": "67572ccf135f2d522b4fd3f81400b7c260fad2afafb1dc5017e4f198a02266f6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\risk_management\\ml_models\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\risk_management\\ml_models\\__init__.py",
+      "sha256": "b06c15929e74d671318bbb951a57a62dce53d4e38674e7fc5561b5a03ab69829",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\cancellation_control.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\cancellation_control.py",
+      "sha256": "f003a88f47ea5a845653c4dacef800b8a8197f98289731efb63a74268ef2950b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\catalog.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\catalog.py",
+      "sha256": "57ab4152eeace62f324ea00f39e4a874c848e05b1315bc7d568baffaa1f0ef11",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\contracts.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\contracts.py",
+      "sha256": "59694e448de97d8d1517562a79d305a008aa2d8b56950beddc57b3c5ec7858a2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\fake_dispatch_authority.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\fake_dispatch_authority.py",
+      "sha256": "7fdc9134ba80d33d707b5e1fda393df706339f451d89a9210741393365fd6630",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\gateway_dispatch.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\gateway_dispatch.py",
+      "sha256": "b2ca93b815d57901c82fdb126547a367564f65d5db4d0cee8101846e4da0eec2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\instrument_risk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\instrument_risk.py",
+      "sha256": "a050f4471d59723e8c4bce1830d7a9a44394244ced7de9da7e214e14b9422a9b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\managed.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\managed.py",
+      "sha256": "a7821b967d3cd94b573eb40c5900cd76a05da5887f956b5d2bcb5df9fa1d6606",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\managed_recovery.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\managed_recovery.py",
+      "sha256": "1bf531d409cd3f8640aed80588a95cc64ba1f2ae07292ea591674733afa3d621",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\reconcile_control.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\reconcile_control.py",
+      "sha256": "4f1933a4162063816140a456516ca2743ced61c2604074e06dc16c2f1e3ef50e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\runtime_plugins\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\runtime_plugins\\__init__.py",
+      "sha256": "984011be8e830e018c82dd9adc46bc8d677d249360f0c73e484883c826f3e12f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\framework.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\framework.py",
+      "sha256": "1d9682559c4ccf67a2d8b29fcce2bbadf28a2508b2f5deece2532879e9693eca",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\__init__.py",
+      "sha256": "658a12c56017cf3d5c96d0f08907b47efcc8c4b5bd244dafaa3431aeac0bedce",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\auth\\mfa_provider.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\auth\\mfa_provider.py",
+      "sha256": "accc8e3f147d1d3ac80c8b8ba338aac982af0d73c15b01295043563ec719417b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\auth\\oauth2_provider.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\auth\\oauth2_provider.py",
+      "sha256": "500f013e34badd820f7348741e46e3ed0ee79ca09369ab646e9b381ded0d8573",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\auth\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\auth\\__init__.py",
+      "sha256": "730ddfefcadbc8c60909acc774cc899fe62518fad81f70d5036316a6657b0df7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\core\\access_control.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\core\\access_control.py",
+      "sha256": "f0ea17199fd9331ec792d83573859c3f419dde79812d83d0908bbd6bd3668e6b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\core\\audit_logger.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\core\\audit_logger.py",
+      "sha256": "46efa64acc4ca090990e4d59c896f8b01da254539d728bd3fee6495d22c0de6e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\core\\compliance_monitor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\core\\compliance_monitor.py",
+      "sha256": "b8322ca3d8890be2664766bcc70df02db75a62f029a25a1756e7ebfc0722ca53",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\core\\encryption_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\core\\encryption_manager.py",
+      "sha256": "31e41e0aba4ed0331ae651bf4722fd233751abe076a20cf6bff394fab4b54dc8",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\core\\identity_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\core\\identity_manager.py",
+      "sha256": "685f7a946ab4b61b0cf619b81e4fbf81636323efcd809e6feea0145c3ed8e7c4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\core\\threat_detection.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\core\\threat_detection.py",
+      "sha256": "18e521779d5d940b3e69aba36dea397b991645283d682df7dd7cc56315bac7ed",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\core\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\core\\__init__.py",
+      "sha256": "642e6bf38ea31cfd0bb931586162ad71e570c235e33235a72789f91a8d084cf0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\data\\protection.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\data\\protection.py",
+      "sha256": "1816f3967b5efc583fdaf86986c884d034ce842fc95587773a55771102c793a1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\data\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\data\\__init__.py",
+      "sha256": "9ebb5f3e133a9b6f48d3513cb93d65a06b7d3a29c63d5654c82ade300f56cc4e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\monitoring\\security_monitoring.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\monitoring\\security_monitoring.py",
+      "sha256": "886d5c35fdda4d7965b2b836166ca2bdb21167c4120587a1b386f6e753054ae8",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\monitoring\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\monitoring\\__init__.py",
+      "sha256": "7fd1b35ed68b85f0a9b9d7b307884b508ce099541148aab18ee140f138980b17",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\network\\tls_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\network\\tls_manager.py",
+      "sha256": "5cf0e3f4b63d1535b8309b54966c645e798f203361b4e86010933d9fb6319692",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\network\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\network\\__init__.py",
+      "sha256": "2d830c6ae792e8271e0b4072acf2717177de779f0220366abbae317f3176ed83",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\recovery\\disaster_recovery.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\recovery\\disaster_recovery.py",
+      "sha256": "07ceb85752b1967b2dbfa609bea948e45c4edd1adba1545f295953f29a536731",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\security_compliance\\recovery\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\security_compliance\\recovery\\__init__.py",
+      "sha256": "ec6feb3761587ff8e010085db840361253114e7e81c89241cdd4da663f9c6590",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\testing\\contract_cases.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\testing\\contract_cases.py",
+      "sha256": "27b1d7c3baa97763ad0f5fbdc4e51c93e92a02535ae7a7a5902190067d309758",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\testing\\fixtures.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\testing\\fixtures.py",
+      "sha256": "f15a0f8b9da5e48735e41b8c44028dbf9ae1fb9f8b8631940872b1ea86c43ba2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\testing\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\testing\\__init__.py",
+      "sha256": "ff0e2a69a1130d2025937db40a6b474592032c33dac2ed4d1c44add832f936a2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\utils\\hyperliquid_types.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\utils\\hyperliquid_types.py",
+      "sha256": "a2f4ad19abea61b91f0f5db1884e4833a6c0c7c7511ef62577b3c97c702bff41",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\utils\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\utils\\__init__.py",
+      "sha256": "db7d6a1d5b42c4e4ac2c290793524bb5ee53245aca290fdf63e5403b4e6dafd2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_contracts\\cache_policy.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_contracts\\cache_policy.py",
+      "sha256": "b2067d1cac711040cb64520ed261e46ed939503c622d77806531d147737a66d9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_contracts\\capabilities.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_contracts\\capabilities.py",
+      "sha256": "a5dd8ad64553a4f214b6b5d2f0cf07cf82fecc99ec39fa69a5df65490d6ac8f1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_contracts\\errors.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_contracts\\errors.py",
+      "sha256": "73f2cbeffce0ddd510a9d6d88f823a37d12c9c88e675ec6f50cfa7df453ff3b1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_contracts\\models.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_contracts\\models.py",
+      "sha256": "5299c383a63e1c1d82e163ddf7cde6be648da252d0bcd6351124774f0a2b2221",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_contracts\\subscriptions.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_contracts\\subscriptions.py",
+      "sha256": "cd571f7982b44a2b0c8ade7e58eb9539e4bc2a71a5fd370e25119f53e8237e98",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_contracts\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_contracts\\__init__.py",
+      "sha256": "9854ca8349497eaea4d84d942cbf01418a93601aecc75167a0ffb2ecf86a34b6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\binance.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_venue_mappers\\binance.py",
+      "sha256": "78fd7b3078472eac2d9f0b75c11d048409b350e15a5b8bd86df51c6739beac56",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\ctp.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_venue_mappers\\ctp.py",
+      "sha256": "643909d043077ec6dbcbe9bed01ad80c2a64fb0baf15409a589b0f49620c71af",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\okx.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_venue_mappers\\okx.py",
+      "sha256": "59c6150a6d22fe1dc757c289d224f98fab29f152f018eeef28d68fe6d9c051f9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\_position.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_venue_mappers\\_position.py",
+      "sha256": "79af31a48180a13de9316a343f6560fe644f88e86701e78f55391b568e506f80",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api_py\\_venue_mappers\\__init__.py",
+      "sha256": "650d3af5a789920e614ecbdc7d81045d184746c12109b328adac5a3cd4921df4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\account_protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\account_protocol.py",
+      "sha256": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\auth_config.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\auth_config.py",
+      "sha256": "52f2a2489acb10f376a8278a84c50bb50dc69fd8abcdff2aa97138fe69587c43",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\balance_utils.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\balance_utils.py",
+      "sha256": "afbc308263d56ff41222239f652e1a745ea4e41ab0842139841e50201ca4bca3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\cache.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\cache.py",
+      "sha256": "6366c0ed14291ce5785bd5612086f914956583905b824be4fc77fc09b0007fb9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\config_loader.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\config_loader.py",
+      "sha256": "c3566937b63fc330b1eb8c9d82436d7e4ef7647eb0a421310a7be14093722672",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\connection_pool.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\connection_pool.py",
+      "sha256": "b4bd8f519296481591fc97e699ab0446a1aee9d54f136a9ac5e550be38a8e6e5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\deployment_evidence.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\deployment_evidence.py",
+      "sha256": "78a87b1d8ad1463cd631dba29c0d9010738e78abad9a118eb5013b4e9f20b256",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\error.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\error.py",
+      "sha256": "e72e9692456bb68f1251f898e8234505f16c3b18eae8bc70cc396ce33a664653",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\event_bus.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\event_bus.py",
+      "sha256": "a812b093b75d402ccf01df3c518de68258d15f55dd0900315d42109996edf8c1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\event_clock.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\event_clock.py",
+      "sha256": "8c1b192889ecde3a9b76890743695c76693c718cb2ef450d108055f915ac453c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\exceptions.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\exceptions.py",
+      "sha256": "272e9714e6ea237bbe34294d8e6ee78c7c5a3c2464fd01612e009c3aa56ba631",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\instrument_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\instrument_manager.py",
+      "sha256": "2b4a78ffcbea884845196656bd86fe28278673c0be03ef26b336f428420725f0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\logging_factory.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\logging_factory.py",
+      "sha256": "238e4e376457340f68e7444e6afda8cbc09ca913f79c49ed2dfa336f918df296",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\market_history_protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\market_history_protocol.py",
+      "sha256": "21096e58d14ebfb05554cf76012793de25846e9f2474b1c42d149edaf6b469ae",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\market_observation_protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\market_observation_protocol.py",
+      "sha256": "fd3a85080f6ac795becbffee5ce6c0812fc2f83ec9532049432097efad7d5c82",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\market_protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\market_protocol.py",
+      "sha256": "9ad1a16842dfee03587a815ecf4a9915559287c9ce995f6cff8df15c00309108",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\rate_limiter.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\rate_limiter.py",
+      "sha256": "0ff147b831784e168cc5a15a073d3c5228fb7af57c868a7ae6dca474057065a0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\registry.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\registry.py",
+      "sha256": "4f66487a7d2cdedd81303b142c329f85cba298153016d6d4aa324918a15524de",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\security.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\security.py",
+      "sha256": "ae6928db08d7f80add4044a91e48eb14d6080e997e361f39e8c6ea34249a3c17",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+      "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\telemetry_protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\telemetry_protocol.py",
+      "sha256": "fc7f2e1907f4bc733f3919a45e7fce189e0d9d03b342872c41289294142987ec",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\websocket_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\websocket_manager.py",
+      "sha256": "e7e3b98f8c4ac68f345893532ec7e525ae80fe034442c7b42e26a5b7f3b70a0a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\_compat.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\_compat.py",
+      "sha256": "17a12e28c7963fc249c58ad6531421f0c9cdf7ff637dbd170a033f472034a869",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\_plugin_shims.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\_plugin_shims.py",
+      "sha256": "28e724334696992db8c28e71ea80d41aa2900f7c30d07b7fa1f1f827273e54e4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\_version.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\_version.py",
+      "sha256": "567f790afd9549fbf5eb4eb5202c8e95cd68e55f91bd13df2240e820e9cee32a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\__init__.py",
+      "sha256": "6b2a075e68d4c1663d28fd7110fae84d780ddec39de4654774f9395151261590",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\auto_init_mixin.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\auto_init_mixin.py",
+      "sha256": "213c7ff0d03ce85749779e406ab87dae5c53e82cb0760fcbffff9f35d25af3ed",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\instrument.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\instrument.py",
+      "sha256": "23a81c871eeff53e6683ae550c6f39311ed4d366bec1acc9f863a36ef7d2d027",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\__init__.py",
+      "sha256": "3eb233cbbe4257ba4e92171ca6558881dbe1858b4ebe772b476080de67ee4810",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\accounts\\account.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\accounts\\account.py",
+      "sha256": "ec0ada503098d8a0c18e1187f2b9ec5452c926569fe8e862f0871cb16ffe1675",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\accounts\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\accounts\\__init__.py",
+      "sha256": "3ddec34dd2c2e462cfbe4a6ba9a9c488d5eae57d96a47125d2e2738a3524b627",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\balances\\balance.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\balances\\balance.py",
+      "sha256": "fdcb1cd74edf2758fae47b6df67b796bf295071dadbf3b846080d7c94a0279c7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\balances\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\balances\\__init__.py",
+      "sha256": "5fb712caa8f43b0827d10f58138b3aa8cf79db84f5117f129a628cb0d186dec3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\bars\\bar.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\bars\\bar.py",
+      "sha256": "831e634a612327636788596644fe6e491b69f42e844ed27d2eed79d7c3029495",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\bars\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\bars\\__init__.py",
+      "sha256": "a84f124df852da27c3a0879306238db02e34d8ec7fd2eca16bda7a8ba224e000",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\exchanges\\exchange_data.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\exchanges\\exchange_data.py",
+      "sha256": "485ed8aa25565b4a16af60eacbac04b097582fa2583aff61e1b63087ec62f059",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\exchanges\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\exchanges\\__init__.py",
+      "sha256": "ab012118d09169fd8b024bb2b0e8be1d5968cbfd585a0a7ebf29cae353cbbe3b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\fundingrates\\funding_rate.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\fundingrates\\funding_rate.py",
+      "sha256": "6f70d8440499af69eabd66669ec6303f790d9cfa512faf0c60ea874321177968",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\fundingrates\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\fundingrates\\__init__.py",
+      "sha256": "ffe57587056cd347c15d830d1565c22cfade1c452c7e8748be92fd587bba1cc7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\greeks\\greeks.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\greeks\\greeks.py",
+      "sha256": "2b8003612b13439091a07a733a97b3b290f12b24fe93be0210cf5c4d0b38006a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\greeks\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\greeks\\__init__.py",
+      "sha256": "924a2bd4e7abeffa03db5228f9b2627a13fa2e723ff38b1b384d5f85b4df619a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\incomes\\income.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\incomes\\income.py",
+      "sha256": "05eb00c2f0244e25156f70430a4d56da02595521f449d679062587726e7d2490",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\incomes\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\incomes\\__init__.py",
+      "sha256": "f16e650e2c201724e7dd9f8a4a7417065186a3d5706d3b0beb0cd35414c96ccf",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\liquidations\\liquidation.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\liquidations\\liquidation.py",
+      "sha256": "8a1954efb9d1e98c7436157ecddaed8059049caf562d79d386ce8e3ccebafdff",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\liquidations\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\liquidations\\__init__.py",
+      "sha256": "3b3f3a048fb558d1e20b3197f09c3382e7f51d9d70c4f01e6c9b7696065729df",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\markprices\\mark_price.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\markprices\\mark_price.py",
+      "sha256": "62c5b860cd75f4c4536397fcc2662c43d323890cbca0869efd0501452c76e49a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\markprices\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\markprices\\__init__.py",
+      "sha256": "e0ab8614d84fb7cc0d8e036a4ac4055bb7be106474c14c43ce1f06bc3ffe3cdb",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orderbooks\\orderbook.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orderbooks\\orderbook.py",
+      "sha256": "b022e7396f6e670b5a72f45d5c8ae6fee3561ed22c806b944cfb209875bc8324",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orderbooks\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orderbooks\\__init__.py",
+      "sha256": "08652de2e7269f1d7748e01b985f05cde77d08d4b8ee2bfdf3102a727928b5c3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orders\\order.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orders\\order.py",
+      "sha256": "9440d65f74725e0fa3237a8d08f16d7579788fa8fe17954fdcdba07e6a23469b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orders\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\orders\\__init__.py",
+      "sha256": "b3a4fcccedcbbd7d246081691b65030da670b20e910ae677c26236cca7deb2fe",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\positions\\position.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\positions\\position.py",
+      "sha256": "021faf8c50bb9949ff13167f5217c9b16fa58b4674266919e1de8e7e170adac9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\positions\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\positions\\__init__.py",
+      "sha256": "2c6cb89ee5d070fcdcf3e73bf1d6cab14579557450ba2c6c368de22cccf72cf0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\requestdatas\\request_data.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\requestdatas\\request_data.py",
+      "sha256": "2c855ef1dc27e5b9913d357ef2d81cce9d5d5fc62daae3fadcfaf9bc52354f43",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\requestdatas\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\requestdatas\\__init__.py",
+      "sha256": "f8ef6f79baccc9cb4e7623a5df8c74dd2a8ed24bdf80e3e57cd48a1291bbbca6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\symbols\\symbol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\symbols\\symbol.py",
+      "sha256": "9444b8cdaaa42094bd8db1f8dffe20d5dd69763e606324204a44bd60fef30c56",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\symbols\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\symbols\\__init__.py",
+      "sha256": "5254a4a459afc31a0e54594d75a1f3b06a10758769148434bde7a3fa64d8ed58",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\tickers\\ticker.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\tickers\\ticker.py",
+      "sha256": "9092e59e2e846feebdef0640d0ea4bb9bd143de1070c9410cf786706ad56ca63",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\tickers\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\tickers\\__init__.py",
+      "sha256": "32d2fb5c1fed1fadcd67fc38eff142f7444076faeb2e401dfeeb5e301dc7ded7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\timers\\timer.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\timers\\timer.py",
+      "sha256": "6a799546660e1508ce01f0f27174d63c459451b9c4669bb5a2457c560e0b0274",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\timers\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\timers\\__init__.py",
+      "sha256": "d27412a2b17a26bd205e6cfea8e1190b86a1f7d0cb0fede0367483b135995116",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\trades\\trade.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\trades\\trade.py",
+      "sha256": "c2d5104d33e90a77b4219d5c62015329d4ed44ad45b96de145de7b5bf9b641fb",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\trades\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\containers\\trades\\__init__.py",
+      "sha256": "b43b4f97c557117a299b401da8459b916c9e717aca6c22e9916813644cc68545",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\async_context.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\async_context.py",
+      "sha256": "67f1e125266c80cd28b63c42de87e7588b31d357a41cbd8301b90563cedd1d20",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\dependency_injection.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\dependency_injection.py",
+      "sha256": "96c178e4c6d387212cb17252a84775652bb2fb86d4f0db5338597e90929b8993",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\interfaces.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\interfaces.py",
+      "sha256": "3cc776e956c2766d3946d218b754372cedc312196cac510df18197f05dd2d523",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\services.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\services.py",
+      "sha256": "f384a09db545a2a293756a26efbeac8f77bcb62d8392be15813878f2880a4f05",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\core\\__init__.py",
+      "sha256": "4fd86536356f5421c1332d0e9eded8370e38473869a015171e34dd63696e45dd",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\abstract_feed.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\abstract_feed.py",
+      "sha256": "7a9b240aca00f5036eac4d1a4e14122c8998036fa2334681cb6bac3459a73b5c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\base_stream.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\base_stream.py",
+      "sha256": "e77bedc168fafb64484e91873b51bcd6e71eacba685986747aebeac5f1461235",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\capability.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\capability.py",
+      "sha256": "6c20a41828d283c61dc2d5778dc20cc4ce015c9d830c6270232e871053f979e4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\connection_mixin.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\connection_mixin.py",
+      "sha256": "31b1390c018e639bfcf88421aad0503c13731f61fcb4654010531e7bf2efadf0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\feed.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\feed.py",
+      "sha256": "f1d5b72970d7e4f9855248617d06d774890eedbbb6277caa1ef96701f89040a4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\http_client.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\http_client.py",
+      "sha256": "c7314563284e1308446f48995ec2be018e7d4f8bb7b27ac975f7107ff2110b47",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\my_websocket_app.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\my_websocket_app.py",
+      "sha256": "cb6e538676723dfd3afcc10ba49aa8684e3b287676201521a4a45245ec542bf6",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\transport_safety.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\transport_safety.py",
+      "sha256": "ba111fec0052e3d47ddfdb4a31337de15cd6f2dce20b42a74e5b3618bd3f83ae",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\feeds\\__init__.py",
+      "sha256": "af7bc27664c005cda5b2d68d939fc41856bfeae7027632c198839a6515656fe4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\async_base.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\async_base.py",
+      "sha256": "637ae9cb7aed8c64b84c8b80a3334e2cb6f3b6b6d3666d84bd51697d8ef97400",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\calculate_time.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\calculate_time.py",
+      "sha256": "1b1c65c637c880e1f4d1795ad6437dedaa6a9c61298e3ebf5f57abbe4247435c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\log_message.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\log_message.py",
+      "sha256": "b7802a512380a51ec7147539bde1d69676f0476f00ab7548b53636d9b5faeb69",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\rate_limiters.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\rate_limiters.py",
+      "sha256": "8159082bb93c587fa46213e4ebda3e7bfae0658bdd3521124cec115f3ddaf5c8",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\signers.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\signers.py",
+      "sha256": "f6a2e057dd720c7f2549b0fddccdd983619d0b077177c23996f8f1c8d534def1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\timestamps.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\timestamps.py",
+      "sha256": "faa4e7613f1acbd1703967401b48643a3f022e40b6e862454cd5a48579d39740",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\utils.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\utils.py",
+      "sha256": "481ed5c55b23c7ebc08d6b285c5e466090432d0556774f5df6b8d7fb07fb9829",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\functions\\__init__.py",
+      "sha256": "7bd75e9b04b4c22b9236a7155a6d3bcaaf777e4ac06961118c4837ffa6ded960",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\config.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\config.py",
+      "sha256": "fae8eb730fe3a2a6f372c3871ef3ca1a2f52ad07c426c62a5ea40e043eff0224",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\health.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\health.py",
+      "sha256": "85f0b5781e679f0a8fb9a616501046c85a462aca190d141e678f60e3f3657cd7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\models.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\models.py",
+      "sha256": "6a50201863f5bf99d64d79131fa63f78604fae15d84041f72626db6f98e2ff1d",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\order_identity_map.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\order_identity_map.py",
+      "sha256": "c2d50f9e6b4cfa5576152cb524282a51245ace4047fc2eaf278c05d025911c28",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\order_ref_allocator.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\order_ref_allocator.py",
+      "sha256": "dccdd68687e46173516736631d245200fd7cf718b2a46e685a317261a3830758",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\protocol.py",
+      "sha256": "358c172189ff63eec4f3227fe1d015d3e191a41a8bc286c6a6bdf63f4c5a2121",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\registrar.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\registrar.py",
+      "sha256": "ca01a47bb6d07ef046bd0a41ad9b474ebe6c8cc9ff369edf9d1249db6d620202",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\runtime.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\runtime.py",
+      "sha256": "6e9c58e4c6400b21eaa4abdcd12e18fb78de74a56fb9d58d42406be04b47d16c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\runtime_remote.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\runtime_remote.py",
+      "sha256": "263e90112425e93209ff0dda15e7a52c1fe68ec9e4ac45a892677d57540f4e03",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\subscription_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\subscription_manager.py",
+      "sha256": "8cb513012ed24502a76e208be7fed4c7a84924a9809c9ec043d2588bdb2cc971",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\__init__.py",
+      "sha256": "40b5f76e8ffb72e72f2ef5e6785d77614c6577bb7ec45137a89d1cd6f90102fe",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\adapters\\base.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\adapters\\base.py",
+      "sha256": "44cf3d8e5c65ccec999b2078731a489dca29cebc763c36dd248b91e321810616",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\adapters\\plugin_adapter.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\adapters\\plugin_adapter.py",
+      "sha256": "c5f749199759db97c9188122084d341caf659b21711415251b16d57c5c547fe0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\adapters\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\adapters\\__init__.py",
+      "sha256": "2efe644785b03f3939796fc12b7758f7038def8d86dcd28cd46b6dad74ed1300",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\storage\\tick_writer.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\storage\\tick_writer.py",
+      "sha256": "5b2bc4acc046cff6a2c14cb7d99bb693f9bed7a0c74fc76219bb2f3316834e95",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\storage\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway\\storage\\__init__.py",
+      "sha256": "601bae070451478c72c917253aab473952f04f1809342662b5ad68f2d70b2522",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\errors.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\errors.py",
+      "sha256": "970f689c58929f9a2b4f16fbc360a5554cb900803ee0bd45426bd5549a75a1a4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\loader.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\loader.py",
+      "sha256": "bf25754bd084861dc8d22e26fa40c498f71e23ac83a22ff2fb72999792286413",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\protocol.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\protocol.py",
+      "sha256": "b9dec7282c65e7789023b60e3d8b72adb47b3a1ea4913db101b3bcae666cacf7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\plugins\\__init__.py",
+      "sha256": "16d16ab8ce5f14c66e1a1a6ecdcab97e42c2856b189a14819b81a027e749244f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\testing\\fixtures.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\testing\\fixtures.py",
+      "sha256": "0defef577f719f0c3113e25a2805050f8e2eb5e5ce7dd3f89c05343dbd48d5b7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\testing\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\testing\\__init__.py",
+      "sha256": "69c327f3a51d81352965a8618ef345d36e64e35ff8d83fec140c0ecae73bc16c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\utils\\time.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\utils\\time.py",
+      "sha256": "5568933b28438c17a9056831247a53e3e9020104d58b7fdeef4e7f2f9a0784c4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\utils\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\utils\\__init__.py",
+      "sha256": "d41a1dd7fe6e489fa65a61c92cf27798e7c2b611b38f80560e30bd3852b708a0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\websocket\\exchange_adapters.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\websocket\\exchange_adapters.py",
+      "sha256": "df3dd3723ea900d8f06a3b4b2dabb3ba0f52b710032bb826134518e2cd6bef0a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\websocket\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_base\\src\\bt_api_base\\websocket\\__init__.py",
+      "sha256": "0e4b8b72f2db6eca5a2f2b2dc1de13df9fda1d83d179b1cb36e8a305bfb83532",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\account_financial_ledger.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\account_financial_ledger.py",
+      "sha256": "f72cc024378f225ad7743e5d76ae8eeab192d7beeb5ee570ee31ead77fd3f8d0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\account_reconciliation.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\account_reconciliation.py",
+      "sha256": "f20350e7284d6d6e5a3d8a94965f442298d34c74c715dbfe2b3122d7857b6fb5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\admission.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\admission.py",
+      "sha256": "3529958357e51fc3c6219715c1e1b910f98ca71d7ec702775c2e98602d710a3b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\basic_admission.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\basic_admission.py",
+      "sha256": "6ae74b5e5ccdc6314f6d6ac9662be12aef03527d988c15e51ce9d63ae9d940d3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\cancellation.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\cancellation.py",
+      "sha256": "68ffd8e790fca9309896075633193f9198e00ee8e8da545efa9ac011e083d4d5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\contracts.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\contracts.py",
+      "sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\ctp_callback_ledger_adapter.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\ctp_callback_ledger_adapter.py",
+      "sha256": "30e4a822103f296e64242be5285c36bdfab570e4e908d26480cb215f9ef25ee1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\ctp_callback_session.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\ctp_callback_session.py",
+      "sha256": "767301c60b5b1d16b028554ab438c0ce737f6a214f87b66098b5c13df7b9c94c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\ctp_callback_source_bridge.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\ctp_callback_source_bridge.py",
+      "sha256": "d4298b54a8d066eab5d63319ebf0199eddc3fca609ccec548e68eca413985d6f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\ctp_native_callbacks.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\ctp_native_callbacks.py",
+      "sha256": "0d8bf4f20f5759f413e2f46a38dbc06a662fd6d93fe15341f0e7c44547366329",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\ctp_single_worker_candidate.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\ctp_single_worker_candidate.py",
+      "sha256": "44961e5ed863b13c9646fd6d90ff555e7250186a1c71f3a0c8d6549159f261f2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\errors.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\errors.py",
+      "sha256": "d1ea5a2a8bb596562f94cfa0acccf2229546e8d815aa84bd0ad52a0cfdbc6bab",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\facade.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\facade.py",
+      "sha256": "b1b6c79e1e8aa309897c92c69286f1263c389b48406ad170ec920867718bea4d",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\group_contracts.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\group_contracts.py",
+      "sha256": "961e137c925ab5bbed362c65f9b39f32e8b53622f6b2ffc55786ca22a167fb4a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\group_coordinator.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\group_coordinator.py",
+      "sha256": "3d7412e9b52698560db26cc866c3e1a3a80e27b2972bfe031c7c29400f8b615f",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\group_order_contracts.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\group_order_contracts.py",
+      "sha256": "380629ad863dc6b8c177149f829b910acda94a17d40a00332dab9e2005cc9ed1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\group_store.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\group_store.py",
+      "sha256": "525486b96003a7929a39feda13f3da87f6e1230ae3cfa8d36d427f3c2c9499f4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\journal_reader.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\journal_reader.py",
+      "sha256": "d032cf69ade5e4869af5a0b523526b87d230029b4d9a24dabd3a99d4e7429500",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\ports.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\ports.py",
+      "sha256": "9e6fe2df31d6daca74f1b176271ea34ef41e5c5bc2780fe078874f16d3860847",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\service_component.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\service_component.py",
+      "sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\service_order_entry.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\service_order_entry.py",
+      "sha256": "bc5aa35be4d2e101cbb5765091bcb2938acfde29ceda3612a18c9cfb7e839c43",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\store.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\store.py",
+      "sha256": "b3ccf1030e28522ceef12934a52c847f435ccb29c9b11e7eb7087d07b44168ed",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\__init__.py",
+      "sha256": "e312379026d804e9f4d34bb3dd266274687ae5d3df32488dfbf3dd0550a8b61e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\allocation_sizing.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\allocation_sizing.py",
+      "sha256": "11d8141ab61044cf6a02859a6238d0c9ebe8eae898b2d6d84497d11bac332cff",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\order_admission.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\order_admission.py",
+      "sha256": "1828460401a001cc14da4494a9576752cdbb4e7912659193894c27ab3a6ff95b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\service_component.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\service_component.py",
+      "sha256": "dfee4aae3048bd4286a66cffa65ee501b4bb991389b452ddcf67c2e414e51f50",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+      "sha256": "198da2a9969746e6d4829596c2ec460641d701a1c7ad235b8376415cef25ddc3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\containers\\risk_events.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\containers\\risk_events.py",
+      "sha256": "3cb7b37bc8e186a630e047858eb120666fc4837ba25045984ee11fb8ffb35b4a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\containers\\risk_metrics.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\containers\\risk_metrics.py",
+      "sha256": "20156a825d28b9a837cae73674b601e81220576ab4f8a03b0dbc405a39c4a0a9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+      "sha256": "8f1648126ad4c3e6d11323f41af17fdbd7c22186976c41cb95a5f92bd55797f2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\exposure.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\exposure.py",
+      "sha256": "2af433523d1060ffb5b86a8d0d63fd55903eb94de6e519559992b1bf3d30e7cc",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\freeze_activation.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\freeze_activation.py",
+      "sha256": "4940638bc24b0103169aa9217126cfed389bc4ee3ee2bf32d92a2545843c0655",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+      "sha256": "059f5e7a20d2652bbe2d041a3ffd7cb7a595e3e20ed17773c898cdc420017116",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\limits_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\limits_manager.py",
+      "sha256": "eb1e026351478b240037b74c6d3fc721e3a2c60074e829dbabb0414da5e6921a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\policy_engine.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\policy_engine.py",
+      "sha256": "f85befc83ee4f82506977491a420c07b3b92e702af3a3a09f496f2937af77296",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\risk_assessor.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\risk_assessor.py",
+      "sha256": "4c22a94caebdf4658e1bfce8d9712b6bbe2fac56058395698c15bae56b4ee585",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\risk_calculator.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\risk_calculator.py",
+      "sha256": "9f077bd4688fdc92b7791b1390cb310192724246933a95fd647e70b02d8d86e5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\risk_manager.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\risk_manager.py",
+      "sha256": "0d9ff11d5ee36c025ff874a3a66966e625b806154b2af56a3446ee46a2699843",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\__init__.py",
+      "sha256": "5ce0af0703ac84b7ff01a2c0852671ad3520e152e4789298074008d548af6d07",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\anomaly_detector.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\anomaly_detector.py",
+      "sha256": "1fe79d5ac5748426580a0c58c0759a94c38d3b05c92fd70fc2b0acd46b69a9f0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\ensemble_model.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\ensemble_model.py",
+      "sha256": "da6a149ee7ac66e3ba29f548eeafa2ee5a104a22c5ecdb9750a6bfd1b4ff555d",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\ml_base.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\ml_base.py",
+      "sha256": "6aa19bb0100e937feb0df22ed5a928cd0da8e992e4e9b11d629f444416a6a4c1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_risk\\src\\bt_api_risk\\ml_models\\__init__.py",
+      "sha256": "0001006fd9f64f72f32c487b31107dca23a7c636b9d3352a92821667adac28f3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\account_session_worker.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\account_session_worker.py",
+      "sha256": "0006b8a9cfe014d881e8bd8efabebe943ae301af2d5f167211d29cf4cc8545e1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\account_view_projection.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\account_view_projection.py",
+      "sha256": "a038cde6e32f8597d2a111a9ee3f63a6143590d35ba5ed691d5bce99b3075f09",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\database_identity.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\database_identity.py",
+      "sha256": "4247ca03ff5d7cf5a9e7c90303a9ec3fd55db50526f5970492e5146adf4184d4",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\event_journal.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\event_journal.py",
+      "sha256": "69c97df8b49b19c96b5819fbe06170e19509b2c50cd47ab2513c3c1bf2998c4d",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\market_hub.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\market_hub.py",
+      "sha256": "68066602191877afc24c72623eb8f81d4defe7f093fbdb53d104cc68153675d3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\resolution.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\resolution.py",
+      "sha256": "ed6ed311a9b7824ae48f5e56a338e162db4199db26d85389453de0fe914861f1",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\router.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\router.py",
+      "sha256": "8e923b0228f9dcbf2e782a43835a7be286620664a9835e6ec862843588fef96d",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\service_component.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\service_component.py",
+      "sha256": "d5e3d4e7814413885672484a11c666dd1603ebfeeb39e412916bab430821fc0c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\session_guard.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\session_guard.py",
+      "sha256": "8910462b67ace265577b8ab6fb2ac3c68d9d841e0c5499cf652f4c74f75ad682",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\wire_mapping.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\wire_mapping.py",
+      "sha256": "67227d1e81c20da9c6231b39e27c51b329eeaecd1c0235d87c06669a846f6b58",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\writer_authority.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\writer_authority.py",
+      "sha256": "a399da18987f6743bc6d1661ac2c2dc8a41b3fb5edb5242b813d54bbb3cdecca",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\__init__.py",
+      "sha256": "d807f831efed22e4f041cbdb1d87fe767ebe7c6c2fba8a64460db05c4fe0ac7c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\client.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\client.py",
+      "sha256": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\events.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\events.py",
+      "sha256": "5e8fb7c9f4481b2f1386c5f197e3b563a079acf84d47ba8f0c90c694bb56e999",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\market_v2.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\market_v2.py",
+      "sha256": "051cb114a41300d9f94630f95ee9a773ce252f36a9f01d94e0d99561db36ac91",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\server.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\server.py",
+      "sha256": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\service_v2.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\service_v2.py",
+      "sha256": "bc17344835fcd80409cdcfd8037345ccf92b5ece5f57817aeb1eda33af17b280",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\wire.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\wire.py",
+      "sha256": "60ef5ea0ea89ff11d1e62c65865a39256cf91c31981553a301f7687394f6372b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\__init__.py",
+      "sha256": "bd0a9854d01062f77a032d2b3af3923ac609dc61d50d88860641b92aa7426227",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\collector.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\collector.py",
+      "sha256": "212dc1e50282a8930d19fece02ae844b58a7ff8d799f678e029f813682a31a06",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\config.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\config.py",
+      "sha256": "829a8dc4985443de27c92c9ffcf06c6156fc32cce4433c8325ce1d4a1844b2aa",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\control.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\control.py",
+      "sha256": "c7e1a8c2dbb512c160f9485714333dd6b2f9f984624c81871d27e8dd448c4b98",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\decorators.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\decorators.py",
+      "sha256": "3bd7402667721f1e6f4d9de232d68effd539986e0b7f045e2c16a16d10c60867",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\durable.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\durable.py",
+      "sha256": "35b1aa96c834baf540bda1b45b08e33204570374be386a4715b9a29e55d68557",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\elk.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\elk.py",
+      "sha256": "b10288de3fc84c8e764c33d5d7145e38a2d5cb9804c1609aaa87c7cc02895747",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\exchange_health.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\exchange_health.py",
+      "sha256": "21fd184ce99d67a149ade4e421e1be09a2d1a162d5904fc227c3ea425abb7926",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\facts.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\facts.py",
+      "sha256": "749ccf017b2b083a34cff46414151d421ef3726f1234b91472996bf22e9c0968",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\grafana.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\grafana.py",
+      "sha256": "81bd9d876bc78da520a01e87c0e453bf12fe241fcdafc919fb4f2bdef6ef36cd",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\ingress.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\ingress.py",
+      "sha256": "baf400c9338f863c951c095ec14e0b33d1e16f0e9a70c053e9910448c554ef17",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\market_observation.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\market_observation.py",
+      "sha256": "30959e253ffb9718370e5e530ecf65f9fb23e1fd7445414e44d138639e2cfe15",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\metrics.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\metrics.py",
+      "sha256": "7a7fed4142afbac2728e42fc8289a4fa773d369c755ed81172d830692f301c11",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\prometheus.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\prometheus.py",
+      "sha256": "b16bb01895567ac5daa639f1c01e7d3137d16f977ea200f9879239e96d2e301e",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\readonly_events.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\readonly_events.py",
+      "sha256": "91e2dd7c9f19b2b09b4b22247506e800135e513448f9aca11a73fb0ed5363631",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_component.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_component.py",
+      "sha256": "f21a5256c60e759f24e305a1f78a360df332544bab36551fbd95d7a81a696247",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_control.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_control.py",
+      "sha256": "222b3da3a1568c213e8ba5d271c7988d651ec66c6f4fbeb3e00e4c54df2918d2",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_ingress.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_ingress.py",
+      "sha256": "0b65d791cd92ddd8d05e33a17e0b9b0ead1033340fcdd71719fa5f91eb7b3bd3",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_telemetry.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\service_telemetry.py",
+      "sha256": "e5d9063f7f1eba84d48e500bfb273869ab7039e56f31981bd3083ea039463c2b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\system_metrics.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\system_metrics.py",
+      "sha256": "37b567de340e35e2a134cd60a4bc96f87b200e174cd8de7647ea9805b550a1f9",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\__init__.py",
+      "sha256": "034325712acd114dcd6e23131ea6bdc19e521bdcad81802c47bd0e62136b34e5",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitoring\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\bt_api\\bt_api_monitor\\src\\bt_api_monitoring\\__init__.py",
+      "sha256": "05101168cc5544d12f680cb04ccd1cfe409515a6f42ffa6b70dc5e3109a84bcd",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\tests\\unit\\test_service_risk_only_order_integration.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\tests\\unit\\test_service_risk_only_order_integration.py",
+      "sha256": "22f4b9aae201580a461a9679b9d21b661bd5defe491de9ee1e79f8b847eba20a",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\tests\\unit\\test_service_risk_order_exposure_integration.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\tests\\unit\\test_service_risk_order_exposure_integration.py",
+      "sha256": "56a7e228644bdadb25588f525dc5823e02f7788d18826238b0394d61822609f1",
+      "method": "explicit reviewed SDK risk-lifecycle source overlay"
+    },
+    {
+      "source": "D:\\bt_api_py\\tests\\unit\\test_service_order_entry_components.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\tests\\unit\\test_service_order_entry_components.py",
+      "sha256": "0444007e5a83dbd36b899c6951cee2cd9f46519124561ea3aa5af857924c97a0",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\tests\\__init__.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\tests\\__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\pyproject.toml",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\pyproject.toml",
+      "sha256": "818f6ed45279478496ebd6d4e953ccb2c5eee93efc6e18cc700c92da3bc24df7",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\tests\\unit\\_spawned_process_helpers.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\tests\\unit\\_spawned_process_helpers.py",
+      "sha256": "1bd9e26d379c646d4c328b8103ac9bef16cefc3d765fb31be003177b066a318c",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\bt_api_py\\tests\\unit\\test_service_execution_account_books_integration.py",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\sdk\\tests\\unit\\test_service_execution_account_books_integration.py",
+      "sha256": "526e3d16daa49d7ffb39489b5c1560b84c554253ec99438422ffd21530cae331",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src\\bt_api_execution\\py.typed",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\src\\bt_api_execution\\py.typed",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "method": "verified checkout bytes"
+    },
+    {
+      "source": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\manifest.json",
+      "artifact": "D:\\temp\\iteration10-risk-exposure-host-sdk-adapter-sdk-20261016-r20-source\\execution743a\\manifest.json",
+      "sha256": "519bd3554f4edb530c92ec610e7754d83d4aae57c274ce257cd816aaaacd67bc",
+      "method": "verified checkout bytes"
+    }
+  ]
+}

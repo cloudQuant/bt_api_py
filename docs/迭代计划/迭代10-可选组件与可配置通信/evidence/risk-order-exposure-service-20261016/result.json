@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T21:08:46.320465+00:00",
+  "source_count": 368,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "a1d34a4d7bb3509e8bfd94f7927ee73dc634898e195da2eae28e07182ee3a35d",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "LOCAL_SPAWNED_SERVICEHOST_FIXED_SOURCE_SNAPSHOT_SYNTHETIC_PROVIDER_NOT_COMPLETE_RISK02"
+}
