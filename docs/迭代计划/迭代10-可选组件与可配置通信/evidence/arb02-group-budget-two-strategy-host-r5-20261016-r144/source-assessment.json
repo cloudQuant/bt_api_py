@@ -1,0 +1,119 @@
+{
+  "schema": "arb02-group-budget-delivery-assessment-v1",
+  "created_utc": "2026-10-15T23:07:23.3590613Z",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "expected_parent": "ea41c3368b5577af34ad215faa513d5bc05c8e25",
+  "source_round": "ARB02 two-strategy shared-portfolio budget contention and deployment writer-scope repair",
+  "source_scope": {
+    "bt_api_py/service_deployment.py": {
+      "path": "bt_api_py/service_deployment.py",
+      "bytes": 22416,
+      "sha256": "997be1908ec15e567800a5ecc8a76eca473c08fcb7677f3cbfa3ac3beaa25865"
+    },
+    "tests/unit/test_service_deployment_group_writer_scopes.py": {
+      "path": "tests/unit/test_service_deployment_group_writer_scopes.py",
+      "bytes": 5137,
+      "sha256": "d5eb07052819a7cba9294c6abc6126a6d32dbe462028fed1ce21898207e11ba3"
+    },
+    "tests/integration/test_arb02_group_budget_service.py": {
+      "path": "tests/integration/test_arb02_group_budget_service.py",
+      "bytes": 69749,
+      "sha256": "50a393e72dae18b8cdac22001c4b9ff86ae82021b9208c32f16ee4772b896de5"
+    }
+  },
+  "source_review": {
+    "status": "GO",
+    "reviewer": "/root/iteration10_parallel_assessment",
+    "scope": "static review of exact source and test pins only",
+    "source_test_path": "tests/unit/test_service_deployment_group_writer_scopes.py",
+    "integration_test_path": "tests/integration/test_arb02_group_budget_service.py",
+    "no_tests_or_hosts_launched_by_reviewer": true
+  },
+  "qa": {
+    "no_host": {
+      "status": "PASS",
+      "tests": "4 passed",
+      "elapsed": "1.28s",
+      "exit": 0,
+      "command": "C:\\anaconda3\\python.exe -B .codex-tmp\\iteration10-focused-qa.py .codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\focused-qa.json",
+      "stdout": ".codex-tmp/arb02-deployment-validator-nohost-20261016-r3/qa-output-author-r1/stdout.log",
+      "junit": ".codex-tmp/arb02-deployment-validator-nohost-20261016-r3/qa-output-author-r1/junit.xml",
+      "source_count": 1715,
+      "stderr_empty": true,
+      "evidence_level": "fixed-source deployment configuration/unit tests; no Host"
+    },
+    "fixed_host": {
+      "status": "PASS",
+      "tests": "1 passed",
+      "elapsed": "11.69s",
+      "exit": 0,
+      "command_record": ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r5/qa-output-root-r1/command.json",
+      "stdout": ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r5/qa-output-root-r1/stdout.log",
+      "junit": ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r5/qa-output-root-r1/junit.xml",
+      "source_count": 1715,
+      "stderr_empty": true,
+      "root_tool_chunk": "6b57fc/e36fde",
+      "post_run_cim": "3456be",
+      "evidence_level": "three ServiceHosts plus Curve clients and synthetic provider leaves"
+    }
+  },
+  "scenario_scope": {
+    "covered": [
+      "two distinct strategy clients issue overlapping group requests against one shared portfolio budget",
+      "the coordinator serially adjudicates after the first group becomes UNKNOWN and retains its budget hold",
+      "the denied second group creates no account Risk vector/provider write/order dispatch",
+      "coordinator restart, exact query, and replay preserve denial snapshot without duplicate reservation"
+    ],
+    "limit": "Client calls overlap, but the coordinator serves requests serially; this does not prove simultaneous SQLite transactions or a database race.",
+    "not_claimed": [
+      "complete formal ARB02 acceptance",
+      "simultaneous SQLite contention",
+      "reservation TTL and expiry behavior",
+      "crash after reservation but before dispatch",
+      "UNKNOWN hold behavior across TTL in all required scenarios"
+    ]
+  },
+  "prior_attempts": [
+    {
+      "round": "R3",
+      "status": "FAIL_SETUP",
+      "summary": "The legitimate two-strategy same-writer routes failed validate_deployment as OUTBOUND_DEPLOYMENT_INVALID before coordinator readiness; this motivated the scope-aware deployment validator.",
+      "artifacts": [
+        ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r3/qa-output-root-r1/result.json",
+        ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r3/qa-output-root-r1/stdout.log"
+      ]
+    },
+    {
+      "round": "R4",
+      "status": "FAIL_TEST_ORACLE",
+      "summary": "Scenario and normal Host cleanup completed, then the test incorrectly expected no Risk snapshot. The portfolio rejection occurs first, so read_group_vector_snapshot correctly raises RiskDeniedError with GROUP_NOT_FOUND.",
+      "artifacts": [
+        ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r4/qa-output-root-r1/result.json",
+        ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r4/qa-output-root-r1/stdout.log"
+      ]
+    },
+    {
+      "round": "R5",
+      "status": "PASS",
+      "summary": "Root corrected the focused spec text only; the final frozen spec accurately records the three overlays. Earlier stale overlay metadata remains preserved as history.",
+      "final_spec": ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r5/focused-qa-final.json",
+      "final_spec_sha256": "df59c86b27d89f96e6bbb13490e1a82c0e1cda2a56fbd0fa437fb0c193951b22",
+      "superseded_specs": [
+        ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r5/focused-qa.json",
+        ".codex-tmp/iteration10-arb02-group-budget-fixed-source-r5/focused-qa-corrected.json"
+      ]
+    }
+  ],
+  "source_committer": {
+    "helper": ".codex-tmp/iteration10-scoped-source-delivery.py",
+    "cfg": ".codex-tmp/arb02-group-budget-r5-delivery-cfg.json",
+    "expected_action": "Root may invoke helper after verifying parent and pins",
+    "no_stage_or_commit_by_agent": true
+  },
+  "next_arb02_gaps": [
+    "reservation TTL and expiry",
+    "crash after reservation before dispatch",
+    "UNKNOWN reservation retained across TTL/restart under the formal required cases"
+  ]
+}

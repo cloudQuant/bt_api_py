@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 1,
+  "finished_utc": "2026-10-15T22:45:41.227483+00:00",
+  "source_count": 1714,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "5ae2f3a8dfec66234612b05e681bd238edb2327b353370680f17199ae9851378",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "NORMAL_SERVICE_HOST_OVERLAPPING_TWO_STRATEGY_CLIENT_REQUESTS_SERIAL_COORDINATOR_BUDGET_DECISION_AND_UNKNOWN_HOLD_REOPEN_QUERY; synthetic provider leaves; not simultaneous SQLite contention or complete ARB02 acceptance"
+}

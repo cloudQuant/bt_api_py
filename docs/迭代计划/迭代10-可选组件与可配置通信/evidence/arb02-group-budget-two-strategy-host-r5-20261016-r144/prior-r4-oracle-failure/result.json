@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 1,
+  "finished_utc": "2026-10-15T23:01:03.175925+00:00",
+  "source_count": 1715,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "121a4cf81aab0fd9608799b00c16f734688f69c49e98218272fdf78ef9b2f823",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FIXED_SOURCE_THREE_SERVICEHOST_CURVE_SYNTHETIC_PROVIDER_ARB02_SCENARIO"
+}

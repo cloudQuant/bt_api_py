@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\qa-harness\\pytest.ini",
+    "--rootdir",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\candidate\\sdk",
+    "-q",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\qa-output-root-r1\\junit.xml",
+    "--basetemp=D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\qa-output-root-r1\\pytest-tmp",
+    "tests/integration/test_arb02_group_budget_service.py::test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen"
+  ],
+  "cwd": "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\candidate\\sdk",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\candidate\\sdk;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\candidate\\base\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\candidate\\execution\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\candidate\\risk\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r5\\candidate\\transport\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-15T23:04:37.818201+00:00"
+}

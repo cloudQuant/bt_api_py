@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="11.294" timestamp="2026-10-16T07:04:38.097547" hostname="yun"><testcase classname="tests.integration.test_arb02_group_budget_service" name="test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen" time="10.325" /></testsuite></testsuites>

@@ -1,0 +1,40 @@
+{
+  "schema": "iteration10-deployment-validator-overlay-v1",
+  "artifact_id": "iteration10-arb02-group-budget-fixed-source-r5",
+  "base_manifest": "source-manifest-base.json",
+  "base_manifest_sha256": "1dc13c46bba8c2d33308b98472ec53eef22066056ef3e87452edb7a20de19dcd",
+  "sdk_commit": "04707f4b7f4c4e009e416901ac4eca7568ea6657",
+  "gitlinks": {
+    "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api/bt_api_execution": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+    "bt_api/bt_api_risk": "c6fcacda5efb5153d8c3e2be7b17f335f2732a9e",
+    "bt_api/bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "overlay": [
+    {
+      "path": "bt_api_py/service_deployment.py",
+      "sha256": "997be1908ec15e567800a5ecc8a76eca473c08fcb7677f3cbfa3ac3beaa25865",
+      "size": 22416,
+      "reason": "reviewed same-writer multi-scope deployment validation"
+    },
+    {
+      "path": "tests/unit/test_service_deployment_group_writer_scopes.py",
+      "sha256": "d5eb07052819a7cba9294c6abc6126a6d32dbe462028fed1ce21898207e11ba3",
+      "size": 5137,
+      "reason": "reviewed pure config regression using actual ARB02 builders"
+    },
+    {
+      "path": "tests/integration/test_arb02_group_budget_service.py",
+      "sha256": "50a393e72dae18b8cdac22001c4b9ff86ae82021b9208c32f16ee4772b896de5",
+      "size": 69749,
+      "reason": "assert exact typed GROUP_NOT_FOUND for portfolio-first rejection without weakening provider/execution postconditions"
+    }
+  ],
+  "node_scope": [
+    "tests/unit/test_service_deployment_group_writer_scopes.py",
+    "tests/unit/test_service_deployment.py::test_selected_bindings_cannot_create_two_writers_for_one_account"
+  ],
+  "host_started": false,
+  "intended_test_node": "tests/integration/test_arb02_group_budget_service.py::test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen",
+  "overlay_policy": "Exact overlays on SDK 04707f4 and its pinned package gitlinks: service_deployment.py plus tests/unit/test_service_deployment_group_writer_scopes.py and tests/integration/test_arb02_group_budget_service.py. No checkout sources are imported at runtime."
+}

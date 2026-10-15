@@ -1,0 +1,359 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+___ test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen ____
+
+tmp_path = WindowsPath('D:/bt_api_py/.codex-tmp/iteration10-arb02-group-budget-fixed-source-r4/qa-output-root-r1/pytest-tmp/test_two_strategy_clients_comp0')
+
+    @pytest.mark.integration
+    def test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen(
+        tmp_path: Path,
+    ) -> None:
+        """An overlapping second submission cannot spend an UNKNOWN-held budget twice."""
+    
+        metadata_reference_ns = time.time_ns()
+        account_paths = {
+            account: {
+                name: str(tmp_path / f"{account}-{name}.sqlite3")
+                for name in (
+                    "registry",
+                    "provider",
+                    "execution",
+                    "risk_order_journal",
+                    "proof",
+                    "risk_gate",
+                    "accepted",
+                    "group_authority",
+                )
+            }
+            for account in _ACCOUNTS
+        }
+        coordinator_paths = {
+            "registry": str(tmp_path / "coordinator-registry.sqlite3"),
+            "groups": str(tmp_path / "coordinator-groups.sqlite3"),
+            "run_bindings": str(tmp_path / "coordinator-run-bindings.sqlite3"),
+        }
+        account_endpoints = {account: _endpoint() for account in _ACCOUNTS}
+        account_keys = {account: zmq.curve_keypair() for account in _ACCOUNTS}
+        coordinator_keys = zmq.curve_keypair()
+        coordinator_client_keys = zmq.curve_keypair()
+        strategy_keys = {strategy: zmq.curve_keypair() for strategy in _STRATEGIES}
+        account_configs = {
+            account: _account_service_config(
+                account, account_endpoints[account], f"arb02-account-server-{account}"
+            )
+            for account in _ACCOUNTS
+        }
+        context = multiprocessing.get_context("spawn")
+        provider_entered = context.Event()
+        provider_release = context.Event()
+        account_processes: dict[str, Any] = {}
+        account_controls: dict[str, Any] = {}
+        coordinator_process = None
+        coordinator_control = None
+        client_threads: dict[str, threading.Thread] = {}
+        client_commands: dict[str, queue.Queue] = {}
+        client_results: dict[str, queue.Queue] = {}
+        accepted_snapshot: GroupOrderSnapshot | None = None
+        denied_snapshot: GroupOrderSnapshot | None = None
+        request_a = _group_request(_GROUP_ACCEPTED, _STRATEGIES[0], metadata_reference_ns)
+        request_b = _group_request(_GROUP_DENIED, _STRATEGIES[1], metadata_reference_ns)
+    
+        try:
+            for account_ref in _ACCOUNTS:
+                parent_control, child_control = context.Pipe(duplex=True)
+                process = None
+                process_started = False
+                try:
+                    process = context.Process(
+                        name=f"arb02-account-host-{account_ref}",
+                        target=_account_host_process,
+                        args=(
+                            child_control,
+                            account_configs[account_ref],
+                            account_paths[account_ref]["registry"],
+                            account_paths[account_ref],
+                            account_ref,
+                            account_keys[account_ref][0],
+                            account_keys[account_ref][1],
+                            coordinator_client_keys[0],
+                            metadata_reference_ns,
+                            ("open",) if account_ref == "account-a" else ("filled",),
+                            provider_entered,
+                            provider_release,
+                        ),
+                    )
+                    process.start()
+                    process_started = True
+                    child_control.close()
+                    ready = _receive(parent_control)
+                    assert ready == ("ready", account_endpoints[account_ref])
+                except BaseException as startup_error:
+                    cleanup_error = _cleanup_failed_host_start(
+                        process,
+                        parent_control,
+                        child_control,
+                        process_started=process_started,
+                    )
+                    if cleanup_error is not None:
+                        add_note = getattr(startup_error, "add_note", None)
+                        if callable(add_note):
+                            add_note(
+                                "account Host startup cleanup also failed: "
+                                f"{type(cleanup_error).__name__}"
+                            )
+                    raise
+                assert process is not None
+                account_processes[account_ref] = process
+                account_controls[account_ref] = parent_control
+    
+            (
+                coordinator_process,
+                coordinator_control,
+                coordinator_endpoint,
+                upstream_bindings,
+            ) = _start_coordinator(
+                context,
+                account_configs,
+                coordinator_paths,
+                account_endpoints,
+                {account: account_keys[account][0] for account in _ACCOUNTS},
+                coordinator_keys,
+                coordinator_client_keys,
+                strategy_keys,
+                metadata_reference_ns,
+            )
+            _activate_owner_routes(account_controls, upstream_bindings)
+    
+            account_controls["account-a"].send(("arm-incomplete-fills",))
+            assert _receive(account_controls["account-a"]) == ("armed", "account-a")
+    
+            client_threads, client_commands, client_results = _new_client_threads(
+                coordinator_endpoint,
+                coordinator_keys[0],
+                strategy_keys,
+            )
+            client_commands[_STRATEGIES[0]].put(("submit", _GROUP_ACCEPTED, request_a))
+            first_started = _next_client_message(client_results[_STRATEGIES[0]], "started")
+            assert first_started[1:3] == ("submit", _GROUP_ACCEPTED)
+            assert provider_entered.wait(20), "first group never reached the synthetic provider"
+    
+            # The independent second Runtime begins its normal Curve RPC while the
+            # first provider write is durably present but deliberately unfinished.
+            client_commands[_STRATEGIES[1]].put(("submit", _GROUP_DENIED, request_b))
+            second_started = _next_client_message(client_results[_STRATEGIES[1]], "started")
+            assert second_started[1:3] == ("submit", _GROUP_DENIED)
+            assert first_started[3] < second_started[3]
+            assert not provider_release.is_set()
+            time.sleep(0.05)
+            provider_release.set()
+    
+            first_done = _next_client_message(client_results[_STRATEGIES[0]], "done")
+            second_done = _next_client_message(client_results[_STRATEGIES[1]], "done")
+            assert first_done[1:3] == ("submit", _GROUP_ACCEPTED)
+            assert second_done[1:3] == ("submit", _GROUP_DENIED)
+            assert second_done[3] < first_done[4], (
+                "the two public client submissions did not overlap while the first "
+                "provider write was held"
+            )
+            accepted_snapshot = _snapshot_from_reply(first_done[5])
+            denied_snapshot = _snapshot_from_reply(second_done[5])
+    
+            assert accepted_snapshot.request.portfolio_ref == denied_snapshot.request.portfolio_ref
+            assert accepted_snapshot.request.strategy_id != denied_snapshot.request.strategy_id
+            assert accepted_snapshot.budget_reservation is not None
+            assert accepted_snapshot.budget_reservation.gross_notional == Decimal("200")
+            assert accepted_snapshot.budget_reservation.state is GroupBudgetReservationState.HELD
+            assert accepted_snapshot.state is GroupOrderState.RECOVERY_REQUIRED
+            unknown_legs = tuple(leg for leg in accepted_snapshot.legs if leg.child_status is not None)
+            assert len(unknown_legs) == 1
+            assert unknown_legs[0].child_status.state is ExecutionState.UNKNOWN
+            assert unknown_legs[0].phase.value == "UNKNOWN"
+            assert unknown_legs[0].resolution_receipt is None
+    
+            assert denied_snapshot.state is GroupOrderState.REJECTED_BEFORE_DISPATCH
+            assert denied_snapshot.error_code == "group_budget_portfolio_limit_exceeded"
+            assert denied_snapshot.budget_reservation is not None
+            assert denied_snapshot.budget_reservation.state is GroupBudgetReservationState.DENIED
+            assert denied_snapshot.budget_reservation.gross_notional == Decimal("200")
+            assert all(item.phase.value == "NOT_STARTED" for item in denied_snapshot.reservations)
+    
+            # Exact provider counts for one UNKNOWN first leg: one write and one
+            # order/fill observation on account A, and no provider call on account
+            # B. The budget-denied second group has no additional provider effect.
+            provider_after_competition = {
+                account: _provider_snapshot(Path(account_paths[account]["provider"]))
+                for account in _ACCOUNTS
+            }
+            assert (
+                provider_after_competition["account-a"][0]
+                and len(provider_after_competition["account-a"][0]) == 1
+            )
+            assert provider_after_competition["account-a"][1] == {
+                "order_queries": 1,
+                "fill_queries": 1,
+            }
+            assert provider_after_competition["account-b"] == (
+                (),
+                {"order_queries": 0, "fill_queries": 0},
+            )
+    
+            # Query is a pure projection before shutdown; neither account owner is
+            # asked to dispatch or release anything for the denied group.
+            for strategy_ref, group_id, expected in (
+                (_STRATEGIES[0], _GROUP_ACCEPTED, accepted_snapshot),
+                (_STRATEGIES[1], _GROUP_DENIED, denied_snapshot),
+            ):
+                client_commands[strategy_ref].put(("query", group_id, None))
+                queried = _next_client_message(client_results[strategy_ref], "started")
+                assert queried[1:3] == ("query", group_id)
+                done = _next_client_message(client_results[strategy_ref], "done")
+                assert _query_reply_snapshot(done[5]) == expected
+    
+            _close_client_threads(client_threads, client_commands, client_results)
+            client_threads = {}
+            client_commands = {}
+            client_results = {}
+            _stop_process(coordinator_process, coordinator_control)
+            coordinator_process = None
+            coordinator_control = None
+    
+            # Reopen the same durable group budget and run-binding stores under a
+            # fresh normal coordinator Host epoch; account-owner Hosts stay live.
+            (
+                coordinator_process,
+                coordinator_control,
+                coordinator_endpoint,
+                upstream_bindings,
+            ) = _start_coordinator(
+                context,
+                account_configs,
+                coordinator_paths,
+                account_endpoints,
+                {account: account_keys[account][0] for account in _ACCOUNTS},
+                coordinator_keys,
+                coordinator_client_keys,
+                strategy_keys,
+                metadata_reference_ns,
+            )
+            client_threads, client_commands, client_results = _new_client_threads(
+                coordinator_endpoint,
+                coordinator_keys[0],
+                strategy_keys,
+            )
+    
+            for strategy_ref, group_id, expected in (
+                (_STRATEGIES[0], _GROUP_ACCEPTED, accepted_snapshot),
+                (_STRATEGIES[1], _GROUP_DENIED, denied_snapshot),
+            ):
+                client_commands[strategy_ref].put(("query", group_id, None))
+                _next_client_message(client_results[strategy_ref], "started")
+                done = _next_client_message(client_results[strategy_ref], "done")
+                assert _query_reply_snapshot(done[5]) == expected
+    
+            # Replaying the exact rejected request after reopen returns the same
+            # durable DENIED receipt and cannot rescore, reserve, claim, or dispatch.
+            client_commands[_STRATEGIES[1]].put(("submit", _GROUP_DENIED, request_b))
+            replay_started = _next_client_message(client_results[_STRATEGIES[1]], "started")
+            assert replay_started[1:3] == ("submit", _GROUP_DENIED)
+            replay_done = _next_client_message(client_results[_STRATEGIES[1]], "done")
+            replayed_denial = _snapshot_from_reply(replay_done[5])
+            assert replayed_denial == denied_snapshot
+    
+            _close_client_threads(client_threads, client_commands, client_results)
+            client_threads = {}
+            client_commands = {}
+            client_results = {}
+            _stop_process(coordinator_process, coordinator_control)
+            coordinator_process = None
+            coordinator_control = None
+        finally:
+            _cleanup_group_hosts(
+                provider_release=provider_release,
+                client_threads=client_threads,
+                client_commands=client_commands,
+                client_results=client_results,
+                coordinator_process=coordinator_process,
+                coordinator_control=coordinator_control,
+                account_processes=account_processes,
+                account_controls=account_controls,
+                close_client_threads=_close_client_threads,
+                stop_process=_stop_process,
+            )
+    
+        assert accepted_snapshot is not None and denied_snapshot is not None
+    
+        # Reopen durable projections only after every Host owner closed its DB.
+        groups = SqliteOrderGroupStore(coordinator_paths["groups"])
+        try:
+            assert groups.get(_PORTFOLIO, _GROUP_ACCEPTED) == accepted_snapshot
+            assert groups.get(_PORTFOLIO, _GROUP_DENIED) == denied_snapshot
+        finally:
+            groups.close()
+    
+        policy = _risk_policy()
+        for account_ref in _ACCOUNTS:
+            risk_scope = AccountScope("fixture", f"provider-{account_ref}", "simulation")
+            gate = DurableRiskGate(account_paths[account_ref]["risk_gate"], policy)
+            try:
+                admitted = gate.read_group_vector_snapshot(risk_scope, _GROUP_ACCEPTED)
+>               denied = gate.read_group_vector_snapshot(risk_scope, _GROUP_DENIED)
+
+tests\integration\test_arb02_group_budget_service.py:1728: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <bt_api_risk.core.admission.DurableRiskGate object at 0x00000137F2412510>
+scope = AccountScope(provider='fixture', account_id='provider-account-a', environment='simulation')
+group_id = 'arb02-last-budget-denied'
+
+    def read_group_vector_snapshot(
+        self, scope: AccountScope, group_id: str
+    ) -> RiskGroupReservationReceipt:
+        """Read exact persisted group state without changing any Risk rows.
+    
+        The receipt describes lifecycle, claim, and resolution state as stored
+        in one SQLite read snapshot. In particular, an elapsed group deadline
+        or permit expiry does not rewrite an ``ACTIVE`` row here. Consumers
+        must treat the returned state as historical facts, not dispatch
+        authorization. A leg is only a time-eligible claim candidate when its
+        persisted state is ACTIVE, it is unclaimed and unresolved, and the
+        caller's current UTC epoch-ns is before both ``deadline_ns`` and that
+        leg's ``expires_at_ns``. ``claim_group_leg`` remains authoritative and
+        rechecks current deadlines and policy on its write path.
+        """
+    
+        self._validate_group_key(scope, group_id)
+        with self._connection() as connection:
+            connection.execute("PRAGMA query_only = ON")
+            connection.execute("BEGIN")
+            try:
+                rows = connection.execute(
+                    """SELECT * FROM risk_reservations
+                       WHERE scope_key = ? AND group_id = ? ORDER BY group_leg_id""",
+                    (scope.key, group_id),
+                ).fetchall()
+                if not rows:
+>                   raise RiskDeniedError("GROUP_NOT_FOUND", "group reservation does not exist")
+E                   bt_api_risk.core.admission.RiskDeniedError: group reservation does not exist
+
+..\risk\src\bt_api_risk\core\admission.py:2837: RiskDeniedError
+---------------------------- Captured stderr call -----------------------------
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+- generated xml file: D:\bt_api_py\.codex-tmp\iteration10-arb02-group-budget-fixed-source-r4\qa-output-root-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/integration/test_arb02_group_budget_service.py::test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen
+1 failed in 13.56s

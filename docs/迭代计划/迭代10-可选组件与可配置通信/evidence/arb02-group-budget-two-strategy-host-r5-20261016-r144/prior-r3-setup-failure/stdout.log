@@ -1,0 +1,172 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+___ test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen ____
+
+tmp_path = WindowsPath('D:/bt_api_py/.codex-tmp/iteration10-arb02-group-budget-fixed-source-r3/qa-output-root-r1/pytest-tmp/test_two_strategy_clients_comp0')
+
+    @pytest.mark.integration
+    def test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen(
+        tmp_path: Path,
+    ) -> None:
+        """An overlapping second submission cannot spend an UNKNOWN-held budget twice."""
+    
+        metadata_reference_ns = time.time_ns()
+        account_paths = {
+            account: {
+                name: str(tmp_path / f"{account}-{name}.sqlite3")
+                for name in (
+                    "registry",
+                    "provider",
+                    "execution",
+                    "risk_order_journal",
+                    "proof",
+                    "risk_gate",
+                    "accepted",
+                    "group_authority",
+                )
+            }
+            for account in _ACCOUNTS
+        }
+        coordinator_paths = {
+            "registry": str(tmp_path / "coordinator-registry.sqlite3"),
+            "groups": str(tmp_path / "coordinator-groups.sqlite3"),
+            "run_bindings": str(tmp_path / "coordinator-run-bindings.sqlite3"),
+        }
+        account_endpoints = {account: _endpoint() for account in _ACCOUNTS}
+        account_keys = {account: zmq.curve_keypair() for account in _ACCOUNTS}
+        coordinator_keys = zmq.curve_keypair()
+        coordinator_client_keys = zmq.curve_keypair()
+        strategy_keys = {strategy: zmq.curve_keypair() for strategy in _STRATEGIES}
+        account_configs = {
+            account: _account_service_config(
+                account, account_endpoints[account], f"arb02-account-server-{account}"
+            )
+            for account in _ACCOUNTS
+        }
+        context = multiprocessing.get_context("spawn")
+        provider_entered = context.Event()
+        provider_release = context.Event()
+        account_processes: dict[str, Any] = {}
+        account_controls: dict[str, Any] = {}
+        coordinator_process = None
+        coordinator_control = None
+        client_threads: dict[str, threading.Thread] = {}
+        client_commands: dict[str, queue.Queue] = {}
+        client_results: dict[str, queue.Queue] = {}
+        accepted_snapshot: GroupOrderSnapshot | None = None
+        denied_snapshot: GroupOrderSnapshot | None = None
+        request_a = _group_request(_GROUP_ACCEPTED, _STRATEGIES[0], metadata_reference_ns)
+        request_b = _group_request(_GROUP_DENIED, _STRATEGIES[1], metadata_reference_ns)
+    
+        try:
+            for account_ref in _ACCOUNTS:
+                parent_control, child_control = context.Pipe(duplex=True)
+                process = None
+                process_started = False
+                try:
+                    process = context.Process(
+                        name=f"arb02-account-host-{account_ref}",
+                        target=_account_host_process,
+                        args=(
+                            child_control,
+                            account_configs[account_ref],
+                            account_paths[account_ref]["registry"],
+                            account_paths[account_ref],
+                            account_ref,
+                            account_keys[account_ref][0],
+                            account_keys[account_ref][1],
+                            coordinator_client_keys[0],
+                            metadata_reference_ns,
+                            ("open",) if account_ref == "account-a" else ("filled",),
+                            provider_entered,
+                            provider_release,
+                        ),
+                    )
+                    process.start()
+                    process_started = True
+                    child_control.close()
+                    ready = _receive(parent_control)
+                    assert ready == ("ready", account_endpoints[account_ref])
+                except BaseException as startup_error:
+                    cleanup_error = _cleanup_failed_host_start(
+                        process,
+                        parent_control,
+                        child_control,
+                        process_started=process_started,
+                    )
+                    if cleanup_error is not None:
+                        add_note = getattr(startup_error, "add_note", None)
+                        if callable(add_note):
+                            add_note(
+                                "account Host startup cleanup also failed: "
+                                f"{type(cleanup_error).__name__}"
+                            )
+                    raise
+                assert process is not None
+                account_processes[account_ref] = process
+                account_controls[account_ref] = parent_control
+    
+            (
+                coordinator_process,
+                coordinator_control,
+                coordinator_endpoint,
+                upstream_bindings,
+>           ) = _start_coordinator(
+                context,
+                account_configs,
+                coordinator_paths,
+                account_endpoints,
+                {account: account_keys[account][0] for account in _ACCOUNTS},
+                coordinator_keys,
+                coordinator_client_keys,
+                strategy_keys,
+                metadata_reference_ns,
+            )
+
+tests\integration\test_arb02_group_budget_service.py:1543: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\test_arb02_group_budget_service.py:1367: in _start_coordinator
+    ready = _receive(parent_control)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+control = <multiprocessing.connection.PipeConnection object at 0x0000024A53946990>
+
+    def _receive(control, *, timeout: float = 20.0) -> tuple[Any, ...]:
+        assert control.poll(timeout), "spawned ServiceHost did not answer within its bound"
+        message = control.recv()
+>       assert message and message[0] != "error", message
+E       AssertionError: ('error', 'OUTBOUND_DEPLOYMENT_INVALID')
+E       assert (('error', 'OUTBOUND_DEPLOYMENT_INVALID') and 'error' != 'error')
+E       coordinator startup cleanup also failed: BrokenPipeError
+
+tests\integration\test_service_execution_group_local_process.py:1030: AssertionError
+---------------------------- Captured stderr call -----------------------------
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+Process arb02-group-budget-coordinator:
+Traceback (most recent call last):
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "D:\bt_api_py\.codex-tmp\iteration10-arb02-group-budget-fixed-source-r3\candidate\sdk\tests\integration\test_arb02_group_budget_service.py", line 1082, in _coordinator_host_process
+    host.start()
+  File "D:\bt_api_py\.codex-tmp\iteration10-arb02-group-budget-fixed-source-r3\candidate\sdk\bt_api_py\service_host.py", line 335, in start
+    self._validate_outbound_bindings()
+  File "D:\bt_api_py\.codex-tmp\iteration10-arb02-group-budget-fixed-source-r3\candidate\sdk\bt_api_py\service_host.py", line 817, in _validate_outbound_bindings
+    raise ServiceHostError("OUTBOUND_DEPLOYMENT_INVALID") from None
+bt_api_py.service_host.ServiceHostError: OUTBOUND_DEPLOYMENT_INVALID
+- generated xml file: D:\bt_api_py\.codex-tmp\iteration10-arb02-group-budget-fixed-source-r3\qa-output-root-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/integration/test_arb02_group_budget_service.py::test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen
+1 failed in 13.20s

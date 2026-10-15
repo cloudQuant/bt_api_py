@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\qa-harness\\pytest.ini",
+    "--rootdir",
+    "D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\candidate\\sdk",
+    "-q",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\qa-output-author-r1\\junit.xml",
+    "--basetemp=D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\qa-output-author-r1\\pytest-tmp",
+    "tests/unit/test_service_deployment_group_writer_scopes.py",
+    "tests/unit/test_service_deployment.py::test_selected_bindings_cannot_create_two_writers_for_one_account"
+  ],
+  "cwd": "D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\candidate\\sdk",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\candidate\\sdk;D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\candidate\\base\\src;D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\candidate\\execution\\src;D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\candidate\\risk\\src;D:\\bt_api_py\\.codex-tmp\\arb02-deployment-validator-nohost-20261016-r3\\candidate\\transport\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-15T22:57:54.379742+00:00"
+}

@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T22:57:56.171885+00:00",
+  "source_count": 1715,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "4ad5fd00d0765fbf261b26f0eaf8d5f1255344fd451a2f9556c759155ec8abba",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FIXED_SOURCE_DEPLOYMENT_VALIDATOR_CONFIG_UNIT_ONLY_NO_HOST"
+}
