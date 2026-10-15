@@ -1,0 +1,63 @@
+{
+  "python": "C:\\anaconda3\\python.exe",
+  "cwd": "D:\\source_code\\backtrader",
+  "pythonpath": "D:\\temp\\backtrader-bt02-multistrategy-r1-20261016\\sdk-export;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src",
+  "modules": [
+    {
+      "name": "backtrader",
+      "file": "D:\\source_code\\backtrader\\backtrader\\__init__.py"
+    },
+    {
+      "name": "bt_api_py.service_config",
+      "file": "D:\\temp\\backtrader-bt02-multistrategy-r1-20261016\\sdk-export\\bt_api_py\\service_config.py"
+    },
+    {
+      "name": "bt_api_py.service_host",
+      "file": "D:\\temp\\backtrader-bt02-multistrategy-r1-20261016\\sdk-export\\bt_api_py\\service_host.py"
+    },
+    {
+      "name": "bt_api_py.service_registry",
+      "file": "D:\\temp\\backtrader-bt02-multistrategy-r1-20261016\\sdk-export\\bt_api_py\\service_registry.py"
+    },
+    {
+      "name": "bt_api_py.service_components",
+      "file": "D:\\temp\\backtrader-bt02-multistrategy-r1-20261016\\sdk-export\\bt_api_py\\service_components.py"
+    },
+    {
+      "name": "bt_api_py.service_runtime",
+      "file": "D:\\temp\\backtrader-bt02-multistrategy-r1-20261016\\sdk-export\\bt_api_py\\service_runtime.py"
+    },
+    {
+      "name": "bt_api_base.service_protocol",
+      "file": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py"
+    },
+    {
+      "name": "bt_api_execution",
+      "file": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\__init__.py"
+    },
+    {
+      "name": "bt_api_execution.service_component",
+      "file": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\service_component.py"
+    },
+    {
+      "name": "bt_api_transport_zmq",
+      "file": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\__init__.py"
+    },
+    {
+      "name": "bt_api_transport_zmq.server",
+      "file": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\server.py"
+    },
+    {
+      "name": "bt_api_transport_zmq.service_v2",
+      "file": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\service_v2.py"
+    },
+    {
+      "name": "zmq",
+      "file": "C:\\anaconda3\\Lib\\site-packages\\zmq\\__init__.py"
+    },
+    {
+      "name": "pandas",
+      "file": "C:\\anaconda3\\Lib\\site-packages\\pandas\\__init__.py"
+    }
+  ]
+}

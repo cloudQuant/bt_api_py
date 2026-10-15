@@ -1,0 +1,46 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+______ test_two_strategies_bind_distinct_read_books_on_one_shared_broker ______
+tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:760: in test_two_strategies_bind_distinct_read_books_on_one_shared_broker
+    strategies = session.run(_cerebro(broker))
+backtrader\stores\service_execution_session.py:521: in run
+    raise primary_error.with_traceback(primary_error.__traceback__)
+backtrader\stores\service_execution_session.py:426: in run
+    result = cerebro.run(**run_kwargs)
+backtrader\cerebro.py:106: in _wrapped
+    result = run_method(self, *args, **kwargs)
+backtrader\cerebro.py:766: in run
+    runstrat = self.runstrategies(iterstrat)
+backtrader\_cerebro\execution.py:320: in runstrategies
+    raise run_exception
+backtrader\_cerebro\execution.py:266: in runstrategies
+    self._runnext(runstrats)
+backtrader\_cerebro\runnext.py:532: in _runnext
+    strat._next()
+backtrader\strategy.py:1513: in _next_fast_simple
+    self.nextstart()
+backtrader\strategy.py:1937: in nextstart
+    super().nextstart()
+backtrader\lineiterator.py:1964: in nextstart
+    self.next()
+tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:617: in next
+    snapshot = self.account_book.snapshot()
+backtrader\stores\service_strategy_account_book.py:127: in snapshot
+    return _snapshot_from_reply(
+backtrader\stores\service_strategy_account_book.py:165: in _snapshot_from_reply
+    raise ServiceStrategyAccountBookError(
+E   backtrader.stores.service_strategy_account_book.ServiceStrategyAccountBookError: UNAVAILABLE
+---------------------------- Captured stderr call -----------------------------
+C:\Anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+============================== warnings summary ===============================
+C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\backtrader-bt02-multistrategy-root-20261016-r2\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py::test_two_strategies_bind_distinct_read_books_on_one_shared_broker
+1 failed, 1 warning in 8.83s

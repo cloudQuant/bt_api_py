@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--tb=short",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\backtrader-bt02-multistrategy-root-20261016-r3\\junit.xml",
+    "--basetemp=D:\\temp\\backtrader-bt02-multistrategy-root-20261016-r3\\pytest-tmp",
+    "tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py::test_two_strategies_bind_distinct_read_books_on_one_shared_broker"
+  ],
+  "cwd": "D:\\source_code\\backtrader",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\backtrader-bt02-multistrategy-r1-20261016\\sdk-export;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T16:42:40.435630+00:00"
+}

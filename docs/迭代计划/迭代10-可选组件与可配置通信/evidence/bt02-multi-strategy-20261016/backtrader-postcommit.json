@@ -1,0 +1,30 @@
+{
+  "status": "PASS_SCOPED_BACKTRADER_POSTCOMMIT",
+  "head": "815a834c3db185ee51c8927e6eea9cdb9fe32330",
+  "parent": "01fc254cfd4c81f659be7c4051b2d53a79b9fe6a",
+  "paths": [
+    "AGENTS.md",
+    "backtrader/stores/service_execution_session.py",
+    "backtrader/stores/service_strategy_account_book.py",
+    "backtrader/brokers/btapibroker.py",
+    "examples/service_execution_session/README.md",
+    "tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py"
+  ],
+  "raw_sha256": {
+    "AGENTS.md": "663853183fe02768bd742c37cf4be83f4cffb05d22f295af6fca0edbb5c56a9e",
+    "backtrader/stores/service_execution_session.py": "3862f50c52f84fd77219909c1cf06371d2ae6d0dedbe32de9b72e037992c5dd4",
+    "backtrader/stores/service_strategy_account_book.py": "56327a7b6a7d33a28fd043264030e856be25d97fa6f2465c9c833794bbddad77",
+    "backtrader/brokers/btapibroker.py": "a019933a953d3cfe9e179b0849a947e02ed5888a7ca2ea683320238776d00850",
+    "examples/service_execution_session/README.md": "3bab66b88f7b0e9e17424f117ffcd406e3731efa37485cce672c9c03f139966a",
+    "tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py": "ae8cccd0f66b9eee9070a1a17c6e6b5bda403aadf74fd17cdfa68199e4e0364f"
+  },
+  "index_empty": true,
+  "unrelated_tracked_changes_preserved": [
+    "0",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "evidence_level": "REAL_CEREBRO_LOCAL_SERVICEHOST_SYNTHETIC_PROVIDER",
+  "qa_repeated": false
+}

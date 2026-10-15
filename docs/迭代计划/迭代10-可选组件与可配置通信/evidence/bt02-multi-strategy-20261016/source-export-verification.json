@@ -1,0 +1,1230 @@
+{
+  "repository": "D:\\bt_api_py",
+  "commit": "7e1ad28429eb9b71c1be079402d80fbde8eb072f",
+  "tree": "cfd90520e334f9ad196f696a5cea30e433cfc7e6",
+  "archive_sha256": "583445c861706c3e8c05ab0b98964460ed8681fec5b68d61f4984882ca8271a2",
+  "archive_file_count": 173,
+  "crlf_normalized_count": 0,
+  "crlf_normalized_paths": [],
+  "initial_byte_comparison_diagnostic": {
+    "path": "bt_api_py/service_host.py",
+    "git_blob_size": 53591,
+    "archive_extracted_size": 54804,
+    "archive_lf_count": 1213,
+    "archive_crlf_count": 1213,
+    "resolution": "CRLF-only archive extraction difference; member reset from exact git cat-file blob and verified"
+  },
+  "files": [
+    {
+      "path": "bt_api_py/__init__.py",
+      "git_blob": "bbdf9a2017507b1013768320cac3282703a131b3",
+      "size_bytes": 10864,
+      "sha256": "4eaf3c55315f158b67d8e2506db6f387ad2dfeae237c335da72db69a25c61dc7",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_compat.py",
+      "git_blob": "fab147a3e52f596ec37fc51e8c1b390c1933bcc4",
+      "size_bytes": 86,
+      "sha256": "08d2bd8479603efd08f919afd13e3a9aaa27465f4f03f6a1d25b2e71814f5cef",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_contracts/__init__.py",
+      "git_blob": "ef29c601b9320b23d4890d0990018928cc14ac39",
+      "size_bytes": 2373,
+      "sha256": "98aaa5ada0d3f02d54f1a27290cb6ff378296c70c8ba5475611571e9d2b14b96",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_contracts/cache_policy.py",
+      "git_blob": "4db2411373fc778a2ce82c3e5ff0299b454b103d",
+      "size_bytes": 1531,
+      "sha256": "30e60a9d18d55d2903818e1a3dca1adfbbeb914412ead955a1f57d2fba46cf67",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_contracts/capabilities.py",
+      "git_blob": "f9572c21c1c9aa7286eb060f0d26469463ff6e59",
+      "size_bytes": 746,
+      "sha256": "303a368f412d8ceba67ab867f717fd6f81dff21d522cb0eaa59838b5b90861c2",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_contracts/errors.py",
+      "git_blob": "0b381b779dfa45f85fcb2cee7d4b4280df2a1f95",
+      "size_bytes": 4961,
+      "sha256": "7b63b0ec38ea99a9962a1a609ea64d6ccf4ff1271c148fae7dae520a5d16cff0",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_contracts/models.py",
+      "git_blob": "fc79d21528db397a6db2a596c035fce286947eda",
+      "size_bytes": 45714,
+      "sha256": "f2d90e8680820867bd300bf893f777995b1c4b1505059615aaacd566215e0a70",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_contracts/subscriptions.py",
+      "git_blob": "34bf9b86a00abe41bcb15218f294e947ebbfde2f",
+      "size_bytes": 360,
+      "sha256": "876c49dc25a03a0fb2c8a72880e124b97aa599a816e30a29659682ad1761e2ac",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_ctp_budget.py",
+      "git_blob": "16a7148f149384c2264d35404721c1c678ae2215",
+      "size_bytes": 26120,
+      "sha256": "cf5cae63435f48239477ce181bc46b5c27b8b1f9cc57077b3c2552e81e0c802b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_ctp_credential_binding.py",
+      "git_blob": "132e1f1eec03a413fb32997ebf92e45906744f9e",
+      "size_bytes": 17729,
+      "sha256": "698ca7aac861f02daca61262be2485548b6494b043b60c471dc4814bf4a0b48e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_ctp_execution_authorization.py",
+      "git_blob": "287b80ff868e4b894643ebad88b0cfdd5f80f565",
+      "size_bytes": 62306,
+      "sha256": "ddb1098ca16da975f4d8a6bc60f9ce89cbe600d4feedb43179e955577a7f08c0",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_ctp_probe.py",
+      "git_blob": "14b23ba32838dd46c9c065f4a903c37141b9864c",
+      "size_bytes": 2986,
+      "sha256": "2027cde4a15de95fef8826a6732eb64bd9b14687626b6051196c924f9a595611",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_direct_backend.py",
+      "git_blob": "637a7573be75e9a3166b91f5d3a944c63b9cc783",
+      "size_bytes": 18616,
+      "sha256": "ce7de29e81426701bdd717ce15721dc0605c636c35e93440911308a36549fa55",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_execution_session.py",
+      "git_blob": "e0ca27fbbd9ba76f2e3c7612176158c73c1edc92",
+      "size_bytes": 493214,
+      "sha256": "50567f940ad0a013834f976cb1ef61d5ce9fb58c47ece1fb26fbd550606b28b8",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_feed_adapter.py",
+      "git_blob": "e633a3c6e9a32683ac2f970da9ebd707ae0e4137",
+      "size_bytes": 2187,
+      "sha256": "576dde325a1f86a127b5ef0fb73bde61525a4a4449fc06f364059583b5b8e038",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_normalization.py",
+      "git_blob": "b7f2a467a37866f2b3e5c5594371fb0d515e1537",
+      "size_bytes": 104920,
+      "sha256": "61a73d9d4f2de1988192ee0963d2eddb95af7f6038aeb8b738a0f96cc324ac9e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_operation_backend.py",
+      "git_blob": "7f9b71e1bdf63f19a19582c657d33940f4c223b3",
+      "size_bytes": 3212,
+      "sha256": "6fe48ce146f232882899de8197f25687dd8f6118a3a95c98cfa95cb011c45f4b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_plugin_catalog.py",
+      "git_blob": "1fc24b2c5faa3a458187b1905505adcd7db1857a",
+      "size_bytes": 4876,
+      "sha256": "5ba67cedf2eb0808b88b854624bab0700cb3058b22f022d7be45951a1c91d216",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_venue_mappers/__init__.py",
+      "git_blob": "f93b13e05e9f307574c72478a65aec6ec82946f9",
+      "size_bytes": 1029,
+      "sha256": "e5cf4d9d32546df33474c573d42cb9c4a0afb881957bb73319d8c29000d67a2d",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_venue_mappers/_position.py",
+      "git_blob": "03a5cf3ff5e66e00cf8f86396fec37e00ec64c39",
+      "size_bytes": 1100,
+      "sha256": "07731f2b859b64726da9f7cf01686f6fc96162cfb9e264d67c553f8a7f2feb26",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_venue_mappers/binance.py",
+      "git_blob": "dee773b9bb240585095eb24eb6afb61f0ffa54e3",
+      "size_bytes": 12046,
+      "sha256": "dec78456b33bbf3bc91445aee9245daf524a68f04be4dc367022491700181cdf",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_venue_mappers/ctp.py",
+      "git_blob": "0b541995fe1c43ed86869717fed527c2f3494b51",
+      "size_bytes": 2073,
+      "sha256": "bbcaf0c68b9500a7ac3382d97eeb247cf9ef7fa0d36a9e1faa1000176124fb09",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/_venue_mappers/okx.py",
+      "git_blob": "88b12d84964cd9254b0f4e82f907f2b1f467f90a",
+      "size_bytes": 12102,
+      "sha256": "7b65d4e2705af33680ae17e56086c3e0a6c2ceafa460c60027cf4c24438ca907",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/backtrader/__init__.py",
+      "git_blob": "8fca0859934f553e853ecc4de89a7f6b6b2321a0",
+      "size_bytes": 115,
+      "sha256": "1f60fecf573884c1136a0dfecfbea597736c0c4c1eb130311e7ce393b9dad7ee",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/backtrader/btapibroker.py",
+      "git_blob": "bf88a9a177d77fdde8299a0608ca579a434db357",
+      "size_bytes": 965,
+      "sha256": "72bbc048572db21934a2a1e6bb00b8fb4dd930f83cebd4e1150fe225042e8a8e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/balance_manager.py",
+      "git_blob": "b0dc5ab681d0eb90181515858747c58808699e99",
+      "size_bytes": 3680,
+      "sha256": "1bd2ae19a35a26f6c197de874b2fcac893c0df4255361447114d6d452f9d1a4d",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/__init__.py",
+      "git_blob": "18ec3f6ec5697d1861745445b11466000436b0f7",
+      "size_bytes": 967,
+      "sha256": "297c7ab0b357cd3da5615a34f1140c27d98dc24529803a0b8638311cecc03c1e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/base.py",
+      "git_blob": "3b7e785eef3cbfa8c03ad8dee3b08cf406ea665e",
+      "size_bytes": 2482,
+      "sha256": "8047d767f641b5862fdceeacda1dfd47406e5d0eb6af6177abecc740cac4e83b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/errors.py",
+      "git_blob": "241a84a685b9ff995b91850f0a7be802d40e9bfe",
+      "size_bytes": 1067,
+      "sha256": "ca53549dc5e1b74e8b28400f3dc18690074759e64eb1e151ee4390efd84462e6",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/feed_bridge.py",
+      "git_blob": "fdb54a57934de0231f8a1290602a8cd4b7ded1d3",
+      "size_bytes": 7195,
+      "sha256": "27c2db4480cc24500d76c83b6ae0b7877cd31e00b0c90991a898f564928caac0",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/gateway_bridge.py",
+      "git_blob": "ababbe6d21f53199ff3885c658078a30bf6244f1",
+      "size_bytes": 2846,
+      "sha256": "324c484f891a2f5ed4493ba6ecb47555c4121324be6218a7f1284c4b1a263e9e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/loader.py",
+      "git_blob": "1619779cf22fa613256f96a68f32be2da69c0547",
+      "size_bytes": 2347,
+      "sha256": "7783377146b7e2e49e9f38b6c11106970083dd6d07345ee6a0fe35562d9c940a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/mock.py",
+      "git_blob": "93b856d2dc8c5455557032fccbe61b61f4c16289",
+      "size_bytes": 6014,
+      "sha256": "93bc87c1429ba99eefcb0dba58f1c69963eeda56585902e1abc34b55f318cc3b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/registry.py",
+      "git_blob": "8081784ef198054ebd3d93877497bf2756e4fd2e",
+      "size_bytes": 964,
+      "sha256": "837378568d4144cea14a3677a11afbadfdb08c764b9c9f6cb5da8cc567533a4a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/brokers/types.py",
+      "git_blob": "7a1d5d6b657e91240176b021f6e6bbcdb1d8eb25",
+      "size_bytes": 2832,
+      "sha256": "204f02fc4e22edde80f8545cce6d8aab494b60dd7bb406f834d2efc08ac82a2b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/bt_api.py",
+      "git_blob": "4dc955050a466642b9da1e46813f599e4d212de8",
+      "size_bytes": 418271,
+      "sha256": "621f26a6dbd5b91a1a60c2381d31a1d420e4a30293bcdda59233c54faa230245",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/certification/__init__.py",
+      "git_blob": "45e2adcd78e2e822a0370318c7863ff5420b39c3",
+      "size_bytes": 722,
+      "sha256": "ab6a4abbe7d32dced1176f6d2fd0eac1cea20134e40050f6fbf6ead965164b58",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/certification/audit.py",
+      "git_blob": "3ab9be6cd7f5538ddce27ed6088c1def09c5c189",
+      "size_bytes": 3887,
+      "sha256": "9dcf9b582e85096f92b07462408fc9c3655a2d9d1222ed49de4c2a9585ec9569",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/certification/scenarios.py",
+      "git_blob": "f02d088ed72b3fd3a5a000dbd14f52e4e29bdf2e",
+      "size_bytes": 8552,
+      "sha256": "2b51bbfadba54adc9977c5b7b82ebcc2dead0f99fe87a50f1fc1f56ce92a3b24",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/__init__.py",
+      "git_blob": "768c42f93f364e037a50871e8ed2dd99db48b874",
+      "size_bytes": 66,
+      "sha256": "7d851e1d0ee44e5085d40ba4ba4b4dbda328cefc0fe97c40ff0bd46283d75161",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/account_config_example.yaml",
+      "git_blob": "86ced1fedb5ea5c56971749e657afcb27a415ebd",
+      "size_bytes": 488,
+      "sha256": "e84ba13d97917acb82552591871f09ee759dd14220c3212ae49d03083ccaf27a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/balancer.yaml",
+      "git_blob": "eeb0b27b6b7cbe00432ac1387b11bb5bd30d26c4",
+      "size_bytes": 15756,
+      "sha256": "312807e77ad6ecda79a422e01be81f6d5ecf5f9e3e382919979f9a5776ea15dd",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/binance_spot_symbol_info.pkl",
+      "git_blob": "91af4bb2d8e3eb0e3bcc0d5c598bc225ad18e44c",
+      "size_bytes": 14003248,
+      "sha256": "11059498b96875ecde7c6ec978a238d744a4d1966ea8887472d1a62499133ab4",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/binance_swap_symbol_info.pkl",
+      "git_blob": "0562c119bf331bae80faf8b546455a4d99241120",
+      "size_bytes": 557700,
+      "sha256": "9a3264bbd1bb721178c926669b8d1efa79297268a5ea74c3a81f5ad323223d58",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/cow_swap.yaml",
+      "git_blob": "4aca63bb3df9d70fff26e7eb9350ba2ca79be682",
+      "size_bytes": 1655,
+      "sha256": "8555bdf6498f1b7e8fff63af2866e516b99ebaffc2ccab987b29711650aedd55",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/curve.yaml",
+      "git_blob": "ec548abe27a5fcf3888b3d2b5931bcbc573776a8",
+      "size_bytes": 2212,
+      "sha256": "a8faabc99f1ecb141ca0204029360b4389498bae5f38f1ec3e2a48d21090f9a6",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/exchange-bundles.toml",
+      "git_blob": "3312c5dd283f05572495614037c0bf21acc07ca4",
+      "size_bytes": 967,
+      "sha256": "107730a8a2c1198dec086fba83792ed0e7bde62a884afeb02b2e50e72edeebf4",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/pancakeswap.yaml",
+      "git_blob": "fb7f3bfeaad0879639cbd570a79606e61dfe3c86",
+      "size_bytes": 999,
+      "sha256": "208829c91a4925b15e9190c4a5096064894913724cf0b31f6c9d2de49cbebc6e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/raydium.yaml",
+      "git_blob": "c3c7ade40a324f0a92fa148818fd205186aa3770",
+      "size_bytes": 3007,
+      "sha256": "e17dee398a9021d3ea2024711fc032ba942c78c33f739cab5ea8961f42d71a0b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/sushiswap.yaml",
+      "git_blob": "a76f6eb506640f9e6d419825cd29747a623f244d",
+      "size_bytes": 4950,
+      "sha256": "34169f8b39369fb855c64d92516e39d9cafb1e92d8c5375d4a7ff5b43fd94b30",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/configs/uniswap.yaml",
+      "git_blob": "bd24d0c03daf7d4ae4367641e14b035be460b861",
+      "size_bytes": 6664,
+      "sha256": "325b820f132771f0636bb06ca3959427bde302c66a586e3d421958e1f128b3d3",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/cross_venue.py",
+      "git_blob": "a2c82f9fbb0e599a28796e992245880cc1a91eae",
+      "size_bytes": 34263,
+      "sha256": "5cd8b6e4f28b9a41b31c7d8e5b4e34eeb58fd3322d40eb12f2a0a415896dcb23",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/ctp_close_plan.py",
+      "git_blob": "a84782d11319d0148c7ee53b89e7054c6cb64ef3",
+      "size_bytes": 73437,
+      "sha256": "fdb4a9032dff5955a4af3d3578077cf78825b0582c6dceefdca8b99b286a546c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/ctp_env_selector.py",
+      "git_blob": "10b249449e1d8c64672484e7aec2d25c7479261c",
+      "size_bytes": 8805,
+      "sha256": "49a55d0f7edf20ae236dbd03beb687e97003152a75e84c5287882b99452ccf99",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/ctp_simnow_execution.py",
+      "git_blob": "83a0f6ad26e44969a84372365eb5222d199c4df9",
+      "size_bytes": 44194,
+      "sha256": "e97822f7d7c408688400cc5e61d1d5860477c9524b1426eb0145bd8905356323",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/data_downloader.py",
+      "git_blob": "739b681c5efb7ccb9332af23dc0843c30aa4f0d6",
+      "size_bytes": 6647,
+      "sha256": "d1fd10df1d24873341242033bfc6cf179ee03337a98080c5fe7c24f329ad6111",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/doctor.py",
+      "git_blob": "5f32b3cf14b50f663af605b7880743e5e51194a1",
+      "size_bytes": 1613,
+      "sha256": "c83a63261e8d7de4544613cbc8fb1e7fe8490b04ddd816ac5995d3344b93f90d",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/exceptions.py",
+      "git_blob": "ad8ee59351dfddf60c42c637ef01e32bd59e9f6c",
+      "size_bytes": 1599,
+      "sha256": "1776f03b4a62438c94793e5fc8522d8ca7152e2965fbb42dd4d435fe2d0dcd08",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/__init__.py",
+      "git_blob": "2743be8c85269ad45a88465a46e95a595bba9f40",
+      "size_bytes": 1543,
+      "sha256": "b732bb74dc6c810305e268c006644e935441d740c9b00c756f29789663c6d964",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/btapi_adapter.py",
+      "git_blob": "fcece5cb2c2fad6e6963504dd2ec006951be3350",
+      "size_bytes": 485,
+      "sha256": "31d41bb3063828a1a68a14e0d4344118431760269c1ef096b10851242ed4b9d6",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/btapi_backend.py",
+      "git_blob": "b82808ac11db65a40739362d12b0abd8f8d14c5a",
+      "size_bytes": 30612,
+      "sha256": "0e6b80a8caed783bdeb996e318bc58f305af8bd1cbdf66957fe13561d0cf9dff",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/btapi_bridge.py",
+      "git_blob": "08a25570b15ffeae874a5a8d24155a1760d24382",
+      "size_bytes": 4352,
+      "sha256": "f68eae4290eb6b86dc480d5a2f46a3eb35298f256ef58060d8c701bcf2c1228f",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/client.py",
+      "git_blob": "5db8c512b53b427ca9fefc3eda9a10ccaf7c4390",
+      "size_bytes": 32197,
+      "sha256": "c88c32290dce7114e6fb3cca9a19372f5b84eb60ab8736a41adc4aed51ae3112",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/hub.py",
+      "git_blob": "eee793d3bb44f5374d82ed3558d9ed91f9768cc7",
+      "size_bytes": 4334,
+      "sha256": "6d66f0b049e47137d9617ca6fa58b4febf0327974fa2d6057afb70e335cbe9b3",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/memory.py",
+      "git_blob": "1e146d3f991696ef7c3ced3904cf005940066685",
+      "size_bytes": 9962,
+      "sha256": "31d72c6c302f85c9ed128aa4b37245c1a4308b969955b6177461dc6b0c91188f",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/private_event_pump.py",
+      "git_blob": "e9f376dc443d8e4043ef5e88c0f8647301003875",
+      "size_bytes": 1835,
+      "sha256": "e072f0e0a3064feb78754993f76e492d4eafde2fa649546e7d53d8076122c204",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/router.py",
+      "git_blob": "09289eb1e033818a608e49ef8e0416c60c739f23",
+      "size_bytes": 38687,
+      "sha256": "f674d9f9505f0eef76bfcc0269e24a9629852fb08a48f814f54ea58ac084c451",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/schema.py",
+      "git_blob": "f9d96c841db94abed7783f02a5db6699325041d4",
+      "size_bytes": 12417,
+      "sha256": "22e81d33ce9d6cb7c75a28886485397e39258d64acd8a2d618b3db7d30496eb8",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/service.py",
+      "git_blob": "d54c0f90418087f5e191254fe815d4a60ffb4339",
+      "size_bytes": 9277,
+      "sha256": "c63f9eec9adad608a8605830f2fe22babea9a37ae3001b3a27a35a2f9057814a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/source_supervisor.py",
+      "git_blob": "d583f2c5a0c43e49de63a0e4fcd0c3d230629e20",
+      "size_bytes": 2775,
+      "sha256": "4e95d31b8a8e150427cf6782a685b4973f33e84cd3f94b7afa41a8b264d76670",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/state.py",
+      "git_blob": "95cfc285633841e4996b4a3d428f39062b111c02",
+      "size_bytes": 8407,
+      "sha256": "db43dc100dc5543540c47e339d3549ee52aed25c295f5d26e267737342bee59f",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/forwarding/transport.py",
+      "git_blob": "8eebdc91ac689fc019ffc00c50c71f8d675ec95a",
+      "size_bytes": 8956,
+      "sha256": "5e21b8c7000ced10f402bc1dcf6a60037db1cae519f8d916fa525d2c6eb0c621",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/gateway/__init__.py",
+      "git_blob": "ad80ac7564b6d62c7ca40a0b724c944aba279377",
+      "size_bytes": 402,
+      "sha256": "13684b26fc3d3d65cadb239887e2f2bd8b354bd350fe49dd95eede13110fcb3e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/gateway/client.py",
+      "git_blob": "6b2c88ff54f717fd063ae407bac032b9ae2b5300",
+      "size_bytes": 3048,
+      "sha256": "e8041f311e5e6387679d24ac4e6131be0f2d06ddfb9dee614420cafb42efd1d3",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/gateway/config.py",
+      "git_blob": "cd236195a2b95e6f493c7ebf520689dbbcf91243",
+      "size_bytes": 3270,
+      "sha256": "18444c395be639015ef47963ccdc346a6d1e2ccc87eab380c2a6e2157ca41f88",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/gateway/safety.py",
+      "git_blob": "f1cd4a4fe585bd6c8933edf0e2e58202e0a3abdf",
+      "size_bytes": 942,
+      "sha256": "505061ff9e0b9226aba7b28fadba9d917f4543af305b2097700bc239dd93a35b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/__init__.py",
+      "git_blob": "fc013acd16f57699925c249e84dcee78933b1f62",
+      "size_bytes": 3104,
+      "sha256": "8190223c7a30a61cb86bcfd422ee9f5cf41c97f338262853e017d83eb5be21ce",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/collector.py",
+      "git_blob": "7aa23afc0646f25d68faaae9f3d80789c5ee5153",
+      "size_bytes": 9599,
+      "sha256": "c5b889ef455389ca95d744d58b46545ef28b69ebd42b4982b45e7477d274c411",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/config.py",
+      "git_blob": "7d9144f6a4da680ebb6594741951180f33774d99",
+      "size_bytes": 9883,
+      "sha256": "26874a4e15fb3f57c7ab1f2e99fab00b0e478854827504c15d658d276cd2d335",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/decorators.py",
+      "git_blob": "2d18503ed6caa247d0fe1683bb686c7435e25a2a",
+      "size_bytes": 8717,
+      "sha256": "c83f0d72868aeb37f89880fe89201433ce5c55a919457c740f90bd8d32fe32f8",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/elk.py",
+      "git_blob": "16628059ae74d81b2e07c2ca85aa9fc89211d007",
+      "size_bytes": 19153,
+      "sha256": "77bbb6fa02d47777e0430cae04d8b52d8554325c93f89e2a791b42d4ef715dec",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/exchange_health.py",
+      "git_blob": "d862b156b2de7a3c727d66005809b28696bca85b",
+      "size_bytes": 13560,
+      "sha256": "b88d2bbb86c80d231ab9a57a0dabf1b8421ba1cc7df24ae7c50401fce10f3ca7",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/grafana.py",
+      "git_blob": "1f66ddb120b950a61cd0a4cf6d506cf3c832e12b",
+      "size_bytes": 20326,
+      "sha256": "44cd3a50f2097255b55b8be90bf0b2bd2153b0d56e53a398ffc774698604599f",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/metrics.py",
+      "git_blob": "b4d94dee556eda6a6d9487f26dd289bc0cce9f3a",
+      "size_bytes": 8004,
+      "sha256": "c6d5dcfabb6d04f51fff4b7e6bc578a7f900c87043c7efbd954f2d86b7a3525d",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/prometheus.py",
+      "git_blob": "8bca90d67748e460f17a8c3a752531dcf49782a8",
+      "size_bytes": 11132,
+      "sha256": "f6d8a31f37df86350bfb5e5f98780b029e5215ed8244a376b3167134bc73e8e1",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/monitoring/system_metrics.py",
+      "git_blob": "318151aefb575c938ba39af84ccce7ee011bb9aa",
+      "size_bytes": 13633,
+      "sha256": "d3e4d480b37ff45025029ed21c50889db34f2804be6045d79695d0bbd7ec4d6c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/py.typed",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/__init__.py",
+      "git_blob": "1bcb2e289b4ad0ad56c02121c3a38fcc9d2cbf75",
+      "size_bytes": 1899,
+      "sha256": "2eb76ff5c598cd82c3ce3d47b324683e729294995715fa5253feeb303c638f3e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/containers/__init__.py",
+      "git_blob": "2bc594d4ced1eab3842e296392bb08684b153806",
+      "size_bytes": 317,
+      "sha256": "fcf688536e7c6232fa6c47021e56fb06acef2675bd96f0a07f44dc24c75b37b1",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/containers/risk_events.py",
+      "git_blob": "22949fcedfda931961dacb9a1cbbb545b11517f6",
+      "size_bytes": 10709,
+      "sha256": "05b8322b4153ac350b2e2d86ab20e1ff92a94fffc891227495072b764ad58160",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/containers/risk_metrics.py",
+      "git_blob": "f629f86cd3530cbb5d9258cb473722cb1aa7de12",
+      "size_bytes": 10210,
+      "sha256": "2a80eeb7f2b73c392d46367a150c3fc105272fd00b0d0f8a0e7b8c010163dd8e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/__init__.py",
+      "git_blob": "fee0f3e41d65444e7d841a203ed592d02b15edb7",
+      "size_bytes": 366,
+      "sha256": "1d9f2658384bcd3906d7b942e2596ea22f48a72bbd1660f4ac3bdd7344d59fc7",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/actions.py",
+      "git_blob": "da11e4d7cb4662a32b226108f6edbf18453619b4",
+      "size_bytes": 6032,
+      "sha256": "cdcf56694488510ce4c11c97090449a98e866b8b41f23270359caa4697dcd85b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/compliance_limits.py",
+      "git_blob": "1141ac01f98873e1c5a1841b750e8c0f64af11c1",
+      "size_bytes": 689,
+      "sha256": "7c961b2955fb324a4dc685206a2fe156430ea476c6fe42a18c0ddcbcffa060ee",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/compliance_risk.py",
+      "git_blob": "c80832a5c31a4b38729109095c084b479eba9a8e",
+      "size_bytes": 3421,
+      "sha256": "1eb5153ae1c6b40f694fcd158cb7374c1dc41da74c3b02297b1c768dd041341c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/credit_risk.py",
+      "git_blob": "6d02af289968727b6569f5c8dc6a7d279714d1f8",
+      "size_bytes": 3719,
+      "sha256": "00fbe7b968929ca40a554e2d55510b4d4c4332c72ce32a7847c15ebe0ff8b287",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/limits_manager.py",
+      "git_blob": "8fa362f1a38a75967604f1a5b0da3cd30560094f",
+      "size_bytes": 16610,
+      "sha256": "a330168d3079143ac6963d3181b68a703177f6191cc636617b55a5ed4bc2d46c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/limits_types.py",
+      "git_blob": "b9311fac98b4353070ae207d2447a6906191c990",
+      "size_bytes": 2175,
+      "sha256": "a90a3a0948f8148abdbb06bef737843be92958ec4426eea77cbc0f57ee888557",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/liquidity_risk.py",
+      "git_blob": "402cd88b88c3df516413358f441ab8c8ba1410e8",
+      "size_bytes": 4596,
+      "sha256": "04bcf059b476822805bafd3e501feffaf811807374a29981b572b2041c8a9867",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/margin_limits.py",
+      "git_blob": "bb3c26bdea6bd570e292fb4fea5adcfb682548c9",
+      "size_bytes": 2058,
+      "sha256": "958261c8a9f2837fa35a8df3a784cb59420d5de672e2b38ac85ee73a6ca27255",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/market_risk.py",
+      "git_blob": "8912f94f343226bf90b64a17b109aeda07b83cf3",
+      "size_bytes": 7209,
+      "sha256": "25da6c2a4f309c28e55f61938575ceeb681d4ac3f8d0d1e9113efd68b5899354",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/operational_risk.py",
+      "git_blob": "594fe0aed3e5e00392395030595bc24eb20545b6",
+      "size_bytes": 5231,
+      "sha256": "7d0615b73b7e37c69427d66b68cd6c99c228169e70ef2f7c191ed317e430ec65",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/order_limits.py",
+      "git_blob": "f222d92f52d135a605a8617b55933dedcbe3c0ba",
+      "size_bytes": 3531,
+      "sha256": "cab4129cda754898fe7bc367fc0958c96ac31a5db47eb68ed041c146b4920086",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/policy_engine.py",
+      "git_blob": "901b98f2d6f543324e1db03d32788df184d70bba",
+      "size_bytes": 20382,
+      "sha256": "f51abf5bcd9d8a62b1fb97ddd124868c2108ec1ca56b060931e0afe8a20ac6e2",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/policy_types.py",
+      "git_blob": "f8fd2948139b6ff905f8a46a7c6958dacd1a4f81",
+      "size_bytes": 904,
+      "sha256": "0ff3c67d4960fd6669365aad1031352c7ad5981ca7aca69a8d185f77143453f4",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/position_limits.py",
+      "git_blob": "c1880802a96523e2d32a4af21d82a5aeb05082b0",
+      "size_bytes": 7585,
+      "sha256": "d53a5069715743071d4611db48cafad0c77c2803f4f4b82c402cda1699d0c52f",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/position_risk.py",
+      "git_blob": "589dfd2c9e95e10a24b82ee28cd1c99612501f73",
+      "size_bytes": 2165,
+      "sha256": "ec115badcfe5a2696ee289636c1ae2bebcb590a343926cd2e97c69b57bd8c3e3",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/risk_assessor.py",
+      "git_blob": "df514a44df1ae47082a139edbe425558054d5f0f",
+      "size_bytes": 16842,
+      "sha256": "80fa6a339f4b81e0dd79118ae53806c68b540266cc195a2cf3363938fd884613",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/risk_calculator.py",
+      "git_blob": "c170541a6933ea85e846bfe562587c6983184a39",
+      "size_bytes": 10436,
+      "sha256": "27d53af7481cf764237c2641803370101ea48e0e0775ed7b694696684ba9b822",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/risk_limits.py",
+      "git_blob": "353fa45c5eb9e3976e9d05f402f01a3eac6a4433",
+      "size_bytes": 2298,
+      "sha256": "461f676bc03c627d5de00c51bdead1176d49b04adab3dea099f91790b31d3f86",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/core/risk_manager.py",
+      "git_blob": "41b01383c12e18106f4ada94996f890335e89682",
+      "size_bytes": 15022,
+      "sha256": "8168e80d9330c678d8a1b4ca314c3975cff2d6e962cb77525675f2c53ed33cbf",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/ml_models/__init__.py",
+      "git_blob": "e7df2b04eeb16d8f48af7c6f9defc1f390606620",
+      "size_bytes": 251,
+      "sha256": "1b80d8b9d96e863d1510f79162e392ef49a5a7318881ad9229ffe5969ab09e93",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/ml_models/anomaly_detector.py",
+      "git_blob": "a7e39e7fec43832492c2e33119f2272cff5954cc",
+      "size_bytes": 21836,
+      "sha256": "0f510599fad3590fc370f039a5aa8ebce539265430bb513a380e07dcfd704bdf",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/ml_models/anomaly_detectors.py",
+      "git_blob": "c0c15a1f29e2d9c2384285adbf50bc5c8b6de693",
+      "size_bytes": 9100,
+      "sha256": "138aa4dc8ee965f3310c39cc6154d0976fd4b5e5e1136d0492f71c3763ba81a4",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/ml_models/anomaly_types.py",
+      "git_blob": "0270e481eaa5a755a51a209f44b3716798c7f29c",
+      "size_bytes": 2148,
+      "sha256": "7044944dde3a7141139f160d7c962a7f71b4c367c58f10e5343edbedafcff2cc",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/ml_models/ensemble_model.py",
+      "git_blob": "f80ff51a0566266ebf1747bbdde3a4ee8fe402cc",
+      "size_bytes": 24915,
+      "sha256": "058ec4b48eb415ca9fb85fe18ff541d045ebf2e2260be7e790834eda641127aa",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/risk_management/ml_models/ml_base.py",
+      "git_blob": "511795ed956da1d3aa038ca6da3239cbddfe0f5b",
+      "size_bytes": 13906,
+      "sha256": "ff082deee368cbb589c62d125e3f50efa0a4d72139ac8b1d1039171c76e79743",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/__init__.py",
+      "git_blob": "36cc9d7331eeceedc23f57355b89384daf8adcab",
+      "size_bytes": 4227,
+      "sha256": "585097eb7f9d3c76908530fd44c1f998a965428aea3d3afa6feab3169e9e3c0e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/cancellation_control.py",
+      "git_blob": "0fa32de6f0f11b73a177b770cb2c74ae39cefed7",
+      "size_bytes": 60346,
+      "sha256": "c54b52eb85b349640e71f6a32b424b6119a5516eaa0d15560b9d5ca2278b5837",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/catalog.py",
+      "git_blob": "eef5167478c949b53ab2557f5f5cf7ddbdbf0f63",
+      "size_bytes": 5274,
+      "sha256": "bcef090d2c3fbec6bf4af5d6f370f3da271f56edad3018676babb1fe08d91148",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/contracts.py",
+      "git_blob": "21bff4a5b021d60aa4e048913803cfcc9ad07a8f",
+      "size_bytes": 8345,
+      "sha256": "bf00684cd9c7d76a391b034ce61e5572bdaa7b7a4b3c00653abc12238791fc84",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/fake_dispatch_authority.py",
+      "git_blob": "32768a7f5ee275cb527f665bf470d87cd1ee3bea",
+      "size_bytes": 46420,
+      "sha256": "6948e8c9f812f8f159cfde3399531cacec78c081e18dbedd7a97adf43555649a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/gateway_dispatch.py",
+      "git_blob": "6a1e0fe2c3e74999fa8ef1529ee8fa2260a6530b",
+      "size_bytes": 47746,
+      "sha256": "d733d775df55757596ddd2c09ef76165d3c0237fc051552391f59150e70be573",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/instrument_risk.py",
+      "git_blob": "adccda4507b03598edfc5a135eef268b66918335",
+      "size_bytes": 29378,
+      "sha256": "0b1c976b6e8247c29214354ad4845602ef46088ad54f89b62c9e2a10f5b3340a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/managed.py",
+      "git_blob": "dd3dec99625e3d31de38336d09beb84660b5079a",
+      "size_bytes": 49066,
+      "sha256": "31e9760c254882104c99698522df758547ad5405dbe5fd75008cac57945e0b5c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/managed_recovery.py",
+      "git_blob": "f53ac6513752245b7df98df15374fb6c6bfeff43",
+      "size_bytes": 34386,
+      "sha256": "a6e5267b46620ad1a69c49fd6b4f8033c0ac5ab96fb8f98dacd34c580fda2bae",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/runtime_plugins/reconcile_control.py",
+      "git_blob": "6afa6b80a04776e689f6012ec827f965cd61a675",
+      "size_bytes": 59661,
+      "sha256": "b044e98bbc2a8a37232bbce80a22360371bd530f6a694db9d8e89cdd304f8413",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/__init__.py",
+      "git_blob": "670374147ea2ae0a8f79cc8add6b59089ab1945b",
+      "size_bytes": 2839,
+      "sha256": "8e1e9fbd329ca8c8bda656f1f5af8963d3e974d414f9f6f1331b0cf2581e82de",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/auth/__init__.py",
+      "git_blob": "03b8a462e982f24b4508745b3984d84a8f6ea163",
+      "size_bytes": 221,
+      "sha256": "3c1ae8922cf4db36766a5ee2a4c5b0c98b3112521d11ca5b3abf53a9b9d435fc",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/auth/mfa_provider.py",
+      "git_blob": "e3a4abb23a52ce479c8d425847e0bc17695a8d9f",
+      "size_bytes": 19068,
+      "sha256": "1b24d0441f6a18136868ed874d116d06a9e60200f26b341dcad04090337b05d4",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/auth/oauth2_provider.py",
+      "git_blob": "74c3403bb9492688c3ad355c4bda9183b483f88b",
+      "size_bytes": 25833,
+      "sha256": "c1b9bb056451553a9a90cf884d138999070216746c0bf29971d3d5bfc46cc26d",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/core/__init__.py",
+      "git_blob": "8f59b9bda84c1eaa796abdd3e1ce5b389c986288",
+      "size_bytes": 724,
+      "sha256": "ba8b07858d362ebbbcd86e091e5ba2e4cfecc28937adba8781c736f1db13833f",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/core/access_control.py",
+      "git_blob": "c216aeae0eabaf1e798f9f856d3c169083729ee1",
+      "size_bytes": 14584,
+      "sha256": "ac429bbc89ede481f9b57fdeecd504836c9bccf9fbe35e97950c31bbec97e227",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/core/audit_logger.py",
+      "git_blob": "84e53f23a8fd395c73d997712a57eb84c76b0026",
+      "size_bytes": 19614,
+      "sha256": "bda6fbdfc2a4d962dd702f67202b79d0578c96643901e337f18f7807c8f609cf",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/core/compliance_monitor.py",
+      "git_blob": "d3af815052f837bfe83be890c5dd5c06ee5aa8e4",
+      "size_bytes": 5190,
+      "sha256": "ab053b46fc2dec288db8575612fb17db4aed057cb9753f5c1f0d7218b388a670",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/core/encryption_manager.py",
+      "git_blob": "e1fc871bbe9178f464ca91388d803289b7dca3ca",
+      "size_bytes": 24019,
+      "sha256": "5aa22b432bc2edc466f240f3decc54a1503c5c541d7cd7195e2ea5132b5e5fe8",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/core/identity_manager.py",
+      "git_blob": "1ea2623e88332e7111b6fbe21e84b9f3e564ef1e",
+      "size_bytes": 15605,
+      "sha256": "69453004fd133a0360a1a651f4317bc0919fda5bdb1d481246a843f35a10b733",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/core/threat_detection.py",
+      "git_blob": "6ab571d980e8915f8971e72316a3a65d05ad9d5f",
+      "size_bytes": 12778,
+      "sha256": "3fb5e416c6e3386e080351b264947151d96f5e25bef8aa91f12af7a16716fff8",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/data/__init__.py",
+      "git_blob": "1961d5503e202fb4124831b4389f0e45be0d0103",
+      "size_bytes": 178,
+      "sha256": "1aeb92652b1ebcbd10aaae2b656315ac8675e6226711442d94f794ce95ad0e7a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/data/protection.py",
+      "git_blob": "21b9f19b5e3d091582781f4b11db1122e5f07bd1",
+      "size_bytes": 15240,
+      "sha256": "66b581d8e81376f464661b9c0595cdeef71abb817312a75501d11216fb2ee244",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/framework.py",
+      "git_blob": "02939080a5c43f9ecd32d3062d705ed347321cb1",
+      "size_bytes": 16113,
+      "sha256": "2b14597e9bf77b98749b270687fd127b31a39b100f3c973e8a79f9618bdb4186",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/monitoring/__init__.py",
+      "git_blob": "ce9d8f3a81c04ceaff10c1d37d1de241ab184146",
+      "size_bytes": 176,
+      "sha256": "27c634b67d8c496e01f8543205e7a4b16637d6d93bec4661084b0ac9c9bd00d6",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/monitoring/security_monitoring.py",
+      "git_blob": "e6ab47d44c239e7e941c4959f161d9e8061a4d88",
+      "size_bytes": 4614,
+      "sha256": "c6111b29d505bb6f4f0db004b66c658e52c6453ed15d1921baca39e94462bc24",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/network/__init__.py",
+      "git_blob": "c36accca32a00e7b3e2e739dcaa767a7ebb7caea",
+      "size_bytes": 181,
+      "sha256": "9b9b96a1aaef6db0d682a01501e12457822ae09e88e8f9390e9f4bd3004f8f6b",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/network/tls_manager.py",
+      "git_blob": "15a9e050809482906557fc2226333a956f581c2f",
+      "size_bytes": 2427,
+      "sha256": "3b1ede421053c83d1c56db73769dc504b090f6a31bda10d610a05bf16cd66682",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/recovery/__init__.py",
+      "git_blob": "2be3caae7e13a70009c1b64bae22b33d93ff61fb",
+      "size_bytes": 182,
+      "sha256": "11ae110f554b58e25834037dbe51d297b8dd1477d12318ff141d3653e76eebd8",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/security_compliance/recovery/disaster_recovery.py",
+      "git_blob": "ba352204cc69396340c22c0ee2e48f60ee857382",
+      "size_bytes": 7225,
+      "sha256": "c5cb598ec6b7391249cba4ba392a8b57d6d4cf849d81fb8b3597c7299ad13db5",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_account.py",
+      "git_blob": "d2b0199b74fec6c7b3de999b9b1d3c95bf710d73",
+      "size_bytes": 18534,
+      "sha256": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_account_consumer.py",
+      "git_blob": "dff28fa2208ce2bdeb116bc444ac424e5e3f962f",
+      "size_bytes": 22539,
+      "sha256": "ab826191d444465e33900d316a709158ca3dacd6328727e10ce2be46ef9d2f58",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_account_projection.py",
+      "git_blob": "b20c5a51b535d1ca56e1145258f6ae616e0b86f5",
+      "size_bytes": 37131,
+      "sha256": "ab32d2cf59a87093c9567bf9ea22ae541448c5a8ffcb822f6d50c0c0a497da14",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_components.py",
+      "git_blob": "8b3198f77e6b749776c64f0af6aa1eb269e1539b",
+      "size_bytes": 68150,
+      "sha256": "c761bf3645a936e23ef33097fd2724197cbf43b79fda88de0cb80f11e75627ef",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_config.py",
+      "git_blob": "1a058d1c1ba7cc12537f52473140b1222e0e66cf",
+      "size_bytes": 45951,
+      "sha256": "599aab9beb2f97aef3e59c7f9ac4a4ea733bb1e0880b6f5ed37ef72c0cf8458c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_config_io.py",
+      "git_blob": "5a93b5511e827c3183e6e29f2a6225736e3910f9",
+      "size_bytes": 5033,
+      "sha256": "54890a5c41bfe0046b8a39fac40d08a2fcf6caa8a38df6b5fc6a739e9918e4b4",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_deployment.py",
+      "git_blob": "1c3662799335f13837f8f35d77f103c995e55128",
+      "size_bytes": 21792,
+      "sha256": "0184ef0647df85b76a94c14c330129325c4ab5f4910e06cac2edae80584caa31",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_execution.py",
+      "git_blob": "f769d4e4d8f2847535e13ff7501e2a1dfe803581",
+      "size_bytes": 21330,
+      "sha256": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_execution_account_books.py",
+      "git_blob": "1a776ea64d6cbe90a9ac5692d289da13e44b3bff",
+      "size_bytes": 21825,
+      "sha256": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_execution_group_authority.py",
+      "git_blob": "190847a6dfd31e5e9ef844a3b23027b7e95fb72f",
+      "size_bytes": 73943,
+      "sha256": "e1b9da627554b3adaef9168a4dcc43cce73731c02f5afb68fb9bb5f95468491c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_execution_monitor.py",
+      "git_blob": "0d793a64a4b662dab9d0757e7521661054ba87df",
+      "size_bytes": 42136,
+      "sha256": "6e10bc4bb3978d9011d796e903639ac7896168719a9f6e442302895787f4537d",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "git_blob": "8c34e61156cd2100a6fe527c782bc4b144f978fe",
+      "size_bytes": 53591,
+      "sha256": "ff9c284530f605933f42966665c4ac19fcf1ef06d00630ad622e9962b460964d",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_market.py",
+      "git_blob": "e3cbb35dbd3c55cfe3aab5185d50d98563d864d5",
+      "size_bytes": 51773,
+      "sha256": "5b7a357693ef4ddc50ef397f4bfc67ca7116ab2809850c03ee07f05a18bc75b6",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_market_monitor.py",
+      "git_blob": "bbee7fe5e10fbba73377143427cc0239468daed3",
+      "size_bytes": 19211,
+      "sha256": "de2831bd99d0103d09cb7018140f548c61a43945faa223e2787fd78e380a4f52",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_monitor.py",
+      "git_blob": "af21c6523520ca48525015e5d1e4dca94b03a3bd",
+      "size_bytes": 10062,
+      "sha256": "6fbc850967e8417b5f9e669b3fce8aee23b3987df37099787d316995cc67abd6",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_monitor_control.py",
+      "git_blob": "966dd109573f777b89f7a2c3f11fc20d9449e8ee",
+      "size_bytes": 19885,
+      "sha256": "d2f3ac6abc804632778d612a8944f0195da6798d5275ad696802f62c6a9e3c45",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_registry.py",
+      "git_blob": "53db8d30d8eab078fb7e1e92300fe38cd7e81d27",
+      "size_bytes": 64135,
+      "sha256": "5b471855cdfbf98d18c0987783469ef82f4fbe05377c3e9706ca13063fff002c",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_risk_order_entry.py",
+      "git_blob": "05f167f2d259b5715e2bc5f116c577bfcc0d531d",
+      "size_bytes": 104492,
+      "sha256": "16540e7c4c391d932a32f036bc352810f171e0fbdfff7a8db09ea1bc968acbce",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_risk_order_journal.py",
+      "git_blob": "9a6b587b4989ad8e346ee68e23c724e36b205ffb",
+      "size_bytes": 118395,
+      "sha256": "bcb6976f6c2d93c08186cacccf4dff7c53b024f54adcbce012e79ec5663e72cf",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_runtime.py",
+      "git_blob": "31f74087cd83f909ad52ab9887a774fd14c2c666",
+      "size_bytes": 72551,
+      "sha256": "60d3769b446d21f47a3b0501090e41eee8f1d5ae117555e27cfc16ff5f108878",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/service_telemetry.py",
+      "git_blob": "6c8137172549002a2cfd3159461d2c9390dd122f",
+      "size_bytes": 18683,
+      "sha256": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/testing/__init__.py",
+      "git_blob": "8301407ca6a8839ef48253f85b90c004f8835fbd",
+      "size_bytes": 455,
+      "sha256": "a81cb87945c7d6caa135d3f4949b41ed2674d216ba31444655d0ae612e55e7d5",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/testing/contract_cases.py",
+      "git_blob": "02c8fcb80309c887d2173ca5ee17135de2449386",
+      "size_bytes": 2503,
+      "sha256": "369195317037a0c5b561a3d56974625c8cb27c6c99c0e50887cdc0075403a035",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/testing/fixtures.py",
+      "git_blob": "9b7483f50d59fab4770d5a4ca988bbbf4d61c4b2",
+      "size_bytes": 1737,
+      "sha256": "0c8b7b0d65a057254321b7aa514b6da3ac6df5bc47283eb29e84f6adeef42847",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/utils/__init__.py",
+      "git_blob": "2648a404677f5378d74d5245927a43ba9781c59c",
+      "size_bytes": 37,
+      "sha256": "a606304c901dde0f6d2a6e3520560d56841bd3045d9392df9104994654fe6f1a",
+      "archive_line_endings_normalized": false
+    },
+    {
+      "path": "bt_api_py/utils/hyperliquid_types.py",
+      "git_blob": "4cda1b2315f3f8941834489bc98008756f681fe9",
+      "size_bytes": 750,
+      "sha256": "8960ea276fdbee5d85738e02e2ecbbae5ada178853b0afd1c3ad9b85c08d3898",
+      "archive_line_endings_normalized": false
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T16:42:49.506933+00:00",
+  "source_count": 808,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\backtrader": "01fc254cfd4c81f659be7c4051b2d53a79b9fe6a",
+    "D:\\bt_api_py": "7e1ad28429eb9b71c1be079402d80fbde8eb072f",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "9943e7bb26ba91754462b23308bc24d352faa16d",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "heads_after": {
+    "D:\\source_code\\backtrader": "01fc254cfd4c81f659be7c4051b2d53a79b9fe6a",
+    "D:\\bt_api_py": "7e1ad28429eb9b71c1be079402d80fbde8eb072f",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "9943e7bb26ba91754462b23308bc24d352faa16d",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "d0710dddcf2eea19855b6e44b057e2375eeac62f015f415588d888ac9cd0947e",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "REAL_CEREBRO_SHARED_BROKER_LOCAL_SERVICEHOST_SYNTHETIC_PROVIDER"
+}

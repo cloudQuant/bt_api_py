@@ -1,0 +1,44 @@
+F.                                                                       [100%]
+================================== FAILURES ===================================
+______ test_two_strategies_bind_distinct_read_books_on_one_shared_broker ______
+tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:752: in test_two_strategies_bind_distinct_read_books_on_one_shared_broker
+    strategies = session.run(_cerebro(broker))
+backtrader\stores\service_execution_session.py:521: in run
+    raise primary_error.with_traceback(primary_error.__traceback__)
+backtrader\stores\service_execution_session.py:426: in run
+    result = cerebro.run(**run_kwargs)
+backtrader\cerebro.py:106: in _wrapped
+    result = run_method(self, *args, **kwargs)
+backtrader\cerebro.py:766: in run
+    runstrat = self.runstrategies(iterstrat)
+backtrader\_cerebro\execution.py:223: in runstrategies
+    strat._start()
+backtrader\strategy.py:1795: in _start
+    self.start()
+tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:662: in start
+    self.rejected_order = self.buy(data=self.data, size=1.0)
+backtrader\strategy.py:2617: in buy
+    order = self.broker.buy(
+backtrader\brokers\btapibroker.py:4276: in buy
+    order = BuyOrder(
+backtrader\order.py:925: in __init__
+    super().__init__(**kwargs)
+backtrader\order.py:578: in __init__
+    pclose = self.data.close[0] if not self.p.simulated else self.price
+backtrader\linebuffer.py:472: in __getitem__
+    raise IndexError("array index out of range")
+E   IndexError: array index out of range
+---------------------------- Captured stderr call -----------------------------
+C:\Anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+============================== warnings summary ===============================
+C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\backtrader-bt02-multistrategy-root-20261016-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py::test_two_strategies_bind_distinct_read_books_on_one_shared_broker
+1 failed, 1 passed, 1 warning in 10.65s

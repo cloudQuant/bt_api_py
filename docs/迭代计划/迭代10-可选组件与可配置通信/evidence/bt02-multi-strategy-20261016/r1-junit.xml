@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="10.656" timestamp="2026-10-16T00:34:43.443914" hostname="yun"><testcase classname="tests.integration.test_btapi_strategy_account_book_multi_strategy_local_process" name="test_two_strategies_bind_distinct_read_books_on_one_shared_broker" time="5.255"><failure message="IndexError: array index out of range">tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:752: in test_two_strategies_bind_distinct_read_books_on_one_shared_broker
+    strategies = session.run(_cerebro(broker))
+backtrader\stores\service_execution_session.py:521: in run
+    raise primary_error.with_traceback(primary_error.__traceback__)
+backtrader\stores\service_execution_session.py:426: in run
+    result = cerebro.run(**run_kwargs)
+backtrader\cerebro.py:106: in _wrapped
+    result = run_method(self, *args, **kwargs)
+backtrader\cerebro.py:766: in run
+    runstrat = self.runstrategies(iterstrat)
+backtrader\_cerebro\execution.py:223: in runstrategies
+    strat._start()
+backtrader\strategy.py:1795: in _start
+    self.start()
+tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:662: in start
+    self.rejected_order = self.buy(data=self.data, size=1.0)
+backtrader\strategy.py:2617: in buy
+    order = self.broker.buy(
+backtrader\brokers\btapibroker.py:4276: in buy
+    order = BuyOrder(
+backtrader\order.py:925: in __init__
+    super().__init__(**kwargs)
+backtrader\order.py:578: in __init__
+    pclose = self.data.close[0] if not self.p.simulated else self.price
+backtrader\linebuffer.py:472: in __getitem__
+    raise IndexError("array index out of range")
+E   IndexError: array index out of range</failure></testcase><testcase classname="tests.integration.test_btapi_strategy_account_book_multi_strategy_local_process" name="test_preflight_empty_run_and_refresh_setup_release_owned_runtime_claims" time="0.005" /></testsuite></testsuites>

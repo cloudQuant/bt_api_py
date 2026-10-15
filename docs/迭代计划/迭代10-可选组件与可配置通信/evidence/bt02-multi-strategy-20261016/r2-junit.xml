@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="8.836" timestamp="2026-10-16T00:36:50.622157" hostname="yun"><testcase classname="tests.integration.test_btapi_strategy_account_book_multi_strategy_local_process" name="test_two_strategies_bind_distinct_read_books_on_one_shared_broker" time="4.551"><failure message="backtrader.stores.service_strategy_account_book.ServiceStrategyAccountBookError: UNAVAILABLE">tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:760: in test_two_strategies_bind_distinct_read_books_on_one_shared_broker
+    strategies = session.run(_cerebro(broker))
+backtrader\stores\service_execution_session.py:521: in run
+    raise primary_error.with_traceback(primary_error.__traceback__)
+backtrader\stores\service_execution_session.py:426: in run
+    result = cerebro.run(**run_kwargs)
+backtrader\cerebro.py:106: in _wrapped
+    result = run_method(self, *args, **kwargs)
+backtrader\cerebro.py:766: in run
+    runstrat = self.runstrategies(iterstrat)
+backtrader\_cerebro\execution.py:320: in runstrategies
+    raise run_exception
+backtrader\_cerebro\execution.py:266: in runstrategies
+    self._runnext(runstrats)
+backtrader\_cerebro\runnext.py:532: in _runnext
+    strat._next()
+backtrader\strategy.py:1513: in _next_fast_simple
+    self.nextstart()
+backtrader\strategy.py:1937: in nextstart
+    super().nextstart()
+backtrader\lineiterator.py:1964: in nextstart
+    self.next()
+tests\integration\test_btapi_strategy_account_book_multi_strategy_local_process.py:617: in next
+    snapshot = self.account_book.snapshot()
+backtrader\stores\service_strategy_account_book.py:127: in snapshot
+    return _snapshot_from_reply(
+backtrader\stores\service_strategy_account_book.py:165: in _snapshot_from_reply
+    raise ServiceStrategyAccountBookError(
+E   backtrader.stores.service_strategy_account_book.ServiceStrategyAccountBookError: UNAVAILABLE</failure></testcase></testsuite></testsuites>
