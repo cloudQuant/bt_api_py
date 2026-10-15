@@ -1,0 +1,1183 @@
+{
+  "account_provider_session_counts": {
+    "gw02-account-00": {
+      "close": 1,
+      "connect": 1,
+      "generation": "1b79d10e4b8d09607b1c0501a5feb060",
+      "initial_read": 1
+    },
+    "gw02-account-01": {
+      "close": 1,
+      "connect": 1,
+      "generation": "86bb49dafc98728f0fff0ec93c5f8b7e",
+      "initial_read": 1
+    },
+    "gw02-account-02": {
+      "close": 1,
+      "connect": 1,
+      "generation": "0e5757e300820294f774f5629e6d3c48",
+      "initial_read": 1
+    },
+    "gw02-account-03": {
+      "close": 1,
+      "connect": 1,
+      "generation": "84a8fe7c851d951abe06e3abdf367596",
+      "initial_read": 1
+    },
+    "gw02-account-04": {
+      "close": 1,
+      "connect": 1,
+      "generation": "d52d717bc434fdd2364d9437aa749072",
+      "initial_read": 1
+    },
+    "gw02-account-05": {
+      "close": 1,
+      "connect": 1,
+      "generation": "c40a5c0f6c86031bdf7157fecd4fe19c",
+      "initial_read": 1
+    },
+    "gw02-account-06": {
+      "close": 1,
+      "connect": 1,
+      "generation": "de22b58d964571c259b5989830cd52ab",
+      "initial_read": 1
+    },
+    "gw02-account-07": {
+      "close": 1,
+      "connect": 1,
+      "generation": "7deda8433abf964484acc730ad68fa50",
+      "initial_read": 1
+    },
+    "gw02-account-08": {
+      "close": 1,
+      "connect": 1,
+      "generation": "19bc3fee252ccfe64ca5a67bc10193eb",
+      "initial_read": 1
+    },
+    "gw02-account-09": {
+      "close": 1,
+      "connect": 1,
+      "generation": "9035a7c8d93396dc9e094ea0c779aca8",
+      "initial_read": 1
+    }
+  },
+  "account_target_count": 10,
+  "all_child_pid_count": 111,
+  "all_loaded_alive_before_barrier": true,
+  "all_unique_child_pid_count": 111,
+  "barrier_published_ns": 263526269387100,
+  "case": "GW02_100_STRATEGY_10_ACCOUNT_LOCAL_SYNTHETIC",
+  "cleanup_complete": true,
+  "cleanup_failures": [],
+  "distinct_market_key_count": 1,
+  "forced_cleanup_requests": [],
+  "loaded_count": 100,
+  "loaded_unique_pid_count": 100,
+  "market_provider_start_stop": [
+    1,
+    1
+  ],
+  "memory_at_barrier_bytes": 10471923712,
+  "memory_before_bytes": 14890389504,
+  "normal_server_exit_count": 11,
+  "normal_strategy_exit_count": 100,
+  "pilot_mean_rss_bytes": 56623104,
+  "projected_process_rss_bytes": 75497472,
+  "projected_total_child_rss_bytes": 8380219392,
+  "provider_contract": "one acquired handle per exact MarketSubscriptionKey",
+  "ready_count": 100,
+  "servers": [
+    {
+      "account_ref": null,
+      "exit_code": 0,
+      "kind": "market",
+      "normal_close_ack": true,
+      "pid": 14860,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 24152,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 68456,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 15276,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 36440,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 45972,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 29408,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 55992,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 20036,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 52892,
+      "ready": true
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "kind": "account",
+      "normal_close_ack": true,
+      "pid": 30036,
+      "ready": true
+    }
+  ],
+  "start_spread_ns": 59547200,
+  "strategies": [
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 22432,
+      "normal_close_ack": true,
+      "pid": 22432,
+      "ready": true,
+      "started_ns": 263526293938700,
+      "strategy_index": 0
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 37188,
+      "normal_close_ack": true,
+      "pid": 37188,
+      "ready": true,
+      "started_ns": 263526295221700,
+      "strategy_index": 1
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 47184,
+      "normal_close_ack": true,
+      "pid": 47184,
+      "ready": true,
+      "started_ns": 263526309675600,
+      "strategy_index": 2
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 25848,
+      "normal_close_ack": true,
+      "pid": 25848,
+      "ready": true,
+      "started_ns": 263526284896600,
+      "strategy_index": 3
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 60384,
+      "normal_close_ack": true,
+      "pid": 60384,
+      "ready": true,
+      "started_ns": 263526299967800,
+      "strategy_index": 4
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 24428,
+      "normal_close_ack": true,
+      "pid": 24428,
+      "ready": true,
+      "started_ns": 263526295434700,
+      "strategy_index": 5
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 26476,
+      "normal_close_ack": true,
+      "pid": 26476,
+      "ready": true,
+      "started_ns": 263526282430300,
+      "strategy_index": 6
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 52764,
+      "normal_close_ack": true,
+      "pid": 52764,
+      "ready": true,
+      "started_ns": 263526296227000,
+      "strategy_index": 7
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 47256,
+      "normal_close_ack": true,
+      "pid": 47256,
+      "ready": true,
+      "started_ns": 263526281914600,
+      "strategy_index": 8
+    },
+    {
+      "account_ref": "gw02-account-00",
+      "exit_code": 0,
+      "loaded_pid": 33056,
+      "normal_close_ack": true,
+      "pid": 33056,
+      "ready": true,
+      "started_ns": 263526292573500,
+      "strategy_index": 9
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 71124,
+      "normal_close_ack": true,
+      "pid": 71124,
+      "ready": true,
+      "started_ns": 263526323800100,
+      "strategy_index": 10
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 45948,
+      "normal_close_ack": true,
+      "pid": 45948,
+      "ready": true,
+      "started_ns": 263526285340700,
+      "strategy_index": 11
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 62988,
+      "normal_close_ack": true,
+      "pid": 62988,
+      "ready": true,
+      "started_ns": 263526332565300,
+      "strategy_index": 12
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 61336,
+      "normal_close_ack": true,
+      "pid": 61336,
+      "ready": true,
+      "started_ns": 263526287756400,
+      "strategy_index": 13
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 33584,
+      "normal_close_ack": true,
+      "pid": 33584,
+      "ready": true,
+      "started_ns": 263526333948800,
+      "strategy_index": 14
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 37372,
+      "normal_close_ack": true,
+      "pid": 37372,
+      "ready": true,
+      "started_ns": 263526286895800,
+      "strategy_index": 15
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 50228,
+      "normal_close_ack": true,
+      "pid": 50228,
+      "ready": true,
+      "started_ns": 263526310646900,
+      "strategy_index": 16
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 59140,
+      "normal_close_ack": true,
+      "pid": 59140,
+      "ready": true,
+      "started_ns": 263526304513200,
+      "strategy_index": 17
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 53024,
+      "normal_close_ack": true,
+      "pid": 53024,
+      "ready": true,
+      "started_ns": 263526282218500,
+      "strategy_index": 18
+    },
+    {
+      "account_ref": "gw02-account-01",
+      "exit_code": 0,
+      "loaded_pid": 81444,
+      "normal_close_ack": true,
+      "pid": 81444,
+      "ready": true,
+      "started_ns": 263526287100000,
+      "strategy_index": 19
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 29176,
+      "normal_close_ack": true,
+      "pid": 29176,
+      "ready": true,
+      "started_ns": 263526284298800,
+      "strategy_index": 20
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 13336,
+      "normal_close_ack": true,
+      "pid": 13336,
+      "ready": true,
+      "started_ns": 263526288538000,
+      "strategy_index": 21
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 19488,
+      "normal_close_ack": true,
+      "pid": 19488,
+      "ready": true,
+      "started_ns": 263526287148400,
+      "strategy_index": 22
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 69284,
+      "normal_close_ack": true,
+      "pid": 69284,
+      "ready": true,
+      "started_ns": 263526334742600,
+      "strategy_index": 23
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 35264,
+      "normal_close_ack": true,
+      "pid": 35264,
+      "ready": true,
+      "started_ns": 263526286110500,
+      "strategy_index": 24
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 35368,
+      "normal_close_ack": true,
+      "pid": 35368,
+      "ready": true,
+      "started_ns": 263526299448900,
+      "strategy_index": 25
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 80708,
+      "normal_close_ack": true,
+      "pid": 80708,
+      "ready": true,
+      "started_ns": 263526289029600,
+      "strategy_index": 26
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 28264,
+      "normal_close_ack": true,
+      "pid": 28264,
+      "ready": true,
+      "started_ns": 263526292946500,
+      "strategy_index": 27
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 79816,
+      "normal_close_ack": true,
+      "pid": 79816,
+      "ready": true,
+      "started_ns": 263526286488200,
+      "strategy_index": 28
+    },
+    {
+      "account_ref": "gw02-account-02",
+      "exit_code": 0,
+      "loaded_pid": 26008,
+      "normal_close_ack": true,
+      "pid": 26008,
+      "ready": true,
+      "started_ns": 263526281507000,
+      "strategy_index": 29
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 56272,
+      "normal_close_ack": true,
+      "pid": 56272,
+      "ready": true,
+      "started_ns": 263526316888000,
+      "strategy_index": 30
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 13376,
+      "normal_close_ack": true,
+      "pid": 13376,
+      "ready": true,
+      "started_ns": 263526336452500,
+      "strategy_index": 31
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 13400,
+      "normal_close_ack": true,
+      "pid": 13400,
+      "ready": true,
+      "started_ns": 263526286665000,
+      "strategy_index": 32
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 79940,
+      "normal_close_ack": true,
+      "pid": 79940,
+      "ready": true,
+      "started_ns": 263526305520700,
+      "strategy_index": 33
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 53392,
+      "normal_close_ack": true,
+      "pid": 53392,
+      "ready": true,
+      "started_ns": 263526306845800,
+      "strategy_index": 34
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 52392,
+      "normal_close_ack": true,
+      "pid": 52392,
+      "ready": true,
+      "started_ns": 263526299996100,
+      "strategy_index": 35
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 20460,
+      "normal_close_ack": true,
+      "pid": 20460,
+      "ready": true,
+      "started_ns": 263526284590400,
+      "strategy_index": 36
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 64460,
+      "normal_close_ack": true,
+      "pid": 64460,
+      "ready": true,
+      "started_ns": 263526284449100,
+      "strategy_index": 37
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 62952,
+      "normal_close_ack": true,
+      "pid": 62952,
+      "ready": true,
+      "started_ns": 263526335172000,
+      "strategy_index": 38
+    },
+    {
+      "account_ref": "gw02-account-03",
+      "exit_code": 0,
+      "loaded_pid": 22196,
+      "normal_close_ack": true,
+      "pid": 22196,
+      "ready": true,
+      "started_ns": 263526287576300,
+      "strategy_index": 39
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 56232,
+      "normal_close_ack": true,
+      "pid": 56232,
+      "ready": true,
+      "started_ns": 263526299121900,
+      "strategy_index": 40
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 58616,
+      "normal_close_ack": true,
+      "pid": 58616,
+      "ready": true,
+      "started_ns": 263526295506700,
+      "strategy_index": 41
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 48044,
+      "normal_close_ack": true,
+      "pid": 48044,
+      "ready": true,
+      "started_ns": 263526334384100,
+      "strategy_index": 42
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 43260,
+      "normal_close_ack": true,
+      "pid": 43260,
+      "ready": true,
+      "started_ns": 263526315941700,
+      "strategy_index": 43
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 71320,
+      "normal_close_ack": true,
+      "pid": 71320,
+      "ready": true,
+      "started_ns": 263526282055900,
+      "strategy_index": 44
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 77232,
+      "normal_close_ack": true,
+      "pid": 77232,
+      "ready": true,
+      "started_ns": 263526334788000,
+      "strategy_index": 45
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 62484,
+      "normal_close_ack": true,
+      "pid": 62484,
+      "ready": true,
+      "started_ns": 263526283725200,
+      "strategy_index": 46
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 75188,
+      "normal_close_ack": true,
+      "pid": 75188,
+      "ready": true,
+      "started_ns": 263526296338400,
+      "strategy_index": 47
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 3144,
+      "normal_close_ack": true,
+      "pid": 3144,
+      "ready": true,
+      "started_ns": 263526298277800,
+      "strategy_index": 48
+    },
+    {
+      "account_ref": "gw02-account-04",
+      "exit_code": 0,
+      "loaded_pid": 72576,
+      "normal_close_ack": true,
+      "pid": 72576,
+      "ready": true,
+      "started_ns": 263526286150300,
+      "strategy_index": 49
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 73936,
+      "normal_close_ack": true,
+      "pid": 73936,
+      "ready": true,
+      "started_ns": 263526307033100,
+      "strategy_index": 50
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 37216,
+      "normal_close_ack": true,
+      "pid": 37216,
+      "ready": true,
+      "started_ns": 263526334614600,
+      "strategy_index": 51
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 66048,
+      "normal_close_ack": true,
+      "pid": 66048,
+      "ready": true,
+      "started_ns": 263526296885600,
+      "strategy_index": 52
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 11880,
+      "normal_close_ack": true,
+      "pid": 11880,
+      "ready": true,
+      "started_ns": 263526313203800,
+      "strategy_index": 53
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 37352,
+      "normal_close_ack": true,
+      "pid": 37352,
+      "ready": true,
+      "started_ns": 263526340674200,
+      "strategy_index": 54
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 18688,
+      "normal_close_ack": true,
+      "pid": 18688,
+      "ready": true,
+      "started_ns": 263526281778700,
+      "strategy_index": 55
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 65164,
+      "normal_close_ack": true,
+      "pid": 65164,
+      "ready": true,
+      "started_ns": 263526302568100,
+      "strategy_index": 56
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 12452,
+      "normal_close_ack": true,
+      "pid": 12452,
+      "ready": true,
+      "started_ns": 263526336134000,
+      "strategy_index": 57
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 60524,
+      "normal_close_ack": true,
+      "pid": 60524,
+      "ready": true,
+      "started_ns": 263526328109000,
+      "strategy_index": 58
+    },
+    {
+      "account_ref": "gw02-account-05",
+      "exit_code": 0,
+      "loaded_pid": 36896,
+      "normal_close_ack": true,
+      "pid": 36896,
+      "ready": true,
+      "started_ns": 263526339689000,
+      "strategy_index": 59
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 61664,
+      "normal_close_ack": true,
+      "pid": 61664,
+      "ready": true,
+      "started_ns": 263526284672600,
+      "strategy_index": 60
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 78940,
+      "normal_close_ack": true,
+      "pid": 78940,
+      "ready": true,
+      "started_ns": 263526335879500,
+      "strategy_index": 61
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 81404,
+      "normal_close_ack": true,
+      "pid": 81404,
+      "ready": true,
+      "started_ns": 263526285745500,
+      "strategy_index": 62
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 48156,
+      "normal_close_ack": true,
+      "pid": 48156,
+      "ready": true,
+      "started_ns": 263526302084000,
+      "strategy_index": 63
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 33664,
+      "normal_close_ack": true,
+      "pid": 33664,
+      "ready": true,
+      "started_ns": 263526301162000,
+      "strategy_index": 64
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 62200,
+      "normal_close_ack": true,
+      "pid": 62200,
+      "ready": true,
+      "started_ns": 263526287983200,
+      "strategy_index": 65
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 10324,
+      "normal_close_ack": true,
+      "pid": 10324,
+      "ready": true,
+      "started_ns": 263526340943000,
+      "strategy_index": 66
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 73468,
+      "normal_close_ack": true,
+      "pid": 73468,
+      "ready": true,
+      "started_ns": 263526284552900,
+      "strategy_index": 67
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 56468,
+      "normal_close_ack": true,
+      "pid": 56468,
+      "ready": true,
+      "started_ns": 263526288793600,
+      "strategy_index": 68
+    },
+    {
+      "account_ref": "gw02-account-06",
+      "exit_code": 0,
+      "loaded_pid": 48204,
+      "normal_close_ack": true,
+      "pid": 48204,
+      "ready": true,
+      "started_ns": 263526334635900,
+      "strategy_index": 69
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 27032,
+      "normal_close_ack": true,
+      "pid": 27032,
+      "ready": true,
+      "started_ns": 263526295915800,
+      "strategy_index": 70
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 14848,
+      "normal_close_ack": true,
+      "pid": 14848,
+      "ready": true,
+      "started_ns": 263526307684400,
+      "strategy_index": 71
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 37260,
+      "normal_close_ack": true,
+      "pid": 37260,
+      "ready": true,
+      "started_ns": 263526284219500,
+      "strategy_index": 72
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 72720,
+      "normal_close_ack": true,
+      "pid": 72720,
+      "ready": true,
+      "started_ns": 263526285446700,
+      "strategy_index": 73
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 29308,
+      "normal_close_ack": true,
+      "pid": 29308,
+      "ready": true,
+      "started_ns": 263526323671500,
+      "strategy_index": 74
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 13348,
+      "normal_close_ack": true,
+      "pid": 13348,
+      "ready": true,
+      "started_ns": 263526305739700,
+      "strategy_index": 75
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 46628,
+      "normal_close_ack": true,
+      "pid": 46628,
+      "ready": true,
+      "started_ns": 263526322207300,
+      "strategy_index": 76
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 25020,
+      "normal_close_ack": true,
+      "pid": 25020,
+      "ready": true,
+      "started_ns": 263526281413900,
+      "strategy_index": 77
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 9280,
+      "normal_close_ack": true,
+      "pid": 9280,
+      "ready": true,
+      "started_ns": 263526313168500,
+      "strategy_index": 78
+    },
+    {
+      "account_ref": "gw02-account-07",
+      "exit_code": 0,
+      "loaded_pid": 66528,
+      "normal_close_ack": true,
+      "pid": 66528,
+      "ready": true,
+      "started_ns": 263526315459700,
+      "strategy_index": 79
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 78652,
+      "normal_close_ack": true,
+      "pid": 78652,
+      "ready": true,
+      "started_ns": 263526289615100,
+      "strategy_index": 80
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 65888,
+      "normal_close_ack": true,
+      "pid": 65888,
+      "ready": true,
+      "started_ns": 263526311599500,
+      "strategy_index": 81
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 76052,
+      "normal_close_ack": true,
+      "pid": 76052,
+      "ready": true,
+      "started_ns": 263526281395800,
+      "strategy_index": 82
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 29904,
+      "normal_close_ack": true,
+      "pid": 29904,
+      "ready": true,
+      "started_ns": 263526311830900,
+      "strategy_index": 83
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 50868,
+      "normal_close_ack": true,
+      "pid": 50868,
+      "ready": true,
+      "started_ns": 263526283171900,
+      "strategy_index": 84
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 59316,
+      "normal_close_ack": true,
+      "pid": 59316,
+      "ready": true,
+      "started_ns": 263526281954200,
+      "strategy_index": 85
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 21232,
+      "normal_close_ack": true,
+      "pid": 21232,
+      "ready": true,
+      "started_ns": 263526281757500,
+      "strategy_index": 86
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 35660,
+      "normal_close_ack": true,
+      "pid": 35660,
+      "ready": true,
+      "started_ns": 263526284086900,
+      "strategy_index": 87
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 44168,
+      "normal_close_ack": true,
+      "pid": 44168,
+      "ready": true,
+      "started_ns": 263526311276500,
+      "strategy_index": 88
+    },
+    {
+      "account_ref": "gw02-account-08",
+      "exit_code": 0,
+      "loaded_pid": 69468,
+      "normal_close_ack": true,
+      "pid": 69468,
+      "ready": true,
+      "started_ns": 263526281869500,
+      "strategy_index": 89
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 79288,
+      "normal_close_ack": true,
+      "pid": 79288,
+      "ready": true,
+      "started_ns": 263526306550600,
+      "strategy_index": 90
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 18044,
+      "normal_close_ack": true,
+      "pid": 18044,
+      "ready": true,
+      "started_ns": 263526282418600,
+      "strategy_index": 91
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 70084,
+      "normal_close_ack": true,
+      "pid": 70084,
+      "ready": true,
+      "started_ns": 263526334854400,
+      "strategy_index": 92
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 47620,
+      "normal_close_ack": true,
+      "pid": 47620,
+      "ready": true,
+      "started_ns": 263526340869000,
+      "strategy_index": 93
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 73580,
+      "normal_close_ack": true,
+      "pid": 73580,
+      "ready": true,
+      "started_ns": 263526283368500,
+      "strategy_index": 94
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 12644,
+      "normal_close_ack": true,
+      "pid": 12644,
+      "ready": true,
+      "started_ns": 263526282011700,
+      "strategy_index": 95
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 77580,
+      "normal_close_ack": true,
+      "pid": 77580,
+      "ready": true,
+      "started_ns": 263526284814200,
+      "strategy_index": 96
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 12716,
+      "normal_close_ack": true,
+      "pid": 12716,
+      "ready": true,
+      "started_ns": 263526281692700,
+      "strategy_index": 97
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 28548,
+      "normal_close_ack": true,
+      "pid": 28548,
+      "ready": true,
+      "started_ns": 263526283892500,
+      "strategy_index": 98
+    },
+    {
+      "account_ref": "gw02-account-09",
+      "exit_code": 0,
+      "loaded_pid": 23732,
+      "normal_close_ack": true,
+      "pid": 23732,
+      "ready": true,
+      "started_ns": 263526336374900,
+      "strategy_index": 99
+    }
+  ],
+  "strategy_target_count": 100
+}
