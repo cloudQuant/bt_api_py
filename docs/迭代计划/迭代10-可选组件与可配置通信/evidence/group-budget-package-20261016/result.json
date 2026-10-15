@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T20:17:14.606734+00:00",
+  "source_count": 188,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "d4d06f0068807637f494d7480958f040dae2f41f6392dc21c46e4924273a63f5",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FIXED_CANDIDATE_PACKAGE_SQLITE_SYNTHETIC_AND_TWO_PROCESS_BUDGET_ONLY"
+}

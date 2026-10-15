@@ -1,0 +1,42 @@
+{
+  "parent": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+  "paths": [
+    "src/bt_api_execution/__init__.py",
+    "src/bt_api_execution/group_budget.py",
+    "src/bt_api_execution/group_coordinator.py",
+    "src/bt_api_execution/group_order_contracts.py",
+    "src/bt_api_execution/group_store.py",
+    "tests/test_group_budget.py",
+    "tests/test_group_coordinator.py",
+    "tests/test_group_risk_integration.py"
+  ],
+  "source_sha256": {
+    "src/bt_api_execution/__init__.py": "bdc2c92cf5fdcf1de299085d3f38ae0d765feef8091041a65a03a9c72d0b1ef8",
+    "src/bt_api_execution/group_budget.py": "a227459c5279d2e1bcddc9cf8de1548bd3f02a0d8219468ea035b2281b44191e",
+    "src/bt_api_execution/group_coordinator.py": "fdff9f83752b6a85aaf7cd7fbd9c577f46384bf52cc4aa6ba71b448b5570ac22",
+    "src/bt_api_execution/group_order_contracts.py": "6366b09ae1421b471af19656f2d6cf10f840dfd20874b17a5a283360b74e15b6",
+    "src/bt_api_execution/group_store.py": "de38f884913b98603ddeae1d2ab9a7d61a4282f1a5a648052c198631f8525d67",
+    "tests/test_group_budget.py": "ba31287662360be5217410f9dd8987442eaf9999a6228e98516befa1551b76a1",
+    "tests/test_group_coordinator.py": "0e91d51ea39918d4547dd8d56d6db5f3ac1f834e63a15f9ce6e908dae7e2c421",
+    "tests/test_group_risk_integration.py": "5c9d0993991c58edbeeae5d5f8883dc389110f8128927dc0e1168d8b660c0ee5"
+  },
+  "git_blobs": {
+    "src/bt_api_execution/__init__.py": "72f2c6a40d69441ce4250aac2856819216e00450",
+    "src/bt_api_execution/group_budget.py": "e165c704756aa2bcaf6b39d6da197aa06318ce09",
+    "src/bt_api_execution/group_coordinator.py": "bc07a98db91f1470163a457c829cc8f3dfc9b366",
+    "src/bt_api_execution/group_order_contracts.py": "ed239632f3066d933079adcf6b7f1d3b117b95b9",
+    "src/bt_api_execution/group_store.py": "f7a0b97e7c60d5bfe329eea33cb7cb6ab1ee4289",
+    "tests/test_group_budget.py": "82004c892619e9a016cde5588ed00c27b5998e58",
+    "tests/test_group_coordinator.py": "4554c8c7a8a2be3164b992a869780045cf904866",
+    "tests/test_group_risk_integration.py": "7224b300ab66ba9b779ef06e968e10080f3168d6"
+  },
+  "qa": "D:\\temp\\iteration10-group-budget-candidate-qa-20261016-r1",
+  "evidence_level": "FIXED_CANDIDATE_PACKAGE_SQLITE_SYNTHETIC_AND_TWO_PROCESS_BUDGET_ONLY",
+  "unrelated_tracked_paths": [
+    "src/bt_api_execution/store.py"
+  ],
+  "unrelated_diff_before_sha256": "eaa3fed2695b46afdc3fc17f539fcd69a217d90d525b6d3c94084481bd30e7b1",
+  "head": "5e6ba3e90e04f5e2f5ad0944e6557f2a1eb1edc5",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true
+}

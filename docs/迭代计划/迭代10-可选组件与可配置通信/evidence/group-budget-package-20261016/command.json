@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-group-budget-candidate-qa-20261016-r1\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-group-budget-candidate-qa-20261016-r1\\pytest-tmp",
+    "tests/test_group_budget.py",
+    "tests/test_group_coordinator.py",
+    "tests/test_group_risk_integration.py"
+  ],
+  "cwd": "D:\\temp\\iteration10-group-budget-candidate-source-20261016-r1\\execution",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\iteration10-group-budget-candidate-source-20261016-r1\\execution\\src;D:\\temp\\iteration10-group-budget-candidate-source-20261016-r1\\risk\\src;D:\\temp\\iteration10-group-budget-candidate-source-20261016-r1\\base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T20:17:10.463236+00:00"
+}

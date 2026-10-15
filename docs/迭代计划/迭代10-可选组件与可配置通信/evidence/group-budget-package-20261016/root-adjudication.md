@@ -1,0 +1,9 @@
+## 第126轮：Execution组合预算持久原子预留
+
+Execution/dev提交5e6ba3e90e04f5e2f5ad0944e6557f2a1eb1edc5（父ae1dffd4），精确八个source/test路径：新增受信组合预算政策、按Risk真实InstrumentRiskRegistry计算的手续费/滑点估值、按组合持久预算receipt与SQLite事务竞争约束。相同ID重放绑定原政策/quote；未知及已配对组保留HELD，未定价的活跃v1历史行拒绝新授信；活跃政策指纹不一致拒绝。只有明确未派发或经证明无成交且预留已释放的路径才释放预算。
+
+内置估值器对缺可信价格界的MARKET明确返回group_budget_market_price_unbounded，发生在Risk评估前；共享MARKET合同与存量读取保持兼容，其它受信quote builder仍可提供有证明的价格界。不声称内置MARKET估值、跨账户分布式原子事务或完整ARB02通过。
+
+作者最终22项通过，独立静态review GO；Root为排除并行开发中的store.py依赖，从已提交ae1dffd源码加本轮八项原字节overlay构造固定候选，依赖Risk5f6ba0b2/Baseb4aabd1e。一次候选QA为22passed/3.79秒/exit0，无warning、stderr空，188个源码pins前后相同；覆盖真实SQLite及双spawn预算竞争，Risk API真实、provider/authority事实合成。原17pass/1fail暴露旧scope fixture漏portfolio_ref，已按现行合同修复且最终suite包含原节点；原21pass仅工具transcript，最终作者22pass原日志保留，均不替代Root固定候选结果。
+
+Root提交及postcommit验证八项blob/checkout、空index和无关recovery store改动保留。本轮SDK仅记录包级交付，gitlink暂留ae1dffd：现有SDK组Host尚未注入新必需预算，必须在下一轮接线与组合验收后一起更新gitlink，避免发布断链组合。不重复已通过的22项；不增加正式22/68。证据见[evidence/group-budget-package-20261016/root-adjudication.md](evidence/group-budget-package-20261016/root-adjudication.md)。
