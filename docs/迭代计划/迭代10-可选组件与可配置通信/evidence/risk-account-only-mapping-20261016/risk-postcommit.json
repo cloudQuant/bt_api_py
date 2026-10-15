@@ -1,0 +1,24 @@
+{
+  "repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "parent": "3e02dee8b86c0b9ccfa369d6e4761cf07d5a73c9",
+  "paths": [
+    "src/bt_api_risk/core/instrument.py",
+    "tests/test_account_only_terminal_mapping.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_risk/core/instrument.py": "059f5e7a20d2652bbe2d041a3ffd7cb7a595e3e20ed17773c898cdc420017116",
+    "tests/test_account_only_terminal_mapping.py": "db6a0573b32ff72f79fceb1066318821a9f871162577a1939b2991573fed9e49"
+  },
+  "filtered_blob_ids": {
+    "src/bt_api_risk/core/instrument.py": "e67b8153e9d73f3982f0372daed8009a8dde4137",
+    "tests/test_account_only_terminal_mapping.py": "9198603e944dd094e5749a05ad91191460db8217"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-risk-account-mapping-root-20261016-r1\\result.json",
+  "evidence_level": "ACCOUNT_ONLY_MAPPING_REAL_SQLITE_GATE_TYPED_SYNTHETIC_AUTHORITY_NOT_EXECUTION_JOURNAL_PROOF"
+}

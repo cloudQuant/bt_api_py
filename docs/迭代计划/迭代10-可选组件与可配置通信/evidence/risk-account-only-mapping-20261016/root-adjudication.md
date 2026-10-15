@@ -1,0 +1,7 @@
+# 第112轮：账户级订单数量映射
+
+合法account-only OPEN经InstrumentRiskAdmissionMapper已取得可信数量单位与订单数量，但原返回条件额外要求strategy_id，导致持久reservation缺数量，SDK实际终态证明在_actual_claim_order_bounds拒绝。修复只从三个返回字段条件删除strategy_id要求；有可信metadata quantity_unit才保留instrument/quantity/unit，策略allocation分支未改。没有给SDKfixture添加虚假strategy来绕过问题。
+
+Root新四项真实mapper/SQLite gate回归通过，0.80秒/exit0，一条既有pytest配置warning；133输入和Risk/Base HEAD前后不变，独立static GO。覆盖account-only reserve/claim/settle/typed terminal以及缺单位、缺metadata digest和错账户。测试journal authority仍为synthetic，这不是完整execution journal/provider证据；作者33项旧mapper测试不冒充Root验收，也不为交付再跑。原SDKtyped r2两例失败记录保留，接下来仅复验两例。
+
+Risk/dev两路径提交5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b，父3e02dee8b86c0b9ccfa369d6e4761cf07d5a73c9。父SDK/dev仅更新Risk gitlink及本轮证据和两份进度记录，父5f29a66d，实际SDK提交由本轮Git记录给出。正式22/68不变；RISK02完整正常服务观察链、FX/TTL/重启仍待验。

@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T17:42:25.028599+00:00",
+  "source_count": 133,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "3e02dee8b86c0b9ccfa369d6e4761cf07d5a73c9",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "3e02dee8b86c0b9ccfa369d6e4761cf07d5a73c9",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "b95d85b0acf8930b2ec2701d675d79fae31fbb9cd89382bdf38c9a3a9567286a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "ACCOUNT_ONLY_MAPPING_REAL_SQLITE_GATE_TYPED_SYNTHETIC_AUTHORITY_NOT_EXECUTION_JOURNAL_PROOF"
+}
