@@ -3,6 +3,7 @@ from __future__ import annotations
 import multiprocessing
 import os
 import uuid
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -68,7 +69,7 @@ def _identity(principal: str = _PRINCIPAL) -> WireIdentity:
     return WireIdentity(WireRole.SERVICE, principal, "coordinator-worker")
 
 
-def _scope(*, group: str = _GROUP, leg: str = _LEG) -> WireScope:
+def _scope(*, group: str | None = None, leg: str | None = None) -> WireScope:
     return WireScope(
         execution_domain_ref="paper:venue-a",
         account_ref=_ACCOUNT,
@@ -77,6 +78,15 @@ def _scope(*, group: str = _GROUP, leg: str = _LEG) -> WireScope:
         group_id=group,
         leg_id=leg,
     )
+
+
+def _operation_scope(
+    registered_scope: WireScope,
+    *,
+    group: str = _GROUP,
+    leg: str = _LEG,
+) -> WireScope:
+    return replace(registered_scope, group_id=group, leg_id=leg)
 
 
 def _request(
@@ -109,8 +119,9 @@ def _registered_contexts(
     path: Path,
     *,
     principals: tuple[str, ...] = (_PRINCIPAL,),
+    scope: WireScope | None = None,
 ) -> tuple[ServiceRegistry, list[ServiceCallContext]]:
-    scope = _scope()
+    scope = scope or _scope()
     operations = frozenset({_REGISTRY_OPERATION})
     capability = ServiceCapability(
         "execution-owner",
@@ -194,8 +205,16 @@ def _register_and_dispatch(
 
 # Capture through a small delegating fixture without replacing Registry's
 # public handler path. The factory installs this list for each test registry.
-def _capture_registry_contexts(path: Path) -> tuple[ServiceRegistry, list[ServiceCallContext]]:
-    registry, contexts = _registered_contexts(path, principals=(_PRINCIPAL, _SECOND_PRINCIPAL))
+def _capture_registry_contexts(
+    path: Path,
+    *,
+    scope: WireScope | None = None,
+) -> tuple[ServiceRegistry, list[ServiceCallContext]]:
+    registry, contexts = _registered_contexts(
+        path,
+        principals=(_PRINCIPAL, _SECOND_PRINCIPAL),
+        scope=scope,
+    )
     registry._captured_contexts = contexts  # type: ignore[attr-defined]
     return registry, contexts
 
@@ -208,11 +227,13 @@ def _intent_and_binding(
     *,
     coordinator_principal_ref: str = _PRINCIPAL,
     session_date: str = "20261015",
+    group_id: str = _GROUP,
+    leg_id: str = _LEG,
 ) -> tuple[OrderIntent, GroupPermitBinding]:
     scope = _execution_scope(session_date=session_date)
     deadline = 9_000_000_000_000
     intent = OrderIntent(
-        intent_id=group_leg_intent_id(_GROUP, _LEG),
+        intent_id=group_leg_intent_id(group_id, leg_id),
         scope=scope,
         signal_id="signal-a",
         instrument="BTC-USD",
@@ -225,15 +246,15 @@ def _intent_and_binding(
         deadline_ns=deadline,
     )
     binding = GroupPermitBinding(
-        group_id=_GROUP,
-        leg_id=_LEG,
+        group_id=group_id,
+        leg_id=leg_id,
         portfolio_ref=_PORTFOLIO,
         strategy_id=_STRATEGY,
         account_ref=_ACCOUNT,
         coordinator_principal_ref=coordinator_principal_ref,
         risk_scope_fingerprint=risk_account_scope_fingerprint(_RISK_SCOPE_KEY),
-        permit_id="permit-a",
-        group_fingerprint=payload_sha256({"group": _GROUP}),
+        permit_id=f"permit-{group_id}-{leg_id}",
+        group_fingerprint=payload_sha256({"group": group_id}),
         policy_fingerprint=payload_sha256({"policy": "risk-v1"}),
         reserved_intent_hash=payload_sha256({"reserved": "maximum"}),
         exposure_profile_fingerprint=payload_sha256({"profile": "btc-long"}),
@@ -258,7 +279,11 @@ def _authorization(authority, context, *, intent, binding, lease):
     return authority.guard.hold_group_leg_authorization(
         principal_ref=context.principal_ref,
         identity=context.identity,
-        wire_scope=context.scope,
+        wire_scope=_operation_scope(
+            context.scope,
+            group=binding.group_id,
+            leg=binding.leg_id,
+        ),
         execution_scope=intent.scope,
         intent=intent,
         binding=binding,
@@ -527,7 +552,11 @@ def test_normal_guard_exit_requires_exact_execution_store_completion(
                     service.submit_group_leg(
                         principal_ref=context.principal_ref,
                         identity=context.identity,
-                        scope=context.scope,
+                        scope=_operation_scope(
+                            context.scope,
+                            group=binding.group_id,
+                            leg=binding.leg_id,
+                        ),
                         intent=intent,
                         binding=binding,
                     )
@@ -744,17 +773,20 @@ def test_request_context_cannot_supply_generation_or_change_registered_scope(
             context.registration_id,
             context.principal_ref,
         )
-        with (
-            authority.guard.bind_service_call(changed_context, execution_scope=_execution_scope()),
-            pytest.raises(GroupCoordinatorDenied),
-            _authorization(
-                authority,
-                changed_context,
-                intent=intent,
-                binding=binding,
-                lease=_writer_lease(),
-            ),
+        with pytest.raises(
+            GroupCoordinatorDenied, match="invalid coordinator registration context"
         ):
+            with authority.guard.bind_service_call(
+                changed_context,
+                execution_scope=_execution_scope(),
+            ):
+                _authorization(
+                    authority,
+                    changed_context,
+                    intent=intent,
+                    binding=binding,
+                    lease=_writer_lease(),
+                )
             pytest.fail("altered request scope unexpectedly acquired authority")
         with (
             pytest.raises(GroupCoordinatorDenied),
@@ -764,6 +796,78 @@ def test_request_context_cannot_supply_generation_or_change_registered_scope(
             ),
         ):
             pytest.fail("a mapping was accepted as Registry context")
+        assert authority.pending_holds() == ()
+    finally:
+        authority.close()
+        registry.close()
+
+
+def test_one_registry_registration_authorizes_distinct_group_legs(tmp_path: Path) -> None:
+    registry, _contexts = _capture_registry_contexts(tmp_path / "registry.sqlite3")
+    authority = ExecutionGroupAuthority(
+        tmp_path / "authority.sqlite3",
+        completion_verifier=lambda _hold: True,
+        monotonic_clock_ns=lambda: 1,
+    )
+    try:
+        context = _register_and_dispatch(registry, session="stable-coordinator-registration")
+        assert context.scope.group_id is None
+        assert context.scope.leg_id is None
+        authority.control.activate(
+            context,
+            execution_scope=_execution_scope(),
+            risk_account_scope_key=_RISK_SCOPE_KEY,
+        )
+
+        # A normal coordinator registration covers the stable portfolio /
+        # account / strategy mapping. Each child is separately derived by
+        # trusted server code and still passes the same active registration.
+        for group_id, leg_id in (("group-a", "leg-a"), ("group-b", "leg-hedge")):
+            intent, binding = _intent_and_binding(group_id=group_id, leg_id=leg_id)
+            with (
+                authority.guard.bind_service_call(context, execution_scope=intent.scope),
+                _authorization(
+                    authority,
+                    context,
+                    intent=intent,
+                    binding=binding,
+                    lease=_writer_lease(),
+                ) as authorization,
+            ):
+                assert authorization.group_id == group_id
+                assert authorization.leg_id == leg_id
+                assert authority.pending_holds()[0].intent_id == intent.intent_id
+            assert authority.pending_holds() == ()
+        assert authority.ready is True
+    finally:
+        authority.close()
+        registry.close()
+
+
+def test_legacy_registration_with_fixed_group_leg_is_rejected(tmp_path: Path) -> None:
+    fixed_scope = _scope(group="legacy-fixed-group", leg="legacy-fixed-leg")
+    registry, _contexts = _capture_registry_contexts(
+        tmp_path / "registry.sqlite3",
+        scope=fixed_scope,
+    )
+    authority = ExecutionGroupAuthority(
+        tmp_path / "authority.sqlite3",
+        monotonic_clock_ns=lambda: 1,
+    )
+    try:
+        context = _register_and_dispatch(
+            registry,
+            session="legacy-fixed-group-registration",
+            scope=fixed_scope,
+        )
+        with pytest.raises(
+            GroupCoordinatorDenied, match="invalid coordinator registration context"
+        ):
+            authority.control.activate(
+                context,
+                execution_scope=_execution_scope(),
+                risk_account_scope_key=_RISK_SCOPE_KEY,
+            )
         assert authority.pending_holds() == ()
     finally:
         authority.close()

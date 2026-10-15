@@ -719,8 +719,11 @@ class ExecutionGroupAuthority:
             or not scope.portfolio_ref
             or not scope.account_ref
             or not scope.strategy_ref
-            or not scope.group_id
-            or not scope.leg_id
+            # Group and leg are per-request child identities. A Registry
+            # registration is long-lived and therefore pins only the
+            # coordinator's stable account/strategy authority scope.
+            or scope.group_id is not None
+            or scope.leg_id is not None
             or scope.account_refs
             or scope.manual_book_ref is not None
             or scope.account_ref != execution_scope.account_ref
@@ -1018,7 +1021,7 @@ class ExecutionGroupAuthorityGuard:
                 or type(intent) is not OrderIntent
                 or type(writer_lease) is not WriterLease
                 or identity != context.identity
-                or wire_scope != context.scope
+                or not _wire_scope_matches_registration(context.scope, wire_scope)
                 or principal_ref != context.principal_ref
                 or principal_ref != binding.coordinator_principal_ref
                 or execution_scope.account_ref != binding.account_ref
@@ -1307,6 +1310,32 @@ def _wire_scope_payload(scope: WireScope) -> dict[str, object]:
         "group_id": scope.group_id,
         "leg_id": scope.leg_id,
     }
+
+
+def _wire_scope_matches_registration(
+    registered_scope: WireScope,
+    operation_scope: WireScope,
+) -> bool:
+    """Match a per-leg scope to the stable Registry registration scope.
+
+    Only ``group_id`` and ``leg_id`` may be added for an operation. The
+    coordinator service adapter constructs this child scope from the trusted
+    permit/reservation record; all identity, account, portfolio, execution
+    domain, run, and manual-book fields must remain the exact registered
+    values. Registrations that already pin a group or leg are rejected by
+    ``_validate_registered_scope`` instead of being silently reinterpreted.
+    """
+
+    if (
+        type(registered_scope) is not WireScope
+        or type(operation_scope) is not WireScope
+        or registered_scope.group_id is not None
+        or registered_scope.leg_id is not None
+        or not operation_scope.group_id
+        or not operation_scope.leg_id
+    ):
+        return False
+    return replace(operation_scope, group_id=None, leg_id=None) == registered_scope
 
 
 def _hold_payload(hold: GroupDispatchHold) -> dict[str, object]:
