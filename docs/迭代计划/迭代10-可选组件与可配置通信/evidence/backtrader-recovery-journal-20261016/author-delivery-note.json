@@ -1,0 +1,171 @@
+{
+  "record_type": "iteration10_bt02_recovery_delivery_note",
+  "created_date": "2026-10-16",
+  "repository": {
+    "path": "D:\\source_code\\backtrader",
+    "branch": "dev",
+    "head": "8e1851ac7dc59dae51c1b92ac5d9b3a9d4209a77",
+    "staged_or_committed": false,
+    "scope_note": "Six candidate paths are unstaged. Existing unrelated D 0, CTP modifications, and untracked historical evidence are preserved."
+  },
+  "candidate_paths": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 399534,
+      "sha256": "58CE09FC675A5590A4F03F838638979387BBB007AEBFBFBFE89858739196AE04",
+      "round_delta": "6 added lines documenting recovery journal limits and pending process-restart acceptance"
+    },
+    {
+      "path": "backtrader/stores/service_execution_adapter.py",
+      "bytes": 41933,
+      "sha256": "9813C2344D5FBFF95A6A3E9520CBF9CED8AA17D4B197FF170B5CB0A15EAB2526",
+      "round_delta": "Recovery snapshot/page client calls, durable manifests, acceptance-only submit projection, and recovery event/callback polling"
+    },
+    {
+      "path": "backtrader/stores/service_execution_session.py",
+      "bytes": 46896,
+      "sha256": "0B266571FC696B072A45664B616ED8921DC79DEC7A2947EAF5266A7DC20E5379",
+      "round_delta": "Opt-in stable logical-run recovery initialization and main-thread event refresh through normal Session.run"
+    },
+    {
+      "path": "backtrader/stores/service_execution_recovery.py",
+      "bytes": 71062,
+      "sha256": "EABB7FB09B836B727AD41CE0A6945FFD805A522D962838E2BD7EEC53AF916C83",
+      "round_delta": "SQLite durable intent/cancel manifests, snapshot receipts, event projections/cursors, callback queue, and strict v1 wire validation"
+    },
+    {
+      "path": "tests/unit/stores/test_service_execution_adapter.py",
+      "bytes": 54080,
+      "sha256": "54A94E883F1C9F31E64EC3ED915046311D8939AE852F1438236F5450CF153B9C",
+      "round_delta": "Recovery-mode adapter regressions"
+    },
+    {
+      "path": "tests/unit/stores/test_service_execution_recovery.py",
+      "bytes": 30431,
+      "sha256": "3C2E9DDE272AA5DF7AF44ECE98CB8338E9C9BFC78BD75FD7F84B14B0598FB40E",
+      "round_delta": "Recovery journal, cursor, callback restart, rebate, and malformed-wire regressions"
+    }
+  ],
+  "independent_review": {
+    "reviewer": "/root/backtrader_entry_review",
+    "status": "GO",
+    "review_type": "static_only",
+    "reviewed_exact_pins": {
+      "backtrader/stores/service_execution_recovery.py": {
+        "bytes": 71062,
+        "sha256": "EABB7FB09B836B727AD41CE0A6945FFD805A522D962838E2BD7EEC53AF916C83"
+      },
+      "tests/unit/stores/test_service_execution_recovery.py": {
+        "bytes": 30431,
+        "sha256": "3C2E9DDE272AA5DF7AF44ECE98CB8338E9C9BFC78BD75FD7F84B14B0598FB40E"
+      }
+    },
+    "review_scope": "Signed finite cumulative commission is accepted and preserved for valid maker rebates; quantity/price constraints stay in place; currency with null commission and noncanonical decimal text are rejected before cursor/projection/callback effects. Reviewer ran no tests, imports, or processes."
+  },
+  "r11_local_qa": {
+    "cwd": "D:\\source_code\\backtrader",
+    "python": "C:/anaconda3/python.exe",
+    "environment": {
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+    },
+    "pytest_command": "C:/anaconda3/python.exe -m pytest --noconftest -q --junitxml=D:\\temp\\bt02-recovery-local-focus-20261016-r11.xml tests/unit/stores/test_service_execution_recovery.py tests/unit/stores/test_service_execution_adapter.py::test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection tests/unit/stores/test_service_execution_adapter.py::test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal tests/unit/stores/test_service_execution_adapter.py::test_recovery_submit_rejects_a_strategy_with_the_wrong_scope_before_rpc tests/unit/stores/test_service_execution_adapter.py::test_recovery_cancel_rejects_a_strategy_with_the_wrong_scope_before_rpc",
+    "powershell_invocation": "$log='D:\\temp\\bt02-recovery-local-focus-20261016-r11.log'; $junit='D:\\temp\\bt02-recovery-local-focus-20261016-r11.xml'; if((Test-Path -LiteralPath $log) -or (Test-Path -LiteralPath $junit)){ throw 'R11 output path already exists; refusing overwrite' }; $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; & C:/anaconda3/python.exe -m pytest --noconftest -q --junitxml=$junit tests/unit/stores/test_service_execution_recovery.py tests/unit/stores/test_service_execution_adapter.py::test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection tests/unit/stores/test_service_execution_adapter.py::test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal tests/unit/stores/test_service_execution_adapter.py::test_recovery_submit_rejects_a_strategy_with_the_wrong_scope_before_rpc tests/unit/stores/test_service_execution_adapter.py::test_recovery_cancel_rejects_a_strategy_with_the_wrong_scope_before_rpc 2>&1 | Tee-Object -FilePath $log; $testExitCode=$LASTEXITCODE; \"PYTEST_EXIT=$testExitCode\"; exit $testExitCode",
+    "exit_code": 0,
+    "result": {
+      "passed": 27,
+      "failed": 0,
+      "duration_seconds": 4.65,
+      "warnings": [
+        "One existing PytestConfigWarning: unknown config option asyncio_default_fixture_loop_scope"
+      ]
+    },
+    "log": {
+      "path": "D:\\temp\\bt02-recovery-local-focus-20261016-r11.log",
+      "bytes": 632,
+      "sha256": "E03642617D43A29F03EAB32C2A1FA6E66DBFF4D8762B3152C81C837F2B7CAD57"
+    },
+    "junit": {
+      "path": "D:\\temp\\bt02-recovery-local-focus-20261016-r11.xml",
+      "bytes": 4671,
+      "sha256": "43626E8BD1305F7B96FEA4B00EFA203DFB010B1E58A682AA42440B01D1F2C326"
+    },
+    "additional_checks": [
+      {
+        "command": "C:/anaconda3/python.exe -m ruff format backtrader/stores/service_execution_recovery.py tests/unit/stores/test_service_execution_recovery.py",
+        "result": "1 file reformatted, 1 file left unchanged"
+      },
+      {
+        "command": "C:/anaconda3/python.exe -m ruff check backtrader/stores/service_execution_recovery.py tests/unit/stores/test_service_execution_recovery.py",
+        "result": "All checks passed"
+      },
+      {
+        "command": "C:/anaconda3/python.exe -m py_compile backtrader/stores/service_execution_recovery.py tests/unit/stores/test_service_execution_recovery.py",
+        "result": "passed"
+      },
+      {
+        "command": "git diff --check",
+        "result": "passed; Git emitted only existing working-copy LF-to-CRLF notices on other candidate paths"
+      }
+    ],
+    "evidence_level": "LOCAL_RECOVERY_JOURNAL_AND_ADAPTER_UNIT_ONLY"
+  },
+  "fixed_source_dependencies_observed": [
+    {
+      "repository": "D:\\source_code\\backtrader",
+      "commit": "8e1851ac7dc59dae51c1b92ac5d9b3a9d4209a77",
+      "role": "Committed BT normal-runtime baseline"
+    },
+    {
+      "repository": "D:\\bt_api_py",
+      "commit": "596ca47bfe8b84620d07ec7bedfd13e88648cfca",
+      "role": "Committed SDK recovery client wrappers and authenticated account-books v1 wire views"
+    },
+    {
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "commit": "f04851d91a7b336636b02ed9b6dd5cba1dc71037",
+      "role": "Committed Execution SQLite recovery snapshot/page read contract"
+    },
+    {
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "role": "SDK base gitlink observed at SDK recovery commit"
+    },
+    {
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+      "commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "role": "SDK gateway gitlink observed at SDK recovery commit"
+    }
+  ],
+  "scope_and_limitations": [
+    "R11 uses local recovery fixtures and fake recovery client methods; it does not import the SDK recovery client or prove the SDK wire/ServiceHost path.",
+    "No ServiceHost, CURVE endpoint, Cerebro integration, independent client process, process restart, or account/provider was run in this round.",
+    "The local journal persists stable logical-run intent/cancel manifests, snapshot/order evidence, event receipts/projections/cursors, and callback work atomically before callback invocation. A callback exception leaves the receipt retryable; delivery is at-least-once, not exactly-once.",
+    "Execution durable scope has no Backtrader logical run ID; BT local manifests select which authenticated strategy-scope facts belong to a run.",
+    "Recovery snapshots and events do not reconstruct arbitrary Backtrader Order or Strategy objects. The Strategy/application owns rebuilding its stable logical-run and intent manifest.",
+    "Do not claim full BT02 or BT01 acceptance from these local tests."
+  ],
+  "next_integration_plan": {
+    "status": "proposed_only_not_written_or_run",
+    "target": "One new integration node after Root provides the final fixed-source pins; do not rerun R11 or accepted callback nodes.",
+    "candidate_file": "tests/integration/test_btapi_strategy_execution_recovery_local_process.py",
+    "existing_fixture_pattern": "tests/integration/test_btapi_strategy_execution_callbacks_local_process.py",
+    "topology": [
+      "Start one real synthetic ServiceHost process with CURVE and a persistent Execution SQLite store; use the accepted SDK recovery client/account-books contract and a deterministic synthetic provider leaf.",
+      "Spawn client generation A as an independent process. It runs normal Cerebro and ServiceExecutionSession with the durable Backtrader journal, stable account/strategy/logical_run_id, and a predeclared stable intent payload. Assert one dispatch and one durable fill observation.",
+      "After an event receipt, projection, and cursor have committed, make the recovery callback raise once before acknowledgement. Confirm process A performs bounded normal runtime cleanup and exits; do not simulate a source result as a completed callback.",
+      "Spawn client generation B as a fresh process with a fresh client session ID but the same durable journal path, logical run ID, and exact same intent payload. Let the normal strategy entry repeat the same stable intent once, then consume the pending receipt."
+    ],
+    "assertions": [
+      "The retry uses the same receipt/event IDs and is delivered with attempt 2 before successful acknowledgement.",
+      "The local event cursor and projection are not duplicated or advanced by an identical replay.",
+      "The Execution owner reports one stable intent, one dispatch, one fill/fee fact; retrying the same submit payload does not dispatch again.",
+      "The recovered-submit response alone creates no fill or trade callback; only the committed recovery fact is delivered.",
+      "Both client processes and the ServiceHost close normally with bounded cleanup; source origins are asserted against the exact Root fixed export."
+    ],
+    "non_claims_and_blocker": [
+      "The candidate currently restores facts into the local journal and callback queue but does not reconstruct arbitrary Backtrader Order/Strategy objects or apply a recovery snapshot into a fresh Broker position. The proposed node must not assert restored Broker position/notify_order semantics unless Root authorizes a narrow production projection change first.",
+      "The callback boundary is at-least-once: after the simulated failure, attempt 2 is expected. This is not an exactly-once arbitrary user callback guarantee.",
+      "Execution's authenticated strategy scope is not server-filtered by BT logical run; local manifest matching is the run-selection boundary."
+    ]
+  }
+}

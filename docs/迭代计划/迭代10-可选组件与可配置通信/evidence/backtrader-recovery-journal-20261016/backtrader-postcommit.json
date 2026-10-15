@@ -1,0 +1,59 @@
+{
+  "repository": "D:/source_code/backtrader",
+  "parent": "8e1851ac7dc59dae51c1b92ac5d9b3a9d4209a77",
+  "post_path": "D:/bt_api_py/.codex-tmp/iteration10-round132-backtrader-postcommit.json",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "AGENTS.md": "58ce09fc675a5590a4f03f838638979387bbb007aebfbfbfe89858739196ae04",
+    "backtrader/stores/service_execution_adapter.py": "9813c2344d5fbff95a6a3e9520cbf9ced8aa17d4b197ff170b5cb0a15eab2526",
+    "backtrader/stores/service_execution_session.py": "0b266571fc696b072a45664b616ed8921dc79dec7a2947eaf5266a7dc20e5379",
+    "backtrader/stores/service_execution_recovery.py": "eabb7fb09b836b727ad41ce0a6945ffd805a522d962838e2bd7eec53af916c83",
+    "tests/unit/stores/test_service_execution_adapter.py": "54a94e883f1c9f31e64ec3ed915046311d8939ae852f1438236f5450cf153b9c",
+    "tests/unit/stores/test_service_execution_recovery.py": "3c2e9dde272aa5df7af44ece98cb8338e9c9bfc78bd75fd7f84b14b0598fb40e"
+  },
+  "evidence_sha256": {
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10-bt-recovery-delivery-note-20261016.json": "280abdd0d704e5ebc51f8652da4fb043f1a8af125270921c37a45fb6296de0f8",
+    "D:\\temp\\bt02-recovery-local-focus-20261016-r11.log": "e03642617d43a29f03eab32c2a1fa6e66dbff4d8762b3152c81c837f2b7cad57",
+    "D:\\temp\\bt02-recovery-local-focus-20261016-r11.xml": "43626e8bd1305f7b96fea4b00efa203dfb010b1e58a682aa42440b01d1f2c326"
+  },
+  "junit": "D:\\temp\\bt02-recovery-local-focus-20261016-r11.xml",
+  "tests_passed": 27,
+  "reported_pytest_exit": 0,
+  "evidence_level": "AUTHOR_LOCAL_RECOVERY_JOURNAL_ADAPTER_QA_AND_STATIC_REVIEW_ONLY",
+  "limitations": [
+    "R11 uses local recovery fixtures and fake recovery client methods; it does not import the SDK recovery client or prove the SDK wire/ServiceHost path.",
+    "No ServiceHost, CURVE endpoint, Cerebro integration, independent client process, process restart, or account/provider was run in this round.",
+    "The local journal persists stable logical-run intent/cancel manifests, snapshot/order evidence, event receipts/projections/cursors, and callback work atomically before callback invocation. A callback exception leaves the receipt retryable; delivery is at-least-once, not exactly-once.",
+    "Execution durable scope has no Backtrader logical run ID; BT local manifests select which authenticated strategy-scope facts belong to a run.",
+    "Recovery snapshots and events do not reconstruct arbitrary Backtrader Order or Strategy objects. The Strategy/application owns rebuilding its stable logical-run and intent manifest.",
+    "Do not claim full BT02 or BT01 acceptance from these local tests."
+  ],
+  "message": "feat: persist managed execution recovery manifests and event cursors",
+  "paths": [
+    "AGENTS.md",
+    "backtrader/stores/service_execution_adapter.py",
+    "backtrader/stores/service_execution_recovery.py",
+    "backtrader/stores/service_execution_session.py",
+    "tests/unit/stores/test_service_execution_adapter.py",
+    "tests/unit/stores/test_service_execution_recovery.py"
+  ],
+  "filtered_blob_ids": {
+    "AGENTS.md": "c6f3a61a19facf711f8f6229b782b9c7a64999e3",
+    "backtrader/stores/service_execution_adapter.py": "740c8c3cfe582fac6348d4dbdc651d2badbbf8f2",
+    "backtrader/stores/service_execution_recovery.py": "12857743bef0a32a66d0e957b269f17a96d99c0f",
+    "backtrader/stores/service_execution_session.py": "56a043aaecbe852da1a5b8661e14bd4d27b41899",
+    "tests/unit/stores/test_service_execution_adapter.py": "adec31a64d0ebee3790ae81966363e6180a8bd3e",
+    "tests/unit/stores/test_service_execution_recovery.py": "545f9c17c3bad15b6985a1346f8b6b2a039635d3"
+  },
+  "unrelated_paths": [
+    "0",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "unrelated_diff_sha256": "9e790e9053c0081adc3d63c9474664a688b67231761fbeb4763212bf2f4750b1",
+  "unrelated_status_sha256": "b7bef090ac83180c0564beb1416b022de0e6d73220ce2f739c609adc8840a144",
+  "head": "a50aea8c4cc863341cdb1338aebc38edee25fb8a",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true
+}
