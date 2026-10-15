@@ -1105,7 +1105,9 @@ class ServiceClientRuntime:
             operations = operations.intersection(_DEFAULT_TELEMETRY_INGRESS_OPERATIONS)
         if not operations:
             raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
-        if port == "service.order_entry" and not {"orders.submit", "orders.cancel"} <= operations:
+        # Risk-only owners may expose submit without a cancel implementation.
+        # Register only advertised operations; absent cancel never gets a route.
+        if port == "service.order_entry" and "orders.submit" not in operations:
             raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         digest = hashlib.sha256(
             json.dumps(dict(binding), sort_keys=True, separators=(",", ":")).encode()

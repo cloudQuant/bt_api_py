@@ -28,6 +28,248 @@ from ._contracts.models import FeeSchedule, Freshness, FundingSnapshot, Instrume
 _CLOCK_DOMAIN_SEED = f"{socket.gethostname()}:{os.getpid()}:{time.monotonic_ns()}"
 CLOCK_DOMAIN_ID = hashlib.sha256(_CLOCK_DOMAIN_SEED.encode()).hexdigest()[:24]
 _EXPLICIT_IDENTITY_FIELDS = "_explicit_identity_fields"
+_RISK_ORDER_PROVENANCE_SCHEMA = "bt-api-order-source-provenance-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizationProvenance:
+    """Finite source facts carried alongside normalized order observations.
+
+    Normalized records intentionally fill useful API defaults from the
+    request.  This object keeps a separate projection of fields present in the
+    provider response so a safety-sensitive caller can distinguish those
+    values from normalization fallbacks.  It does not retain the provider's
+    arbitrary response body.
+    """
+
+    schema: str
+    operation: str
+    source_fields: tuple[str, ...]
+    source_values: tuple[tuple[str, Any], ...]
+    envelope_fields: tuple[str, ...]
+    envelope_values: tuple[tuple[str, Any], ...]
+    source_sha256: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a detached, bounded representation for service evidence."""
+
+        return {
+            "schema": self.schema,
+            "operation": self.operation,
+            "source_fields": list(self.source_fields),
+            "source_values": dict(self.source_values),
+            "envelope_fields": list(self.envelope_fields),
+            "envelope_values": dict(self.envelope_values),
+            "source_sha256": self.source_sha256,
+        }
+
+
+class NormalizedRecord(dict):
+    """A dict-compatible normalized record with optional source provenance."""
+
+    def __init__(
+        self,
+        value=(),
+        *,
+        provenance: NormalizationProvenance | None = None,
+        source_row_count: int | None = None,
+        source_alignment_valid: bool = False,
+        collection_provenance: NormalizationProvenance | None = None,
+    ):
+        super().__init__(value)
+        self.normalization_provenance = provenance
+        self.source_row_count = source_row_count
+        self.source_alignment_valid = source_alignment_valid
+        self.collection_provenance = collection_provenance
+
+
+class NormalizedRecords(list):
+    """A list-compatible normalized result with per-row source provenance."""
+
+    def __init__(
+        self,
+        values=(),
+        *,
+        provenance: NormalizationProvenance | None = None,
+        row_provenance: tuple[NormalizationProvenance | None, ...] = (),
+        source_alignment_valid: bool = False,
+    ):
+        super().__init__(values)
+        self.normalization_provenance = provenance
+        self.row_provenance = row_provenance
+        self.source_alignment_valid = source_alignment_valid
+
+
+class _NormalizedSourceRows(list):
+    """Internal rows() result carrying source alignment facts for order APIs."""
+
+    def __init__(self, values=(), *, collection_provenance=None, row_provenance=(), aligned=True):
+        super().__init__(values)
+        self.collection_provenance = collection_provenance
+        self.row_provenance = tuple(row_provenance)
+        self.source_alignment_valid = aligned
+
+
+_ORDER_PROVENANCE_FIELDS = frozenset(
+    {
+        "account_id",
+        "AccountID",
+        "InvestorID",
+        "symbol",
+        "symbol_name",
+        "instrument",
+        "instrument_id",
+        "data_name",
+        "instId",
+        "InstrumentID",
+        "trade_symbol",
+        "side",
+        "order_side",
+        "trade_side",
+        "S",
+        "order_id",
+        "external_order_id",
+        "ordId",
+        "orderId",
+        "order_sys_id",
+        "OrderSysID",
+        "client_order_id",
+        "clOrdId",
+        "clientOrderId",
+        "order_ref",
+        "OrderRef",
+        "status",
+        "order_status",
+        "state",
+        "filled",
+        "filled_quantity",
+        "executed_qty",
+        "accFillSz",
+        "executedQty",
+        "VolumeTraded",
+        "quantity",
+        "size",
+        "order_size",
+        "sz",
+        "origQty",
+        "VolumeTotalOriginal",
+        "trade_id",
+        "fill_id",
+        "deal_id",
+        "tradeId",
+        "id",
+        "TradeID",
+        "trade_volume",
+        "qty",
+        "fillSz",
+        "volume",
+        "Volume",
+        "trade_price",
+        "price",
+        "fillPx",
+        "Price",
+        "complete",
+        "is_complete",
+        "snapshot_complete",
+        "history_complete",
+        "complete_order_snapshot",
+        "complete_fill_history",
+        "schema",
+        "schema_version",
+        "watermark",
+        "observation_watermark",
+        "client_query_id",
+        "query_client_order_id",
+        "queried_client_order_id",
+        "response_client_order_id",
+        "response_account_id",
+        "response_operation",
+        "response_schema",
+        "response_watermark",
+    }
+)
+_ORDER_ENVELOPE_FIELDS = frozenset(
+    {
+        "complete",
+        "is_complete",
+        "snapshot_complete",
+        "history_complete",
+        "complete_order_snapshot",
+        "complete_fill_history",
+        "schema",
+        "schema_version",
+        "watermark",
+        "observation_watermark",
+        "client_order_id",
+        "query_client_order_id",
+        "queried_client_order_id",
+        "response_client_order_id",
+        "account_id",
+        "response_account_id",
+        "response_operation",
+        "response_schema",
+        "response_watermark",
+    }
+)
+
+
+def _provenance_scalar(value):
+    """Project only inert scalar facts; arbitrary provider objects are omitted."""
+
+    if value is None or type(value) in (str, bool, int):
+        return value
+    if isinstance(value, Decimal) and value.is_finite():
+        return format(value, "f")
+    if isinstance(value, float) and math.isfinite(value):
+        return format(value, ".17g")
+    if isinstance(value, Enum):
+        return _provenance_scalar(value.value)
+    return None
+
+
+def _order_source_provenance(raw, operation, row=None):
+    """Bind explicit raw order/fill fields without retaining arbitrary values."""
+
+    envelope = raw if isinstance(raw, dict) else {}
+    row = row if isinstance(row, dict) else {}
+    source_fields = tuple(sorted(key for key in row if type(key) is str))
+    envelope_fields = tuple(sorted(key for key in envelope if type(key) is str))
+    source_values = {
+        key: _provenance_scalar(value)
+        for key, value in row.items()
+        if key in _ORDER_PROVENANCE_FIELDS and _provenance_scalar(value) is not None
+    }
+    envelope_values = {
+        key: _provenance_scalar(value)
+        for key, value in envelope.items()
+        if key in _ORDER_ENVELOPE_FIELDS and _provenance_scalar(value) is not None
+    }
+    projection = {
+        "envelope_values": envelope_values,
+        "operation": operation,
+        "schema": _RISK_ORDER_PROVENANCE_SCHEMA,
+        "source_fields": source_fields,
+        "source_values": source_values,
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            projection,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8", errors="strict")
+    ).hexdigest()
+    return NormalizationProvenance(
+        schema=_RISK_ORDER_PROVENANCE_SCHEMA,
+        operation=operation,
+        source_fields=source_fields,
+        source_values=tuple(sorted(source_values.items())),
+        envelope_fields=envelope_fields,
+        envelope_values=tuple(sorted(envelope_values.items())),
+        source_sha256=digest,
+    )
+
 
 # Only response codes whose venue documentation proves that the request was
 # rejected before acceptance belong here. Unknown numeric codes are deliberately
@@ -1012,6 +1254,23 @@ def rows(result, operation, *, exchange_name=None, write=False):
         raise normalize_error(raw, operation, exchange_name=exchange_name, write=write) from None
     check_response(raw, operation, exchange_name=exchange_name, write=write)
     native_rows = _raw_rows(raw)
+
+    def source_rows(values, *, aligned):
+        if operation not in {"make_order", "query_order", "get_deals"}:
+            return values
+        collection = _order_source_provenance(raw, operation)
+        row_provenance = (
+            tuple(_order_source_provenance(raw, operation, item) for item in native_rows)
+            if aligned and len(values) == len(native_rows)
+            else tuple(None for _ in values)
+        )
+        return _NormalizedSourceRows(
+            values,
+            collection_provenance=collection,
+            row_provenance=row_provenance,
+            aligned=aligned and len(values) == len(native_rows),
+        )
+
     getter = getattr(result, "get_data", None)
     if callable(getter):
         try:
@@ -1021,20 +1280,21 @@ def rows(result, operation, *, exchange_name=None, write=False):
             if mapped:
                 # Keep missing native fields locally for vendor-only values.
                 if len(mapped) == len(native_rows):
-                    return [
+                    merged = [
                         {
                             **(dict(native) if isinstance(native, dict) else {}),
                             **{key: value for key, value in item.items() if value is not None},
                         }
                         for native, item in zip(native_rows, mapped, strict=True)
                     ]
-                return mapped
+                    return source_rows(merged, aligned=True)
+                return source_rows(mapped, aligned=False)
             if not native_rows:
-                return []
+                return source_rows([], aligned=True)
         except (ValueError, TypeError, KeyError, AttributeError, NotImplementedError):
             # Some legacy containers do not normalize newer endpoints yet.
             pass
-    return [_dict(item) for item in native_rows]
+    return source_rows([_dict(item) for item in native_rows], aligned=True)
 
 
 def _base(exchange_name, row, symbol=None):
@@ -2389,11 +2649,46 @@ def normalize_result(operation, result, exchange_name, symbol=None, request=None
                 terminal_confirmed=False,
                 definite_reject=False,
             )
-        return normalized
+        provenance = None
+        source_row_count = None
+        source_alignment_valid = False
+        collection_provenance = None
+        if isinstance(source, _NormalizedSourceRows) and source.source_alignment_valid:
+            provenance = source.row_provenance[0] if source.row_provenance else None
+            source_row_count = len(source)
+            source_alignment_valid = True
+            collection_provenance = source.collection_provenance
+        return NormalizedRecord(
+            normalized,
+            provenance=provenance,
+            source_row_count=source_row_count,
+            source_alignment_valid=source_alignment_valid,
+            collection_provenance=collection_provenance,
+        )
     if operation == "get_open_orders":
         return [order(row, exchange_name, symbol) for row in source]
     if operation == "get_deals":
-        return [trade(row, exchange_name, symbol) for row in source]
+        mapped = [trade(row, exchange_name, symbol) for row in source]
+        if isinstance(source, _NormalizedSourceRows):
+            row_provenance = source.row_provenance
+            if source.source_alignment_valid and len(row_provenance) == len(mapped):
+                mapped = [
+                    NormalizedRecord(item, provenance=row_provenance[index])
+                    for index, item in enumerate(mapped)
+                ]
+                return NormalizedRecords(
+                    mapped,
+                    provenance=source.collection_provenance,
+                    row_provenance=row_provenance,
+                    source_alignment_valid=source.source_alignment_valid,
+                )
+            return NormalizedRecords(
+                mapped,
+                provenance=source.collection_provenance,
+                row_provenance=tuple(None for _ in mapped),
+                source_alignment_valid=False,
+            )
+        return mapped
     if operation == "get_kline":
         return [normalize_event(row, exchange_name, kind="bar", symbol=symbol) for row in source]
     if operation in {"get_tick", "get_depth"}:

@@ -370,6 +370,20 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             internal_ports=frozenset({"service.owner_control"}),
             validator_module_name="bt_api_execution.service_component",
         ),
+        ("risk", "account_owner"): _Builtin(
+            module_name="bt_api_py.service_risk_order_entry",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset(
+                {"bt_api", "targets", "admission", "journal", "gate", "provider_contracts"}
+            ),
+            public_ports=MappingProxyType(
+                {
+                    "service.order_entry": frozenset({"orders.submit"}),
+                    "service.order_query": frozenset({"orders.query"}),
+                }
+            ),
+            internal_ports=frozenset(),
+        ),
     }
 )
 
@@ -801,6 +815,83 @@ def build_component(
                 else:
                     constructor = getattr(module, "MonitorReadService", None)
                     adapter = constructor(values["outbox"], values["targets"])
+            elif spec.component == "risk" and spec.options.get("role") == "account_owner":
+                constructor = getattr(module, "RiskOrderEntryService", None)
+                adapter = constructor(
+                    values["bt_api"],
+                    values["targets"],
+                    values["admission"],
+                    values["journal"],
+                    values["gate"],
+                    values["provider_contracts"],
+                )
+                if "service.order_entry" in spec.bind_ports:
+                    targets = values["targets"]
+                    capability_state = getattr(adapter, "capability_state", None)
+                    if (
+                        not isinstance(targets, Mapping)
+                        or not targets
+                        or not callable(capability_state)
+                    ):
+                        raise ServiceComponentError("ORDER_CAPABILITY_UNAVAILABLE")
+                    for target_scope in targets:
+                        state = capability_state(target_scope)
+                        if not isinstance(state, Mapping) or state.get("orders.submit") is not True:
+                            raise ServiceComponentError("ORDER_CAPABILITY_UNAVAILABLE")
+                    recover = getattr(adapter, "recover_interrupted_dispatches", None)
+                    if not callable(recover):
+                        raise ServiceComponentError("ORDER_RECOVERY_UNAVAILABLE")
+                    try:
+                        # The Risk journal owns the account-wide writer fence.
+                        # Recovery completes before capabilities become ready.
+                        recovered = recover()
+                    except Exception:
+                        raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
+                    record_type = getattr(module, "RiskOrderCommand", None)
+                    if type(recovered) is not tuple or not isinstance(record_type, type):
+                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
+                    try:
+                        expected_scope_keys = {
+                            target.account_scope.key for target in targets.values()
+                        }
+                        # The trusted adapter can finish a retained PROOF_READY
+                        # command using its exact durable Risk receipt. Both
+                        # that ACK and a still-UNKNOWN result are valid startup
+                        # outcomes; this projection check grants no new proof.
+                        recovery_result_valid = all(
+                            type(record) is record_type
+                            and record.state in {"UNKNOWN", "ACKED_TRACKED"}
+                            and record.scope.key in expected_scope_keys
+                            and type(record.principal_ref) is str
+                            and bool(record.principal_ref)
+                            and isinstance(record.latest_event, Mapping)
+                            and record.latest_event.get("public_state") == record.state
+                            and (
+                                record.state == "UNKNOWN"
+                                or (
+                                    type(record.latest_event.get("dispatch_attempt_count")) is int
+                                    and record.latest_event["dispatch_attempt_count"] == 1
+                                    and type(record.latest_event.get("provider_order_id")) is str
+                                    and bool(record.latest_event["provider_order_id"])
+                                    and type(record.permit_id) is str
+                                    and bool(record.permit_id)
+                                    and record.latest_event.get("permit_id") == record.permit_id
+                                    and record.latest_event.get("risk_intent_id")
+                                    == record.risk_intent_id
+                                    and type(record.latest_event.get("proof_sha256")) is str
+                                    and len(record.latest_event["proof_sha256"]) == 64
+                                    and all(
+                                        char in "0123456789abcdef"
+                                        for char in record.latest_event["proof_sha256"]
+                                    )
+                                )
+                            )
+                            for record in recovered
+                        )
+                    except Exception:
+                        recovery_result_valid = False
+                    if not recovery_result_valid:
+                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
             elif spec.component == "risk":
                 constructor = getattr(module, "RiskReadService", None)
                 adapter = constructor(values["gate"], values["targets"])
@@ -1069,7 +1160,10 @@ def build_component(
                         ):
                             raise ServiceResultTooLargeError() from None
                         raise
-                if spec.component == "execution" and spec.options.get("role") == "account_owner":
+                if (
+                    spec.component in {"execution", "risk"}
+                    and spec.options.get("role") == "account_owner"
+                ):
                     return _adapter.handle(  # type: ignore[attr-defined]
                         _operation,
                         principal_ref=context.principal_ref,

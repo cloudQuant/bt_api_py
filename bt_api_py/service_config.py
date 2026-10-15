@@ -178,6 +178,7 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         "group_coordinator": frozenset({"service.order_group_entry"}),
     },
     "risk": {
+        "account_owner": frozenset({"service.order_entry", "service.order_query"}),
         "account_admission": frozenset(
             {
                 "service.order_admission",
@@ -939,7 +940,7 @@ def _validate_component_options(
             "portfolio_ref": _required_ref(raw, "portfolio_ref", options_path),
         }
     if component == "risk":
-        if role == "account_admission":
+        if role in {"account_admission", "account_owner"}:
             _check_keys(raw, {"role", "account_policy_ref"}, options_path)
             return {
                 "role": role,
