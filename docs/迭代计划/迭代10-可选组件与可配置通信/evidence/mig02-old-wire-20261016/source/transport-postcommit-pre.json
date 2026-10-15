@@ -1,0 +1,40 @@
+{
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+  "parent": "29ab21e714292a363538491e4ff8461d336d1dfc",
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-mig02-transport-postcommit-r1.json",
+  "message": "test(transport): reject legacy forwarding order on v2 endpoint",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "tests/test_service_v2.py": "c5d8a6056d3fb76ee9e4b7a0b7896399f94f4fcb08e11c542f4c11ec589202b4"
+  },
+  "evidence_sha256": {
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\spec.json": "d08c6cd1982674ffdee9febade159974b0be67c6cbef7f7f75dd75973e57efa7",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\command.json": "965e166ef286f87bb0a6f4c8e1ddb54b34fb377abe8092ac069eaf3c8b66e735",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\runner.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\result.json": "2570074dd6a1d741f1d019f937cfdcc1f2193f73a7fcda203a7b381c0102eaeb",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\source-before.json": "d625aa6ce4b62a8c6d8d646d547db771ebabc8d8977217d80c4a47ca7f040451",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\source-after.json": "d625aa6ce4b62a8c6d8d646d547db771ebabc8d8977217d80c4a47ca7f040451",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\stdout.log": "35f3740547201bb9d559bace5cf7899e767139a414ca634c19c2632b05fcf8bc",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\junit.xml": "ea52d6141bb0c04acdf8e83681b794f6c372c501159a1c142f32d997a2aefff6",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\exit.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\running.json": "1c80358f462680ebcc45ace1e3083cb0ce2f70ef0a393bc108a6a030b3531882",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\pytest.ini": "8250d20f42b419af40706490ead78aabab9feba93eab09a3f626e3de5256e1f4",
+    "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\正式迭代计划.md": "a6f8dba3e749bd321e0ba118f666914fe6bf540ae9ea1396c2a4273087d75349",
+    "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\cfg05-v4-normal-runtime-20261016\\root-adjudication.md": "6444609f3c47bb732660fee5eb4e0e83cf556951f6ce993d5eb2bc718a85ce2c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-mig02-transport-source-assessment-r1.json": "2ab0c72ebd5b1be24896c8e590e1ad99b499c33c0478878b67e1d0bd9788c835"
+  },
+  "junit": "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\junit.xml",
+  "tests_passed": 1,
+  "allowed_blank_at_eof": {},
+  "allowed_markdown_hardbreaks": {},
+  "paths": [
+    "tests/test_service_v2.py"
+  ],
+  "filtered_blob_ids": {
+    "tests/test_service_v2.py": "e976ebfdc048d4b17b26c18a7e6522576bc36122"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

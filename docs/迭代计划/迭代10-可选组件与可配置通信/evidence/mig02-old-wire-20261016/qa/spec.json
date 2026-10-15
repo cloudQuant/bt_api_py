@@ -1,0 +1,44 @@
+{
+  "python": "C:/anaconda3/python.exe",
+  "cwd": "D:/bt_api_py/bt_api/bt_api_transport_zmq",
+  "output": "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output",
+  "source_sha256": {
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq/tests/test_service_v2.py": "c5d8a6056d3fb76ee9e4b7a0b7896399f94f4fcb08e11c542f4c11ec589202b4",
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/service_v2.py": "bc17344835fcd80409cdcfd8037345ccf92b5ece5f57817aeb1eda33af17b280",
+    "D:/bt_api_py/bt_api_py/forwarding/schema.py": "60f0a2f1fb06db0f562dc502d7ceb521379556db9cc16d328d59ab0b5bacd4f6",
+    "D:/bt_api_py/bt_api/bt_api_base/src/bt_api_base/service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\pytest.ini": "8250d20f42b419af40706490ead78aabab9feba93eab09a3f626e3de5256e1f4"
+  },
+  "repositories": {
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+    "D:/bt_api_py/bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "environment": {
+    "PYTHONNOUSERSITE": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "D:/bt_api_py;D:/bt_api_py/bt_api/bt_api_base/src;D:/bt_api_py/bt_api/bt_api_transport_zmq/src"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_PLUGINS",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTHONSTARTUP"
+  ],
+  "pytest_options": [
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\pytest.ini",
+    "--rootdir",
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q"
+  ],
+  "nodes": [
+    "tests/test_service_v2.py::test_legacy_forwarding_order_command_is_dropped_by_live_v2_curve_server"
+  ],
+  "evidence_level": "REAL_LOCAL_CURVE_ENDPOINT_LEGACY_WIRE_REJECTION_SELECTED_SOURCE_ONLY"
+}

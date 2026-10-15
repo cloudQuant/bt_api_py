@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "round": "MIG02 legacy forwarding wire negative / transport package",
+  "evidence_level": "REAL_LOCAL_CURVE_ENDPOINT_LEGACY_WIRE_REJECTION_SELECTED_SOURCE_ONLY",
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+  "branch": "dev",
+  "package_parent_head": "29ab21e714292a363538491e4ff8461d336d1dfc",
+  "authorized_source_scope": [
+    "tests/test_service_v2.py"
+  ],
+  "source_pins": {
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq/tests/test_service_v2.py": {
+      "bytes": 65082,
+      "sha256": "c5d8a6056d3fb76ee9e4b7a0b7896399f94f4fcb08e11c542f4c11ec589202b4"
+    },
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/service_v2.py": {
+      "bytes": 29701,
+      "sha256": "bc17344835fcd80409cdcfd8037345ccf92b5ece5f57817aeb1eda33af17b280"
+    },
+    "D:/bt_api_py/bt_api_py/forwarding/schema.py": {
+      "bytes": 12785,
+      "sha256": "60f0a2f1fb06db0f562dc502d7ceb521379556db9cc16d328d59ab0b5bacd4f6"
+    },
+    "D:/bt_api_py/bt_api/bt_api_base/src/bt_api_base/service_protocol.py": {
+      "bytes": 26174,
+      "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+    },
+    "D:/bt_api_py/.codex-tmp/mig02-old-forwarding-wire-negative-root-20261016-r1/pytest.ini": {
+      "bytes": 9,
+      "sha256": "8250d20f42b419af40706490ead78aabab9feba93eab09a3f626e3de5256e1f4"
+    }
+  },
+  "formal_mapping": {
+    "plan_path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\正式迭代计划.md",
+    "plan_sha256": "a6f8dba3e749bd321e0ba118f666914fe6bf540ae9ea1396c2a4273087d75349",
+    "row": "MIG02",
+    "line": 783,
+    "contract": "旧远程配置离线转换或具体拒绝；旧 wire 拒绝，无后台启动、自动 direct 或双协议降级；纯转换检查及真实新端点版本反例，普通 direct/回测继续运行。",
+    "prior_cfg05_adjudication": {
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\cfg05-v4-normal-runtime-20261016\\root-adjudication.md",
+      "sha256": "6444609f3c47bb732660fee5eb4e0e83cf556951f6ce993d5eb2bc718a85ce2c",
+      "decision": "第135轮独立条款审查GO并裁定CFG05正式PASS；该证据被引用，不在本轮重跑。",
+      "r48": "已接受11项离线拒绝检查与EMPTY_COMPONENTS检查，覆盖enabled/register_to/空服务清单/政策身份引用。",
+      "r127": "正常CLI/legacy入口覆盖旧Gateway/forwarding形状及10个已消费BT_GATEWAY环境变量，派发前要求迁移拒绝；保留其作者6 passed/1 warning，但原始log/JUnit与独立exit记录缺失，不能追溯声称是Root运行。",
+      "r133": "BT_STORE_PROVIDER selector的三个Gateway拒绝与先前两个direct/unset正向情况分轮记录；不可表述为同一轮5/5。",
+      "normal_backtest": "新增CFG05节点证明真实v4本地回测入口完成；CFG01正常DirectBackend证据可沿用。"
+    },
+    "new_wire_node": "本轮真实本机CURVE v2服务端收到了用旧 forwarding.OrderCommand/serialize_message 生成的扁平 JSON；服务端消费该帧但无业务回复，业务handler次数相对基线增量为0。",
+    "downgrade_limit": "该node不调用旧 forwarding client，不覆盖其超时后的fallback决策或跨机ServiceHost启动；不单独证明无automatic-direct/dual-protocol downgrade。Root总裁定MIG02正式PASS时应把此限制与CFG05已接受范围一起保留。",
+    "outside_scope": "不推定MIG01/MIG04、跨机部署或账户/provider接受。"
+  },
+  "root_shared_run": {
+    "invocation": "5f95c8",
+    "output_dir": "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output",
+    "node": "tests/test_service_v2.py::test_legacy_forwarding_order_command_is_dropped_by_live_v2_curve_server",
+    "exit": 0,
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "duration_seconds": 0.81,
+    "stdout_sha256": "35f3740547201bb9d559bace5cf7899e767139a414ca634c19c2632b05fcf8bc",
+    "stderr_empty": true,
+    "warning": "One RuntimeWarning from pyzmq: Windows Proactor event loop lacks add_reader; tornado registers an additional selector thread.",
+    "runner_source_recorded": "The runner/source-before and source-after record exactly five unchanged pins: test, transport server, old forwarding schema, Base protocol and standalone pytest.ini. Transport/Base package heads are unchanged.",
+    "import_origin_limit": "No same-call import-origin capture was recorded. PYTHONPATH explicitly names SDK root, Base src, Transport src; legacy schema is loaded by spec_from_file_location from its pinned path. No same-call origin assertion is claimed.",
+    "artifact_pins": {
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\spec.json": {
+        "bytes": 2070,
+        "sha256": "d08c6cd1982674ffdee9febade159974b0be67c6cbef7f7f75dd75973e57efa7"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\command.json": {
+        "bytes": 1198,
+        "sha256": "965e166ef286f87bb0a6f4c8e1ddb54b34fb377abe8092ac069eaf3c8b66e735"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\result.json": {
+        "bytes": 835,
+        "sha256": "2570074dd6a1d741f1d019f937cfdcc1f2193f73a7fcda203a7b381c0102eaeb"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\source-before.json": {
+        "bytes": 724,
+        "sha256": "d625aa6ce4b62a8c6d8d646d547db771ebabc8d8977217d80c4a47ca7f040451"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\source-after.json": {
+        "bytes": 724,
+        "sha256": "d625aa6ce4b62a8c6d8d646d547db771ebabc8d8977217d80c4a47ca7f040451"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\stdout.log": {
+        "bytes": 836,
+        "sha256": "35f3740547201bb9d559bace5cf7899e767139a414ca634c19c2632b05fcf8bc"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\junit.xml": {
+        "bytes": 351,
+        "sha256": "ea52d6141bb0c04acdf8e83681b794f6c372c501159a1c142f32d997a2aefff6"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\qa-output\\running.json": {
+        "bytes": 76,
+        "sha256": "1c80358f462680ebcc45ace1e3083cb0ce2f70ef0a393bc108a6a030b3531882"
+      },
+      "D:\\bt_api_py\\.codex-tmp\\mig02-old-forwarding-wire-negative-root-20261016-r1\\pytest.ini": {
+        "bytes": 9,
+        "sha256": "8250d20f42b419af40706490ead78aabab9feba93eab09a3f626e3de5256e1f4"
+      },
+      "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\正式迭代计划.md": {
+        "bytes": 161040,
+        "sha256": "a6f8dba3e749bd321e0ba118f666914fe6bf540ae9ea1396c2a4273087d75349"
+      },
+      "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\cfg05-v4-normal-runtime-20261016\\root-adjudication.md": {
+        "bytes": 2653,
+        "sha256": "6444609f3c47bb732660fee5eb4e0e83cf556951f6ce993d5eb2bc718a85ce2c"
+      }
+    }
+  },
+  "independent_static_review": {
+    "reviewer": "/root/execution_recovery_review",
+    "disposition": "GO",
+    "review_scope": "Static review of exact test pin; no test/import/Host execution by reviewer.",
+    "limit": "Endpoint-level old-wire rejection only; not ServiceHost/client downgrade behavior or MIG02 acceptance by itself."
+  },
+  "unrelated_untracked_sha256": {}
+}

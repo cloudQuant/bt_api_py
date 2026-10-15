@@ -1,0 +1,9 @@
+.                                                                        [100%]
+============================== warnings summary ===============================
+tests/test_service_v2.py::test_legacy_forwarding_order_command_is_dropped_by_live_v2_curve_server
+  C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+    self._get_loop()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\bt_api_py\.codex-tmp\mig02-old-forwarding-wire-negative-root-20261016-r1\qa-output\junit.xml -
+1 passed, 1 warning in 0.81s

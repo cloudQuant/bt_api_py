@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T23:08:16.486017+00:00",
+  "source_count": 5,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+    "D:/bt_api_py/bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+    "D:/bt_api_py/bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "35f3740547201bb9d559bace5cf7899e767139a414ca634c19c2632b05fcf8bc",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "REAL_LOCAL_CURVE_ENDPOINT_LEGACY_WIRE_REJECTION_SELECTED_SOURCE_ONLY"
+}
