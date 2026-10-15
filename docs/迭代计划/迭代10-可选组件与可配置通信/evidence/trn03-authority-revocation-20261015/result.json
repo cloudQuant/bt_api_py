@@ -1,0 +1,147 @@
+{
+  "schema": "trn03-market-revocation-r3-result/v1",
+  "start_utc": "2026-10-15T14:19:59.6959855Z",
+  "finish_utc": "2026-10-15T14:20:05.5044386Z",
+  "exit_code": 0,
+  "node": "D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source\\tests\\test_service_transport_authorization_revocation_r3.py::test_service_host_market_audience_revoke_reconnect_blocks_existing_subscriber",
+  "source_pins_before": [
+    {
+      "path": "bt_api_py\\service_components.py",
+      "bytes": 61001,
+      "sha256": "40C533472BD05A58A834EA270921150BD12B7A1CE57419141FB213AF6837E9B4"
+    },
+    {
+      "path": "bt_api_py\\service_config.py",
+      "bytes": 46655,
+      "sha256": "CA5130BB485536CC8B05E4A237B125294ED887B21DD65BCAE33874D3E41CBD33"
+    },
+    {
+      "path": "bt_api_py\\service_host.py",
+      "bytes": 54006,
+      "sha256": "C19E1A81FD7220631D433758EECA15FBCB564712CAD4AB02F7B576F360BF166E"
+    },
+    {
+      "path": "bt_api_py\\service_market.py",
+      "bytes": 53046,
+      "sha256": "C0E6C96113875E7DCFB2C1668CE1B8318B86E9E3AE135E16D7523FF28CD7E3C3"
+    },
+    {
+      "path": "bt_api_py\\service_registry.py",
+      "bytes": 57116,
+      "sha256": "144E1C6A032AB7A4014534CACEF3519FE3C51C90A0F3958173732E4A925920A1"
+    },
+    {
+      "path": "bt_api_py\\service_runtime.py",
+      "bytes": 70218,
+      "sha256": "01A9DB01913C9E22D6EE2B1C030DDC306F5FC9C6FF93D36EC0B65F39D4D27FB5"
+    },
+    {
+      "path": "bt_api\\bt_api_base\\src\\bt_api_base\\market_protocol.py",
+      "bytes": 6061,
+      "sha256": "FB110BA6818FBD0F2E0D98036EEB3834CBF312B74018980A454B28272C22410A"
+    },
+    {
+      "path": "bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+      "bytes": 26884,
+      "sha256": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87"
+    },
+    {
+      "path": "bt_api\\bt_api_gateway\\src\\bt_api_gateway\\market_hub.py",
+      "bytes": 54282,
+      "sha256": "80F60A6A2CA86223BD6FEA608CF40956C3655ADC1419E3E229ABF8B3BBF9F1A0"
+    },
+    {
+      "path": "bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\market_v2.py",
+      "bytes": 27052,
+      "sha256": "FB86E8288C835E6B600E9C1BE5CA01F05D166A778F0595E5192C06CB25D2F24B"
+    },
+    {
+      "path": "bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\server.py",
+      "bytes": 16949,
+      "sha256": "717C551079CC6F56E55CC845F7B05276987FBA172D3CAF812275511D46FB35B1"
+    }
+  ],
+  "source_pins_after": [
+    {
+      "path": "bt_api_py\\service_components.py",
+      "bytes": 61001,
+      "sha256": "40C533472BD05A58A834EA270921150BD12B7A1CE57419141FB213AF6837E9B4"
+    },
+    {
+      "path": "bt_api_py\\service_config.py",
+      "bytes": 46655,
+      "sha256": "CA5130BB485536CC8B05E4A237B125294ED887B21DD65BCAE33874D3E41CBD33"
+    },
+    {
+      "path": "bt_api_py\\service_host.py",
+      "bytes": 54006,
+      "sha256": "C19E1A81FD7220631D433758EECA15FBCB564712CAD4AB02F7B576F360BF166E"
+    },
+    {
+      "path": "bt_api_py\\service_market.py",
+      "bytes": 53046,
+      "sha256": "C0E6C96113875E7DCFB2C1668CE1B8318B86E9E3AE135E16D7523FF28CD7E3C3"
+    },
+    {
+      "path": "bt_api_py\\service_registry.py",
+      "bytes": 57116,
+      "sha256": "144E1C6A032AB7A4014534CACEF3519FE3C51C90A0F3958173732E4A925920A1"
+    },
+    {
+      "path": "bt_api_py\\service_runtime.py",
+      "bytes": 70218,
+      "sha256": "01A9DB01913C9E22D6EE2B1C030DDC306F5FC9C6FF93D36EC0B65F39D4D27FB5"
+    },
+    {
+      "path": "bt_api\\bt_api_base\\src\\bt_api_base\\market_protocol.py",
+      "bytes": 6061,
+      "sha256": "FB110BA6818FBD0F2E0D98036EEB3834CBF312B74018980A454B28272C22410A"
+    },
+    {
+      "path": "bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+      "bytes": 26884,
+      "sha256": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87"
+    },
+    {
+      "path": "bt_api\\bt_api_gateway\\src\\bt_api_gateway\\market_hub.py",
+      "bytes": 54282,
+      "sha256": "80F60A6A2CA86223BD6FEA608CF40956C3655ADC1419E3E229ABF8B3BBF9F1A0"
+    },
+    {
+      "path": "bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\market_v2.py",
+      "bytes": 27052,
+      "sha256": "FB86E8288C835E6B600E9C1BE5CA01F05D166A778F0595E5192C06CB25D2F24B"
+    },
+    {
+      "path": "bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\server.py",
+      "bytes": 16949,
+      "sha256": "717C551079CC6F56E55CC845F7B05276987FBA172D3CAF812275511D46FB35B1"
+    }
+  ],
+  "artifacts": {
+    "stdout.txt": {
+      "bytes": 687,
+      "sha256": "F3C05AAD10C0072E4C122FC902DA8E6800190D1B7AE7387F90FB904C21207E17"
+    },
+    "stderr-verbose-imports.txt": {
+      "bytes": 142265,
+      "sha256": "33FE0EDD985DAC346C5AF57F3A998E5C1936E8C1A9A55F26B1990D6DDF5391B0"
+    },
+    "pytest-junit.xml": {
+      "bytes": 392,
+      "sha256": "A8938A614B7880D1E3C064C37916D84736FE3FF8CF47EF36DCA1FDB31D67FC50"
+    }
+  },
+  "normal_cleanup_assertion": "test requires two host shutdown records of (exitcode=0,reaped=true), with no forced termination",
+  "network_scope": "synthetic loopback only",
+  "private_inputs_read": false,
+  "provider_network": false,
+  "tests": 1,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "pytest_warning_count": 1,
+  "warning": "PytestConfigWarning: asyncio_default_fixture_loop_scope is unknown because plugin autoload was disabled.",
+  "result_record_correction": "Initial record writer addressed testsuite at the XML root; pytest-junit.xml uses testsuites, so counts were corrected from that same artifact without rerunning the node.",
+  "source_origin_caveat": "The run used explicit fixed-source PYTHONPATH and matching pre/post source pins. A post-run PathFinder source-origin scan aborted before module lookup due to a malformed package search-root argument; no test or application module import followed."
+}

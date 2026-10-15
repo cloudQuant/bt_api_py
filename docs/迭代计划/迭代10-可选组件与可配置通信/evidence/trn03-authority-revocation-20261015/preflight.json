@@ -1,0 +1,96 @@
+{
+  "schema": "trn03-market-revocation-r3-preflight/v1",
+  "source_root": "D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source",
+  "root_commit": "c6c832f4e12bf999dd554ba518d9421ecf6b1eb8",
+  "submodule_commits": {
+    "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api/bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "bt_api/bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "base_manifest": {
+    "path": "D:\\temp\\reg03-durable-business-c6-hostfix-20261015-r5\\source-verification.json",
+    "bytes": 5530,
+    "sha256": "4CF48831A6E9518E4626BFB721221462F9264A5F4A124B72FA2EBF3220C6AC2A"
+  },
+  "overlay_manifest": {
+    "path": "D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source-verification.json",
+    "bytes": 35575,
+    "sha256": "C369AA0DFED660CC1ABC003D2B9F692386425AC8E54CABB59A742DCE5AA06B02"
+  },
+  "test": {
+    "path": "D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source\\tests\\test_service_transport_authorization_revocation_r3.py",
+    "bytes": 26372,
+    "sha256": "9D55CE69036A3451980F3DFBE34266B133E0C58C164877F80B580D381E50498C",
+    "node": "tests.test_service_transport_authorization_revocation_r3::test_service_host_market_audience_revoke_reconnect_blocks_existing_subscriber"
+  },
+  "python": {
+    "path": "C:\\anaconda3\\python.exe",
+    "version": "Python 3.11.5"
+  },
+  "source_pins": [
+    {
+      "path": "bt_api_py\\service_components.py",
+      "bytes": 61001,
+      "sha256": "40C533472BD05A58A834EA270921150BD12B7A1CE57419141FB213AF6837E9B4"
+    },
+    {
+      "path": "bt_api_py\\service_config.py",
+      "bytes": 46655,
+      "sha256": "CA5130BB485536CC8B05E4A237B125294ED887B21DD65BCAE33874D3E41CBD33"
+    },
+    {
+      "path": "bt_api_py\\service_host.py",
+      "bytes": 54006,
+      "sha256": "C19E1A81FD7220631D433758EECA15FBCB564712CAD4AB02F7B576F360BF166E"
+    },
+    {
+      "path": "bt_api_py\\service_market.py",
+      "bytes": 53046,
+      "sha256": "C0E6C96113875E7DCFB2C1668CE1B8318B86E9E3AE135E16D7523FF28CD7E3C3"
+    },
+    {
+      "path": "bt_api_py\\service_registry.py",
+      "bytes": 57116,
+      "sha256": "144E1C6A032AB7A4014534CACEF3519FE3C51C90A0F3958173732E4A925920A1"
+    },
+    {
+      "path": "bt_api_py\\service_runtime.py",
+      "bytes": 70218,
+      "sha256": "01A9DB01913C9E22D6EE2B1C030DDC306F5FC9C6FF93D36EC0B65F39D4D27FB5"
+    },
+    {
+      "path": "bt_api\\bt_api_base\\src\\bt_api_base\\market_protocol.py",
+      "bytes": 6061,
+      "sha256": "FB110BA6818FBD0F2E0D98036EEB3834CBF312B74018980A454B28272C22410A"
+    },
+    {
+      "path": "bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+      "bytes": 26884,
+      "sha256": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87"
+    },
+    {
+      "path": "bt_api\\bt_api_gateway\\src\\bt_api_gateway\\market_hub.py",
+      "bytes": 54282,
+      "sha256": "80F60A6A2CA86223BD6FEA608CF40956C3655ADC1419E3E229ABF8B3BBF9F1A0"
+    },
+    {
+      "path": "bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\market_v2.py",
+      "bytes": 27052,
+      "sha256": "FB86E8288C835E6B600E9C1BE5CA01F05D166A778F0595E5192C06CB25D2F24B"
+    },
+    {
+      "path": "bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\server.py",
+      "bytes": 16949,
+      "sha256": "717C551079CC6F56E55CC845F7B05276987FBA172D3CAF812275511D46FB35B1"
+    }
+  ],
+  "env": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONPATH": "D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source;D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source\\bt_api\\bt_api_base\\src;D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source\\bt_api\\bt_api_gateway\\src;D:\\temp\\reg03-durable-business-c6-writeops-20261015-r1\\source\\bt_api\\bt_api_transport_zmq\\src"
+  },
+  "private_inputs_read": false,
+  "provider_network": false,
+  "network_scope": "synthetic loopback endpoints only",
+  "command": "C:\\anaconda3\\python.exe -v -m pytest -q --noconftest --import-mode=importlib -c <source>\\pyproject.toml <test-copy>::test_service_host_market_audience_revoke_reconnect_blocks_existing_subscriber --basetemp=<run>\\pytest-tmp --junitxml=<run>\\pytest-junit.xml",
+  "independent_review": "GO_STATIC_ONLY; afi_lifespan_review; 9D55CE69036A3451980F3DFBE34266B133E0C58C164877F80B580D381E50498C"
+}

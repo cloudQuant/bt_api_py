@@ -1,0 +1,43 @@
+{
+  "parent": "0959c4d3c24c6f1698debc92ae5359e5d4274588",
+  "formal_case": "TRN03",
+  "evidence_level": "REAL_LOCAL_CURVE_ACL_AND_CONTROLLED_PUBLISHER_REPLACEMENT",
+  "source_origin_boundary": "Explicit fixed-source PYTHONPATH and unchanged input pins; no separately captured live __file__ assertion.",
+  "files": [
+    {
+      "path": "launch.json",
+      "bytes": 3567,
+      "sha256": "81d0f9ee08af66c9e12b971c6ab6c2a65a119447fdd9b0ec2e71678b59b5d2b4"
+    },
+    {
+      "path": "preflight.json",
+      "bytes": 4456,
+      "sha256": "5fd60f0438a2bd8c1cc2b1a5741eb73ed48a5c67b7df4ebdeb1219789fd89ddf"
+    },
+    {
+      "path": "pytest-junit.xml",
+      "bytes": 392,
+      "sha256": "a8938a614b7880d1e3c064c37916d84736fe3ff8cf47ef36dca1fdb31d67fc50"
+    },
+    {
+      "path": "result.json",
+      "bytes": 5908,
+      "sha256": "00e05504229bcdeaef8c126526d96b94a17ab571727486f7e592e7864b259f56"
+    },
+    {
+      "path": "stderr-verbose-imports.txt",
+      "bytes": 142265,
+      "sha256": "33fe0edd985dac346c5af57f3a998e5c1936e8c1a9a55f26b1990d6ddf5391b0"
+    },
+    {
+      "path": "stdout.txt",
+      "bytes": 687,
+      "sha256": "f3c05aad10c0072e4c122fc902da8e6800190d1b7ae7387f90fb904c21207e17"
+    },
+    {
+      "path": "executed-test.py",
+      "bytes": 26372,
+      "sha256": "9d55ce69036a3451980f3dfbe34266b133e0c58c164877f80b580d381e50498c"
+    }
+  ]
+}

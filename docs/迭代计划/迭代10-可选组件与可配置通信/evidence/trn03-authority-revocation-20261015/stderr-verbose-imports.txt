@@ -1,0 +1,2541 @@
+import _frozen_importlib # frozen
+import _imp # builtin
+import '_thread' # <class '_frozen_importlib.BuiltinImporter'>
+import '_warnings' # <class '_frozen_importlib.BuiltinImporter'>
+import '_weakref' # <class '_frozen_importlib.BuiltinImporter'>
+import 'winreg' # <class '_frozen_importlib.BuiltinImporter'>
+import '_io' # <class '_frozen_importlib.BuiltinImporter'>
+import 'marshal' # <class '_frozen_importlib.BuiltinImporter'>
+import 'nt' # <class '_frozen_importlib.BuiltinImporter'>
+import '_frozen_importlib_external' # <class '_frozen_importlib.FrozenImporter'>
+# installing zipimport hook
+import 'time' # <class '_frozen_importlib.BuiltinImporter'>
+import 'zipimport' # <class '_frozen_importlib.FrozenImporter'>
+# installed zipimport hook
+# C:\anaconda3\Lib\encodings\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\encodings\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\encodings\\__pycache__\\__init__.cpython-311.pyc'
+import '_codecs' # <class '_frozen_importlib.BuiltinImporter'>
+import 'codecs' # <class '_frozen_importlib.FrozenImporter'>
+# C:\anaconda3\Lib\encodings\__pycache__\aliases.cpython-311.pyc matches C:\anaconda3\Lib\encodings\aliases.py
+# code object from 'C:\\anaconda3\\Lib\\encodings\\__pycache__\\aliases.cpython-311.pyc'
+import 'encodings.aliases' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB155150>
+import 'encodings' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB151D50>
+# C:\anaconda3\Lib\encodings\__pycache__\utf_8.cpython-311.pyc matches C:\anaconda3\Lib\encodings\utf_8.py
+# code object from 'C:\\anaconda3\\Lib\\encodings\\__pycache__\\utf_8.cpython-311.pyc'
+import 'encodings.utf_8' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB178F10>
+# C:\anaconda3\Lib\encodings\__pycache__\gbk.cpython-311.pyc matches C:\anaconda3\Lib\encodings\gbk.py
+# code object from 'C:\\anaconda3\\Lib\\encodings\\__pycache__\\gbk.cpython-311.pyc'
+import '_codecs_cn' # <class '_frozen_importlib.BuiltinImporter'>
+import '_multibytecodec' # <class '_frozen_importlib.BuiltinImporter'>
+import 'encodings.gbk' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB179090>
+import '_signal' # <class '_frozen_importlib.BuiltinImporter'>
+import '_abc' # <class '_frozen_importlib.BuiltinImporter'>
+import 'abc' # <class '_frozen_importlib.FrozenImporter'>
+import 'io' # <class '_frozen_importlib.FrozenImporter'>
+import '_stat' # <class '_frozen_importlib.BuiltinImporter'>
+import 'stat' # <class '_frozen_importlib.FrozenImporter'>
+import '_collections_abc' # <class '_frozen_importlib.FrozenImporter'>
+import 'genericpath' # <class '_frozen_importlib.FrozenImporter'>
+import '_winapi' # <class '_frozen_importlib.BuiltinImporter'>
+import 'ntpath' # <class '_frozen_importlib.FrozenImporter'>
+import 'os' # <class '_frozen_importlib.FrozenImporter'>
+import '_sitebuiltins' # <class '_frozen_importlib.FrozenImporter'>
+Processing user site-packages
+Processing global site-packages
+Adding directory: 'C:\\anaconda3'
+Adding directory: 'C:\\anaconda3\\Lib\\site-packages'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_base-0.15.8.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_binance-2.0.1.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_bitget-0.15.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_bybit-0.15.1.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_coinbase-0.1.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_dydx-0.15.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_execution-0.1.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_gateio-0.15.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_gateway-0.1.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_htx-0.15.1.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_hyperliquid-0.15.1.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_ib_web-2.0.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_kraken-0.15.1.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_mexc-0.15.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_monitor-0.1.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_mt5-2.0.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_okx-0.15.4.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_py-0.15.3.pth'
+# C:\anaconda3\Lib\site-packages\__pycache__\__editable___bt_api_py_0_15_3_finder.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\__editable___bt_api_py_0_15_3_finder.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\__pycache__\\__editable___bt_api_py_0_15_3_finder.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\__future__.cpython-311.pyc matches C:\anaconda3\Lib\__future__.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\__future__.cpython-311.pyc'
+import '__future__' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB36A810>
+# C:\anaconda3\Lib\importlib\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\importlib\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\warnings.cpython-311.pyc matches C:\anaconda3\Lib\warnings.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\warnings.cpython-311.pyc'
+import 'warnings' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB39E4D0>
+import 'importlib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB39DF90>
+import 'importlib.machinery' # <class '_frozen_importlib.FrozenImporter'>
+# C:\anaconda3\Lib\importlib\__pycache__\_abc.cpython-311.pyc matches C:\anaconda3\Lib\importlib\_abc.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\__pycache__\\_abc.cpython-311.pyc'
+import 'importlib._abc' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3B0810>
+# C:\anaconda3\Lib\__pycache__\contextlib.cpython-311.pyc matches C:\anaconda3\Lib\contextlib.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\contextlib.cpython-311.pyc'
+# C:\anaconda3\Lib\collections\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\collections\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\collections\\__pycache__\\__init__.cpython-311.pyc'
+import 'itertools' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\__pycache__\keyword.cpython-311.pyc matches C:\anaconda3\Lib\keyword.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\keyword.cpython-311.pyc'
+import 'keyword' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3D2790>
+# C:\anaconda3\Lib\__pycache__\operator.cpython-311.pyc matches C:\anaconda3\Lib\operator.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\operator.cpython-311.pyc'
+import '_operator' # <class '_frozen_importlib.BuiltinImporter'>
+import 'operator' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3D3290>
+# C:\anaconda3\Lib\__pycache__\reprlib.cpython-311.pyc matches C:\anaconda3\Lib\reprlib.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\reprlib.cpython-311.pyc'
+import 'reprlib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3D3FD0>
+import '_collections' # <class '_frozen_importlib.BuiltinImporter'>
+import 'collections' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3B2F10>
+# C:\anaconda3\Lib\__pycache__\functools.cpython-311.pyc matches C:\anaconda3\Lib\functools.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\functools.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\types.cpython-311.pyc matches C:\anaconda3\Lib\types.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\types.cpython-311.pyc'
+import 'types' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3EFB50>
+import '_functools' # <class '_frozen_importlib.BuiltinImporter'>
+import 'functools' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3ECFD0>
+import 'contextlib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3B1290>
+import 'importlib.util' # <class '_frozen_importlib.FrozenImporter'>
+# C:\anaconda3\Lib\__pycache__\pathlib.cpython-311.pyc matches C:\anaconda3\Lib\pathlib.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\pathlib.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\fnmatch.cpython-311.pyc matches C:\anaconda3\Lib\fnmatch.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\fnmatch.cpython-311.pyc'
+import 'posixpath' # <class '_frozen_importlib.FrozenImporter'>
+# C:\anaconda3\Lib\re\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\re\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\re\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\enum.cpython-311.pyc matches C:\anaconda3\Lib\enum.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\enum.cpython-311.pyc'
+import 'enum' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB41F690>
+# C:\anaconda3\Lib\re\__pycache__\_compiler.cpython-311.pyc matches C:\anaconda3\Lib\re\_compiler.py
+# code object from 'C:\\anaconda3\\Lib\\re\\__pycache__\\_compiler.cpython-311.pyc'
+import '_sre' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\re\__pycache__\_parser.cpython-311.pyc matches C:\anaconda3\Lib\re\_parser.py
+# code object from 'C:\\anaconda3\\Lib\\re\\__pycache__\\_parser.cpython-311.pyc'
+# C:\anaconda3\Lib\re\__pycache__\_constants.cpython-311.pyc matches C:\anaconda3\Lib\re\_constants.py
+# code object from 'C:\\anaconda3\\Lib\\re\\__pycache__\\_constants.cpython-311.pyc'
+import 're._constants' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB451FD0>
+import 're._parser' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB442ED0>
+# C:\anaconda3\Lib\re\__pycache__\_casefix.cpython-311.pyc matches C:\anaconda3\Lib\re\_casefix.py
+# code object from 'C:\\anaconda3\\Lib\\re\\__pycache__\\_casefix.cpython-311.pyc'
+import 're._casefix' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB465710>
+import 're._compiler' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4378D0>
+# C:\anaconda3\Lib\__pycache__\copyreg.cpython-311.pyc matches C:\anaconda3\Lib\copyreg.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\copyreg.cpython-311.pyc'
+import 'copyreg' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB466B10>
+import 're' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB3EFDD0>
+import 'fnmatch' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB413690>
+import 'errno' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\urllib\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\urllib\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\urllib\\__pycache__\\__init__.cpython-311.pyc'
+import 'urllib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB46D910>
+# C:\anaconda3\Lib\urllib\__pycache__\parse.cpython-311.pyc matches C:\anaconda3\Lib\urllib\parse.py
+# code object from 'C:\\anaconda3\\Lib\\urllib\\__pycache__\\parse.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\ipaddress.cpython-311.pyc matches C:\anaconda3\Lib\ipaddress.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\ipaddress.cpython-311.pyc'
+import 'ipaddress' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB47E290>
+import 'urllib.parse' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB46DB10>
+import 'pathlib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4021D0>
+import '__editable___bt_api_py_0_15_3_finder' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB365150>
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_risk-0.1.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.bt_api_transport_zmq-0.1.0.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.fincore-0.3.0.pth'
+# C:\anaconda3\Lib\site-packages\__pycache__\__editable___fincore_0_3_0_finder.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\__editable___fincore_0_3_0_finder.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\__pycache__\\__editable___fincore_0_3_0_finder.cpython-311.pyc'
+import '__editable___fincore_0_3_0_finder' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4C5D90>
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\__editable__.pyqlib-0.1.dev2041+g7d66e4b78.pth'
+# C:\anaconda3\Lib\site-packages\__pycache__\__editable___pyqlib_0_1_dev2041_g7d66e4b78_finder.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\__editable___pyqlib_0_1_dev2041_g7d66e4b78_finder.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\__pycache__\\__editable___pyqlib_0_1_dev2041_g7d66e4b78_finder.cpython-311.pyc'
+import '__editable___pyqlib_0_1_dev2041_g7d66e4b78_finder' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4C6950>
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\_cloudquant.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\_editable_skbc_back_trader_cpp.pth'
+# C:\anaconda3\Lib\site-packages\__pycache__\_editable_skbc_back_trader_cpp.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_editable_skbc_back_trader_cpp.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\__pycache__\\_editable_skbc_back_trader_cpp.cpython-311.pyc'
+# C:\anaconda3\Lib\importlib\__pycache__\abc.cpython-311.pyc matches C:\anaconda3\Lib\importlib\abc.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\__pycache__\\abc.cpython-311.pyc'
+# C:\anaconda3\Lib\importlib\resources\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\importlib\resources\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\resources\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\importlib\resources\__pycache__\_common.cpython-311.pyc matches C:\anaconda3\Lib\importlib\resources\_common.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\resources\\__pycache__\\_common.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\tempfile.cpython-311.pyc matches C:\anaconda3\Lib\tempfile.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\tempfile.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\shutil.cpython-311.pyc matches C:\anaconda3\Lib\shutil.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\shutil.cpython-311.pyc'
+import 'zlib' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\__pycache__\bz2.cpython-311.pyc matches C:\anaconda3\Lib\bz2.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\bz2.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\_compression.cpython-311.pyc matches C:\anaconda3\Lib\_compression.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\_compression.cpython-311.pyc'
+import '_compression' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB519610>
+# extension module '_bz2' loaded from 'C:\\anaconda3\\DLLs\\_bz2.pyd'
+# extension module '_bz2' executed from 'C:\\anaconda3\\DLLs\\_bz2.pyd'
+import '_bz2' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CB51A490>
+import 'bz2' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB518310>
+# C:\anaconda3\Lib\__pycache__\lzma.cpython-311.pyc matches C:\anaconda3\Lib\lzma.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\lzma.cpython-311.pyc'
+# extension module '_lzma' loaded from 'C:\\anaconda3\\DLLs\\_lzma.pyd'
+# extension module '_lzma' executed from 'C:\\anaconda3\\DLLs\\_lzma.pyd'
+import '_lzma' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CB51BB50>
+import 'lzma' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB51AAD0>
+import 'shutil' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4F6CD0>
+# C:\anaconda3\Lib\__pycache__\random.cpython-311.pyc matches C:\anaconda3\Lib\random.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\random.cpython-311.pyc'
+import 'math' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\__pycache__\bisect.cpython-311.pyc matches C:\anaconda3\Lib\bisect.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\bisect.cpython-311.pyc'
+import '_bisect' # <class '_frozen_importlib.BuiltinImporter'>
+import 'bisect' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB740610>
+import '_random' # <class '_frozen_importlib.BuiltinImporter'>
+import '_sha512' # <class '_frozen_importlib.BuiltinImporter'>
+import 'random' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4F7510>
+# C:\anaconda3\Lib\__pycache__\weakref.cpython-311.pyc matches C:\anaconda3\Lib\weakref.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\weakref.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\_weakrefset.cpython-311.pyc matches C:\anaconda3\Lib\_weakrefset.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\_weakrefset.cpython-311.pyc'
+import '_weakrefset' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB743590>
+import 'weakref' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB7415D0>
+import 'tempfile' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4CFFD0>
+# C:\anaconda3\Lib\__pycache__\typing.cpython-311.pyc matches C:\anaconda3\Lib\typing.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\typing.cpython-311.pyc'
+# C:\anaconda3\Lib\collections\__pycache__\abc.cpython-311.pyc matches C:\anaconda3\Lib\collections\abc.py
+# code object from 'C:\\anaconda3\\Lib\\collections\\__pycache__\\abc.cpython-311.pyc'
+import 'collections.abc' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB798890>
+import '_typing' # <class '_frozen_importlib.BuiltinImporter'>
+import 'typing' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4F5550>
+# C:\anaconda3\Lib\importlib\resources\__pycache__\abc.cpython-311.pyc matches C:\anaconda3\Lib\importlib\resources\abc.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\resources\\__pycache__\\abc.cpython-311.pyc'
+import 'importlib.resources.abc' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB799950>
+# C:\anaconda3\Lib\importlib\resources\__pycache__\_adapters.cpython-311.pyc matches C:\anaconda3\Lib\importlib\resources\_adapters.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\resources\\__pycache__\\_adapters.cpython-311.pyc'
+import 'importlib.resources._adapters' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB7DC290>
+import 'importlib.resources._common' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4CF250>
+# C:\anaconda3\Lib\importlib\resources\__pycache__\_legacy.cpython-311.pyc matches C:\anaconda3\Lib\importlib\resources\_legacy.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\resources\\__pycache__\\_legacy.cpython-311.pyc'
+import 'importlib.resources._legacy' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB7DD790>
+import 'importlib.resources' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4CEA10>
+import 'importlib.abc' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4CDA90>
+# C:\anaconda3\Lib\__pycache__\subprocess.cpython-311.pyc matches C:\anaconda3\Lib\subprocess.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\subprocess.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\locale.cpython-311.pyc matches C:\anaconda3\Lib\locale.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\locale.cpython-311.pyc'
+import '_locale' # <class '_frozen_importlib.BuiltinImporter'>
+import 'locale' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB7F7A90>
+# C:\anaconda3\Lib\__pycache__\signal.cpython-311.pyc matches C:\anaconda3\Lib\signal.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\signal.cpython-311.pyc'
+import 'signal' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8210D0>
+# C:\anaconda3\Lib\__pycache__\threading.cpython-311.pyc matches C:\anaconda3\Lib\threading.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\threading.cpython-311.pyc'
+import 'threading' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB821190>
+import 'msvcrt' # <class '_frozen_importlib.BuiltinImporter'>
+import 'subprocess' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4CE410>
+import '_editable_skbc_back_trader_cpp' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB4C75D0>
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\distutils-precedence.pth'
+# C:\anaconda3\Lib\site-packages\_distutils_hack\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_distutils_hack\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_distutils_hack\\__pycache__\\__init__.cpython-311.pyc'
+import '_distutils_hack' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB7F7350>
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\easy-install.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\pytest-cov.pth'
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\pywin32.pth'
+# C:\anaconda3\Lib\site-packages\win32\lib\__pycache__\pywin32_bootstrap.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\win32\lib\pywin32_bootstrap.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\win32\\lib\\__pycache__\\pywin32_bootstrap.cpython-311.pyc'
+# possible namespace for C:\anaconda3\Lib\site-packages\pywin32_system32
+import 'pywin32_system32' # <_frozen_importlib_external.NamespaceLoader object at 0x000001E4CB841C90>
+import 'pywin32_bootstrap' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB841B10>
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\sphinxcontrib_applehelp-1.0.2-py3.9-nspkg.pth'
+# possible namespace for C:\anaconda3\Lib\site-packages\sphinxcontrib
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\sphinxcontrib_devhelp-1.0.2-py3.9-nspkg.pth'
+# possible namespace for C:\anaconda3\Lib\site-packages\sphinxcontrib
+# destroy sphinxcontrib
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\sphinxcontrib_htmlhelp-2.0.0-py3.9-nspkg.pth'
+# possible namespace for C:\anaconda3\Lib\site-packages\sphinxcontrib
+# destroy sphinxcontrib
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\sphinxcontrib_jsmath-1.0.1-py3.9-nspkg.pth'
+# possible namespace for C:\anaconda3\Lib\site-packages\sphinxcontrib
+# destroy sphinxcontrib
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\sphinxcontrib_qthelp-1.0.3-py3.9-nspkg.pth'
+# possible namespace for C:\anaconda3\Lib\site-packages\sphinxcontrib
+# destroy sphinxcontrib
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\sphinxcontrib_serializinghtml-1.1.5-py3.9-nspkg.pth'
+# possible namespace for C:\anaconda3\Lib\site-packages\sphinxcontrib
+# destroy sphinxcontrib
+Processing .pth file: 'C:\\anaconda3\\Lib\\site-packages\\zope.interface-5.4.0-py3.11-nspkg.pth'
+import 'site' # <class '_frozen_importlib.FrozenImporter'>
+Python 3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)] on win32
+Type "help", "copyright", "credits" or "license" for more information.
+import 'runpy' # <class '_frozen_importlib.FrozenImporter'>
+# C:\anaconda3\Lib\site-packages\pytest\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pytest\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pytest\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\_version.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_version.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\_version.cpython-311.pyc'
+import '_pytest._version' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB852490>
+import '_pytest' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB851F90>
+# C:\anaconda3\Lib\site-packages\_pytest\_code\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_code\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_code\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\_code\__pycache__\code.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_code\code.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_code\\__pycache__\\code.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\ast.cpython-311.pyc matches C:\anaconda3\Lib\ast.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\ast.cpython-311.pyc'
+import '_ast' # <class '_frozen_importlib.BuiltinImporter'>
+import 'ast' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8752D0>
+# C:\anaconda3\Lib\__pycache__\dataclasses.cpython-311.pyc matches C:\anaconda3\Lib\dataclasses.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\dataclasses.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\copy.cpython-311.pyc matches C:\anaconda3\Lib\copy.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\copy.cpython-311.pyc'
+import 'copy' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8B0990>
+# C:\anaconda3\Lib\__pycache__\inspect.cpython-311.pyc matches C:\anaconda3\Lib\inspect.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\inspect.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\dis.cpython-311.pyc matches C:\anaconda3\Lib\dis.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\dis.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\opcode.cpython-311.pyc matches C:\anaconda3\Lib\opcode.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\opcode.cpython-311.pyc'
+import '_opcode' # <class '_frozen_importlib.BuiltinImporter'>
+import 'opcode' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8E4250>
+import 'dis' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8CFE90>
+# C:\anaconda3\Lib\__pycache__\linecache.cpython-311.pyc matches C:\anaconda3\Lib\linecache.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\linecache.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\tokenize.cpython-311.pyc matches C:\anaconda3\Lib\tokenize.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\tokenize.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\token.cpython-311.pyc matches C:\anaconda3\Lib\token.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\token.cpython-311.pyc'
+import 'token' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8FA290>
+import 'tokenize' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8EC050>
+import 'linecache' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8ECE90>
+import 'inspect' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB8B15D0>
+import 'dataclasses' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB876D90>
+# C:\anaconda3\Lib\__pycache__\traceback.cpython-311.pyc matches C:\anaconda3\Lib\traceback.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\traceback.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\textwrap.cpython-311.pyc matches C:\anaconda3\Lib\textwrap.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\textwrap.cpython-311.pyc'
+import 'textwrap' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB928FD0>
+import 'traceback' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB916610>
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\_version.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\_version.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\_version.cpython-311.pyc'
+import 'pluggy._version' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB931890>
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\_hooks.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\_hooks.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\_hooks.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\_result.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\_result.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\_result.cpython-311.pyc'
+import 'pluggy._result' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB9336D0>
+import 'pluggy._hooks' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB931F50>
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\_manager.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\_manager.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\_manager.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\_tracing.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\_tracing.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\_tracing.cpython-311.pyc'
+import 'pluggy._tracing' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB94BAD0>
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\_callers.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\_callers.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\_callers.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\pluggy\__pycache__\_warnings.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pluggy\_warnings.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pluggy\\__pycache__\\_warnings.cpython-311.pyc'
+import 'pluggy._warnings' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB961510>
+import 'pluggy._callers' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB960E10>
+import 'pluggy._manager' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB949D90>
+import 'pluggy' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB9310D0>
+# C:\anaconda3\Lib\site-packages\_pytest\_code\__pycache__\source.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_code\source.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_code\\__pycache__\\source.cpython-311.pyc'
+import '_pytest._code.source' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB931550>
+# C:\anaconda3\Lib\site-packages\_pytest\_io\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_io\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_io\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\_io\__pycache__\terminalwriter.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_io\terminalwriter.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_io\\__pycache__\\terminalwriter.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\_io\__pycache__\wcwidth.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_io\wcwidth.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_io\\__pycache__\\wcwidth.cpython-311.pyc'
+# extension module 'unicodedata' loaded from 'C:\\anaconda3\\DLLs\\unicodedata.pyd'
+# extension module 'unicodedata' executed from 'C:\\anaconda3\\DLLs\\unicodedata.pyd'
+import 'unicodedata' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CB96E250>
+import '_pytest._io.wcwidth' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB96DD50>
+import '_pytest._io.terminalwriter' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB96C3D0>
+import '_pytest._io' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB962B10>
+# C:\anaconda3\Lib\site-packages\_pytest\_io\__pycache__\saferepr.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_io\saferepr.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_io\\__pycache__\\saferepr.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\pprint.cpython-311.pyc matches C:\anaconda3\Lib\pprint.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\pprint.cpython-311.pyc'
+import 'pprint' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB96F0D0>
+import '_pytest._io.saferepr' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB963F10>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\compat.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\compat.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\compat.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\__pycache__\py.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\py.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\__pycache__\\py.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\_py\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_py\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_py\\__pycache__\\__init__.cpython-311.pyc'
+import '_pytest._py' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB97B010>
+# C:\anaconda3\Lib\site-packages\_pytest\_py\__pycache__\error.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_py\error.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_py\\__pycache__\\error.cpython-311.pyc'
+import '_pytest._py.error' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB97B510>
+# C:\anaconda3\Lib\site-packages\_pytest\_py\__pycache__\path.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_py\path.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_py\\__pycache__\\path.cpython-311.pyc'
+import 'atexit' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\__pycache__\uuid.cpython-311.pyc matches C:\anaconda3\Lib\uuid.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\uuid.cpython-311.pyc'
+# extension module '_uuid' loaded from 'C:\\anaconda3\\DLLs\\_uuid.pyd'
+# extension module '_uuid' executed from 'C:\\anaconda3\\DLLs\\_uuid.pyd'
+import '_uuid' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CB9B4ED0>
+import 'uuid' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB9AD950>
+import '_pytest._py.path' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB97BF90>
+import 'py' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB97AB10>
+import '_pytest.compat' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB96EF10>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\deprecated.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\deprecated.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\deprecated.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\warning_types.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\warning_types.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\warning_types.cpython-311.pyc'
+import '_pytest.warning_types' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB9B6710>
+import '_pytest.deprecated' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB11AA50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\pathlib.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\pathlib.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\pathlib.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\outcomes.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\outcomes.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\outcomes.cpython-311.pyc'
+import '_pytest.outcomes' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB9C9550>
+import '_pytest.pathlib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB9B6AD0>
+import '_pytest._code.code' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB852D10>
+import '_pytest._code' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB851E10>
+# C:\anaconda3\Lib\site-packages\_pytest\assertion\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\assertion\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\assertion\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\assertion\__pycache__\rewrite.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\assertion\rewrite.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\assertion\\__pycache__\\rewrite.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\struct.cpython-311.pyc matches C:\anaconda3\Lib\struct.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\struct.cpython-311.pyc'
+import '_struct' # <class '_frozen_importlib.BuiltinImporter'>
+import 'struct' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBA04C10>
+# C:\anaconda3\Lib\site-packages\_pytest\assertion\__pycache__\util.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\assertion\util.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\assertion\\__pycache__\\util.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\_io\__pycache__\pprint.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_io\pprint.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\_io\\__pycache__\\pprint.cpython-311.pyc'
+import '_pytest._io.pprint' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBA07890>
+# C:\anaconda3\Lib\site-packages\_pytest\config\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\config\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\argparse.cpython-311.pyc matches C:\anaconda3\Lib\argparse.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\argparse.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\gettext.cpython-311.pyc matches C:\anaconda3\Lib\gettext.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\gettext.cpython-311.pyc'
+import 'gettext' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBE51B50>
+import 'argparse' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBE3F110>
+# C:\anaconda3\Lib\__pycache__\glob.cpython-311.pyc matches C:\anaconda3\Lib\glob.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\glob.cpython-311.pyc'
+import 'glob' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBE7AA10>
+# C:\anaconda3\Lib\importlib\metadata\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\importlib\metadata\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\metadata\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\csv.cpython-311.pyc matches C:\anaconda3\Lib\csv.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\csv.cpython-311.pyc'
+import '_csv' # <class '_frozen_importlib.BuiltinImporter'>
+import 'csv' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBE91E50>
+# C:\anaconda3\Lib\email\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\email\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\__init__.cpython-311.pyc'
+import 'email' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBEA5150>
+# C:\anaconda3\Lib\__pycache__\zipfile.cpython-311.pyc matches C:\anaconda3\Lib\zipfile.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\zipfile.cpython-311.pyc'
+import 'binascii' # <class '_frozen_importlib.BuiltinImporter'>
+import 'zipfile' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBEA6BD0>
+# C:\anaconda3\Lib\importlib\metadata\__pycache__\_adapters.cpython-311.pyc matches C:\anaconda3\Lib\importlib\metadata\_adapters.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\metadata\\__pycache__\\_adapters.cpython-311.pyc'
+# C:\anaconda3\Lib\email\__pycache__\message.cpython-311.pyc matches C:\anaconda3\Lib\email\message.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\message.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\quopri.cpython-311.pyc matches C:\anaconda3\Lib\quopri.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\quopri.cpython-311.pyc'
+import 'quopri' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBEE9ED0>
+# C:\anaconda3\Lib\email\__pycache__\utils.cpython-311.pyc matches C:\anaconda3\Lib\email\utils.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\utils.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\socket.cpython-311.pyc matches C:\anaconda3\Lib\socket.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\socket.cpython-311.pyc'
+# extension module '_socket' loaded from 'C:\\anaconda3\\DLLs\\_socket.pyd'
+# extension module '_socket' executed from 'C:\\anaconda3\\DLLs\\_socket.pyd'
+import '_socket' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CBF081D0>
+# C:\anaconda3\Lib\__pycache__\selectors.cpython-311.pyc matches C:\anaconda3\Lib\selectors.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\selectors.cpython-311.pyc'
+# extension module 'select' loaded from 'C:\\anaconda3\\DLLs\\select.pyd'
+# extension module 'select' executed from 'C:\\anaconda3\\DLLs\\select.pyd'
+import 'select' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CBF1C4D0>
+import 'selectors' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF0AAD0>
+import 'socket' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBEF0BD0>
+# C:\anaconda3\Lib\__pycache__\datetime.cpython-311.pyc matches C:\anaconda3\Lib\datetime.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\datetime.cpython-311.pyc'
+import '_datetime' # <class '_frozen_importlib.BuiltinImporter'>
+import 'datetime' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBEF2E50>
+# C:\anaconda3\Lib\email\__pycache__\_parseaddr.cpython-311.pyc matches C:\anaconda3\Lib\email\_parseaddr.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\_parseaddr.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\calendar.cpython-311.pyc matches C:\anaconda3\Lib\calendar.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\calendar.cpython-311.pyc'
+import 'calendar' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF53AD0>
+import 'email._parseaddr' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBEF2B90>
+# C:\anaconda3\Lib\email\__pycache__\charset.cpython-311.pyc matches C:\anaconda3\Lib\email\charset.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\charset.cpython-311.pyc'
+# C:\anaconda3\Lib\email\__pycache__\base64mime.cpython-311.pyc matches C:\anaconda3\Lib\email\base64mime.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\base64mime.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\base64.cpython-311.pyc matches C:\anaconda3\Lib\base64.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\base64.cpython-311.pyc'
+import 'base64' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF2EF50>
+import 'email.base64mime' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF2FC10>
+# C:\anaconda3\Lib\email\__pycache__\quoprimime.cpython-311.pyc matches C:\anaconda3\Lib\email\quoprimime.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\quoprimime.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\string.cpython-311.pyc matches C:\anaconda3\Lib\string.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\string.cpython-311.pyc'
+import '_string' # <class '_frozen_importlib.BuiltinImporter'>
+import 'string' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF6B4D0>
+import 'email.quoprimime' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF2D9D0>
+# C:\anaconda3\Lib\email\__pycache__\errors.cpython-311.pyc matches C:\anaconda3\Lib\email\errors.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\errors.cpython-311.pyc'
+import 'email.errors' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF2F290>
+# C:\anaconda3\Lib\email\__pycache__\encoders.cpython-311.pyc matches C:\anaconda3\Lib\email\encoders.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\encoders.cpython-311.pyc'
+import 'email.encoders' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF85B10>
+import 'email.charset' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF50310>
+import 'email.utils' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBEEAC10>
+# C:\anaconda3\Lib\email\__pycache__\_policybase.cpython-311.pyc matches C:\anaconda3\Lib\email\_policybase.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\_policybase.cpython-311.pyc'
+# C:\anaconda3\Lib\email\__pycache__\header.cpython-311.pyc matches C:\anaconda3\Lib\email\header.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\header.cpython-311.pyc'
+import 'email.header' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF87410>
+import 'email._policybase' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF50A10>
+# C:\anaconda3\Lib\email\__pycache__\_encoded_words.cpython-311.pyc matches C:\anaconda3\Lib\email\_encoded_words.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\_encoded_words.cpython-311.pyc'
+import 'email._encoded_words' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF89910>
+# C:\anaconda3\Lib\email\__pycache__\iterators.cpython-311.pyc matches C:\anaconda3\Lib\email\iterators.py
+# code object from 'C:\\anaconda3\\Lib\\email\\__pycache__\\iterators.cpython-311.pyc'
+import 'email.iterators' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF8A5D0>
+import 'email.message' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBECD850>
+# C:\anaconda3\Lib\importlib\metadata\__pycache__\_text.cpython-311.pyc matches C:\anaconda3\Lib\importlib\metadata\_text.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\metadata\\__pycache__\\_text.cpython-311.pyc'
+# C:\anaconda3\Lib\importlib\metadata\__pycache__\_functools.cpython-311.pyc matches C:\anaconda3\Lib\importlib\metadata\_functools.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\metadata\\__pycache__\\_functools.cpython-311.pyc'
+import 'importlib.metadata._functools' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF8AE10>
+import 'importlib.metadata._text' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF8A950>
+import 'importlib.metadata._adapters' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBECC810>
+# C:\anaconda3\Lib\importlib\metadata\__pycache__\_meta.cpython-311.pyc matches C:\anaconda3\Lib\importlib\metadata\_meta.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\metadata\\__pycache__\\_meta.cpython-311.pyc'
+import 'importlib.metadata._meta' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBECC950>
+# C:\anaconda3\Lib\importlib\metadata\__pycache__\_collections.cpython-311.pyc matches C:\anaconda3\Lib\importlib\metadata\_collections.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\metadata\\__pycache__\\_collections.cpython-311.pyc'
+import 'importlib.metadata._collections' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF98AD0>
+# C:\anaconda3\Lib\importlib\metadata\__pycache__\_itertools.cpython-311.pyc matches C:\anaconda3\Lib\importlib\metadata\_itertools.py
+# code object from 'C:\\anaconda3\\Lib\\importlib\\metadata\\__pycache__\\_itertools.cpython-311.pyc'
+import 'importlib.metadata._itertools' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBF994D0>
+import 'importlib.metadata' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBE7B650>
+# C:\anaconda3\Lib\__pycache__\shlex.cpython-311.pyc matches C:\anaconda3\Lib\shlex.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\shlex.cpython-311.pyc'
+import 'shlex' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFA8150>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\hookspec.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\hookspec.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\hookspec.cpython-311.pyc'
+import '_pytest.hookspec' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFA92D0>
+# C:\anaconda3\Lib\site-packages\_pytest\config\__pycache__\compat.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\config\compat.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\config\\__pycache__\\compat.cpython-311.pyc'
+import '_pytest.config.compat' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFBD610>
+# C:\anaconda3\Lib\site-packages\_pytest\config\__pycache__\exceptions.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\config\exceptions.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\config\\__pycache__\\exceptions.cpython-311.pyc'
+import '_pytest.config.exceptions' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFBE110>
+# C:\anaconda3\Lib\site-packages\_pytest\config\__pycache__\findpaths.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\config\findpaths.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\config\\__pycache__\\findpaths.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\iniconfig\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\iniconfig\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\iniconfig\\__pycache__\\__init__.cpython-311.pyc'
+import 'iniconfig' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFBF390>
+import '_pytest.config.findpaths' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFBE350>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\stash.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\stash.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\stash.cpython-311.pyc'
+import '_pytest.stash' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFC4790>
+import '_pytest.config' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBA1D1D0>
+import '_pytest.assertion.util' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBA05410>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\main.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\main.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\main.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\nodes.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\nodes.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\nodes.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\mark\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\mark\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\mark\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\mark\__pycache__\expression.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\mark\expression.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\mark\\__pycache__\\expression.cpython-311.pyc'
+import '_pytest.mark.expression' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFEB610>
+# C:\anaconda3\Lib\site-packages\_pytest\mark\__pycache__\structures.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\mark\structures.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\mark\\__pycache__\\structures.cpython-311.pyc'
+import '_pytest.mark.structures' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFEAED0>
+# C:\anaconda3\Lib\site-packages\_pytest\config\__pycache__\argparsing.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\config\argparsing.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\config\\__pycache__\\argparsing.cpython-311.pyc'
+import '_pytest.config.argparsing' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFFEC50>
+import '_pytest.mark' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFEA090>
+import '_pytest.nodes' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFCFD50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\fixtures.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\fixtures.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\fixtures.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\scope.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\scope.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\scope.cpython-311.pyc'
+import '_pytest.scope' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC02E710>
+import '_pytest.fixtures' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFE9D50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\reports.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\reports.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\reports.cpython-311.pyc'
+import '_pytest.reports' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC06CD90>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\runner.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\runner.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\runner.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\bdb.cpython-311.pyc matches C:\anaconda3\Lib\bdb.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\bdb.cpython-311.pyc'
+import 'bdb' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC074C90>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\timing.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\timing.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\timing.cpython-311.pyc'
+import '_pytest.timing' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC098510>
+import '_pytest.runner' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC06F6D0>
+import '_pytest.main' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CBFCD050>
+import '_pytest.assertion.rewrite' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB9F0A50>
+# C:\anaconda3\Lib\site-packages\_pytest\assertion\__pycache__\truncate.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\assertion\truncate.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\assertion\\__pycache__\\truncate.cpython-311.pyc'
+import '_pytest.assertion.truncate' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC09BA10>
+import '_pytest.assertion' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB852650>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\cacheprovider.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\cacheprovider.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\cacheprovider.cpython-311.pyc'
+# C:\anaconda3\Lib\json\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\json\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\json\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\json\__pycache__\decoder.cpython-311.pyc matches C:\anaconda3\Lib\json\decoder.py
+# code object from 'C:\\anaconda3\\Lib\\json\\__pycache__\\decoder.cpython-311.pyc'
+# C:\anaconda3\Lib\json\__pycache__\scanner.cpython-311.pyc matches C:\anaconda3\Lib\json\scanner.py
+# code object from 'C:\\anaconda3\\Lib\\json\\__pycache__\\scanner.cpython-311.pyc'
+import '_json' # <class '_frozen_importlib.BuiltinImporter'>
+import 'json.scanner' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0A7C10>
+import 'json.decoder' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0A6890>
+# C:\anaconda3\Lib\json\__pycache__\encoder.cpython-311.pyc matches C:\anaconda3\Lib\json\encoder.py
+# code object from 'C:\\anaconda3\\Lib\\json\\__pycache__\\encoder.cpython-311.pyc'
+import 'json.encoder' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0A7E10>
+import 'json' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0A5A90>
+import '_pytest.cacheprovider' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC09BCD0>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\capture.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\capture.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\capture.cpython-311.pyc'
+import '_pytest.capture' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0BBF90>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\debugging.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\debugging.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\debugging.cpython-311.pyc'
+# C:\anaconda3\Lib\unittest\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\unittest\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\unittest\__pycache__\result.cpython-311.pyc matches C:\anaconda3\Lib\unittest\result.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\result.cpython-311.pyc'
+# C:\anaconda3\Lib\unittest\__pycache__\util.cpython-311.pyc matches C:\anaconda3\Lib\unittest\util.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\util.cpython-311.pyc'
+import 'unittest.util' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0EDF10>
+import 'unittest.result' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0EC1D0>
+# C:\anaconda3\Lib\unittest\__pycache__\case.cpython-311.pyc matches C:\anaconda3\Lib\unittest\case.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\case.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\difflib.cpython-311.pyc matches C:\anaconda3\Lib\difflib.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\difflib.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\heapq.cpython-311.pyc matches C:\anaconda3\Lib\heapq.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\heapq.cpython-311.pyc'
+import '_heapq' # <class '_frozen_importlib.BuiltinImporter'>
+import 'heapq' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC11CD10>
+import 'difflib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0F8FD0>
+import 'unittest.case' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0EE410>
+# C:\anaconda3\Lib\unittest\__pycache__\suite.cpython-311.pyc matches C:\anaconda3\Lib\unittest\suite.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\suite.cpython-311.pyc'
+import 'unittest.suite' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC11F090>
+# C:\anaconda3\Lib\unittest\__pycache__\loader.cpython-311.pyc matches C:\anaconda3\Lib\unittest\loader.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\loader.cpython-311.pyc'
+import 'unittest.loader' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC130210>
+# C:\anaconda3\Lib\unittest\__pycache__\main.cpython-311.pyc matches C:\anaconda3\Lib\unittest\main.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\main.cpython-311.pyc'
+# C:\anaconda3\Lib\unittest\__pycache__\runner.cpython-311.pyc matches C:\anaconda3\Lib\unittest\runner.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\runner.cpython-311.pyc'
+# C:\anaconda3\Lib\unittest\__pycache__\signals.cpython-311.pyc matches C:\anaconda3\Lib\unittest\signals.py
+# code object from 'C:\\anaconda3\\Lib\\unittest\\__pycache__\\signals.cpython-311.pyc'
+import 'unittest.signals' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC133DD0>
+import 'unittest.runner' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC132C90>
+import 'unittest.main' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC131A90>
+import 'unittest' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0E3250>
+import '_pytest.debugging' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC0E2010>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\doctest.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\doctest.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\doctest.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\platform.cpython-311.pyc matches C:\anaconda3\Lib\platform.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\platform.cpython-311.pyc'
+import 'platform' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC143250>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\python.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\python.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\python.cpython-311.pyc'
+# destroy empty_module
+import '_pytest.python' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC16E350>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\python_api.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\python_api.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\python_api.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\decimal.cpython-311.pyc matches C:\anaconda3\Lib\decimal.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\decimal.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\numbers.cpython-311.pyc matches C:\anaconda3\Lib\numbers.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\numbers.cpython-311.pyc'
+import 'numbers' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC1A2D10>
+# extension module '_decimal' loaded from 'C:\\anaconda3\\DLLs\\_decimal.pyd'
+# extension module '_decimal' executed from 'C:\\anaconda3\\DLLs\\_decimal.pyd'
+import '_decimal' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CC1A1990>
+import 'decimal' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC1A1690>
+import '_pytest.python_api' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC183F10>
+import '_pytest.doctest' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC140AD0>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\freeze_support.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\freeze_support.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\freeze_support.cpython-311.pyc'
+import '_pytest.freeze_support' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC1C4450>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\legacypath.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\legacypath.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\legacypath.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\monkeypatch.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\monkeypatch.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\monkeypatch.cpython-311.pyc'
+import '_pytest.monkeypatch' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC1C7B50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\pytester.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\pytester.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\pytester.cpython-311.pyc'
+import 'gc' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\tmpdir.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\tmpdir.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\tmpdir.cpython-311.pyc'
+import '_pytest.tmpdir' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC1F2B90>
+import '_pytest.pytester' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC1E1410>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\terminal.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\terminal.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\terminal.cpython-311.pyc'
+import '_pytest.terminal' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC20A710>
+import '_pytest.legacypath' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC1C4750>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\logging.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\logging.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\logging.cpython-311.pyc'
+# C:\anaconda3\Lib\logging\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\logging\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\logging\\__pycache__\\__init__.cpython-311.pyc'
+import 'logging' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2590D0>
+import '_pytest.logging' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC236450>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\recwarn.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\recwarn.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\recwarn.cpython-311.pyc'
+import '_pytest.recwarn' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC296D10>
+import 'pytest' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CB850B10>
+# C:\anaconda3\Lib\site-packages\pytest\__pycache__\__main__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\pytest\__main__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\pytest\\__pycache__\\__main__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\helpconfig.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\helpconfig.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\helpconfig.cpython-311.pyc'
+import '_pytest.helpconfig' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2B3F50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\unittest.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\unittest.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\unittest.cpython-311.pyc'
+import '_pytest.unittest' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2BFA50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\skipping.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\skipping.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\skipping.cpython-311.pyc'
+import '_pytest.skipping' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2CDA90>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\pastebin.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\pastebin.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\pastebin.cpython-311.pyc'
+import '_pytest.pastebin' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2DC790>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\nose.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\nose.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\nose.cpython-311.pyc'
+import '_pytest.nose' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2DD050>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\junitxml.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\junitxml.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\junitxml.cpython-311.pyc'
+# C:\anaconda3\Lib\xml\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\xml\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\xml\\__pycache__\\__init__.cpython-311.pyc'
+import 'xml' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2E46D0>
+# C:\anaconda3\Lib\xml\etree\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\xml\etree\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\xml\\etree\\__pycache__\\__init__.cpython-311.pyc'
+import 'xml.etree' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2E4C90>
+# C:\anaconda3\Lib\xml\etree\__pycache__\ElementTree.cpython-311.pyc matches C:\anaconda3\Lib\xml\etree\ElementTree.py
+# code object from 'C:\\anaconda3\\Lib\\xml\\etree\\__pycache__\\ElementTree.cpython-311.pyc'
+# C:\anaconda3\Lib\xml\etree\__pycache__\ElementPath.cpython-311.pyc matches C:\anaconda3\Lib\xml\etree\ElementPath.py
+# code object from 'C:\\anaconda3\\Lib\\xml\\etree\\__pycache__\\ElementPath.cpython-311.pyc'
+import 'xml.etree.ElementPath' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2F32D0>
+# extension module 'pyexpat' loaded from 'C:\\anaconda3\\DLLs\\pyexpat.pyd'
+# extension module 'pyexpat' executed from 'C:\\anaconda3\\DLLs\\pyexpat.pyd'
+import 'pyexpat' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CC313310>
+# extension module '_elementtree' loaded from 'C:\\anaconda3\\DLLs\\_elementtree.pyd'
+# extension module '_elementtree' executed from 'C:\\anaconda3\\DLLs\\_elementtree.pyd'
+import '_elementtree' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CC312C50>
+import 'xml.etree.ElementTree' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2E4E10>
+import '_pytest.junitxml' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2DD910>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\setuponly.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\setuponly.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\setuponly.cpython-311.pyc'
+import '_pytest.setuponly' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC322410>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\setupplan.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\setupplan.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\setupplan.cpython-311.pyc'
+import '_pytest.setupplan' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC322F10>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\stepwise.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\stepwise.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\stepwise.cpython-311.pyc'
+import '_pytest.stepwise' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC323510>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\warnings.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\warnings.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\warnings.cpython-311.pyc'
+import '_pytest.warnings' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC323F10>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\python_path.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\python_path.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\python_path.cpython-311.pyc'
+import '_pytest.python_path' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC331D50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\unraisableexception.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\unraisableexception.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\unraisableexception.cpython-311.pyc'
+import '_pytest.unraisableexception' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC331A50>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\threadexception.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\threadexception.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\threadexception.cpython-311.pyc'
+import '_pytest.threadexception' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2F1450>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\faulthandler.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\faulthandler.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\faulthandler.cpython-311.pyc'
+import '_pytest.faulthandler' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC332710>
+# C:\anaconda3\Lib\site-packages\_pytest\__pycache__\_argcomplete.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\_pytest\_argcomplete.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\_pytest\\__pycache__\\_argcomplete.cpython-311.pyc'
+import '_pytest._argcomplete' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC332E90>
+# C:\anaconda3\Lib\tomllib\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\tomllib\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\tomllib\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\tomllib\__pycache__\_parser.cpython-311.pyc matches C:\anaconda3\Lib\tomllib\_parser.py
+# code object from 'C:\\anaconda3\\Lib\\tomllib\\__pycache__\\_parser.cpython-311.pyc'
+# C:\anaconda3\Lib\tomllib\__pycache__\_re.cpython-311.pyc matches C:\anaconda3\Lib\tomllib\_re.py
+# code object from 'C:\\anaconda3\\Lib\\tomllib\\__pycache__\\_re.cpython-311.pyc'
+# C:\anaconda3\Lib\tomllib\__pycache__\_types.cpython-311.pyc matches C:\anaconda3\Lib\tomllib\_types.py
+# code object from 'C:\\anaconda3\\Lib\\tomllib\\__pycache__\\_types.cpython-311.pyc'
+import 'tomllib._types' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC349CD0>
+import 'tomllib._re' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC349350>
+import 'tomllib._parser' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC346D50>
+import 'tomllib' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC346890>
+# C:\anaconda3\Lib\site-packages\colorama\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\colorama\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\colorama\\__pycache__\\__init__.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\colorama\__pycache__\initialise.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\colorama\initialise.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\colorama\\__pycache__\\initialise.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\colorama\__pycache__\ansitowin32.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\colorama\ansitowin32.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\colorama\\__pycache__\\ansitowin32.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\colorama\__pycache__\ansi.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\colorama\ansi.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\colorama\\__pycache__\\ansi.cpython-311.pyc'
+import 'colorama.ansi' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC385F10>
+# C:\anaconda3\Lib\site-packages\colorama\__pycache__\winterm.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\colorama\winterm.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\colorama\\__pycache__\\winterm.cpython-311.pyc'
+# C:\anaconda3\Lib\site-packages\colorama\__pycache__\win32.cpython-311.pyc matches C:\anaconda3\Lib\site-packages\colorama\win32.py
+# code object from 'C:\\anaconda3\\Lib\\site-packages\\colorama\\__pycache__\\win32.cpython-311.pyc'
+# C:\anaconda3\Lib\ctypes\__pycache__\__init__.cpython-311.pyc matches C:\anaconda3\Lib\ctypes\__init__.py
+# code object from 'C:\\anaconda3\\Lib\\ctypes\\__pycache__\\__init__.cpython-311.pyc'
+# extension module '_ctypes' loaded from 'C:\\anaconda3\\DLLs\\_ctypes.pyd'
+# extension module '_ctypes' executed from 'C:\\anaconda3\\DLLs\\_ctypes.pyd'
+import '_ctypes' # <_frozen_importlib_external.ExtensionFileLoader object at 0x000001E4CC399650>
+# C:\anaconda3\Lib\ctypes\__pycache__\_endian.cpython-311.pyc matches C:\anaconda3\Lib\ctypes\_endian.py
+# code object from 'C:\\anaconda3\\Lib\\ctypes\\__pycache__\\_endian.cpython-311.pyc'
+import 'ctypes._endian' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC37FBD0>
+import 'ctypes' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC398610>
+# C:\anaconda3\Lib\ctypes\__pycache__\wintypes.cpython-311.pyc matches C:\anaconda3\Lib\ctypes\wintypes.py
+# code object from 'C:\\anaconda3\\Lib\\ctypes\\__pycache__\\wintypes.cpython-311.pyc'
+import 'ctypes.wintypes' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC3993D0>
+import 'colorama.win32' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC387A50>
+import 'colorama.winterm' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC386E10>
+import 'colorama.ansitowin32' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC2F0CD0>
+import 'colorama.initialise' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC349210>
+import 'colorama' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC380310>
+import 'faulthandler' # <class '_frozen_importlib.BuiltinImporter'>
+# C:\anaconda3\Lib\__pycache__\pdb.cpython-311.pyc matches C:\anaconda3\Lib\pdb.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\pdb.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\cmd.cpython-311.pyc matches C:\anaconda3\Lib\cmd.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\cmd.cpython-311.pyc'
+import 'cmd' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC3F0650>
+# C:\anaconda3\Lib\__pycache__\code.cpython-311.pyc matches C:\anaconda3\Lib\code.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\code.cpython-311.pyc'
+# C:\anaconda3\Lib\__pycache__\codeop.cpython-311.pyc matches C:\anaconda3\Lib\codeop.py
+# code object from 'C:\\anaconda3\\Lib\\__pycache__\\codeop.cpython-311.pyc'
+import 'codeop' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC3F2F90>
+import 'code' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC3F1F10>
+import 'pdb' # <_frozen_importlib_external.SourceFileLoader object at 0x000001E4CC3BEF50>
+# clear builtins._
+# clear sys.path
+# clear sys.argv
+# clear sys.ps1
+# clear sys.ps2
+# clear sys.last_type
+# clear sys.last_value
+# clear sys.last_traceback
+# clear sys.path_hooks
+# clear sys.path_importer_cache
+# clear sys.meta_path
+# clear sys.__interactivehook__
+# restore sys.stdin
+# restore sys.stdout
+# restore sys.stderr
+# cleanup[2] removing sys
+# cleanup[2] removing builtins
+# cleanup[2] removing _frozen_importlib
+# cleanup[2] removing _imp
+# cleanup[2] removing _thread
+# cleanup[2] removing _warnings
+# cleanup[2] removing _weakref
+# cleanup[2] removing winreg
+# cleanup[2] removing _io
+# cleanup[2] removing marshal
+# cleanup[2] removing nt
+# cleanup[2] removing _frozen_importlib_external
+# cleanup[2] removing time
+# cleanup[2] removing zipimport
+# destroy zipimport
+# cleanup[2] removing _codecs
+# cleanup[2] removing codecs
+# cleanup[2] removing encodings.aliases
+# cleanup[2] removing encodings
+# cleanup[2] removing encodings.utf_8
+# cleanup[2] removing _codecs_cn
+# cleanup[2] removing _multibytecodec
+# cleanup[2] removing encodings.gbk
+# cleanup[2] removing _signal
+# cleanup[2] removing _abc
+# cleanup[2] removing abc
+# cleanup[2] removing io
+# cleanup[2] removing __main__
+# cleanup[2] removing _stat
+# cleanup[2] removing stat
+# cleanup[2] removing _collections_abc
+# cleanup[2] removing genericpath
+# cleanup[2] removing _winapi
+# cleanup[2] removing ntpath
+# cleanup[2] removing os.path
+# cleanup[2] removing os
+# cleanup[2] removing _sitebuiltins
+# cleanup[2] removing __future__
+# cleanup[2] removing importlib._bootstrap
+# cleanup[2] removing importlib._bootstrap_external
+# cleanup[2] removing warnings
+# cleanup[2] removing importlib
+# cleanup[2] removing importlib.machinery
+# cleanup[2] removing importlib._abc
+# cleanup[2] removing itertools
+# cleanup[2] removing keyword
+# cleanup[2] removing _operator
+# cleanup[2] removing operator
+# cleanup[2] removing reprlib
+# cleanup[2] removing _collections
+# cleanup[2] removing collections
+# cleanup[2] removing types
+# cleanup[2] removing _functools
+# cleanup[2] removing functools
+# cleanup[2] removing contextlib
+# cleanup[2] removing importlib.util
+# cleanup[2] removing posixpath
+# cleanup[2] removing enum
+# cleanup[2] removing _sre
+# cleanup[2] removing re._constants
+# cleanup[2] removing re._parser
+# cleanup[2] removing re._casefix
+# cleanup[2] removing re._compiler
+# cleanup[2] removing copyreg
+# cleanup[2] removing re
+# cleanup[2] removing fnmatch
+# cleanup[2] removing errno
+# cleanup[2] removing urllib
+# cleanup[2] removing ipaddress
+# cleanup[2] removing urllib.parse
+# cleanup[2] removing pathlib
+# cleanup[2] removing __editable___bt_api_py_0_15_3_finder
+# destroy __editable___bt_api_py_0_15_3_finder
+# cleanup[2] removing __editable___fincore_0_3_0_finder
+# destroy __editable___fincore_0_3_0_finder
+# cleanup[2] removing __editable___pyqlib_0_1_dev2041_g7d66e4b78_finder
+# destroy __editable___pyqlib_0_1_dev2041_g7d66e4b78_finder
+# cleanup[2] removing zlib
+# cleanup[2] removing _compression
+# cleanup[2] removing _bz2
+# cleanup[2] removing bz2
+# cleanup[2] removing _lzma
+# cleanup[2] removing lzma
+# cleanup[2] removing shutil
+# cleanup[2] removing math
+# cleanup[2] removing _bisect
+# cleanup[2] removing bisect
+# cleanup[2] removing _random
+# cleanup[2] removing _sha512
+# cleanup[2] removing random
+# cleanup[2] removing _weakrefset
+# destroy _weakrefset
+# cleanup[2] removing weakref
+# cleanup[2] removing tempfile
+# cleanup[2] removing collections.abc
+# cleanup[2] removing _typing
+# cleanup[2] removing typing
+# cleanup[2] removing importlib.resources.abc
+# cleanup[2] removing importlib.resources._adapters
+# cleanup[2] removing importlib.resources._common
+# cleanup[2] removing importlib.resources._legacy
+# cleanup[2] removing importlib.resources
+# cleanup[2] removing importlib.abc
+# cleanup[2] removing _locale
+# cleanup[2] removing locale
+# cleanup[2] removing signal
+# cleanup[2] removing threading
+# cleanup[2] removing msvcrt
+# cleanup[2] removing subprocess
+# cleanup[2] removing _editable_skbc_back_trader_cpp
+# destroy _editable_skbc_back_trader_cpp
+# cleanup[2] removing _distutils_hack
+# destroy _distutils_hack
+# cleanup[2] removing pywin32_system32
+# cleanup[2] removing pywin32_bootstrap
+# destroy pywin32_bootstrap
+# destroy pywin32_system32
+# cleanup[2] removing sphinxcontrib
+# destroy sphinxcontrib
+# cleanup[2] removing zope
+# destroy zope
+# cleanup[2] removing site
+# destroy site
+# cleanup[2] removing runpy
+# cleanup[2] removing _pytest._version
+# cleanup[2] removing _pytest
+# cleanup[2] removing _ast
+# destroy _ast
+# cleanup[2] removing ast
+# cleanup[2] removing copy
+# cleanup[2] removing _opcode
+# cleanup[2] removing opcode
+# destroy opcode
+# cleanup[2] removing dis
+# cleanup[2] removing token
+# cleanup[2] removing tokenize
+# cleanup[2] removing linecache
+# cleanup[2] removing inspect
+# cleanup[2] removing dataclasses
+# cleanup[2] removing textwrap
+# cleanup[2] removing traceback
+# cleanup[2] removing pluggy._version
+# cleanup[2] removing pluggy._result
+# cleanup[2] removing pluggy._hooks
+# cleanup[2] removing pluggy._tracing
+# cleanup[2] removing pluggy._warnings
+# cleanup[2] removing pluggy._callers
+# cleanup[2] removing pluggy._manager
+# cleanup[2] removing pluggy
+# cleanup[2] removing _pytest._code.source
+# cleanup[2] removing unicodedata
+# cleanup[2] removing _pytest._io.wcwidth
+# cleanup[2] removing _pytest._io.terminalwriter
+# cleanup[2] removing _pytest._io
+# cleanup[2] removing pprint
+# cleanup[2] removing _pytest._io.saferepr
+# cleanup[2] removing _pytest._py
+# cleanup[2] removing _pytest._py.error
+# cleanup[2] removing atexit
+# cleanup[2] removing _uuid
+# cleanup[2] removing uuid
+# cleanup[2] removing _pytest._py.path
+# cleanup[2] removing py.error
+# cleanup[2] removing py.path
+# cleanup[2] removing py
+# cleanup[2] removing _pytest.compat
+# cleanup[2] removing _pytest.warning_types
+# cleanup[2] removing _pytest.deprecated
+# cleanup[2] removing _pytest.outcomes
+# cleanup[2] removing _pytest.pathlib
+# cleanup[2] removing _pytest._code.code
+# cleanup[2] removing _pytest._code
+# cleanup[2] removing _struct
+# cleanup[2] removing struct
+# cleanup[2] removing _pytest._io.pprint
+# cleanup[2] removing gettext
+# destroy gettext
+# cleanup[2] removing argparse
+# cleanup[2] removing glob
+# cleanup[2] removing _csv
+# cleanup[2] removing csv
+# cleanup[2] removing email
+# cleanup[2] removing binascii
+# cleanup[2] removing zipfile
+# cleanup[2] removing quopri
+# cleanup[2] removing _socket
+# cleanup[2] removing select
+# cleanup[2] removing selectors
+# cleanup[2] removing socket
+# cleanup[2] removing _datetime
+# cleanup[2] removing datetime
+# cleanup[2] removing calendar
+# cleanup[2] removing email._parseaddr
+# cleanup[2] removing base64
+# cleanup[2] removing email.base64mime
+# cleanup[2] removing _string
+# cleanup[2] removing string
+# cleanup[2] removing email.quoprimime
+# cleanup[2] removing email.errors
+# cleanup[2] removing email.encoders
+# cleanup[2] removing email.charset
+# cleanup[2] removing email.utils
+# cleanup[2] removing email.header
+# cleanup[2] removing email._policybase
+# cleanup[2] removing email._encoded_words
+# cleanup[2] removing email.iterators
+# cleanup[2] removing email.message
+# cleanup[2] removing importlib.metadata._functools
+# cleanup[2] removing importlib.metadata._text
+# cleanup[2] removing importlib.metadata._adapters
+# cleanup[2] removing importlib.metadata._meta
+# cleanup[2] removing importlib.metadata._collections
+# cleanup[2] removing importlib.metadata._itertools
+# cleanup[2] removing importlib.metadata
+# cleanup[2] removing shlex
+# cleanup[2] removing _pytest.hookspec
+# cleanup[2] removing _pytest.config.compat
+# cleanup[2] removing _pytest.config.exceptions
+# cleanup[2] removing iniconfig
+# cleanup[2] removing _pytest.config.findpaths
+# cleanup[2] removing _pytest.stash
+# cleanup[2] removing _pytest.config
+# cleanup[2] removing _pytest.assertion.util
+# cleanup[2] removing _pytest.mark.expression
+# cleanup[2] removing _pytest.mark.structures
+# cleanup[2] removing _pytest.config.argparsing
+# cleanup[2] removing _pytest.mark
+# cleanup[2] removing _pytest.nodes
+# cleanup[2] removing _pytest.scope
+# cleanup[2] removing _pytest.fixtures
+# cleanup[2] removing _pytest.reports
+# cleanup[2] removing bdb
+# cleanup[2] removing _pytest.timing
+# cleanup[2] removing _pytest.runner
+# cleanup[2] removing _pytest.main
+# cleanup[2] removing _pytest.assertion.rewrite
+# cleanup[2] removing _pytest.assertion.truncate
+# cleanup[2] removing _pytest.assertion
+# cleanup[2] removing _json
+# cleanup[2] removing json.scanner
+# cleanup[2] removing json.decoder
+# cleanup[2] removing json.encoder
+# cleanup[2] removing json
+# cleanup[2] removing _pytest.cacheprovider
+# cleanup[2] removing _pytest.capture
+# cleanup[2] removing unittest.util
+# cleanup[2] removing unittest.result
+# cleanup[2] removing _heapq
+# cleanup[2] removing heapq
+# cleanup[2] removing difflib
+# cleanup[2] removing unittest.case
+# cleanup[2] removing unittest.suite
+# cleanup[2] removing unittest.loader
+# cleanup[2] removing unittest.signals
+# cleanup[2] removing unittest.runner
+# cleanup[2] removing unittest.main
+# destroy unittest.main
+# cleanup[2] removing unittest
+# cleanup[2] removing _pytest.debugging
+# cleanup[2] removing platform
+# cleanup[2] removing _pytest.python
+# cleanup[2] removing numbers
+# destroy numbers
+# cleanup[2] removing _decimal
+# cleanup[2] removing decimal
+# cleanup[2] removing _pytest.python_api
+# cleanup[2] removing _pytest.doctest
+# cleanup[2] removing _pytest.freeze_support
+# cleanup[2] removing _pytest.monkeypatch
+# cleanup[2] removing gc
+# cleanup[2] removing _pytest.tmpdir
+# cleanup[2] removing _pytest.pytester
+# cleanup[2] removing _pytest.terminal
+# cleanup[2] removing _pytest.legacypath
+# cleanup[2] removing logging
+# cleanup[2] removing _pytest.logging
+# cleanup[2] removing _pytest.recwarn
+# cleanup[2] removing pytest
+# cleanup[2] removing _pytest.helpconfig
+# cleanup[2] removing _pytest.unittest
+# cleanup[2] removing _pytest.skipping
+# cleanup[2] removing _pytest.pastebin
+# cleanup[2] removing _pytest.nose
+# cleanup[2] removing xml
+# destroy xml
+# cleanup[2] removing xml.etree
+# destroy xml.etree
+# cleanup[2] removing xml.etree.ElementPath
+# cleanup[2] removing pyexpat.errors
+# cleanup[2] removing pyexpat.model
+# cleanup[2] removing pyexpat
+# cleanup[2] removing _elementtree
+# cleanup[2] removing xml.etree.ElementTree
+# cleanup[2] removing _pytest.junitxml
+# cleanup[2] removing _pytest.setuponly
+# cleanup[2] removing _pytest.setupplan
+# cleanup[2] removing _pytest.stepwise
+# cleanup[2] removing _pytest.warnings
+# cleanup[2] removing _pytest.python_path
+# cleanup[2] removing _pytest.unraisableexception
+# cleanup[2] removing _pytest.threadexception
+# cleanup[2] removing _pytest.faulthandler
+# cleanup[2] removing _pytest._argcomplete
+# cleanup[2] removing tomllib._types
+# cleanup[2] removing tomllib._re
+# cleanup[2] removing tomllib._parser
+# cleanup[2] removing tomllib
+# destroy tomllib
+# destroy tomllib._types
+# destroy tomllib._re
+# destroy tomllib._parser
+# cleanup[2] removing colorama.ansi
+# cleanup[2] removing _ctypes
+# cleanup[2] removing ctypes._endian
+# cleanup[2] removing ctypes
+# cleanup[2] removing ctypes.wintypes
+# cleanup[2] removing colorama.win32
+# cleanup[2] removing colorama.winterm
+# cleanup[2] removing colorama.ansitowin32
+# cleanup[2] removing colorama.initialise
+# cleanup[2] removing colorama
+# destroy colorama
+# destroy colorama.ansi
+# destroy colorama.winterm
+# destroy colorama.ansitowin32
+# destroy colorama.initialise
+# cleanup[2] removing faulthandler
+# cleanup[2] removing cmd
+# cleanup[2] removing codeop
+# destroy codeop
+# cleanup[2] removing code
+# cleanup[2] removing pdb
+# destroy pdb
+# cleanup[2] removing tests.test_service_transport_authorization_revocation_r3
+# cleanup[2] removing multiprocessing.process
+# cleanup[2] removing _compat_pickle
+# cleanup[2] removing _pickle
+# cleanup[2] removing pickle
+# cleanup[2] removing multiprocessing.reduction
+# cleanup[2] removing multiprocessing.context
+# cleanup[2] removing __mp_main__
+# destroy __main__
+# cleanup[2] removing multiprocessing
+# cleanup[2] removing zmq.backend.select
+# cleanup[2] removing cython_runtime
+# cleanup[2] removing _cython_3_1_3
+# cleanup[2] removing zmq.constants
+# cleanup[2] removing zmq.error
+# cleanup[2] removing zmq.backend.cython._zmq
+# cleanup[2] removing zmq.backend.cython
+# cleanup[2] removing zmq.backend
+# cleanup[2] removing zmq._typing
+# cleanup[2] removing zmq.utils
+# cleanup[2] removing zmq.utils.interop
+# cleanup[2] removing zmq.sugar.attrsettr
+# cleanup[2] removing zmq.utils.jsonapi
+# cleanup[2] removing zmq.sugar.poll
+# cleanup[2] removing zmq.sugar.socket
+# cleanup[2] removing zmq.sugar.context
+# cleanup[2] removing zmq.sugar.frame
+# cleanup[2] removing zmq.sugar.tracker
+# cleanup[2] removing zmq.sugar.version
+# cleanup[2] removing zmq.sugar.stopwatch
+# cleanup[2] removing zmq.sugar
+# cleanup[2] removing zmq
+# cleanup[2] removing bt_api_base._version
+# cleanup[2] removing _hashlib
+# cleanup[2] removing _blake2
+# cleanup[2] removing hashlib
+# cleanup[2] removing bt_api_base.deployment_evidence
+# cleanup[2] removing bt_api_base
+# destroy bt_api_base
+# destroy bt_api_base._version
+# destroy bt_api_base.deployment_evidence
+# cleanup[2] removing bt_api_base.service_protocol
+# destroy bt_api_base.service_protocol
+# cleanup[2] removing bt_api_base.market_protocol
+# destroy bt_api_base.market_protocol
+# cleanup[2] removing _sqlite3
+# cleanup[2] removing sqlite3.dbapi2
+# cleanup[2] removing sqlite3
+# cleanup[2] removing bt_api_base.account_protocol
+# destroy bt_api_base.account_protocol
+# cleanup[2] removing bt_api_gateway.account_view_projection
+# cleanup[2] removing bt_api_gateway.database_identity
+# cleanup[2] removing bt_api_gateway.router
+# cleanup[2] removing bt_api_gateway.event_journal
+# cleanup[2] removing hmac
+# cleanup[2] removing secrets
+# cleanup[2] removing bt_api_gateway.resolution
+# cleanup[2] removing bt_api_gateway.wire_mapping
+# cleanup[2] removing bt_api_gateway.writer_authority
+# cleanup[2] removing bt_api_gateway
+# destroy bt_api_gateway
+# destroy bt_api_gateway.account_view_projection
+# destroy bt_api_gateway.database_identity
+# destroy bt_api_gateway.router
+# destroy bt_api_gateway.event_journal
+# destroy bt_api_gateway.resolution
+# destroy bt_api_gateway.wire_mapping
+# destroy bt_api_gateway.writer_authority
+# cleanup[2] removing bt_api_base.market_history_protocol
+# destroy bt_api_base.market_history_protocol
+# cleanup[2] removing bt_api_gateway.market_hub
+# destroy bt_api_gateway.market_hub
+# cleanup[2] removing zmq.utils.z85
+# cleanup[2] removing zmq.auth.certs
+# cleanup[2] removing zmq.auth.base
+# cleanup[2] removing zmq.auth
+# cleanup[2] removing concurrent
+# cleanup[2] removing concurrent.futures._base
+# cleanup[2] removing concurrent.futures
+# cleanup[2] removing _ssl
+# cleanup[2] removing ssl
+# cleanup[2] removing asyncio.constants
+# cleanup[2] removing asyncio.coroutines
+# cleanup[2] removing _contextvars
+# cleanup[2] removing contextvars
+# cleanup[2] removing asyncio.format_helpers
+# cleanup[2] removing asyncio.base_futures
+# cleanup[2] removing asyncio.exceptions
+# cleanup[2] removing asyncio.base_tasks
+# cleanup[2] removing _asyncio
+# cleanup[2] removing asyncio.events
+# cleanup[2] removing asyncio.futures
+# cleanup[2] removing asyncio.protocols
+# cleanup[2] removing asyncio.transports
+# cleanup[2] removing asyncio.log
+# cleanup[2] removing asyncio.sslproto
+# cleanup[2] removing asyncio.mixins
+# cleanup[2] removing asyncio.tasks
+# cleanup[2] removing asyncio.locks
+# cleanup[2] removing asyncio.staggered
+# cleanup[2] removing asyncio.trsock
+# cleanup[2] removing asyncio.base_events
+# cleanup[2] removing asyncio.runners
+# cleanup[2] removing asyncio.queues
+# cleanup[2] removing asyncio.streams
+# cleanup[2] removing asyncio.subprocess
+# cleanup[2] removing asyncio.taskgroups
+# cleanup[2] removing asyncio.timeouts
+# cleanup[2] removing asyncio.threads
+# cleanup[2] removing _overlapped
+# cleanup[2] removing asyncio.base_subprocess
+# cleanup[2] removing asyncio.proactor_events
+# cleanup[2] removing asyncio.selector_events
+# cleanup[2] removing asyncio.windows_utils
+# cleanup[2] removing asyncio.windows_events
+# cleanup[2] removing asyncio
+# cleanup[2] removing zmq._future
+# cleanup[2] removing zmq.asyncio
+# cleanup[2] removing zmq.auth.thread
+# cleanup[2] removing bt_api_transport_zmq.wire
+# cleanup[2] removing bt_api_transport_zmq.server
+# cleanup[2] removing bt_api_transport_zmq.client
+# cleanup[2] removing bt_api_transport_zmq.events
+# cleanup[2] removing bt_api_transport_zmq
+# destroy bt_api_transport_zmq
+# destroy bt_api_transport_zmq.wire
+# destroy bt_api_transport_zmq.server
+# destroy bt_api_transport_zmq.client
+# destroy bt_api_transport_zmq.events
+# cleanup[2] removing nacl
+# cleanup[2] removing nacl.exceptions
+# cleanup[2] removing _cffi_backend
+# cleanup[2] removing _sodium
+# cleanup[2] removing nacl._sodium
+# cleanup[2] removing nacl.bindings.crypto_aead
+# cleanup[2] removing nacl.bindings.crypto_box
+# destroy nacl.bindings.crypto_box
+# cleanup[2] removing nacl.bindings.crypto_core
+# cleanup[2] removing nacl.bindings.crypto_generichash
+# cleanup[2] removing nacl.bindings.crypto_hash
+# destroy nacl.bindings.crypto_hash
+# cleanup[2] removing nacl.bindings.crypto_kx
+# cleanup[2] removing nacl.bindings.crypto_pwhash
+# cleanup[2] removing nacl.bindings.crypto_scalarmult
+# destroy nacl.bindings.crypto_scalarmult
+# cleanup[2] removing nacl.bindings.crypto_secretbox
+# destroy nacl.bindings.crypto_secretbox
+# cleanup[2] removing nacl.bindings.crypto_secretstream
+# cleanup[2] removing nacl.bindings.crypto_shorthash
+# cleanup[2] removing nacl.bindings.crypto_sign
+# destroy nacl.bindings.crypto_sign
+# cleanup[2] removing nacl.bindings.randombytes
+# destroy nacl.bindings.randombytes
+# cleanup[2] removing nacl.bindings.sodium_core
+# cleanup[2] removing nacl.bindings.utils
+# cleanup[2] removing nacl.bindings
+# cleanup[2] removing nacl.encoding
+# cleanup[2] removing nacl.utils
+# cleanup[2] removing nacl.public
+# cleanup[2] removing bt_api_transport_zmq.service_v2
+# destroy bt_api_transport_zmq.service_v2
+# cleanup[2] removing bt_api_transport_zmq.market_v2
+# destroy bt_api_transport_zmq.market_v2
+# cleanup[2] removing zmq.utils.monitor
+# cleanup[2] removing bt_api_base._compat
+# destroy bt_api_base._compat
+# cleanup[2] removing email.feedparser
+# cleanup[2] removing email.parser
+# cleanup[2] removing bt_api_base.auth_config
+# destroy bt_api_base.auth_config
+# cleanup[2] removing bt_api_base.balance_utils
+# destroy bt_api_base.balance_utils
+# cleanup[2] removing bt_api_base.exceptions
+# destroy bt_api_base.exceptions
+# cleanup[2] removing bt_api_base.error
+# destroy bt_api_base.error
+# cleanup[2] removing urllib3.packages
+# cleanup[2] removing urllib3.packages.six
+# cleanup[2] removing urllib3.packages.six.moves
+# cleanup[2] removing http
+# cleanup[2] removing http.client
+# cleanup[2] removing urllib3.packages.six.moves.http_client
+# cleanup[2] removing urllib3.exceptions
+# cleanup[2] removing urllib3._version
+# cleanup[2] removing urllib3._collections
+# cleanup[2] removing urllib3.contrib
+# cleanup[2] removing urllib3.contrib._appengine_environ
+# cleanup[2] removing urllib3.util.wait
+# cleanup[2] removing urllib3.util.connection
+# cleanup[2] removing _brotli
+# cleanup[2] removing brotli._brotli
+# cleanup[2] removing brotli.brotli
+# cleanup[2] removing brotli
+# cleanup[2] removing urllib3.util.request
+# cleanup[2] removing urllib3.util.response
+# cleanup[2] removing urllib3.util.retry
+# cleanup[2] removing urllib3.util.url
+# cleanup[2] removing urllib3.util.ssltransport
+# cleanup[2] removing urllib3.util.ssl_
+# cleanup[2] removing urllib3.util.timeout
+# cleanup[2] removing urllib3.util
+# cleanup[2] removing urllib3.util.proxy
+# cleanup[2] removing urllib3.util.ssl_match_hostname
+# cleanup[2] removing urllib3.connection
+# cleanup[2] removing _queue
+# cleanup[2] removing queue
+# cleanup[2] removing mimetypes
+# cleanup[2] removing urllib3.fields
+# cleanup[2] removing urllib3.filepost
+# cleanup[2] removing urllib3.packages.six.moves.urllib
+# cleanup[2] removing urllib3.packages.six.moves.urllib.parse
+# cleanup[2] removing urllib3.request
+# cleanup[2] removing urllib3.response
+# cleanup[2] removing urllib3.util.queue
+# cleanup[2] removing urllib3.connectionpool
+# cleanup[2] removing urllib3.poolmanager
+# cleanup[2] removing urllib3
+# cleanup[2] removing chardet.enums
+# cleanup[2] removing chardet.charsetprober
+# cleanup[2] removing chardet.charsetgroupprober
+# cleanup[2] removing chardet.codingstatemachine
+# cleanup[2] removing chardet.escsm
+# cleanup[2] removing chardet.escprober
+# cleanup[2] removing chardet.latin1prober
+# cleanup[2] removing chardet.mbcssm
+# cleanup[2] removing chardet.utf8prober
+# cleanup[2] removing chardet.mbcharsetprober
+# cleanup[2] removing chardet.euctwfreq
+# cleanup[2] removing chardet.euckrfreq
+# cleanup[2] removing chardet.gb2312freq
+# cleanup[2] removing chardet.big5freq
+# cleanup[2] removing chardet.jisfreq
+# cleanup[2] removing chardet.chardistribution
+# cleanup[2] removing chardet.jpcntx
+# cleanup[2] removing chardet.sjisprober
+# cleanup[2] removing chardet.eucjpprober
+# cleanup[2] removing chardet.gb2312prober
+# cleanup[2] removing chardet.euckrprober
+# cleanup[2] removing chardet.cp949prober
+# cleanup[2] removing chardet.big5prober
+# cleanup[2] removing chardet.euctwprober
+# cleanup[2] removing chardet.mbcsgroupprober
+# cleanup[2] removing chardet.hebrewprober
+# cleanup[2] removing chardet.sbcharsetprober
+# cleanup[2] removing chardet.langbulgarianmodel
+# cleanup[2] removing chardet.langgreekmodel
+# cleanup[2] removing chardet.langhebrewmodel
+# cleanup[2] removing chardet.langrussianmodel
+# cleanup[2] removing chardet.langthaimodel
+# cleanup[2] removing chardet.langturkishmodel
+# cleanup[2] removing chardet.sbcsgroupprober
+# cleanup[2] removing chardet.universaldetector
+# cleanup[2] removing chardet.version
+# cleanup[2] removing chardet
+# cleanup[2] removing simplejson.errors
+# cleanup[2] removing simplejson.raw_json
+# cleanup[2] removing simplejson.compat
+# cleanup[2] removing simplejson._speedups
+# cleanup[2] removing simplejson.scanner
+# cleanup[2] removing simplejson.decoder
+# cleanup[2] removing simplejson.encoder
+# cleanup[2] removing simplejson
+# cleanup[2] removing urllib.response
+# cleanup[2] removing urllib.error
+# cleanup[2] removing nturl2path
+# destroy nturl2path
+# cleanup[2] removing urllib.request
+# cleanup[2] removing http.cookiejar
+# cleanup[2] removing http.cookies
+# cleanup[2] removing requests.compat
+# cleanup[2] removing requests.exceptions
+# cleanup[2] removing charset_normalizer.constant
+# cleanup[2] removing charset_normalizer.utils
+# cleanup[2] removing charset_normalizer.md
+# cleanup[2] removing charset_normalizer.models
+# cleanup[2] removing charset_normalizer.assets
+# cleanup[2] removing charset_normalizer.cd
+# cleanup[2] removing charset_normalizer.api
+# cleanup[2] removing charset_normalizer.legacy
+# cleanup[2] removing charset_normalizer.version
+# cleanup[2] removing charset_normalizer
+# destroy charset_normalizer
+# destroy charset_normalizer.constant
+# destroy charset_normalizer.utils
+# destroy charset_normalizer.md
+# destroy charset_normalizer.models
+# destroy charset_normalizer.assets
+# destroy charset_normalizer.cd
+# destroy charset_normalizer.legacy
+# destroy charset_normalizer.version
+# destroy charset_normalizer.api
+# cleanup[2] removing requests.packages.urllib3.packages
+# cleanup[2] removing requests.packages.urllib3.packages.six
+# cleanup[2] removing requests.packages.urllib3.packages.six.moves
+# cleanup[2] removing requests.packages.urllib3.packages.six.moves.http_client
+# cleanup[2] removing requests.packages.urllib3.exceptions
+# cleanup[2] removing requests.packages.urllib3._version
+# cleanup[2] removing requests.packages.urllib3._collections
+# cleanup[2] removing requests.packages.urllib3.contrib
+# cleanup[2] removing requests.packages.urllib3.contrib._appengine_environ
+# cleanup[2] removing requests.packages.urllib3.util.wait
+# cleanup[2] removing requests.packages.urllib3.util.connection
+# cleanup[2] removing requests.packages.urllib3.util.request
+# cleanup[2] removing requests.packages.urllib3.util.response
+# cleanup[2] removing requests.packages.urllib3.util.retry
+# cleanup[2] removing requests.packages.urllib3.util.url
+# cleanup[2] removing requests.packages.urllib3.util.ssltransport
+# cleanup[2] removing requests.packages.urllib3.util.ssl_
+# cleanup[2] removing requests.packages.urllib3.util.timeout
+# cleanup[2] removing requests.packages.urllib3.util
+# cleanup[2] removing requests.packages.urllib3.util.proxy
+# cleanup[2] removing requests.packages.urllib3.util.ssl_match_hostname
+# cleanup[2] removing requests.packages.urllib3.connection
+# cleanup[2] removing requests.packages.urllib3.fields
+# cleanup[2] removing requests.packages.urllib3.filepost
+# cleanup[2] removing requests.packages.urllib3.packages.six.moves.urllib
+# cleanup[2] removing requests.packages.urllib3.packages.six.moves.urllib.parse
+# cleanup[2] removing requests.packages.urllib3.request
+# cleanup[2] removing requests.packages.urllib3.response
+# cleanup[2] removing requests.packages.urllib3.util.queue
+# cleanup[2] removing requests.packages.urllib3.connectionpool
+# cleanup[2] removing requests.packages.urllib3.poolmanager
+# cleanup[2] removing requests.packages.urllib3
+# cleanup[2] removing idna.package_data
+# cleanup[2] removing idna.idnadata
+# cleanup[2] removing idna.intranges
+# cleanup[2] removing idna.core
+# cleanup[2] removing idna
+# cleanup[2] removing requests.packages.idna.package_data
+# cleanup[2] removing requests.packages.idna.idnadata
+# cleanup[2] removing requests.packages.idna.intranges
+# cleanup[2] removing requests.packages.idna.core
+# cleanup[2] removing requests.packages.idna
+# cleanup[2] removing requests.packages.chardet.enums
+# cleanup[2] removing requests.packages.chardet.charsetprober
+# cleanup[2] removing requests.packages.chardet.charsetgroupprober
+# cleanup[2] removing requests.packages.chardet.codingstatemachine
+# cleanup[2] removing requests.packages.chardet.escsm
+# cleanup[2] removing requests.packages.chardet.escprober
+# cleanup[2] removing requests.packages.chardet.latin1prober
+# cleanup[2] removing requests.packages.chardet.mbcssm
+# cleanup[2] removing requests.packages.chardet.utf8prober
+# cleanup[2] removing requests.packages.chardet.mbcharsetprober
+# cleanup[2] removing requests.packages.chardet.euctwfreq
+# cleanup[2] removing requests.packages.chardet.euckrfreq
+# cleanup[2] removing requests.packages.chardet.gb2312freq
+# cleanup[2] removing requests.packages.chardet.big5freq
+# cleanup[2] removing requests.packages.chardet.jisfreq
+# cleanup[2] removing requests.packages.chardet.chardistribution
+# cleanup[2] removing requests.packages.chardet.jpcntx
+# cleanup[2] removing requests.packages.chardet.sjisprober
+# cleanup[2] removing requests.packages.chardet.eucjpprober
+# cleanup[2] removing requests.packages.chardet.gb2312prober
+# cleanup[2] removing requests.packages.chardet.euckrprober
+# cleanup[2] removing requests.packages.chardet.cp949prober
+# cleanup[2] removing requests.packages.chardet.big5prober
+# cleanup[2] removing requests.packages.chardet.euctwprober
+# cleanup[2] removing requests.packages.chardet.mbcsgroupprober
+# cleanup[2] removing requests.packages.chardet.hebrewprober
+# cleanup[2] removing requests.packages.chardet.sbcharsetprober
+# cleanup[2] removing requests.packages.chardet.langbulgarianmodel
+# cleanup[2] removing requests.packages.chardet.langgreekmodel
+# cleanup[2] removing requests.packages.chardet.langhebrewmodel
+# cleanup[2] removing requests.packages.chardet.langrussianmodel
+# cleanup[2] removing requests.packages.chardet.langthaimodel
+# cleanup[2] removing requests.packages.chardet.langturkishmodel
+# cleanup[2] removing requests.packages.chardet.sbcsgroupprober
+# cleanup[2] removing requests.packages.chardet.universaldetector
+# cleanup[2] removing requests.packages.chardet.version
+# cleanup[2] removing requests.packages.chardet
+# cleanup[2] removing requests.packages
+# cleanup[2] removing certifi.core
+# cleanup[2] removing certifi
+# destroy certifi
+# destroy certifi.core
+# cleanup[2] removing requests.certs
+# cleanup[2] removing requests.__version__
+# destroy requests.__version__
+# cleanup[2] removing requests._internal_utils
+# cleanup[2] removing requests.cookies
+# cleanup[2] removing requests.structures
+# cleanup[2] removing importlib.resources._itertools
+# cleanup[2] removing importlib.resources.readers
+# cleanup[2] removing importlib.readers
+# cleanup[2] removing requests.utils
+# cleanup[2] removing requests.auth
+# cleanup[2] removing stringprep
+# cleanup[2] removing encodings.idna
+# cleanup[2] removing requests.hooks
+# cleanup[2] removing requests.status_codes
+# cleanup[2] removing requests.models
+# cleanup[2] removing socks
+# cleanup[2] removing urllib3.contrib.socks
+# cleanup[2] removing requests.adapters
+# cleanup[2] removing requests.sessions
+# cleanup[2] removing requests.api
+# cleanup[2] removing requests
+# cleanup[2] removing yaml.error
+# cleanup[2] removing yaml.tokens
+# cleanup[2] removing yaml.events
+# cleanup[2] removing yaml.nodes
+# cleanup[2] removing yaml.reader
+# cleanup[2] removing yaml.scanner
+# cleanup[2] removing yaml.parser
+# cleanup[2] removing yaml.composer
+# cleanup[2] removing yaml.constructor
+# cleanup[2] removing yaml.resolver
+# cleanup[2] removing yaml.loader
+# cleanup[2] removing yaml.emitter
+# cleanup[2] removing yaml.serializer
+# cleanup[2] removing yaml.representer
+# cleanup[2] removing yaml.dumper
+# cleanup[2] removing yaml._yaml
+# cleanup[2] removing yaml.cyaml
+# cleanup[2] removing yaml
+# cleanup[2] removing dotenv.parser
+# cleanup[2] removing dotenv.variables
+# cleanup[2] removing dotenv.main
+# cleanup[2] removing dotenv
+# destroy dotenv
+# cleanup[2] removing bt_api_base.functions.utils
+# cleanup[2] removing bt_api_base.functions
+# destroy bt_api_base.functions
+# destroy bt_api_base.functions.utils
+# cleanup[2] removing bt_api_base.functions.log_message
+# destroy bt_api_base.functions.log_message
+# cleanup[2] removing bt_api_base.logging_factory
+# destroy bt_api_base.logging_factory
+# cleanup[2] removing bt_api_base.event_bus
+# destroy bt_api_base.event_bus
+# cleanup[2] removing bt_api_base.containers.auto_init_mixin
+# cleanup[2] removing bt_api_base.containers.accounts.account
+# cleanup[2] removing bt_api_base.containers.accounts
+# cleanup[2] removing bt_api_base.containers.balances.balance
+# cleanup[2] removing bt_api_base.containers.balances
+# cleanup[2] removing bt_api_base.containers.bars.bar
+# cleanup[2] removing bt_api_base.containers.bars
+# cleanup[2] removing bt_api_base.containers.exchanges.exchange_data
+# cleanup[2] removing bt_api_base.containers.exchanges
+# cleanup[2] removing bt_api_base.containers.fundingrates.funding_rate
+# cleanup[2] removing bt_api_base.containers.fundingrates
+# cleanup[2] removing bt_api_base.containers.greeks.greeks
+# cleanup[2] removing bt_api_base.containers.greeks
+# cleanup[2] removing bt_api_base.containers.incomes.income
+# cleanup[2] removing bt_api_base.containers.incomes
+# cleanup[2] removing bt_api_base.containers.instrument
+# cleanup[2] removing bt_api_base.containers.liquidations.liquidation
+# cleanup[2] removing bt_api_base.containers.liquidations
+# cleanup[2] removing bt_api_base.containers.markprices.mark_price
+# cleanup[2] removing bt_api_base.containers.markprices
+# cleanup[2] removing bt_api_base.containers.orderbooks.orderbook
+# cleanup[2] removing bt_api_base.containers.orderbooks
+# cleanup[2] removing bt_api_base.containers.orders.order
+# cleanup[2] removing bt_api_base.containers.orders
+# cleanup[2] removing bt_api_base.containers.positions.position
+# cleanup[2] removing bt_api_base.containers.positions
+# cleanup[2] removing bt_api_base.containers.requestdatas.request_data
+# cleanup[2] removing bt_api_base.containers.requestdatas
+# cleanup[2] removing bt_api_base.containers.symbols.symbol
+# cleanup[2] removing bt_api_base.containers.symbols
+# cleanup[2] removing bt_api_base.containers.tickers.ticker
+# cleanup[2] removing bt_api_base.containers.tickers
+# cleanup[2] removing bt_api_base.containers.timers.timer
+# cleanup[2] removing bt_api_base.containers.timers
+# cleanup[2] removing bt_api_base.containers.trades.trade
+# cleanup[2] removing bt_api_base.containers.trades
+# cleanup[2] removing bt_api_base.containers
+# destroy bt_api_base.containers
+# destroy bt_api_base.containers.auto_init_mixin
+# destroy bt_api_base.containers.accounts
+# destroy bt_api_base.containers.accounts.account
+# destroy bt_api_base.containers.balances
+# destroy bt_api_base.containers.balances.balance
+# destroy bt_api_base.containers.bars
+# destroy bt_api_base.containers.bars.bar
+# destroy bt_api_base.containers.exchanges
+# destroy bt_api_base.containers.exchanges.exchange_data
+# destroy bt_api_base.containers.fundingrates
+# destroy bt_api_base.containers.fundingrates.funding_rate
+# destroy bt_api_base.containers.greeks
+# destroy bt_api_base.containers.greeks.greeks
+# destroy bt_api_base.containers.incomes
+# destroy bt_api_base.containers.incomes.income
+# destroy bt_api_base.containers.instrument
+# destroy bt_api_base.containers.liquidations
+# destroy bt_api_base.containers.liquidations.liquidation
+# destroy bt_api_base.containers.markprices
+# destroy bt_api_base.containers.markprices.mark_price
+# destroy bt_api_base.containers.orderbooks
+# destroy bt_api_base.containers.orderbooks.orderbook
+# destroy bt_api_base.containers.orders
+# destroy bt_api_base.containers.orders.order
+# destroy bt_api_base.containers.positions
+# destroy bt_api_base.containers.positions.position
+# destroy bt_api_base.containers.requestdatas
+# destroy bt_api_base.containers.requestdatas.request_data
+# destroy bt_api_base.containers.symbols
+# destroy bt_api_base.containers.symbols.symbol
+# destroy bt_api_base.containers.tickers
+# destroy bt_api_base.containers.tickers.ticker
+# destroy bt_api_base.containers.timers
+# destroy bt_api_base.containers.timers.timer
+# destroy bt_api_base.containers.trades
+# destroy bt_api_base.containers.trades.trade
+# cleanup[2] removing bt_api_base.instrument_manager
+# destroy bt_api_base.instrument_manager
+# cleanup[2] removing bt_api_base.registry
+# destroy bt_api_base.registry
+# cleanup[2] removing bt_api_py._contracts.models
+# cleanup[2] removing bt_api_py._contracts.cache_policy
+# cleanup[2] removing bt_api_py._contracts.capabilities
+# cleanup[2] removing bt_api_py._contracts.errors
+# cleanup[2] removing bt_api_py._contracts.subscriptions
+# cleanup[2] removing bt_api_py._contracts
+# cleanup[2] removing bt_api_py._ctp_budget
+# cleanup[2] removing bt_api_py._ctp_credential_binding
+# cleanup[2] removing bt_api_py._ctp_execution_authorization
+# cleanup[2] removing bt_api_py._normalization
+# cleanup[2] removing bt_api_py._execution_session
+# cleanup[2] removing bt_api_py.brokers.errors
+# cleanup[2] removing bt_api_py.brokers.types
+# cleanup[2] removing bt_api_py.brokers.base
+# cleanup[2] removing bt_api_py.brokers.feed_bridge
+# cleanup[2] removing bt_api_py.brokers.gateway_bridge
+# cleanup[2] removing bt_api_py.brokers.mock
+# cleanup[2] removing bt_api_py.brokers.registry
+# cleanup[2] removing bt_api_py.brokers.loader
+# cleanup[2] removing bt_api_py.brokers
+# cleanup[2] removing bt_api_py.certification.audit
+# cleanup[2] removing bt_api_py.certification.scenarios
+# cleanup[2] removing bt_api_py.certification
+# cleanup[2] removing bt_api_py.cross_venue
+# cleanup[2] removing bt_api_py.balance_manager
+# cleanup[2] removing bt_api_py.exceptions
+# cleanup[2] removing bt_api_py.data_downloader
+# cleanup[2] removing bt_api_py.bt_api
+# cleanup[2] removing bt_api_py
+# destroy bt_api_py
+# cleanup[2] removing bt_api_py.service_registry
+# cleanup[2] removing bt_api_py.service_components
+# cleanup[2] removing bt_api_py.service_config
+# cleanup[2] removing bt_api_py.service_deployment
+# cleanup[2] removing bt_api_py.service_runtime
+# cleanup[2] removing bt_api_py.service_host
+# cleanup[2] removing bt_api_py.service_market
+# cleanup[2] removing tests
+# destroy tests
+# cleanup[2] removing _multiprocessing
+# cleanup[2] removing multiprocessing.util
+# cleanup[2] removing multiprocessing.connection
+# cleanup[2] removing multiprocessing.spawn
+# cleanup[2] removing multiprocessing.popen_spawn_win32
+# destroy _sitebuiltins
+# destroy pyexpat.errors
+# destroy pyexpat.model
+# destroy pyexpat
+# destroy colorama.win32
+# destroy faulthandler
+# destroy multiprocessing
+# destroy multiprocessing.connection
+# destroy multiprocessing.popen_spawn_win32
+# destroy multiprocessing.context
+# destroy sqlite3.dbapi2
+# destroy _sqlite3
+# destroy secrets
+# destroy bt_api_py._contracts
+# destroy bt_api_py._contracts.models
+# destroy bt_api_py._contracts.cache_policy
+# destroy bt_api_py._contracts.capabilities
+# destroy bt_api_py._contracts.errors
+# destroy bt_api_py._contracts.subscriptions
+# destroy bt_api_py._ctp_budget
+# destroy bt_api_py._ctp_credential_binding
+# destroy bt_api_py._ctp_execution_authorization
+# destroy bt_api_py._normalization
+# destroy bt_api_py._execution_session
+# destroy bt_api_py.brokers
+# destroy bt_api_py.brokers.errors
+# destroy bt_api_py.brokers.types
+# destroy bt_api_py.brokers.base
+# destroy bt_api_py.brokers.feed_bridge
+# destroy bt_api_py.brokers.gateway_bridge
+# destroy bt_api_py.brokers.mock
+# destroy bt_api_py.brokers.registry
+# destroy bt_api_py.brokers.loader
+# destroy bt_api_py.certification
+# destroy bt_api_py.certification.audit
+# destroy bt_api_py.certification.scenarios
+# destroy bt_api_py.cross_venue
+# destroy bt_api_py.balance_manager
+# destroy bt_api_py.exceptions
+# destroy bt_api_py.data_downloader
+# destroy bt_api_py.bt_api
+# destroy bt_api_py.service_registry
+# destroy bt_api_py.service_components
+# destroy bt_api_py.service_config
+# destroy bt_api_py.service_deployment
+# destroy bt_api_py.service_runtime
+# destroy bt_api_py.service_host
+# destroy bt_api_py.service_market
+# destroy requests
+# destroy requests.compat
+# destroy requests.exceptions
+# destroy requests.packages
+# destroy urllib3
+# destroy idna
+# destroy idna.package_data
+# destroy idna.intranges
+# destroy idna.core
+# destroy requests._internal_utils
+# destroy requests.cookies
+# destroy requests.structures
+# destroy requests.utils
+# destroy requests.auth
+# destroy requests.hooks
+# destroy requests.status_codes
+# destroy requests.models
+# destroy requests.adapters
+# destroy requests.api
+# destroy urllib3.packages
+# destroy urllib3.exceptions
+# destroy urllib3._version
+# destroy urllib3._collections
+# destroy urllib3.contrib
+# destroy urllib3.contrib.socks
+# destroy urllib3.connection
+# destroy urllib3.fields
+# destroy urllib3.filepost
+# destroy urllib3.request
+# destroy urllib3.response
+# destroy urllib3.connectionpool
+# destroy urllib3.poolmanager
+# destroy urllib3.util.wait
+# destroy urllib3.util.connection
+# destroy urllib3.util.request
+# destroy urllib3.util.response
+# destroy urllib3.util.retry
+# destroy urllib3.util.url
+# destroy urllib3.util.ssltransport
+# destroy urllib3.util.ssl_
+# destroy urllib3.util.timeout
+# destroy urllib3.util.proxy
+# destroy urllib3.util.ssl_match_hostname
+# destroy urllib3.util.queue
+# destroy urllib3.contrib._appengine_environ
+# destroy brotli.brotli
+# destroy hmac
+# destroy mimetypes
+# destroy brotli
+# destroy urllib3.util
+# destroy urllib3.packages.six
+# destroy chardet.enums
+# destroy chardet.charsetprober
+# destroy chardet.charsetgroupprober
+# destroy chardet.codingstatemachine
+# destroy chardet.escsm
+# destroy chardet.escprober
+# destroy chardet.latin1prober
+# destroy chardet.mbcssm
+# destroy chardet.utf8prober
+# destroy chardet.mbcharsetprober
+# destroy chardet.euctwfreq
+# destroy chardet.euckrfreq
+# destroy chardet.gb2312freq
+# destroy chardet.big5freq
+# destroy chardet.jisfreq
+# destroy chardet.chardistribution
+# destroy chardet.jpcntx
+# destroy chardet.sjisprober
+# destroy chardet.eucjpprober
+# destroy chardet.gb2312prober
+# destroy chardet.euckrprober
+# destroy chardet.cp949prober
+# destroy chardet.big5prober
+# destroy chardet.euctwprober
+# destroy chardet.mbcsgroupprober
+# destroy chardet.hebrewprober
+# destroy chardet.sbcharsetprober
+# destroy chardet.langbulgarianmodel
+# destroy chardet.langgreekmodel
+# destroy chardet.langhebrewmodel
+# destroy chardet.langrussianmodel
+# destroy chardet.langthaimodel
+# destroy chardet.langturkishmodel
+# destroy chardet.sbcsgroupprober
+# destroy chardet.universaldetector
+# destroy chardet.version
+# destroy simplejson.errors
+# destroy simplejson.raw_json
+# destroy simplejson.compat
+# destroy simplejson.scanner
+# destroy simplejson.decoder
+# destroy simplejson.encoder
+# destroy decimal
+# destroy idna.idnadata
+# destroy requests.certs
+# destroy requests.sessions
+# destroy chardet
+# destroy simplejson
+# destroy socks
+# destroy dotenv.parser
+# destroy dotenv.variables
+# destroy dotenv.main
+# destroy sqlite3
+# destroy _multiprocessing
+# destroy multiprocessing.spawn
+# destroy runpy
+# destroy multiprocessing.process
+# destroy multiprocessing.reduction
+# destroy multiprocessing.util
+# destroy tests.test_service_transport_authorization_revocation_r3
+# cleanup[3] wiping yaml
+# destroy yaml.error
+# destroy yaml.tokens
+# destroy yaml.events
+# destroy yaml.nodes
+# destroy yaml.reader
+# destroy yaml.scanner
+# destroy yaml.parser
+# destroy yaml.composer
+# destroy yaml.constructor
+# destroy yaml.resolver
+# destroy yaml.loader
+# destroy yaml.emitter
+# destroy yaml.serializer
+# destroy yaml.representer
+# destroy yaml.dumper
+# destroy yaml.cyaml
+# cleanup[3] wiping yaml._yaml
+# destroy yaml
+# cleanup[3] wiping encodings.idna
+# destroy stringprep
+# cleanup[3] wiping importlib.readers
+# cleanup[3] wiping importlib.resources.readers
+# cleanup[3] wiping importlib.resources._itertools
+# cleanup[3] wiping requests.packages.urllib3.packages.six.moves.urllib.parse
+# cleanup[3] wiping requests.packages.urllib3.packages.six.moves.urllib
+# cleanup[3] wiping requests.packages.urllib3.packages.six.moves.http_client
+# cleanup[3] wiping requests.packages.urllib3.packages.six.moves
+# destroy queue
+# cleanup[3] wiping http.cookies
+# cleanup[3] wiping http.cookiejar
+# cleanup[3] wiping urllib.request
+# destroy bisect
+# destroy hashlib
+# destroy http
+# cleanup[3] wiping urllib.error
+# cleanup[3] wiping urllib.response
+# cleanup[3] wiping simplejson._speedups
+# cleanup[3] wiping urllib3.packages.six.moves.urllib.parse
+# cleanup[3] wiping urllib3.packages.six.moves.urllib
+# cleanup[3] wiping _queue
+# cleanup[3] wiping brotli._brotli
+# cleanup[3] wiping _brotli
+# cleanup[3] wiping urllib3.packages.six.moves.http_client
+# cleanup[3] wiping http.client
+# cleanup[3] wiping urllib3.packages.six.moves
+# cleanup[3] wiping email.parser
+# cleanup[3] wiping email.feedparser
+# cleanup[3] wiping zmq.utils.monitor
+# cleanup[3] wiping nacl.public
+# cleanup[3] wiping nacl.utils
+# destroy nacl
+# destroy nacl.bindings
+# destroy nacl.bindings.crypto_aead
+# destroy nacl.bindings.crypto_core
+# destroy nacl.bindings.crypto_generichash
+# destroy nacl.bindings.crypto_kx
+# destroy nacl.bindings.crypto_pwhash
+# destroy nacl.bindings.crypto_secretstream
+# destroy nacl.bindings.crypto_shorthash
+# destroy nacl.bindings.sodium_core
+# destroy nacl.bindings.utils
+# destroy nacl.public
+# destroy nacl.encoding
+# destroy nacl.utils
+# cleanup[3] wiping nacl._sodium
+# cleanup[3] wiping _sodium
+# cleanup[3] wiping _cffi_backend
+# cleanup[3] wiping nacl.exceptions
+# cleanup[3] wiping zmq.auth.thread
+# cleanup[3] wiping zmq.asyncio
+# cleanup[3] wiping zmq._future
+# cleanup[3] wiping asyncio
+# destroy asyncio.log
+# destroy asyncio.runners
+# destroy asyncio.queues
+# destroy asyncio.subprocess
+# destroy asyncio.taskgroups
+# destroy asyncio.timeouts
+# destroy asyncio.threads
+# destroy asyncio.windows_events
+# cleanup[3] wiping asyncio.windows_utils
+# cleanup[3] wiping asyncio.selector_events
+# cleanup[3] wiping asyncio.proactor_events
+# destroy asyncio.base_events
+# cleanup[3] wiping asyncio.base_subprocess
+# cleanup[3] wiping _overlapped
+# cleanup[3] wiping asyncio.streams
+# cleanup[3] wiping asyncio.trsock
+# cleanup[3] wiping asyncio.staggered
+# destroy typing
+# cleanup[3] wiping asyncio.locks
+# cleanup[3] wiping asyncio.tasks
+# destroy asyncio.base_tasks
+# cleanup[3] wiping asyncio.mixins
+# cleanup[3] wiping asyncio.sslproto
+# cleanup[3] wiping asyncio.transports
+# cleanup[3] wiping asyncio.protocols
+# cleanup[3] wiping asyncio.futures
+# cleanup[3] wiping asyncio.events
+# cleanup[3] wiping _asyncio
+# cleanup[3] wiping asyncio.exceptions
+# cleanup[3] wiping asyncio.base_futures
+# destroy asyncio.format_helpers
+# cleanup[3] wiping contextvars
+# cleanup[3] wiping _contextvars
+# destroy _contextvars
+# cleanup[3] wiping asyncio.coroutines
+# cleanup[3] wiping asyncio.constants
+# cleanup[3] wiping ssl
+# cleanup[3] wiping _ssl
+# cleanup[3] wiping concurrent.futures
+# destroy concurrent.futures._base
+# cleanup[3] wiping concurrent
+# destroy concurrent.futures
+# cleanup[3] wiping zmq.auth
+# destroy zmq.auth.certs
+# destroy zmq.auth.base
+# destroy zmq.auth.thread
+# cleanup[3] wiping zmq.utils.z85
+# cleanup[3] wiping _blake2
+# cleanup[3] wiping _hashlib
+# cleanup[3] wiping zmq
+# destroy zmq._typing
+# destroy zmq._future
+# destroy zmq.backend
+# destroy zmq.backend.select
+# destroy zmq.backend.cython
+# destroy zmq.utils
+# destroy zmq.utils.interop
+# destroy zmq.utils.monitor
+# destroy zmq.sugar
+# destroy zmq.auth
+# destroy zmq.asyncio
+# cleanup[3] wiping zmq.sugar.stopwatch
+# cleanup[3] wiping zmq.sugar.version
+# cleanup[3] wiping zmq.sugar.tracker
+# cleanup[3] wiping zmq.sugar.frame
+# cleanup[3] wiping zmq.sugar.context
+# cleanup[3] wiping zmq.sugar.socket
+# destroy pickle
+# destroy zmq.utils.jsonapi
+# cleanup[3] wiping zmq.sugar.poll
+# cleanup[3] wiping zmq.sugar.attrsettr
+# destroy zmq.constants
+# cleanup[3] wiping zmq.backend.cython._zmq
+# cleanup[3] wiping zmq.error
+# cleanup[3] wiping _cython_3_1_3
+# cleanup[3] wiping cython_runtime
+# cleanup[3] wiping _pickle
+# cleanup[3] wiping _compat_pickle
+# cleanup[3] wiping code
+# cleanup[3] wiping cmd
+# destroy string
+# cleanup[3] wiping ctypes.wintypes
+# cleanup[3] wiping ctypes
+# destroy ctypes._endian
+# cleanup[3] wiping _ctypes
+# cleanup[3] wiping _pytest._argcomplete
+# cleanup[3] wiping _pytest.faulthandler
+# cleanup[3] wiping _pytest.threadexception
+# cleanup[3] wiping _pytest.unraisableexception
+# cleanup[3] wiping _pytest.python_path
+# cleanup[3] wiping _pytest.warnings
+# cleanup[3] wiping _pytest.stepwise
+# cleanup[3] wiping _pytest.setupplan
+# cleanup[3] wiping _pytest.setuponly
+# cleanup[3] wiping _pytest.junitxml
+# destroy xml.etree.ElementTree
+# cleanup[3] wiping _elementtree
+# cleanup[3] wiping xml.etree.ElementPath
+# cleanup[3] wiping _pytest.nose
+# cleanup[3] wiping _pytest.pastebin
+# cleanup[3] wiping _pytest.skipping
+# cleanup[3] wiping _pytest.unittest
+# cleanup[3] wiping _pytest.helpconfig
+# destroy pytest
+# cleanup[3] wiping _pytest.recwarn
+# cleanup[3] wiping _pytest.logging
+# cleanup[3] wiping logging
+# cleanup[3] wiping _pytest.legacypath
+# cleanup[3] wiping _pytest.terminal
+# cleanup[3] wiping _pytest.pytester
+# cleanup[3] wiping _pytest.tmpdir
+# cleanup[3] wiping gc
+# destroy gc
+# cleanup[3] wiping _pytest.monkeypatch
+# cleanup[3] wiping _pytest.freeze_support
+# cleanup[3] wiping _pytest.doctest
+# destroy platform
+# cleanup[3] wiping _pytest.python_api
+# cleanup[3] wiping _decimal
+# cleanup[3] wiping _pytest.python
+# cleanup[3] wiping _pytest.debugging
+# destroy unittest
+# cleanup[3] wiping unittest.runner
+# cleanup[3] wiping unittest.signals
+# cleanup[3] wiping unittest.loader
+# cleanup[3] wiping unittest.suite
+# cleanup[3] wiping unittest.case
+# destroy difflib
+# cleanup[3] wiping heapq
+# cleanup[3] wiping _heapq
+# cleanup[3] wiping unittest.result
+# cleanup[3] wiping unittest.util
+# cleanup[3] wiping _pytest.capture
+# cleanup[3] wiping _pytest.cacheprovider
+# cleanup[3] wiping json
+# destroy json.decoder
+# destroy json.encoder
+# cleanup[3] wiping json.scanner
+# cleanup[3] wiping _json
+# cleanup[3] wiping _pytest.assertion
+# destroy _pytest.assertion.rewrite
+# destroy _pytest.assertion.truncate
+# cleanup[3] wiping _pytest.main
+# cleanup[3] wiping _pytest.runner
+# cleanup[3] wiping _pytest.timing
+# cleanup[3] wiping bdb
+# cleanup[3] wiping _pytest.reports
+# cleanup[3] wiping _pytest.fixtures
+# cleanup[3] wiping _pytest.scope
+# cleanup[3] wiping _pytest.nodes
+# cleanup[3] wiping _pytest.mark
+# destroy _pytest.mark.expression
+# destroy _pytest.mark.structures
+# cleanup[3] wiping _pytest.config.argparsing
+# cleanup[3] wiping _pytest.assertion.util
+# cleanup[3] wiping _pytest.config
+# destroy shlex
+# destroy _pytest.config.compat
+# destroy _pytest.config.exceptions
+# destroy _pytest.config.findpaths
+# destroy _pytest.config.argparsing
+# cleanup[3] wiping _pytest.stash
+# cleanup[3] wiping iniconfig
+# cleanup[3] wiping _pytest.hookspec
+# cleanup[3] wiping importlib.metadata
+# destroy importlib.metadata._functools
+# destroy importlib.metadata._text
+# destroy importlib.metadata._adapters
+# destroy importlib.metadata._meta
+# destroy importlib.metadata._collections
+# destroy importlib.metadata._itertools
+# destroy csv
+# destroy zipfile
+# cleanup[3] wiping email.message
+# destroy quopri
+# cleanup[3] wiping email.iterators
+# cleanup[3] wiping email._encoded_words
+# cleanup[3] wiping email._policybase
+# cleanup[3] wiping email.header
+# cleanup[3] wiping email.utils
+# destroy random
+# destroy urllib
+# destroy urllib.parse
+# destroy urllib.response
+# destroy urllib.error
+# destroy urllib.request
+# cleanup[3] wiping email.charset
+# cleanup[3] wiping email.encoders
+# cleanup[3] wiping email.errors
+# cleanup[3] wiping email.quoprimime
+# cleanup[3] wiping _string
+# cleanup[3] wiping email.base64mime
+# cleanup[3] wiping base64
+# cleanup[3] wiping email._parseaddr
+# destroy calendar
+# cleanup[3] wiping datetime
+# cleanup[3] wiping _datetime
+# cleanup[3] wiping socket
+# destroy selectors
+# cleanup[3] wiping select
+# cleanup[3] wiping _socket
+# cleanup[3] wiping binascii
+# cleanup[3] wiping email
+# destroy email._parseaddr
+# destroy email._policybase
+# destroy email._encoded_words
+# destroy email.base64mime
+# destroy email.quoprimime
+# destroy email.errors
+# destroy email.encoders
+# destroy email.charset
+# destroy email.utils
+# destroy email.header
+# destroy email.iterators
+# destroy email.message
+# destroy email.feedparser
+# destroy email.parser
+# cleanup[3] wiping _csv
+# cleanup[3] wiping glob
+# cleanup[3] wiping argparse
+# cleanup[3] wiping _pytest._io.pprint
+# cleanup[3] wiping struct
+# cleanup[3] wiping _struct
+# cleanup[3] wiping _pytest._code
+# destroy _pytest._code.source
+# destroy _pytest._code.code
+# cleanup[3] wiping _pytest.pathlib
+# cleanup[3] wiping _pytest.outcomes
+# cleanup[3] wiping _pytest.deprecated
+# cleanup[3] wiping _pytest.warning_types
+# cleanup[3] wiping _pytest.compat
+# destroy py
+# cleanup[3] wiping py.path
+# destroy uuid
+# cleanup[3] wiping py.error
+# cleanup[3] wiping _pytest._py.path
+# cleanup[3] wiping _uuid
+# cleanup[3] wiping atexit
+# destroy atexit
+# cleanup[3] wiping _pytest._py.error
+# cleanup[3] wiping _pytest._py
+# destroy _pytest._py.error
+# destroy _pytest._py.path
+# cleanup[3] wiping _pytest._io.saferepr
+# cleanup[3] wiping pprint
+# cleanup[3] wiping _pytest._io
+# destroy _pytest._io.wcwidth
+# destroy _pytest._io.terminalwriter
+# destroy _pytest._io.saferepr
+# destroy _pytest._io.pprint
+# cleanup[3] wiping unicodedata
+# cleanup[3] wiping pluggy
+# destroy pluggy._version
+# destroy pluggy._result
+# destroy pluggy._hooks
+# destroy pluggy._warnings
+# destroy pluggy._callers
+# destroy pluggy._manager
+# cleanup[3] wiping pluggy._tracing
+# cleanup[3] wiping traceback
+# cleanup[3] wiping textwrap
+# cleanup[3] wiping dataclasses
+# destroy copy
+# destroy keyword
+# cleanup[3] wiping inspect
+# destroy token
+# cleanup[3] wiping linecache
+# cleanup[3] wiping tokenize
+# cleanup[3] wiping dis
+# cleanup[3] wiping _opcode
+# destroy _opcode
+# cleanup[3] wiping ast
+# cleanup[3] wiping _pytest
+# destroy _pytest._version
+# destroy _pytest._io
+# destroy _pytest._py
+# destroy _pytest._code
+# destroy _pytest._argcomplete
+# destroy _pytest.compat
+# destroy _pytest.warning_types
+# destroy _pytest.deprecated
+# destroy _pytest.outcomes
+# destroy _pytest.pathlib
+# destroy _pytest.hookspec
+# destroy _pytest.stash
+# destroy _pytest.config
+# destroy _pytest.mark
+# destroy _pytest.nodes
+# destroy _pytest.scope
+# destroy _pytest.fixtures
+# destroy _pytest.reports
+# destroy _pytest.timing
+# destroy _pytest.runner
+# destroy _pytest.main
+# destroy _pytest.assertion
+# destroy _pytest.cacheprovider
+# destroy _pytest.capture
+# destroy _pytest.debugging
+# destroy _pytest.python
+# destroy _pytest.python_api
+# destroy _pytest.doctest
+# destroy _pytest.freeze_support
+# destroy _pytest.monkeypatch
+# destroy _pytest.tmpdir
+# destroy _pytest.pytester
+# destroy _pytest.terminal
+# destroy _pytest.legacypath
+# destroy _pytest.logging
+# destroy _pytest.recwarn
+# destroy _pytest.helpconfig
+# destroy _pytest.unittest
+# destroy _pytest.skipping
+# destroy _pytest.pastebin
+# destroy _pytest.nose
+# destroy _pytest.junitxml
+# destroy _pytest.setuponly
+# destroy _pytest.setupplan
+# destroy _pytest.stepwise
+# destroy _pytest.warnings
+# destroy _pytest.python_path
+# destroy _pytest.unraisableexception
+# destroy _pytest.threadexception
+# destroy _pytest.faulthandler
+# cleanup[3] wiping subprocess
+# cleanup[3] wiping msvcrt
+# cleanup[3] wiping threading
+# cleanup[3] wiping signal
+# cleanup[3] wiping locale
+# destroy encodings
+# cleanup[3] wiping _locale
+# destroy _locale
+# cleanup[3] wiping importlib.abc
+# cleanup[3] wiping importlib.resources
+# destroy importlib.resources._adapters
+# destroy importlib.resources._legacy
+# destroy importlib.resources._itertools
+# destroy importlib.resources.readers
+# cleanup[3] wiping importlib.resources._common
+# destroy tempfile
+# cleanup[3] wiping importlib.resources.abc
+# cleanup[3] wiping _typing
+# cleanup[3] wiping collections.abc
+# cleanup[3] wiping weakref
+# cleanup[3] wiping _sha512
+# cleanup[3] wiping _random
+# cleanup[3] wiping _bisect
+# cleanup[3] wiping math
+# cleanup[3] wiping shutil
+# cleanup[3] wiping lzma
+# cleanup[3] wiping _lzma
+# cleanup[3] wiping bz2
+# destroy _compression
+# cleanup[3] wiping _bz2
+# cleanup[3] wiping zlib
+# cleanup[3] wiping pathlib
+# destroy fnmatch
+# cleanup[3] wiping ipaddress
+# cleanup[3] wiping errno
+# cleanup[3] wiping re
+# destroy re._constants
+# destroy re._casefix
+# destroy re._compiler
+# cleanup[3] wiping copyreg
+# cleanup[3] wiping re._parser
+# cleanup[3] wiping _sre
+# cleanup[3] wiping enum
+# cleanup[3] wiping posixpath
+# cleanup[3] wiping importlib.util
+# cleanup[3] wiping contextlib
+# cleanup[3] wiping functools
+# cleanup[3] wiping _functools
+# cleanup[3] wiping types
+# cleanup[3] wiping collections
+# destroy _collections_abc
+# destroy collections.abc
+# cleanup[3] wiping _collections
+# destroy _collections
+# cleanup[3] wiping reprlib
+# cleanup[3] wiping operator
+# cleanup[3] wiping _operator
+# cleanup[3] wiping itertools
+# cleanup[3] wiping importlib._abc
+# cleanup[3] wiping importlib.machinery
+# cleanup[3] wiping importlib
+# destroy importlib._abc
+# destroy importlib.machinery
+# destroy importlib.util
+# destroy importlib.resources
+# destroy importlib.abc
+# destroy importlib.metadata
+# destroy importlib.readers
+# cleanup[3] wiping warnings
+# cleanup[3] wiping importlib._bootstrap_external
+# cleanup[3] wiping importlib._bootstrap
+# cleanup[3] wiping __future__
+# cleanup[3] wiping os
+# cleanup[3] wiping os.path
+# destroy genericpath
+# cleanup[3] wiping ntpath
+# cleanup[3] wiping _winapi
+# cleanup[3] wiping stat
+# cleanup[3] wiping _stat
+# destroy _stat
+# cleanup[3] wiping io
+# destroy abc
+# cleanup[3] wiping _abc
+# cleanup[3] wiping _signal
+# destroy _signal
+# cleanup[3] wiping encodings.gbk
+# cleanup[3] wiping _multibytecodec
+# cleanup[3] wiping _codecs_cn
+# destroy _codecs_cn
+# cleanup[3] wiping encodings.utf_8
+# cleanup[3] wiping encodings.aliases
+# cleanup[3] wiping codecs
+# cleanup[3] wiping _codecs
+# cleanup[3] wiping time
+# cleanup[3] wiping _frozen_importlib_external
+# cleanup[3] wiping nt
+# cleanup[3] wiping marshal
+# cleanup[3] wiping _io
+# cleanup[3] wiping winreg
+# cleanup[3] wiping _weakref
+# cleanup[3] wiping _warnings
+# cleanup[3] wiping _thread
+# cleanup[3] wiping _imp
+# cleanup[3] wiping _frozen_importlib
+# cleanup[3] wiping sys
+# cleanup[3] wiping builtins
+# destroy simplejson._speedups
+# destroy brotli._brotli
+# destroy nacl._sodium
+# destroy _cffi_backend
+# destroy _asyncio
+# destroy asyncio
+# destroy decimal
+# destroy _datetime
+# destroy _socket
+# destroy winreg
+# destroy concurrent
+# destroy ssl
+# destroy asyncio.sslproto
+# destroy asyncio.staggered
+# destroy asyncio.transports
+# destroy asyncio.trsock
+# destroy _ssl
+# destroy asyncio.constants
+# destroy reprlib
+# destroy asyncio.base_futures
+# destroy asyncio.coroutines
+# destroy heapq
+# destroy asyncio.locks
+# destroy asyncio.mixins
+# destroy asyncio.protocols
+# destroy asyncio.streams
+# destroy contextvars
+# destroy msvcrt
+# destroy socket
+# destroy asyncio.events
+# destroy asyncio.base_subprocess
+# destroy asyncio.futures
+# destroy asyncio.exceptions
+# destroy asyncio.proactor_events
+# destroy asyncio.selector_events
+# destroy asyncio.tasks
+# destroy asyncio.windows_utils
+# destroy _overlapped
+# destroy urllib3.packages.six.moves.urllib
+# destroy xml.etree.ElementPath
+# destroy _elementtree
+# destroy select
+# destroy weakref
+# destroy _thread
+# destroy zmq.error
+# destroy zmq.sugar.attrsettr
+# destroy zmq.sugar.poll
+# destroy zmq.sugar.socket
+# destroy zmq.sugar.context
+# destroy zmq.sugar.frame
+# destroy zmq.sugar.tracker
+# destroy zmq.sugar.version
+# destroy zmq.sugar.stopwatch
+# destroy _functools
+# destroy _winapi
+# destroy _weakref
+# destroy _typing
+# destroy copyreg
+# destroy urllib3.packages.six.moves.urllib_parse
+# destroy urllib3.packages.six.moves.urllib.error
+# destroy urllib3.packages.six.moves.urllib.request
+# destroy urllib3.packages.six.moves.urllib.response
+# destroy urllib3.packages.six.moves.urllib.robotparser
+# destroy _frozen_importlib_external
+# destroy _imp
+# destroy _sre
+# destroy re._parser
+# destroy logging
+# destroy zmq.utils.z85
+# destroy operator
+# destroy urllib3.packages.six.moves
+# destroy subprocess
+# destroy ntpath
+# destroy json
+# destroy zmq
+# destroy _string
+# destroy math
+# destroy nt
+# destroy _operator
+# destroy _random
+# destroy ipaddress
+# destroy _heapq
+# destroy _warnings
+# destroy _bisect
+# destroy _pytest
+# destroy _queue
+# destroy _struct
+# destroy _compat_pickle
+# destroy _pickle
+# destroy importlib.resources.abc
+# destroy importlib.resources._common
+# destroy posixpath
+# destroy stat
+# destroy threading
+# destroy time
+# destroy contextlib
+# destroy pathlib
+# destroy bz2
+# destroy lzma
+# destroy textwrap
+# destroy email
+# destroy collections
+# destroy pluggy
+# destroy http.client
+# destroy http.cookiejar
+# destroy http.cookies
+# destroy _uuid
+# destroy _sha512
+# destroy json.scanner
+# destroy _json
+# destroy zlib
+# destroy _csv
+# destroy _bz2
+# destroy _lzma
+# destroy base64
+# destroy cmd
+# destroy bdb
+# destroy dis
+# destroy code
+# destroy glob
+# destroy pprint
+# destroy signal
+# destroy traceback
+# destroy linecache
+# destroy inspect
+# destroy pluggy._tracing
+# destroy shutil
+# destroy iniconfig
+# destroy datetime
+# destroy locale
+# destroy binascii
+# destroy unicodedata
+# destroy dataclasses
+# destroy enum
+# destroy re
+# destroy ast
+# destroy errno
+# destroy functools
+# destroy importlib
+# destroy io
+# destroy itertools
+# destroy marshal
+# destroy struct
+# destroy tokenize
+# destroy types
+# destroy _pytest.assertion.util
+# destroy unittest.util
+# destroy unittest.result
+# destroy unittest.case
+# destroy unittest.suite
+# destroy unittest.signals
+# destroy __future__
+# destroy _hashlib
+# destroy _blake2
+# destroy argparse
+# destroy os
+# destroy warnings
+# destroy unittest.loader
+# destroy unittest.runner
+# destroy nacl.exceptions
+# destroy _frozen_importlib
+# destroy codecs
+# destroy encodings.aliases
+# destroy encodings.utf_8
+# destroy encodings.gbk
+# destroy encodings.idna
+# destroy _codecs
+# destroy _multibytecodec
+# clear sys.audit hooks
