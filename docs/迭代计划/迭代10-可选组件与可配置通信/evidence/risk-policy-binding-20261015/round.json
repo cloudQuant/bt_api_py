@@ -1,0 +1,41 @@
+{
+  "round": "iteration10-risk-policy-binding-20261015",
+  "date": "2026-10-15",
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "branch": "dev",
+  "package_head_before_parent_commit": "a099e367afd503cd38f3787e3cba578e2b244db4",
+  "scope": [
+    "src/bt_api_risk/order_admission.py",
+    "src/bt_api_risk/__init__.py",
+    "tests/test_order_admission.py"
+  ],
+  "changes": "Added frozen public RiskAdmissionPolicyBinding and DurableRiskAdmissionAdapter.policy_binding sourced from the actual gate policy; aligned policy_id validation with RiskPolicy by preserving nonblank IDs without trimming; added real gate/adapter whitespace-bearing policy regression and lazy-export coverage.",
+  "qa": {
+    "interpreter": "C:\\anaconda3\\python.exe",
+    "command": "C:\\anaconda3\\python.exe -m pytest -q -p no:cacheprovider tests/test_order_admission.py",
+    "working_directory": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+    "environment": {
+      "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src"
+    },
+    "exit_code": 0,
+    "result": "11 passed, 1 warning in 2.45s",
+    "warning": "PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope",
+    "raw_tool_chunk_id": "a0f984",
+    "saved_stdout_or_junit_path": null,
+    "evidence_limit": "The command output is preserved in the tool result shown in the task transcript; no original stdout/JUnit file was written. QA was not rerun for this archive."
+  },
+  "independent_review": {
+    "reviewer": "/root/trn02_acceptance",
+    "outcome": "GO",
+    "type": "static review only",
+    "conclusion": "Confirmed exactly the three scoped files, RiskPolicy-compatible policy_id handling preserving exact ID/fingerprint, actual gate-policy source, frozen typed DTO, and lazy package export; no tests or edits by reviewer.",
+    "tool_result_id": null,
+    "provenance": "Independent reviewer collaboration message; no separate durable review file/tool ID supplied."
+  },
+  "file_sha256": {
+    "src/bt_api_risk/order_admission.py": "1828460401A001CC14DA4494A9576752CDBB4E7912659193894C27AB3A6FF95B",
+    "src/bt_api_risk/__init__.py": "198DA2A9969746E6D4829596C2EC460641D701A1C7AD235B8376415CEF25DDC3",
+    "tests/test_order_admission.py": "C8E8F64ED9D7C79C9298858A003E307F7358B3E04EF7F9878CA2DA5EFEB3F102"
+  },
+  "delivery": "Root is committing the accepted Risk package scope; this record does not assert the eventual commit hash."
+}

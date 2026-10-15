@@ -1,0 +1,22 @@
+{
+  "status": "PASS_SCOPED_PACKAGE_COMMIT",
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "branch": "dev",
+  "parent": "a099e367afd503cd38f3787e3cba578e2b244db4",
+  "head": "79c04d30a541f473311b7d48727370c7e331ed10",
+  "paths": [
+    "src/bt_api_risk/order_admission.py",
+    "src/bt_api_risk/__init__.py",
+    "tests/test_order_admission.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_risk/order_admission.py": "1828460401a001cc14da4494a9576752cdbb4e7912659193894c27ab3a6ff95b",
+    "src/bt_api_risk/__init__.py": "198da2a9969746e6d4829596c2ec460641d701a1c7ad235b8376415cef25ddc3",
+    "tests/test_order_admission.py": "c8e8f64ed9d7c79c9298858a003e307f7358b3e04ef7f9878ca2da5efeb3f102"
+  },
+  "index_empty": true,
+  "qa_repeated": false,
+  "test_evidence": "author tool a0f984: 11 passed, exit 0, one existing config warning; no saved raw stdout/JUnit",
+  "independent_static_review": "trn02_acceptance GO",
+  "formal_case_progress": false
+}
