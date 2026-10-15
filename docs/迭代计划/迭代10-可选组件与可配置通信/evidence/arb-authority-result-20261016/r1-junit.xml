@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="4" time="1.732" timestamp="2026-10-16T00:59:25.428144" hostname="yun"><testcase classname="tests.unit.test_service_execution_group_authority" name="test_post_result_authority_uses_exact_terminal_outbox_phase[True-rejected_with_id]" time="0.151"><failure message="assert None is not None">tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None</failure></testcase><testcase classname="tests.unit.test_service_execution_group_authority" name="test_post_result_authority_uses_exact_terminal_outbox_phase[True-filled]" time="0.129"><failure message="assert None is not None">tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None</failure></testcase><testcase classname="tests.unit.test_service_execution_group_authority" name="test_post_result_authority_uses_exact_terminal_outbox_phase[False-rejected_with_id]" time="0.189"><failure message="assert None is not None">tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None</failure></testcase><testcase classname="tests.unit.test_service_execution_group_authority" name="test_post_result_authority_uses_exact_terminal_outbox_phase[False-filled]" time="0.148"><failure message="assert None is not None">tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None</failure></testcase></testsuite></testsuites>

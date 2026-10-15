@@ -1,0 +1,32 @@
+FFFF                                                                     [100%]
+================================== FAILURES ===================================
+_ test_post_result_authority_uses_exact_terminal_outbox_phase[True-rejected_with_id] _
+tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None
+__ test_post_result_authority_uses_exact_terminal_outbox_phase[True-filled] ___
+tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None
+_ test_post_result_authority_uses_exact_terminal_outbox_phase[False-rejected_with_id] _
+tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None
+__ test_post_result_authority_uses_exact_terminal_outbox_phase[False-filled] __
+tests\unit\test_service_execution_group_authority.py:1082: in test_post_result_authority_uses_exact_terminal_outbox_phase
+    assert record is not None
+E   assert None is not None
+============================== warnings summary ===============================
+C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\iteration10-group-authority-result-root-20261016-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_execution_group_authority.py::test_post_result_authority_uses_exact_terminal_outbox_phase[True-rejected_with_id]
+FAILED tests/unit/test_service_execution_group_authority.py::test_post_result_authority_uses_exact_terminal_outbox_phase[True-filled]
+FAILED tests/unit/test_service_execution_group_authority.py::test_post_result_authority_uses_exact_terminal_outbox_phase[False-rejected_with_id]
+FAILED tests/unit/test_service_execution_group_authority.py::test_post_result_authority_uses_exact_terminal_outbox_phase[False-filled]
+4 failed, 1 warning in 2.11s

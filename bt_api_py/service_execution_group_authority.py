@@ -29,6 +29,7 @@ import uuid
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from pathlib import Path
 from typing import Protocol
 
@@ -248,6 +249,242 @@ class ExecutionStoreGroupCompletionVerifier:
             raise GroupAuthorityUnavailableError(
                 "execution record does not match the current claimed group attempt"
             )
+
+    def _assert_current_execution_result(
+        self,
+        *,
+        hold: GroupDispatchHold,
+        intent: OrderIntent,
+        binding: GroupPermitBinding,
+        authorization: GroupLegAuthorization,
+        writer_lease: WriterLease,
+    ) -> None:
+        """Validate the exact terminal result after this attempt's provider call.
+
+        This is a separate phase check from ``_assert_current_execution_attempt``.
+        It accepts only FILLED or REJECTED rows whose complete immutable
+        provider outbox chain proves the same one-shot group intent and result.
+        The pre-dispatch verifier remains DISPATCHING-only.
+        """
+
+        if (
+            type(hold) is not GroupDispatchHold
+            or type(intent) is not OrderIntent
+            or type(binding) is not GroupPermitBinding
+            or type(authorization) is not GroupLegAuthorization
+            or type(writer_lease) is not WriterLease
+        ):
+            raise GroupAuthorityUnavailableError("typed execution result facts are required")
+        exact = self._read_exact_hold(hold)
+        if exact is None:
+            raise GroupAuthorityUnavailableError(
+                "execution store does not contain the exact held authorization result"
+            )
+        scope, record, stored_binding, stored_authorization = exact
+        try:
+            stored_intent = self._store.get_intent(intent.intent_id, scope=scope)
+            binding.validate_order(intent)
+            authorization.validate_binding(binding)
+            authorization.validate_writer_lease(writer_lease)
+            self._store.assert_writer_lease(scope, writer_lease)
+        except Exception as error:
+            raise GroupAuthorityUnavailableError(
+                "execution result or current writer lease is invalid"
+            ) from error
+        if (
+            intent.scope != scope
+            or record.intent_id != intent.intent_id
+            or record.scope_key != scope.key
+            or record.payload_sha256 != intent.fingerprint
+            or type(stored_intent) is not OrderIntent
+            or stored_intent.to_payload() != intent.to_payload()
+            or stored_binding != binding
+            or stored_binding.fingerprint != binding.fingerprint
+            or stored_authorization != authorization
+            or authorization.authorization_attempt_id != hold.hold_id
+            or record.group_binding != binding
+            or record.permit_reference != binding.permit_id
+            or record.state not in {ExecutionState.FILLED, ExecutionState.REJECTED}
+            or type(record.dispatch_attempts) is not int
+            or record.dispatch_attempts != 1
+            or record.unknown_reason is not None
+            or record.review_required
+            or type(record.provider_order_id) is not str
+            or not record.provider_order_id
+            or record.provider_order_id != record.provider_order_id.strip()
+            or type(record.filled_quantity) is not Decimal
+            or (
+                record.state is ExecutionState.FILLED
+                and (
+                    type(record.average_price) is not Decimal
+                    or not record.average_price.is_finite()
+                    or record.average_price <= 0
+                )
+            )
+            or (record.state is ExecutionState.REJECTED and record.average_price is not None)
+            or not record.filled_quantity.is_finite()
+            or (
+                record.cumulative_commission is not None
+                and (
+                    type(record.cumulative_commission) is not Decimal
+                    or not record.cumulative_commission.is_finite()
+                )
+            )
+        ):
+            raise GroupAuthorityUnavailableError(
+                "execution record does not match a known result for the current group attempt"
+            )
+        if (
+            record.state is ExecutionState.FILLED and record.filled_quantity != intent.quantity
+        ) or (
+            record.state is ExecutionState.REJECTED
+            and (
+                record.filled_quantity != 0
+                or record.average_price is not None
+                or record.cumulative_commission is not None
+            )
+        ):
+            raise GroupAuthorityUnavailableError(
+                "execution result quantity or economics are incomplete"
+            )
+        if not self._provider_result_provenance(record, binding, scope):
+            raise GroupAuthorityUnavailableError(
+                "execution result lacks an exact complete provider outbox history"
+            )
+        try:
+            current = self._store.get(intent.intent_id, scope=scope)
+            self._store.assert_writer_lease(scope, writer_lease)
+        except Exception as error:
+            raise GroupAuthorityUnavailableError(
+                "execution result changed or writer lease expired"
+            ) from error
+        if current != record:
+            raise GroupAuthorityUnavailableError(
+                "execution result changed during provider history verification"
+            )
+
+    def _provider_result_provenance(
+        self,
+        record: ExecutionRecord,
+        binding: GroupPermitBinding,
+        scope: ExecutionScope,
+    ) -> bool:
+        """Require one stable, gap-free write-ahead and provider-result chain."""
+
+        try:
+            bounds = self._store.execution_outbox_bounds()
+            if (
+                type(bounds) is not tuple
+                or len(bounds) != 4
+                or type(bounds[0]) is not int
+                or type(bounds[3]) is not int
+            ):
+                return False
+            count, first, last, high_water = bounds
+            if count <= 0 or first != 1 or last != count or high_water != last:
+                return False
+            incarnation = self._store.journal_source_identity().get("generation")
+            if type(incarnation) is not str or not incarnation:
+                return False
+            matching: list[ExecutionEvent] = []
+            after_sequence = 0
+            while True:
+                page = self._store.read_outbox(
+                    after_sequence=after_sequence,
+                    limit=10_000,
+                    scope=scope,
+                )
+                if type(page) is not tuple:
+                    return False
+                if not page:
+                    break
+                previous_sequence = after_sequence
+                for event in page:
+                    if (
+                        type(event) is not ExecutionEvent
+                        or event.sequence <= previous_sequence
+                        or event.sequence > high_water
+                        or event.scope_key != scope.key
+                        or event.journal_incarnation_id != incarnation
+                    ):
+                        return False
+                    previous_sequence = event.sequence
+                    if event.intent_id == record.intent_id:
+                        matching.append(event)
+                after_sequence = previous_sequence
+                if len(page) < 10_000:
+                    break
+            if (
+                self._store.execution_outbox_bounds() != bounds
+                or self._store.journal_source_identity().get("generation") != incarnation
+            ):
+                return False
+        except Exception:
+            return False
+
+        expected_types = (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+        )
+        if (
+            len(matching) != len(expected_types)
+            or tuple(event.event_type for event in matching) != expected_types
+            or any(event.intent_id != record.intent_id for event in matching)
+        ):
+            return False
+        recorded, admitted, claimed, observed = matching
+        if (
+            recorded.state is not ExecutionState.PENDING_ADMISSION
+            or recorded.payload
+            != {
+                "payload_sha256": record.payload_sha256,
+                "group_binding_sha256": binding.fingerprint,
+            }
+            or admitted.state is not ExecutionState.PENDING_DISPATCH
+            or admitted.payload != {"permit_reference": binding.permit_id}
+            or claimed.state is not ExecutionState.DISPATCHING
+            or claimed.payload != {"dispatch_attempt": 1}
+            or observed.state is not record.state
+            or observed.created_at_ns != record.updated_at_ns
+            or type(observed.payload) is not dict
+        ):
+            return False
+        payload = observed.payload
+        expected_payload = {
+            "provider_order_id": record.provider_order_id,
+            "filled_quantity": format(record.filled_quantity, "f"),
+            "average_price": (
+                None if record.average_price is None else format(record.average_price, "f")
+            ),
+            "cumulative_commission": (
+                None
+                if record.cumulative_commission is None
+                else format(record.cumulative_commission, "f")
+            ),
+            "source": "provider",
+        }
+        if frozenset(payload) not in {
+            frozenset(expected_payload) | {"reason_code"},
+            frozenset(expected_payload) | {"reason_code", "cumulative_commission_currency"},
+        }:
+            return False
+        if any(payload.get(key) != value for key, value in expected_payload.items()):
+            return False
+        reason = payload.get("reason_code")
+        if reason is not None and (
+            type(reason) is not str or re.fullmatch(r"[a-z][a-z0-9_]{0,127}", reason) is None
+        ):
+            return False
+        currency = payload.get("cumulative_commission_currency")
+        if currency is not None and (
+            type(currency) is not str or not currency or currency != currency.strip()
+        ):
+            return False
+        if (record.cumulative_commission is None) != (currency is None):
+            return False
+        return recorded.sequence < admitted.sequence < claimed.sequence < observed.sequence
 
     def inspect_terminal_replay(
         self,
@@ -1088,9 +1325,7 @@ class ExecutionGroupAuthorityGuard:
         with owner._operation():
             context = owner._call_context.get()
             if context is None:
-                raise GroupCoordinatorDeniedError(
-                    "trusted ServiceCallContext is not bound"
-                )
+                raise GroupCoordinatorDeniedError("trusted ServiceCallContext is not bound")
             try:
                 owner._validate_registered_scope(context, execution_scope)
                 if (
@@ -1214,16 +1449,13 @@ class ExecutionGroupAuthorityGuard:
                     coordinator["registration_id"] != context.registration_id
                     or coordinator["principal_ref"] != context.principal_ref
                     or coordinator["identity_json"] != _json(_identity_payload(context.identity))
-                    or coordinator["wire_scope_json"]
-                    != _json(_wire_scope_payload(context.scope))
-                    or coordinator["execution_scope_json"]
-                    != _json(execution_scope.to_payload())
+                    or coordinator["wire_scope_json"] != _json(_wire_scope_payload(context.scope))
+                    or coordinator["execution_scope_json"] != _json(execution_scope.to_payload())
                     or coordinator["execution_scope_key"] != execution_scope.key
                     or coordinator["portfolio_ref"] != binding.portfolio_ref
                     or coordinator["account_ref"] != binding.account_ref
                     or coordinator["strategy_id"] != binding.strategy_id
-                    or coordinator["risk_scope_fingerprint"]
-                    != binding.risk_scope_fingerprint
+                    or coordinator["risk_scope_fingerprint"] != binding.risk_scope_fingerprint
                     or int(coordinator["generation"]) != authorization.coordinator_epoch
                 ):
                     raise GroupCoordinatorDeniedError(
@@ -1235,13 +1467,37 @@ class ExecutionGroupAuthorityGuard:
                     raise GroupAuthorityUnavailableError(
                         "a real ExecutionStoreGroupCompletionVerifier is required"
                     )
-                verifier._assert_current_execution_attempt(
-                    hold=persisted_hold,
-                    intent=intent,
-                    binding=binding,
-                    authorization=authorization,
-                    writer_lease=writer_lease,
+                exact_execution = verifier._read_exact_hold(persisted_hold)
+                if exact_execution is None:
+                    raise GroupAuthorityUnavailableError(
+                        "execution record no longer matches the current held attempt"
+                    )
+                _execution_scope, execution_record, _stored_binding, _stored_authorization = (
+                    exact_execution
                 )
+                if execution_record.state is ExecutionState.DISPATCHING:
+                    verifier._assert_current_execution_attempt(
+                        hold=persisted_hold,
+                        intent=intent,
+                        binding=binding,
+                        authorization=authorization,
+                        writer_lease=writer_lease,
+                    )
+                elif execution_record.state in {
+                    ExecutionState.FILLED,
+                    ExecutionState.REJECTED,
+                }:
+                    verifier._assert_current_execution_result(
+                        hold=persisted_hold,
+                        intent=intent,
+                        binding=binding,
+                        authorization=authorization,
+                        writer_lease=writer_lease,
+                    )
+                else:
+                    raise GroupAuthorityUnavailableError(
+                        "execution row is outside the dispatch or verified-result phase"
+                    )
 
     @contextmanager
     def hold_group_leg_authorization(

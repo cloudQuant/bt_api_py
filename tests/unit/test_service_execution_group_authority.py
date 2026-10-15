@@ -728,6 +728,23 @@ class _SyntheticProvider:
             raise RuntimeError("provider response lost")
         if self.outcome == "rejected":
             return ProviderObservation.rejected(intent.intent_id, "synthetic_reject")
+        if self.outcome == "rejected_with_id":
+            return ProviderObservation(
+                intent_id=intent.intent_id,
+                state=ExecutionState.REJECTED,
+                provider_order_id="provider-order-group-a",
+                reason_code="synthetic_reject",
+            )
+        if self.outcome == "filled":
+            return ProviderObservation(
+                intent_id=intent.intent_id,
+                state=ExecutionState.FILLED,
+                provider_order_id="provider-order-group-a",
+                filled_quantity=intent.quantity,
+                average_price=intent.price,
+                cumulative_commission=Decimal("-0.05"),
+                cumulative_commission_currency="USD",
+            )
         return ProviderObservation.accepted(intent.intent_id, "provider-order-group-a")
 
     def cancel(self, intent) -> CancelObservation:
@@ -869,7 +886,7 @@ def test_normal_guard_exit_requires_exact_execution_store_completion(
     )
     service = ExecutionOrderEntryService(
         store,
-        targets={WireScope(_DOMAIN, account_ref=_ACCOUNT, strategy_ref=_STRATEGY): execution_scope},
+        targets={_scope(): execution_scope},
         dispatch=provider,
         admission_gate=AccountScopedGroupAdmissionAdapter(
             risk_admission,
@@ -902,6 +919,7 @@ def test_normal_guard_exit_requires_exact_execution_store_completion(
                 )
 
         reply = submit()
+        assert reply.get("result", {}).get("found") is True, (reply, authority.pending_holds())
         record = store.get(intent.intent_id, scope=execution_scope)
         assert record is not None, (reply, authority.pending_holds())
         assert record.state is expected_state
@@ -976,6 +994,152 @@ def test_normal_guard_exit_requires_exact_execution_store_completion(
             with pytest.raises(GroupAuthorityReconciliationRejected):
                 authority.control.reconcile_hold(holds[0].hold_id, "retry-or-unknown")
             assert authority.pending_holds() == holds
+    finally:
+        authority.close()
+        store.close()
+        registry.close()
+
+
+@pytest.mark.parametrize("provider_outcome", ["filled", "rejected_with_id"])
+@pytest.mark.parametrize("mutate_result_after_callback", [False, True])
+def test_post_result_authority_uses_exact_terminal_outbox_phase(
+    tmp_path: Path,
+    provider_outcome: str,
+    mutate_result_after_callback: bool,
+) -> None:
+    registry, _contexts = _capture_registry_contexts(tmp_path / "registry.sqlite3")
+    execution_scope = _execution_scope()
+    store = SqliteExecutionStore(tmp_path / "execution.sqlite3")
+    intent, binding = _intent_and_binding()
+    provider = _SyntheticProvider(outcome=provider_outcome)
+    expected_state = (
+        ExecutionState.FILLED if provider_outcome == "filled" else ExecutionState.REJECTED
+    )
+    completion = ExecutionStoreGroupCompletionVerifier(store, execution_scopes=(execution_scope,))
+    risk_admission = _SyntheticGroupRiskAdmission(binding)
+    authority = ExecutionGroupAuthority(
+        tmp_path / "authority.sqlite3",
+        completion_verifier=completion,
+        reconciliation_verifier=lambda hold, _proof: completion(hold),
+        monotonic_clock_ns=lambda: 1,
+    )
+    service = ExecutionOrderEntryService(
+        store,
+        targets={_scope(): execution_scope},
+        dispatch=provider,
+        admission_gate=AccountScopedGroupAdmissionAdapter(
+            risk_admission,
+            account_scope=_SyntheticRiskScope(execution_scope),
+        ),
+        group_coordinator_authority=authority.guard,
+    )
+    try:
+        context = _register_and_dispatch(registry, session="post-result-group-authorization")
+        authority.control.activate(
+            context,
+            execution_scope=execution_scope,
+            risk_account_scope_key=_RISK_SCOPE_KEY,
+        )
+
+        def after_result(
+            _intent,
+            _binding,
+            _authorization,
+            writer_lease,
+            _claim,
+            _record,
+        ) -> None:
+            if mutate_result_after_callback:
+                # Exercise a public store mutation between the callback's
+                # accepted result and the package's final phase/fence check.
+                store.mark_review_required(
+                    intent.intent_id,
+                    execution_scope,
+                    "synthetic_callback_mutation",
+                    writer_lease=writer_lease,
+                )
+
+        def submit() -> dict[str, Any]:
+            with authority.guard.bind_service_call(context, execution_scope=execution_scope):
+                return dict(
+                    service.submit_group_leg(
+                        principal_ref=context.principal_ref,
+                        identity=context.identity,
+                        scope=_operation_scope(
+                            context.scope,
+                            group=binding.group_id,
+                            leg=binding.leg_id,
+                        ),
+                        intent=intent,
+                        binding=binding,
+                        after_group_claim=lambda *_arguments: None,
+                        provider_dispatcher=provider,
+                        after_group_result=after_result,
+                    )
+                )
+
+        reply = submit()
+        assert reply.get("result", {}).get("found") is True, (reply, authority.pending_holds())
+        record = store.get(intent.intent_id, scope=execution_scope)
+        assert record is not None
+        assert record.dispatch_attempts == 1
+        assert record.state is expected_state
+        assert provider.submitted == [intent.intent_id]
+        assert risk_admission.claimed == [intent.intent_id]
+        if mutate_result_after_callback:
+            assert reply["ok"] is False
+            assert reply["code"] == "GROUP_RESOLUTION_UNPROVEN"
+            assert record.review_required is True
+            assert len(authority.pending_holds()) == 1
+            assert authority.ready is False
+            events = store.read_outbox(scope=execution_scope, limit=100)
+            assert any(
+                event.intent_id == intent.intent_id and event.event_type == "manual_review_required"
+                for event in events
+            )
+        else:
+            assert reply["ok"] is True, (reply, record, authority.pending_holds())
+            assert record.provider_order_id == "provider-order-group-a"
+            if expected_state is ExecutionState.FILLED:
+                assert record.filled_quantity == intent.quantity
+                assert record.average_price == intent.price
+            else:
+                assert record.filled_quantity == 0
+                assert record.average_price is None
+            events = store.read_outbox(scope=execution_scope, limit=100)
+            attempt_events = tuple(event for event in events if event.intent_id == intent.intent_id)
+            assert tuple(event.event_type for event in attempt_events) == (
+                "intent_recorded",
+                "intent_admitted",
+                "dispatch_claimed",
+                "provider_observation",
+            )
+            assert attempt_events[-1].state is expected_state
+            assert attempt_events[-1].payload == {
+                "provider_order_id": record.provider_order_id,
+                "filled_quantity": format(record.filled_quantity, "f"),
+                "average_price": (
+                    None if record.average_price is None else format(record.average_price, "f")
+                ),
+                "cumulative_commission": (
+                    None
+                    if record.cumulative_commission is None
+                    else format(record.cumulative_commission, "f")
+                ),
+                "reason_code": (
+                    None if expected_state is ExecutionState.FILLED else "synthetic_reject"
+                ),
+                "source": "provider",
+                **(
+                    {"cumulative_commission_currency": "USD"}
+                    if record.cumulative_commission is not None
+                    else {}
+                ),
+            }
+            assert authority.pending_holds() == ()
+            assert authority.ready is True
+        assert risk_admission.claimed == [intent.intent_id]
+        assert provider.submitted == [intent.intent_id]
     finally:
         authority.close()
         store.close()

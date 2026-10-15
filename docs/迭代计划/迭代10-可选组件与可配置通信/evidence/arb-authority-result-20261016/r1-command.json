@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--tb=short",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\iteration10-group-authority-result-root-20261016-r1\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-group-authority-result-root-20261016-r1\\pytest-tmp",
+    "tests/unit/test_service_execution_group_authority.py::test_post_result_authority_uses_exact_terminal_outbox_phase"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\temp\\iteration10-execution-9943-fixed-source-20261016\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T16:59:25.137146+00:00"
+}
