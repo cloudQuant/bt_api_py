@@ -1,0 +1,123 @@
+{
+  "evidence_root": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2",
+  "wheel": {
+    "distribution": "backtrader",
+    "version": "1.4.0",
+    "source_revision": "53d2bf93949737f2ba6f51979f3f3d13b0d1b450",
+    "wheel": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\wheelhouse-final\\backtrader-1.4.0-py3-none-any.whl",
+    "size": 1786381,
+    "sha256": "1f8917dd433ef6dd1b8dabbe45a93b9ccdbe3919e86145180c315fd7439fabae",
+    "built_from_clean_git_archive": true
+  },
+  "python_3_14": {
+    "base_only": {
+      "venv": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\core-base-314",
+      "pip_check": "No broken requirements found.",
+      "smoke": {
+        "status": "PASS_ISOLATED_BASE_NO_TRANSPORT",
+        "python": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\core-base-314\\Scripts\\python.exe",
+        "base_version": "0.15.8",
+        "numpy_version": "2.5.4",
+        "pyarrow_version": "26.0.0",
+        "pyzmq_distribution_absent": true,
+        "spdlog_distribution_absent": true,
+        "legacy_remote_missing_extra_message": "The legacy ZeroMQ gateway requires the optional transport dependency; install bt_api_base[transport-zmq] or bt_api_py[transport-zmq]."
+      }
+    },
+    "client_no_transport": {
+      "venv": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\client-no-transport-314",
+      "pip_check": "No broken requirements found.",
+      "smoke": {
+        "status": "PASS_ISOLATED_CORE_CLIENT_NO_TRANSPORT",
+        "python": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\client-no-transport-314\\Scripts\\python.exe",
+        "python_version": "3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)]",
+        "sdk_version": "0.15.5",
+        "base_version": "0.15.8",
+        "backtrader_version": "1.4.0",
+        "direct_mode": "direct",
+        "direct_backend": "bt_api_py._direct_backend.DirectBackend",
+        "cerebro_bars": 3,
+        "pyzmq_distribution": null,
+        "pyzmq_importable": false,
+        "pyzmq_probes_during_default_paths": [],
+        "pyzmq_probes_after_explicit_missing_transport": [
+          "zmq"
+        ],
+        "spdlog_distribution": null,
+        "spdlog_importable": false,
+        "spdlog_probes_during_default_paths": [],
+        "spdlog_probes_after_explicit_use": [],
+        "legacy_remote_error": "The legacy ZeroMQ gateway requires the optional transport dependency; install bt_api_base[transport-zmq] or bt_api_py[transport-zmq].",
+        "new_service_missing_transport_error": "ModuleNotFoundError",
+        "absent_domain_distributions": [
+          "bt_api_gateway",
+          "bt_api_execution",
+          "bt_api_risk",
+          "bt_api_monitor"
+        ]
+      }
+    },
+    "client_and_separate_service_explicit_transport": {
+      "client_venv": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\client-transport-314",
+      "service_venv": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\service-transport-314",
+      "client_pip_check": "No broken requirements found.",
+      "service_pip_check": "No broken requirements found.",
+      "result": {
+        "status": "PASS_EXPLICIT_TRANSPORT_SEPARATE_PROCESS_SYNTHETIC",
+        "client_python": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\client-transport-314\\Scripts\\python.exe",
+        "service_python": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\service-transport-314\\Scripts\\python.exe",
+        "sdk_version": "0.15.5",
+        "base_version": "0.15.8",
+        "transport_version": "0.1.0",
+        "pyzmq_version": "27.2.0",
+        "tornado_version": "6.5.10",
+        "endpoint_scheme": "tcp",
+        "service_exit_code": 0,
+        "service_served_one_request": true,
+        "request_reply_correlation_verified": true,
+        "synthetic_echo_verified": true,
+        "service_stdout": "",
+        "service_stderr": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\service-transport-314\\Lib\\site-packages\\zmq\\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.\n  self._get_loop()\n",
+        "service_stderr_empty": false,
+        "domain_distributions_absent": true,
+        "synthetic_key_material_only": true,
+        "runtime_warning_classification": "Expected PyZMQ Proactor warning: Windows Proactor lacks add_reader, so PyZMQ registers Tornado selector support; the authenticated request still completed and the service exited normally."
+      }
+    }
+  },
+  "python_3_11": {
+    "venv": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\core-client",
+    "metadata": {
+      "backtrader": "1.4.0",
+      "bt_api_base": "0.15.8",
+      "bt_api_py": "0.15.5",
+      "numpy": "1.26.4",
+      "pyarrow": "26.0.0",
+      "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]"
+    },
+    "pip_check": "No broken requirements found.",
+    "gateway_import": "FAILED: pyarrow 26.0.0 requires NumPy >=2.0; the normal resolver selected NumPy 1.26.4 under the Backtrader Python <3.13 constraint",
+    "smoke_log": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\smoke\\core-client-no-transport.log",
+    "status": "OPEN_COMPATIBILITY_GAP_NOT_MATRIX_PASS"
+  },
+  "delivered_base_commit": "5d4380f3f69aef1561669de74a357945baf41e41",
+  "build_source_pins": {
+    "sdk_root": {
+      "revision": "509869e568a553f05d86474323a24499de4fa9b7",
+      "overlays": {
+        "pyproject.toml": "818f6ed45279478496ebd6d4e953ccb2c5eee93efc6e18cc700c92da3bc24df7"
+      }
+    },
+    "bt_api_base": {
+      "revision": "5dbf9bfafd9fec2523c28688337d6f8af77b709f",
+      "overlays": {
+        "pyproject.toml": "d25bb16578d1d9797a89260c16120a0eb234370d4d18c0e5afc507648c2a141d",
+        "src/bt_api_base/gateway/runtime_remote.py": "263e90112425e93209ff0dda15e7a52c1fe68ec9e4ac45a892677d57540f4e03"
+      }
+    },
+    "bt_api_transport_zmq": {
+      "revision": "614e2d3837e93bd9a8d30066b883e47a03020d51",
+      "overlays": {}
+    }
+  }
+}
