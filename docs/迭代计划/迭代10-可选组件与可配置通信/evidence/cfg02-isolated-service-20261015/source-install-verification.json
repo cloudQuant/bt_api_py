@@ -1,0 +1,536 @@
+{
+  "actual_imported_module_chains": [
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "environment": "client",
+      "git_blob_oid": "e3cbb35dbd3c55cfe3aab5185d50d98563d864d5",
+      "git_blob_path": "bt_api_py/service_market.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1273
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1273
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 1273,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1273
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1273
+        }
+      },
+      "module": "bt_api_py.service_market",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_market.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py",
+      "sha256": {
+        "archive_member_raw": "C0E6C96113875E7DCFB2C1668CE1B8318B86E9E3AE135E16D7523FF28CD7E3C3",
+        "build_source_raw": "C0E6C96113875E7DCFB2C1668CE1B8318B86E9E3AE135E16D7523FF28CD7E3C3",
+        "git_blob": "5B7A357693EF4DDC50EF397F4BFC67CA7116AB2809850C03EE07F05A18BC75B6",
+        "installed_file_raw": "C0E6C96113875E7DCFB2C1668CE1B8318B86E9E3AE135E16D7523FF28CD7E3C3",
+        "wheel_member_raw": "C0E6C96113875E7DCFB2C1668CE1B8318B86E9E3AE135E16D7523FF28CD7E3C3"
+      }
+    },
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "environment": "client",
+      "git_blob_oid": "888cdd800d2d16d25ed596fa302b76f6d513fcc4",
+      "git_blob_path": "src/bt_api_base/market_protocol.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 181
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 181
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 181,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 181
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 181
+        }
+      },
+      "module": "bt_api_base.market_protocol",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_base\\market_protocol.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "sha256": {
+        "archive_member_raw": "FB110BA6818FBD0F2E0D98036EEB3834CBF312B74018980A454B28272C22410A",
+        "build_source_raw": "FB110BA6818FBD0F2E0D98036EEB3834CBF312B74018980A454B28272C22410A",
+        "git_blob": "9AD1A16842DFEE03587A815ECF4A9915559287C9CE995F6CFF8DF15C00309108",
+        "installed_file_raw": "FB110BA6818FBD0F2E0D98036EEB3834CBF312B74018980A454B28272C22410A",
+        "wheel_member_raw": "FB110BA6818FBD0F2E0D98036EEB3834CBF312B74018980A454B28272C22410A"
+      }
+    },
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "environment": "client",
+      "git_blob_oid": "cf0fac23d3ae29cc482b12fba7ae44e2d529e24c",
+      "git_blob_path": "src/bt_api_base/service_protocol.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 710,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        }
+      },
+      "module": "bt_api_base.service_protocol",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_base\\service_protocol.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "sha256": {
+        "archive_member_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87",
+        "build_source_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87",
+        "git_blob": "F0ED739AC98CDA400BED07BF8487B79EE0A5EBE6842B9D0711B4B12E8AF6B15A",
+        "installed_file_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87",
+        "wheel_member_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87"
+      }
+    },
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "environment": "client",
+      "git_blob_oid": "b856c1e79cdeaf022ceb72460ae935d391ca4be5",
+      "git_blob_path": "src/bt_api_transport_zmq/market_v2.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 673
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 673
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 673,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 673
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 673
+        }
+      },
+      "module": "bt_api_transport_zmq.market_v2",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_transport_zmq\\market_v2.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+      "sha256": {
+        "archive_member_raw": "FB86E8288C835E6B600E9C1BE5CA01F05D166A778F0595E5192C06CB25D2F24B",
+        "build_source_raw": "FB86E8288C835E6B600E9C1BE5CA01F05D166A778F0595E5192C06CB25D2F24B",
+        "git_blob": "051CB114A41300D9F94630F95EE9A773CE252F36A9F01D94E0D99561DB36AC91",
+        "installed_file_raw": "FB86E8288C835E6B600E9C1BE5CA01F05D166A778F0595E5192C06CB25D2F24B",
+        "wheel_member_raw": "FB86E8288C835E6B600E9C1BE5CA01F05D166A778F0595E5192C06CB25D2F24B"
+      }
+    },
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "environment": "server",
+      "git_blob_oid": "2b0b55652611a5a56fb34f4f868a18adc6165f2d",
+      "git_blob_path": "bt_api_py/service_host.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1189
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1189
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 1189,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1189
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1189
+        }
+      },
+      "module": "bt_api_py.service_host",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_host.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py",
+      "sha256": {
+        "archive_member_raw": "FAD269AA043F39A7FC9DED0F0B4671C68E5C19C488358027E2060A14440472C4",
+        "build_source_raw": "FAD269AA043F39A7FC9DED0F0B4671C68E5C19C488358027E2060A14440472C4",
+        "git_blob": "862BBB7695436E60880FDDEBC2659FB295402D17BC32FF70082309F6D16EBB56",
+        "installed_file_raw": "FAD269AA043F39A7FC9DED0F0B4671C68E5C19C488358027E2060A14440472C4",
+        "wheel_member_raw": "FAD269AA043F39A7FC9DED0F0B4671C68E5C19C488358027E2060A14440472C4"
+      }
+    },
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "environment": "server",
+      "git_blob_oid": "cf0fac23d3ae29cc482b12fba7ae44e2d529e24c",
+      "git_blob_path": "src/bt_api_base/service_protocol.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 710,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 710
+        }
+      },
+      "module": "bt_api_base.service_protocol",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_base\\service_protocol.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "sha256": {
+        "archive_member_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87",
+        "build_source_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87",
+        "git_blob": "F0ED739AC98CDA400BED07BF8487B79EE0A5EBE6842B9D0711B4B12E8AF6B15A",
+        "installed_file_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87",
+        "wheel_member_raw": "EF31A048E95785C5128F6CBC9E202B939955D2F845C5680ECF2D8A8E28421B87"
+      }
+    },
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "environment": "server",
+      "git_blob_oid": "3ed85eee04cacea948d40af0fddf9c22725103b5",
+      "git_blob_path": "src/bt_api_gateway/market_hub.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1264
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1264
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 1264,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1264
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 1264
+        }
+      },
+      "module": "bt_api_gateway.market_hub",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_gateway\\market_hub.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+      "sha256": {
+        "archive_member_raw": "80F60A6A2CA86223BD6FEA608CF40956C3655ADC1419E3E229ABF8B3BBF9F1A0",
+        "build_source_raw": "80F60A6A2CA86223BD6FEA608CF40956C3655ADC1419E3E229ABF8B3BBF9F1A0",
+        "git_blob": "68066602191877AFC24C72623EB8F81D4DEFE7F093FBDB53D104CC68153675D3",
+        "installed_file_raw": "80F60A6A2CA86223BD6FEA608CF40956C3655ADC1419E3E229ABF8B3BBF9F1A0",
+        "wheel_member_raw": "80F60A6A2CA86223BD6FEA608CF40956C3655ADC1419E3E229ABF8B3BBF9F1A0"
+      }
+    },
+    {
+      "archive_build_source_wheel_installed_raw_bytes_identical": true,
+      "archive_to_git_normalization": "CRLF-to-LF pairs only",
+      "commit": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "environment": "server",
+      "git_blob_oid": "41e0d58b061ded11fa3a8bc68315aed54808fb27",
+      "git_blob_path": "src/bt_api_transport_zmq/server.py",
+      "line_endings": {
+        "archive_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 422
+        },
+        "build_source": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 422
+        },
+        "git_blob": {
+          "bare_cr": 0,
+          "bare_lf": 422,
+          "crlf_sequences": 0
+        },
+        "installed": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 422
+        },
+        "wheel_member": {
+          "bare_cr": 0,
+          "bare_lf": 0,
+          "crlf_sequences": 422
+        }
+      },
+      "module": "bt_api_transport_zmq.server",
+      "observed_origin": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_transport_zmq\\server.py",
+      "origin_under_venv_site_packages": true,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+      "sha256": {
+        "archive_member_raw": "717C551079CC6F56E55CC845F7B05276987FBA172D3CAF812275511D46FB35B1",
+        "build_source_raw": "717C551079CC6F56E55CC845F7B05276987FBA172D3CAF812275511D46FB35B1",
+        "git_blob": "B536D34B2D1E15DC2135B1C5F5E504491C612CE60C19EF24673596117F2AC1DF",
+        "installed_file_raw": "717C551079CC6F56E55CC845F7B05276987FBA172D3CAF812275511D46FB35B1",
+        "wheel_member_raw": "717C551079CC6F56E55CC845F7B05276987FBA172D3CAF812275511D46FB35B1"
+      }
+    }
+  ],
+  "artifact_root": "D:\\temp\\iteration10-cfg02-real-20261015-r1",
+  "crlf_note": "Pinned Git blobs have LF line endings for the listed source modules. The prepared tar/build-source/wheel/installed bytes use CRLF pairs; replacing CRLF with LF yields the Git blob exactly. From archive through build source, wheel member, and installed file, raw bytes are unchanged.",
+  "normal_resolver_install_records": {
+    "client": {
+      "bt_api_base": {
+        "direct_wheel_install": true,
+        "sha256": "B36B4B81C517BBAE288592B5C56A8D2C8DCFAD175AD4917E58E450BEBD5FC786",
+        "url": "file:///D:/temp/iteration10-cfg02-real-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl"
+      },
+      "bt_api_py": {
+        "direct_wheel_install": true,
+        "sha256": "93C4582E8699DF22189938A044641AF9E133CE090E82FFD10510F774A5B1DD88",
+        "url": "file:///D:/temp/iteration10-cfg02-real-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl"
+      },
+      "bt_api_transport_zmq": {
+        "direct_wheel_install": true,
+        "sha256": "6E6A8777AF1A4B4545A650F1D810240537FED489AC843B2A608963FAF0638D84",
+        "url": "file:///D:/temp/iteration10-cfg02-real-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl"
+      }
+    },
+    "server": {
+      "bt_api_base": {
+        "direct_wheel_install": true,
+        "sha256": "B36B4B81C517BBAE288592B5C56A8D2C8DCFAD175AD4917E58E450BEBD5FC786",
+        "url": "file:///D:/temp/iteration10-cfg02-real-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl"
+      },
+      "bt_api_gateway": {
+        "direct_wheel_install": true,
+        "sha256": "DE0F007607BF55EE78E8DAA868A6D96A7BF79848020A98F97A7338265F52A06E",
+        "url": "file:///D:/temp/iteration10-cfg02-real-20261015-r1/wheelhouse/bt_api_gateway-0.1.0-py3-none-any.whl"
+      },
+      "bt_api_py": {
+        "direct_wheel_install": true,
+        "sha256": "93C4582E8699DF22189938A044641AF9E133CE090E82FFD10510F774A5B1DD88",
+        "url": "file:///D:/temp/iteration10-cfg02-real-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl"
+      },
+      "bt_api_transport_zmq": {
+        "direct_wheel_install": true,
+        "sha256": "6E6A8777AF1A4B4545A650F1D810240537FED489AC843B2A608963FAF0638D84",
+        "url": "file:///D:/temp/iteration10-cfg02-real-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl"
+      }
+    }
+  },
+  "observed_run": {
+    "control_reader_stopped": true,
+    "forced_cleanup": [],
+    "market_frame_sequence": 4,
+    "normal_host_close": true,
+    "output_reader_stopped": true,
+    "status": "PASS_CFG02_SINGLE_DECLARED_GATEWAY_COMPONENT_INSTALLED_WHEEL"
+  },
+  "record_type": "CFG02_METADATA_ONLY_SOURCE_INSTALL_VERIFICATION",
+  "recorded_at_utc": "2026-10-15T13:18:46.874472+00:00",
+  "scope": "Read-only source/install provenance for the already completed CFG02 run. No pytest, node rerun, or wheel rebuild.",
+  "sdk_source_resolution": {
+    "actual_sdk_build_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+    "basis": "build log names source/sdk_wheel; its Git-archive PAX comment identifies the commit; every archive file matches that commit Git blob exactly or via CRLF-to-LF normalization only.",
+    "candidate_c6_comparison": {
+      "archive_members_different_or_missing_after_CRLF_normalization": 1,
+      "commit": "c6c832f4e12bf999dd554ba518d9421ecf6b1eb8",
+      "examples": [
+        "bt_api_py/service_execution_group_authority.py"
+      ]
+    }
+  },
+  "source_archives_and_wheels": {
+    "base": {
+      "archive_files_match_pinned_git_tree": true,
+      "archive_files_verified": 204,
+      "archive_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\base.tar",
+      "archive_pax_commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "archive_sha256": "155EE31167570385DB4F7AE7BA107FA618CA078D0C7CE0F09DAD043570C22C54",
+      "archive_size_bytes": 1372160,
+      "build_source_directory": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\base",
+      "candidate_sdk_c6_comparison": null,
+      "commit_tree": "91769c6410f5b0f476472749fbd6ee508975ad30",
+      "git_blob_byte_exact_files": 1,
+      "git_blob_files_equal_after_CRLF_to_LF_only": 203,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "wheel_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\wheelhouse\\bt_api_base-0.15.8-py3-none-any.whl",
+      "wheel_sha256": "B36B4B81C517BBAE288592B5C56A8D2C8DCFAD175AD4917E58E450BEBD5FC786",
+      "wheel_size_bytes": 177472
+    },
+    "gateway": {
+      "archive_files_match_pinned_git_tree": true,
+      "archive_files_verified": 36,
+      "archive_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\gateway.tar",
+      "archive_pax_commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "archive_sha256": "2CFC2FE748742D732888D7FCB90BD89C93BB6237800407C7F0862DA950C1781D",
+      "archive_size_bytes": 768000,
+      "build_source_directory": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\gateway",
+      "candidate_sdk_c6_comparison": null,
+      "commit_tree": "e849274b401fa24823e7d6a1180e7d43a8e43c31",
+      "git_blob_byte_exact_files": 0,
+      "git_blob_files_equal_after_CRLF_to_LF_only": 36,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+      "wheel_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\wheelhouse\\bt_api_gateway-0.1.0-py3-none-any.whl",
+      "wheel_sha256": "DE0F007607BF55EE78E8DAA868A6D96A7BF79848020A98F97A7338265F52A06E",
+      "wheel_size_bytes": 85584
+    },
+    "sdk": {
+      "archive_files_match_pinned_git_tree": true,
+      "archive_files_verified": 177,
+      "archive_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\sdk_wheel.tar",
+      "archive_pax_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "archive_sha256": "23B88285C33E2058601611D7E898C46E26E24493D881013A28A81EFA4ACB6BC6",
+      "archive_size_bytes": 18247680,
+      "build_source_directory": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\sdk_wheel",
+      "candidate_sdk_c6_comparison": {
+        "archive_members_different_or_missing_after_CRLF_normalization": 1,
+        "commit": "c6c832f4e12bf999dd554ba518d9421ecf6b1eb8",
+        "examples": [
+          "bt_api_py/service_execution_group_authority.py"
+        ]
+      },
+      "commit_tree": "906ad6818b8d34ca62427685359978bdb890058e",
+      "git_blob_byte_exact_files": 3,
+      "git_blob_files_equal_after_CRLF_to_LF_only": 174,
+      "repository": "D:\\bt_api_py",
+      "wheel_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\wheelhouse\\bt_api_py-0.15.5-py3-none-any.whl",
+      "wheel_sha256": "93C4582E8699DF22189938A044641AF9E133CE090E82FFD10510F774A5B1DD88",
+      "wheel_size_bytes": 1127431
+    },
+    "transport": {
+      "archive_files_match_pinned_git_tree": true,
+      "archive_files_verified": 18,
+      "archive_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\transport.tar",
+      "archive_pax_commit": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "archive_sha256": "92C032DDFDAD80852EB90E11871CACCBC70E786B6EB080B2A02B9C972773D3A2",
+      "archive_size_bytes": 256000,
+      "build_source_directory": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\source\\transport",
+      "candidate_sdk_c6_comparison": null,
+      "commit_tree": "289526b06114fbe9790b2b62fde374b91d1811ec",
+      "git_blob_byte_exact_files": 0,
+      "git_blob_files_equal_after_CRLF_to_LF_only": 18,
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+      "wheel_path": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\wheelhouse\\bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+      "wheel_sha256": "6E6A8777AF1A4B4545A650F1D810240537FED489AC843B2A608963FAF0638D84",
+      "wheel_size_bytes": 27729
+    }
+  },
+  "test_only_copy": {
+    "artifact_test": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\test-only\\tests\\unit\\test_iteration10_optional_install_matrix.py",
+    "byte_identical": true,
+    "expected_sha256": "017797364F74EBD61E3210052864F5D994D7B5F35E3F85834A1B7BC2B0B01455",
+    "repository_test": "D:\\bt_api_py\\tests\\unit\\test_iteration10_optional_install_matrix.py",
+    "sha256": "017797364F74EBD61E3210052864F5D994D7B5F35E3F85834A1B7BC2B0B01455"
+  },
+  "venvs": {
+    "client": {
+      "include_system_site_packages": false,
+      "interpreter": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\client-venv\\Scripts\\python.exe",
+      "prefix": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\client-venv",
+      "python_version": "3.11.5",
+      "pyvenv_cfg": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\client-venv\\pyvenv.cfg"
+    },
+    "server": {
+      "include_system_site_packages": false,
+      "interpreter": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\server-venv\\Scripts\\python.exe",
+      "prefix": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\server-venv",
+      "python_version": "3.11.5",
+      "pyvenv_cfg": "D:\\temp\\iteration10-cfg02-real-20261015-r1\\server-venv\\pyvenv.cfg"
+    }
+  }
+}
