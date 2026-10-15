@@ -345,6 +345,16 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             internal_ports=frozenset(),
         ),
+        ("monitor", "control"): _Builtin(
+            module_name="bt_api_py.service_monitor_control",
+            operations_attribute=("MonitorControlRuntime", "OPERATIONS"),
+            resource_keys=frozenset({"service", "owners"}),
+            public_ports=MappingProxyType(
+                {"service.monitor_control": frozenset({"monitor.control"})}
+            ),
+            internal_ports=frozenset(),
+            validator_module_name="bt_api_monitor.service_control",
+        ),
         ("execution", "account_owner"): _Builtin(
             module_name="bt_api_execution.service_order_entry",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -762,7 +772,10 @@ def build_component(
                         constructor_args["state_worker"] = account_worker
                     adapter = constructor(values["journal"], **constructor_args)
             elif spec.component == "monitor":
-                if spec.options.get("role") == "telemetry_ingress":
+                if spec.options.get("role") == "control":
+                    constructor = getattr(module, "MonitorControlRuntime", None)
+                    adapter = constructor(values["service"], values["owners"])
+                elif spec.options.get("role") == "telemetry_ingress":
                     constructor = getattr(module, "MonitorTelemetryService", None)
                     constructor_options = dict(prepared.options)
                     constructor_options.pop("role", None)
@@ -978,6 +991,34 @@ def build_component(
                             and getattr(error, "code", None) == "CONSUMER_PAGE_TOO_LARGE"
                         ):
                             raise ServiceResultTooLargeError() from None
+                        raise
+                if spec.component == "monitor" and spec.options.get("role") == "control":
+                    try:
+                        return _adapter.handle(  # type: ignore[attr-defined]
+                            _operation,
+                            principal_ref=context.principal_ref,
+                            identity=context.identity,
+                            scope=context.scope,
+                            arguments=arguments,
+                        )
+                    except Exception as error:
+                        if (
+                            type(error)
+                            is getattr(prepared.module, "MonitorControlServiceError", None)
+                            and error.code in {
+                                "CONTROL_NOT_AUTHORIZED",
+                                "CALLER_DELEGATION_NOT_GRANTED",
+                                "APPLICATION_ROLE_REQUIRED",
+                                "INVALID_IDENTITY",
+                                "IDENTITY_MISMATCH",
+                                "INVALID_SCOPE",
+                                "UNSUPPORTED_SCOPE",
+                                "SCOPE_NOT_GRANTED",
+                            }
+                        ):
+                            # These failures precede ledger admission/effects.
+                            # Owner, storage and ACK failures stay UNKNOWN.
+                            raise ServiceOperationDeniedError() from None
                         raise
                 if spec.component == "monitor" and spec.options.get("role") == "durable_ingress":
                     return _adapter.handle(  # type: ignore[attr-defined]

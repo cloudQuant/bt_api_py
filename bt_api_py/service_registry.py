@@ -183,8 +183,8 @@ class ServiceOperationDeniedError(RuntimeError):
     """A trusted adapter proved an operation was rejected before side effects.
 
     The registry only maps this exact exception to a definitive wire denial
-    for the market subscription operation. Other operations and exception
-    types retain the ordinary ``HANDLER_FAILED`` outcome.
+    for market subscription and monitor control admission. Other operations
+    and exception types retain the ordinary ``HANDLER_FAILED`` outcome.
     """
 
     def __init__(self) -> None:
@@ -1208,8 +1208,11 @@ class ServiceRegistry:
         except Exception as error:
             if (
                 type(error) is ServiceOperationDeniedError
-                and capability.port == "service.market_source"
-                and operation == "market.subscribe"
+                and (capability.port, operation)
+                in {
+                    ("service.market_source", "market.subscribe"),
+                    ("service.monitor_control", "monitor.control"),
+                }
             ):
                 return self._failure("SCOPE_DENIED")
             return self._failure("HANDLER_FAILED")

@@ -197,11 +197,11 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
             {
                 "service.telemetry_ingress",
                 "service.monitor_query",
-                "service.monitor_control",
             }
         ),
         "durable_ingress": frozenset({"service.telemetry_ingress"}),
         "telemetry_ingress": frozenset({"service.telemetry_ingress", "service.monitor_query"}),
+        "control": frozenset({"service.monitor_control"}),
     },
 }
 _SERVICE_PORTS: Final[frozenset[str]] = frozenset(
@@ -880,6 +880,9 @@ def _validate_component_options(
     if component == "monitor":
         if role is None:
             return {}
+        if role == "control":
+            _check_keys(raw, {"role"}, options_path)
+            return {"role": role}
         if role == "telemetry_ingress":
             defaults = {
                 "max_streams": 256,

@@ -76,7 +76,7 @@ PORT_OPERATIONS = MappingProxyType(
         "service.monitor_query": frozenset(
             {"monitor.query", "monitor.read_after", "telemetry.snapshot"}
         ),
-        "service.monitor_control": frozenset({"monitor.acknowledge", "monitor.control"}),
+        "service.monitor_control": frozenset({"monitor.control"}),
         "service.owner_control": frozenset(
             {"owner.session", "owner.stop_new", "owner.cancel", "owner.reduce"}
         ),
@@ -899,7 +899,23 @@ class ServiceClientRuntime:
         capabilities = discovered.get("capabilities")
         if not isinstance(capabilities, (tuple, list)):
             raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
-        for port in MOUNT_PORTS[binding["mount"]]:
+        requested = self._requested_operations.get(binding["mount"])
+        required_ports = MOUNT_PORTS[binding["mount"]]
+        if binding["mount"] == "application.monitor" and requested is not None:
+            required_ports = tuple(
+                port for port in required_ports if requested.intersection(PORT_OPERATIONS[port])
+            )
+            if not required_ports:
+                # A control-only mount selects its control endpoint directly.
+                # Its binding policy governs startup/renewal; query capability
+                # is not a prerequisite. Mixed read/control mounts retain the
+                # existing optional-control behavior below.
+                required_ports = tuple(
+                    port
+                    for port in OPTIONAL_MOUNT_PORTS[binding["mount"]]
+                    if requested.intersection(PORT_OPERATIONS[port])
+                )
+        for port in required_ports:
             self._register_port(
                 binding,
                 scope,
@@ -911,8 +927,11 @@ class ServiceClientRuntime:
             )
         for port in OPTIONAL_MOUNT_PORTS.get(binding["mount"], ()):
             # Explicit application code requests control separately from reads.
-            requested = self._requested_operations.get(binding["mount"], frozenset())
-            if requested.intersection(PORT_OPERATIONS[port]):
+            if (
+                requested is not None
+                and port not in required_ports
+                and requested.intersection(PORT_OPERATIONS[port])
+            ):
                 try:
                     self._register_port(
                         binding,
