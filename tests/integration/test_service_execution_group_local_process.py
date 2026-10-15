@@ -14,6 +14,7 @@ import time
 from collections.abc import Mapping
 from contextlib import suppress
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -28,10 +29,12 @@ from bt_api_execution import (
     GroupOrderState,
     OrderIntent,
     OrderType,
+    PortfolioGroupBudgetPolicy,
     Side,
     SqliteExecutionStore,
     SqliteOrderGroupStore,
     TimeInForce,
+    build_instrument_risk_group_budget_quote,
     group_leg_intent_id,
     risk_account_scope_fingerprint,
 )
@@ -97,8 +100,8 @@ from tests.unit._service_group_provider_fixtures import (
     _V2_INSTRUMENT,
     _V2_METADATA_VERSION,
     _V2_ORDER_SCHEMA,
-    _V2SyntheticBtApiFeed,
     _arm_incomplete_fills,
+    _V2SyntheticBtApiFeed,
 )
 
 _DOMAIN = "paper:group-process"
@@ -363,6 +366,23 @@ def _metadata(reference_ns: int) -> InstrumentRiskMetadata:
         quantity_unit="base",
         valuation_unit="USD",
     )
+
+
+def _budget_binding(metadata: InstrumentRiskMetadata) -> tuple[PortfolioGroupBudgetPolicy, object]:
+    policy = PortfolioGroupBudgetPolicy(
+        portfolio_ref=_PORTFOLIO,
+        policy_id="group-process-budget-v1",
+        policy_version=1,
+        valuation_unit="USD",
+        max_group_gross_notional=Decimal("1000000"),
+        max_active_gross_notional=Decimal("10000000"),
+        max_active_groups=100,
+    )
+    builder = partial(
+        build_instrument_risk_group_budget_quote,
+        registry=InstrumentRiskRegistry((metadata,)),
+    )
+    return policy, builder
 
 
 def _risk_policy() -> RiskPolicy:
@@ -890,10 +910,13 @@ def _coordinator_host_process(
                 )
             },
         )
+    budget_policy, budget_quote_builder = _budget_binding(metadata)
     coordinator_target = GroupCoordinatorTarget(
         scope_ref=_COORDINATOR_SCOPE_REF,
         accounts=route_targets,
         max_group_lifetime_ns=300_000_000_000,
+        portfolio_budget_policy=budget_policy,
+        budget_quote_builder=budget_quote_builder,
     )
     resources: dict[str, object] = {}
     host: ServiceHost | None = None

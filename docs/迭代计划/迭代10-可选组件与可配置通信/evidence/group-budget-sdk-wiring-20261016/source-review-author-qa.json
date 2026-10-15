@@ -1,0 +1,113 @@
+{
+  "schema": "iteration10-group-budget-wiring-delivery-note-v2",
+  "date": "2026-10-16",
+  "purpose": "Correct the malformed command strings in R1 using structured argv/environment and explicit command provenance.",
+  "r1_preserved": {
+    "path": ".codex-tmp/iteration10-group-budget-wiring-delivery-note-20261016.json",
+    "sha256": "20A331052D7D29149B9EF8EB6AF36A51AF6BCCEABFBE9C57CF30FAD298169AFF",
+    "note": "R1 is not modified. Its command strings lost Windows separators during serialization and must not be treated as exact."
+  },
+  "round_scope": {
+    "result": "SDK group-budget wiring source/author-workspace QA only",
+    "formal_arb02": false,
+    "fixed_committed_dependency_acceptance": false,
+    "real_account_acceptance": false,
+    "no_qa_rerun": true
+  },
+  "frozen_paths": [
+    {
+      "path": "bt_api_py/service_execution_group.py",
+      "bytes": 82879,
+      "sha256": "281D55B08B8011BCFC637CDEBF5157902EB4D6D637EDD54BA19D740EFE22B5F0"
+    },
+    {
+      "path": "tests/unit/test_service_execution_group.py",
+      "bytes": 60966,
+      "sha256": "A6077DD9BABE014EF2A64A753E69132050C2F821BE6903342722461841F3D365"
+    },
+    {
+      "path": "tests/integration/test_service_execution_group_local_process.py",
+      "bytes": 59662,
+      "sha256": "8EAB3B0C9EBB32EAC6F4D942704EC6FCE5A317A8A9BFAA1A0498D814D753457A"
+    }
+  ],
+  "independent_review": {
+    "reviewer": "/root/iteration10_parallel_assessment",
+    "result": "GO",
+    "scope": "exact three frozen paths above",
+    "review_kind": "static only; reviewer did not run tests or launch a Host"
+  },
+  "runs": [
+    {
+      "name": "focused author unit suite",
+      "result_message": "10 passed, 1 warning, 4.89s",
+      "exit_code_reported": 0,
+      "warning_reported": "PytestConfigWarning: Unknown config option asyncio_default_fixture_loop_scope",
+      "original_tool_chunk_id": null,
+      "command_provenance": "unavailable from the original exec event in the currently retained task transcript. The compacted author summary retained a remembered command, but it is not verified against the original tool invocation; this note intentionally does not represent it as exact.",
+      "structured_argv": null,
+      "environment": null,
+      "working_directory_reported_but_unverified": "D:\\bt_api_py",
+      "stdout_or_junit_path": null,
+      "saved_output_status": "No redirection or junitxml option was used according to the retained run summary; a scoped .codex-tmp search found no matching stdout/JUnit artifact. Result is preserved only as the earlier tool-output summary."
+    },
+    {
+      "name": "spawned local three-ServiceHost integration node",
+      "test_node": "tests/integration/test_service_execution_group_local_process.py::test_spawned_curve_group_hosts_complete_two_legs_and_preserve_unknown_hold",
+      "shell": "PowerShell",
+      "working_directory": "D:\\bt_api_py",
+      "structured_argv": [
+        "C:\\anaconda3\\python.exe",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "no:asyncio",
+        "--noconftest",
+        "tests/integration/test_service_execution_group_local_process.py::test_spawned_curve_group_hosts_complete_two_legs_and_preserve_unknown_hold"
+      ],
+      "environment": {
+        "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src"
+      },
+      "command_provenance": "confirmed from the original functions.exec invocation retained in this task transcript",
+      "original_tool_chunk_id": "1b288b",
+      "exit_code": 0,
+      "result": "1 passed, 1 warning, 10.66s",
+      "warning": "PytestConfigWarning: Unknown config option asyncio_default_fixture_loop_scope",
+      "stdout_or_junit_path": null,
+      "saved_output_status": "Tool response only; no stdout redirection or junitxml path was supplied."
+    }
+  ],
+  "integration_evidence": {
+    "observed": "The node spawned two synthetic account ServiceHosts and one coordinator, used Curve registrations/clients and local SQLite, paired two legs with terminal fills, retained an UNKNOWN/unresolved claim on the second group, queried the durable snapshot, verified provider counters/Risk claim-resolution snapshots, and shut the local Hosts down normally.",
+    "limitations": [
+      "Synthetic provider leaves only; no exchange or real-account I/O.",
+      "The three-Host node itself did not assert an over-budget rejection or a concurrent cross-group cap race. The author unit suite's remembered result reports the over-budget case makes no downstream reservation/order calls, but its exact invocation cannot be recovered here.",
+      "This is not formal ARB02 acceptance."
+    ]
+  },
+  "source_and_dependency_provenance": {
+    "execution_package_head_observed_after_run": "5e6ba3e90e04f5e2f5ad0944e6557f2a1eb1edc5",
+    "execution_checkout_state_observed_after_run": [
+      "src/bt_api_execution/store.py modified with 312 added lines",
+      "tests/test_execution_recovery_views.py untracked"
+    ],
+    "origin_attestation": "The integration command's PYTHONPATH included the current bt_api_execution/src directory, and the test imports SqliteExecutionStore. The test output did not assert or print the imported module __file__/hash. Therefore the run is not pinned to fixed committed package bytes, and this record does not claim whether the store.py recovery WIP was loaded as the executing module or whether its added hunk was required.",
+    "parent_checkout_dirty_sources_observed_during_delivery-preparation": [
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_execution.py",
+      "bt_api_py/service_execution_account_books.py",
+      "bt_api_py/service_registry.py",
+      "bt_api_py/service_risk_order_entry.py",
+      "bt_api_py/service_risk_order_journal.py"
+    ],
+    "dependency_limit": "No per-module origin hashes or isolated dependency experiment were recorded for the integration run. The listed dirty shared SDK sources were present in the working checkout; their exact necessary hunks cannot be retroactively asserted. service_execution_account_books.py was not part of the group test path."
+  },
+  "artifact_and_delivery_status": {
+    "scoped_stdout_or_junit_files_found": false,
+    "searched_location": ".codex-tmp",
+    "parent_commit_or_gitlink_change_by_this_agent": false,
+    "source_or_test_changes_by_this_R2_note": false
+  }
+}

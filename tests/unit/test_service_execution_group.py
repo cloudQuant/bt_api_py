@@ -10,18 +10,22 @@ from __future__ import annotations
 
 import hashlib
 import time
+from collections.abc import Mapping
 from dataclasses import replace
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     AccountScopedGroupAdmissionAdapter,
     ExecutionScope,
     ExecutionState,
     GroupAccountReservationSnapshot,
+    GroupBudgetUnsupportedOrderError,
     GroupChildOrderStatus,
     GroupLegOrderReceipt,
     GroupOrderSnapshot,
@@ -29,33 +33,36 @@ from bt_api_execution import (
     GroupRiskLegSnapshot,
     OrderIntent,
     OrderType,
+    PortfolioGroupBudgetPolicy,
     Side,
     SqliteExecutionStore,
     SqliteOrderGroupStore,
     TimeInForce,
+    build_instrument_risk_group_budget_quote,
     group_leg_intent_id,
     order_intent_from_payload,
     risk_account_scope_fingerprint,
 )
 from bt_api_execution.group_order_contracts import GroupReservationPhase
 from bt_api_risk import (
+    INSTRUMENT_METADATA_DIGEST_TAG,
     AccountScope,
     DispatchEvidenceClass,
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
     ExposureAccountingMode,
-    INSTRUMENT_METADATA_DIGEST_TAG,
     InstrumentRiskAdmissionMapper,
     InstrumentRiskMetadata,
     InstrumentRiskRegistry,
+    RiskDeniedError,
     RiskPolicy,
 )
 
 from bt_api_py.bt_api import BtApi
 from bt_api_py.service_components import BorrowedServiceClient
 from bt_api_py.service_execution_group import (
-    GROUP_COORDINATOR_OPERATIONS,
     GROUP_ACCOUNT_OWNER_OPERATIONS,
+    GROUP_COORDINATOR_OPERATIONS,
     ExecutionGroupOrderEntryService,
     GroupAccountRoute,
     GroupCoordinatorService,
@@ -76,11 +83,13 @@ from bt_api_py.service_execution_group_proofs import (
     GroupProofRuntimeBundle,
     GroupProofSource,
     GroupProofTarget,
+)
+from bt_api_py.service_execution_group_proofs import (
     GroupReservationTarget as ProofReservationTarget,
 )
 from bt_api_py.service_group_reservations import (
-    GroupReservationTarget,
     GroupReservationsService,
+    GroupReservationTarget,
 )
 from bt_api_py.service_registry import (
     ActiveRegistrationContext,
@@ -401,15 +410,42 @@ def _target(now_ns: int) -> tuple[WireScope, GroupCoordinatorTarget, dict[str, s
         )
         for account_ref in _ACCOUNTS
     }
+    budget_policy, budget_quote_builder = _budget_binding(metadata)
     return (
         stable_scope,
         GroupCoordinatorTarget(
             scope_ref=_COORDINATOR_SCOPE_REF,
             accounts=accounts,
             max_group_lifetime_ns=300_000_000_000,
+            portfolio_budget_policy=budget_policy,
+            budget_quote_builder=budget_quote_builder,
         ),
         fingerprints,
     )
+
+
+def _budget_binding(
+    metadata: InstrumentRiskMetadata,
+    *,
+    portfolio_ref: str = _PORTFOLIO,
+    max_group_gross_notional: Decimal = Decimal("1000000"),
+    max_active_gross_notional: Decimal = Decimal("10000000"),
+    max_active_groups: int = 100,
+):
+    policy = PortfolioGroupBudgetPolicy(
+        portfolio_ref=portfolio_ref,
+        policy_id="portfolio-budget-v1",
+        policy_version=1,
+        valuation_unit="USD",
+        max_group_gross_notional=max_group_gross_notional,
+        max_active_gross_notional=max_active_gross_notional,
+        max_active_groups=max_active_groups,
+    )
+    builder = partial(
+        build_instrument_risk_group_budget_quote,
+        registry=InstrumentRiskRegistry((metadata,)),
+    )
+    return policy, builder
 
 
 def _make_service(
@@ -465,6 +501,249 @@ def _arguments(now_ns: int, metadata: InstrumentRiskMetadata) -> dict[str, Any]:
             },
         ],
     }
+
+
+def _new_coordinator_service(
+    tmp_path: Path,
+    runtime: _LoopbackRuntime,
+    scopes: Mapping[WireScope, GroupCoordinatorTarget],
+) -> tuple[GroupCoordinatorService, SqliteOrderGroupStore, GroupOriginRunBindingStore]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    group_store = SqliteOrderGroupStore(tmp_path / "groups.sqlite3")
+    run_bindings = GroupOriginRunBindingStore(tmp_path / "group-runs.sqlite3")
+    try:
+        service = GroupCoordinatorService(
+            group_store,
+            scopes,
+            run_bindings,
+            BorrowedServiceClient(runtime),
+            WireIdentity(WireRole.SERVICE, _COORDINATOR_PRINCIPAL, "coordinator-actor"),
+            instance_id=_COORDINATOR_INSTANCE,
+            clock_ns=time.time_ns,
+        )
+    except Exception:
+        group_store.close()
+        run_bindings.close()
+        raise
+    return service, group_store, run_bindings
+
+
+def test_missing_budget_policy_rejects_submit_before_run_binding_and_keeps_query_readable(
+    tmp_path: Path,
+) -> None:
+    now_ns = [time.time_ns()]
+    stable_scope, target, fingerprints = _target(now_ns[0])
+    target_without_budget = replace(target, portfolio_budget_policy=None, budget_quote_builder=None)
+    runtime = _LoopbackRuntime(fingerprints)
+    service, group_store, run_bindings = _make_service(
+        tmp_path, runtime, stable_scope, target_without_budget, now_ns=now_ns
+    )
+    registration = _registration(now_ns[0])
+    service.maintain_registrations((registration,))
+    metadata = next(iter(target.accounts.values())).instruments["BTC-USDT"].metadata
+    try:
+        denied = service.handle(
+            "groups.submit",
+            context=registration.context,
+            arguments=_arguments(now_ns[0], metadata),
+        )
+        assert denied == {"ok": False, "code": "GROUP_BUDGET_POLICY_REQUIRED", "result": {}}
+        assert run_bindings.get(_PORTFOLIO, _GROUP_ID) is None
+        assert group_store.get(_PORTFOLIO, _GROUP_ID) is None
+        assert runtime.calls == []
+        assert runtime.reservations == {}
+        assert runtime.submitted == []
+
+        queried = service.handle(
+            "groups.query",
+            context=registration.context,
+            arguments={"group_id": _GROUP_ID},
+        )
+        assert queried == {"ok": True, "code": "OK", "result": {"found": False, "snapshot": None}}
+        assert runtime.calls == []
+    finally:
+        service.close()
+        group_store.close()
+        run_bindings.close()
+
+
+def test_wire_cannot_supply_budget_quote_or_policy_resources(tmp_path: Path) -> None:
+    now_ns = [time.time_ns()]
+    stable_scope, target, fingerprints = _target(now_ns[0])
+    runtime = _LoopbackRuntime(fingerprints)
+    service, group_store, run_bindings = _make_service(
+        tmp_path, runtime, stable_scope, target, now_ns=now_ns
+    )
+    registration = _registration(now_ns[0])
+    service.maintain_registrations((registration,))
+    metadata = next(iter(target.accounts.values())).instruments["BTC-USDT"].metadata
+    arguments = _arguments(now_ns[0], metadata)
+    arguments["budget_quote"] = {"gross_notional": "0.01"}
+    arguments["max_active_gross_notional"] = "999999999999"
+    try:
+        denied = service.handle("groups.submit", context=registration.context, arguments=arguments)
+        assert denied == {"ok": False, "code": "INVALID_REQUEST", "result": {}}
+        assert run_bindings.list_all() == ()
+        assert group_store.get(_PORTFOLIO, _GROUP_ID) is None
+        assert runtime.calls == []
+        assert runtime.reservations == {}
+        assert runtime.submitted == []
+    finally:
+        service.close()
+        group_store.close()
+        run_bindings.close()
+
+
+def test_budget_denial_and_unsupported_builder_error_are_stable_and_pre_dispatch(
+    tmp_path: Path,
+) -> None:
+    now_ns = [time.time_ns()]
+    stable_scope, target, fingerprints = _target(now_ns[0])
+    metadata = next(iter(target.accounts.values())).instruments["BTC-USDT"].metadata
+    small_policy, small_builder = _budget_binding(
+        metadata,
+        max_group_gross_notional=Decimal("1"),
+        max_active_gross_notional=Decimal("100000"),
+    )
+    over_limit_target = replace(
+        target,
+        portfolio_budget_policy=small_policy,
+        budget_quote_builder=small_builder,
+    )
+    runtime = _LoopbackRuntime(fingerprints)
+    over_limit_path = tmp_path / "over-limit"
+    over_limit_path.mkdir()
+    service, group_store, run_bindings = _make_service(
+        over_limit_path, runtime, stable_scope, over_limit_target, now_ns=now_ns
+    )
+    registration = _registration(now_ns[0])
+    service.maintain_registrations((registration,))
+    try:
+        result = service.handle(
+            "groups.submit",
+            context=registration.context,
+            arguments=_arguments(now_ns[0], metadata),
+        )
+        assert result["ok"] is True
+        denied_snapshot = GroupOrderSnapshot.from_payload(result["result"]["snapshot"])
+        assert denied_snapshot.state is GroupOrderState.REJECTED_BEFORE_DISPATCH
+        assert denied_snapshot.error_code == "group_budget_limit_exceeded"
+        assert denied_snapshot.budget_reservation is not None
+        assert denied_snapshot.budget_reservation.policy_fingerprint == small_policy.fingerprint
+        assert runtime.calls == []
+        assert runtime.reservations == {}
+        assert runtime.submitted == []
+    finally:
+        service.close()
+        group_store.close()
+        run_bindings.close()
+
+    def unsupported_builder(_request, _policy, *, now_ns: int):
+        del now_ns
+        raise GroupBudgetUnsupportedOrderError("trusted price bound is unavailable")
+
+    unsupported_target = replace(target, budget_quote_builder=unsupported_builder)
+    runtime = _LoopbackRuntime(fingerprints)
+    unsupported_path = tmp_path / "unsupported"
+    unsupported_path.mkdir()
+    service, group_store, run_bindings = _make_service(
+        unsupported_path, runtime, stable_scope, unsupported_target, now_ns=now_ns
+    )
+    service.maintain_registrations((registration,))
+    try:
+        result = service.handle(
+            "groups.submit",
+            context=registration.context,
+            arguments=_arguments(now_ns[0], metadata),
+        )
+        assert result == {
+            "ok": False,
+            "code": "GROUP_BUDGET_MARKET_PRICE_UNBOUNDED",
+            "result": {},
+        }
+        assert runtime.calls == []
+        assert runtime.reservations == {}
+        assert runtime.submitted == []
+    finally:
+        service.close()
+        group_store.close()
+        run_bindings.close()
+
+    def denied_builder(_request, _policy, *, now_ns: int):
+        del now_ns
+        raise RiskDeniedError("INSTRUMENT_PRICE_UNPROVEN", "untrusted details are not returned")
+
+    denied_target = replace(target, budget_quote_builder=denied_builder)
+    runtime = _LoopbackRuntime(fingerprints)
+    denied_path = tmp_path / "risk-denied"
+    denied_path.mkdir()
+    service, group_store, run_bindings = _make_service(
+        denied_path, runtime, stable_scope, denied_target, now_ns=now_ns
+    )
+    service.maintain_registrations((registration,))
+    try:
+        result = service.handle(
+            "groups.submit",
+            context=registration.context,
+            arguments=_arguments(now_ns[0], metadata),
+        )
+        assert result == {
+            "ok": False,
+            "code": "INSTRUMENT_PRICE_UNPROVEN",
+            "result": {},
+        }
+        assert runtime.calls == []
+        assert runtime.reservations == {}
+        assert runtime.submitted == []
+    finally:
+        service.close()
+        group_store.close()
+        run_bindings.close()
+
+
+def test_budget_resources_must_pair_match_portfolio_and_not_conflict(tmp_path: Path) -> None:
+    now_ns = time.time_ns()
+    stable_scope, target, fingerprints = _target(now_ns)
+    metadata = next(iter(target.accounts.values())).instruments["BTC-USDT"].metadata
+    with pytest.raises(ServiceExecutionGroupError) as unpaired:
+        replace(target, budget_quote_builder=None)
+    assert unpaired.value.code == "GROUP_BUDGET_CONFIGURATION_INVALID"
+
+    wrong_policy, wrong_builder = _budget_binding(metadata, portfolio_ref="another-portfolio")
+    wrong_target = replace(
+        target,
+        portfolio_budget_policy=wrong_policy,
+        budget_quote_builder=wrong_builder,
+    )
+    runtime = _LoopbackRuntime(fingerprints)
+    with pytest.raises(ServiceExecutionGroupError) as wrong_portfolio:
+        _new_coordinator_service(
+            tmp_path / "wrong-portfolio", runtime, {stable_scope: wrong_target}
+        )
+    assert wrong_portfolio.value.code == "GROUP_BUDGET_POLICY_SCOPE_MISMATCH"
+
+    other_strategy_scope = replace(stable_scope, strategy_ref="strategy-b")
+    other_accounts = {
+        account_ref: replace(
+            route,
+            execution_scope=replace(route.execution_scope, strategy_id="strategy-b"),
+        )
+        for account_ref, route in target.accounts.items()
+    }
+    conflicting_policy = replace(target.portfolio_budget_policy, policy_id="different-policy")
+    assert conflicting_policy is not None
+    other_target = replace(
+        target,
+        accounts=other_accounts,
+        portfolio_budget_policy=conflicting_policy,
+    )
+    with pytest.raises(ServiceExecutionGroupError) as conflict:
+        _new_coordinator_service(
+            tmp_path / "policy-conflict",
+            runtime,
+            {stable_scope: target, other_strategy_scope: other_target},
+        )
+    assert conflict.value.code == "GROUP_BUDGET_POLICY_CONFLICT"
 
 
 def test_coordinator_uses_trusted_registration_and_never_resubmits_unknown_after_restart(
@@ -788,7 +1067,11 @@ def test_normal_group_services_complete_two_filled_legs_from_source_backed_provi
     # for an unmapped venue remains unchanged.
     from bt_api_py._contracts.models import (
         OrderRequest as BtOrderRequest,
+    )
+    from bt_api_py._contracts.models import (
         OrderType as BtOrderType,
+    )
+    from bt_api_py._contracts.models import (
         Side as BtSide,
     )
     from bt_api_py._venue_mappers import MAPPERS
@@ -1148,10 +1431,15 @@ def test_normal_group_services_complete_two_filled_legs_from_source_backed_provi
                 )
             },
         )
+        budget_policy, budget_quote_builder = _budget_binding(
+            metadata, portfolio_ref=strategy_template.portfolio_ref
+        )
         coordinator_target = GroupCoordinatorTarget(
             scope_ref=_COORDINATOR_SCOPE_REF,
             accounts={account_ref: route},
             max_group_lifetime_ns=300_000_000_000,
+            portfolio_budget_policy=budget_policy,
+            budget_quote_builder=budget_quote_builder,
         )
         coordinator_service = GroupCoordinatorService(
             coordinator_store,

@@ -23,9 +23,13 @@ from typing import Any
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     AccountScopedGroupAdmissionAdapter,
+    ContractValidationError,
     ExecutionRecord,
     ExecutionScope,
     GroupAccountReservationSnapshot,
+    GroupBudgetQuote,
+    GroupBudgetQuoteBuilder,
+    GroupBudgetUnsupportedOrderError,
     GroupChildOrderStatus,
     GroupDispatchResolutionReceipt,
     GroupLegClaimReceipt,
@@ -39,6 +43,7 @@ from bt_api_execution import (
     GroupRiskLegSnapshot,
     OrderIntent,
     OrderType,
+    PortfolioGroupBudgetPolicy,
     PositionEffect,
     SqliteExecutionStore,
     SqliteOrderGroupStore,
@@ -46,7 +51,11 @@ from bt_api_execution import (
     group_leg_intent_id,
     order_intent_from_payload,
 )
-from bt_api_risk import INSTRUMENT_METADATA_DIGEST_TAG, InstrumentRiskMetadata
+from bt_api_risk import (
+    INSTRUMENT_METADATA_DIGEST_TAG,
+    InstrumentRiskMetadata,
+    RiskDeniedError,
+)
 
 from .service_components import BorrowedServiceClient
 from .service_execution_group_authority import ExecutionGroupAuthorityGuard
@@ -168,6 +177,8 @@ class GroupCoordinatorTarget:
     scope_ref: str
     accounts: Mapping[str, GroupAccountRoute]
     max_group_lifetime_ns: int
+    portfolio_budget_policy: PortfolioGroupBudgetPolicy | None = None
+    budget_quote_builder: GroupBudgetQuoteBuilder | None = None
 
     def __post_init__(self) -> None:
         if type(self.scope_ref) is not str or _REFERENCE.fullmatch(self.scope_ref) is None:
@@ -184,6 +195,13 @@ class GroupCoordinatorTarget:
             for account_ref, route in copied.items()
         ):
             raise ServiceExecutionGroupError("GROUP_TARGET_INVALID")
+        if (self.portfolio_budget_policy is None) != (self.budget_quote_builder is None):
+            raise ServiceExecutionGroupError("GROUP_BUDGET_CONFIGURATION_INVALID")
+        if self.portfolio_budget_policy is not None and (
+            type(self.portfolio_budget_policy) is not PortfolioGroupBudgetPolicy
+            or not callable(self.budget_quote_builder)
+        ):
+            raise ServiceExecutionGroupError("GROUP_BUDGET_CONFIGURATION_INVALID")
         object.__setattr__(self, "accounts", MappingProxyType(copied))
 
 
@@ -412,6 +430,9 @@ class GroupCoordinatorService:
                 raise ServiceExecutionGroupError("GROUP_TARGET_SCOPE_INVALID")
             if tuple(sorted(target.accounts)) != tuple(stable_scope.account_refs):
                 raise ServiceExecutionGroupError("GROUP_TARGET_SCOPE_INVALID")
+            policy = target.portfolio_budget_policy
+            if policy is not None and policy.portfolio_ref != stable_scope.portfolio_ref:
+                raise ServiceExecutionGroupError("GROUP_BUDGET_POLICY_SCOPE_MISMATCH")
             for route in target.accounts.values():
                 if (
                     route.execution_scope.account_ref not in target.accounts
@@ -439,11 +460,22 @@ class GroupCoordinatorService:
             for account, fingerprint in fingerprints.items()
         }
         orders = {account: _OrdersRpcPort(account, borrowed_upstream) for account in fingerprints}
+        portfolio_policies: dict[str, PortfolioGroupBudgetPolicy] = {}
+        for stable_scope, target in target_copy.items():
+            policy = target.portfolio_budget_policy
+            if policy is None:
+                continue
+            existing_policy = portfolio_policies.get(stable_scope.portfolio_ref)
+            if existing_policy is not None and existing_policy.fingerprint != policy.fingerprint:
+                raise ServiceExecutionGroupError("GROUP_BUDGET_POLICY_CONFLICT")
+            portfolio_policies.setdefault(stable_scope.portfolio_ref, policy)
         try:
             self._coordinator = GroupOrderCoordinator(
                 store,
                 reservations=reservations,
                 orders=orders,
+                portfolio_budget_policies=portfolio_policies,
+                budget_quote_builder=self._build_budget_quote,
                 clock_ns=clock_ns,
             )
         except Exception:
@@ -489,6 +521,8 @@ class GroupCoordinatorService:
             registration, target_scope, target = self._authorize(operation, context)
             if operation == "groups.query":
                 return self._query(registration, target, arguments)
+            if target.portfolio_budget_policy is None or target.budget_quote_builder is None:
+                return _failure("GROUP_BUDGET_POLICY_REQUIRED")
             request = self._parse_request(registration, target, arguments)
             # Persist the Registry-derived run before package acceptance. An
             # exact retry after a restart returns the original normalized
@@ -498,10 +532,13 @@ class GroupCoordinatorService:
                 request,
                 coordinator_principal_ref=self._identity.principal_ref,
             )
-            self._coordinator.accept(run_binding.request)
             call = _CoordinatorCall(registration, target_scope, target, run_binding)
             token = _CURRENT_COORDINATOR_CALL.set(call)
             try:
+                try:
+                    self._coordinator.accept(run_binding.request)
+                except ContractValidationError:
+                    return _failure("GROUP_ACCEPTANCE_REJECTED")
                 snapshot = self._coordinator.advance_group(
                     run_binding.request.portfolio_ref, run_binding.request.group_id
                 )
@@ -516,6 +553,49 @@ class GroupCoordinatorService:
             return _failure("GROUP_BINDING_UNAVAILABLE")
         except (TypeError, ValueError, KeyError):
             return _failure("INVALID_REQUEST")
+
+    def _build_budget_quote(
+        self,
+        request: GroupOrderIntent,
+        package_policy: PortfolioGroupBudgetPolicy,
+        *,
+        now_ns: int,
+    ) -> GroupBudgetQuote:
+        """Select the quote builder only from the authenticated target context."""
+
+        current = _CURRENT_COORDINATOR_CALL.get()
+        if current is None or self._targets.get(current.target_scope) is not current.target:
+            raise ServiceExecutionGroupError("GROUP_BUDGET_TARGET_UNAVAILABLE")
+        target_scope = current.target_scope
+        target_policy = current.target.portfolio_budget_policy
+        builder = current.target.budget_quote_builder
+        if (
+            target_policy is None
+            or builder is None
+            or package_policy.fingerprint != target_policy.fingerprint
+            or request.portfolio_ref != target_scope.portfolio_ref
+            or request.strategy_id != target_scope.strategy_ref
+            or request.coordinator_principal_ref != self._identity.principal_ref
+            or not set(request.account_refs).issubset(current.target.accounts)
+            or any(leg.account_ref not in current.target.accounts for leg in request.legs)
+        ):
+            raise ServiceExecutionGroupError("GROUP_BUDGET_TARGET_MISMATCH")
+        try:
+            quote = builder(request, target_policy, now_ns=now_ns)
+        except GroupBudgetUnsupportedOrderError:
+            raise ServiceExecutionGroupError("GROUP_BUDGET_MARKET_PRICE_UNBOUNDED") from None
+        except RiskDeniedError as error:
+            code = error.code
+            if type(code) is not str or re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", code) is None:
+                code = "GROUP_BUDGET_RISK_DENIED"
+            raise ServiceExecutionGroupError(code) from None
+        except ContractValidationError:
+            raise ServiceExecutionGroupError("GROUP_BUDGET_QUOTE_INVALID") from None
+        except Exception:
+            raise ServiceExecutionGroupError("GROUP_BUDGET_QUOTE_FAILED") from None
+        if type(quote) is not GroupBudgetQuote or quote.policy_fingerprint != target_policy.fingerprint:
+            raise ServiceExecutionGroupError("GROUP_BUDGET_QUOTE_INVALID")
+        return quote
 
     def close(self) -> None:
         with self._lock:
