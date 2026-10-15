@@ -1,0 +1,28 @@
+{
+  "python": "C:/Anaconda3/python.exe",
+  "argv": [
+    "-m",
+    "pytest",
+    "-q",
+    "--tb=short",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\backtrader-bt-callbacks-root-20261016-r3\\junit.xml",
+    "--basetemp=D:\\temp\\backtrader-bt-callbacks-root-20261016-r3\\pytest-tmp",
+    "tests/integration/test_btapi_strategy_execution_callbacks_local_process.py::test_cerebro_projects_one_durable_full_fill_once_through_real_service"
+  ],
+  "cwd": "D:\\source_code\\backtrader",
+  "evidence_directory": "D:\\temp\\backtrader-bt-callbacks-root-20261016-r3",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\iteration10-sdk-6e38-fixed-source-20261016;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\temp\\iteration10-execution-743a-fixed-source-20261016\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "BT_STRATEGY_FINANCIAL_SDK_ROOT": "D:\\temp\\iteration10-sdk-6e38-fixed-source-20261016",
+    "BT_STRATEGY_FINANCIAL_BASE_ROOT": "D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "BT_STRATEGY_FINANCIAL_EXECUTION_ROOT": "D:\\temp\\iteration10-execution-743a-fixed-source-20261016\\src",
+    "BT_STRATEGY_FINANCIAL_TRANSPORT_ROOT": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ]
+}

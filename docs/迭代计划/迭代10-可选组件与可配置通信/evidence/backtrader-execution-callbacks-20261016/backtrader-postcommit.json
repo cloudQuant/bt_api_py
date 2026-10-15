@@ -1,0 +1,38 @@
+{
+  "round": 122,
+  "repository": "D:\\source_code\\backtrader",
+  "branch": "dev",
+  "parent": "1fc58a3d3f8a5d4b97c23d3623107649fb15c56f",
+  "source": "tests/integration/test_btapi_strategy_execution_callbacks_local_process.py",
+  "checkout_sha256": "4cf0f713aceeaa7b1b7d4ac2820aa1dd4b6eb3a9b2ecfd5504a25ff846e70ea0",
+  "acceptance": "AUTHOR_EXECUTED_LOCAL_SYNTHETIC_SERVICE_QA_ROOT_REVIEWED",
+  "qa_artifact_directory": "D:\\temp\\backtrader-bt-callbacks-root-20261016-r3",
+  "tests_passed": 1,
+  "pytest_exit": 0,
+  "warnings": [
+    "existing pytest asyncio_default_fixture_loop_scope config warning"
+  ],
+  "qa_artifact_sha256": {
+    "command.json": "4dc468bf75f992fff1db01e0859dd478bbc339ef365e7d069d5066bac1a6921c",
+    "exit.txt": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "junit.xml": "e9bd537049d96bb9e4515d412600885aed55a9bce30aea5ec2fd7be3d0c6c54a",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout.log": "52f604da6ad639e75bcee8c582fe39dd2b64ab93798faac95c186e780f67add2"
+  },
+  "limitations": [
+    "No full pre/post QA source or repository snapshot was recorded by this direct author runner.",
+    "Execution used a normalized fixed source export, not the Root raw Git-blob export.",
+    "Synthetic provider/admission leaves; no fresh strategy process restart or account acceptance."
+  ],
+  "unrelated_paths": [
+    "0",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "unrelated_diff_sha256": "9e790e9053c0081adc3d63c9474664a688b67231761fbeb4763212bf2f4750b1",
+  "head": "470b425d75fae37f873cd85f00ff56b150753240",
+  "committed_blob": "9673ea95ee6b32493487e340c06538e1b1fa7515",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true
+}
