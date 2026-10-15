@@ -1,0 +1,267 @@
+{
+  "business_fact_unchanged": true,
+  "case": "REG02",
+  "cleanup": {
+    "business": {
+      "cleanup_failures": [],
+      "close_message": {
+        "cleanup_history": [],
+        "reason": "request",
+        "state": "closed"
+      },
+      "close_requested_by_parent": true,
+      "exit_code": 0,
+      "forced_cleanup": false,
+      "normal_close": true,
+      "normal_close_deadline": 275813.156,
+      "process_alive_after_bounded_wait": false
+    },
+    "business_registry_after_runtime_close": {
+      "active_ids": [],
+      "registration_key_count": 4
+    },
+    "errors": [],
+    "forced_cleanup_hosts": [],
+    "runtimes": [
+      {
+        "cleanup_failures": 0,
+        "state": "closed",
+        "unregister_uncertainties": 0
+      },
+      {
+        "cleanup_failures": 0,
+        "state": "closed",
+        "unregister_uncertainties": 0
+      },
+      {
+        "cleanup_failures": 0,
+        "state": "closed",
+        "unregister_uncertainties": 0
+      },
+      {
+        "cleanup_failures": 0,
+        "state": "closed",
+        "unregister_uncertainties": 0
+      }
+    ],
+    "telemetry": {
+      "cleanup_failures": [],
+      "close_message": {
+        "cleanup_history": [],
+        "reason": "request",
+        "state": "closed"
+      },
+      "close_requested_by_parent": true,
+      "exit_code": 0,
+      "forced_cleanup": false,
+      "normal_close": true,
+      "normal_close_deadline": 275814.203,
+      "process_alive_after_bounded_wait": false
+    }
+  },
+  "evidence_level": "LOCAL_REAL_SERVICEHOST_SDK_INTEGRATION",
+  "formal_pass_claimed": false,
+  "host_children": {
+    "business": {
+      "endpoint": "tcp://127.0.0.1:58190",
+      "origins": {
+        "cwd": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r5",
+        "module_origins": {
+          "bt_api_base.service_protocol": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\base\\src\\bt_api_base\\service_protocol.py",
+          "bt_api_gateway.event_journal": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src\\bt_api_gateway\\event_journal.py",
+          "bt_api_gateway.service_component": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src\\bt_api_gateway\\service_component.py",
+          "bt_api_monitor.durable": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\durable.py",
+          "bt_api_monitor.service_component": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\service_component.py",
+          "bt_api_monitor.service_ingress": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\service_ingress.py",
+          "bt_api_py.service_components": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_components.py",
+          "bt_api_py.service_config": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_config.py",
+          "bt_api_py.service_host": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_host.py",
+          "bt_api_py.service_registry": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_registry.py",
+          "bt_api_py.service_runtime": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_runtime.py",
+          "bt_api_transport_zmq.server": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src\\bt_api_transport_zmq\\server.py",
+          "bt_api_transport_zmq.service_v2": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src\\bt_api_transport_zmq\\service_v2.py"
+        },
+        "python_executable": "C:\\anaconda3\\python.exe",
+        "python_prefix": "C:\\anaconda3",
+        "pyzmq_origin": "C:\\anaconda3\\Lib\\site-packages\\zmq\\__init__.py",
+        "pyzmq_version": "27.1.0",
+        "sdk_service_runtime_file": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_runtime.py",
+        "source_roots": {
+          "base": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\base\\src",
+          "gateway": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src",
+          "monitor": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src",
+          "sdk": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk",
+          "transport": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src"
+        },
+        "test_file": "D:\\bt_api_py\\tests\\unit\\test_service_registration_partial_failure_integration.py",
+        "test_sha256": "b619bcc6e9decd24ea86841a59ad7c99a081bf61897afc0622cda8bc0a1a8afb"
+      },
+      "pid": 57392
+    },
+    "telemetry": {
+      "endpoint": "tcp://127.0.0.1:58208",
+      "origins": {
+        "cwd": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r5",
+        "module_origins": {
+          "bt_api_base.service_protocol": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\base\\src\\bt_api_base\\service_protocol.py",
+          "bt_api_gateway.event_journal": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src\\bt_api_gateway\\event_journal.py",
+          "bt_api_gateway.service_component": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src\\bt_api_gateway\\service_component.py",
+          "bt_api_monitor.durable": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\durable.py",
+          "bt_api_monitor.service_component": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\service_component.py",
+          "bt_api_monitor.service_ingress": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\service_ingress.py",
+          "bt_api_py.service_components": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_components.py",
+          "bt_api_py.service_config": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_config.py",
+          "bt_api_py.service_host": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_host.py",
+          "bt_api_py.service_registry": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_registry.py",
+          "bt_api_py.service_runtime": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_runtime.py",
+          "bt_api_transport_zmq.server": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src\\bt_api_transport_zmq\\server.py",
+          "bt_api_transport_zmq.service_v2": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src\\bt_api_transport_zmq\\service_v2.py"
+        },
+        "python_executable": "C:\\anaconda3\\python.exe",
+        "python_prefix": "C:\\anaconda3",
+        "pyzmq_origin": "C:\\anaconda3\\Lib\\site-packages\\zmq\\__init__.py",
+        "pyzmq_version": "27.1.0",
+        "sdk_service_runtime_file": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_runtime.py",
+        "source_roots": {
+          "base": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\base\\src",
+          "gateway": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src",
+          "monitor": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src",
+          "sdk": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk",
+          "transport": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src"
+        },
+        "test_file": "D:\\bt_api_py\\tests\\unit\\test_service_registration_partial_failure_integration.py",
+        "test_sha256": "b619bcc6e9decd24ea86841a59ad7c99a081bf61897afc0622cda8bc0a1a8afb"
+      },
+      "pid": 20124
+    }
+  },
+  "origins": {
+    "cwd": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r5",
+    "module_origins": {
+      "bt_api_base.service_protocol": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\base\\src\\bt_api_base\\service_protocol.py",
+      "bt_api_gateway.event_journal": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src\\bt_api_gateway\\event_journal.py",
+      "bt_api_gateway.service_component": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src\\bt_api_gateway\\service_component.py",
+      "bt_api_monitor.durable": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\durable.py",
+      "bt_api_monitor.service_component": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\service_component.py",
+      "bt_api_monitor.service_ingress": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src\\bt_api_monitor\\service_ingress.py",
+      "bt_api_py.service_components": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_components.py",
+      "bt_api_py.service_config": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_config.py",
+      "bt_api_py.service_host": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_host.py",
+      "bt_api_py.service_registry": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_registry.py",
+      "bt_api_py.service_runtime": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_runtime.py",
+      "bt_api_transport_zmq.server": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src\\bt_api_transport_zmq\\server.py",
+      "bt_api_transport_zmq.service_v2": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src\\bt_api_transport_zmq\\service_v2.py"
+    },
+    "python_executable": "C:\\anaconda3\\python.exe",
+    "python_prefix": "C:\\anaconda3",
+    "pyzmq_origin": "C:\\anaconda3\\Lib\\site-packages\\zmq\\__init__.py",
+    "pyzmq_version": "27.1.0",
+    "sdk_service_runtime_file": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk\\bt_api_py\\service_runtime.py",
+    "source_roots": {
+      "base": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\base\\src",
+      "gateway": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\gateway\\src",
+      "monitor": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\monitor\\src",
+      "sdk": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\sdk",
+      "transport": "D:\\temp\\iteration10-reg02-partial-failure-20261015-r1\\sources\\transport\\src"
+    },
+    "test_file": "D:\\bt_api_py\\tests\\unit\\test_service_registration_partial_failure_integration.py",
+    "test_sha256": "b619bcc6e9decd24ea86841a59ad7c99a081bf61897afc0622cda8bc0a1a8afb"
+  },
+  "phases": {
+    "baseline": {
+      "active_registry_ids": [
+        "40a5234c2a964a5aa5505cbbdc06f23a"
+      ],
+      "business_event": {
+        "account_scope": "journal:reg02-account",
+        "event_id": "reg02-existing-position-fact",
+        "kind": "position_update",
+        "observed_at": 1800000000.0,
+        "payload": {
+          "quantity": "7",
+          "symbol": "REG02-SYNTH"
+        },
+        "sequence": 1,
+        "strategy_scope": "journal:reg02-strategy"
+      },
+      "registration_id": "40a5234c2a964a5aa5505cbbdc06f23a",
+      "state": "registered"
+    },
+    "optional_telemetry_missing": {
+      "active_registration_after_optional_close": [
+        "40a5234c2a964a5aa5505cbbdc06f23a"
+      ],
+      "active_registration_with_optional_runtime": [
+        "40a5234c2a964a5aa5505cbbdc06f23a",
+        "d351881dab1b40dca7de7ab3e5e7452f"
+      ],
+      "business_event": {
+        "account_scope": "journal:reg02-account",
+        "event_id": "reg02-existing-position-fact",
+        "kind": "position_update",
+        "observed_at": 1800000000.0,
+        "payload": {
+          "quantity": "7",
+          "symbol": "REG02-SYNTH"
+        },
+        "sequence": 1,
+        "strategy_scope": "journal:reg02-strategy"
+      },
+      "degradation_codes": [
+        "REQUEST_NOT_SENT"
+      ],
+      "degraded_count": 1,
+      "registered_mounts": [
+        "store.account"
+      ],
+      "runtime_state": "closed",
+      "transient_business_registration_id": "d351881dab1b40dca7de7ab3e5e7452f",
+      "unavailable_mount_call_code": "AMBIGUOUS_OR_MISSING_ROUTE",
+      "unbound_local_endpoint": "tcp://127.0.0.1:58276"
+    },
+    "required_authorization_rejection": {
+      "business_registration_after": [
+        "40a5234c2a964a5aa5505cbbdc06f23a"
+      ],
+      "business_registration_before": [
+        "40a5234c2a964a5aa5505cbbdc06f23a"
+      ],
+      "cleanup_failures": 0,
+      "failed_runtime_call_code": "SESSION_NOT_REGISTERED",
+      "rejected_service_active_ids": [],
+      "rejected_service_registration_keys": [],
+      "runtime_state": "failed",
+      "service_host": "reg02-telemetry-service",
+      "service_reply_code": "SCOPE_DENIED",
+      "transient_registration_key_rows": [
+        [
+          "bcada62adb347df054dd11e540c6840a1f6a0b51c5f4d61103bf5bd273c96303",
+          "4e4ed8996e964f9ea5cef09f82a2b637"
+        ]
+      ],
+      "unknown_registrations": 0,
+      "unregister_uncertainties": 0
+    },
+    "required_endpoint_missing": {
+      "business_registration_after": [
+        "40a5234c2a964a5aa5505cbbdc06f23a"
+      ],
+      "business_registration_before": [
+        "40a5234c2a964a5aa5505cbbdc06f23a"
+      ],
+      "cleanup_failures": 0,
+      "failed_runtime_call_code": "SESSION_NOT_REGISTERED",
+      "runtime_state": "failed",
+      "service_reply_or_transport_code": "REQUEST_NOT_SENT",
+      "transient_registration_key_rows": [
+        [
+          "f536685fc2cb62ffa459c7659facd0311859b089a42a69e7aea8430c6bc44006",
+          "ec9f223fa20348df8b6551f881c97cdf"
+        ]
+      ],
+      "unbound_local_endpoint": "tcp://127.0.0.1:58257",
+      "unknown_registrations": 0,
+      "unregister_uncertainties": 0
+    }
+  }
+}

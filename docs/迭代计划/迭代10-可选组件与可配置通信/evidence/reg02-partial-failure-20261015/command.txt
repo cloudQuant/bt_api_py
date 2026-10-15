@@ -1,0 +1,11 @@
+working_directory=D:\temp\iteration10-reg02-partial-failure-20261015-r5
+executable=C:\anaconda3\python.exe
+argv=-m pytest --import-mode=importlib --noconftest -q D:\bt_api_py\tests\unit\test_service_registration_partial_failure_integration.py --junitxml=D:\temp\iteration10-reg02-partial-failure-20261015-r5\junit.xml
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+PYTHONPATH=D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\sdk;D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\base\src;D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\gateway\src;D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\monitor\src;D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\transport\src;D:\bt_api_py
+REG02_EVIDENCE_DIR=D:\temp\iteration10-reg02-partial-failure-20261015-r5
+REG02_SDK_ROOT=D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\sdk
+REG02_BASE_ROOT=D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\base\src
+REG02_GATEWAY_ROOT=D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\gateway\src
+REG02_MONITOR_ROOT=D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\monitor\src
+REG02_TRANSPORT_ROOT=D:\temp\iteration10-reg02-partial-failure-20261015-r1\sources\transport\src
