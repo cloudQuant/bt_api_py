@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T20:40:05.319804+00:00",
+  "source_count": 2159,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "1cf08d2a4673ea557bf8d11e7a1642e541ea7199"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "1cf08d2a4673ea557bf8d11e7a1642e541ea7199"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "afddfd2fb56fee5888ce8437100e3fc3762be7706c694dd5e6493b6fe25fddc1",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "AFI07_FIXED_SDK_LOCAL_MULTIPROCESS_SYNTHETIC_OPERATION"
+}

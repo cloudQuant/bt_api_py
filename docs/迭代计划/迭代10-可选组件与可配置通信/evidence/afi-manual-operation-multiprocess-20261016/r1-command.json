@@ -1,0 +1,35 @@
+{
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "python": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+  "argv": [
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-q",
+    "tests/test_service_read_authorized_http_integration.py::test_manual_order_operation_is_durable_across_concurrent_processes_and_restart",
+    "--junitxml=D:/temp/afi07_operation_multiprocess_20261016_r1/junit.xml"
+  ],
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONPATH": [
+      "D:/temp/afi07_fixed_sdk_40d3e17_20261016/sdk-root",
+      "D:/temp/afi07_fixed_sdk_40d3e17_20261016/base/src",
+      "D:/temp/afi07_fixed_sdk_40d3e17_20261016/execution/src",
+      "D:/temp/afi07_fixed_sdk_40d3e17_20261016/gateway/src",
+      "D:/temp/afi07_fixed_sdk_40d3e17_20261016/monitor/src",
+      "D:/temp/afi07_fixed_sdk_40d3e17_20261016/risk/src",
+      "D:/temp/afi07_fixed_sdk_40d3e17_20261016/transport-zmq/src"
+    ]
+  },
+  "repo_head": "1cf08d2a4673ea557bf8d11e7a1642e541ea7199",
+  "repo_branch": "dev",
+  "test_path": "src/backend/tests/test_service_read_authorized_http_integration.py",
+  "test_sha256_before": "565126F7A92FDB2D50C45569FA8C0186BFBDABBBB6EB8F38100057AF0B6EFD72",
+  "sdk_source_commit": "40d3e17af111ff47dd6a283455e0620543a0d079",
+  "sdk_manifest_sha256": "F5751B544DF2ECA0316F695A2DDFE01D045A9CA8B22FE7770BEE05DF6A705105",
+  "sdk_manifest_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\manifest.json",
+  "result_directory": "D:/temp/afi07_operation_multiprocess_20261016_r1"
+}

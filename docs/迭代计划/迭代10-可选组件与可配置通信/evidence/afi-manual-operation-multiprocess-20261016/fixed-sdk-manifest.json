@@ -1,0 +1,76 @@
+{
+  "purpose": "FIXED_COMMITTED_SDK_SOURCE_ARTIFACT_NOT_WORKTREE",
+  "root_commit": "40d3e17af111ff47dd6a283455e0620543a0d079",
+  "packages": [
+    {
+      "name": "sdk-root",
+      "repository": "D:\\bt_api_py",
+      "commit": "40d3e17af111ff47dd6a283455e0620543a0d079",
+      "path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\sdk-root",
+      "archive": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\sdk-root.tar",
+      "archive_size": 18708480,
+      "archive_sha256": "9dc5589191d603a205d27c1ba8dfe61c9cec402f6672370fb1635b22126c3e35",
+      "python_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\sdk-root"
+    },
+    {
+      "name": "base",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\base",
+      "archive": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\base.tar",
+      "archive_size": 757760,
+      "archive_sha256": "7b5ae3b3441858b86f682e8cf88e9e127d8650425e412ac467ed7bd3d68a4e5d",
+      "python_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\base\\src"
+    },
+    {
+      "name": "execution",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "commit": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+      "path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\execution",
+      "archive": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\execution.tar",
+      "archive_size": 1628160,
+      "archive_sha256": "778b8eb74a69c37a2eb7b4cfa1f1e8c19c0aa7d8c5be5b5a6f5e0a3de245de88",
+      "python_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\execution\\src"
+    },
+    {
+      "name": "gateway",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+      "commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\gateway",
+      "archive": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\gateway.tar",
+      "archive_size": 399360,
+      "archive_sha256": "9962e37d547101478117d146bffbdd8def268e1fb8b90633b8f6782ada17907e",
+      "python_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\gateway\\src"
+    },
+    {
+      "name": "monitor",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_monitor",
+      "commit": "536a4f04747182749fabdac5e28624f80465bc53",
+      "path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\monitor",
+      "archive": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\monitor.tar",
+      "archive_size": 389120,
+      "archive_sha256": "3fb3617f0423a811f4e0ab31d2ddd45002c3d24885dfd38d524fb797560acee1",
+      "python_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\monitor\\src"
+    },
+    {
+      "name": "risk",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "commit": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+      "path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\risk",
+      "archive": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\risk.tar",
+      "archive_size": 829440,
+      "archive_sha256": "05707e77b8773feb9410e38c44bbd15baa61fc15a562bb56610056b0378c5b5a",
+      "python_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\risk\\src"
+    },
+    {
+      "name": "transport-zmq",
+      "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+      "commit": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\transport-zmq",
+      "archive": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\transport-zmq.tar",
+      "archive_size": 102400,
+      "archive_sha256": "0b4693673311939867d71158091f804f2ca41937cb173a3d3ee1777fc3c0f6a7",
+      "python_path": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\transport-zmq\\src"
+    }
+  ]
+}

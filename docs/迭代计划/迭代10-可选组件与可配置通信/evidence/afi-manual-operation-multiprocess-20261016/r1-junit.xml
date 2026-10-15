@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="15.566" timestamp="2026-10-16T04:22:56.379211+08:00" hostname="yun"><testcase classname="test_service_read_authorized_http_integration" name="test_manual_order_operation_is_durable_across_concurrent_processes_and_restart" time="13.151"><failure message="AssertionError: ('afi07-manual-order-app-1', ('error', 'imports', 'KeyError', 'UNCLASSIFIED'))&#10;manual-order integration phase: database_setup&#10;manual-order cross-process cleanup reported 4 failure(s)">tests\test_service_read_authorized_http_integration.py:5342: in test_manual_order_operation_is_durable_across_concurrent_processes_and_restart
+    _run_manual_order_cross_process_integration(tmp_path)
+tests\test_service_read_authorized_http_integration.py:5330: in _run_manual_order_cross_process_integration
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_authorized_http_integration.py:5186: in _run_manual_order_cross_process_integration
+    ready_message = _receive_manual_order_app_message(app_server)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_service_read_authorized_http_integration.py:4915: in _receive_manual_order_app_message
+    raise AssertionError((server["label"], message))
+E   AssertionError: ('afi07-manual-order-app-1', ('error', 'imports', 'KeyError', 'UNCLASSIFIED'))
+E   manual-order integration phase: database_setup
+E   manual-order cross-process cleanup reported 4 failure(s)</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,28 @@
+{
+  "repo": "D:\\source_code\\ai-for-investor",
+  "parent": "1cf08d2a4673ea557bf8d11e7a1642e541ea7199",
+  "paths": [
+    "src/backend/tests/test_service_read_authorized_http_integration.py"
+  ],
+  "raw_sha256": {
+    "src/backend/tests/test_service_read_authorized_http_integration.py": "696911df54be53565b470a49d7fcec722af81a8d01d973dd3b0799da44067fab"
+  },
+  "filtered_blob_ids": {
+    "src/backend/tests/test_service_read_authorized_http_integration.py": "e93dd26ffcb077b2c58a5784eee60be7ed64238f"
+  },
+  "unrelated_paths": [
+    "README.md",
+    "scripts/README.md",
+    "scripts/ops/app.bat",
+    "scripts/windows/restart_app.bat",
+    "scripts/windows/start_app.bat",
+    "scripts/windows/stop_app.bat"
+  ],
+  "unrelated_diff_sha256": "7e14f5453fb81df4b9c0483c44a3e1f8632b85aeebb22b4a9d4a7da6831926af",
+  "unrelated_status_sha256": "749ef73a0c76ea437e3ba20f70809e27987aaaf8b38b87338b0becbaec2d963e",
+  "head": "13ab6f912a568877846e25f42ae94fd3969de61e",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\afi07_operation_multiprocess_20261016_r2\\result.json",
+  "evidence_level": "AFI07_FIXED_SDK_LOCAL_MULTIPROCESS_SYNTHETIC_OPERATION"
+}

@@ -1,0 +1,9 @@
+{
+  "exit_code": 1,
+  "launch_error_type": null,
+  "test_sha256_after": "565126F7A92FDB2D50C45569FA8C0186BFBDABBBB6EB8F38100057AF0B6EFD72",
+  "sdk_manifest_sha256_after": "F5751B544DF2ECA0316F695A2DDFE01D045A9CA8B22FE7770BEE05DF6A705105",
+  "stdout_bytes": 3188,
+  "stderr_bytes": 0,
+  "junit_exists": true
+}

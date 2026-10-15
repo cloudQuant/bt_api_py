@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-q",
+    "--junitxml=D:\\temp\\afi07_operation_multiprocess_20261016_r2\\junit.xml",
+    "--basetemp=D:\\temp\\afi07_operation_multiprocess_20261016_r2\\pytest-tmp",
+    "tests/test_service_read_authorized_http_integration.py::test_manual_order_operation_is_durable_across_concurrent_processes_and_restart"
+  ],
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\sdk-root;D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\base\\src;D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\execution\\src;D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\gateway\\src;D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\monitor\\src;D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\risk\\src;D:\\temp\\afi07_fixed_sdk_40d3e17_20261016\\transport-zmq\\src"
+  },
+  "unset_environment": [
+    "PYTHONHOME",
+    "PYTEST_ADDOPTS",
+    "PYTEST_PLUGINS"
+  ],
+  "started_utc": "2026-10-15T20:39:35.492226+00:00"
+}
