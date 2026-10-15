@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-p",
+    "iteration10_group_origin_r2",
+    "-o",
+    "addopts=",
+    "-o",
+    "pythonpath=",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-group-unknown-root-20261016-r2\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-group-unknown-root-20261016-r2\\pytest-tmp",
+    "tests/test_group_coordinator.py::test_lost_reserve_reply_with_unknown_code_recovers_active_vector_by_query",
+    "tests/test_group_coordinator.py::test_group_cross_account_denial_releases_prior_vector_before_any_order",
+    "tests/test_group_coordinator.py::test_group_coordinator_reserves_one_vector_sizes_hedge_and_pairs"
+  ],
+  "cwd": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\iteration10-group-unknown-candidate-20261016-r1\\support;D:\\temp\\iteration10-group-unknown-candidate-20261016-r1\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T18:40:00.173894+00:00"
+}

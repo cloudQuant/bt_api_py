@@ -1,0 +1,5 @@
+ROOT_SOURCE_ORIGIN bt_api_execution.group_coordinator D:\temp\iteration10-group-unknown-candidate-20261016-r1\src\bt_api_execution\group_coordinator.py
+ROOT_SOURCE_ORIGIN bt_api_execution.store D:\temp\iteration10-group-unknown-candidate-20261016-r1\src\bt_api_execution\store.py
+...                                                                      [100%]
+- generated xml file: D:\temp\iteration10-group-unknown-root-20261016-r2\junit.xml -
+3 passed in 0.66s

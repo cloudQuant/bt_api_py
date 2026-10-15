@@ -1,0 +1,29 @@
+{
+  "repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "parent": "1373b13ecf29d78addc988921a0234d24101c837",
+  "paths": [
+    "src/bt_api_execution/group_coordinator.py",
+    "tests/test_group_coordinator.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_execution/group_coordinator.py": "3d7412e9b52698560db26cc866c3e1a3a80e27b2972bfe031c7c29400f8b615f",
+    "tests/test_group_coordinator.py": "5cf79f98b0a29862f29cc54937e79b2e17547d26ad775deec054d9b98da0deea"
+  },
+  "filtered_blob_ids": {
+    "src/bt_api_execution/group_coordinator.py": "ea90b20eb2ff4edc91125adeb8767f55e1274f74",
+    "tests/test_group_coordinator.py": "0c7af93690cc3e16d07ee7cda93b02f7baeee3f6"
+  },
+  "unrelated_paths": [
+    "src/bt_api_execution/__init__.py",
+    "src/bt_api_execution/facade.py",
+    "src/bt_api_execution/service_order_entry.py",
+    "src/bt_api_execution/store.py"
+  ],
+  "unrelated_diff_sha256": "0e5e16210b93234222a1b1e9f9f8f9d3f129ae8d004526ad2206cec7afcf6d5d",
+  "unrelated_status_sha256": "2d28e647e1d5d7b7478df59400e3b7da1568f8b94a40e4ac01b8e5286d42b977",
+  "head": "743a0b9feef5b625fbd98269e8ab374f4d80adc8",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-group-unknown-root-20261016-r2\\result.json",
+  "evidence_level": "EXECUTION_GROUP_LOST_RESERVATION_REPLY_SQLITE_REOPEN_SYNTHETIC_PORT_ONLY_NOT_SERVICEHOST_OR_COMPLETE_ARB_ACCEPTANCE"
+}

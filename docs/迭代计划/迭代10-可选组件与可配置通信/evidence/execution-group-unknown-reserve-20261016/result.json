@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T18:40:01.666337+00:00",
+  "source_count": 138,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "1373b13ecf29d78addc988921a0234d24101c837",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "1373b13ecf29d78addc988921a0234d24101c837",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "e89f678bd47a93dfc03c02613bbb6a887144219792946e890fd97371cba68cdc",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "EXECUTION_GROUP_LOST_RESERVATION_REPLY_SQLITE_REOPEN_SYNTHETIC_PORT_ONLY_NOT_SERVICEHOST_OR_COMPLETE_ARB_ACCEPTANCE"
+}
