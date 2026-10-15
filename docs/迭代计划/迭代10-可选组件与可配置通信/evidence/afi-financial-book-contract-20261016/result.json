@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T18:33:06.048919+00:00",
+  "source_count": 2094,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "db32c3ce46e6b8e03bdaef42f3e18ce20c64c4ac"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "db32c3ce46e6b8e03bdaef42f3e18ce20c64c4ac"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "bff26f86d6458b9df6242ff80e216d977e8acca7ab312824c28b658e5354a0be",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "AFI_FIXED_SDK_SERVICE_HANDLE_FINANCIAL_WIRE_COMPATIBILITY_SYNTHETIC_CONTRACT_ONLY_NOT_HOST_PROVIDER_OR_COMPLETE_AFI02_ACCEPTANCE"
+}

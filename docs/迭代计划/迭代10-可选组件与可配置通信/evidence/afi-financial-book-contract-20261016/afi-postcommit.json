@@ -1,0 +1,31 @@
+{
+  "repo": "D:\\source_code\\ai-for-investor",
+  "parent": "db32c3ce46e6b8e03bdaef42f3e18ce20c64c4ac",
+  "paths": [
+    "src/backend/app/services/service_read/contracts.py",
+    "src/backend/tests/test_service_read_account_book_contract.py"
+  ],
+  "raw_sha256": {
+    "src/backend/app/services/service_read/contracts.py": "818755f8b0b5d72fb7fa21385f17f7293abf0f555a6326f58017e970e9d2ef15",
+    "src/backend/tests/test_service_read_account_book_contract.py": "c3b155c2e99509c4629f019e1c8ab4ff487b30a9ba6f96b24f8172ed4b187989"
+  },
+  "filtered_blob_ids": {
+    "src/backend/app/services/service_read/contracts.py": "5a03f5fca226c752cbecb5c0dc1c168cedcf2e17",
+    "src/backend/tests/test_service_read_account_book_contract.py": "9f98d09fe439cfd57b0c462b7fa10f3a1696972e"
+  },
+  "unrelated_paths": [
+    "README.md",
+    "scripts/README.md",
+    "scripts/ops/app.bat",
+    "scripts/windows/restart_app.bat",
+    "scripts/windows/start_app.bat",
+    "scripts/windows/stop_app.bat"
+  ],
+  "unrelated_diff_sha256": "7e14f5453fb81df4b9c0483c44a3e1f8632b85aeebb22b4a9d4a7da6831926af",
+  "unrelated_status_sha256": "749ef73a0c76ea437e3ba20f70809e27987aaaf8b38b87338b0becbaec2d963e",
+  "head": "dd1e14a287cebc1137999045d1332d86bdab3806",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-afi-financial-contract-root-20261016-r2\\result.json",
+  "evidence_level": "AFI_FIXED_SDK_SERVICE_HANDLE_FINANCIAL_WIRE_COMPATIBILITY_SYNTHETIC_CONTRACT_ONLY_NOT_HOST_PROVIDER_OR_COMPLETE_AFI02_ACCEPTANCE"
+}

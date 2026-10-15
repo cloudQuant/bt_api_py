@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-afi-financial-contract-root-20261016-r2\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-afi-financial-contract-root-20261016-r2\\pytest-tmp",
+    "tests/test_service_read_account_book_contract.py"
+  ],
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "environment": {
+    "PYTHONPATH": "D:\\source_code\\ai-for-investor\\src\\backend;D:\\temp\\afi_sdk115_accountbook_r1\\root;D:\\temp\\afi_sdk115_accountbook_r1\\base\\src;D:\\temp\\afi_sdk115_accountbook_r1\\execution\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "AFI_SDK115_ROOT_SRC": "D:\\temp\\afi_sdk115_accountbook_r1\\root",
+    "AFI_SDK115_BASE_SRC": "D:\\temp\\afi_sdk115_accountbook_r1\\base\\src",
+    "AFI_SDK115_EXECUTION_SRC": "D:\\temp\\afi_sdk115_accountbook_r1\\execution\\src"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T18:33:04.215552+00:00"
+}
