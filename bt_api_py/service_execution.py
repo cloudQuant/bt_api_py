@@ -379,10 +379,17 @@ class ServiceExecutionClient:
         expected_journal_generation: str,
         expected_directory_revision: str,
         limit: int,
+        version: int = 1,
     ) -> Mapping[str, Any]:
-        """Read a bounded page pinned to the supplied durable journal cut."""
+        """Read a bounded page pinned to the supplied durable journal cut.
+
+        Version two is an explicit opt-in for receipt-backed managed-paper
+        fill facts. The default stays on the unchanged version-one schema.
+        """
 
         self._assert_owner_thread()
+        if type(version) is not int or version not in {1, 2}:
+            raise ServiceExecutionError("INVALID_RECOVERY_VERSION")
         if type(after_sequence) is not int or after_sequence < 0:
             raise ServiceExecutionError("INVALID_RECOVERY_CURSOR")
         if (
@@ -401,7 +408,7 @@ class ServiceExecutionClient:
             _ACCOUNT_BOOKS_QUERY_OPERATION,
             {
                 "view": "EVENTS_AFTER",
-                "version": 1,
+                "version": version,
                 "after_sequence": after_sequence,
                 "expected_journal_generation": expected_journal_generation,
                 "expected_directory_revision": expected_directory_revision,

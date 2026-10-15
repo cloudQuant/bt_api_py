@@ -20,6 +20,7 @@ from typing import Any, Protocol
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
+    PAPER_PROVIDER,
     AccountBookReconciliation,
     AccountFinancialProjectionV1,
     AllocationOwnerKind,
@@ -72,6 +73,44 @@ _MAX_RESULT_BYTES = 48 * 1024
 _RECOVERY_SNAPSHOT_VIEW = "RECOVERY_SNAPSHOT"
 _EVENTS_AFTER_VIEW = "EVENTS_AFTER"
 _RECOVERY_PAGE_MAX = 128
+_RECOVERY_PAGE_VERSIONS = frozenset({1, 2})
+_EVENTS_AFTER_REQUEST_FIELDS = frozenset(
+    {
+        "view",
+        "version",
+        "after_sequence",
+        "expected_journal_generation",
+        "expected_directory_revision",
+        "limit",
+    }
+)
+_PAPER_FILL_V2_FIELDS = frozenset(
+    {
+        "schema",
+        "time_source",
+        "fill_id",
+        "match_time_ns",
+        "quantity",
+        "price",
+        "commission",
+        "commission_currency",
+        "commission_model_id",
+        "commission_model_version",
+        "event_id",
+        "event_sequence",
+        "journal_generation",
+        "scope_key",
+        "intent_id",
+        "intent_fingerprint",
+        "account_ref",
+        "strategy_ref",
+        "quote_source_ref",
+        "quote_generation",
+        "quote_cursor",
+        "quote_instrument",
+        "receipt_sha256",
+    }
+)
 _RECOVERY_REASON = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
 _RECOVERY_HEX32 = re.compile(r"^[0-9a-f]{32}$")
 _RECOVERY_HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -541,14 +580,28 @@ class ExecutionAccountBookReadAdapter:
         records = {
             (item.record.scope_key, item.record.intent_id): item.record for item in page.intents
         }
-        events = [
-            _recovery_event_result(
-                event,
-                intents[(event.scope_key, event.intent_id)],
-                records[(event.scope_key, event.intent_id)],
-            )
-            for event in page.events
-        ]
+        scopes = {item.record.scope_key: item.intent.scope for item in page.intents}
+        events: list[dict[str, Any]] = []
+        for event in page.events:
+            key = (event.scope_key, event.intent_id)
+            intent = intents[key]
+            record = records[key]
+            projected = _recovery_event_result(event, intent, record)
+            if request["version"] == 2 and event.event_type == "provider_observation":
+                execution_scope = scopes.get(event.scope_key)
+                if execution_scope is None:
+                    raise ValueError("recovery event has no selected execution scope")
+                paper_fill = _managed_paper_fill_v2_projection(
+                    self._store,
+                    event,
+                    intent,
+                    record,
+                    execution_scope,
+                    projected["details"],
+                )
+                if paper_fill is not None:
+                    projected["details"]["paper_fill_v2"] = paper_fill
+            events.append(projected)
         coverage = _recovery_cut_result(
             page.cut,
             directory.revision,
@@ -565,7 +618,7 @@ class ExecutionAccountBookReadAdapter:
         )
         return {
             "view": _EVENTS_AFTER_VIEW,
-            "version": 1,
+            "version": request["version"],
             "coverage": coverage,
             "events": events,
         }
@@ -756,24 +809,22 @@ class ExecutionAccountBookReadAdapter:
 def _recovery_request(arguments: Mapping[str, Any]) -> Mapping[str, Any] | None:
     """Parse the versioned, read-only journal views without accepting filters."""
 
-    if not arguments:
+    if not arguments or type(arguments.get("view")) is not str:
         return None
-    if type(arguments.get("view")) is not str or type(arguments.get("version")) is not int:
-        return None
-    if arguments["version"] != 1:
+    version = arguments.get("version")
+    if type(version) is not int:
         return None
     if arguments["view"] == _RECOVERY_SNAPSHOT_VIEW:
+        if version != 1:
+            return None
         if set(arguments) != {"view", "version"}:
             return None
         return MappingProxyType({"view": _RECOVERY_SNAPSHOT_VIEW, "version": 1})
-    if arguments["view"] != _EVENTS_AFTER_VIEW or set(arguments) != {
-        "view",
-        "version",
-        "after_sequence",
-        "expected_journal_generation",
-        "expected_directory_revision",
-        "limit",
-    }:
+    if (
+        arguments["view"] != _EVENTS_AFTER_VIEW
+        or version not in _RECOVERY_PAGE_VERSIONS
+        or set(arguments) != _EVENTS_AFTER_REQUEST_FIELDS
+    ):
         return None
     after_sequence = arguments["after_sequence"]
     limit = arguments["limit"]
@@ -795,7 +846,7 @@ def _recovery_request(arguments: Mapping[str, Any]) -> Mapping[str, Any] | None:
     return MappingProxyType(
         {
             "view": _EVENTS_AFTER_VIEW,
-            "version": 1,
+            "version": version,
             "after_sequence": after_sequence,
             "expected_journal_generation": generation,
             "expected_directory_revision": revision,
@@ -1041,6 +1092,80 @@ def _recovery_event_result(
         "event_sha256": event_sha256,
         "details": details,
     }
+
+
+def _managed_paper_fill_v2_projection(
+    store: SqliteExecutionStore,
+    event: ExecutionEvent,
+    intent: OrderIntent,
+    record: ExecutionRecord,
+    scope: ExecutionScope,
+    details: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Project only a store-validated managed-paper V2 match receipt.
+
+    Version-one events remain unchanged. Version two exposes no fill facts for
+    legacy receipts or non-paper events, and never substitutes event commit
+    time for the receipt's explicit managed-paper match time.
+    """
+
+    if scope.provider != PAPER_PROVIDER:
+        return None
+    from bt_api_execution.paper_execution import PaperMatchReceiptV2
+
+    read_receipt = getattr(store, "get_managed_paper_fill_v2_for_event", None)
+    if not callable(read_receipt):
+        raise ValueError("managed-paper V2 reader is unavailable")
+    receipt = read_receipt(
+        event.event_id,
+        event_sequence=event.sequence,
+        journal_generation=event.journal_incarnation_id,
+        scope=scope,
+    )
+    if receipt is None:
+        return None
+    if type(receipt) is not PaperMatchReceiptV2:
+        raise ValueError("managed-paper V2 reader returned an invalid receipt")
+    if (
+        event.event_type != "provider_observation"
+        or event.state is not ExecutionState.FILLED
+        or type(intent) is not OrderIntent
+        or type(record) is not ExecutionRecord
+        or type(scope) is not ExecutionScope
+        or intent.scope != scope
+        or event.scope_key != scope.key
+        or intent.intent_id != event.intent_id
+        or record.intent_id != event.intent_id
+        or record.scope_key != event.scope_key
+        or record.payload_sha256 != intent.fingerprint
+        or record.state is not ExecutionState.FILLED
+        or record.average_price is None
+        or record.cumulative_commission is None
+    ):
+        raise ValueError("managed-paper V2 receipt does not match its durable execution row")
+    fill = receipt.to_fill_fact_payload()
+    expected_receipt_fields = _PAPER_FILL_V2_FIELDS | {"event_created_at_ns"}
+    if type(fill) is not dict or set(fill) != expected_receipt_fields:
+        raise ValueError("managed-paper V2 receipt has an invalid public shape")
+    if (
+        fill["event_id"] != event.event_id
+        or fill["event_sequence"] != event.sequence
+        or fill["journal_generation"] != event.journal_incarnation_id
+        or fill["scope_key"] != event.scope_key
+        or fill["intent_id"] != intent.intent_id
+        or fill["intent_fingerprint"] != intent.fingerprint
+        or fill["account_ref"] != scope.account_ref
+        or fill["strategy_ref"] != scope.strategy_id
+        or fill["quantity"] != details.get("filled_quantity")
+        or fill["price"] != details.get("average_price")
+        or fill["commission"] != details.get("cumulative_commission")
+        or fill["commission_currency"] != details.get("cumulative_commission_currency")
+        or fill["quantity"] != format(record.filled_quantity, "f")
+        or fill["price"] != format(record.average_price, "f")
+        or fill["commission"] != format(record.cumulative_commission, "f")
+    ):
+        raise ValueError("managed-paper V2 receipt binding differs from its observation")
+    return {key: fill[key] for key in _PAPER_FILL_V2_FIELDS}
 
 
 def _recovery_observation_details(
