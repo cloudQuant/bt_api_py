@@ -1185,6 +1185,15 @@ def build_component(
             if resources.values["account_books"] is None:
                 raise ServiceComponentError("INVALID_ACCOUNT_BOOK_RESOURCES")
             expected_keys = expected_keys | {"account_books"}
+        if (
+            spec.component == "execution"
+            and spec.options.get("role") == "account_owner"
+            and "service.order_entry" in public_ports
+            and "paper_owner_domain" in resources.values
+        ):
+            if resources.values["paper_owner_domain"] is None:
+                raise ServiceComponentError("INVALID_PAPER_OWNER_DOMAIN_RESOURCE")
+            expected_keys = expected_keys | {"paper_owner_domain"}
         if set(resources.values) != set(expected_keys):
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
         account_risk_policy_bindings, account_risk_policy_required_ports = (
@@ -1480,15 +1489,20 @@ def build_component(
                     # A provider-capable write route must not silently become
                     # unprotected; the composition root states its policy.
                     raise ServiceComponentError("ADMISSION_POLICY_REQUIRED")
+                constructor_args = {
+                    "admission_gate": order_gate,
+                    "cancel_admission_gate": cancel_gate,
+                    "basic_admission_gate": basic_gate,
+                    "allow_unprotected": allow_unprotected,
+                    "account_books_source": values.get("account_books"),
+                }
+                if "paper_owner_domain" in values:
+                    constructor_args["paper_owner_domain"] = values["paper_owner_domain"]
                 adapter = constructor(
                     values["store"],
                     values["targets"],
                     values["dispatch"],
-                    admission_gate=order_gate,
-                    cancel_admission_gate=cancel_gate,
-                    basic_admission_gate=basic_gate,
-                    allow_unprotected=allow_unprotected,
-                    account_books_source=values.get("account_books"),
+                    **constructor_args,
                 )
                 if "service.order_entry" in spec.bind_ports:
                     recover = getattr(adapter, "recover_interrupted_dispatches", None)

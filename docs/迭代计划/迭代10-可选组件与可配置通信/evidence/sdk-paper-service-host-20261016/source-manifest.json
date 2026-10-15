@@ -1,0 +1,225 @@
+{
+  "kind": "READ_ONLY_PAPER_HOST_DELIVERY_CANDIDATE",
+  "status": "CANDIDATE_ONLY_NO_STAGE_OR_COMMIT",
+  "sdk_checkout": "D:\\bt_api_py",
+  "base_commit": "9d1dc457af0e0e4e94895ca215a27137e86fa20f",
+  "checkout_head_at_capture_start": "748d8b760e888396a807d674f46739454d93f39c",
+  "checkout_head_at_capture_end": "748d8b760e888396a807d674f46739454d93f39c",
+  "execution_head_from_accepted_qa": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+  "candidate_blob_directory": "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-delivery-r1\\candidate",
+  "diff_artifact": null,
+  "diff_note": "No patch emitted; Root may generate a line-oriented Git diff from the pinned base blobs and candidate blobs.",
+  "files": [
+    {
+      "path": "bt_api_py/service_components.py",
+      "scope": "only paper_owner_domain wiring hunks",
+      "head_sha256": "aa4bbc716b6108524a46c47bf9794110d49e7d758b6cb5b9f40fe46312933799",
+      "head_git_blob_oid": "5fbe37721b446ecaef43ab0c592405415ba57399",
+      "checkout_sha256": "c46855416d0e1bdb8b0a36e91b563c098d1fdd46079fe1de97c08917b19c1356",
+      "checkout_bytes": 92102,
+      "candidate_sha256": "767767902b03a790080ff34c2b5fbf0b00946866bd4e5daf6d3fa235dda22854",
+      "candidate_bytes": 90199,
+      "candidate_git_blob_oid_via_path_filter": "b204aff5bb45328fead9d336da94dbe17b4ca1db",
+      "attributes": "bt_api_py/service_components.py: text: unspecified\nbt_api_py/service_components.py: eol: unspecified\nbt_api_py/service_components.py: filter: unspecified",
+      "selected_hunks": [
+        {
+          "kind": "insert",
+          "head_logical_lines": [
+            1188,
+            1187
+          ],
+          "checkout_logical_lines": [
+            1188,
+            1196
+          ],
+          "marker": "if (",
+          "reason": "Validate typed paper-owner domain and expected resource key for execution account owner."
+        },
+        {
+          "kind": "insert",
+          "head_logical_lines": [
+            1483,
+            1482
+          ],
+          "checkout_logical_lines": [
+            1492,
+            1500
+          ],
+          "marker": "constructor_args = {",
+          "reason": "Add the paper-owner domain to account-owner adapter constructor arguments."
+        },
+        {
+          "kind": "replace",
+          "head_logical_lines": [
+            1487,
+            1491
+          ],
+          "checkout_logical_lines": [
+            1505,
+            1505
+          ],
+          "marker": "**constructor_args,",
+          "reason": "Expand the prepared constructor argument mapping."
+        }
+      ],
+      "excluded_hunks": [
+        {
+          "kind": "replace",
+          "head_logical_lines": [
+            1718,
+            1731
+          ],
+          "checkout_logical_lines": [
+            1732,
+            1743
+          ],
+          "marker": "if type(error) is getattr(",
+          "reason": "Exclude unrelated Monitor-control formatting/denial hunk."
+        },
+        {
+          "kind": "insert",
+          "head_logical_lines": [
+            1948,
+            1947
+          ],
+          "checkout_logical_lines": [
+            1960,
+            1960
+          ],
+          "marker": "\"TrustedRiskPolicyBinding\",",
+          "reason": "Exclude unrelated TrustedRiskPolicyBinding export."
+        }
+      ]
+    },
+    {
+      "path": "bt_api_py/service_execution_account_books.py",
+      "scope": "complete account_books delta",
+      "head_sha256": "fb51f9f6b3d45583e61e6f1b3e40048cf2b6896fb03ef090e354b88341caf112",
+      "head_git_blob_oid": "bc4dfb7d03f282ff5f8859e8d2a7926de4895e4f",
+      "checkout_sha256": "c4261c122968bd8bf47b4e4958bc295481cfe6f43e4441d596ef1a161f0a64af",
+      "checkout_bytes": 30198,
+      "candidate_sha256": "c4261c122968bd8bf47b4e4958bc295481cfe6f43e4441d596ef1a161f0a64af",
+      "candidate_bytes": 30198,
+      "candidate_git_blob_oid_via_path_filter": "6ca94d09a3f4bcd477b379829eeea5ce4fb5f4dc",
+      "attributes": "bt_api_py/service_execution_account_books.py: text: unspecified\nbt_api_py/service_execution_account_books.py: eol: unspecified\nbt_api_py/service_execution_account_books.py: filter: unspecified",
+      "selected_hunks": [
+        {
+          "kind": "insert",
+          "head_logical_lines": [
+            38,
+            37
+          ],
+          "checkout_logical_lines": [
+            38,
+            38
+          ],
+          "marker": "PaperOwnerDomainV1,"
+        },
+        {
+          "kind": "insert",
+          "head_logical_lines": [
+            474,
+            473
+          ],
+          "checkout_logical_lines": [
+            475,
+            475
+          ],
+          "marker": "paper_owner_domain: PaperOwnerDomainV1 | None = None,"
+        },
+        {
+          "kind": "replace",
+          "head_logical_lines": [
+            475,
+            485
+          ],
+          "checkout_logical_lines": [
+            477,
+            487
+          ],
+          "marker": "order_entry_args: dict[str, object] = {"
+        }
+      ],
+      "excluded_hunks": []
+    },
+    {
+      "path": "tests/unit/test_service_execution_paper_host_integration.py",
+      "scope": "exact QA-tested new integration test",
+      "head_sha256": null,
+      "head_git_blob_oid": null,
+      "checkout_sha256": "25a96fc2b04a0c956a588d031cbc1460d334268e50cce0586bc8d63486d8db83",
+      "checkout_bytes": 30364,
+      "candidate_sha256": "25a96fc2b04a0c956a588d031cbc1460d334268e50cce0586bc8d63486d8db83",
+      "candidate_bytes": 30364,
+      "candidate_git_blob_oid_via_path_filter": "4d30e63652ddcc102882da84ad8b6f5717af0063",
+      "attributes": "tests/unit/test_service_execution_paper_host_integration.py: text: unspecified\ntests/unit/test_service_execution_paper_host_integration.py: eol: unspecified\ntests/unit/test_service_execution_paper_host_integration.py: filter: unspecified",
+      "selected_hunks": [
+        {
+          "scope": "complete file; exact QA source pin"
+        }
+      ],
+      "excluded_hunks": []
+    }
+  ],
+  "qa": {
+    "evidence_level": "LOCAL_PAPER_SERVICEHOST_SYNTHETIC_ONLY",
+    "test": "tests/unit/test_service_execution_paper_host_integration.py::test_e_only_paper_market_submit_uses_trusted_domain_and_quote_over_curve",
+    "command": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1\nC:/anaconda3/python.exe -m pytest \"--noconftest\" \"-p\" \"no:cacheprovider\" \"-q\" \"--junitxml=D:\\temp\\iteration10-paper-host-root-20261016-r2\\junit.xml\" \"tests/unit/test_service_execution_paper_host_integration.py::test_e_only_paper_market_submit_uses_trusted_domain_and_quote_over_curve\"\n",
+    "pytest_exit": 0,
+    "junit_summary": [
+      {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "warning": "One existing PytestConfigWarning: unknown config option asyncio_default_fixture_loop_scope.",
+    "source_pin_pre_post_match": true,
+    "pre_post_equal_except_timestamp": true,
+    "artifacts": [
+      {
+        "path": "D:\\temp\\iteration10-paper-host-root-20261016-r2\\command.txt",
+        "sha256": "e6eb828bddb4b891ff6e649a997b88c0909207110d70fd0ead43281f1772b0f0",
+        "bytes": 320
+      },
+      {
+        "path": "D:\\temp\\iteration10-paper-host-root-20261016-r2\\argv.json",
+        "sha256": "e97b3f6e279b6435155175dbc1e737bffeb69230373ab95bde7582dd8ddcec7b",
+        "bytes": 283
+      },
+      {
+        "path": "D:\\temp\\iteration10-paper-host-root-20261016-r2\\exit.txt",
+        "sha256": "f9703120c10d0a5f1412f37914637ef68757293a74cdf0ab518f0dd4f865a2fd",
+        "bytes": 20
+      },
+      {
+        "path": "D:\\temp\\iteration10-paper-host-root-20261016-r2\\pytest.log",
+        "sha256": "256b2ba1ff5635c227466bb7c75754f71995fe3d7b8bdee25a6d4b0fc557b816",
+        "bytes": 633
+      },
+      {
+        "path": "D:\\temp\\iteration10-paper-host-root-20261016-r2\\junit.xml",
+        "sha256": "4f0714442b6bb8c8f10f8856f03b1ebc3fec4f00c7fac37e228ba94a3e502baf",
+        "bytes": 387
+      },
+      {
+        "path": "D:\\temp\\iteration10-paper-host-root-20261016-r2\\pre.json",
+        "sha256": "699f11126b06849a4b2ab11888bcf9d51a8ba60adca5e3a537e2980dcd0f1733",
+        "bytes": 986
+      },
+      {
+        "path": "D:\\temp\\iteration10-paper-host-root-20261016-r2\\post.json",
+        "sha256": "06a32c952b72283b05332aeca73493f7eb70f7308276889d004c1bc33fd63bd3",
+        "bytes": 986
+      }
+    ]
+  },
+  "capture_checks": {
+    "candidate_source_pins_unchanged": true,
+    "index_empty_before_and_after": true,
+    "tracked_working_files_modified_here": false,
+    "created_artifacts_only_in_approved_codex_tmp": true,
+    "tests_or_hosts_run_here": false
+  }
+}

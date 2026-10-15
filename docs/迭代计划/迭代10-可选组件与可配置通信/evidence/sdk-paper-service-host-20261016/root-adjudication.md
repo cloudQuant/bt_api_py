@@ -1,0 +1,9 @@
+## 第123轮：受管paper正常ServiceHost接线
+
+SDK仅在execution/account_owner且公开service.order_entry时接受受信服务器resource paper_owner_domain；拒绝None和其它角色/端口的多余resource，客户端/YAML没有新增权限。Host构建经ExecutionAccountOwnerService条件转交该domain，Execution包继续执行精确domain/port/账户/策略绑定及基础admission验证。未配置paper时保留原调用参数形状。共享components只提交paper相关hunks，既有Monitor格式及TrustedRiskPolicyBinding导出不纳入。
+
+作者首次正确启动的新节点使用真实spawn ServiceHost、ServiceExecutionClient、CURVE和SQLite，MARKET请求同ID重放仍只撮合一次，持久receipt和现金/持仓/费用核对一致，关闭后重开SQLite读取不改账。错domain和live目标在启动时拒绝、quote零调用；正常客户端/Host退出且无强制清理，Risk/Gateway未导入。原r2为1passed、exit0、3.44秒，一条既有pytest配置warning；三项review源码pins、SDK9d1与Execution ae1 HEAD前后不变。r1在collection前因PowerShell参数分词退出4，原记录保留。独立静态逻辑review和交付hunk review通过；Root核对原日志、JUnit、pre/post及候选，不重复通过的节点。
+
+本次直接runner记录了三个改动文件的pre/post与两个HEAD，未记录全部依赖pre/post或加载模块origin，故不宣称完整发行/原始导出来源验证。原始checkout中的其它未提交变化未被接受；候选hunks由原测试覆盖和独立scope核对支持，没有另称隔离候选树QA。当前SDK/dev父748d8b76，提交三个明确source/test及本轮记录，保持checkout原字节与无关改动。证据为本机合成报价paper服务链，不是真实provider、AFI入口、R/M组合、LIMIT持续部分撮合、旧数据迁移或完整AFI13；正式22/68不变。
+
+证据见[evidence/sdk-paper-service-host-20261016/root-adjudication.md](evidence/sdk-paper-service-host-20261016/root-adjudication.md)。

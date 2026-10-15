@@ -35,6 +35,7 @@ from bt_api_execution import (
     FinancialOwnerKind,
     FinancialSourceKind,
     OwnerFinancialBookV1,
+    PaperOwnerDomainV1,
     SqliteExecutionStore,
 )
 from bt_api_execution.service_order_entry import (
@@ -471,18 +472,19 @@ class ExecutionAccountOwnerService:
         writer_id: str = "execution-order-entry",
         lease_ttl_ns: int = 30_000_000_000,
         account_books_source: ExecutionAccountBookSource | None = None,
+        paper_owner_domain: PaperOwnerDomainV1 | None = None,
     ) -> None:
-        self._orders = _ExecutionOrderEntryService(
-            store,
-            targets,
-            dispatch,
-            admission_gate=admission_gate,
-            basic_admission_gate=basic_admission_gate,
-            cancel_admission_gate=cancel_admission_gate,
-            allow_unprotected=allow_unprotected,
-            writer_id=writer_id,
-            lease_ttl_ns=lease_ttl_ns,
-        )
+        order_entry_args: dict[str, object] = {
+            "admission_gate": admission_gate,
+            "basic_admission_gate": basic_admission_gate,
+            "cancel_admission_gate": cancel_admission_gate,
+            "allow_unprotected": allow_unprotected,
+            "writer_id": writer_id,
+            "lease_ttl_ns": lease_ttl_ns,
+        }
+        if paper_owner_domain is not None:
+            order_entry_args["paper_owner_domain"] = paper_owner_domain
+        self._orders = _ExecutionOrderEntryService(store, targets, dispatch, **order_entry_args)
         self._books = (
             None
             if account_books_source is None

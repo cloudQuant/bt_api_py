@@ -1,0 +1,8 @@
+[
+  "--noconftest",
+  "-p",
+  "no:cacheprovider",
+  "-q",
+  "--junitxml=D:\\temp\\iteration10-paper-host-root-20261016-r2\\junit.xml",
+  "tests/unit/test_service_execution_paper_host_integration.py::test_e_only_paper_market_submit_uses_trusted_domain_and_quote_over_curve"
+]

@@ -1,0 +1,28 @@
+{
+  "captured_at": "2026-10-15T19:40:32.0477396Z",
+  "sdk_head": "9d1dc457af0e0e4e94895ca215a27137e86fa20f",
+  "execution_head": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+  "source_hashes": [
+    {
+      "path": "bt_api_py/service_components.py",
+      "sha256": "C46855416D0E1BDB8B0A36E91B563C098D1FDD46079FE1DE97C08917B19C1356",
+      "bytes": 92102
+    },
+    {
+      "path": "bt_api_py/service_execution_account_books.py",
+      "sha256": "C4261C122968BD8BF47B4E4958BC295481CFE6F43E4441D596EF1A161F0A64AF",
+      "bytes": 30198
+    },
+    {
+      "path": "tests/unit/test_service_execution_paper_host_integration.py",
+      "sha256": "25A96FC2B04A0C956A588D031CBC1460D334268E50CCE0586BC8D63486D8DB83",
+      "bytes": 30364
+    }
+  ],
+  "sdk_status": [
+    " M bt_api_py/service_components.py",
+    " M bt_api_py/service_execution_account_books.py",
+    "?? tests/unit/test_service_execution_paper_host_integration.py"
+  ],
+  "execution_status": null
+}
