@@ -1,0 +1,40 @@
+{
+  "repo": "D:\\source_code\\ai-for-investor",
+  "parent": "2d081f4308215c4aa7f90d656039026fd9713e2e",
+  "paths": [
+    "src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+    "src/frontend/src/api/portfolio.ts",
+    "src/frontend/src/i18n/locales/en-US.ts",
+    "src/frontend/src/i18n/locales/zh-CN.ts",
+    "src/frontend/src/views/PortfolioPage.vue"
+  ],
+  "raw_sha256": {
+    "src/frontend/src/__tests__/views/PortfolioPage.test.ts": "97abab02ef1c773fd733f56a2ff2e4c27427a98f508437fe1cb4515ee47a1a90",
+    "src/frontend/src/api/portfolio.ts": "a076c8a2de63c664bd2a13fd7deb9fce4e0a23ad90e87b718e74e493f705268d",
+    "src/frontend/src/i18n/locales/en-US.ts": "a0d7d81865c858a2ba1665618522c43bd3f6d2f3d7efa48e296336cd0a1d23db",
+    "src/frontend/src/i18n/locales/zh-CN.ts": "51dd171d5ee1fe803dc7fcfd34b7c07382ee70ceba36016d23e2c119d829bd74",
+    "src/frontend/src/views/PortfolioPage.vue": "623e0ea1186904004fbc626fbc2f140cb629f1d3f16098928252e6d49dd55277"
+  },
+  "filtered_blob_ids": {
+    "src/frontend/src/__tests__/views/PortfolioPage.test.ts": "4b8d27cf13c97501e47891bb6f00f1bf7e3e2ee5",
+    "src/frontend/src/api/portfolio.ts": "c66fdfd69c03dfe82d92e8d6744882e2d69922f0",
+    "src/frontend/src/i18n/locales/en-US.ts": "ce5a9073cc7062584563e55691a2f543abe78be5",
+    "src/frontend/src/i18n/locales/zh-CN.ts": "7faf2d32d7aee6ec331b4b76bbcb7f106ef97113",
+    "src/frontend/src/views/PortfolioPage.vue": "e14ede9ad10de89b4d757b97a7b636f48c7aa30b"
+  },
+  "unrelated_paths": [
+    "README.md",
+    "scripts/README.md",
+    "scripts/ops/app.bat",
+    "scripts/windows/restart_app.bat",
+    "scripts/windows/start_app.bat",
+    "scripts/windows/stop_app.bat"
+  ],
+  "unrelated_diff_sha256": "7e14f5453fb81df4b9c0483c44a3e1f8632b85aeebb22b4a9d4a7da6831926af",
+  "unrelated_status_sha256": "749ef73a0c76ea437e3ba20f70809e27987aaaf8b38b87338b0becbaec2d963e",
+  "head": "db32c3ce46e6b8e03bdaef42f3e18ce20c64c4ac",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-afi-unallocated-ui-root-20261016-r1\\result.json",
+  "evidence_level": "VUE_COMPONENT_SYNTHETIC_API_UI_ONLY_NOT_COMPLETE_AFI_ACCEPTANCE"
+}

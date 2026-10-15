@@ -1,0 +1,20 @@
+{
+  "argv": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "src/__tests__/views/PortfolioPage.test.ts",
+    "-t",
+    "shows live unallocated books separately|keeps older live projections usable",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile=D:\\temp\\iteration10-afi-unallocated-ui-root-20261016-r1\\vitest.json"
+  ],
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\frontend",
+  "environment_overrides": {
+    "CI": "1",
+    "NO_COLOR": "1"
+  },
+  "node_version": "v24.13.0",
+  "started_utc": "2026-10-15T17:56:51.369410+00:00"
+}

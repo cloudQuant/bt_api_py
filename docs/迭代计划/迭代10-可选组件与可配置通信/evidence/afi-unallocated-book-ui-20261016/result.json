@@ -1,0 +1,15 @@
+{
+  "vitest_exit": 0,
+  "sources_unchanged": true,
+  "source_count": 446,
+  "heads_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "2d081f4308215c4aa7f90d656039026fd9713e2e"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "2d081f4308215c4aa7f90d656039026fd9713e2e"
+  },
+  "stdout_sha256": "7539fdd2313f05b53a6213cbc4705ece4c6efcf9ec60178b91aaadba59865dda",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "VUE_COMPONENT_SYNTHETIC_API_UI_ONLY_NOT_COMPLETE_AFI_ACCEPTANCE"
+}
