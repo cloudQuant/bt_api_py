@@ -1,0 +1,79 @@
+{
+  "round": "AFI07 approved-target Execution package focus plus server-owned requirement option",
+  "repository": "D:/bt_api_py/bt_api/bt_api_execution",
+  "branch": "dev",
+  "head_before_commit": "f04851d91a7b336636b02ed9b6dd5cba1dc71037",
+  "index_empty_at_freeze": true,
+  "commit_created_by_agent": false,
+  "scope": "Eight Execution package paths only: six approved-target implementation/tests plus the account-owner service option validator and its focused test. No store/journal/Risk/group changes in this round.",
+  "package_paths": [
+    {"path":"src/bt_api_execution/__init__.py","bytes":16009,"sha256":"8988AB761C5212F8A117737ACB870BA3ACC9A64A85B80773DC0FE9BA61692259"},
+    {"path":"src/bt_api_execution/basic_admission.py","bytes":29736,"sha256":"94F061C0F06B3D4848886C8DA7C4B0B01D8E9381723356ECFA4DAF2DF5A99665"},
+    {"path":"src/bt_api_execution/approved_target.py","bytes":47012,"sha256":"4B525578DB46CAE62AA866E8E23AC239294826FEB4EED7D014EAE047C441303B"},
+    {"path":"src/bt_api_execution/facade.py","bytes":61439,"sha256":"E8384EA49DDEB90A7098297B62AC1166985F676BDDA7854109B71E74183B5220"},
+    {"path":"src/bt_api_execution/service_order_entry.py","bytes":43599,"sha256":"F2A1EB3664962A322A8DF8D2F36F32FD482390B994511D873AA4FAF80C7166A0"},
+    {"path":"src/bt_api_execution/service_component.py","bytes":11813,"sha256":"09D25D677457E9AAD7B90F76B1A6B109F347041A45BADB512704A94674035CB8"},
+    {"path":"tests/test_approved_target.py","bytes":25799,"sha256":"2FA7E26C0A0DF83B656B2C2209A4B9527A038AD52264B8E90AFE9E8E29FC1333"},
+    {"path":"tests/test_service_component.py","bytes":13307,"sha256":"4AAF36E07BC2A6108C63B3414BDE4888454F2A9749D8D4F3ECB6691EC722B156"}
+  ],
+  "behavior": [
+    "Approved-target consume classifies only exact non-ambiguous ApprovedTargetAuthorityError as definitive; arbitrary transport exceptions with denial-looking .code remain UNKNOWN and are not released or replayed.",
+    "Account-owner server options accept optional approved_target_required only as exact bool; true requires service.order_entry. False/absent preserves legacy.",
+    "SDK host builder rejects true with missing authority before adapter construction and retains the resource cleanup callback; client config/wire cannot set this server flag.",
+    "Existing protected-scope authority path still denies ordinary orders.submit before Risk, authority, or provider work."
+  ],
+  "test_runs": [
+    {
+      "scope":"Historical approved-target package focus; console-only",
+      "tool_call":"functions.exec chunk 5b98d1",
+      "command":"C:/anaconda3/python.exe -m pytest --noconftest -p no:cacheprovider -q tests/test_approved_target.py",
+      "cwd":"D:/bt_api_py/bt_api/bt_api_execution",
+      "environment":{"PYTEST_DISABLE_PLUGIN_AUTOLOAD":"1"},
+      "exit_code":0,
+      "result":"27 passed in 0.83s; 0 warnings",
+      "raw_stdout":null,"raw_stderr":null,"junit":null,
+      "evidence_limit":"No saved raw output/JUnit and no fixed-source Root run; do not represent it as such."
+    },
+    {
+      "scope":"Typed consume-classification regression",
+      "command":"C:/anaconda3/python.exe -m pytest --noconftest -p no:cacheprovider -q --junitxml=\"D:\\temp\\iteration10-approved-consume-classification-20261016-r1\\junit.xml\" tests/test_approved_target.py::test_approved_consume_outcomes_fail_closed_and_unknown_replay_is_read_only",
+      "cwd":"D:/bt_api_py/bt_api/bt_api_execution",
+      "environment":{"PYTEST_DISABLE_PLUGIN_AUTOLOAD":"1"},
+      "exit_code":0,
+      "result":"5 passed in 0.93s; 0 warnings",
+      "artifacts":{
+        "stdout":{"path":"D:/temp/iteration10-approved-consume-classification-20261016-r1/stdout.txt","bytes":199,"sha256":"F7C2792BC30945733A02C975362636DA2FD631F1C5B2F23579F769EDC0A914EE"},
+        "stderr":{"path":"D:/temp/iteration10-approved-consume-classification-20261016-r1/stderr.txt","bytes":0,"sha256":"E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"},
+        "exit_code":{"path":"D:/temp/iteration10-approved-consume-classification-20261016-r1/exit-code.txt","bytes":2,"sha256":"9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"},
+        "junit":{"path":"D:/temp/iteration10-approved-consume-classification-20261016-r1/junit.xml","bytes":1165,"sha256":"18C14CA2FCE8BCC2351356042DD3A23AA24553FA3F84F75A7B1677713AB72014"}
+      }
+    },
+    {
+      "scope":"New approved_target_required exact-bool/write-port option regression",
+      "command":"C:/anaconda3/python.exe -m pytest --noconftest -p no:cacheprovider -q --junitxml=\"D:\\temp\\iteration10-approved-required-option-package-20261016-r1\\junit.xml\" tests/test_service_component.py::test_approved_target_required_is_strict_server_option_and_write_only",
+      "cwd":"D:/bt_api_py/bt_api/bt_api_execution",
+      "environment":{"PYTEST_DISABLE_PLUGIN_AUTOLOAD":"1","PYTHONPATH":"D:/bt_api_py/bt_api/bt_api_execution/src"},
+      "exit_code":0,
+      "result":"1 passed in 0.58s; 0 warnings",
+      "artifacts":{
+        "stdout":{"path":"D:/temp/iteration10-approved-required-option-package-20261016-r1/stdout.txt","bytes":200,"sha256":"BAF9D78156892700D57E86FC772DC2E917995C2777457497B9D0AAE824FCE04C"},
+        "stderr":{"path":"D:/temp/iteration10-approved-required-option-package-20261016-r1/stderr.txt","bytes":0,"sha256":"E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"},
+        "exit_code":{"path":"D:/temp/iteration10-approved-required-option-package-20261016-r1/exit-code.txt","bytes":2,"sha256":"9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"},
+        "junit":{"path":"D:/temp/iteration10-approved-required-option-package-20261016-r1/junit.xml","bytes":355,"sha256":"35A6068E352468E76B3C9B78AB68FFDF121475137CE015AE46A55F029F4F9E20"}
+      }
+    }
+  ],
+  "static_review": {
+    "reviewer":"execution_recovery_review",
+    "result":"GO",
+    "scope":"Static review of approved_target_required option validator, SDK builder guard, and focused wiring test; no tests/imports/Host run by reviewer.",
+    "findings":"Exact bool and closed server-side option, write-port restriction, missing authority fail closed before adapter construction, tracked cleanup retained, legacy absent/false unchanged."
+  },
+  "lint_compile": {
+    "command":"C:/anaconda3/python.exe -m ruff check src/bt_api_execution/service_component.py tests/test_service_component.py; C:/anaconda3/python.exe -m py_compile src/bt_api_execution/service_component.py tests/test_service_component.py",
+    "cwd":"D:/bt_api_py/bt_api/bt_api_execution",
+    "exit_code":0,
+    "result":"All checks passed!"
+  },
+  "remaining_limits":"No AFI persistence adapter/Host integration or actual provider/account acceptance. The AFI current-state provider remains external to these package paths."
+}

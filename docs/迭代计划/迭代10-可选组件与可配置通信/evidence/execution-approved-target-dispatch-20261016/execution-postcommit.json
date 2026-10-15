@@ -1,0 +1,58 @@
+{
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "parent": "f04851d91a7b336636b02ed9b6dd5cba1dc71037",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "src/bt_api_execution/__init__.py": "8988ab761c5212f8a117737acb870ba3acc9a64a85b80773dc0fe9ba61692259",
+    "src/bt_api_execution/basic_admission.py": "94f061c0f06b3d4848886c8da7c4b0b01d8e9381723356ecfa4daf2df5a99665",
+    "src/bt_api_execution/approved_target.py": "4b525578db46cae62aa866e8e23ac239294826feb4eed7d014eae047c441303b",
+    "src/bt_api_execution/facade.py": "e8384ea49ddeb90a7098297b62ac1166985f676bdda7854109b71e74183b5220",
+    "src/bt_api_execution/service_order_entry.py": "f2a1eb3664962a322a8df8d2f36f32fd482390b994511d873aa4faf80c7166a0",
+    "src/bt_api_execution/service_component.py": "09d25d677457e9aad7b90f76b1a6b109f347041a45badb512704a94674035cb8",
+    "tests/test_approved_target.py": "2fa7e26c0a0df83b656b2c2209a4b9527a038ad52264b8e90afe9e8e29fc1333",
+    "tests/test_service_component.py": "4aaf36e07bc2a6108c63b3414bde4888454f2a9749d8d4f3ecb6691ec722b156"
+  },
+  "evidence_sha256": {
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-approved-target-package-final-20261016.json": "a3602eb8cdb0c167758e4565f1de964247130638dfc6077015d9414052aab61a",
+    "D:\\temp\\iteration10-approved-consume-classification-20261016-r1\\stdout.txt": "f7c2792bc30945733a02c975362636da2fd631f1c5b2f23579f769edc0a914ee",
+    "D:\\temp\\iteration10-approved-consume-classification-20261016-r1\\stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\temp\\iteration10-approved-consume-classification-20261016-r1\\exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "D:\\temp\\iteration10-approved-consume-classification-20261016-r1\\junit.xml": "18c14ca2fce8bcc2351356042dd3a23aa24553fa3f84f75a7b1677713ab72014",
+    "D:\\temp\\iteration10-approved-required-option-package-20261016-r1\\stdout.txt": "baf9d78156892700d57e86fc772dc2e917995c2777457497b9d0aae824fce04c",
+    "D:\\temp\\iteration10-approved-required-option-package-20261016-r1\\stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\temp\\iteration10-approved-required-option-package-20261016-r1\\exit-code.txt": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "D:\\temp\\iteration10-approved-required-option-package-20261016-r1\\junit.xml": "35a6068e352468e76b3c9b78ab68ffdf121475137ce015ae46a55f029f4f9e20"
+  },
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-round137-execution-postcommit.json",
+  "junit": "D:/temp/iteration10-approved-required-option-package-20261016-r1/junit.xml",
+  "tests_passed": 1,
+  "message": "feat(execution): enforce trusted approved target dispatch",
+  "paths": [
+    "src/bt_api_execution/__init__.py",
+    "src/bt_api_execution/approved_target.py",
+    "src/bt_api_execution/basic_admission.py",
+    "src/bt_api_execution/facade.py",
+    "src/bt_api_execution/service_component.py",
+    "src/bt_api_execution/service_order_entry.py",
+    "tests/test_approved_target.py",
+    "tests/test_service_component.py"
+  ],
+  "filtered_blob_ids": {
+    "src/bt_api_execution/__init__.py": "85645502edef0dc5c6a4bc1e8d54c13d3b61a3c9",
+    "src/bt_api_execution/approved_target.py": "18b282c00fe40bd389057233258a9d11bb3f6995",
+    "src/bt_api_execution/basic_admission.py": "5116ff776f2d9b2ff04f45faf99fae3ebac5affa",
+    "src/bt_api_execution/facade.py": "b93f60b2ecc50cca1653bdc636475313db7a8a23",
+    "src/bt_api_execution/service_component.py": "c66b2eab0d3de621003b7f2cdecfe497e35fa473",
+    "src/bt_api_execution/service_order_entry.py": "5eb23d3388b9c6a0b98c5aa724c9ac6f24b703cb",
+    "tests/test_approved_target.py": "bc79e9cfdb7a8c8ce6775f1204eba2a1147bd9ab",
+    "tests/test_service_component.py": "a27641a19bed0ee217b95f241a57971b0bd6d433"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "unrelated_untracked_sha256": {},
+  "unrelated_untracked_preserved": true
+}

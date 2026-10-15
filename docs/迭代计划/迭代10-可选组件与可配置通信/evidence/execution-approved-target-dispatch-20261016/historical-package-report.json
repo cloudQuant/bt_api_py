@@ -1,0 +1,131 @@
+{
+  "round": "AFI07 execution approved-target package focus",
+  "repository": "D:/bt_api_py/bt_api/bt_api_execution",
+  "branch": "dev",
+  "head_before_round": "f04851d91a7b336636b02ed9b6dd5cba1dc71037",
+  "head_after_round": "f04851d91a7b336636b02ed9b6dd5cba1dc71037",
+  "commit_created": false,
+  "package_paths": [
+    {
+      "path": "src/bt_api_execution/approved_target.py",
+      "bytes": 47251,
+      "sha256": "47EDBAA2427BB84F472422B5D59D15B8FF02C23BF1BAE69AB849D77ACE762C2D"
+    },
+    {
+      "path": "src/bt_api_execution/basic_admission.py",
+      "bytes": 29736,
+      "sha256": "94F061C0F06B3D4848886C8DA7C4B0B01D8E9381723356ECFA4DAF2DF5A99665"
+    },
+    {
+      "path": "src/bt_api_execution/facade.py",
+      "bytes": 61439,
+      "sha256": "E8384EA49DDEB90A7098297B62AC1166985F676BDDA7854109B71E74183B5220"
+    },
+    {
+      "path": "src/bt_api_execution/service_order_entry.py",
+      "bytes": 43599,
+      "sha256": "F2A1EB3664962A322A8DF8D2F36F32FD482390B994511D873AA4FAF80C7166A0"
+    },
+    {
+      "path": "src/bt_api_execution/__init__.py",
+      "bytes": 16009,
+      "sha256": "8988AB761C5212F8A117737ACB870BA3ACC9A64A85B80773DC0FE9BA61692259"
+    },
+    {
+      "path": "tests/test_approved_target.py",
+      "bytes": 25565,
+      "sha256": "3C67C7F576B247F8985D06133A75F9643DC9EFB56A763D629F48C0B3A54BE830"
+    }
+  ],
+  "focused_test": {
+    "invocation": "functions.exec tool chunk 5b98d1",
+    "cwd": "D:/bt_api_py/bt_api/bt_api_execution",
+    "command": "$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; C:/anaconda3/python.exe -m pytest --noconftest -p no:cacheprovider -q tests/test_approved_target.py",
+    "python_exit_code": 0,
+    "stdout_excerpt": "27 passed in 0.83s",
+    "warnings": 0,
+    "raw_stdout_file": null,
+    "raw_stderr_file": null,
+    "junit_file": null,
+    "evidence_limit": "Author tool-captured focused package test only; no saved raw log/JUnit, no fixed-source Root run, no ServiceHost/AFI integration."
+  },
+  "lint": {
+    "invocation": "functions.exec tool chunk 4c066a",
+    "command": "C:/anaconda3/Scripts/ruff.exe check src/bt_api_execution/approved_target.py src/bt_api_execution/basic_admission.py src/bt_api_execution/facade.py src/bt_api_execution/service_order_entry.py src/bt_api_execution/__init__.py tests/test_approved_target.py",
+    "exit_code": 0,
+    "stdout_excerpt": "All checks passed!"
+  },
+  "initial_focused_attempt": {
+    "invocation": "functions.exec tool chunk db1f9c",
+    "exit_code": 1,
+    "result": "25 passed, 2 failed; one exposed that the consume bridge failed to classify finite AFI denial codes, which was fixed; the other was a cumulative-call test assertion corrected to isolate the second request. Final frozen 27-test run passed."
+  },
+  "implemented_behavior": [
+    "Exact typed AFI target/request/binding contract with four request fields; server-owned identity/scope/owner binding and stable operation-key derivation.",
+    "Approved submission consumes only after a durable DISPATCHING claim; only a fully bound CONSUMED_NEW receipt continues to Basic then Risk claims and provider dispatch.",
+    "Definitive finite consume denial blocks and releases unclaimed reservations; ambiguous/malformed/already-consumed results remain UNKNOWN and are never retried.",
+    "Protected strategy scope ordinary submit is denied; reserved approval tags and group-leg intents cannot use the approved path.",
+    "AFI target policy fields bind only AFI approval/eligibility policy; they are not represented as live Risk policy facts."
+  ],
+  "remaining_limit": "AFI current target/strategy/membership/approval-policy provider and normal SDK/AFI Host integration remain outside this package focus; missing current-state provider must fail closed.",
+  "current_package_paths": [
+    {
+      "path": "src/bt_api_execution/__init__.py",
+      "bytes": 16009,
+      "sha256": "8988AB761C5212F8A117737ACB870BA3ACC9A64A85B80773DC0FE9BA61692259"
+    },
+    {
+      "path": "src/bt_api_execution/basic_admission.py",
+      "bytes": 29736,
+      "sha256": "94F061C0F06B3D4848886C8DA7C4B0B01D8E9381723356ECFA4DAF2DF5A99665"
+    },
+    {
+      "path": "src/bt_api_execution/approved_target.py",
+      "bytes": 47012,
+      "sha256": "4B525578DB46CAE62AA866E8E23AC239294826FEB4EED7D014EAE047C441303B"
+    },
+    {
+      "path": "src/bt_api_execution/facade.py",
+      "bytes": 61439,
+      "sha256": "E8384EA49DDEB90A7098297B62AC1166985F676BDDA7854109B71E74183B5220"
+    },
+    {
+      "path": "src/bt_api_execution/service_order_entry.py",
+      "bytes": 43599,
+      "sha256": "F2A1EB3664962A322A8DF8D2F36F32FD482390B994511D873AA4FAF80C7166A0"
+    },
+    {
+      "path": "tests/test_approved_target.py",
+      "bytes": 25799,
+      "sha256": "2FA7E26C0A0DF83B656B2C2209A4B9527A038AD52264B8E90AFE9E8E29FC1333"
+    }
+  ],
+  "consume_classification_repair": {
+    "result": "PASS_FOCUSED_CONSUME_CLASSIFICATION_REPAIR",
+    "changed_paths": [
+      "src/bt_api_execution/approved_target.py",
+      "tests/test_approved_target.py"
+    ],
+    "behavior": "Only the exact ApprovedTargetAuthorityError class with ambiguous=false is definitive. Generic transport exceptions with a denial-looking .code remain AMBIGUOUS/UNKNOWN and are not released or retried.",
+    "command": "C:/anaconda3/python.exe -m pytest --noconftest -p no:cacheprovider -q --junitxml=\"D:\\temp\\iteration10-approved-consume-classification-20261016-r1\\junit.xml\" tests/test_approved_target.py::test_approved_consume_outcomes_fail_closed_and_unknown_replay_is_read_only",
+    "working_directory": "D:/bt_api_py/bt_api/bt_api_execution",
+    "environment": {
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+    },
+    "exit_code": 0,
+    "stdout_excerpt": [
+      "..... [100%]",
+      "5 passed in 0.93s"
+    ],
+    "warnings": 0,
+    "artifacts": {
+      "exit_code": "D:/temp/iteration10-approved-consume-classification-20261016-r1/exit-code.txt",
+      "stderr": "D:/temp/iteration10-approved-consume-classification-20261016-r1/stderr.txt",
+      "junit": "D:/temp/iteration10-approved-consume-classification-20261016-r1/junit.xml",
+      "stdout": "D:/temp/iteration10-approved-consume-classification-20261016-r1/stdout.txt"
+    },
+    "static_review": "execution_recovery_review GO on the two new pins; no tests/imports/Host by reviewer.",
+    "scope_limit": "No AFI transaction integration or ServiceHost/AFI acceptance."
+  },
+  "package_status_at_note_update": "Unstaged/uncommitted; HEAD remains f04851d91a7b336636b02ed9b6dd5cba1dc71037."
+}
