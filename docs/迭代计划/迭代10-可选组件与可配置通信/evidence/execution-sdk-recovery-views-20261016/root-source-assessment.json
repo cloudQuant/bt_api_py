@@ -1,0 +1,40 @@
+{
+  "record_type": "root_source_delivery_assessment",
+  "original_author_note": "D:\\bt_api_py\\.codex-tmp\\iteration10-recovery-delivery-note-20261016.json",
+  "original_author_note_sha256": "b2c2b4429e14906ffe78b5aca23bfb846418d29d593bb9d8840f31f1508ac86b",
+  "independent_review": {
+    "result": "GO",
+    "reviewer": "execution_recovery_review",
+    "evidence": "Retained independent static review on the exact five source/test pins; no reviewer execution."
+  },
+  "files": [
+    {
+      "repository": "sdk",
+      "path": "bt_api_py/service_execution_account_books.py",
+      "bytes": 58827,
+      "sha256": "22166DA944FE4E9DDADE5F41B16E43678FAE382184B520BB1FCF8E18065A452F"
+    },
+    {
+      "repository": "sdk",
+      "path": "bt_api_py/service_execution.py",
+      "bytes": 25059,
+      "sha256": "DED42B52272286C9DD74EF95DA15EA1927A9454B18C7562EF7187F4ED83FBA1B"
+    },
+    {
+      "repository": "sdk",
+      "path": "tests/unit/test_service_execution_recovery_views.py",
+      "bytes": 16579,
+      "sha256": "35867DC8E92E16D6C98610E1FA8F5A1A15A2BF0ADDBB60D7AE89ADFF0428E7A1"
+    }
+  ],
+  "acceptance_level": "AUTHOR_WORKTREE_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "root_assessment": "Root read the SDK recovery adapter/client diff and focused tests, verified all five byte pins and the committed Execution dependency. Original author report records package 4 pass and SDK 5 pass; raw logs/JUnit were not saved. No tests repeated for delivery.",
+  "limitations": [
+    "No ServiceHost/CURVE integration or Host launch was run in this round.",
+    "Recovery views attest a durable local journal cut, not provider-live freshness.",
+    "No files were staged or committed as part of this note.",
+    "The schema-21 compatibility test creates a current-schema SQLite database, rewrites the recorded-intent outbox payload to the supported pre-v22 one-key shape, sets schema_version to 21, then reopens through the current migration path and reads the recovery snapshot. It is a migration-path compatibility regression, not a fixture built from a complete historical v21 DDL database.",
+    "No full dependency origin attestation or real process recovery acceptance."
+  ],
+  "execution_commit": "f04851d91a7b336636b02ed9b6dd5cba1dc71037"
+}

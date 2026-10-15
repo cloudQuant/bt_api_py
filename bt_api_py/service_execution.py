@@ -34,7 +34,9 @@ QUERY_OPERATION = "orders.query"
 
 _ORDER_ENTRY_PORT = "service.order_entry"
 _ORDER_QUERY_PORT = "service.order_query"
+_ACCOUNT_BOOKS_QUERY_OPERATION = "execution.account_books.query"
 _REFERENCE_RE_LENGTH = 128
+_RECOVERY_PAGE_MAX = 128
 
 _SIDES = frozenset({"BUY", "SELL"})
 _POSITION_EFFECTS = frozenset({"OPEN", "CLOSE", "CLOSE_TODAY", "CLOSE_YESTERDAY"})
@@ -311,6 +313,69 @@ class ServiceExecutionClient:
             return None
         return _order_record(payload, identifier=intent_id)
 
+    def query_recovery_snapshot(self) -> Mapping[str, Any]:
+        """Read a versioned durable snapshot through the configured query route.
+
+        The returned mapping is the authenticated operation's ``result`` value.
+        It describes one SQLite execution-journal cut, not provider-live state.
+        """
+
+        self._assert_owner_thread()
+        query_mount, query_scope_ref = self._require_query_route()
+        return self._request(
+            query_mount,
+            _ACCOUNT_BOOKS_QUERY_OPERATION,
+            {"view": "RECOVERY_SNAPSHOT", "version": 1},
+            query_scope_ref,
+            identifier="execution-recovery-snapshot",
+            result_kind="account_books",
+        )
+
+    def query_recovery_events_after(
+        self,
+        *,
+        after_sequence: int,
+        expected_journal_generation: str,
+        expected_directory_revision: str,
+        limit: int,
+    ) -> Mapping[str, Any]:
+        """Read a bounded page pinned to the supplied durable journal cut."""
+
+        self._assert_owner_thread()
+        if type(after_sequence) is not int or after_sequence < 0:
+            raise ServiceExecutionError("INVALID_RECOVERY_CURSOR")
+        if (
+            type(expected_journal_generation) is not str
+            or len(expected_journal_generation) != 32
+            or any(character not in "0123456789abcdef" for character in expected_journal_generation)
+        ):
+            raise ServiceExecutionError("INVALID_RECOVERY_GENERATION")
+        if not _reference(expected_directory_revision):
+            raise ServiceExecutionError("INVALID_RECOVERY_DIRECTORY_REVISION")
+        if type(limit) is not int or not 1 <= limit <= _RECOVERY_PAGE_MAX:
+            raise ServiceExecutionError("INVALID_RECOVERY_LIMIT")
+        query_mount, query_scope_ref = self._require_query_route()
+        return self._request(
+            query_mount,
+            _ACCOUNT_BOOKS_QUERY_OPERATION,
+            {
+                "view": "EVENTS_AFTER",
+                "version": 1,
+                "after_sequence": after_sequence,
+                "expected_journal_generation": expected_journal_generation,
+                "expected_directory_revision": expected_directory_revision,
+                "limit": limit,
+            },
+            query_scope_ref,
+            identifier="execution-recovery-events",
+            result_kind="account_books",
+        )
+
+    def _require_query_route(self) -> tuple[str, str]:
+        if self._query_mount is None or self._query_scope_ref is None:
+            raise ServiceExecutionError("QUERY_NOT_CONFIGURED")
+        return self._query_mount, self._query_scope_ref
+
     def _assert_owner_thread(self) -> None:
         if threading.get_ident() != self._owner_thread_id:
             raise ServiceExecutionError("WRONG_OWNER_THREAD")
@@ -334,6 +399,7 @@ class ServiceExecutionClient:
         scope_ref: str,
         *,
         identifier: str,
+        result_kind: str = "order",
     ) -> Mapping[str, Any]:
         try:
             reply = self._runtime.call(mount, operation, arguments, scope_ref=scope_ref)
@@ -353,6 +419,10 @@ class ServiceExecutionClient:
             raise ServiceExecutionUnknownOutcomeError(
                 "TRANSPORT_OUTCOME_UNKNOWN", identifier
             ) from None
+        if result_kind == "account_books":
+            return _account_books_reply_payload(reply)
+        if result_kind != "order":
+            raise ServiceExecutionError("INVALID_REPLY")
         return _reply_payload(reply, identifier=identifier)
 
 
@@ -492,6 +562,24 @@ def _reply_payload(reply: object, *, identifier: str) -> Mapping[str, Any]:
         raise ServiceExecutionError(code)
     if result.get("found") is True and isinstance(record, Mapping):
         raise ServiceExecutionError(code, _any_record(record))
+    raise ServiceExecutionError(code)
+
+
+def _account_books_reply_payload(reply: object) -> Mapping[str, Any]:
+    """Unwrap one successful account-books operation without projecting its view."""
+
+    if not isinstance(reply, Mapping) or set(reply) != _REPLY_FIELDS:
+        raise ServiceExecutionError("INVALID_REPLY")
+    code = reply.get("code")
+    result = reply.get("result")
+    if type(code) is not str or not code or len(code) > 64 or not isinstance(result, Mapping):
+        raise ServiceExecutionError("INVALID_REPLY")
+    if reply.get("ok") is True:
+        if code != "OK":
+            raise ServiceExecutionError("INVALID_REPLY")
+        return result
+    if reply.get("ok") is not False or code == "OK":
+        raise ServiceExecutionError("INVALID_REPLY")
     raise ServiceExecutionError(code)
 
 

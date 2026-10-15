@@ -1,0 +1,20 @@
+{
+  "repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "branch": "dev",
+  "parent": "5e6ba3e90e04f5e2f5ad0944e6557f2a1eb1edc5",
+  "head": "f04851d91a7b336636b02ed9b6dd5cba1dc71037",
+  "paths": [
+    "src/bt_api_execution/store.py",
+    "tests/test_execution_recovery_views.py"
+  ],
+  "checkout_sha256": {
+    "src/bt_api_execution/store.py": "e6a6e75cd0a762bc321a0bef8c03f32a2dcc75536567f18ac5385388699d7ffd",
+    "tests/test_execution_recovery_views.py": "573ae9a3872131097500bf8e402a1880c55ea343629d7a620caaf40d7f777855"
+  },
+  "blob_objects": {
+    "src/bt_api_execution/store.py": "14fa6056e48dd142d0e7cfa2781141ecc4b732d9",
+    "tests/test_execution_recovery_views.py": "e9e80b38b151194220a699fd98553d16aa72ae5d"
+  },
+  "index_empty": true,
+  "evidence": "author tool-session 4 passed/exit0; static review GO; no saved raw log/JUnit; source component only"
+}

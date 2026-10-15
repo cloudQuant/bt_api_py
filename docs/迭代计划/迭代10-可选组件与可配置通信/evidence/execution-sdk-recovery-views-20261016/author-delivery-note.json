@@ -1,0 +1,110 @@
+{
+  "record_type": "iteration10_execution_recovery_delivery_note",
+  "created_date": "2026-10-16",
+  "instructions_checked": {
+    "sdk_repository": "D:/bt_api_py/AGENTS.md",
+    "execution_package": "No AGENTS.md exists at D:/bt_api_py/bt_api/bt_api_execution/AGENTS.md",
+    "relevant_rule": "Use the existing dev checkouts, preserve unrelated changes, and submit the Execution package before updating the SDK parent."
+  },
+  "repositories": {
+    "execution_package": {
+      "path": "D:/bt_api_py/bt_api/bt_api_execution",
+      "branch": "dev",
+      "head": "5e6ba3e90e04f5e2f5ad0944e6557f2a1eb1edc5",
+      "working_tree_changes_for_this_round": [
+        "src/bt_api_execution/store.py",
+        "tests/test_execution_recovery_views.py"
+      ],
+      "other_uncommitted_package_paths": false
+    },
+    "sdk": {
+      "path": "D:/bt_api_py",
+      "branch": "dev",
+      "head": "1843101a198e7ee325ffa86c0e0d37b1128d1cec",
+      "working_tree_note": "The shared SDK checkout has other unrelated/concurrent changes. This round owns only the three listed SDK files; no other dirty path is a dependency of these recovery-view tests."
+    }
+  },
+  "files": [
+    {
+      "repository": "execution_package",
+      "path": "bt_api/bt_api_execution/src/bt_api_execution/store.py",
+      "bytes": 877421,
+      "sha256": "E6A6E75CD0A762BC321A0BEF8C03F32A2DCC75536567F18AC5385388699D7FFD"
+    },
+    {
+      "repository": "execution_package",
+      "path": "bt_api/bt_api_execution/tests/test_execution_recovery_views.py",
+      "bytes": 5015,
+      "sha256": "573AE9A3872131097500BF8E402A1880C55EA343629D7A620CAAF40D7F777855"
+    },
+    {
+      "repository": "sdk",
+      "path": "bt_api_py/service_execution_account_books.py",
+      "bytes": 58827,
+      "sha256": "22166DA944FE4E9DDADE5F41B16E43678FAE382184B520BB1FCF8E18065A452F"
+    },
+    {
+      "repository": "sdk",
+      "path": "bt_api_py/service_execution.py",
+      "bytes": 25059,
+      "sha256": "DED42B52272286C9DD74EF95DA15EA1927A9454B18C7562EF7187F4ED83FBA1B"
+    },
+    {
+      "repository": "sdk",
+      "path": "tests/unit/test_service_execution_recovery_views.py",
+      "bytes": 16579,
+      "sha256": "35867DC8E92E16D6C98610E1FA8F5A1A15A2BF0ADDBB60D7AE89ADFF0428E7A1"
+    }
+  ],
+  "acceptance_runs": [
+    {
+      "name": "Execution package recovery views",
+      "working_directory": "D:/bt_api_py/bt_api/bt_api_execution",
+      "environment": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONPATH": "D:/bt_api_py/bt_api/bt_api_execution/src"
+      },
+      "command": "C:/anaconda3/python.exe -m pytest -p no:cacheprovider --noconftest -q tests/test_execution_recovery_views.py",
+      "exit_code": 0,
+      "output": "4 passed in 0.53s",
+      "warnings": [],
+      "raw_log_path": null,
+      "junit_path": null,
+      "artifact_note": "The command/output were captured in the tool session; no durable raw log or JUnit file was saved."
+    },
+    {
+      "name": "SDK recovery views and client wrappers",
+      "working_directory": "D:/bt_api_py",
+      "environment": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONPATH": "D:/bt_api_py;D:/bt_api_py/bt_api/bt_api_execution/src"
+      },
+      "command": "C:/anaconda3/python.exe -m pytest -p no:cacheprovider --noconftest -q tests/unit/test_service_execution_recovery_views.py",
+      "exit_code": 0,
+      "output": "5 passed, 1 warning in 0.98s",
+      "warning": "PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope (plugin autoload disabled).",
+      "raw_log_path": null,
+      "junit_path": null,
+      "artifact_note": "The command/output were captured in the tool session; no durable raw log or JUnit file was saved."
+    }
+  ],
+  "additional_checks": {
+    "py_compile": "passed for the five owned files; no persistent log path recorded",
+    "ruff": "passed for the five owned files; no persistent log path recorded",
+    "independent_static_review": {
+      "reviewer": "execution_recovery_review",
+      "result": "GO on the exact pins listed above",
+      "scope_note": "Static review only; reviewer did not run tests, imports, a database, or a Host."
+    }
+  },
+  "dependency_assessment": {
+    "package_two_paths": "The package test and new recovery methods use the current committed Execution source at HEAD 5e6ba3e90e04f5e2f5ad0944e6557f2a1eb1edc plus the modified store.py in this round. Package status showed no other changed or untracked source/test path. The package test does not depend on any SDK changes.",
+    "sdk_three_paths": "The recovery adapter and SDK test use the new DTOs/read methods in the package store.py, plus committed Execution APIs at package HEAD. The SDK test uses the committed ServiceClientRuntime and protocol APIs. These paths do not require other uncommitted SDK files such as components, registry, Host, group, or Risk files, and do not depend on the package test file."
+  },
+  "compatibility_regression_limit": "The schema-21 compatibility test creates a current-schema SQLite database, rewrites the recorded-intent outbox payload to the supported pre-v22 one-key shape, sets schema_version to 21, then reopens through the current migration path and reads the recovery snapshot. It is a migration-path compatibility regression, not a fixture built from a complete historical v21 DDL database.",
+  "scope_limits": [
+    "No ServiceHost/CURVE integration or Host launch was run in this round.",
+    "Recovery views attest a durable local journal cut, not provider-live freshness.",
+    "No files were staged or committed as part of this note."
+  ]
+}
