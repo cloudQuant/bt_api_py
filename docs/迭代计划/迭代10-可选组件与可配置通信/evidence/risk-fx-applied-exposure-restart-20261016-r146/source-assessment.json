@@ -1,0 +1,139 @@
+{
+  "schema": "iteration10-risk-fx-restart-delivery-assessment-v1",
+  "created_utc": "2026-10-15T23:43:29Z",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "expected_parent": "c1d9d6926f2e1151ef487fff419329d2ca13af8e",
+  "source_round": "RISK02 SDK FX valuation and applied-exposure restart integration",
+  "source_scope": {
+    "bt_api_py/service_risk_order_entry.py": {
+      "path": "D:\\bt_api_py\\bt_api_py\\service_risk_order_entry.py",
+      "bytes": 151781,
+      "sha256": "8ad906d552de081b816a984d5585ca52db3716076be030ce49f3b39d7e3d4fe5"
+    },
+    "bt_api_py/service_risk_order_journal.py": {
+      "path": "D:\\bt_api_py\\bt_api_py\\service_risk_order_journal.py",
+      "bytes": 231705,
+      "sha256": "7edc42810134221b753f76530054595d0ae94d76e6baa76f0cd1fe72fad8a46c"
+    },
+    "tests/unit/test_service_risk_order_fx_restart_integration.py": {
+      "path": "D:\\bt_api_py\\tests\\unit\\test_service_risk_order_fx_restart_integration.py",
+      "bytes": 47242,
+      "sha256": "814d37fe8e7007cf9b39b69810a0ed76ad05ec849709a4d103312695f657aab6"
+    }
+  },
+  "source_review": {
+    "status": "GO",
+    "reviewer": "/root/trn02_acceptance",
+    "scope": "Static review of exact entry, journal, and test pins; no test or Host execution by reviewer.",
+    "source_pins": {
+      "bt_api_py/service_risk_order_entry.py": "151781 bytes / 8ad906d552de081b816a984d5585ca52db3716076be030ce49f3b39d7e3d4fe5",
+      "bt_api_py/service_risk_order_journal.py": "231705 bytes / 7edc42810134221b753f76530054595d0ae94d76e6baa76f0cd1fe72fad8a46c",
+      "tests/unit/test_service_risk_order_fx_restart_integration.py": "47242 bytes / 814d37fe8e7007cf9b39b69810a0ed76ad05ec849709a4d103312695f657aab6"
+    }
+  },
+  "qa": {
+    "fixed_host_v8": {
+      "status": "PASS",
+      "tests": "1 passed",
+      "elapsed": "21.49s",
+      "exit": 0,
+      "root_tool": "de8ef5/30ad6e",
+      "spec": "D:\\temp\\iter10-fx-v8-host-root-spec.json",
+      "spec_sha256": "b167c7462fafe8c22fa9f252afd340f42a517b8105425449c32b3291e62140e9",
+      "result": "D:\\temp\\iter10-fx-v8-host-root\\result.json",
+      "stdout": "D:\\temp\\iter10-fx-v8-host-root\\stdout.log",
+      "stderr": "D:\\temp\\iter10-fx-v8-host-root\\stderr.log",
+      "junit": "D:\\temp\\iter10-fx-v8-host-root\\junit.xml",
+      "source_count": 1962,
+      "sources_unchanged": true,
+      "stderr_empty": true,
+      "process_cleanup": "Root post-run CIM found no candidate PID 1940, child process, or candidate Python process; normal shutdown and bounded cleanup assertions passed.",
+      "evidence_level": "LOCAL_SPAWNED_SERVICEHOST_CURVE_SQLITE_SYNTHETIC_PROVIDER_FX_RESTART_NOT_REAL_ACCOUNT"
+    },
+    "direct_focus_v7": {
+      "status": "PASS_PREVIOUSLY_ACCEPTED_NOT_RERUN",
+      "tests": "1 passed",
+      "elapsed": "5.74s",
+      "exit": 0,
+      "spec": "D:\\temp\\iter10-fx-v7-direct-root-spec.json",
+      "spec_sha256": "48b588f214ac4abe91037c3b3b316b966c4a81ebbd51cd0b95bc7eba3e6d714f",
+      "output": "D:\\temp\\iter10-fx-v7-direct-root",
+      "selected_test": "test_valuation_digest_canonicalizes_equivalent_provider_price_scales",
+      "evidence_level": "REAL_DIRECT_RISK_HANDLER_SYNTHETIC_PROVIDER_DECIMAL_CANONICALIZATION_ONLY",
+      "note": "Root instructed not to rerun this accepted node. The selected direct test body was unchanged in the V8 fixture update; V8 adds same-logical-run/fresh-client-session restart assertions to the spawned Host fixture."
+    }
+  },
+  "scenario_scope": {
+    "covered": [
+      "Synthetic EUR-quoted order admission preserves raw EUR price and applies a trusted EUR/USD fact with non-unit contract multiplier.",
+      "V8 spawned ServiceHost/ServiceClientRuntime/CURVE flow submits, applies partial-fill exposure, restarts against the same SQLite stores and preserves the applied exposure and stable order/business identity.",
+      "An expired FX fact causes fail-closed UNKNOWN behavior while preserving the previously applied exposure; a later fresh FX fact permits cancellation/revaluation without duplicate application.",
+      "Restart uses the original logical strategy run ID with distinct client session IDs, matching the durable registry contract."
+    ],
+    "representative_values": "EUR 20 × quantity 2 × multiplier 3 × EUR/USD 1.25 = USD 150; partial fill 0.5 yields USD 37.5 filled and USD 112.5 leaves; fresh EUR/USD 1.30 on cancellation yields USD 39 filled and zero leaves.",
+    "evidence_limit": "Provider rows, FX facts, and baseline inputs are synthetic; no external venue or real account was used. The synthetic fee amount is zero, so nonzero quote-currency fee conversion is not separately demonstrated by this Host node.",
+    "not_claimed": [
+      "Complete formal RISK02 acceptance.",
+      "Real-account or external-provider acceptance.",
+      "Pre-dispatch permit/claim TTL expiry with zero provider writes.",
+      "Dispatched UNKNOWN occupancy retained across TTL and restart."
+    ]
+  },
+  "fixed_source_closure": {
+    "artifact_root": "D:\\temp\\iter10-fx-v8-source",
+    "host_spec": "D:\\temp\\iter10-fx-v8-host-root-spec.json",
+    "source_count": 1962,
+    "current_repository_sources_imported": false,
+    "sdk_archive_commit": "04707f4b7f4c4e009e416901ac4eca7568ea6657",
+    "selected_package_sources": {
+      "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "bt_api_execution": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+      "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "bt_api_risk": "c6fcacda5efb5153d8c3e2be7b17f335f2732a9e",
+      "bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+    },
+    "exact_overlay_paths": [
+      "bt_api_py/service_risk_order_entry.py",
+      "bt_api_py/service_risk_order_journal.py",
+      "tests/unit/test_service_risk_order_fx_restart_integration.py"
+    ],
+    "overlay_source_sha256": {
+      "bt_api_py/service_risk_order_entry.py": "8ad906d552de081b816a984d5585ca52db3716076be030ce49f3b39d7e3d4fe5",
+      "bt_api_py/service_risk_order_journal.py": "7edc42810134221b753f76530054595d0ae94d76e6baa76f0cd1fe72fad8a46c",
+      "tests/unit/test_service_risk_order_fx_restart_integration.py": "814d37fe8e7007cf9b39b69810a0ed76ad05ec849709a4d103312695f657aab6"
+    },
+    "provenance": "The Host spec declares repositories={} and loads the fixed-source artifact plus the three reviewed overlays; it does not import the mutable current checkout. This delivery binds the current dev source files for the proposed commit."
+  },
+  "prior_attempts": [
+    {
+      "round": "V5 direct",
+      "status": "FAIL_TEST_ORACLE",
+      "artifact": "D:\\temp\\iter10-fx-v5-direct-root",
+      "summary": "Synthetic query fixture sent unsupported tags; preserved, not accepted."
+    },
+    {
+      "round": "V6 direct",
+      "status": "FAIL_TEST_ORACLE",
+      "artifact": "D:\\temp\\iter10-fx-v6-direct-root",
+      "summary": "Fixture assumed one PROVIDER_QUERY shape for both terminal submit and partial query; terminal submit records ORDER_OBSERVATION. Preserved, not accepted."
+    },
+    {
+      "round": "V7 Host",
+      "status": "FAIL_FIXTURE_REGISTRATION",
+      "artifact": "D:\\temp\\iter10-fx-v7-host-root",
+      "summary": "Restart fixture used a new logical run ID; durable strategy-write registration rejected it with DUPLICATE_ACTIVE_RUN. Corrected fixture reuses the logical run ID with fresh sessions."
+    }
+  ],
+  "source_committer": {
+    "helper": ".codex-tmp/iteration10-scoped-source-delivery-r3.py",
+    "cfg": ".codex-tmp/iteration10-risk-fx-restart-delivery-cfg-20261016.json",
+    "expected_action": "Root may review and invoke the existing scoped-delivery helper after checking exact pins and unrelated changes.",
+    "no_stage_or_commit_by_agent": true
+  },
+  "next_risk02_gaps": [
+    "Running-host pre-dispatch permit/claim TTL expiry must demonstrate zero provider writes.",
+    "Already-dispatched UNKNOWN occupancy must be retained across TTL and restart without a second dispatch."
+  ]
+}

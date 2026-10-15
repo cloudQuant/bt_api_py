@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="4.565" timestamp="2026-10-16T07:25:50.687240" hostname="yun"><testcase classname="tests.unit.test_service_risk_order_fx_restart_integration" name="test_valuation_digest_canonicalizes_equivalent_provider_price_scales" time="2.689"><failure message="AssertionError: {'code': 'INVALID_REQUEST', 'ok': False, 'result': {'found': False, 'record': None}}&#10;assert False is True">tests\unit\test_service_risk_order_fx_restart_integration.py:1016: in test_valuation_digest_canonicalizes_equivalent_provider_price_scales
+    assert record_state(partial) == "PARTIALLY_FILLED", partial
+tests\unit\test_service_risk_order_fx_restart_integration.py:983: in record_state
+    assert reply["ok"] is True, reply
+E   AssertionError: {'code': 'INVALID_REQUEST', 'ok': False, 'result': {'found': False, 'record': None}}
+E   assert False is True</failure></testcase></testsuite></testsuites>

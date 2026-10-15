@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="4.356" timestamp="2026-10-16T07:27:33.168917" hostname="yun"><testcase classname="tests.unit.test_service_risk_order_fx_restart_integration" name="test_valuation_digest_canonicalizes_equivalent_provider_price_scales" time="2.616"><failure message="RuntimeError: generator raised StopIteration">tests\unit\test_service_risk_order_fx_restart_integration.py:1028: in test_valuation_digest_canonicalizes_equivalent_provider_price_scales
+    query_event = next(
+E   StopIteration
+
+The above exception was the direct cause of the following exception:
+C:\Anaconda3\Lib\site-packages\_pytest\runner.py:345: in from_call
+    result: Optional[TResult] = func()
+C:\Anaconda3\Lib\site-packages\_pytest\runner.py:266: in &lt;lambda&gt;
+    lambda: ihook(item=item, **kwds), when=when, reraise=reraise
+C:\Anaconda3\Lib\site-packages\pluggy\_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+C:\Anaconda3\Lib\site-packages\pluggy\_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+C:\Anaconda3\Lib\site-packages\_pytest\threadexception.py:87: in pytest_runtest_call
+    yield from thread_exception_runtest_hook()
+C:\Anaconda3\Lib\site-packages\_pytest\threadexception.py:63: in thread_exception_runtest_hook
+    yield
+C:\Anaconda3\Lib\site-packages\_pytest\unraisableexception.py:90: in pytest_runtest_call
+    yield from unraisable_exception_runtest_hook()
+C:\Anaconda3\Lib\site-packages\_pytest\unraisableexception.py:65: in unraisable_exception_runtest_hook
+    yield
+C:\Anaconda3\Lib\site-packages\_pytest\logging.py:839: in pytest_runtest_call
+    yield from self._runtest_for(item, "call")
+C:\Anaconda3\Lib\site-packages\_pytest\logging.py:822: in _runtest_for
+    yield
+C:\Anaconda3\Lib\site-packages\_pytest\capture.py:882: in pytest_runtest_call
+    return (yield)
+E   RuntimeError: generator raised StopIteration</failure></testcase></testsuite></testsuites>

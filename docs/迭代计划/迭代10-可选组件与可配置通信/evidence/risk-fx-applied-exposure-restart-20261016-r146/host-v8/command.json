@@ -1,0 +1,41 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\temp\\iter10-fx-v8-source\\pytest-risk-fx.ini",
+    "--rootdir",
+    "D:\\temp\\iter10-fx-v8-source",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iter10-fx-v8-host-root\\junit.xml",
+    "--basetemp=D:\\temp\\iter10-fx-v8-host-root\\pytest-tmp",
+    "tests/unit/test_service_risk_order_fx_restart_integration.py::test_spawned_fx_risk_order_survives_restart_expiry_and_revaluation"
+  ],
+  "cwd": "D:\\temp\\iter10-fx-v8-source",
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "D:\\temp\\iter10-fx-v8-source;D:\\temp\\iter10-fx-v8-source\\bt_api\\bt_api_base\\src;D:\\temp\\iter10-fx-v8-source\\bt_api\\bt_api_execution\\src;D:\\temp\\iter10-fx-v8-source\\bt_api\\bt_api_gateway\\src;D:\\temp\\iter10-fx-v8-source\\bt_api\\bt_api_monitor\\src;D:\\temp\\iter10-fx-v8-source\\bt_api\\bt_api_risk\\src;D:\\temp\\iter10-fx-v8-source\\bt_api\\bt_api_transport_zmq\\src",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS",
+    "PYTEST_PLUGINS",
+    "PYTHONHOME",
+    "PYTHONSTARTUP",
+    "PYTHONUSERBASE",
+    "PYTHONINSPECT",
+    "PYTHONEXECUTABLE",
+    "PYTHONBREAKPOINT",
+    "PYTHONPATH",
+    "PYTEST_CURRENT_TEST"
+  ],
+  "started_utc": "2026-10-15T23:38:35.092748+00:00"
+}

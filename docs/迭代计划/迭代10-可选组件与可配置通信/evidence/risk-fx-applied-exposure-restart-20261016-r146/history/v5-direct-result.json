@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 1,
+  "finished_utc": "2026-10-15T23:25:55.550274+00:00",
+  "source_count": 1962,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "a1f9a93047a85ebd44498910d7bceb7b61d6cdfc254049562818be3377c66f64",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "REAL_DIRECT_RISK_HANDLER_SYNTHETIC_PROVIDER_DECIMAL_CANONICALIZATION_ONLY"
+}

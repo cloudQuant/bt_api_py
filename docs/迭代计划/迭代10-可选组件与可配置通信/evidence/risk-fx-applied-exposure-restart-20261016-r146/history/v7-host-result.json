@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 1,
+  "finished_utc": "2026-10-15T23:31:30.252308+00:00",
+  "source_count": 1962,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "787dac9965c43a3b53682c9e4d1ae24f9e2777bdecb45fbc3722bc13c8fda8cf",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "LOCAL_SPAWNED_SERVICEHOST_CURVE_SQLITE_SYNTHETIC_PROVIDER_FX_RESTART_NOT_REAL_ACCOUNT"
+}

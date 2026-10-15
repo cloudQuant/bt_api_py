@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="13.316" timestamp="2026-10-16T07:31:16.305806" hostname="yun"><testcase classname="tests.unit.test_service_risk_order_fx_restart_integration" name="test_spawned_fx_risk_order_survives_restart_expiry_and_revaluation" time="11.662"><failure message="AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-fx-strategy-2:normal_close:BrokenPipeError',)">tests\unit\test_service_risk_order_fx_restart_integration.py:668: in test_spawned_fx_risk_order_survives_restart_expiry_and_revaluation
+    strategy2, run2 = start_strategy(host2, "risk-fx-strategy-2")
+tests\unit\test_service_risk_order_fx_restart_integration.py:590: in start_strategy
+    assert ready[0] == "ready" and type(ready[1]) is str and ready[1], ready
+E   AssertionError: ('error', 'DUPLICATE_ACTIVE_RUN')
+E   assert ('error' == 'ready'
+E     
+E     - ready
+E     + error)
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_order_fx_restart_integration.py:772: in test_spawned_fx_risk_order_survives_restart_expiry_and_revaluation
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-fx-strategy-2:normal_close:BrokenPipeError',)</failure></testcase></testsuite></testsuites>
