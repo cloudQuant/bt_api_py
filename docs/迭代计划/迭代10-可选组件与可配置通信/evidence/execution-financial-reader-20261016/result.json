@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T17:50:14.087031+00:00",
+  "source_count": 137,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "0881a8f3bb3837be3a7b6a2b776589c6d743642987be1990615267d7d8e9fe11",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "LOCAL_SQLITE_PERSISTED_FINANCIAL_PROJECTION_READ_ONLY_SYNTHETIC_PROVIDER_NOT_SERVICE_OR_ACCOUNT_ACCEPTANCE"
+}

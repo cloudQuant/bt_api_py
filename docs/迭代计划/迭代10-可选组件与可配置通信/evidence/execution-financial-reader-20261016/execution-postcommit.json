@@ -1,0 +1,24 @@
+{
+  "repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "parent": "dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc",
+  "paths": [
+    "src/bt_api_execution/store.py",
+    "tests/test_account_financial_store.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_execution/store.py": "f0763053686ba01ed91ad1052dea2fe73e59da1e963a1f96a22d794e5055a70a",
+    "tests/test_account_financial_store.py": "34e6d9438bb4d38babfdc1ec022825cd05bc7c3a2c5f5400d54a1bd22b32448b"
+  },
+  "filtered_blob_ids": {
+    "src/bt_api_execution/store.py": "dd25b5c6abaaa44d4f952fec123ece0299fe90e8",
+    "tests/test_account_financial_store.py": "b01da472e4a24a66948ca46b430217db1745bec5"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "1373b13ecf29d78addc988921a0234d24101c837",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-financial-reader-root-20261016-r1\\result.json",
+  "evidence_level": "LOCAL_SQLITE_PERSISTED_FINANCIAL_PROJECTION_READ_ONLY_SYNTHETIC_PROVIDER_NOT_SERVICE_OR_ACCOUNT_ACCEPTANCE"
+}

@@ -1,0 +1,9 @@
+# 第113轮：持久账本纯只读投影接口
+
+新增SqliteExecutionStore.read_account_financial_projection(account_key, expected_directory=...)，只在pure_read_transaction中校验并返回已持久化的AccountFinancialProjectionV1；不reconcile、不写账、不调整lease。校验baseline/directory/projection哈希、cut/head、连续outbox来源、每单cursor/posting以及当前Execution journal。journal推进后旧head不可读；返回的是最后一次持久化的活动事实，不声称当前provider、行情或FX新鲜度。
+
+独立静态审查发现并修复两处真实合同差异：外账户全局outbox行仍保存intent hash但不得分配cursor/posting；UNALLOCATED只在residual表示，不在registered owner books中。Root仅运行三个新回归，3 passed in 0.84s、exit0、无warnings；137源码输入及Execution/Base HEAD前后不变。覆盖SQLite重开、读前后数据库不变、过期head拒绝、来源篡改拒绝以及同库另一账户真实事件。旧17项账本suite没有为交付重复运行。证据限本地SQLite/合成provider，不是SDK ServiceHost、Backtrader或真实账户验收。
+
+Execution/dev两路径提交1373b13ecf29d78addc988921a0234d24101c837，父dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc。父SDK/dev仅更新Execution gitlink、本轮证据及两份进度记录，父2e9bace6；实际SDK提交由本轮Git记录给出。正式22/68不变，BT02仍需可信生产资源接线和实际Host/Cerebro及恢复验收。
+
+同期SDK typed-claim r3的两个positive参数均到达append_terminal_exposure_ack后因TERMINAL_EXPOSURE_RECEIPT_MISMATCH失败；原结果保留于D:/temp/iteration10-risk-typed-claim-root-20261016-r3（401源/4HEAD不变）。该失败不是本轮reader验收，不能计入正式PASS。尚未创建额外worktree；用户的并行工作区问题仅做方案评估。
