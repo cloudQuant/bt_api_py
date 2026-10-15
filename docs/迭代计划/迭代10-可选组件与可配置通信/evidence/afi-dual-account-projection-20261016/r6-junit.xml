@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="17.930" timestamp="2026-10-16T01:12:03.138729+08:00" hostname="yun"><testcase classname="test_service_read_authorized_http_integration" name="test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts" time="15.833"><failure message="AssertionError: assert {'afi-account...ntity': '1'}]} == {'afi-account...ntity': '5'}]}&#10;  &#10;  Differing items:&#10;  {'afi-account-b': [{'instrument': 'PAPER:SIM:AFI-DUAL-B', 'net_quantity': '1'}]} != {'afi-account-b': [{'instrument': 'PAPER:SIM:AFI-DUAL-B', 'net_quantity': '5'}]}&#10;  {'afi-account-a': [{'instrument': 'PAPER:SIM:AFI-DUAL-A', 'net_quantity': '0.5'}]} != {'afi-account-a': [{'instrument': 'PAPER:SIM:AFI-DUAL-A', 'net_quantity': '3.5'}]}&#10;  Use -v to get more diff&#10;service-read-startup-diagnostic={&quot;events&quot;:[],&quot;events_overflow&quot;:false,&quot;outer_failure&quot;:{&quot;code&quot;:null,&quot;phase&quot;:&quot;integration_body&quot;,&quot;type&quot;:&quot;builtins.AssertionError&quot;},&quot;schema_version&quot;:1}">tests\test_service_read_authorized_http_integration.py:3873: in test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts
+    _run_dual_live_composition_projection(tmp_path, monkeypatch)
+tests\test_service_read_authorized_http_integration.py:3863: in _run_dual_live_composition_projection
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_authorized_http_integration.py:3762: in _run_dual_live_composition_projection
+    asyncio.run(_exercise_http())
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests\test_service_read_authorized_http_integration.py:3703: in _exercise_http
+    assert {
+E   AssertionError: assert {'afi-account...ntity': '1'}]} == {'afi-account...ntity': '5'}]}
+E     
+E     Differing items:
+E     {'afi-account-b': [{'instrument': 'PAPER:SIM:AFI-DUAL-B', 'net_quantity': '1'}]} != {'afi-account-b': [{'instrument': 'PAPER:SIM:AFI-DUAL-B', 'net_quantity': '5'}]}
+E     {'afi-account-a': [{'instrument': 'PAPER:SIM:AFI-DUAL-A', 'net_quantity': '0.5'}]} != {'afi-account-a': [{'instrument': 'PAPER:SIM:AFI-DUAL-A', 'net_quantity': '3.5'}]}
+E     Use -v to get more diff
+E   service-read-startup-diagnostic={"events":[],"events_overflow":false,"outer_failure":{"code":null,"phase":"integration_body","type":"builtins.AssertionError"},"schema_version":1}</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\afi_iter10_dual_live_api_root_20261016_r7\\junit.xml",
+    "--basetemp=D:\\temp\\afi_iter10_dual_live_api_root_20261016_r7\\pytest-tmp",
+    "tests/test_service_read_authorized_http_integration.py::test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts"
+  ],
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\afi_iter10_p9b_sdk_d996_20261015\\root;D:\\temp\\afi_iter10_p9b_sdk_d996_20261015\\base\\src;D:\\temp\\afi_iter10_p9b_sdk_d996_20261015\\execution\\src;D:\\temp\\afi_iter10_p9b_sdk_d996_20261015\\transport\\src;D:\\temp\\afi_iter10_p9b_sdk_d996_20261015\\monitor\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS",
+    "AFI_DUAL_LIVE_PREFLIGHT_ONLY"
+  ],
+  "started_utc": "2026-10-15T17:24:31.657466+00:00"
+}

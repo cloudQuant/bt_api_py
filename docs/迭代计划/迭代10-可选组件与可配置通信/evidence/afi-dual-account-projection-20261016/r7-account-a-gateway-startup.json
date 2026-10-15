@@ -1,0 +1,1 @@
+{"account_ref":"afi-account-a","role":"gateway","schema_version":1,"shutdown":{"exit_code":0,"failure_count":0,"reply":["closed","closed",1,1,1,"closed"]},"startup":{"account_key_id":"account-f1cde9b08de53e457ae660fd88db05fb64113a700b9a3e09fe140cb3cda0c522","close_calls":0,"connect_calls":1,"read_calls":1,"worker_ready":true,"worker_state":"ready"}}

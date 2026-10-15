@@ -1,0 +1,74 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\source_code\ai-for-investor\src\backend\tests
+configfile: pytest.ini
+collected 1 item
+
+tests\test_service_read_authorized_http_integration.py F                 [100%]
+
+================================== FAILURES ===================================
+__ test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts ___
+tests\test_service_read_authorized_http_integration.py:3873: in test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts
+    _run_dual_live_composition_projection(tmp_path, monkeypatch)
+tests\test_service_read_authorized_http_integration.py:3863: in _run_dual_live_composition_projection
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_authorized_http_integration.py:3762: in _run_dual_live_composition_projection
+    asyncio.run(_exercise_http())
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests\test_service_read_authorized_http_integration.py:3703: in _exercise_http
+    assert {
+E   AssertionError: assert {'afi-account...ntity': '1'}]} == {'afi-account...ntity': '5'}]}
+E     
+E     Differing items:
+E     {'afi-account-b': [{'instrument': 'PAPER:SIM:AFI-DUAL-B', 'net_quantity': '1'}]} != {'afi-account-b': [{'instrument': 'PAPER:SIM:AFI-DUAL-B', 'net_quantity': '5'}]}
+E     {'afi-account-a': [{'instrument': 'PAPER:SIM:AFI-DUAL-A', 'net_quantity': '0.5'}]} != {'afi-account-a': [{'instrument': 'PAPER:SIM:AFI-DUAL-A', 'net_quantity': '3.5'}]}
+E     Use -v to get more diff
+E   service-read-startup-diagnostic={"events":[],"events_overflow":false,"outer_failure":{"code":null,"phase":"integration_body","type":"builtins.AssertionError"},"schema_version":1}
+---------------------------- Captured stderr call -----------------------------
+D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+------------------------------ Captured log call ------------------------------
+INFO     app.rate_limit:rate_limit.py:38 Rate limiter using in-memory backend (not suitable for multi-instance)
+INFO     weasyprint.progress:__init__.py:292 Step 2 - Fetching and parsing CSS - CSS string
+INFO     weasyprint.progress:__init__.py:292 Step 2 - Fetching and parsing CSS - CSS string
+INFO     weasyprint.progress:__init__.py:292 Step 2 - Fetching and parsing CSS - CSS string
+============================== warnings summary ===============================
+.venv\Lib\site-packages\_pytest\config\__init__.py:1464
+  D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+.venv\Lib\site-packages\_pytest\config\__init__.py:1464
+  D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: asyncio_mode
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+.venv\Lib\site-packages\_pytest\config\__init__.py:1464
+  D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+.venv\Lib\site-packages\_pytest\config\__init__.py:1464
+  D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\afi_iter10_dual_live_api_root_20261016_r6\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests\test_service_read_authorized_http_integration.py::test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts
+======================= 1 failed, 4 warnings in 17.93s ========================

@@ -1,0 +1,9 @@
+# 第110轮：AFI双账户真实服务投影
+
+AFI默认read runtime在有账户绑定时明确请求account.snapshot，双账户fixture统一source授权、Registry grants及profile的application identity。组合API透传SDK唯一UNALLOCATED账与coverage，分别保留当前未分配账和基线后对账残差，不改变SDK会计计算或重复加总。
+
+Root r5通过一个runtime装配节点，但真实双账户节点因旧identity返回DENIED；r6修正identity后已能读取服务，旧断言把UNALLOCATED持仓当成incremental residual而失败。r7只重跑失败的真实链路，1passed/15.51秒/exit0，四条既有pytest配置warning。2115公共输入及AFI HEAD前后不变；两个Gateway和两个Execution真实spawn/CURVE Host均正常closed/exit0、failure_count=0，应用owner线程完整关闭。正常FastAPI lifespan→HTTP→SDK读取合成账户总额160+790=950；strategy持仓2.5/4、UNALLOCATED3.5/5、incremental residual0.5/1分别核对，重叠组合不累加，跨owner404。r5/r6原结果保留，已通过装配节点未重复。
+
+这是本机真实进程与合成provider事实证据，HTTP使用ASGI客户端；不是真实账户、前端展示或完整AFI02–AFI03验收。strategy value仍不可用、creditable=false、总coverage incomplete；paper、多币种/FX和完整异常矩阵继续待验。固定SDK及Base/Execution/Transport/Monitor导出来自既有P9B组合，Gateway使用固定当前源码；不能将此结果推定为所有当前SDK候选已接受。正式22/68不变。
+
+独立静态审查afi_lifespan_review GO，三个源码pin见r7-spec与afi-postcommit。AFI/dev提交2d081f4308215c4aa7f90d656039026fd9713e2e，父e18b0a3cb4383cd134f94a9be1d47cc8a4dd16f4。更早r2–r4未通过的原始结果仍保留在先前生成的原目录，本轮不重写或推定它们的异常原因。

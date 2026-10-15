@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="17.785" timestamp="2026-10-16T01:03:16.480426+08:00" hostname="yun"><testcase classname="test_service_read_authorized_http_integration" name="test_default_service_read_runtime_assembly_limits_gateway_to_snapshot" time="0.032" /><testcase classname="test_service_read_authorized_http_integration" name="test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts" time="15.391"><failure message="app.services.service_read.deployment.ServiceReadDeploymentError: START_FAILED&#10;service-read-startup-diagnostic={&quot;events&quot;:[{&quot;code&quot;:&quot;DENIED&quot;,&quot;phase&quot;:&quot;sdk_control_rpc&quot;,&quot;type&quot;:&quot;bt_api_py.service_runtime.ServiceRuntimeError&quot;},{&quot;code&quot;:&quot;DENIED&quot;,&quot;phase&quot;:&quot;sdk_runtime_start&quot;,&quot;type&quot;:&quot;bt_api_py.service_runtime.ServiceRuntimeError&quot;},{&quot;code&quot;:&quot;DENIED&quot;,&quot;phase&quot;:&quot;session_start&quot;,&quot;type&quot;:&quot;bt_api_py.service_runtime.ServiceRuntimeError&quot;},{&quot;code&quot;:&quot;DENIED&quot;,&quot;phase&quot;:&quot;owner_thread_start&quot;,&quot;type&quot;:&quot;bt_api_py.service_runtime.ServiceRuntimeError&quot;}],&quot;events_overflow&quot;:false,&quot;outer_failure&quot;:{&quot;code&quot;:&quot;START_FAILED&quot;,&quot;phase&quot;:&quot;integration_body&quot;,&quot;type&quot;:&quot;app.services.service_read.deployment.ServiceReadDeploymentError&quot;},&quot;schema_version&quot;:1}">tests\test_service_read_authorized_http_integration.py:3802: in test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts
+    _run_dual_live_composition_projection(tmp_path, monkeypatch)
+tests\test_service_read_authorized_http_integration.py:3792: in _run_dual_live_composition_projection
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_authorized_http_integration.py:3691: in _run_dual_live_composition_projection
+    asyncio.run(_exercise_http())
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests\test_service_read_authorized_http_integration.py:3498: in _exercise_http
+    async with main_module.lifespan(app):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\contextlib.py:210: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+app\main.py:105: in lifespan
+    service_read_deployment = await start_service_read_deployment(
+app\services\service_read\deployment.py:183: in start_service_read_deployment
+    raise ServiceReadDeploymentError(
+E   app.services.service_read.deployment.ServiceReadDeploymentError: START_FAILED
+E   service-read-startup-diagnostic={"events":[{"code":"DENIED","phase":"sdk_control_rpc","type":"bt_api_py.service_runtime.ServiceRuntimeError"},{"code":"DENIED","phase":"sdk_runtime_start","type":"bt_api_py.service_runtime.ServiceRuntimeError"},{"code":"DENIED","phase":"session_start","type":"bt_api_py.service_runtime.ServiceRuntimeError"},{"code":"DENIED","phase":"owner_thread_start","type":"bt_api_py.service_runtime.ServiceRuntimeError"}],"events_overflow":false,"outer_failure":{"code":"START_FAILED","phase":"integration_body","type":"app.services.service_read.deployment.ServiceReadDeploymentError"},"schema_version":1}</failure></testcase></testsuite></testsuites>

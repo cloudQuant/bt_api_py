@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T17:24:49.032324+00:00",
+  "source_count": 2115,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "e18b0a3cb4383cd134f94a9be1d47cc8a4dd16f4"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "e18b0a3cb4383cd134f94a9be1d47cc8a4dd16f4"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "44e154bd2e0127dc2c1a22deef4669702a4d2d30c6cea168feea7c93b3ab2e02",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "SYNTHETIC_DUAL_ACCOUNT_REAL_HTTP_LIFESPAN_SERVICEHOST_FIXED_DEPENDENCIES"
+}

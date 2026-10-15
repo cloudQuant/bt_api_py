@@ -1,0 +1,34 @@
+{
+  "repo": "D:\\source_code\\ai-for-investor",
+  "parent": "e18b0a3cb4383cd134f94a9be1d47cc8a4dd16f4",
+  "paths": [
+    "src/backend/app/services/portfolio_composition.py",
+    "src/backend/app/services/service_read/deployment.py",
+    "src/backend/tests/test_service_read_authorized_http_integration.py"
+  ],
+  "raw_sha256": {
+    "src/backend/app/services/portfolio_composition.py": "cddbd670048209775ec65baf9459cfbb4a62ba7ce8ca6961690400d2ebe92fd1",
+    "src/backend/app/services/service_read/deployment.py": "4a5885ed6d197d7428316507b53df5416ee732a988e63194f11619d87f8e99dd",
+    "src/backend/tests/test_service_read_authorized_http_integration.py": "fce95d01509a912a12136697e2b1b49ec0031e1654646b83e9de95f1673c4d30"
+  },
+  "filtered_blob_ids": {
+    "src/backend/app/services/portfolio_composition.py": "504d2e2632296b05f958225067357342b57ff700",
+    "src/backend/app/services/service_read/deployment.py": "dd22263a3937a59800291068cddad3d5f0cf6a7d",
+    "src/backend/tests/test_service_read_authorized_http_integration.py": "3f6cc0b7af419c3e30ddc5506f57ceb64ce8ff61"
+  },
+  "unrelated_paths": [
+    "README.md",
+    "scripts/README.md",
+    "scripts/ops/app.bat",
+    "scripts/windows/restart_app.bat",
+    "scripts/windows/start_app.bat",
+    "scripts/windows/stop_app.bat"
+  ],
+  "unrelated_diff_sha256": "7e14f5453fb81df4b9c0483c44a3e1f8632b85aeebb22b4a9d4a7da6831926af",
+  "unrelated_status_sha256": "749ef73a0c76ea437e3ba20f70809e27987aaaf8b38b87338b0becbaec2d963e",
+  "head": "2d081f4308215c4aa7f90d656039026fd9713e2e",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\afi_iter10_dual_live_api_root_20261016_r7\\result.json",
+  "evidence_level": "SYNTHETIC_DUAL_ACCOUNT_REAL_HTTP_LIFESPAN_SERVICEHOST_FIXED_DEPENDENCIES"
+}
