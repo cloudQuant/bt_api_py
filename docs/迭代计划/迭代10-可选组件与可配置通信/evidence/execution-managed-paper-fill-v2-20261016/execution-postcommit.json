@@ -1,0 +1,34 @@
+{
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "parent": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "src/bt_api_execution/paper_execution.py": "d6009b51da22b2431d5646cb640a2d974bf345a84172514a2e060ae738c93731",
+    "src/bt_api_execution/store.py": "30488f9d2dd8aeaef787fcc44fefdbdd4a8e2e43fbb3373a14f8c37d458e1bae",
+    "tests/test_paper_execution_v2.py": "e287e50bfa65d2df2c702b89d18eff641529414b42082c57ab769d49c81476d8"
+  },
+  "evidence_sha256": {
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-v2-source-assessment-20261016.json": "390774fb38671af5dc4d85eae30ae904ca7f087a387fcd8f5465a72b4dadf631"
+  },
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-v2-execution-postcommit.json",
+  "message": "feat(execution): persist validated managed paper fill facts",
+  "acceptance_level": "AUTHOR_CONSOLE_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "paths": [
+    "src/bt_api_execution/paper_execution.py",
+    "src/bt_api_execution/store.py",
+    "tests/test_paper_execution_v2.py"
+  ],
+  "filtered_blob_ids": {
+    "src/bt_api_execution/paper_execution.py": "036b8469db983d5d08fd60d6407347b7b56483ab",
+    "src/bt_api_execution/store.py": "51b55a45e99ef0dc275dc576a797d15e97901a52",
+    "tests/test_paper_execution_v2.py": "604d037ed59ffa4909a6382f6630dd6455556e61"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "12372d82bb5c871e8a46c39c3daed9f85edccb0c",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "unrelated_untracked_sha256": {},
+  "unrelated_untracked_preserved": true
+}

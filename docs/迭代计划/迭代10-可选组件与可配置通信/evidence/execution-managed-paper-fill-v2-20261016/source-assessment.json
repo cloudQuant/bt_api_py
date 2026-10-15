@@ -1,0 +1,74 @@
+{
+  "schema": "iteration10-managed-paper-v2-source-assessment-v1",
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "parent": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+  "source_sha256": {
+    "src/bt_api_execution/paper_execution.py": "d6009b51da22b2431d5646cb640a2d974bf345a84172514a2e060ae738c93731",
+    "src/bt_api_execution/store.py": "30488f9d2dd8aeaef787fcc44fefdbdd4a8e2e43fbb3373a14f8c37d458e1bae",
+    "tests/test_paper_execution_v2.py": "e287e50bfa65d2df2c702b89d18eff641529414b42082c57ab769d49c81476d8"
+  },
+  "source_bytes": {
+    "src/bt_api_execution/paper_execution.py": 57364,
+    "src/bt_api_execution/store.py": 882318,
+    "tests/test_paper_execution_v2.py": 23148
+  },
+  "acceptance_level": "AUTHOR_CONSOLE_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "independent_static_review": {
+    "reviewer": "acceptance_review",
+    "result": "GO",
+    "scope": "All three final source/test pins, including the follow-up late-quote-expiry rollback test; no tests or Host run by reviewer."
+  },
+  "public_read_api": "SqliteExecutionStore.get_managed_paper_fill_v2_for_event(event_id, *, event_sequence, journal_generation, scope)",
+  "semantics": [
+    "V2 represents only a newly generated successful managed-paper fill; its time is MANAGED_PAPER_MATCH Unix-epoch nanoseconds, not venue execution time.",
+    "One match-time sample drives evaluation and receipt replay; the later local event-created time remains diagnostic only.",
+    "Exact receipt binds event/cursor/generation, intent/scope/account/strategy, quote source/cursor, incremental economics, fee currency/model, and receipt digest.",
+    "The reader validates the durable chain in one read-only SQLite snapshot. V1 rows remain readable but return no V2 fill and are never promoted.",
+    "Quote expiry between evaluation and event commit rolls back order/event/receipt/book writes. The separate one-attempt dispatch claim is latched UNKNOWN; duplicate intent does not rematch."
+  ],
+  "author_report": {
+    "author": "monitor_control",
+    "raw_artifacts_available": false,
+    "report_is_not_original_stdout": true,
+    "cwd": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+    "argv": [
+      "C:/Anaconda3/python.exe",
+      "-m",
+      "pytest",
+      "-p",
+      "no:asyncio",
+      "--noconftest",
+      "-q",
+      "tests/test_paper_execution.py",
+      "tests/test_paper_execution_store.py",
+      "tests/test_paper_execution_v2.py"
+    ],
+    "environment": {
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src"
+    },
+    "final_result": {
+      "passed": 22,
+      "exit_code": 0,
+      "seconds": 2.77,
+      "warnings_printed": false
+    },
+    "prior_executions": [
+      "21 passed before adding late-quote-expiry case.",
+      "The added targeted case first failed because the test clock recorder omitted its final scheduled event sample.",
+      "Corrected targeted case passed once; author then ran the 22-case affected suite separately."
+    ],
+    "checks_reported": [
+      "Ruff",
+      "test formatting",
+      "py_compile",
+      "git diff --check"
+    ],
+    "no_junit_stdout_stderr_or_source_prepost_files": true
+  },
+  "limitations": [
+    "Author console-only QA was not independently repeated by Root; no reconstructed logs were created.",
+    "No fixed-source Root run, ServiceHost, SDK recovery projection, Backtrader queue, provider/account or BT02 acceptance.",
+    "Historical V1 and generic live-provider fills still lack validated execution-time semantics."
+  ]
+}
