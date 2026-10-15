@@ -1,0 +1,27 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-owner-account-binding-root-20261016-r1\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-owner-account-binding-root-20261016-r1\\pytest-tmp",
+    "tests/unit/test_service_execution_account_books_integration.py::test_exe03_owner_book_query_binds_legacy_coverage_to_financial_cut_account"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src;D:\\bt_api_py\\bt_api\\bt_api_monitor\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T18:58:22.377222+00:00"
+}

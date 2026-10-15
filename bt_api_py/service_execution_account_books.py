@@ -652,6 +652,7 @@ def _owner_projection(
         "owner_kind": kind.value,
         "owner_ref": owner_ref,
         "coverage": {
+            "account_key": reconciliation.coverage.account_key,
             "complete": reconciliation.coverage.complete,
             "scope_directory_revision": reconciliation.coverage.scope_directory_revision,
             "journal_generation": reconciliation.coverage.journal_generation,

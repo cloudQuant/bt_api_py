@@ -1352,6 +1352,47 @@ def _persist_financial_projection_for_account_books(store, targets):
 
 
 @pytest.mark.unit
+def test_exe03_owner_book_query_binds_legacy_coverage_to_financial_cut_account(tmp_path) -> None:
+    """The real owner response carries its trusted Execution account binding."""
+
+    from bt_api_execution import SqliteExecutionStore
+
+    from bt_api_py.service_execution_account_books import ExecutionOrderEntryService
+
+    store = SqliteExecutionStore(str(tmp_path / "account-books-owner-account-binding.sqlite3"))
+    targets = _targets()
+    directory = _persist_financial_projection_for_account_books(store, targets)
+    source = _TrustedFinancialAccountBooksSource(store, targets, directory)
+    service = ExecutionOrderEntryService(
+        store,
+        targets,
+        _SyntheticAcceptedDispatch(),
+        allow_unprotected=True,
+        writer_id="account-books-owner-account-binding-test",
+        account_books_source=source,
+    )
+    try:
+        changes_before_query = store._connection.total_changes
+        response = service.handle(
+            _BOOKS_OPERATION,
+            principal_ref=_STRATEGY_A_PRINCIPAL,
+            identity=_IDENTITY_A,
+            scope=_WIRE_A,
+            arguments={},
+        )
+        assert store._connection.total_changes == changes_before_query
+        assert response["ok"] is True and response["code"] == "OK"
+        result = response["result"]
+        assert result["view"] == "OWNER_BOOK"
+        assert result["coverage"]["account_key"] == targets[_WIRE_A].account_key
+        assert result["coverage"]["account_key"] == result["financial"]["ledger_cut"][
+            "account_key"
+        ]
+    finally:
+        store.close()
+
+
+@pytest.mark.unit
 def test_exe03_service_query_reads_persisted_financial_projection_by_authorized_owner(
     tmp_path,
 ) -> None:
