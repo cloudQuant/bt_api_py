@@ -1,0 +1,79 @@
+{
+  "status": "PASS_PYTHON311_RESOLVER_AND_GATEWAY_DIRECT_CEREBRO_SMOKE",
+  "scope": "source packaging compatibility component; not full CFG01/CFG04/MIG04 or formal provider/account acceptance",
+  "base_source_head": "5d4380f3f69aef1561669de74a357945baf41e41",
+  "base_source_archive_revision": "5d4380f3f69aef1561669de74a357945baf41e41",
+  "base_pyproject_overlay_sha256": "591d520a892f85b47b3ca79c0358a5f9fb0c24041b2d3204884e1b298db3b20e",
+  "wheel": {
+    "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\pyarrow-compat-r1\\wheelhouse\\bt_api_base-0.15.8-py3-none-any.whl",
+    "bytes": 174697,
+    "sha256": "40e8989732255019c1db95777e67b36e9966eaf452d8f95bf619c6e267d2ee26",
+    "requires_dist": [
+      "numpy>=1.26.0",
+      "pyarrow<26.0.0,>=14.0.0; python_version < \"3.13\"",
+      "pyarrow>=14.0.0; python_version >= \"3.13\""
+    ]
+  },
+  "input_wheels": [
+    {
+      "distribution": "bt_api_py",
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\wheelhouse-final\\bt_api_py-0.15.5-py3-none-any.whl",
+      "sha256": "6dc2ef4585c1d40985e22575d94c57d36774731b42c2bcb34a170ba2a41cdac5",
+      "bytes": 1055875,
+      "source_root_revision": "509869e568a553f05d86474323a24499de4fa9b7",
+      "pyproject_overlay_sha256": "818f6ed45279478496ebd6d4e953ccb2c5eee93efc6e18cc700c92da3bc24df7"
+    },
+    {
+      "distribution": "backtrader",
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\wheelhouse-final\\backtrader-1.4.0-py3-none-any.whl",
+      "sha256": "1f8917dd433ef6dd1b8dabbe45a93b9ccdbe3919e86145180c315fd7439fabae",
+      "bytes": 1786381,
+      "source_revision": "53d2bf93949737f2ba6f51979f3f3d13b0d1b450"
+    }
+  ],
+  "venv": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\pyarrow-compat-r1\\venv-client-311",
+  "system_site_packages": false,
+  "resolver": "normal pip install from the three supplied local wheels; declared dependencies from default PyPI index; no constraints, no --no-deps",
+  "resolved_versions": {
+    "python": "3.11.5",
+    "bt_api_py": "0.15.5",
+    "bt_api_base": "0.15.8",
+    "backtrader": "1.4.0",
+    "numpy": "1.26.4",
+    "pyarrow": "25.0.1"
+  },
+  "pip_check": "No broken requirements found.",
+  "cold_gateway_import_log": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\pyarrow-compat-r1\\cold-gateway-import-clean-r1.log",
+  "cold_gateway_import": "PASS: bt_api_base.gateway imported; exported TickWriter; NumPy 1.26.4 / PyArrow 25.0.1",
+  "direct_cerebro_smoke_result": {
+    "status": "PASS_ISOLATED_CORE_CLIENT_NO_TRANSPORT",
+    "python": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\pyarrow-compat-r1\\venv-client-311\\Scripts\\python.exe",
+    "python_version": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+    "sdk_version": "0.15.5",
+    "base_version": "0.15.8",
+    "backtrader_version": "1.4.0",
+    "direct_mode": "direct",
+    "direct_backend": "bt_api_py._direct_backend.DirectBackend",
+    "cerebro_bars": 3,
+    "pyzmq_distribution": null,
+    "pyzmq_importable": false,
+    "pyzmq_probes_during_default_paths": [],
+    "pyzmq_probes_after_explicit_missing_transport": [
+      "zmq"
+    ],
+    "spdlog_distribution": null,
+    "spdlog_importable": false,
+    "spdlog_probes_during_default_paths": [],
+    "spdlog_probes_after_explicit_use": [],
+    "legacy_remote_error": "The legacy ZeroMQ gateway requires the optional transport dependency; install bt_api_base[transport-zmq] or bt_api_py[transport-zmq].",
+    "new_service_missing_transport_error": "ModuleNotFoundError",
+    "absent_domain_distributions": [
+      "bt_api_gateway",
+      "bt_api_execution",
+      "bt_api_risk",
+      "bt_api_monitor"
+    ]
+  },
+  "install_log": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\pyarrow-compat-r1\\pip-install.log",
+  "build_log": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\pyarrow-compat-r1\\build.log"
+}
