@@ -1,0 +1,8 @@
+# Root acceptance: AFI approved-target persistence component
+
+Accepted only at AUTHOR_DATABASE_COMPONENT_QA_AND_INDEPENDENT_STATIC_REVIEW_ONLY. AFI dev commit a6d769474ece728818710d293ea9ad61ca55a4c7 contains exactly six reviewed paths. Root verified exact checkout pins before staging, filtered committed blob identities, inherited parent, empty index, and preservation of six unrelated tracked and three unrelated untracked files. The postcommit record identifies the exact scope and hashes.
+
+The author ran R8 (14 passed) and R11 (5 affected/new passed) separately, both exit zero with two existing pytest configuration warnings. They are not a single 19-test run. The saved stdout, JUnit, and exit files were read and pinned; R8 exact argv was not saved, and R11 argv is author-reported rather than a raw command artifact. No claim of Root-run or fixed installed-artifact QA is made. Independent static review of the final six pins returned GO. Accepted QA was not repeated for delivery.
+
+The final migration fixes required-column nullability and rejects cascading event foreign keys; the file-backed independent-session race covers stable intent reservation. Consumption/revocation coverage is sequential, not simultaneous. Existing CHECK compatibility validates required SQL fragments rather than full Boolean equivalence. Production freshness authorities, approval HTTP/SDK/Execution integration and normal ServiceHost acceptance remain absent. Application approval-policy fields do not identify live Risk policy. No account/provider action and no new formal case PASS; total stays 24/68.
+

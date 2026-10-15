@@ -1,0 +1,69 @@
+{
+  "repository": "D:\\source_code\\ai-for-investor",
+  "parent": "13ab6f912a568877846e25f42ae94fd3969de61e",
+  "independent_static_review": "GO",
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-round136-afi-postcommit.json",
+  "source_sha256": {
+    "src/backend/app/models/strategy_target_approval.py": "3b729191d3c92e5518bbc6367fe90568d4095c262d2fee03ea6d56e2a6e1d790",
+    "src/backend/app/models/__init__.py": "1a0fd63cde9e01ee531cc9466d7aa3581ace0abfd1daaa46c788f5ef897a8afa",
+    "src/backend/alembic/versions/20261016_strategy_target_approvals.py": "6cf82375e0f9e29cc2328b5f9fd203f9d94d0278b7f11d94860af2f963a2cc9f",
+    "src/backend/app/services/strategy_target_approvals.py": "36987e132c602206ad94cdb732b66fbd7e97320c753734ad0cf6c9bbef91ed5d",
+    "src/backend/tests/test_strategy_target_approvals.py": "b2c7ba2beb2a1c9b4a517951a4437d85685e83fc899e3c70d94d205d92243f9f",
+    "src/backend/.codex-tmp/iteration10-approved-target-contract-20261016.md": "2893db7c7dc185f4bab59552df8b376a66de3f8062f0d0d0a8a58afa40721a97"
+  },
+  "evidence_sha256": {
+    "D:\\temp\\afi07_target_store_20261016_r8\\stdout.log": "a78a9b464dd23047ea0a2c1c031ced22d3b74f3b37cf52fdeb05c566f7385c98",
+    "D:\\temp\\afi07_target_store_20261016_r8\\junit.xml": "96422211f7c49ff12856c00fcb05013330dcf760e6430e837602e5985ec36bf3",
+    "D:\\temp\\afi07_target_store_20261016_r8\\exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "D:\\temp\\afi07_target_store_20261016_r11\\stdout.log": "b2f16ef2b437e034732cc532516ac3ce9e0900a7851bc097c4deffaee6d7e178",
+    "D:\\temp\\afi07_target_store_20261016_r11\\junit.xml": "f66556684b6bbfd3b03f6557cd109f7f34c10161f474e3b5f2667a5e795108c5",
+    "D:\\temp\\afi07_target_store_20261016_r11\\exit-code.txt": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-round136-afi-assessment.json": "0c4dab362c86b14df6b159081ea2470b99c22095820c5a75109d036b025a36ee"
+  },
+  "junit": "D:/temp/afi07_target_store_20261016_r11/junit.xml",
+  "tests_passed": 5,
+  "message": "feat(approvals): persist scoped strategy target approval lifecycle",
+  "allowed_markdown_hardbreaks": {
+    "src/backend/.codex-tmp/iteration10-approved-target-contract-20261016.md": [
+      3,
+      4
+    ]
+  },
+  "paths": [
+    "src/backend/.codex-tmp/iteration10-approved-target-contract-20261016.md",
+    "src/backend/alembic/versions/20261016_strategy_target_approvals.py",
+    "src/backend/app/models/__init__.py",
+    "src/backend/app/models/strategy_target_approval.py",
+    "src/backend/app/services/strategy_target_approvals.py",
+    "src/backend/tests/test_strategy_target_approvals.py"
+  ],
+  "filtered_blob_ids": {
+    "src/backend/.codex-tmp/iteration10-approved-target-contract-20261016.md": "7c2fcbbef7cf53f9b2a73f8c1257556fcf96818c",
+    "src/backend/alembic/versions/20261016_strategy_target_approvals.py": "d7d54471577fcba01724eadf4a146282298b96d6",
+    "src/backend/app/models/__init__.py": "9be61e94d3fbd7914a770a1c50fc799188baacd4",
+    "src/backend/app/models/strategy_target_approval.py": "b48e03de8505f4c12f28f7bcf7ae893bb13974f6",
+    "src/backend/app/services/strategy_target_approvals.py": "4546bd8e3dd5b26141d655fd13dabe447372abfe",
+    "src/backend/tests/test_strategy_target_approvals.py": "edf6baf1a2758821cc162144fdfd1eaf6258871c"
+  },
+  "unrelated_paths": [
+    "README.md",
+    "scripts/README.md",
+    "scripts/ops/app.bat",
+    "scripts/windows/restart_app.bat",
+    "scripts/windows/start_app.bat",
+    "scripts/windows/stop_app.bat"
+  ],
+  "unrelated_diff_sha256": "7e14f5453fb81df4b9c0483c44a3e1f8632b85aeebb22b4a9d4a7da6831926af",
+  "unrelated_status_sha256": "749ef73a0c76ea437e3ba20f70809e27987aaaf8b38b87338b0becbaec2d963e",
+  "head": "a6d769474ece728818710d293ea9ad61ca55a4c7",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "whitespace_preservation": "src/backend/.codex-tmp/iteration10-approved-target-contract-20261016.md:98: new blank line at EOF.",
+  "recovery": "No restaging or accepted source edits.",
+  "unrelated_untracked_sha256": {
+    "scripts/windows/README.md": "3703063c7d132f5c0be2589c14e62abcdb4532a25f98b658ca986888acc7a080",
+    "scripts/windows/app.bat": "c1c5dacfc1b53483deff94ae92444870508ff8f47d5010b4deb3f58cca8bb5ed",
+    "scripts/windows/app.ps1": "3d48516c024d36431e41f6cf6002763b77b221b8cf174f98b9557406184e21bb"
+  },
+  "unrelated_untracked_preserved": true
+}

@@ -1,0 +1,105 @@
+{
+  "repository": "D:\\source_code\\ai-for-investor",
+  "parent": "13ab6f912a568877846e25f42ae94fd3969de61e",
+  "evidence_level": "AUTHOR_DATABASE_COMPONENT_QA_AND_INDEPENDENT_STATIC_REVIEW_ONLY",
+  "source_files": [
+    {
+      "path": "src/backend/app/models/strategy_target_approval.py",
+      "size": 8176,
+      "sha256": "3b729191d3c92e5518bbc6367fe90568d4095c262d2fee03ea6d56e2a6e1d790"
+    },
+    {
+      "path": "src/backend/app/models/__init__.py",
+      "size": 9345,
+      "sha256": "1a0fd63cde9e01ee531cc9466d7aa3581ace0abfd1daaa46c788f5ef897a8afa"
+    },
+    {
+      "path": "src/backend/alembic/versions/20261016_strategy_target_approvals.py",
+      "size": 18092,
+      "sha256": "6cf82375e0f9e29cc2328b5f9fd203f9d94d0278b7f11d94860af2f963a2cc9f"
+    },
+    {
+      "path": "src/backend/app/services/strategy_target_approvals.py",
+      "size": 51463,
+      "sha256": "36987e132c602206ad94cdb732b66fbd7e97320c753734ad0cf6c9bbef91ed5d"
+    },
+    {
+      "path": "src/backend/tests/test_strategy_target_approvals.py",
+      "size": 35291,
+      "sha256": "b2c7ba2beb2a1c9b4a517951a4437d85685e83fc899e3c70d94d205d92243f9f"
+    },
+    {
+      "path": "src/backend/.codex-tmp/iteration10-approved-target-contract-20261016.md",
+      "size": 16589,
+      "sha256": "2893db7c7dc185f4bab59552df8b376a66de3f8062f0d0d0a8a58afa40721a97"
+    }
+  ],
+  "independent_review": {
+    "agent": "/root/afi_lifespan_review",
+    "result": "GO",
+    "scope": "Exact six-path persistence component; required nullability/FK semantics and independent file SQLite session reservation race."
+  },
+  "runs": [
+    {
+      "revision": "r8",
+      "passed": 14,
+      "exit": 0,
+      "warnings": 2,
+      "artifacts": [
+        {
+          "path": "D:\\temp\\afi07_target_store_20261016_r8\\stdout.log",
+          "size": 1353,
+          "sha256": "a78a9b464dd23047ea0a2c1c031ced22d3b74f3b37cf52fdeb05c566f7385c98"
+        },
+        {
+          "path": "D:\\temp\\afi07_target_store_20261016_r8\\junit.xml",
+          "size": 2340,
+          "sha256": "96422211f7c49ff12856c00fcb05013330dcf760e6430e837602e5985ec36bf3"
+        },
+        {
+          "path": "D:\\temp\\afi07_target_store_20261016_r8\\exit-code.txt",
+          "size": 3,
+          "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+        }
+      ],
+      "exact_argv_retained": false
+    },
+    {
+      "revision": "r11",
+      "passed": 5,
+      "exit": 0,
+      "warnings": 2,
+      "artifacts": [
+        {
+          "path": "D:\\temp\\afi07_target_store_20261016_r11\\stdout.log",
+          "size": 1352,
+          "sha256": "b2f16ef2b437e034732cc532516ac3ce9e0900a7851bc097c4deffaee6d7e178"
+        },
+        {
+          "path": "D:\\temp\\afi07_target_store_20261016_r11\\junit.xml",
+          "size": 1188,
+          "sha256": "f66556684b6bbfd3b03f6557cd109f7f34c10161f474e3b5f2667a5e795108c5"
+        },
+        {
+          "path": "D:\\temp\\afi07_target_store_20261016_r11\\exit-code.txt",
+          "size": 1,
+          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        }
+      ],
+      "exact_argv_retained": false
+    }
+  ],
+  "not_one_19_test_run": true,
+  "accepted_tests_repeated": false,
+  "limitations": [
+    "R8 exact argv was not retained; R11 argv is author-reported rather than a saved command artifact.",
+    "No production freshness registry, HTTP, SDK, Execution, provider, or full AFI07 acceptance.",
+    "Consume versus revoke contention is tested in sequential orderings, not simultaneously.",
+    "Existing CHECK compatibility uses required SQL fragments, not complete Boolean equivalence."
+  ],
+  "unrelated_untracked_sha256": {
+    "scripts/windows/README.md": "3703063c7d132f5c0be2589c14e62abcdb4532a25f98b658ca986888acc7a080",
+    "scripts/windows/app.bat": "c1c5dacfc1b53483deff94ae92444870508ff8f47d5010b4deb3f58cca8bb5ed",
+    "scripts/windows/app.ps1": "3d48516c024d36431e41f6cf6002763b77b221b8cf174f98b9557406184e21bb"
+  }
+}
