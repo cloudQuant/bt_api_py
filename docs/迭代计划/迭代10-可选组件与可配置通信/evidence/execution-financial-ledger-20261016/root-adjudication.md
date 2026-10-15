@@ -1,0 +1,7 @@
+# 第109轮：Execution资金账
+
+资金账新增可信基线、累计成交游标、按owner归属的现金/持仓/费用与现货平均成本。完整全局outbox扫描拒绝过滤或截断；基线前已累计成交只记增量，迟到活动中的受管订单不会重新分配到人工账。SQLite v23保存基线、事件和head，写入、head更新、提交前复核writer租约；重设基线拒绝activity代次变化和游标回退。complete与BALANCED明确区分，未知成本或不支持的产品保留不可用。
+
+这是合成provider事实与真实SQLite的包级证据；没有ServiceHost/真实账户验收，尚未接入Backtrader资金账或完整恢复，不能替代BT01/BT02、AFI、ARB完整通过。Root仅运行本轮两份新测试文件一次：17passed/0.88秒/exit0、无warning，137公共输入及Execution/Base HEAD前后不变；静态独立审查GO。初始旧spec未执行，元数据pin转录校验失败在pytest前已修正；没有已接受QA重跑。
+
+Execution/dev dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc，父9943e7bb26ba91754462b23308bc24d352faa16d。独立review由execution_recovery_review完成，最终五文件pin与spec及子包postcommit一致。父仓本轮仅gitlink、两份进度及本目录证据。正式用例22/68保持不变。

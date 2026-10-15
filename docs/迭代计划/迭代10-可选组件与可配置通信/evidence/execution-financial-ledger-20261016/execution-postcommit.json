@@ -1,0 +1,33 @@
+{
+  "repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "parent": "9943e7bb26ba91754462b23308bc24d352faa16d",
+  "paths": [
+    "src/bt_api_execution/__init__.py",
+    "src/bt_api_execution/account_financial_ledger.py",
+    "src/bt_api_execution/store.py",
+    "tests/test_account_financial_ledger.py",
+    "tests/test_account_financial_store.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_execution/__init__.py": "eb2694117e74e6c02b24b218669a4dc39f633453866ecefb4104fdb804fd1c76",
+    "src/bt_api_execution/account_financial_ledger.py": "f72cc024378f225ad7743e5d76ae8eeab192d7beeb5ee570ee31ead77fd3f8d0",
+    "src/bt_api_execution/store.py": "288372ed62a9c34f6e9bc5994e992cbfdfff5e671977cc2ddbe0e1101b51c9f1",
+    "tests/test_account_financial_ledger.py": "98650324d4897d623cb19c154a66f0bb1a907ad4a8b40ad6bcfd65b7353b6e61",
+    "tests/test_account_financial_store.py": "060b34c338d7be95eb6c3cf5ecf876cffab07cce95176cd757f8d7c6446207f7"
+  },
+  "filtered_blob_ids": {
+    "src/bt_api_execution/__init__.py": "298a88065842b059ba8c3361c8c3478d43bb1037",
+    "src/bt_api_execution/account_financial_ledger.py": "ee7baeb2473f3b59abeb3dd58f41b0248f1206c8",
+    "src/bt_api_execution/store.py": "88842976ab2886368454e7904e2f30359f70c1a4",
+    "tests/test_account_financial_ledger.py": "b677aecd09aade17a7bd3c0a4282d4911a9861d7",
+    "tests/test_account_financial_store.py": "3c6f43931636ec95050b8a88981e7161facbc938"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-financial-ledger-root-20261016-r2\\result.json",
+  "evidence_level": "LOCAL_SQLITE_FINANCIAL_LEDGER_SYNTHETIC_PROVIDER_NOT_SERVICE_OR_ACCOUNT_ACCEPTANCE"
+}
