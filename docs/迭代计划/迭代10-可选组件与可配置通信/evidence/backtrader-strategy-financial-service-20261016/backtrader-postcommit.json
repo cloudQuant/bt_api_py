@@ -1,0 +1,32 @@
+{
+  "repo": "D:\\source_code\\backtrader",
+  "parent": "815a834c3db185ee51c8927e6eea9cdb9fe32330",
+  "paths": [
+    "backtrader/stores/service_strategy_account_book.py",
+    "tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py",
+    "tests/unit/stores/test_service_strategy_account_book.py"
+  ],
+  "raw_sha256": {
+    "backtrader/stores/service_strategy_account_book.py": "a15100af912a917fbc57fcb395318a6527c3c19b2bd0c7c53e33e56440dc3f65",
+    "tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py": "6171b9f0b058ee01aa557d0b03d73d6d0baa70dd9976f3c83eb5833db1548405",
+    "tests/unit/stores/test_service_strategy_account_book.py": "831dfa737a3ecf98b2c07c22b1e45c2df637cca8b090be3081421290a56aeda7"
+  },
+  "filtered_blob_ids": {
+    "backtrader/stores/service_strategy_account_book.py": "cbc319ca05eee90c9cc93972336bdc28954b3b26",
+    "tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py": "ad687df802547c41f754980f1b3c2f2d0c64ad4e",
+    "tests/unit/stores/test_service_strategy_account_book.py": "147b7e2984c632a7c19e1d5f691b9a2bb7dd1deb"
+  },
+  "unrelated_paths": [
+    "0",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "unrelated_diff_sha256": "9e790e9053c0081adc3d63c9474664a688b67231761fbeb4763212bf2f4750b1",
+  "unrelated_status_sha256": "b7bef090ac83180c0564beb1416b022de0e6d73220ce2f739c609adc8840a144",
+  "head": "1fc58a3d3f8a5d4b97c23d3623107649fb15c56f",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\backtrader-bt-financial-root-20261016-r1\\result.json",
+  "evidence_level": "BT_FINANCIAL_CONSUMER_18_UNIT_CASES_AND_ONE_REAL_CEREBRO_SERVICEHOST_SYNTHETIC_PROVIDER_NODE_USING_FIXED_SDK_6E38_EXECUTION_743A_EXPORTS"
+}

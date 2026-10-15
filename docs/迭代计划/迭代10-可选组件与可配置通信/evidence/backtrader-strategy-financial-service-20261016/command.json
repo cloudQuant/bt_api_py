@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "C:\\Anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-q",
+    "-s",
+    "--tb=short",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\backtrader-bt-financial-root-20261016-r1\\junit.xml",
+    "--basetemp=D:\\temp\\backtrader-bt-financial-root-20261016-r1\\pytest-tmp",
+    "tests/unit/stores/test_service_strategy_account_book.py",
+    "tests/integration/test_btapi_strategy_account_book_multi_strategy_local_process.py::test_two_strategies_bind_distinct_read_books_on_one_shared_broker"
+  ],
+  "cwd": "D:\\source_code\\backtrader",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\iteration10-sdk-6e38-fixed-source-20261016;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "BT_STRATEGY_FINANCIAL_SDK_ROOT": "D:\\temp\\iteration10-sdk-6e38-fixed-source-20261016",
+    "BT_STRATEGY_FINANCIAL_BASE_ROOT": "D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "BT_STRATEGY_FINANCIAL_EXECUTION_ROOT": "D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src",
+    "BT_STRATEGY_FINANCIAL_TRANSPORT_ROOT": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T19:07:15.062178+00:00"
+}

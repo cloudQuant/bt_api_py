@@ -1,0 +1,7 @@
+# 第120轮：Backtrader策略资金成本服务消费与正常重开
+
+Backtrader显式策略账本消费服务端financial cut，提供按币种现金、持仓成本与累计费用；不把旧单次费用当成累计费用，也不据缺失估值生成NAV。读取要求canonical account_key、策略、游标和financial cut一致；缺少/错账户绑定使financial不可用，旧可信持仓仍可读取。非零持仓缺失成本行或成本未知时，cost_basis_complete降为false，现金可用但平均价不生成。
+
+Root首次验证最终三个文件：18单元用例及一个真实Cerebro/ServiceHost节点，共19passed，exit0，13.83秒。集成使用两个策略共享Broker、真实CURVE通信和SQLite，正常关闭并重开服务与客户端，保留相同策略RunID；现金、数量、成本及费用与重开前一致，未重复派发或重复入账。测试和Host实际来源均打印并检查；814个来源pin和五个仓库HEAD前后相同。stdout有一条既有pytest配置warning，stderr有两条Windows Proactor为ZMQ注册selector线程的RuntimeWarning，不能称为无warning。独立静态review GO；外部检查确认四个无关BT tracked改动和空index保持。
+
+实际依赖为固定SDK 6e38c528与Execution 743a0b9的Git源码导出，Base/Transport为当前固定dev；执行时仓库HEAD为SDK302674dc、Execution ae1dffd，不将历史导出组合冒称最新全仓发行验收。Backtrader/dev精确三个文件提交1fc58a3d3f8a5d4b97c23d3623107649fb15c56f，父815a834c，postverify index空且无关改动不变。本SDK轮只归档原QA及提交记录、更新进度，没有重复已通过QA。证据为本机合成provider的真实服务/Cerebro/SQLite消费与正常重开，不是实盘、完整故障恢复/回调崩溃矩阵、估值或全部场景迁移；BT01/BT02仍部分，正式22/68不变。

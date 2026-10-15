@@ -1,0 +1,14 @@
+{
+  "repository": "D:\\source_code\\backtrader",
+  "head": "815a834c3db185ee51c8927e6eea9cdb9fe32330",
+  "paths": [
+    "0",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "diff_sha256": "9e790e9053c0081adc3d63c9474664a688b67231761fbeb4763212bf2f4750b1",
+  "status": " D 0\n M backtrader_runtime/ctp_configured_front_check.py\n M backtrader_runtime/ctp_simnow_operator.py\n M tests/unit/runtime/test_ctp_simnow_config_operator_route.py\n",
+  "index_empty": true,
+  "unrelated_preserved_after_qa": true
+}

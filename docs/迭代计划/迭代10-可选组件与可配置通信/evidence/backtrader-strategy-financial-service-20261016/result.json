@@ -1,0 +1,24 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T19:07:29.761479+00:00",
+  "source_count": 814,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\backtrader": "815a834c3db185ee51c8927e6eea9cdb9fe32330",
+    "D:\\bt_api_py": "302674dc711659d2171914cf66dfa7d544716bca",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "heads_after": {
+    "D:\\source_code\\backtrader": "815a834c3db185ee51c8927e6eea9cdb9fe32330",
+    "D:\\bt_api_py": "302674dc711659d2171914cf66dfa7d544716bca",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "fc3b4d1d30bb00e86a7ba1db4702ab6beff0a793f857c485bc35aef88baa1256",
+  "stderr_sha256": "aa175b6fa5ca4a171ab5db54b60f065bbb33f8d26fa05b4a2c0500955b5a1225",
+  "evidence_level": "BT_FINANCIAL_CONSUMER_18_UNIT_CASES_AND_ONE_REAL_CEREBRO_SERVICEHOST_SYNTHETIC_PROVIDER_NODE_USING_FIXED_SDK_6E38_EXECUTION_743A_EXPORTS"
+}
