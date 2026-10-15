@@ -1,0 +1,25 @@
+{
+  "repository": "D:\\source_code\\backtrader",
+  "branch": "dev",
+  "parent": "470b425d75fae37f873cd85f00ff56b150753240",
+  "head": "8e1851ac7dc59dae51c1b92ac5d9b3a9d4209a77",
+  "paths": [
+    "backtrader_runtime/config.py",
+    "backtrader_runtime/cli.py",
+    "tests/unit/runtime/test_legacy_remote_config_migration.py"
+  ],
+  "checkout_sha256": {
+    "backtrader_runtime/config.py": "dba6f20c56e98eff6367589095a2ba9edfff6fe06dd7384a23d0b10927429c4e",
+    "backtrader_runtime/cli.py": "e9f1f3efe82aa3d2c8951e7f0de8492b236a137b85f3697dc73bb740f35e7637",
+    "tests/unit/runtime/test_legacy_remote_config_migration.py": "9134cb291e2f48cf8bc2da972b420da291d8c9c622f7e1f220890daf67b4eeb1"
+  },
+  "committed_objects": {
+    "backtrader_runtime/config.py": "ad4dadd3f9f2b8cfca4b3c1f52c5970ff459285b",
+    "backtrader_runtime/cli.py": "192cb2f3fff7f897d11a0f5482d0f9e6a23bd674",
+    "tests/unit/runtime/test_legacy_remote_config_migration.py": "d562ee0cf9195d5c6217d64a9f60d08c04442d52"
+  },
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_evidence": "author terminal summary 6 passed/1 warning; no saved raw log/JUnit or independent exit-code field; static GO; Root did not rerun",
+  "formal_CFG05": "PARTIAL"
+}

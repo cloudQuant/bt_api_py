@@ -1,0 +1,88 @@
+{
+  "record_type": "delivery_preparation_only",
+  "created_utc": "2026-10-16",
+  "scope": "CFG05 legacy remote configuration rejection at the original runtime entry; no source files changed by this record operation",
+  "repository": {
+    "path": "D:\\source_code\\backtrader",
+    "branch": "dev",
+    "parent_commit": "470b425d75fae37f873cd85f00ff56b150753240",
+    "index_empty": true
+  },
+  "files": [
+    {
+      "path": "backtrader_runtime/config.py",
+      "bytes": 67489,
+      "sha256": "DBA6F20C56E98EFF6367589095A2BA9EDFFF6FE06DD7384A23D0B10927429C4E",
+      "role": "Reject legacy Gateway/forwarding root fields with an explicit migration-required error before generic schema handling."
+    },
+    {
+      "path": "backtrader_runtime/cli.py",
+      "bytes": 69222,
+      "sha256": "E9F1F3EFE82AA3D2C8951E7F0DE8492B236A137B85F3697DC73BB740F35E7637",
+      "role": "Reject only nonempty legacy BT_GATEWAY environment names consumed by the old Backtrader store; exact variable in redacted error path."
+    },
+    {
+      "path": "tests/unit/runtime/test_legacy_remote_config_migration.py",
+      "bytes": 11567,
+      "sha256": "9134CB291E2F48CF8BC2DA972B420DA291D8C9C622F7E1F220890DAF67B4EEB1",
+      "role": "Six normal-entry regressions: old remote YAML refusal; known old environment refusal; unknown suffix/empty value preserve local v4; v4 local direct/backtest handoff; v5 explicit unsupported result."
+    }
+  ],
+  "required_uncommitted_dependencies": [],
+  "tracked_dependencies_confirmed": [
+    "backtrader_runtime/__init__.py",
+    "backtrader_runtime/errors.py",
+    "backtrader_runtime/legacy.py",
+    "backtrader_runtime/registry.py"
+  ],
+  "acceptance": {
+    "formal_cfg05_status": "PARTIAL; no formal case count increment",
+    "reason": "The formal plan requires supported v4/v5 direct/backtest semantics. Current runtime supports v4 only; v5 remains CONFIG_SCHEMA_UNSUPPORTED and is not claimed as direct/backtest support.",
+    "scope_limit": "This candidate covers normal-entry legacy remote rejection, no implicit service startup, and current v4 local-backtest semantics only."
+  },
+  "author_qa": {
+    "command": "python -m pytest -q -p no:asyncio tests/unit/runtime/test_legacy_remote_config_migration.py",
+    "working_directory": "D:\\source_code\\backtrader",
+    "result_summary": "6 passed, 1 warning in 0.52s",
+    "warning": "Existing PytestConfigWarning: unknown config option asyncio_default_fixture_loop_scope.",
+    "raw_stdout": "...... [100%] followed by the warning summary and 6 passed, 1 warning in 0.52s.",
+    "raw_log_path": null,
+    "junit_path": null,
+    "exit_code_recorded": false,
+    "exit_code_note": "No separate subprocess exit-code field was saved; only the terminal output returned by the command tool is available. Do not fabricate a runner record or infer a stored exit code.",
+    "runner_record_saved": false,
+    "root_executed_tests": false,
+    "prior_setup_attempt": {
+      "command": "python -m pytest -q tests/unit/runtime/test_legacy_remote_config_migration.py",
+      "result": "Stopped before collection in installed pytest_asyncio plugin setup with Package.obj AttributeError; zero cases ran. This is not the accepted result and has no saved log/JUnit."
+    }
+  },
+  "static_review": {
+    "status": "GO",
+    "reviewer": "backtrader_entry_review",
+    "scope": "Exact three path pins above; review only, no tests/imports/processes.",
+    "summary": "The ten-name legacy environment allowlist matches the names consumed by the existing Gateway store; empty known and unknown-prefix values do not block local v4; refusals remain before dispatch; v4 and unsupported-v5 boundary is coherent."
+  },
+  "commit_proposal": "Reject legacy Gateway configuration at the normal runtime entry",
+  "commit_created": false,
+  "staged": false,
+  "unrelated_worktree_paths_observed": [
+    "AGENTS.md",
+    "backtrader/stores/service_execution_adapter.py",
+    "backtrader/stores/service_execution_session.py",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py",
+    "tests/unit/stores/test_service_execution_adapter.py",
+    "backtrader/stores/service_execution_recovery.py",
+    "tests/unit/stores/test_service_execution_recovery.py",
+    "0 (deleted)"
+  ],
+  "exclusion_note": "These unrelated dirty/untracked paths are preserved and are not dependencies for this round. The three candidate paths import/use tracked runtime dependencies; no uncommitted helper or private input is required.",
+  "unrelated_status_note": "Git status also showed one quoted non-ASCII evidence directory under docs/_internal/opts/requirements; its contents were not read. All unrelated changes remain excluded.",
+  "applicable_agent_instructions": [
+    "Use the existing dev checkout; do not create another worktree unless requested.",
+    "Accept and commit only this round's explicit files or hunks; preserve unrelated dirty files.",
+    "Record scope, evidence, repository, branch, and commit truthfully. No commit was made here."
+  ]
+}
