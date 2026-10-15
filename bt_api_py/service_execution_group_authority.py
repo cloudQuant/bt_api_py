@@ -183,6 +183,72 @@ class ExecutionStoreGroupCompletionVerifier:
         scope, record, binding, _authorization = exact
         return self._known_completion(record, binding, scope)
 
+    def _assert_current_execution_attempt(
+        self,
+        *,
+        hold: GroupDispatchHold,
+        intent: OrderIntent,
+        binding: GroupPermitBinding,
+        authorization: GroupLegAuthorization,
+        writer_lease: WriterLease,
+    ) -> None:
+        """Validate the exact claimed attempt and live SQLite writer fence.
+
+        This is deliberately backed by the configured execution store rather
+        than a completion callback: a callback can attest normal completion,
+        but it cannot establish the current writer lease at the final dispatch
+        boundary.
+        """
+
+        if (
+            type(hold) is not GroupDispatchHold
+            or type(intent) is not OrderIntent
+            or type(binding) is not GroupPermitBinding
+            or type(authorization) is not GroupLegAuthorization
+            or type(writer_lease) is not WriterLease
+        ):
+            raise GroupAuthorityUnavailableError("typed execution attempt facts are required")
+        exact = self._read_exact_hold(hold)
+        if exact is None:
+            raise GroupAuthorityUnavailableError(
+                "execution store does not contain the exact held authorization attempt"
+            )
+        scope, record, stored_binding, stored_authorization = exact
+        try:
+            stored_intent = self._store.get_intent(intent.intent_id, scope=scope)
+            binding.validate_order(intent)
+            authorization.validate_binding(binding)
+            authorization.validate_writer_lease(writer_lease)
+            self._store.assert_writer_lease(scope, writer_lease)
+        except Exception as error:
+            raise GroupAuthorityUnavailableError(
+                "execution attempt or current writer lease is invalid"
+            ) from error
+        if (
+            intent.scope != scope
+            or record.intent_id != intent.intent_id
+            or record.scope_key != scope.key
+            or record.payload_sha256 != intent.fingerprint
+            or type(stored_intent) is not OrderIntent
+            or stored_intent.to_payload() != intent.to_payload()
+            or stored_binding != binding
+            or stored_binding.fingerprint != binding.fingerprint
+            or stored_authorization != authorization
+            or authorization.authorization_attempt_id != hold.hold_id
+            or record.permit_reference != binding.permit_id
+            or record.state is not ExecutionState.DISPATCHING
+            or record.dispatch_attempts != 1
+            or record.provider_order_id is not None
+            or record.filled_quantity != 0
+            or record.average_price is not None
+            or record.cumulative_commission is not None
+            or record.unknown_reason is not None
+            or record.review_required
+        ):
+            raise GroupAuthorityUnavailableError(
+                "execution record does not match the current claimed group attempt"
+            )
+
     def inspect_terminal_replay(
         self,
         *,
@@ -995,6 +1061,187 @@ class ExecutionGroupAuthorityGuard:
             yield
         finally:
             self._owner._call_context.reset(token)
+
+    def assert_current_group_leg_authorization(
+        self,
+        *,
+        principal_ref: str,
+        identity: WireIdentity,
+        wire_scope: WireScope,
+        execution_scope: ExecutionScope,
+        intent: OrderIntent,
+        binding: GroupPermitBinding,
+        authorization: GroupLegAuthorization,
+        writer_lease: WriterLease,
+    ) -> None:
+        """Re-read persisted coordinator authority, exact hold, attempt and lease.
+
+        The bound ``ServiceCallContext`` is the Registry-authorized call
+        snapshot; this method rechecks its persisted coordinator generation
+        and exact hold. The surrounding hold context keeps this call within
+        the account owner's dispatch boundary. This method performs no
+        admission, hold creation, or release; it only fails closed unless the
+        same durable authorization is still active in both SQLite stores.
+        """
+
+        owner = self._owner
+        with owner._operation():
+            context = owner._call_context.get()
+            if context is None:
+                raise GroupCoordinatorDeniedError(
+                    "trusted ServiceCallContext is not bound"
+                )
+            try:
+                owner._validate_registered_scope(context, execution_scope)
+                if (
+                    type(identity) is not WireIdentity
+                    or type(wire_scope) is not WireScope
+                    or type(execution_scope) is not ExecutionScope
+                    or type(intent) is not OrderIntent
+                    or type(binding) is not GroupPermitBinding
+                    or type(authorization) is not GroupLegAuthorization
+                    or type(writer_lease) is not WriterLease
+                    or identity != context.identity
+                    or type(principal_ref) is not str
+                    or principal_ref != context.principal_ref
+                    or principal_ref != binding.coordinator_principal_ref
+                    or not _wire_scope_matches_registration(context.scope, wire_scope)
+                    or execution_scope.account_ref != wire_scope.account_ref
+                    or execution_scope.strategy_id != wire_scope.strategy_ref
+                    or wire_scope.portfolio_ref != binding.portfolio_ref
+                    or wire_scope.group_id != binding.group_id
+                    or wire_scope.leg_id != binding.leg_id
+                    or intent.scope != execution_scope
+                    or writer_lease.scope_key != execution_scope.account_key
+                ):
+                    raise GroupCoordinatorDeniedError(
+                        "group authorization does not match the trusted caller"
+                    )
+                binding.validate_order(intent)
+                authorization.validate_binding(binding)
+                authorization.validate_writer_lease(writer_lease)
+            except GroupCoordinatorDeniedError:
+                raise
+            except Exception as error:
+                raise GroupCoordinatorDeniedError(
+                    "group authorization facts are invalid"
+                ) from error
+
+            authority_key = owner._authority_key(context)
+            with owner._key_lock(authority_key):
+                with owner._state_lock:
+                    active_here = authorization.authorization_attempt_id in owner._active_hold_ids
+                    unresolved_here = (
+                        authorization.authorization_attempt_id in owner._unresolved_hold_ids
+                    )
+                if not active_here or unresolved_here:
+                    raise GroupAuthorityUnavailableError(
+                        "this process does not own the active dispatch hold"
+                    )
+
+                try:
+                    with owner._connection() as connection:
+                        # Explicitly make this a read-only SQLite snapshot. The
+                        # first SELECT pins the coordinator and hold reads to
+                        # one consistent view; unlike the old generation
+                        # helper this read permits only the exact own hold.
+                        connection.execute("PRAGMA query_only=ON")
+                        connection.execute("BEGIN")
+                        coordinator = owner._stored_coordinator(connection, authority_key)
+                        hold_rows = connection.execute(
+                            "SELECT hold_id, hold_json FROM group_dispatch_holds "
+                            "WHERE authority_key=? ORDER BY hold_id",
+                            (authority_key,),
+                        ).fetchall()
+                        connection.commit()
+                except Exception as error:
+                    raise GroupAuthorityUnavailableError(
+                        "current coordinator authority could not be read"
+                    ) from error
+
+                if coordinator is None or not coordinator["active"]:
+                    raise GroupCoordinatorDeniedError(
+                        "coordinator registration is stale or revoked"
+                    )
+                if len(hold_rows) > 1:
+                    raise GroupAuthorityBusyError(
+                        "another unresolved group dispatch hold blocks authorization"
+                    )
+                if len(hold_rows) != 1:
+                    raise GroupAuthorityUnavailableError(
+                        "the current group dispatch hold is missing"
+                    )
+
+                try:
+                    persisted_hold = _hold_from_json(hold_rows[0]["hold_json"])
+                    if _json(_hold_payload(persisted_hold)) != hold_rows[0]["hold_json"]:
+                        raise GroupAuthorityUnavailableError(
+                            "persisted group dispatch hold is not canonical"
+                        )
+                except GroupAuthorityUnavailableError:
+                    raise
+                except Exception as error:
+                    raise GroupAuthorityUnavailableError(
+                        "persisted group dispatch hold is unreadable"
+                    ) from error
+
+                expected_hold = GroupDispatchHold(
+                    hold_id=authorization.authorization_attempt_id,
+                    authority_key=authority_key,
+                    principal_ref=context.principal_ref,
+                    registration_id=context.registration_id,
+                    coordinator_generation=authorization.coordinator_epoch,
+                    portfolio_ref=binding.portfolio_ref,
+                    account_ref=binding.account_ref,
+                    strategy_id=binding.strategy_id,
+                    execution_scope_key=execution_scope.key,
+                    intent_id=intent.intent_id,
+                    intent_fingerprint=intent.fingerprint,
+                    binding_fingerprint=binding.fingerprint,
+                    risk_scope_fingerprint=binding.risk_scope_fingerprint,
+                    execution_writer_lease_fingerprint=writer_lease_fingerprint(writer_lease),
+                    account_writer_epoch=writer_lease.fencing_token,
+                )
+                if (
+                    hold_rows[0]["hold_id"] != expected_hold.hold_id
+                    or persisted_hold != expected_hold
+                ):
+                    raise GroupAuthorityUnavailableError(
+                        "persisted hold does not match the current group leg attempt"
+                    )
+
+                if (
+                    coordinator["registration_id"] != context.registration_id
+                    or coordinator["principal_ref"] != context.principal_ref
+                    or coordinator["identity_json"] != _json(_identity_payload(context.identity))
+                    or coordinator["wire_scope_json"]
+                    != _json(_wire_scope_payload(context.scope))
+                    or coordinator["execution_scope_json"]
+                    != _json(execution_scope.to_payload())
+                    or coordinator["execution_scope_key"] != execution_scope.key
+                    or coordinator["portfolio_ref"] != binding.portfolio_ref
+                    or coordinator["account_ref"] != binding.account_ref
+                    or coordinator["strategy_id"] != binding.strategy_id
+                    or coordinator["risk_scope_fingerprint"]
+                    != binding.risk_scope_fingerprint
+                    or int(coordinator["generation"]) != authorization.coordinator_epoch
+                ):
+                    raise GroupCoordinatorDeniedError(
+                        "coordinator registration or generation changed"
+                    )
+
+                verifier = owner._completion_verifier
+                if type(verifier) is not ExecutionStoreGroupCompletionVerifier:
+                    raise GroupAuthorityUnavailableError(
+                        "a real ExecutionStoreGroupCompletionVerifier is required"
+                    )
+                verifier._assert_current_execution_attempt(
+                    hold=persisted_hold,
+                    intent=intent,
+                    binding=binding,
+                    authorization=authorization,
+                    writer_lease=writer_lease,
+                )
 
     @contextmanager
     def hold_group_leg_authorization(

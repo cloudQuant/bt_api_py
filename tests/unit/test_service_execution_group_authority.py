@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import multiprocessing
 import os
+import sqlite3
+import time
 import uuid
 from dataclasses import replace
 from decimal import Decimal
@@ -43,6 +46,7 @@ from bt_api_py.service_execution_group_authority import (
     ExecutionStoreGroupCompletionVerifier,
     GroupAuthorityBusy,
     GroupAuthorityReconciliationRejected,
+    GroupAuthorityUnavailable,
     GroupCoordinatorDenied,
 )
 from bt_api_py.service_registry import (
@@ -231,7 +235,10 @@ def _intent_and_binding(
     leg_id: str = _LEG,
 ) -> tuple[OrderIntent, GroupPermitBinding]:
     scope = _execution_scope(session_date=session_date)
-    deadline = 9_000_000_000_000
+    # This fixture also drives the live Execution facade, whose final
+    # pre-dispatch check uses wall-clock nanoseconds. Keep the synthetic order
+    # valid for the test instead of relying on a historical fixed timestamp.
+    deadline = time.time_ns() + 86_400_000_000_000
     intent = OrderIntent(
         intent_id=group_leg_intent_id(group_id, leg_id),
         scope=scope,
@@ -289,6 +296,338 @@ def _authorization(authority, context, *, intent, binding, lease):
         binding=binding,
         writer_lease=lease,
     )
+
+
+def _seed_claimed_group_attempt(store, *, intent, binding, authorization, lease):
+    store.admit_intent(
+        intent,
+        writer_lease=lease,
+        group_binding=binding,
+        group_authorization=authorization,
+    )
+    store.activate_intent(
+        intent.intent_id,
+        intent.scope,
+        binding.permit_id,
+        writer_lease=lease,
+    )
+    record, claimed = store.claim_for_dispatch(
+        intent.intent_id,
+        intent.scope,
+        writer_lease=lease,
+    )
+    assert claimed is True
+    assert record.state is ExecutionState.DISPATCHING
+    assert record.dispatch_attempts == 1
+
+
+def _actual_group_guard_case(tmp_path: Path):
+    registry, _contexts = _capture_registry_contexts(tmp_path / "registry.sqlite3")
+    execution_scope = _execution_scope()
+    store = SqliteExecutionStore(tmp_path / "execution.sqlite3")
+    lease = store.acquire_or_renew_lease(
+        execution_scope,
+        "execution-owner",
+        ttl_ns=60_000_000_000,
+    )
+    completion = ExecutionStoreGroupCompletionVerifier(
+        store,
+        execution_scopes=(execution_scope,),
+    )
+    authority_path = tmp_path / "authority.sqlite3"
+    authority = ExecutionGroupAuthority(
+        authority_path,
+        completion_verifier=completion,
+        monotonic_clock_ns=lambda: 1,
+    )
+    context = _register_and_dispatch(registry, session="current-group-authorization")
+    authority.control.activate(
+        context,
+        execution_scope=execution_scope,
+        risk_account_scope_key=_RISK_SCOPE_KEY,
+    )
+    intent, binding = _intent_and_binding()
+    return registry, authority, authority_path, store, context, intent, binding, lease
+
+
+def _assert_current_authorization(
+    authority,
+    context,
+    *,
+    intent,
+    binding,
+    authorization,
+    lease,
+) -> None:
+    authority.guard.assert_current_group_leg_authorization(
+        principal_ref=context.principal_ref,
+        identity=context.identity,
+        wire_scope=_operation_scope(
+            context.scope,
+            group=binding.group_id,
+            leg=binding.leg_id,
+        ),
+        execution_scope=intent.scope,
+        intent=intent,
+        binding=binding,
+        authorization=authorization,
+        writer_lease=lease,
+    )
+
+
+def test_current_group_authorization_accepts_only_exact_live_registry_hold_and_lease(
+    tmp_path: Path,
+) -> None:
+    registry, authority, _authority_path, store, context, intent, binding, lease = (
+        _actual_group_guard_case(tmp_path)
+    )
+    try:
+        with (
+            authority.guard.bind_service_call(context, execution_scope=intent.scope),
+            pytest.raises(RuntimeError, match="preserve the durable hold"),
+            _authorization(
+                authority,
+                context,
+                intent=intent,
+                binding=binding,
+                lease=lease,
+            ) as authorization,
+        ):
+            _seed_claimed_group_attempt(
+                store,
+                intent=intent,
+                binding=binding,
+                authorization=authorization,
+                lease=lease,
+            )
+            holds_before = authority.pending_holds()
+            assert len(holds_before) == 1
+            assert (
+                _assert_current_authorization(
+                    authority,
+                    context,
+                    intent=intent,
+                    binding=binding,
+                    authorization=authorization,
+                    lease=lease,
+                )
+                is None
+            )
+            # Assertion is read-only: the exact same durable hold remains
+            # present until the surrounding dispatch resolves.
+            assert authority.pending_holds() == holds_before
+            raise RuntimeError("preserve the durable hold")
+        holds = authority.pending_holds()
+        assert len(holds) == 1
+        assert holds[0].hold_id == holds[0].authorization_attempt_id
+        assert authority.ready is False
+    finally:
+        authority.close()
+        store.close()
+        registry.close()
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected_error"),
+    [
+        ("generation", GroupCoordinatorDenied),
+        ("revoked", GroupCoordinatorDenied),
+        ("coordinator_registration", GroupCoordinatorDenied),
+        ("coordinator_identity", GroupCoordinatorDenied),
+        ("coordinator_wire_scope", GroupCoordinatorDenied),
+        ("coordinator_execution_scope", GroupCoordinatorDenied),
+        ("coordinator_risk_scope", GroupCoordinatorDenied),
+        ("wrong_hold", GroupAuthorityUnavailable),
+        ("wrong_lease", GroupCoordinatorDenied),
+        ("expired_lease", GroupAuthorityUnavailable),
+        ("binding", GroupCoordinatorDenied),
+        ("persisted_binding", GroupAuthorityUnavailable),
+        ("other_hold", GroupAuthorityBusy),
+        ("fake_verifier", GroupAuthorityUnavailable),
+    ],
+)
+def test_current_group_authorization_rejects_changed_generation_hold_or_lease(
+    tmp_path: Path,
+    tamper: str,
+    expected_error: type[Exception],
+) -> None:
+    registry, authority, authority_path, store, context, intent, binding, lease = (
+        _actual_group_guard_case(tmp_path)
+    )
+    try:
+        with (
+            authority.guard.bind_service_call(context, execution_scope=intent.scope),
+            pytest.raises(expected_error),
+            _authorization(
+                authority,
+                context,
+                intent=intent,
+                binding=binding,
+                lease=lease,
+            ) as authorization,
+        ):
+            _seed_claimed_group_attempt(
+                store,
+                intent=intent,
+                binding=binding,
+                authorization=authorization,
+                lease=lease,
+            )
+            hold = authority.pending_holds()[0]
+            passed_authorization = authorization
+            passed_binding = binding
+            passed_lease = lease
+
+            if tamper in {"generation", "revoked"}:
+                with sqlite3.connect(authority_path) as connection:
+                    if tamper == "generation":
+                        connection.execute(
+                            "UPDATE execution_group_coordinators "
+                            "SET generation=generation+1 WHERE authority_key=?",
+                            (hold.authority_key,),
+                        )
+                    else:
+                        connection.execute(
+                            "UPDATE execution_group_coordinators "
+                            "SET generation=generation+1, active=0 "
+                            "WHERE authority_key=?",
+                            (hold.authority_key,),
+                        )
+            elif tamper.startswith("coordinator_"):
+                column_by_case = {
+                    "coordinator_registration": "registration_id",
+                    "coordinator_identity": "identity_json",
+                    "coordinator_wire_scope": "wire_scope_json",
+                    "coordinator_execution_scope": "execution_scope_json",
+                    "coordinator_risk_scope": "risk_scope_fingerprint",
+                }
+                column = column_by_case[tamper]
+                assert column in column_by_case.values()
+                with sqlite3.connect(authority_path) as connection:
+                    row = connection.execute(
+                        f"SELECT {column} FROM execution_group_coordinators "  # noqa: S608 - fixed allowlisted identifier
+                        "WHERE authority_key=?",
+                        (hold.authority_key,),
+                    ).fetchone()
+                    assert row is not None
+                    value = row[0]
+                    if column.endswith("_json"):
+                        payload = json.loads(value)
+                        if column == "identity_json":
+                            payload["actor_ref"] = "tampered-actor"
+                        elif column == "wire_scope_json":
+                            payload["execution_domain_ref"] = "paper:other"
+                        else:
+                            payload["provider"] = "OTHER"
+                        value = json.dumps(
+                            payload,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=True,
+                        )
+                    elif column == "risk_scope_fingerprint":
+                        value = payload_sha256({"changed_risk_scope": True})
+                    else:
+                        value = "different-registration"
+                    connection.execute(
+                        f"UPDATE execution_group_coordinators SET {column}=? "  # noqa: S608 - fixed allowlisted identifier
+                        "WHERE authority_key=?",
+                        (value, hold.authority_key),
+                    )
+            elif tamper == "wrong_hold":
+                passed_authorization = replace(
+                    authorization,
+                    authorization_attempt_id="different-persisted-attempt",
+                )
+            elif tamper in {"wrong_lease", "expired_lease"}:
+                assert (
+                    store.release_lease(
+                        intent.scope,
+                        lease.owner_id,
+                        fencing_token=lease.fencing_token,
+                    )
+                    is True
+                )
+                replacement_lease = store.acquire_or_renew_lease(
+                    intent.scope,
+                    "replacement-execution-owner",
+                    ttl_ns=60_000_000_000,
+                )
+                if tamper == "wrong_lease":
+                    passed_lease = replacement_lease
+            elif tamper == "binding":
+                passed_binding = replace(
+                    binding,
+                    policy_fingerprint=payload_sha256(
+                        {"tampered_policy": binding.policy_fingerprint}
+                    ),
+                )
+            elif tamper == "persisted_binding":
+                with sqlite3.connect(authority_path) as connection:
+                    row = connection.execute(
+                        "SELECT hold_json FROM group_dispatch_holds WHERE hold_id=?",
+                        (hold.hold_id,),
+                    ).fetchone()
+                    assert row is not None
+                    payload = json.loads(row[0])
+                    payload["binding_fingerprint"] = payload_sha256(
+                        {"tampered_binding": binding.fingerprint}
+                    )
+                    connection.execute(
+                        "UPDATE group_dispatch_holds SET hold_json=? WHERE hold_id=?",
+                        (
+                            json.dumps(
+                                payload,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                ensure_ascii=True,
+                            ),
+                            hold.hold_id,
+                        ),
+                    )
+            elif tamper == "other_hold":
+                with sqlite3.connect(authority_path) as connection:
+                    payload = json.loads(
+                        connection.execute(
+                            "SELECT hold_json FROM group_dispatch_holds WHERE hold_id=?",
+                            (hold.hold_id,),
+                        ).fetchone()[0]
+                    )
+                    other_hold_id = uuid.uuid4().hex
+                    payload["hold_id"] = other_hold_id
+                    connection.execute(
+                        "INSERT INTO group_dispatch_holds(hold_id, authority_key, hold_json) "
+                        "VALUES(?, ?, ?)",
+                        (
+                            other_hold_id,
+                            hold.authority_key,
+                            json.dumps(
+                                payload,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                ensure_ascii=True,
+                            ),
+                        ),
+                    )
+            elif tamper == "fake_verifier":
+                authority._completion_verifier = lambda _hold: True
+            else:
+                raise AssertionError(f"unhandled tamper case: {tamper}")
+
+            _assert_current_authorization(
+                authority,
+                context,
+                intent=intent,
+                binding=passed_binding,
+                authorization=passed_authorization,
+                lease=passed_lease,
+            )
+        assert authority.pending_holds()
+        assert authority.ready is False
+    finally:
+        authority.close()
+        store.close()
+        registry.close()
 
 
 def _child_crash_with_durable_hold(
