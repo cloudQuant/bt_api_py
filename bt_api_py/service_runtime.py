@@ -269,6 +269,7 @@ class ServiceClientRuntime:
     """
 
     _RENEWAL_FRACTION = 1.0 / 3.0
+    _STARTUP_RPC_TIMEOUT_FRACTION = 0.5
 
     def __init__(
         self,
@@ -316,6 +317,8 @@ class ServiceClientRuntime:
         self._peers: dict[str, WireIdentity] = {}
         self._bindings: list[RegisteredBinding] = []
         self._state = "new"
+        self._startup_maintaining = False
+        self._startup_rollback = False
         self._degraded = 0
         self._degradation_codes: list[str] = []
         self._cleanup_failures = 0
@@ -507,6 +510,7 @@ class ServiceClientRuntime:
             )
         if self._state != "new":
             raise ServiceRuntimeError("SESSION_NOT_NEW")
+        self._state = "starting"
         try:
             for client in self._config.get("clients", {}).values():
                 for binding in client["settings"]["bindings"]:
@@ -520,20 +524,25 @@ class ServiceClientRuntime:
                             timeout_ms=timeout_ms,
                             heartbeat_interval_seconds=heartbeat_interval,
                         )
+                        self._startup_maintain_if_due()
                     except Exception as error:
                         if isinstance(error, ServiceRuntimeStartupCleanupError):
+                            raise
+                        if self._state != "starting":
                             raise
                         if binding.get("required", True):
                             if isinstance(error, ServiceRuntimeError):
                                 raise
                             raise ServiceRuntimeError("REQUIRED_REGISTRATION_FAILED") from None
-                        self._release_bindings(first_binding)
+                        self._release_during_startup(first_binding)
                         self._degraded += 1
                         self._degradation_codes.append(
                             error.code
                             if isinstance(error, ServiceRuntimeError)
                             else "SERVICE_UNAVAILABLE"
                         )
+            self._startup_maintain_if_due()
+            self._startup_check_required_leases()
             self._state = "registered"
             return RegistrationSummary(
                 self.bindings, self._degraded, tuple(self._degradation_codes)
@@ -542,7 +551,11 @@ class ServiceClientRuntime:
             # Startup can be interrupted after a transport or registration has
             # been acquired. Try every local close, and retain any transport
             # whose owner-thread cleanup did not complete.
-            self._release(capture_base_exceptions=True)
+            self._startup_rollback = True
+            try:
+                self._release(capture_base_exceptions=True)
+            finally:
+                self._startup_rollback = False
             self._state = "close_failed" if self._transports else "failed"
             if self._transports:
                 raise ServiceRuntimeError("CLOSE_FAILED") from None
@@ -641,6 +654,27 @@ class ServiceClientRuntime:
         if self._state != "registered":
             raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
         self._require_healthy()
+        return self._maintain_bindings(force=force, startup=False)
+
+    def _maintain_startup(self) -> RegistrationSummary:
+        self._assert_owner_thread()
+        if self._state != "starting":
+            raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
+        if self._startup_maintaining or self._startup_rollback:
+            raise ServiceRuntimeError("STARTUP_MAINTENANCE_REENTRANT")
+        self._startup_check_required_leases()
+        self._startup_maintaining = True
+        try:
+            return self._maintain_bindings(force=False, startup=True)
+        finally:
+            self._startup_maintaining = False
+
+    def _maintain_bindings(self, *, force: bool, startup: bool) -> RegistrationSummary:
+        if startup:
+            if self._state != "starting" or not self._startup_maintaining:
+                raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
+        elif self._state != "registered":
+            raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
         now = self._monotonic_now()
         index = 0
         while index < len(self._bindings):
@@ -736,7 +770,10 @@ class ServiceClientRuntime:
                 self._expire_binding(renewed)
                 continue
             index += 1
-        self._require_healthy()
+        if startup:
+            self._startup_check_required_leases()
+        else:
+            self._require_healthy()
         return self._summary()
 
     def recover(self) -> RegistrationSummary:
@@ -793,6 +830,67 @@ class ServiceClientRuntime:
         for binding in tuple(self._bindings):
             if binding.active and not binding.required and now >= binding.lease_deadline:
                 self._expire_binding(binding)
+
+    def _startup_check_required_leases(self) -> None:
+        if self._state != "starting":
+            raise ServiceRuntimeError("SESSION_NOT_REGISTERED")
+        now = self._monotonic_now()
+        if any(
+            binding.active and binding.required and now >= binding.lease_deadline
+            for binding in self._bindings
+        ):
+            self._state = "failed"
+            raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
+
+    def _startup_maintain_if_due(self) -> None:
+        if self._state != "starting" or self._startup_rollback:
+            return
+        self._startup_check_required_leases()
+        if self._startup_maintaining:
+            return
+        now = self._monotonic_now()
+        if any(binding.active and now >= binding.renewal_due_at for binding in self._bindings):
+            self._maintain_startup()
+
+    def _release_during_startup(self, first: int = 0) -> None:
+        was_rollback = self._startup_rollback
+        self._startup_rollback = True
+        try:
+            self._release_bindings(first)
+        finally:
+            self._startup_rollback = was_rollback
+
+    def _unregister_during_startup(
+        self, service_id, transport_ref, scope, registration_id, epoch, timeout
+    ) -> bool:
+        was_rollback = self._startup_rollback
+        self._startup_rollback = True
+        try:
+            return self._unregister(
+                service_id,
+                transport_ref,
+                scope,
+                registration_id,
+                epoch,
+                timeout,
+            )
+        finally:
+            self._startup_rollback = was_rollback
+
+    def _startup_timeout(self, timeout: float) -> float:
+        self._startup_check_required_leases()
+        deadlines = [
+            binding.lease_deadline
+            for binding in self._bindings
+            if binding.active and binding.required
+        ]
+        if not deadlines:
+            return timeout
+        remaining = min(deadlines) - self._monotonic_now()
+        if remaining <= 0:
+            self._state = "failed"
+            raise ServiceRuntimeError("REQUIRED_LEASE_EXPIRED")
+        return min(timeout, remaining * self._STARTUP_RPC_TIMEOUT_FRACTION)
 
     def _expire_binding(self, binding: RegisteredBinding) -> None:
         if binding.required:
@@ -945,6 +1043,8 @@ class ServiceClientRuntime:
                 except Exception as error:
                     if isinstance(error, ServiceRuntimeStartupCleanupError):
                         raise
+                    if self._state != "starting":
+                        raise
                     self._degraded += 1
                     self._degradation_codes.append(
                         error.code
@@ -1029,12 +1129,50 @@ class ServiceClientRuntime:
             ):
                 self._record_unknown_registration(registration_key)
             raise
-        for name in ("registration_id", "service_epoch"):
-            if not isinstance(result.get(name), str) or not result[name]:
+        registration_id = None
+        service_epoch = None
+        placeholder = None
+        try:
+            for name in ("registration_id", "service_epoch"):
+                if not isinstance(result.get(name), str) or not result[name]:
+                    raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+            registration_id = result["registration_id"]
+            service_epoch = result["service_epoch"]
+            # Keep the exact remote cleanup identity before validating the
+            # remaining receipt fields. Startup rollback can then unregister
+            # even if validation or the caller is interrupted.
+            placeholder = RegisteredBinding(
+                mount=binding["mount"],
+                service_id=binding["service_id"],
+                instance_id=binding["instance_id"],
+                scope_ref=binding["scope_ref"],
+                scope=scope,
+                registration_id=registration_id,
+                service_epoch=service_epoch,
+                operations=frozenset(operations),
+                expires_at=0.0,
+                policy_version="",
+                requirements_version="",
+                transport_ref=binding["transport_ref"],
+                timeout=timeout,
+                required=bool(required),
+                active=False,
+            )
+            placeholder_index = len(self._bindings)
+            self._bindings.append(placeholder)
+        except BaseException:
+            if placeholder is None:
+                # A successful remote registration without a locally retained
+                # cleanup handle is explicitly uncertain, never silently lost.
                 self._record_unknown_registration(registration_key)
-                raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
-        # Once a usable cleanup handle arrives, retain responsibility for it
-        # even if the rest of the success receipt is malformed.
+            else:
+                try:
+                    if not any(item is placeholder for item in self._bindings):
+                        self._bindings.append(placeholder)
+                except BaseException:
+                    self._record_unknown_registration(registration_key)
+                    raise
+            raise
         try:
             for name in ("policy_version", "requirements_version"):
                 if not isinstance(result.get(name), str) or not result[name]:
@@ -1051,27 +1189,14 @@ class ServiceClientRuntime:
             lease_deadline = request_started + lease_remaining
             if self._monotonic_now() >= lease_deadline:
                 raise ServiceRuntimeError("LEASE_EXPIRED_DURING_REGISTRATION")
-        except Exception:
-            cleanup_acknowledged = self._unregister(
-                binding["service_id"],
-                binding["transport_ref"],
-                scope,
-                result["registration_id"],
-                result["service_epoch"],
-                timeout,
-            )
-            if not cleanup_acknowledged:
-                self._fold_unregister_uncertainty(result["registration_id"])
-            raise
-        self._bindings.append(
-            RegisteredBinding(
+            final_binding = RegisteredBinding(
                 mount=binding["mount"],
                 service_id=binding["service_id"],
                 instance_id=binding["instance_id"],
                 scope_ref=binding["scope_ref"],
                 scope=scope,
-                registration_id=result["registration_id"],
-                service_epoch=result["service_epoch"],
+                registration_id=registration_id,
+                service_epoch=service_epoch,
                 operations=frozenset(operations),
                 expires_at=expiry,
                 policy_version=result["policy_version"],
@@ -1087,7 +1212,40 @@ class ServiceClientRuntime:
                 if heartbeat_interval_seconds is not None
                 else None,
             )
-        )
+        except BaseException:
+            try:
+                cleanup_acknowledged = self._unregister_during_startup(
+                    binding["service_id"],
+                    binding["transport_ref"],
+                    scope,
+                    registration_id,
+                    service_epoch,
+                    timeout,
+                )
+            except BaseException:
+                # Preserve uncertainty before allowing an interrupt to unwind;
+                # the placeholder lets startup rollback retry the exact handle.
+                self._unregister_uncertainties[registration_id] = None
+                raise
+            if not cleanup_acknowledged:
+                self._unregister_uncertainties[registration_id] = None
+            else:
+                self._bindings = [item for item in self._bindings if item is not placeholder]
+            raise
+        if (
+            placeholder_index < len(self._bindings)
+            and self._bindings[placeholder_index] is placeholder
+        ):
+            self._bindings[placeholder_index] = final_binding
+        else:
+            # This is defensive against an unexpected in-process mutation; the
+            # known remote handle must remain represented for cleanup.
+            self._bindings = [item for item in self._bindings if item is not placeholder]
+            self._bindings.append(final_binding)
+        if self._state == "starting":
+            # A successful register reply is retained before checking older
+            # leases so startup rollback still has its exact cleanup handle.
+            self._startup_check_required_leases()
 
     def _profile_max_message_bytes(self, transport_ref: str) -> int:
         profile = self._config["communication"]["profiles"].get(transport_ref)
@@ -1164,6 +1322,25 @@ class ServiceClientRuntime:
     ):
         self._assert_owner_thread()
         profile = self._config["communication"]["profiles"][transport_ref]
+        startup_rpc = self._state == "starting"
+        rollback_rpc = self._startup_rollback
+        configured_timeout = (
+            timeout if timeout is not None else profile["options"]["request_timeout_ms"] / 1000
+        )
+        if rollback_rpc:
+            if operation != "service.unregister":
+                raise ServiceRuntimeError("STARTUP_ROLLBACK_IN_PROGRESS")
+            effective_timeout = configured_timeout
+        elif startup_rpc:
+            try:
+                self._startup_maintain_if_due()
+                effective_timeout = self._startup_timeout(configured_timeout)
+            except BaseException:
+                if timing is not None:
+                    timing["request_not_sent"] = True
+                raise
+        else:
+            effective_timeout = configured_timeout
         request = WireEnvelope(
             WireHeader(
                 protocol_version=2,
@@ -1179,6 +1356,15 @@ class ServiceClientRuntime:
             ),
             payload,
         )
+        if startup_rpc and not rollback_rpc:
+            try:
+                # Recheck at the actual send boundary: envelope construction
+                # must not consume the remaining lease or timeout margin.
+                effective_timeout = self._startup_timeout(configured_timeout)
+            except BaseException:
+                if timing is not None:
+                    timing["request_not_sent"] = True
+                raise
         # No automatic retry: a timed-out write requires business reconciliation.
         request_started = self._monotonic_now()
         if started_at is not None:
@@ -1187,10 +1373,7 @@ class ServiceClientRuntime:
             timing["request_started"] = request_started
         try:
             reply = self._transports[(service_id, transport_ref)].request(
-                request,
-                timeout=timeout
-                if timeout is not None
-                else profile["options"]["request_timeout_ms"] / 1000,
+                request, timeout=effective_timeout
             )
         except ServiceRuntimeRequestNotSentError:
             if timing is not None:
@@ -1218,6 +1401,8 @@ class ServiceClientRuntime:
             if not control:
                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
             raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        if startup_rpc and not rollback_rpc and operation != "service.register":
+            self._startup_check_required_leases()
         if include_started_at:
             return result, request_started
         return result
@@ -1270,7 +1455,10 @@ class ServiceClientRuntime:
         if binding.remote_lease_inactive:
             self._unregister_uncertainties.pop(binding.registration_id, None)
             return True
-        return self._unregister(
+        unregister = (
+            self._unregister_during_startup if self._state == "starting" else self._unregister
+        )
+        return unregister(
             binding.service_id,
             binding.transport_ref,
             binding.scope,
