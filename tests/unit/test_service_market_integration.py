@@ -25,7 +25,6 @@ from bt_api_py.service_market import ServiceMarketClient, ZmqMarketTransportFact
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
-    ServiceCallOutcomeUnknownError,
     ServiceClientRuntime,
     ServiceRuntimeError,
     ZmqTransportFactory,
@@ -35,6 +34,7 @@ _SERVICE_ID = "synthetic-market-service"
 _SERVICE_INSTANCE = "synthetic-market-hub"
 _SERVICE_SCOPE_REF = "synthetic-market-public-scope-v1"
 _DOMAIN_REF = "paper:market-integration"
+_ACCOUNT_REF = "account:synthetic-market-gw01"
 _TRANSPORT_REF = "market-listener-v1"
 _SECURITY_REF = "market-curve-v1"
 _MARKET_OPERATIONS = frozenset(
@@ -223,7 +223,11 @@ def _service_host_process(control, raw_config, registry_path, server_keys, clien
                         _SERVICE_INSTANCE,
                         "service.market_source",
                         _SERVICE_SCOPE_REF,
-                        WireScope(_DOMAIN_REF, strategy_ref=strategy_ref),
+                        WireScope(
+                            _DOMAIN_REF,
+                            account_ref=_ACCOUNT_REF,
+                            strategy_ref=strategy_ref,
+                        ),
                         _MARKET_OPERATIONS,
                     ),
                 ),
@@ -251,6 +255,9 @@ def _service_host_process(control, raw_config, registry_path, server_keys, clien
     hub = GatewayMarketHub(
         provider,
         key_universe=frozenset({_MARKET_KEY}),
+        # The PUB endpoint exposes one shared audience, so every authorized
+        # principal must receive the entire exported key universe. A valid
+        # endpoint cannot model per-principal stream isolation here.
         principal_allowed_keys={
             principal_ref: frozenset({_MARKET_KEY})
             for _public_key, principal_ref, _strategy_ref in client_audience
@@ -333,7 +340,11 @@ def _strategy_client_process(
     identity = WireIdentity(WireRole.STRATEGY_CLIENT, principal_ref, strategy_ref)
 
     def scope_resolver(_scope_ref: str) -> WireScope:
-        return WireScope(_DOMAIN_REF, strategy_ref=strategy_ref)
+        return WireScope(
+            _DOMAIN_REF,
+            account_ref=_ACCOUNT_REF,
+            strategy_ref=strategy_ref,
+        )
 
     security = ClientCurveKeys(client_keys[0], client_keys[1], client_keys[2])
     runtime = ServiceClientRuntime(
@@ -363,6 +374,7 @@ def _strategy_client_process(
             (
                 "ready",
                 registration_id,
+                runtime.bindings[0].scope.account_ref,
                 bootstrap.snapshot_kind,
                 bootstrap.snapshot_complete,
                 bootstrap.full_baseline_available,
@@ -446,7 +458,7 @@ def _strategy_client_process(
                     )
                 )
             elif action == "denied-key":
-                denied_key = MarketSubscriptionKey(
+                nonexported_key = MarketSubscriptionKey(
                     source_ref="unauthorized-synthetic-source",
                     entitlement_ref="synthetic-public-entitlement",
                     instrument=_MARKET_KEY.instrument,
@@ -456,10 +468,10 @@ def _strategy_client_process(
                     runtime.call(
                         "store.market",
                         "market.subscribe",
-                        {"key": denied_key.to_dict()},
+                        {"key": nonexported_key.to_dict()},
                     )
-                except (ServiceCallOutcomeUnknownError, ServiceRuntimeError) as exc:
-                    control.send(("key-denied", getattr(exc, "code", type(exc).__name__)))
+                except ServiceRuntimeError as exc:
+                    control.send(("key-denied", exc.code))
                 else:
                     control.send(("key-accepted",))
             elif action == "release":
@@ -616,6 +628,8 @@ def test_ten_spawned_clients_share_market_stream_and_expired_lease_releases_only
         audience.append((public_key, principal_ref, strategy_ref))
         client_material[index] = (server_public, public_key, secret_key)
         client_raw_configs[index] = _client_config(rpc_endpoint, market_endpoint, strategy_ref)
+    assert len({entry[1] for entry in audience}) == _CLIENT_COUNT
+    assert len({entry[2] for entry in audience}) == _CLIENT_COUNT
 
     raw_service_config = _service_config(rpc_endpoint, market_endpoint)
     registry_path = str(tmp_path / "market-registry.sqlite3")
@@ -641,6 +655,7 @@ def test_ten_spawned_clients_share_market_stream_and_expired_lease_releases_only
         service_ready = _receive(service_pipe)
         assert service_ready[0] == "ready" and service_ready[1] and service_ready[2], service_ready
         client_ready = {}
+        client_account_refs = {}
         for index, (_public, principal_ref, strategy_ref) in enumerate(audience):
             process, pipe = _start_process(
                 context,
@@ -660,26 +675,42 @@ def test_ten_spawned_clients_share_market_stream_and_expired_lease_releases_only
                 "process_closed": False,
             }
             ready = _receive(pipe)
-            assert ready[0] == "ready" and ready[2:5] == (
+            assert ready[0] == "ready" and ready[3:6] == (
                 "latest_event",
                 False,
                 False,
             ), ready
             client_ready[index] = ready[1]
+            client_account_refs[index] = ready[2]
         assert len(set(client_ready.values())) == _CLIENT_COUNT
+        assert set(client_account_refs.values()) == {_ACCOUNT_REF}
 
         readiness, starts, stops = _host_status(service_pipe)
         assert readiness["active_registrations"] == _CLIENT_COUNT, readiness
         assert readiness["active_upstreams"] == 1
         assert (starts, stops) == (1, 0)
+        state_before_denial = (
+            readiness["active_upstreams"],
+            readiness["active_registrations"],
+            readiness["pending_releases"],
+            starts,
+            stops,
+        )
 
         # The service handler receives the complete key only after strategy
-        # registration and must reject an unauthorized stream before provider
-        # acquisition. The caller reports the safe unknown-outcome boundary.
+        # registration and must reject a key outside the endpoint's finite
+        # exported universe before adding a provider handle or registration ref.
         denied = _client_command(clients[0], "denied-key")
-        assert denied[0] == "key-denied", denied
+        assert denied == ("key-denied", "SCOPE_DENIED"), denied
         readiness, starts, stops = _host_status(service_pipe)
-        assert readiness["active_upstreams"] == 1 and (starts, stops) == (1, 0)
+        state_after_denial = (
+            readiness["active_upstreams"],
+            readiness["active_registrations"],
+            readiness["pending_releases"],
+            starts,
+            stops,
+        )
+        assert state_after_denial == state_before_denial
 
         # This raw CURVE subscriber is deliberately absent from the publisher's
         # authenticated audience map. It receives no event while all ten

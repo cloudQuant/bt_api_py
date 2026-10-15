@@ -22,6 +22,7 @@ from bt_api_py.service_registry import (
     ResourceGrant,
     ServiceCallContext,
     ServiceCapability,
+    ServiceOperationDeniedError,
     ServiceRegistry,
     ServiceRegistryBusyError,
 )
@@ -363,6 +364,100 @@ def test_discovery_and_dispatch_bind_authenticated_identity_scope_and_operations
         ungranted_operation = _business(registry, registration["result"], operation="orders.cancel")
         assert ungranted_operation["code"] == "SCOPE_DENIED"
         assert len(calls) == 1
+    finally:
+        registry.close()
+
+
+def test_pre_dispatch_market_denial_is_explicit_and_other_failures_are_not_denied(
+    tmp_path: Path,
+) -> None:
+    operations = frozenset({"market.subscribe", "market.unsubscribe"})
+    identity = _identity()
+    scope_template = _strategy_scope(run_id=None)
+    registry = ServiceRegistry(
+        tmp_path / "market-denial.sqlite",
+        service_id="market-service",
+        capabilities=(
+            ServiceCapability("market-instance", "service.market_source", operations),
+        ),
+        grants={
+            "curve-a": (
+                PrincipalGrant(
+                    identity,
+                    (
+                        ResourceGrant(
+                            "market-instance",
+                            "service.market_source",
+                            "market-grant-a",
+                            scope_template,
+                            operations,
+                        ),
+                    ),
+                ),
+            )
+        },
+        policy_version="policy-v1",
+        requirements_version="requirements-v1",
+    )
+    subscribe_error: Exception = ServiceOperationDeniedError()
+
+    def reject_subscribe(_context, _arguments):
+        raise subscribe_error
+
+    def reject_unsubscribe(_context, _arguments):
+        raise ServiceOperationDeniedError()
+
+    registry.register_handler("market-instance", "market.subscribe", reject_subscribe)
+    registry.register_handler("market-instance", "market.unsubscribe", reject_unsubscribe)
+    registration_reply = _register(
+        registry,
+        operations=tuple(sorted(operations)),
+        instance_id="market-instance",
+        port="service.market_source",
+        scope_ref="market-grant-a",
+    )
+    assert registration_reply["ok"] is True
+    registration = registration_reply["result"]
+    try:
+        explicit_denial = _business(
+            registry,
+            registration,
+            operation="market.subscribe",
+            instance_id="market-instance",
+        )
+        assert explicit_denial == {
+            "ok": False,
+            "code": "SCOPE_DENIED",
+            "result": {},
+        }
+
+        class CodedFailureError(RuntimeError):
+            code = "SCOPE_DENIED"
+
+        subscribe_error = CodedFailureError("untrusted code attribute")
+        generic_failure = _business(
+            registry,
+            registration,
+            operation="market.subscribe",
+            instance_id="market-instance",
+        )
+        assert generic_failure == {
+            "ok": False,
+            "code": "HANDLER_FAILED",
+            "result": {},
+        }
+
+        wrong_operation = _business(
+            registry,
+            registration,
+            operation="market.unsubscribe",
+            instance_id="market-instance",
+        )
+        assert wrong_operation == {
+            "ok": False,
+            "code": "HANDLER_FAILED",
+            "result": {},
+        }
     finally:
         registry.close()
 

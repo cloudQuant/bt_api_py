@@ -23,7 +23,12 @@ from typing import Any, Final, Protocol
 
 from bt_api_base.service_protocol import WireScope
 
-from .service_registry import ServiceCallContext, ServiceCapability, ServiceResultTooLargeError
+from .service_registry import (
+    ServiceCallContext,
+    ServiceCapability,
+    ServiceOperationDeniedError,
+    ServiceResultTooLargeError,
+)
 
 
 class ServiceComponentError(ValueError):
@@ -685,6 +690,18 @@ def build_component(
             if registration_bound
             else None
         )
+        market_authorization_error_types = tuple(
+            error_type
+            for error_type in (
+                getattr(prepared.module, "GatewayMarketHubError", None)
+                if registration_bound
+                else None,
+                getattr(prepared.module, "GatewayMarketServiceError", None)
+                if registration_bound
+                else None,
+            )
+            if isinstance(error_type, type) and issubclass(error_type, Exception)
+        )
         gateway_event_journal_error_type = (
             getattr(prepared.module, "GatewayEventJournalError", None)
             if spec.component == "gateway"
@@ -692,6 +709,8 @@ def build_component(
         )
         if registration_bound and (
             market_registration_type is None
+            or len(market_authorization_error_types) != 2
+            or len(set(market_authorization_error_types)) != 2
             or not callable(getattr(adapter, "register_registration", None))
         ):
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
@@ -706,20 +725,33 @@ def build_component(
             ) -> Mapping[str, Any]:
                 assert _adapter is not None
                 if registration_bound:
-                    registration = market_registration_type(
-                        principal_ref=context.principal_ref,
-                        execution_domain_ref=context.scope.execution_domain_ref,
-                        strategy_ref=context.scope.strategy_ref,
-                        run_id=context.scope.run_id,
-                    )
-                    _adapter.register_registration(context.registration_id, registration)  # type: ignore[attr-defined]
-                    return _adapter.handle(  # type: ignore[attr-defined]
-                        _operation,
-                        principal_ref=context.principal_ref,
-                        scope=context.scope,
-                        arguments=arguments,
-                        registration_id=context.registration_id,
-                    )
+                    try:
+                        registration = market_registration_type(
+                            principal_ref=context.principal_ref,
+                            execution_domain_ref=context.scope.execution_domain_ref,
+                            strategy_ref=context.scope.strategy_ref,
+                            run_id=context.scope.run_id,
+                            account_ref=context.scope.account_ref,
+                        )
+                        _adapter.register_registration(  # type: ignore[attr-defined]
+                            context.registration_id, registration
+                        )
+                        return _adapter.handle(  # type: ignore[attr-defined]
+                            _operation,
+                            principal_ref=context.principal_ref,
+                            scope=context.scope,
+                            arguments=arguments,
+                            registration_id=context.registration_id,
+                        )
+                    except Exception as error:
+                        if (
+                            _operation == "market.subscribe"
+                            and type(error) in market_authorization_error_types
+                            and getattr(error, "code", None)
+                            in {"MARKET_KEY_DENIED", "MARKET_KEY_NOT_EXPORTED"}
+                        ):
+                            raise ServiceOperationDeniedError() from None
+                        raise
                 if spec.component == "gateway":
                     try:
                         return _adapter.handle(  # type: ignore[attr-defined]

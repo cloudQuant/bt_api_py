@@ -179,6 +179,18 @@ class ServiceResultTooLargeError(RuntimeError):
         super().__init__(self.code)
 
 
+class ServiceOperationDeniedError(RuntimeError):
+    """A trusted adapter proved an operation was rejected before side effects.
+
+    The registry only maps this exact exception to a definitive wire denial
+    for the market subscription operation. Other operations and exception
+    types retain the ordinary ``HANDLER_FAILED`` outcome.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("SERVICE_OPERATION_DENIED")
+
+
 def validate_capabilities_and_grants(
     capabilities: tuple[ServiceCapability, ...],
     grants: Mapping[str, tuple[PrincipalGrant, ...]],
@@ -1193,7 +1205,13 @@ class ServiceRegistry:
             ):
                 return self._failure("REPLY_TOO_LARGE")
             return self._failure("HANDLER_FAILED")
-        except Exception:
+        except Exception as error:
+            if (
+                type(error) is ServiceOperationDeniedError
+                and capability.port == "service.market_source"
+                and operation == "market.subscribe"
+            ):
+                return self._failure("SCOPE_DENIED")
             return self._failure("HANDLER_FAILED")
 
     @classmethod
