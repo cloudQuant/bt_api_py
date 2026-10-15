@@ -97,6 +97,16 @@ _DEFAULT_ACCOUNT_READ_OPERATIONS = frozenset(
     {"account.read_after", "account.snapshot", "account.head"}
 )
 _DEFAULT_TELEMETRY_INGRESS_OPERATIONS = frozenset({"telemetry.append"})
+_REGISTRATION_POLICY_FIELDS = frozenset(
+    {
+        "access_policy_ref",
+        "access_policy_version",
+        "risk_policy_status",
+        "risk_policy_ref",
+        "risk_policy_version",
+        "requirements_ref",
+    }
+)
 
 
 class ServiceRuntimeError(RuntimeError):
@@ -218,6 +228,12 @@ class RegisteredBinding:
     required: bool = True
     heartbeat_interval_seconds: float | None = None
     active: bool = True
+    access_policy_ref: str | None = None
+    access_policy_version: str | None = None
+    risk_policy_status: str | None = None
+    risk_policy_ref: str | None = None
+    risk_policy_version: str | None = None
+    requirements_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1262,6 +1278,7 @@ class ServiceClientRuntime:
             for name in ("policy_version", "requirements_version"):
                 if not isinstance(result.get(name), str) or not result[name]:
                     raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+            policy_metadata = self._registration_policy_metadata(result)
             granted = result.get("operations")
             if (
                 not isinstance(granted, (list, tuple))
@@ -1296,6 +1313,12 @@ class ServiceClientRuntime:
                 heartbeat_interval_seconds=float(heartbeat_interval_seconds)
                 if heartbeat_interval_seconds is not None
                 else None,
+                access_policy_ref=policy_metadata[0],
+                access_policy_version=policy_metadata[1],
+                risk_policy_status=policy_metadata[2],
+                risk_policy_ref=policy_metadata[3],
+                risk_policy_version=policy_metadata[4],
+                requirements_ref=policy_metadata[5],
             )
         except BaseException:
             try:
@@ -1364,6 +1387,72 @@ class ServiceClientRuntime:
             raise ServiceRuntimeError("LEASE_TIMING_UNAVAILABLE")
         return float(value)
 
+    @staticmethod
+    def _valid_receipt_reference(value: object) -> bool:
+        if type(value) is not str or not 1 <= len(value) <= 128:
+            return False
+        if not value[0].isascii() or not value[0].isalnum():
+            return False
+        return all(
+            character.isascii() and (character.isalnum() or character in "._:-")
+            for character in value
+        )
+
+    @classmethod
+    def _registration_policy_metadata(
+        cls, result: Mapping[str, Any]
+    ) -> tuple[str | None, str | None, str | None, str | None, str | None, str | None]:
+        """Read the additive receipt schema without confusing legacy replies.
+
+        Older service hosts return only ``policy_version`` and
+        ``requirements_version``. That remains valid, but is represented as
+        unknown metadata (all ``None``), never as explicit Risk N/A.
+        """
+
+        present = _REGISTRATION_POLICY_FIELDS.intersection(result)
+        if not present:
+            return None, None, None, None, None, None
+        if present != _REGISTRATION_POLICY_FIELDS:
+            raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+
+        access_ref = result.get("access_policy_ref")
+        access_version = result.get("access_policy_version")
+        risk_status = result.get("risk_policy_status")
+        risk_ref = result.get("risk_policy_ref")
+        risk_version = result.get("risk_policy_version")
+        requirements_ref = result.get("requirements_ref")
+        policy_version = result.get("policy_version")
+
+        if (
+            not cls._valid_receipt_reference(access_ref)
+            or type(access_version) is not str
+            or not access_version
+            or access_version != policy_version
+            or not cls._valid_receipt_reference(requirements_ref)
+        ):
+            raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        if risk_status == "NOT_APPLICABLE":
+            if risk_ref is not None or risk_version is not None:
+                raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        elif risk_status == "APPLIED":
+            if (
+                not cls._valid_receipt_reference(risk_ref)
+                or type(risk_version) is not str
+                or len(risk_version) != 64
+                or any(character not in "0123456789abcdef" for character in risk_version)
+            ):
+                raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        else:
+            raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        return (
+            access_ref,
+            access_version,
+            risk_status,
+            risk_ref,
+            risk_version,
+            requirements_ref,
+        )
+
     @classmethod
     def _validate_renewal_receipt(
         cls, result: Mapping[str, Any], binding: RegisteredBinding
@@ -1388,6 +1477,16 @@ class ServiceClientRuntime:
             value = result.get(name)
             if not isinstance(value, str) or not value or value != expected:
                 raise ServiceRuntimeError("RENEWAL_BINDING_MISMATCH")
+        policy_metadata = cls._registration_policy_metadata(result)
+        if policy_metadata != (
+            binding.access_policy_ref,
+            binding.access_policy_version,
+            binding.risk_policy_status,
+            binding.risk_policy_ref,
+            binding.risk_policy_version,
+            binding.requirements_ref,
+        ):
+            raise ServiceRuntimeError("RENEWAL_BINDING_MISMATCH")
         cls._expiry(result)
         cls._lease_remaining(result)
 

@@ -1,0 +1,55 @@
+{
+  "command": [
+    "C:\\anaconda3\\python.exe",
+    "-P",
+    "-m",
+    "pytest",
+    "-vv",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp",
+    "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\pytest-tmp",
+    "--junitxml",
+    "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\junit.xml",
+    "tests/unit/test_service_registration_authorization_matrix.py::test_real_service_registration_returns_scoped_policy_receipts_and_denies_bypasses"
+  ],
+  "cwd": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source",
+  "environment_overrides": {
+    "PYTHONPATH": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src;D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_monitor\\src",
+    "PYTHONUTF8": "1",
+    "PYTHONNOUSERSITE": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "source_manifest_sha256": "bc29164753e91870386b68b4f30722913e59f8a89b829fc938a123bd3b6a56d9",
+  "packages": {
+    "bt_api_base": {
+      "head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "tracked_clean": true
+    },
+    "bt_api_gateway": {
+      "head": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "tracked_clean": true
+    },
+    "bt_api_risk": {
+      "head": "a099e367afd503cd38f3787e3cba578e2b244db4",
+      "tracked_clean": true
+    },
+    "bt_api_transport_zmq": {
+      "head": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "tracked_clean": true
+    },
+    "bt_api_execution": {
+      "head": "d2b49c44fdc8689e5728ed2f01a9919c1ee66afe",
+      "tracked_clean": true
+    },
+    "bt_api_monitor": {
+      "head": "536a4f04747182749fabdac5e28624f80465bc53",
+      "tracked_clean": true
+    }
+  },
+  "scope": "one REG01 local synthetic-provider integration node",
+  "repository_head_at_launch": "4861237c83765682a1c77324c23670290b550100"
+}

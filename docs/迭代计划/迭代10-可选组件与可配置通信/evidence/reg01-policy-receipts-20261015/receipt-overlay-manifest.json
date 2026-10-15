@@ -1,0 +1,32 @@
+{
+  "baseline_head": "edb72152616629fbc6238b993f472f5f997717b2",
+  "scope": "REG01 registration policy receipts only; excludes all group-role wiring and lifecycle changes",
+  "files": {
+    "bt_api_py/service_components.py": {
+      "baseline_sha256": "b3cdaa0f96449059572b469251a121299546376362636cffb5c1639a8c7d0098",
+      "candidate_sha256": "c761bf3645a936e23ef33097fd2724197cbf43b79fda88de0cb80f11e75627ef",
+      "baseline_bytes": 59670,
+      "candidate_bytes": 68150
+    },
+    "bt_api_py/service_registry.py": {
+      "baseline_sha256": "cf9834f10723b46cc3b7bdc20c5764e2611f10bdb2bd8e301b931ac1ed288c0a",
+      "candidate_sha256": "5b471855cdfbf98d18c0987783469ef82f4fbe05377c3e9706ca13063fff002c",
+      "baseline_bytes": 55803,
+      "candidate_bytes": 64135
+    },
+    "bt_api_py/service_host.py": {
+      "baseline_sha256": "e0aaaf0258050b63ceb8058d7300d31a4a0d6d491949dc7c40aeff75e8934493",
+      "candidate_sha256": "ff9c284530f605933f42966665c4ac19fcf1ef06d00630ad622e9962b460964d",
+      "baseline_bytes": 52808,
+      "candidate_bytes": 53591
+    },
+    "bt_api_py/service_runtime.py": {
+      "baseline_sha256": "b40478c3ad747981815b36a2193f2ac98fab255999e57b51f897c545432c8e8c",
+      "candidate_sha256": "60d3769b446d21f47a3b0501090e41eee8f1d5ae117555e27cfc16ff5f108878",
+      "baseline_bytes": 68569,
+      "candidate_bytes": 72551
+    }
+  },
+  "patch_sha256": "89fc8df5afd76a38829104dcd908382597c9e8fddcf09891c558273155f9a0d7",
+  "patch_bytes": 32845
+}

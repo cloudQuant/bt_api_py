@@ -131,6 +131,36 @@ class ServiceCapability:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountRiskPolicyBinding:
+    """Trusted, scope-specific account Risk policy shown in registration receipts.
+
+    The SDK composition root creates these only after checking the configured
+    reference against the actual Risk gate policy supplied by the trusted
+    resource provider. ``policy_version`` is the gate policy fingerprint, not
+    an access-control or readiness version.
+    """
+
+    instance_id: str
+    scope: WireScope
+    policy_ref: str
+    policy_version: str
+
+    def __post_init__(self) -> None:
+        if not _text(self.instance_id) or not _text(self.policy_ref):
+            raise ValueError("account Risk policy binding identifiers are invalid")
+        if type(self.scope) is not WireScope or self.scope.run_id is not None:
+            raise TypeError("account Risk policy binding scope is invalid")
+        if not self.scope.account_ref or self.scope.account_refs:
+            raise ValueError("account Risk policy binding requires one account")
+        if (
+            type(self.policy_version) is not str
+            or len(self.policy_version) != 64
+            or any(character not in "0123456789abcdef" for character in self.policy_version)
+        ):
+            raise ValueError("account Risk policy version must be a SHA-256 fingerprint")
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceGrant:
     """Trusted scope template and operation grant for one service resource."""
 
@@ -283,6 +313,10 @@ class ServiceRegistry:
         max_registration_keys: int = _DEFAULT_REGISTRATION_KEYS,
         reply_size_checker: Callable[[WireEnvelope, Mapping[str, Any], int | None], bool]
         | None = None,
+        access_policy_ref: str | None = None,
+        requirements_ref: str | None = None,
+        account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = (),
+        account_risk_policy_required_routes: frozenset[tuple[str, str]] = frozenset(),
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
@@ -306,10 +340,49 @@ class ServiceRegistry:
         ):
             raise TypeError("ready or clock is invalid")
         capability_map, trusted_grants = validate_capabilities_and_grants(capabilities, grants)
+        effective_access_policy_ref = policy_version if access_policy_ref is None else access_policy_ref
+        effective_requirements_ref = (
+            requirements_version if requirements_ref is None else requirements_ref
+        )
+        if not _text(effective_access_policy_ref) or not _text(effective_requirements_ref):
+            raise ValueError("policy references are invalid")
+        if type(account_risk_policy_bindings) is not tuple or any(
+            type(binding) is not AccountRiskPolicyBinding
+            for binding in account_risk_policy_bindings
+        ):
+            raise TypeError("account_risk_policy_bindings must be a tuple")
+        if type(account_risk_policy_required_routes) is not frozenset or any(
+            type(route) is not tuple
+            or len(route) != 2
+            or not all(_text(value) for value in route)
+            or route[1] != "service.order_entry"
+            for route in account_risk_policy_required_routes
+        ):
+            raise TypeError("account_risk_policy_required_routes must be a frozenset")
+        account_risk_bindings_by_route: dict[tuple[str, WireScope], AccountRiskPolicyBinding] = {}
+        for binding in account_risk_policy_bindings:
+            route = (binding.instance_id, "service.order_entry")
+            if route not in capability_map:
+                raise ValueError("account Risk policy binding is outside the local capability")
+            key = (binding.instance_id, binding.scope)
+            if key in account_risk_bindings_by_route:
+                raise ValueError("duplicate account Risk policy binding")
+            account_risk_bindings_by_route[key] = binding
+        if any(route not in capability_map for route in account_risk_policy_required_routes):
+            raise ValueError("required account Risk policy route is not declared")
+        if any(
+            not any(binding.instance_id == route[0] for binding in account_risk_policy_bindings)
+            for route in account_risk_policy_required_routes
+        ):
+            raise ValueError("required account Risk policy route has no binding")
 
         self.service_id = service_id
         self.policy_version = policy_version
         self.requirements_version = requirements_version
+        self.access_policy_ref = effective_access_policy_ref
+        self.requirements_ref = effective_requirements_ref
+        self._account_risk_policy_bindings = tuple(account_risk_policy_bindings)
+        self._account_risk_policy_required_routes = account_risk_policy_required_routes
         self.lease_seconds = float(lease_seconds)
         self.max_sessions = max_sessions
         self.max_registration_keys = max_registration_keys
@@ -414,7 +487,12 @@ class ServiceRegistry:
                 policy_version TEXT NOT NULL,
                 requirements_version TEXT NOT NULL,
                 service_epoch TEXT NOT NULL,
-                expires_at REAL NOT NULL
+                expires_at REAL NOT NULL,
+                access_policy_ref TEXT NOT NULL DEFAULT '',
+                requirements_ref TEXT NOT NULL DEFAULT '',
+                risk_policy_status TEXT NOT NULL DEFAULT 'NOT_APPLICABLE',
+                risk_policy_ref TEXT,
+                risk_policy_version TEXT
             );
             CREATE INDEX IF NOT EXISTS sessions_by_principal
                 ON sessions(principal, expires_at);
@@ -443,6 +521,18 @@ class ServiceRegistry:
             self._db.execute(
                 "ALTER TABLE strategy_write_claims ADD COLUMN active_registration_id TEXT"
             )
+        session_columns = {
+            row["name"] for row in self._db.execute("PRAGMA table_info(sessions)")
+        }
+        for name, declaration in (
+            ("access_policy_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("requirements_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("risk_policy_status", "TEXT NOT NULL DEFAULT 'NOT_APPLICABLE'"),
+            ("risk_policy_ref", "TEXT"),
+            ("risk_policy_version", "TEXT"),
+        ):
+            if name not in session_columns:
+                self._db.execute(f"ALTER TABLE sessions ADD COLUMN {name} {declaration}")
 
     def _acquire_owner_lock(self, db_path: str) -> None:
         if db_path == ":memory:":
@@ -586,12 +676,16 @@ class ServiceRegistry:
         with self._transaction():
             self._expire_sessions(self._now())
             rows = self._db.execute(
-                "SELECT registration_id FROM sessions "
+                "SELECT * FROM sessions "
                 "WHERE instance_id=? AND service_epoch=? "
                 "AND policy_version=? AND requirements_version=?",
                 (instance_id, self._epoch, self.policy_version, self.requirements_version),
             ).fetchall()
-            return frozenset(row["registration_id"] for row in rows)
+            return frozenset(
+                row["registration_id"]
+                for row in rows
+                if self._registration_policy_matches(row)
+            )
 
     def _ensure_open(self) -> None:
         if self._closed or self._db is None:
@@ -664,6 +758,50 @@ class ServiceRegistry:
         if not isinstance(payload, Mapping) or frozenset(payload.keys()) != expected:
             return None
         return payload
+
+    def _account_risk_receipt_for(
+        self,
+        instance_id: str,
+        port: str,
+        scope: WireScope,
+        identity: WireIdentity,
+    ) -> tuple[str, str | None, str | None] | None:
+        bindings = tuple(
+            binding
+            for binding in self._account_risk_policy_bindings
+            if binding.instance_id == instance_id
+            and port == "service.order_entry"
+            and self._scope_matches(binding.scope, scope, identity)
+        )
+        if len(bindings) > 1:
+            return None
+        if not bindings:
+            if (instance_id, port) in self._account_risk_policy_required_routes:
+                return None
+            return "NOT_APPLICABLE", None, None
+        binding = bindings[0]
+        return "APPLIED", binding.policy_ref, binding.policy_version
+
+    def _registration_policy_matches(self, row: sqlite3.Row | Mapping[str, Any]) -> bool:
+        if (
+            row["policy_version"] != self.policy_version
+            or row["requirements_version"] != self.requirements_version
+            or row["access_policy_ref"] != self.access_policy_ref
+            or row["requirements_ref"] != self.requirements_ref
+        ):
+            return False
+        identity = self._stored_identity(row["identity_json"])
+        scope = self._stored_scope(row["scope_json"])
+        expected = self._account_risk_receipt_for(
+            row["instance_id"], row["port"], scope, identity
+        )
+        if expected is None:
+            return False
+        return (
+            row["risk_policy_status"],
+            row["risk_policy_ref"],
+            row["risk_policy_version"],
+        ) == expected
 
     def _identity_is_trusted(self, principal: str, identity: WireIdentity) -> bool:
         return any(grant.identity == identity for grant in self._grants.get(principal, ()))
@@ -873,6 +1011,11 @@ class ServiceRegistry:
         )
         if status != "OK" or capability is None:
             return self._failure(status)
+        risk_receipt = self._account_risk_receipt_for(
+            instance_id, port, request.header.scope, request.header.identity
+        )
+        if risk_receipt is None:
+            return self._failure("POLICY_REQUIREMENT_UNMET")
         now = self._now()
         expires_at = now + self.lease_seconds
         if not math.isfinite(expires_at):
@@ -907,6 +1050,12 @@ class ServiceRegistry:
                     (previous["registration_id"], self._epoch),
                 ).fetchone()
                 if active is not None and active["expires_at"] > now:
+                    if (
+                        active["policy_version"] != self.policy_version
+                        or active["requirements_version"] != self.requirements_version
+                        or not self._registration_policy_matches(active)
+                    ):
+                        return self._failure("POLICY_REQUIREMENT_UNMET")
                     return self._success(self._registration_result(active, now=now))
             else:
                 key_count = self._db.execute("SELECT COUNT(*) FROM registration_keys").fetchone()[0]
@@ -932,7 +1081,11 @@ class ServiceRegistry:
                 self._scope_dict(request.header.scope), sort_keys=True, separators=(",", ":")
             )
             self._db.execute(
-                "INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO sessions (registration_id, principal, registration_key, request_digest, "
+                "identity_json, instance_id, port, scope_ref, scope_json, operations_json, "
+                "write_operations_json, policy_version, requirements_version, service_epoch, expires_at, "
+                "access_policy_ref, requirements_ref, risk_policy_status, risk_policy_ref, "
+                "risk_policy_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     registration_id,
                     principal,
@@ -951,6 +1104,9 @@ class ServiceRegistry:
                     self.requirements_version,
                     self._epoch,
                     expires_at,
+                    self.access_policy_ref,
+                    self.requirements_ref,
+                    *risk_receipt,
                 ),
             )
             self._db.execute(
@@ -1021,6 +1177,14 @@ class ServiceRegistry:
             "expires_at": row["expires_at"],
             "lease_remaining_seconds": lease_remaining,
             "operations": json.loads(row["operations_json"]),
+            "access_policy_ref": row["access_policy_ref"],
+            "access_policy_version": row["policy_version"],
+            "risk_policy_status": row["risk_policy_status"],
+            "risk_policy_ref": row["risk_policy_ref"],
+            "risk_policy_version": row["risk_policy_version"],
+            "requirements_ref": row["requirements_ref"],
+            # Compatibility alias for clients which still consume access policy
+            # version under its original wire name.
             "policy_version": row["policy_version"],
             "requirements_version": row["requirements_version"],
         }
@@ -1064,6 +1228,7 @@ class ServiceRegistry:
                 if (
                     row["policy_version"] != self.policy_version
                     or row["requirements_version"] != self.requirements_version
+                    or not self._registration_policy_matches(row)
                 ):
                     return self._failure("POLICY_REQUIREMENT_UNMET")
                 expires_at = now + self.lease_seconds
@@ -1135,6 +1300,7 @@ class ServiceRegistry:
             if (
                 row["policy_version"] != self.policy_version
                 or row["requirements_version"] != self.requirements_version
+                or not self._registration_policy_matches(row)
             ):
                 return self._failure("POLICY_REQUIREMENT_UNMET")
             instance_id = row["instance_id"]

@@ -555,6 +555,17 @@ class ServiceHost:
             ):
                 raise ServiceHostError("CAPABILITY_PLAN_MISMATCH")
 
+            account_risk_policy_bindings = tuple(
+                binding
+                for component in self._components
+                for binding in component.account_risk_policy_bindings
+            )
+            account_risk_policy_required_routes = frozenset(
+                (component.instance_id, port)
+                for component in self._components
+                for port in component.account_risk_policy_required_ports
+            )
+
             try:
                 self._registry = ServiceRegistry(
                     self._registry_path,
@@ -563,7 +574,11 @@ class ServiceHost:
                     grants=self._authority.grants,
                     policy_version=self._authority.registration_policy_version,
                     requirements_version=self._authority.service_requirements_version,
+                    access_policy_ref=self._authority.registration_policy_ref,
+                    requirements_ref=self._authority.service_requirements_ref,
                     ready=False,
+                    account_risk_policy_bindings=account_risk_policy_bindings,
+                    account_risk_policy_required_routes=account_risk_policy_required_routes,
                     reply_size_checker=self._reply_size_checker,
                 )
             except ServiceRegistryStartupCleanupError as exc:

@@ -1,0 +1,102 @@
+{
+  "round": 103,
+  "parent": "4861237c83765682a1c77324c23670290b550100",
+  "formal_case": "REG01",
+  "formal_pass_count": 22,
+  "formal_total": 68,
+  "evidence_level": "LOCAL_REAL_HOST_CURVE_SYNTHETIC_PROVIDER_REGISTRATION_MATRIX",
+  "files": {
+    "stdout.log": {
+      "bytes": 596,
+      "sha256": "69ee696939294b77f016426c8ee05778b784cf0dfea2bd3840fa106ba24e6a32",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\stdout.log"
+    },
+    "stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\stderr.log"
+    },
+    "junit.xml": {
+      "bytes": 397,
+      "sha256": "b01da77891efde7b44628a83f19070464864439cc183fc75267d5bd8b16581b4",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\junit.xml"
+    },
+    "exit-code.txt": {
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\exit-code.txt"
+    },
+    "invocation.json": {
+      "bytes": 2104,
+      "sha256": "5362ae23ebedca17a07c00a744c5a3edaa3438318a2731a3fd772c4cb1abdc2a",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\invocation.json"
+    },
+    "result.json": {
+      "bytes": 314,
+      "sha256": "d570c2033b4d53529ddbbe8e1b76b4c4c26d4e88b9c162230789bfe1ff60546c",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\result.json"
+    },
+    "process.json": {
+      "bytes": 33,
+      "sha256": "ab170893863536ebf0902daf6ddab69ffb92b94053edcae3bb2a28dd35e7cf90",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\run\\process.json"
+    },
+    "source-manifest.json": {
+      "bytes": 31255,
+      "sha256": "bc29164753e91870386b68b4f30722913e59f8a89b829fc938a123bd3b6a56d9",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source-manifest.json"
+    },
+    "test-executed.py": {
+      "bytes": 30519,
+      "sha256": "3b8daa542c9a3dc4bcbbc47d94f0986556436afbdafec4e9c5b9025c8a5146c5",
+      "source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source\\tests\\unit\\test_service_registration_authorization_matrix.py"
+    },
+    "runner-executed.py": {
+      "bytes": 4159,
+      "sha256": "613a819a162fa882eba7bb3cb427178fc67990fba4338f7cae60f5bf71546686",
+      "source": "D:\\bt_api_py\\.codex-tmp\\iteration10-reg01-root-run-r4.py"
+    },
+    "receipt-overlay-manifest.json": {
+      "bytes": 1510,
+      "sha256": "e8b713ae176d1c1d8b8461ea0d4ad200e43bda8dfb79df446c476be8bb0572db",
+      "source": "D:\\temp\\iteration10-reg01-fixed-source-20261015\\manifest.json"
+    },
+    ".gitattributes": {
+      "bytes": 8,
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+      "source": "Root record"
+    },
+    "root-adjudication.md": {
+      "bytes": 2593,
+      "sha256": "29868d4c09db81a3d35a530a1279b4ef0d50624fcf5e3d9fe832c060f69a3981",
+      "source": "Root record"
+    }
+  },
+  "production_overlays": {
+    "bt_api_py/service_components.py": {
+      "accepted_source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source\\bt_api_py\\service_components.py",
+      "accepted_sha256": "c761bf3645a936e23ef33097fd2724197cbf43b79fda88de0cb80f11e75627ef",
+      "base_sha256": "b3cdaa0f96449059572b469251a121299546376362636cffb5c1639a8c7d0098",
+      "checkout_preserved_sha256": "6c4fe3b7f575e909a2b1205e1e55db9613e6a9608198b25f5587ad1db76e007d"
+    },
+    "bt_api_py/service_registry.py": {
+      "accepted_source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source\\bt_api_py\\service_registry.py",
+      "accepted_sha256": "5b471855cdfbf98d18c0987783469ef82f4fbe05377c3e9706ca13063fff002c",
+      "base_sha256": "cf9834f10723b46cc3b7bdc20c5764e2611f10bdb2bd8e301b931ac1ed288c0a",
+      "checkout_preserved_sha256": "9d1f4d81c3656bfd6aa5732ae6a8542db68e7d03ac349aa05bc90967fae633a1"
+    },
+    "bt_api_py/service_host.py": {
+      "accepted_source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source\\bt_api_py\\service_host.py",
+      "accepted_sha256": "ff9c284530f605933f42966665c4ac19fcf1ef06d00630ad622e9962b460964d",
+      "base_sha256": "e0aaaf0258050b63ceb8058d7300d31a4a0d6d491949dc7c40aeff75e8934493",
+      "checkout_preserved_sha256": "9bb985bef5f8582bdb3878e5738e2e646bd25741c9077170f4592b1679a17778"
+    },
+    "bt_api_py/service_runtime.py": {
+      "accepted_source": "D:\\temp\\iteration10-reg01-root-edb-20261015-r4\\source\\bt_api_py\\service_runtime.py",
+      "accepted_sha256": "60d3769b446d21f47a3b0501090e41eee8f1d5ae117555e27cfc16ff5f108878",
+      "base_sha256": "b40478c3ad747981815b36a2193f2ac98fab255999e57b51f897c545432c8e8c",
+      "checkout_preserved_sha256": "5fa83e861f6d47738df409605a1a6adb4e63a538b71beccd453ee72e4e45299b"
+    }
+  },
+  "accepted_qa_repeated": false
+}

@@ -27,6 +27,7 @@ from typing import Any, Final, Protocol
 from bt_api_base.service_protocol import WireScope
 
 from .service_registry import (
+    AccountRiskPolicyBinding,
     ServiceCallContext,
     ServiceCapability,
     ServiceOperationDeniedError,
@@ -47,6 +48,32 @@ class ResourceOwnership(str, Enum):  # noqa: UP042 -- Python 3.9 compatibility.
 
     OWNED = "owned"
     BORROWED = "borrowed"
+
+
+@dataclass(frozen=True, slots=True)
+class TrustedRiskPolicyBinding:
+    """Trusted alias from a configured reference to one actual Risk policy.
+
+    The policy object is resolved by the operator resource provider and must
+    be the exact object exposed by the gate passed to the Risk adapter.
+    """
+
+    reference: str
+    scope: WireScope
+    policy: object = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.reference) is not str
+            or not self.reference
+            or self.reference != self.reference.strip()
+            or len(self.reference.encode("utf-8", errors="strict")) > 128
+        ):
+            raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
+        if type(self.scope) is not WireScope or self.scope.run_id is not None:
+            raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
+        if self.policy is None:
+            raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
 
 
 def _borrowed_noop() -> None:
@@ -71,6 +98,7 @@ class ComponentResources:
     close_resource: Callable[[], None] = field(repr=False, compare=False)
     internal_ports: Mapping[str, object] = field(default_factory=dict)
     ownership: ResourceOwnership = ResourceOwnership.BORROWED
+    risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = ()
     _release_once: Callable[[], None] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -82,6 +110,11 @@ class ComponentResources:
             raise ServiceComponentError("INVALID_RESOURCE_OWNERSHIP")
         if not callable(self.close_resource):
             raise ServiceComponentError("INVALID_RESOURCE_CLOSE")
+        if type(self.risk_policy_bindings) is not tuple or any(
+            type(binding) is not TrustedRiskPolicyBinding
+            for binding in self.risk_policy_bindings
+        ):
+            raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
         if self.ownership is ResourceOwnership.BORROWED:
             if self.close_resource is not _borrowed_noop:
                 raise ServiceComponentError("BORROWED_RESOURCE_REQUIRES_EXPLICIT_NOOP")
@@ -111,6 +144,7 @@ class ComponentResources:
         *,
         ready: Callable[[], bool],
         internal_ports: Mapping[str, object] | None = None,
+        risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
     ) -> ComponentResources:
         """Describe operator-owned objects whose lifetime remains external."""
 
@@ -119,6 +153,7 @@ class ComponentResources:
             ready=ready,
             internal_ports={} if internal_ports is None else internal_ports,
             ownership=ResourceOwnership.BORROWED,
+            risk_policy_bindings=risk_policy_bindings,
             close_resource=_borrowed_noop,
         )
 
@@ -130,6 +165,7 @@ class ComponentResources:
         ready: Callable[[], bool],
         close: Callable[[], None],
         internal_ports: Mapping[str, object] | None = None,
+        risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
     ) -> ComponentResources:
         """Describe host-owned objects and their explicit cleanup callback."""
 
@@ -138,6 +174,7 @@ class ComponentResources:
             ready=ready,
             internal_ports={} if internal_ports is None else internal_ports,
             ownership=ResourceOwnership.OWNED,
+            risk_policy_bindings=risk_policy_bindings,
             close_resource=close,
         )
 
@@ -209,6 +246,8 @@ class ServiceComponent:
     maintain: Callable[[frozenset[str]], object] | None = field(
         default=None, repr=False, compare=False
     )
+    account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = ()
+    account_risk_policy_required_ports: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if type(self.capabilities) is not tuple or any(
@@ -228,6 +267,27 @@ class ServiceComponent:
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
         if self.maintain is not None and not callable(self.maintain):
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
+        if type(self.account_risk_policy_bindings) is not tuple or any(
+            type(binding) is not AccountRiskPolicyBinding
+            for binding in self.account_risk_policy_bindings
+        ):
+            raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
+        if type(self.account_risk_policy_required_ports) is not frozenset or any(
+            type(port) is not str or not port for port in self.account_risk_policy_required_ports
+        ):
+            raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
+        capability_ports = {capability.port for capability in self.capabilities}
+        if not self.account_risk_policy_required_ports.issubset(capability_ports):
+            raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
+        if any(binding.instance_id != self.instance_id for binding in self.account_risk_policy_bindings):
+            raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
+        binding_scopes = [binding.scope for binding in self.account_risk_policy_bindings]
+        if len(binding_scopes) != len(set(binding_scopes)):
+            raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
+        if self.account_risk_policy_required_ports - {"service.order_entry"}:
+            raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
+        if self.account_risk_policy_required_ports and not self.account_risk_policy_bindings:
+            raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
         object.__setattr__(self, "handlers", MappingProxyType(handlers))
         object.__setattr__(self, "internal_ports", MappingProxyType(internal))
 
@@ -717,6 +777,122 @@ def order_components(prepared: Sequence[PreparedComponent]) -> tuple[PreparedCom
     return tuple(ordered)
 
 
+def _account_risk_policy_metadata(
+    resources: ComponentResources,
+    *,
+    spec: ComponentSpec,
+    options: Mapping[str, object],
+    module: object,
+) -> tuple[tuple[AccountRiskPolicyBinding, ...], frozenset[str]]:
+    """Bind an account-order route to the actual configured Risk policy.
+
+    A configured account policy reference may be an operator alias. Aliases
+    need an explicit resource-provider binding to the exact policy object on
+    the gate; the policy fingerprint is always read from that object.
+    """
+
+    risk_owner = spec.component == "risk" and options.get("role") == "account_owner"
+    if not risk_owner or "service.order_entry" not in spec.bind_ports:
+        if resources.risk_policy_bindings:
+            raise ServiceComponentError("UNEXPECTED_RISK_POLICY_BINDING")
+        return (), frozenset()
+
+    try:
+        risk_module = importlib.import_module("bt_api_risk")
+        gate_type = getattr(risk_module, "DurableRiskGate", None)
+        policy_type = getattr(risk_module, "RiskPolicy", None)
+        account_scope_type = getattr(risk_module, "AccountScope", None)
+        target_type = getattr(module, "RiskOrderTarget", None)
+        gate = resources.values["gate"]
+        targets = resources.values["targets"]
+        policy = gate.policy
+        configured_ref = options["account_policy_ref"]
+        policy_id = policy.policy_id
+        fingerprint = policy.fingerprint
+    except Exception:
+        raise ServiceComponentError("RISK_POLICY_BINDING_UNAVAILABLE") from None
+
+    if (
+        not isinstance(gate_type, type)
+        or type(gate) is not gate_type
+        or not isinstance(policy_type, type)
+        or type(policy) is not policy_type
+        or not isinstance(account_scope_type, type)
+        or not isinstance(target_type, type)
+        or type(configured_ref) is not str
+        or not configured_ref
+        or type(policy_id) is not str
+        or not policy_id
+        or type(fingerprint) is not str
+        or len(fingerprint) != 64
+        or any(character not in "0123456789abcdef" for character in fingerprint)
+        or not isinstance(targets, Mapping)
+        or not targets
+    ):
+        raise ServiceComponentError("RISK_POLICY_BINDING_INVALID")
+
+    target_scopes: set[WireScope] = set()
+    for wire_scope, target in targets.items():
+        try:
+            account_scope = target.account_scope
+            strategy_id = target.strategy_id
+            provider_account_id = target.provider_account_id
+        except Exception:
+            raise ServiceComponentError("RISK_POLICY_BINDING_INVALID") from None
+        if (
+            type(wire_scope) is not WireScope
+            or type(target) is not target_type
+            or type(account_scope) is not account_scope_type
+            or type(provider_account_id) is not str
+            or account_scope.account_id != provider_account_id
+            or wire_scope in target_scopes
+            or not wire_scope.account_ref
+            or wire_scope.account_refs
+            or wire_scope.strategy_ref != strategy_id
+            or wire_scope.run_id is not None
+            or wire_scope.group_id is not None
+            or wire_scope.leg_id is not None
+            or wire_scope.manual_book_ref is not None
+        ):
+            raise ServiceComponentError("RISK_POLICY_BINDING_INVALID")
+        target_scopes.add(wire_scope)
+
+    supplied = resources.risk_policy_bindings
+    if configured_ref != policy_id and not supplied:
+        raise ServiceComponentError("RISK_POLICY_BINDING_REQUIRED")
+    if supplied:
+        by_scope: dict[WireScope, TrustedRiskPolicyBinding] = {}
+        for binding in supplied:
+            if (
+                type(binding) is not TrustedRiskPolicyBinding
+                or binding.reference != configured_ref
+                or binding.policy is not policy
+                or binding.scope not in target_scopes
+                or binding.scope in by_scope
+            ):
+                raise ServiceComponentError("RISK_POLICY_BINDING_MISMATCH")
+            by_scope[binding.scope] = binding
+        if set(by_scope) != target_scopes:
+            raise ServiceComponentError("RISK_POLICY_BINDING_MISMATCH")
+    elif configured_ref != policy_id:
+        raise ServiceComponentError("RISK_POLICY_BINDING_REQUIRED")
+
+    return (
+        tuple(
+            AccountRiskPolicyBinding(spec.instance_id, target_scope, configured_ref, fingerprint)
+            for target_scope in sorted(
+                target_scopes,
+                key=lambda scope: (
+                    scope.execution_domain_ref,
+                    scope.account_ref or "",
+                    scope.strategy_ref or "",
+                ),
+            )
+        ),
+        frozenset({"service.order_entry"}),
+    )
+
+
 def build_component(
     prepared: PreparedComponent,
     *,
@@ -772,6 +948,14 @@ def build_component(
             expected_keys = expected_keys | {"account_books"}
         if set(resources.values) != set(expected_keys):
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
+        account_risk_policy_bindings, account_risk_policy_required_ports = (
+            _account_risk_policy_metadata(
+                resources,
+                spec=spec,
+                options=prepared.options,
+                module=prepared.module,
+            )
+        )
         if any(port not in builtin.internal_ports for port in resources.internal_ports):
             raise ServiceComponentError("UNSUPPORTED_INTERNAL_PORT")
         if any(port not in spec.bind_ports for port in resources.internal_ports):
@@ -1256,6 +1440,8 @@ def build_component(
             readiness=readiness,
             close=component_resources.close,
             maintain=maintain,
+            account_risk_policy_bindings=account_risk_policy_bindings,
+            account_risk_policy_required_ports=account_risk_policy_required_ports,
         )
         if on_resources is not None and defer_resource_tracking:
             # The owner lock and resource close callback must be tracked as one

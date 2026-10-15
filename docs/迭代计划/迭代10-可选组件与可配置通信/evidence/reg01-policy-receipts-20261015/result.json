@@ -1,0 +1,9 @@
+{
+  "returncode": 0,
+  "elapsed_seconds": 6.172,
+  "source_files_checked": 178,
+  "changed_inputs": [],
+  "stdout_sha256": "69ee696939294b77f016426c8ee05778b784cf0dfea2bd3840fa106ba24e6a32",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "changed_packages": []
+}

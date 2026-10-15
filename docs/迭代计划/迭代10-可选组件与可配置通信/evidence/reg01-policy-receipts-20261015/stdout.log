@@ -1,0 +1,9 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+rootdir: D:\temp\iteration10-reg01-root-edb-20261015-r4\source
+collecting ... collected 1 item
+
+tests/unit/test_service_registration_authorization_matrix.py::test_real_service_registration_returns_scoped_policy_receipts_and_denies_bypasses PASSED [100%]
+
+- generated xml file: D:\temp\iteration10-reg01-root-edb-20261015-r4\run\junit.xml -
+============================== 1 passed in 5.74s ==============================
