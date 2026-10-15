@@ -1,0 +1,9 @@
+# 第111轮：Risk整数时钟
+
+Risk默认有效期判定改用time.time_ns整数时钟，保留显式旧seconds clock的既有转换兼容，并允许单独注入clock_ns。精确非负int校验拒绝bool/float/负值；仍严格拒绝未来观察和已到期事实，没有增加容差或sleep。终态resolution写入后及组vector所有扫描/写入后，在事务退出前再次核对事实、deadline/TTL和LIVE_GROSS有效期，过期则整轮回滚。
+
+Root独立运行本轮新test文件16passed/3.35秒/exit0，一条已有pytest配置warning；133源码输入及Risk/Base HEAD前后不变。覆盖默认整数clock与legacy分离、相等/未来/expiry边界、基线/订单/终态回滚、reservations-only和LIVE_GROSS组最终切点回滚。独立静态审查最终GO。作者的18项还包含两项受影响旧group节点，Root未把作者结果冒充自身18项。此前本机20000对时钟采样证明float往返可产生负纳秒差；这是本机新观测，不是恢复先前失败的具体时间。
+
+当前只接受typed synthetic proofs和真实SQLite包级行为；不等于SDK类型证明链、ServiceHost、真实账户或RISK02完整通过。SDK两个contextmanager修复另在集成轮验收；正式仍22/68。
+
+Risk/dev提交3e02dee8b86c0b9ccfa369d6e4761cf07d5a73c9，父79c04d30a541f473311b7d48727370c7e331ed10，scope仅admission.py及新test_integer_clock_freshness.py。最终static review trn02_acceptance GO，精确pin见spec/risk-postcommit。源码QA不为交付重复。

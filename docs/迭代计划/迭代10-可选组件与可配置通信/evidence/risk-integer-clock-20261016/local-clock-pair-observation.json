@@ -1,0 +1,13 @@
+{
+  "evidence_level": "ROOT_LOCAL_CREDENTIAL_FREE_CLOCK_PAIR_REPRODUCTION",
+  "tool_chunk": "fe8338",
+  "python": "3.11.5",
+  "samples": 20000,
+  "sample_order": "n=time.time_ns(); a=int(time.time()*1000000000)-n; b=int((time.time_ns()/1000000000)*1000000000)-n",
+  "default_negative": 10856,
+  "same_source_float_negative": 12143,
+  "default_min_ns": -128,
+  "same_source_float_min_ns": -228,
+  "scope": "Finite local wall-clock pairing only. No provider, account, database or service invocation. Does not recover the prior failed proof's exact clock samples.",
+  "next_action": "Use an integer-nanosecond Risk freshness clock while retaining strict future and expiration boundaries; preserve the original matrix result."
+}

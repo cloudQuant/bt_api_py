@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T17:32:48.525414+00:00",
+  "source_count": 133,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "79c04d30a541f473311b7d48727370c7e331ed10",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "79c04d30a541f473311b7d48727370c7e331ed10",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "b89498a24349498179f9a4a2b16acb4732455e74663ee733349798fdee704a96",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "TYPED_SYNTHETIC_SQLITE_RISK_INTEGER_CLOCK_AND_COMMIT_EXPIRY_NOT_SERVICE_OR_ACCOUNT_ACCEPTANCE"
+}

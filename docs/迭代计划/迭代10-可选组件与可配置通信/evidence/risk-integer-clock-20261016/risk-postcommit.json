@@ -1,0 +1,24 @@
+{
+  "repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "parent": "79c04d30a541f473311b7d48727370c7e331ed10",
+  "paths": [
+    "src/bt_api_risk/core/admission.py",
+    "tests/test_integer_clock_freshness.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_risk/core/admission.py": "8f1648126ad4c3e6d11323f41af17fdbd7c22186976c41cb95a5f92bd55797f2",
+    "tests/test_integer_clock_freshness.py": "16f86e77eecef0661d8431d9799c816ae77288080e253fde34c877d2b1736009"
+  },
+  "filtered_blob_ids": {
+    "src/bt_api_risk/core/admission.py": "0587a1fd18164b2c96ec5042071ea704552c5d3b",
+    "tests/test_integer_clock_freshness.py": "655ac6f10b39aec82084651eefb8321213808234"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "3e02dee8b86c0b9ccfa369d6e4761cf07d5a73c9",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-risk-integer-clock-root-20261016-r1\\result.json",
+  "evidence_level": "TYPED_SYNTHETIC_SQLITE_RISK_INTEGER_CLOCK_AND_COMMIT_EXPIRY_NOT_SERVICE_OR_ACCOUNT_ACCEPTANCE"
+}

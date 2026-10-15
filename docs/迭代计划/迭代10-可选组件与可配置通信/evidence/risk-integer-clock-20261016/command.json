@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "-c",
+    "pyproject.toml",
+    "--junitxml=D:\\temp\\iteration10-risk-integer-clock-root-20261016-r1\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-risk-integer-clock-root-20261016-r1\\pytest-tmp",
+    "tests/test_integer_clock_freshness.py"
+  ],
+  "cwd": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T17:32:44.790989+00:00"
+}
