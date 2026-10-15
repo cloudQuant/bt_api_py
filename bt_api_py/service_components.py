@@ -13,11 +13,14 @@ before the listener is opened.
 
 from __future__ import annotations
 
+import errno
 import importlib
+import os
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
@@ -363,6 +366,164 @@ _ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
     {"order_gate", "cancel_gate", "allow_unprotected"}
 )
 
+_EXECUTION_OWNER_LOCK_GUARD = threading.Lock()
+_EXECUTION_OWNER_LOCK_PATHS: set[str] = set()
+_EXECUTION_OWNER_LOCK_FILES: dict[str, Any] = {}
+_EXECUTION_OWNER_MEMORY_STORES: dict[int, object] = {}
+
+
+def _forget_execution_owner_path(key: str, owner_file: Any) -> None:
+    if not owner_file.closed:
+        return
+    with _EXECUTION_OWNER_LOCK_GUARD:
+        if _EXECUTION_OWNER_LOCK_FILES.get(key) is owner_file:
+            _EXECUTION_OWNER_LOCK_FILES.pop(key, None)
+        if key not in _EXECUTION_OWNER_LOCK_FILES:
+            _EXECUTION_OWNER_LOCK_PATHS.discard(key)
+
+
+class _ExecutionOwnerFileLock:
+    """Retain advisory ownership of one resolved execution-store pathname."""
+
+    def __init__(self, owner_file: Any, key: str) -> None:
+        self._owner_file = owner_file
+        self._key = key
+
+    def close(self) -> None:
+        owner_file = self._owner_file
+        if owner_file is None:
+            return
+        try:
+            # Closing the still-locked descriptor releases the OS lock. Do not
+            # explicitly unlock first: if close then fails, another process
+            # must not enter while this owner still has an open descriptor.
+            owner_file.close()
+        except BaseException:
+            if owner_file.closed:
+                self._owner_file = None
+            _forget_execution_owner_path(self._key, owner_file)
+            raise
+        if not owner_file.closed:
+            raise ServiceComponentError("ORDER_OWNER_LOCK_RELEASE_FAILED")
+        self._owner_file = None
+        _forget_execution_owner_path(self._key, owner_file)
+
+
+class _ExecutionOwnerMemoryLock:
+    """Exclude another local owner reusing the same in-memory store object."""
+
+    def __init__(self, store: object) -> None:
+        self._store: object | None = store
+
+    def close(self) -> None:
+        store = self._store
+        if store is None:
+            return
+        key = id(store)
+        with _EXECUTION_OWNER_LOCK_GUARD:
+            if _EXECUTION_OWNER_MEMORY_STORES.get(key) is store:
+                _EXECUTION_OWNER_MEMORY_STORES.pop(key, None)
+        self._store = None
+
+
+def _acquire_execution_owner_lock(
+    store: object,
+) -> _ExecutionOwnerFileLock | _ExecutionOwnerMemoryLock:
+    """Lock the resolved database pathname, or object identity for memory stores.
+
+    The sidecar protocol is advisory and pathname-based. Symlink aliases resolve
+    to one key; hard links and replacement or unlinking of the sidecar are
+    outside its exclusion guarantee.
+    """
+
+    raw_path = getattr(store, "path", None)
+    if type(raw_path) is not str or not raw_path:
+        raise ServiceComponentError("ORDER_OWNER_LOCK_UNAVAILABLE")
+    if raw_path == ":memory:":
+        memory_lock = _ExecutionOwnerMemoryLock(store)
+        key = id(store)
+        with _EXECUTION_OWNER_LOCK_GUARD:
+            if key in _EXECUTION_OWNER_MEMORY_STORES:
+                raise ServiceComponentError("ORDER_OWNER_ALREADY_ACTIVE")
+            _EXECUTION_OWNER_MEMORY_STORES[key] = store
+        return memory_lock
+    try:
+        key = os.path.normcase(str(Path(raw_path).expanduser().resolve(strict=True)))
+    except (OSError, RuntimeError, ValueError):
+        raise ServiceComponentError("ORDER_OWNER_LOCK_UNAVAILABLE") from None
+
+    with _EXECUTION_OWNER_LOCK_GUARD:
+        if key in _EXECUTION_OWNER_LOCK_PATHS:
+            raise ServiceComponentError("ORDER_OWNER_ALREADY_ACTIVE")
+        _EXECUTION_OWNER_LOCK_PATHS.add(key)
+
+    owner_file = None
+    try:
+        # Match ServiceRegistry's portable lifetime-lock protocol while using
+        # the resolved database pathname, independent of registry_path.
+        # This sidecar does not coordinate hard-link aliases or a sidecar
+        # replaced or unlinked by another process with directory write access.
+        owner_file = open(key + ".service_execution_owner.lock", "a+b")  # noqa: SIM115
+        with _EXECUTION_OWNER_LOCK_GUARD:
+            _EXECUTION_OWNER_LOCK_FILES[key] = owner_file
+        owner_file.seek(0, os.SEEK_END)
+        if owner_file.tell() == 0:
+            owner_file.write(b"\0")
+            owner_file.flush()
+        owner_file.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(owner_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(owner_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return _ExecutionOwnerFileLock(owner_file, key)
+    except BaseException as error:
+        if owner_file is not None:
+            try:
+                owner_file.close()
+            except BaseException:
+                # Keep both the in-process claim and descriptor reference until
+                # a retry confirms that close actually completed.
+                _forget_execution_owner_path(key, owner_file)
+                raise ServiceComponentError("ORDER_OWNER_LOCK_RELEASE_FAILED") from None
+            _forget_execution_owner_path(key, owner_file)
+        else:
+            with _EXECUTION_OWNER_LOCK_GUARD:
+                _EXECUTION_OWNER_LOCK_PATHS.discard(key)
+        if not isinstance(error, Exception):
+            raise
+        if isinstance(error, OSError) and error.errno in {
+            errno.EACCES,
+            errno.EAGAIN,
+            errno.EDEADLK,
+        }:
+            raise ServiceComponentError("ORDER_OWNER_ALREADY_ACTIVE") from None
+        raise ServiceComponentError("ORDER_OWNER_LOCK_UNAVAILABLE") from None
+
+
+def _resources_with_execution_owner_lock(
+    resources: ComponentResources,
+    owner_lock: _ExecutionOwnerFileLock | _ExecutionOwnerMemoryLock | None,
+) -> ComponentResources:
+    if owner_lock is None:
+        return resources
+
+    def close_owned_resources() -> None:
+        # Release the writer exclusion only after trusted provider cleanup has
+        # completed. If cleanup fails, a later host retry still owns the lock.
+        resources.close()
+        owner_lock.close()
+
+    return ComponentResources.owned(
+        resources.values,
+        ready=resources.ready,
+        close=close_owned_resources,
+        internal_ports=resources.internal_ports,
+    )
+
 
 def _builtin_for_spec(spec: ComponentSpec) -> _Builtin | None:
     role = spec.options.get("role")
@@ -531,6 +692,13 @@ def build_component(
         raise ServiceComponentError("UNKNOWN_COMPONENT")
     resources: ComponentResources | None = None
     tracked_by_caller = False
+    execution_owner_lock: _ExecutionOwnerFileLock | _ExecutionOwnerMemoryLock | None = None
+    execution_owner_lock_transferred = False
+    defer_resource_tracking = (
+        spec.component == "execution"
+        and spec.options.get("role") == "account_owner"
+        and "service.order_entry" in spec.bind_ports
+    )
     try:
         resources = resource_provider(
             spec.component,
@@ -543,7 +711,7 @@ def build_component(
     if type(resources) is not ComponentResources:
         raise ServiceComponentError("INVALID_COMPONENT_RESOURCES")
     try:
-        if on_resources is not None:
+        if on_resources is not None and not defer_resource_tracking:
             # Track before validation or adapter construction can fail.
             on_resources(resources)
             tracked_by_caller = True
@@ -634,6 +802,39 @@ def build_component(
                     cancel_admission_gate=cancel_gate,
                     allow_unprotected=allow_unprotected,
                 )
+                if "service.order_entry" in spec.bind_ports:
+                    recover = getattr(adapter, "recover_interrupted_dispatches", None)
+                    if not callable(recover):
+                        raise ServiceComponentError("ORDER_RECOVERY_UNAVAILABLE")
+                    execution_owner_lock = _acquire_execution_owner_lock(values["store"])
+                    try:
+                        recovered = recover()
+                    except Exception:
+                        raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
+                    record_type = getattr(module, "ExecutionRecord", None)
+                    state_type = getattr(module, "ExecutionState", None)
+                    targets = values.get("targets")
+                    if (
+                        type(recovered) is not tuple
+                        or not isinstance(record_type, type)
+                        or not isinstance(state_type, type)
+                        or not isinstance(targets, Mapping)
+                    ):
+                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
+                    try:
+                        expected_scope_keys = {target.key for target in targets.values()}
+                        recovery_result_valid = all(
+                            type(record) is record_type
+                            and record.state is state_type.UNKNOWN
+                            and record.unknown_reason == "interrupted_order_dispatch"
+                            and record.review_required is True
+                            and record.scope_key in expected_scope_keys
+                            for record in recovered
+                        )
+                    except Exception:
+                        recovery_result_valid = False
+                    if not recovery_result_valid:
+                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
             elif spec.component == "execution":
                 constructor = getattr(module, "ExecutionReadService", None)
                 adapter = constructor(values["store"], values["targets"])
@@ -857,6 +1058,7 @@ def build_component(
 
             readiness = account_worker_readiness
 
+        component_resources = _resources_with_execution_owner_lock(resources, execution_owner_lock)
         component = ServiceComponent(
             component=spec.component,
             instance_id=spec.instance_id,
@@ -864,9 +1066,15 @@ def build_component(
             handlers=handlers,
             internal_ports=internal_ports,
             readiness=readiness,
-            close=resources.close,
+            close=component_resources.close,
             maintain=maintain,
         )
+        if on_resources is not None and defer_resource_tracking:
+            # The owner lock and resource close callback must be tracked as one
+            # lifecycle unit if a later host-start step needs to retry cleanup.
+            on_resources(component_resources)
+            tracked_by_caller = True
+        execution_owner_lock_transferred = execution_owner_lock is not None
         if account_worker is not None:
             # Adapter construction above validates the provider session's
             # trusted account/journal/ACL scope bindings. Do not connect to
@@ -884,11 +1092,21 @@ def build_component(
                 raise ServiceComponentError("ACCOUNT_SESSION_WORKER_NOT_READY") from None
         return component
     except BaseException:
+        if defer_resource_tracking and on_resources is not None and not tracked_by_caller:
+            pending_resources = _resources_with_execution_owner_lock(
+                resources, execution_owner_lock
+            )
+            on_resources(pending_resources)
+            tracked_by_caller = True
+            execution_owner_lock_transferred = execution_owner_lock is not None
         if not tracked_by_caller:
             try:
-                resources.close()
+                _resources_with_execution_owner_lock(resources, execution_owner_lock).close()
+                execution_owner_lock_transferred = execution_owner_lock is not None
             except Exception:
                 raise ServiceComponentError("RESOURCE_CLEANUP_FAILED") from None
+        if execution_owner_lock is not None and not execution_owner_lock_transferred:
+            execution_owner_lock.close()
         raise
 
 
