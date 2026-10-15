@@ -164,11 +164,9 @@ _U1A_RUNTIME_DISTRIBUTIONS = (
     "pyyaml",
     "pandas",
     "aiohttp",
-    "spdlog",
     "pytz",
     "python-rapidjson",
     "httpx",
-    "pyzmq",
     "pydantic",
     "websockets",
     "typing-extensions",
@@ -750,11 +748,14 @@ def _package_source_manifest_digest(module_name: str) -> str:
 
 
 def _dependency_source_manifest_digest() -> str:
-    """Hash installed distribution manifests used by this SDK process.
+    """Hash dependencies used by protected direct CTP execution.
 
-    The manifest records distribution identity and every present file digest.
-    It is intentionally collected at approval time instead of accepting a
-    caller-provided dependency hash.
+    The direct CTP path does not use the optional ZeroMQ transport or the
+    optional spdlog backend, so their presence must not affect this identity.
+    The manifest records each required distribution and every installed file
+    digest; it is collected at approval time instead of accepting a
+    caller-provided dependency hash. Changing this set changes the approval
+    identity, so approvals bound to an earlier set must be issued again.
     """
 
     try:
@@ -767,7 +768,7 @@ def _dependency_source_manifest_digest() -> str:
             version = str(distribution.version or "").strip()
             files = distribution.files
             if not name or not version or files is None:
-                continue
+                raise ValueError("dependency_metadata_unavailable")
             file_manifest = []
             for relative in sorted(files, key=lambda item: str(item)):
                 path = Path(str(distribution.locate_file(relative)))
@@ -779,6 +780,8 @@ def _dependency_source_manifest_digest() -> str:
                         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                     }
                 )
+            if not file_manifest:
+                raise ValueError("dependency_manifest_empty")
             manifest.append({"name": name, "version": version, "files": file_manifest})
         if not manifest:
             raise ValueError("dependency_manifest_empty")
