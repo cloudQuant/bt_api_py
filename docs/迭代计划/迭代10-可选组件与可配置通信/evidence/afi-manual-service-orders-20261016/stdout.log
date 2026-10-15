@@ -1,0 +1,27 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\source_code\ai-for-investor\src\backend\tests
+configfile: pytest.ini
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests\test_service_read_authorized_http_integration.py .                 [100%]
+
+============================== warnings summary ===============================
+.venv\Lib\site-packages\_pytest\config\__init__.py:1464
+  D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+.venv\Lib\site-packages\_pytest\config\__init__.py:1464
+  D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\_pytest\config\__init__.py:1464: PytestConfigWarning: Unknown config option: timeout_method
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+test_service_read_authorized_http_integration.py::test_manual_http_submission_reuses_owner_and_durable_execution_intent
+  D:\source_code\ai-for-investor\src\backend\tests\..\app\middleware\exception_handling.py:315: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await handle_request_validation_error(request, exc)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\afi_manual_order_submit_20261016_http_r8\junit.xml -
+======================= 1 passed, 3 warnings in 11.01s ========================

@@ -1,0 +1,152 @@
+[
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/api/router.py",
+    "bytes": 8288,
+    "sha256": "23081C3E50B071E1AED9E8899181A9E547E3147AA7F64BC6B30ECD19714C3705"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/api/service_read.py",
+    "bytes": 11289,
+    "sha256": "F801F39AC190FF1312260A5D0FB00E882F95AC799E39ADE46D8E0B885F338686"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/models/__init__.py",
+    "bytes": 9161,
+    "sha256": "5EA67AFF8EA58176703E35C20CB522E603D9D49319C7AB8429BB881F1B32790F"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/models/permission.py",
+    "bytes": 3288,
+    "sha256": "121EF811AF7D4EA1FE196362C728936B580366FC6C88C35A50F2AFD337467CA1"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/services/service_read/access.py",
+    "bytes": 10954,
+    "sha256": "173B73AFA8A970EAE3E5EB226F29B95BD86F78FF93A3CDF4C3CA766BDD2F27D1"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/services/service_read/client.py",
+    "bytes": 29726,
+    "sha256": "B78757D2543E0F6B1C133492E3D62EE56A03B95FC500EB3DA2A2269909C8F943"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/services/service_read/deployment.py",
+    "bytes": 37020,
+    "sha256": "60A17FB8F23FA6CC762B1FA9B7357142FBA48F3F84F223DE907E8FF8F9E7C43B"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/services/service_read/session.py",
+    "bytes": 22089,
+    "sha256": "E9D20B4D2F47262DEBDCB883A58F80B1CBBC49ECE1EDF14158DD07BFCE24EC9F"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/services/service_read/worker.py",
+    "bytes": 18999,
+    "sha256": "3109F13EFA41F7D4BE44EC8781FE0D821D3F4145F0A7287CB36421B6D9FFAC39"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/tests/test_service_read_authorized_http_integration.py",
+    "bytes": 194225,
+    "sha256": "AE4AC12EAEE9E39CCE311BE4B84948B34F965F34A6381D9ED1AEC35D6FB073EC"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/alembic/versions/20261016_service_order_operations.py",
+    "bytes": 5241,
+    "sha256": "130625ACCB1DF750C89913E6781ACDA995A2C8C164A6F383B9C75064F8A63058"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/api/service_orders.py",
+    "bytes": 13404,
+    "sha256": "D9C55738C50463E76CA983ED09731D6D2252B78409C2F52CF068E9037422ADA5"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/models/service_order_operation.py",
+    "bytes": 2391,
+    "sha256": "206710626FB80171A058EF0915B61AFD12DC599FC08E57392C39C3ACEFE67616"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/app/services/service_order_operations.py",
+    "bytes": 5828,
+    "sha256": "72F2181AB25559A788F8DC37AB8F35C8D6EE0930BA6427AAB5D3E79CC69F2437"
+  },
+  {
+    "repo": "AFI",
+    "path": "src/backend/tests/test_service_order_submission.py",
+    "bytes": 18467,
+    "sha256": "F40EE41C922B1045C15D1F4D3FACBF2EAE694375253642096D5B22D2BE868FC8"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api_py/service_runtime.py",
+    "bytes": 75328,
+    "sha256": "3511CE8E18CE7B1E352CCAEE2C75606C8A86725606E557F9EF3930C5B1208197"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api_py/service_deployment.py",
+    "bytes": 21792,
+    "sha256": "0184EF0647DF85B76A94C14C330129325C4AB5F4910E06CAC2EDAE80584CAA31"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api_py/service_registry.py",
+    "bytes": 100292,
+    "sha256": "9D1F4D81C3656BFD6AA5732AE6A8542DB68E7D03AC349AA05BC90967FAE633A1"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api_py/service_config.py",
+    "bytes": 47157,
+    "sha256": "6518FB59849DB9624EDEA84A532D8B03E9C4C3DEE14322C05E9C5EB85252AC1B"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api_py/service_host.py",
+    "bytes": 64740,
+    "sha256": "9BB985BEF5F8582BDB3878E5738E2E646BD25741C9077170F4592B1679A17778"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api_py/service_components.py",
+    "bytes": 92102,
+    "sha256": "C46855416D0E1BDB8B0A36E91B563C098D1FDD46079FE1DE97C08917B19C1356"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api_py/service_execution_account_books.py",
+    "bytes": 30198,
+    "sha256": "C4261C122968BD8BF47B4E4958BC295481CFE6F43E4441D596EF1A161F0A64AF"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api/bt_api_execution/src/bt_api_execution/service_order_entry.py",
+    "bytes": 37147,
+    "sha256": "C9A14F78920BD8D14E36B5C09D641C9C08E26A4130A6B80E8AEEB2D4A533A8EA"
+  },
+  {
+    "repo": "SDK",
+    "path": "bt_api/bt_api_base/src/bt_api_base/service_protocol.py",
+    "bytes": 26174,
+    "sha256": "F0ED739AC98CDA400BED07BF8487B79EE0A5EBE6842B9D0711B4B12E8AF6B15A"
+  },
+  {
+    "repo": "SDK",
+    "path": "tests/unit/test_service_execution_paper_host_integration.py",
+    "bytes": 30364,
+    "sha256": "25A96FC2B04A0C956A588D031CBC1460D334268E50CCE0586BC8D63486D8DB83"
+  }
+]
