@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T21:26:05.023572+00:00",
+  "source_count": 713,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\backtrader": "db96d8566188bc602a77ae37539dc1269fe7e8ea"
+  },
+  "heads_after": {
+    "D:\\source_code\\backtrader": "db96d8566188bc602a77ae37539dc1269fe7e8ea"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "1a433f7404fea72380a5b3c6906b04a1a6c3575a542e3f9f78c3a030be753fd5",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "CFG05_FIXED_COMMIT_V4_NORMAL_CLI_REAL_CEREBRO_SYNTHETIC_LOCAL_BACKTEST"
+}

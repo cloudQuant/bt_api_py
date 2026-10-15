@@ -1,0 +1,50 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4-pytest.ini",
+    "--rootdir=D:\\bt_api_py\\.codex-tmp\\cfg05-v4-source-db96d856-r3",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-p",
+    "no:asyncio",
+    "-q",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\junit.xml",
+    "--basetemp=D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\pytest-tmp",
+    "tests/integration/test_cfg05_v4_local_backtest_runtime.py::test_schema_v4_local_backtest_runs_real_cerebro_through_the_normal_cli"
+  ],
+  "cwd": "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-source-db96d856-r3",
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1",
+    "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-source-db96d856-r3",
+    "PYTHONPYCACHEPREFIX": "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\pycache-prefix"
+  },
+  "unset_environment": [
+    "BACKTRADER_LIGHT_IMPORT",
+    "BACKTRADER_RUNTIME_MODE",
+    "BACKTRADER_RUNTIME_PRESET",
+    "BT_RUNTIME_MODE",
+    "BT_RUNTIME_PRESET",
+    "BT_STORE_PROVIDER",
+    "CONDA_DEFAULT_ENV",
+    "CONDA_PREFIX",
+    "CONDA_SHLVL",
+    "PYTEST_ADDOPTS",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONHOME",
+    "PYTHONNOUSERSITE",
+    "PYTHONPATH",
+    "PYTHONPYCACHEPREFIX",
+    "PYTHONSTARTUP",
+    "PYTHONUSERBASE",
+    "VIRTUAL_ENV"
+  ],
+  "started_utc": "2026-10-15T21:25:52.059628+00:00"
+}

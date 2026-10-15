@@ -1,0 +1,3721 @@
+{
+  "schema": "cfg05-fixed-source-artifact-v1",
+  "evidence_boundary": "fixed commit source snapshot plus reviewed test overlay; preparation did not execute pytest, CLI, Cerebro, or the local backtest",
+  "repository": {
+    "path": "D:\\source_code\\backtrader",
+    "branch": "dev",
+    "commit": "db96d8566188bc602a77ae37539dc1269fe7e8ea"
+  },
+  "export": {
+    "method": "Git commit tree + git cat-file --batch raw blobs, then deterministic tar snapshot; no checkout bytes or filters",
+    "packages": [
+      "backtrader/",
+      "backtrader_runtime/"
+    ],
+    "excluded": [
+      "examples/",
+      "docs/",
+      "evidence trees/",
+      "checkout-only dirty files"
+    ],
+    "blob_count": 527,
+    "raw_blob_ids_verified": true
+  },
+  "overlay": {
+    "source_path": "D:\\source_code\\backtrader\\tests\\integration\\test_cfg05_v4_local_backtest_runtime.py",
+    "artifact_path": "tests/integration/test_cfg05_v4_local_backtest_runtime.py",
+    "sha256": "815e923a395761bd45344d9bd894124363963a48985d2475018f706d0052163a",
+    "static_review": "acceptance_review GO"
+  },
+  "package_payloads": [
+    {
+      "path": "backtrader/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "5d8d4f34f905faa96722e31f40c974294caff6fc",
+      "size_bytes": 5783,
+      "sha256": "c48c951d8a07d50c134e6ea2db2c1952142c003ef299354f96e5a39ac69efc51"
+    },
+    {
+      "path": "backtrader/_cerebro/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "03d1286b74c4e1cd725443c6526c373314adaa37",
+      "size_bytes": 193,
+      "sha256": "ff628a8babd717f6f1c9300080136f40128be20283cab2f5e6411b92e625a0f6"
+    },
+    {
+      "path": "backtrader/_cerebro/channel.py",
+      "mode": "100644",
+      "git_blob_sha1": "84106b77d2c65cc23227825a1243342b3ebefc07",
+      "size_bytes": 15481,
+      "sha256": "51ce7dc8a054fbf27104af18dc92e435e80fc626f2e07b0d95ed1a1c6ae630b7"
+    },
+    {
+      "path": "backtrader/_cerebro/execution.py",
+      "mode": "100644",
+      "git_blob_sha1": "7dc689861ef53ecee0d7a35df08995856ab38e09",
+      "size_bytes": 16955,
+      "sha256": "bac43841700517bf9afb018e9f85a21bca61d009c12b25aeed7ab04e5eff7508"
+    },
+    {
+      "path": "backtrader/_cerebro/lifecycle.py",
+      "mode": "100644",
+      "git_blob_sha1": "47324d9db7f63fc303608392442b4f6cdb6ddc6a",
+      "size_bytes": 5895,
+      "sha256": "5d88a6e33738b18dd1db3b2e511a5e39f3f0ead148410a8f66691e78dd65df95"
+    },
+    {
+      "path": "backtrader/_cerebro/notifications.py",
+      "mode": "100644",
+      "git_blob_sha1": "34747b89f7f6505181ffe798c73ea58e6910d7be",
+      "size_bytes": 6105,
+      "sha256": "88f6f3f6bffc6478573fe94fc76c9fa5e72ef416b66dc380c34408e6510bed1f"
+    },
+    {
+      "path": "backtrader/_cerebro/presentation.py",
+      "mode": "100644",
+      "git_blob_sha1": "f0202f001cc38b22a05600348082fb2126429279",
+      "size_bytes": 8309,
+      "sha256": "5d5e59acb1266f4a45884deaf926617a3ded87519f7e2ed5daf3bd2184c61590"
+    },
+    {
+      "path": "backtrader/_cerebro/registry.py",
+      "mode": "100644",
+      "git_blob_sha1": "59f2debbcc9dc4bf51998cb61809d56295d2e65c",
+      "size_bytes": 21906,
+      "sha256": "625728378bc2b990d3834adbf5a1d3365e54809a6484d759f3305978780713d8"
+    },
+    {
+      "path": "backtrader/_cerebro/runnext.py",
+      "mode": "100644",
+      "git_blob_sha1": "464edf977265f53311a6c2d7f67f811af78bb2f5",
+      "size_bytes": 25784,
+      "sha256": "284de792781df4215db02c0e81699afb80a01b631a7b435db93f4678675188b2"
+    },
+    {
+      "path": "backtrader/_cerebro/runonce.py",
+      "mode": "100644",
+      "git_blob_sha1": "9e35f3452654c6dd867c218734906093397e4e52",
+      "size_bytes": 5264,
+      "sha256": "18ba2626703c4a949f87b1fffcbd21ce25c6e8cd259b6f97f14f1d805b443aec"
+    },
+    {
+      "path": "backtrader/analyzer.py",
+      "mode": "100644",
+      "git_blob_sha1": "61c70ae37fef89726063187027307270cd2c2097",
+      "size_bytes": 21353,
+      "sha256": "2b8329c1746d1e877c27c4995104ef93e9923007d9ba8d6a66bf74034ee8607f"
+    },
+    {
+      "path": "backtrader/analyzers/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "3903d6b4fb92f9720d764aa70f4a80d71eadb537",
+      "size_bytes": 1582,
+      "sha256": "edaccba98086b3e6d4d0c4ba7b825a95e92aecab0176c8d7c3431efcdc1fd447"
+    },
+    {
+      "path": "backtrader/analyzers/annualreturn.py",
+      "mode": "100644",
+      "git_blob_sha1": "67b210688c6d16fa8a91885c9bb39209281e142b",
+      "size_bytes": 7684,
+      "sha256": "06f9628f60d3a41976de426825101e81201648b793aa0492cc4f592799cc2c7e"
+    },
+    {
+      "path": "backtrader/analyzers/calmar.py",
+      "mode": "100644",
+      "git_blob_sha1": "ed2526b894d478fd054638f1812b0717baaf8523",
+      "size_bytes": 5664,
+      "sha256": "6614ab3e2c2d4cbb16ea14876f52c37c0a9c0abec6d13605d29374561d066390"
+    },
+    {
+      "path": "backtrader/analyzers/drawdown.py",
+      "mode": "100644",
+      "git_blob_sha1": "d7c756d0e8a57240a200b2573caa923a1a4dbe46",
+      "size_bytes": 9531,
+      "sha256": "062b0b959e64149d4d5d78430526f4dee8af4c397fdd50d64f042d8a7407a77e"
+    },
+    {
+      "path": "backtrader/analyzers/leverage.py",
+      "mode": "100644",
+      "git_blob_sha1": "2fe2ba41ad33d7e6c39483e33f4cfcb011749b6a",
+      "size_bytes": 3508,
+      "sha256": "fa826bd80c9d25771efd6120ee15fe0d64d0a1fd0f6db8ff6d0a8720c1fb4574"
+    },
+    {
+      "path": "backtrader/analyzers/logreturnsrolling.py",
+      "mode": "100644",
+      "git_blob_sha1": "09853d5988b77336e23a98bb1cc9a4f2cd958257",
+      "size_bytes": 6823,
+      "sha256": "e151a6d7da88c896c26759fa855233efc5aa4ac9b1a1f47c4215f4463183ba55"
+    },
+    {
+      "path": "backtrader/analyzers/periodstats.py",
+      "mode": "100644",
+      "git_blob_sha1": "0eccb1e3fd9d5c808886d0d7b28e1aecd6e406fe",
+      "size_bytes": 4822,
+      "sha256": "768ebccc0d4112b0e29276e31336a246ee9c74b8099b91ba279f8e243e71ed29"
+    },
+    {
+      "path": "backtrader/analyzers/positions.py",
+      "mode": "100644",
+      "git_blob_sha1": "c406163bb989b4a1ac6c2799265c878dc7e81d3e",
+      "size_bytes": 3728,
+      "sha256": "77cb164b96b38d7e8a14cf2c717bda5a7998c9f09e58ecbfdeac2365eaaceac3"
+    },
+    {
+      "path": "backtrader/analyzers/pyfolio.py",
+      "mode": "100644",
+      "git_blob_sha1": "4c46fb0952c65f5c792603519350a00d79f65d93",
+      "size_bytes": 19791,
+      "sha256": "385ef6b7f1dd07ec523a898bd10af4b4c8c5733a87f516a738037ee498402fe1"
+    },
+    {
+      "path": "backtrader/analyzers/returns.py",
+      "mode": "100644",
+      "git_blob_sha1": "c8eec831c095c8c47654ba715417ebde91b1df6d",
+      "size_bytes": 6056,
+      "sha256": "917d4acb398ca2fed5d505da44b62084199410800ecccc1bd54f4ffd2c81e28f"
+    },
+    {
+      "path": "backtrader/analyzers/sharpe.py",
+      "mode": "100644",
+      "git_blob_sha1": "a01ae21a5e4a817ef0e901b332d36bed0d2d5bcf",
+      "size_bytes": 11978,
+      "sha256": "917153c54127cc2a5a19c6323856ae6761203158f592a26fb4306f4f507d2720"
+    },
+    {
+      "path": "backtrader/analyzers/sharpe_ratio_stats.py",
+      "mode": "100644",
+      "git_blob_sha1": "9d1fbb60443555848688a809ba80f4e490507d29",
+      "size_bytes": 18456,
+      "sha256": "81731e7b337241bd47319561ecb8b36b12dbcd7c0e0da2c42224e97fb7edc0be"
+    },
+    {
+      "path": "backtrader/analyzers/sqn.py",
+      "mode": "100644",
+      "git_blob_sha1": "b098739e1a6ca62241ba9df6a05defe03261fdb9",
+      "size_bytes": 3334,
+      "sha256": "400ff392d39b5f7110a7b4b235fb26ac522c676392867cb7f7f5b6d3dc7afe61"
+    },
+    {
+      "path": "backtrader/analyzers/timereturn.py",
+      "mode": "100644",
+      "git_blob_sha1": "4bd9ff76fd1e5f874d0c058dacb7bcb9d1a86d16",
+      "size_bytes": 6764,
+      "sha256": "9db9d87f1cdf9fb15ba8080140e486961fa64d22ae3bf91500ee2f72dc972208"
+    },
+    {
+      "path": "backtrader/analyzers/total_value.py",
+      "mode": "100644",
+      "git_blob_sha1": "bb8f124c57cc3a2899b49dff9bea0277a17cd96d",
+      "size_bytes": 2046,
+      "sha256": "07e2f09083b5a510344a4d1ed257ae95411110e608aa3319559b469555707c14"
+    },
+    {
+      "path": "backtrader/analyzers/tradeanalyzer.py",
+      "mode": "100644",
+      "git_blob_sha1": "0668faaf734af63c30d488851010cd64d4a80083",
+      "size_bytes": 9913,
+      "sha256": "44109232510a3e0fcddb3486081ef22491be91eaa8c671fd23fd27e6c1a35a05"
+    },
+    {
+      "path": "backtrader/analyzers/transactions.py",
+      "mode": "100644",
+      "git_blob_sha1": "d90ff67844dfffa7b0da8d13de86817aea19d8cf",
+      "size_bytes": 4763,
+      "sha256": "7d91b1f812f6aeda1d45c23c2234028e89188276e5a014193d6c116eb5ba8325"
+    },
+    {
+      "path": "backtrader/analyzers/vwr.py",
+      "mode": "100644",
+      "git_blob_sha1": "dec2c296e532059bed5049c48e7a961e5a843c44",
+      "size_bytes": 7846,
+      "sha256": "c0327cfa66f8143c115dbaef60c1f4e60831c21395be9fc640a2d365fb57aa62"
+    },
+    {
+      "path": "backtrader/bokeh/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "b51abee6e010e930b09140510a0b2869be954f1f",
+      "size_bytes": 4230,
+      "sha256": "637338c4c2f0ed81b4f420895e84c5e0ad68c0e875b78caf867c18f3385985c8"
+    },
+    {
+      "path": "backtrader/bokeh/analyzers/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "3ff6ad7f6399dd221ca118d5b92cb9207ac856bf",
+      "size_bytes": 303,
+      "sha256": "6ddb8f99e08256e9babdac3f0d57a9a0f113c5a775ee31a279177eccc85dff69"
+    },
+    {
+      "path": "backtrader/bokeh/analyzers/plot.py",
+      "mode": "100644",
+      "git_blob_sha1": "0fe2d67644e63a8a59709128e6a1262e29144e4d",
+      "size_bytes": 5336,
+      "sha256": "38e145e8d16468039d3bce065767b121c50e4c742165db88546c146cb0a075aa"
+    },
+    {
+      "path": "backtrader/bokeh/analyzers/recorder.py",
+      "mode": "100644",
+      "git_blob_sha1": "2943d3f2892375326e6999fa91fb01e59f11ad3d",
+      "size_bytes": 5779,
+      "sha256": "6aac20f4eb644a83390141c742ee6eb15b32a6af5bbb942355f36a4557b855aa"
+    },
+    {
+      "path": "backtrader/bokeh/app.py",
+      "mode": "100644",
+      "git_blob_sha1": "e30a1fb8152ba5a001f3cf7a5da933af271b8f9d",
+      "size_bytes": 33290,
+      "sha256": "faa8a4355369d210382a7d077ec8cee05c8bfb00e8edb319f392496efdee9a9f"
+    },
+    {
+      "path": "backtrader/bokeh/live/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "72a8fbdb5cf44fb653ce16d9b78ce24ef65a891f",
+      "size_bytes": 248,
+      "sha256": "df9fb1c7040d87cf1cafd98175c7ce891617ab4b72b9734fdeb90a055a4dd7b2"
+    },
+    {
+      "path": "backtrader/bokeh/live/client.py",
+      "mode": "100644",
+      "git_blob_sha1": "57c5380b0407be5b31e67e9c18f8dce32239d141",
+      "size_bytes": 10371,
+      "sha256": "60d470347a4258e6bbc4b4554ab07bb018651480a2ee6f3f129c3c4088fbc3ff"
+    },
+    {
+      "path": "backtrader/bokeh/live/datahandler.py",
+      "mode": "100644",
+      "git_blob_sha1": "a1208354c34ca1b0f2b382f63a331e12cc6f2c89",
+      "size_bytes": 10974,
+      "sha256": "72db819cc50e8c61d8716be5ef919c6c48c1fca8cf298030746325e8e182df2b"
+    },
+    {
+      "path": "backtrader/bokeh/plot_adapter.py",
+      "mode": "100644",
+      "git_blob_sha1": "11d2f6070d98a6a6cbe2e49ff820458de3e7754c",
+      "size_bytes": 6669,
+      "sha256": "65882f7f1fee5f56f4cd3359dcb6f20062f43355e090075942fde27390e0bece"
+    },
+    {
+      "path": "backtrader/bokeh/schemes/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "5a41e2e502fbcf35df8772760a8781e77a03bf8b",
+      "size_bytes": 266,
+      "sha256": "fc4494d20fdc48d477cdfa87732e1d53fdb435eb43d82512b49cb2dc943eb153"
+    },
+    {
+      "path": "backtrader/bokeh/schemes/blackly.py",
+      "mode": "100644",
+      "git_blob_sha1": "34efd01412422adc97483edb1ed9212f0ae1f9ca",
+      "size_bytes": 2533,
+      "sha256": "92698025559f0f528b71fcf1a2cbe953ab8d34f1423cc75b031442faa7e46199"
+    },
+    {
+      "path": "backtrader/bokeh/schemes/scheme.py",
+      "mode": "100644",
+      "git_blob_sha1": "1c1735ceb3ce7ac4bbb26f6a6c4ed730323bfdac",
+      "size_bytes": 5878,
+      "sha256": "447ce1181a2cae7549366ac8d740275cb108ff389cb17c769259a85c4b6104e0"
+    },
+    {
+      "path": "backtrader/bokeh/schemes/tradimo.py",
+      "mode": "100644",
+      "git_blob_sha1": "fb79d931d37cb3f921518c975864a6f252767840",
+      "size_bytes": 2659,
+      "sha256": "65b54a63d74a6426a368312777da1c71033bc1603a48c12f754bc6d198f99616"
+    },
+    {
+      "path": "backtrader/bokeh/tab.py",
+      "mode": "100644",
+      "git_blob_sha1": "3ba02d6f80831e8cb308a9669699195f3350f1e6",
+      "size_bytes": 3201,
+      "sha256": "5141ca7a5b54a43ea0d6183abd62b654c8c785bac55ee50de32492dc11c43c38"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "5a59064bf1174e9c29908274b9ecf2b34b8e682a",
+      "size_bytes": 649,
+      "sha256": "ef388b4b46af36322d94034fdda15bfe99ccd940c11ae0ca93986bbf2bb6dc7f"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/analyzer.py",
+      "mode": "100644",
+      "git_blob_sha1": "a446f4a90e089085d664da33f920009b814c9456",
+      "size_bytes": 3383,
+      "sha256": "ae9c55a7d1bd4650326b2554c38fd1f148bf5a9caf27d5de2c4b6d35c4c9f585"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/config.py",
+      "mode": "100644",
+      "git_blob_sha1": "2d160e894c61acbc0d034261a458ceb7bd6f1032",
+      "size_bytes": 4948,
+      "sha256": "4fc9ced009ad36b79dceb6a707f80ea1196fecd3a0106fbe3d128eb5a2206a1e"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/live.py",
+      "mode": "100644",
+      "git_blob_sha1": "b92b8aac2e6eb842ef2f0c82049123ea1e0c7ebe",
+      "size_bytes": 3263,
+      "sha256": "0517ffd12f98798b09f2e2e3c93cb7b627b2a696a8ded7e928662e556c303769"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/log.py",
+      "mode": "100644",
+      "git_blob_sha1": "d35162455d5110a022f7ce31fe3afc0c62e36487",
+      "size_bytes": 4843,
+      "sha256": "ee86ade6adb79d6864db07920c43ee088c3496b37fe4477e90913031865b2da2"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/metadata.py",
+      "mode": "100644",
+      "git_blob_sha1": "09223c258dca9616c9091f1ced1f751e41e488b6",
+      "size_bytes": 5775,
+      "sha256": "a1be4142064227ba8998838da8dd2c01c11ed44947c2568a6cf0e32d5d1ee8b1"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/performance.py",
+      "mode": "100644",
+      "git_blob_sha1": "71a07181090a0d22b6fec3b99b012d98d7aa4f61",
+      "size_bytes": 13293,
+      "sha256": "130506b79c2df9020dc8b2b777068d0ba167e7ada3648f9a4064c54a84d7711f"
+    },
+    {
+      "path": "backtrader/bokeh/tabs/source.py",
+      "mode": "100644",
+      "git_blob_sha1": "636a8ebe6732c3cefc52e9b4237698d53668bb12",
+      "size_bytes": 1575,
+      "sha256": "0ca8201a7882afd0c29e0983c50d5f4a763718e3544c3dd65b743b63b44d608f"
+    },
+    {
+      "path": "backtrader/bokeh/utils/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "d093bd2af090ac22bddff6ff56eb1d965a24053e",
+      "size_bytes": 209,
+      "sha256": "de99ed9fe813f594c01f715dbc91ff7d8c6da6a1d387aad1a26eeae6d49ecb46"
+    },
+    {
+      "path": "backtrader/bokeh/utils/helpers.py",
+      "mode": "100644",
+      "git_blob_sha1": "353920a2ee5eb7da5432a4f0916b6ad27fbad140",
+      "size_bytes": 3695,
+      "sha256": "f26487c6cb501db9fe0cfbd28fab678edafa4eb04dfb6f6467498536567b92ef"
+    },
+    {
+      "path": "backtrader/bokeh/webapp.py",
+      "mode": "100644",
+      "git_blob_sha1": "fb1bc5b38586555e27acb8a553fb0ac9b1c9d0b3",
+      "size_bytes": 4443,
+      "sha256": "e212bab9e507ee0d649038fea74270088d058fd512dbb880c23aa8752a0fa0ed"
+    },
+    {
+      "path": "backtrader/broker.py",
+      "mode": "100644",
+      "git_blob_sha1": "af27f24d82cd932875918c0d25be560cce4ae79b",
+      "size_bytes": 14671,
+      "sha256": "a5704ebcc90c9fd686f21ad8749077e81b498a35435f2859c076c0d1b65aae13"
+    },
+    {
+      "path": "backtrader/brokers/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "bd19473c15bd20127177a461187c4cfcfce6b620",
+      "size_bytes": 1199,
+      "sha256": "38ab6ee52ee98d60368c478bc5ff6c5671633e3719af5ad532bda6614bcc1dea"
+    },
+    {
+      "path": "backtrader/brokers/bbroker.py",
+      "mode": "100644",
+      "git_blob_sha1": "d5a6f88625c59ea118f0a3c23928602406adc6ae",
+      "size_bytes": 101568,
+      "sha256": "dac2040f1685b83d9cbb37afb0d7258456d8468552ee0d2ca813d18388695c29"
+    },
+    {
+      "path": "backtrader/brokers/btapibroker.py",
+      "mode": "100644",
+      "git_blob_sha1": "55ad96a8329a844c41c16305f2d18340219eca5c",
+      "size_bytes": 391876,
+      "sha256": "a019933a953d3cfe9e179b0849a947e02ed5888a7ca2ea683320238776d00850"
+    },
+    {
+      "path": "backtrader/brokers/hft/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "3681eb5d1a915de502a4f8a840df185df37e856c",
+      "size_bytes": 2717,
+      "sha256": "4be42e546d4f51c2079a1667f5307eb9ae46b72db41648729feea6bd58b773e3"
+    },
+    {
+      "path": "backtrader/brokers/hft/binance_bbo.py",
+      "mode": "100644",
+      "git_blob_sha1": "a7b7af9110b66ca430add9efdcb97b0d6f047fb5",
+      "size_bytes": 23283,
+      "sha256": "426c72e357cf388b2ba9817e966b463896cd359f99a79ef1eff37ffae5d6805a"
+    },
+    {
+      "path": "backtrader/brokers/hft/binance_bbo_compare.py",
+      "mode": "100644",
+      "git_blob_sha1": "e7727bb1e7f330ee916119779912841bae718970",
+      "size_bytes": 51601,
+      "sha256": "f71c8010c12640d02e6594c12878ece51d15d134d6bccdff2501d91484644f66"
+    },
+    {
+      "path": "backtrader/brokers/hft/examples.py",
+      "mode": "100644",
+      "git_blob_sha1": "a25c1eb048e66522a7300718d5e1ccc83b8b757f",
+      "size_bytes": 47942,
+      "sha256": "362cbc01016082f0460001010b9fa0d034a9b43f193f28a906c9df7134e94f81"
+    },
+    {
+      "path": "backtrader/brokers/hft/exchange.py",
+      "mode": "100644",
+      "git_blob_sha1": "2f16ce6b6e785a53dba91bef358f30b713dc30da",
+      "size_bytes": 15637,
+      "sha256": "ddb59ff17a4b77596f1da1df7178bdd67c5c28a18c5fb4bce94b8da26f1c05f1"
+    },
+    {
+      "path": "backtrader/brokers/hft/latency.py",
+      "mode": "100644",
+      "git_blob_sha1": "caa0ea39df7a0112ed3e587af8f4d034e42626f4",
+      "size_bytes": 11978,
+      "sha256": "7e767940dbbd7580fcce82bf89d0f502d6f6706ee28dc02a875d0357b6542664"
+    },
+    {
+      "path": "backtrader/brokers/hft/matching_core.py",
+      "mode": "100644",
+      "git_blob_sha1": "f02fe6a984f68731ea7658ea8d80147816e866ea",
+      "size_bytes": 23911,
+      "sha256": "adf8359a2099ff7bc24f94442f7df81ed1d51c3a0100ae08db21496035dfc343"
+    },
+    {
+      "path": "backtrader/brokers/hft/queue.py",
+      "mode": "100644",
+      "git_blob_sha1": "f272ba40dd9ac8f1eab7cac79f25e86ec8f114a6",
+      "size_bytes": 10537,
+      "sha256": "4d404f30c4dbc9da512c35a191e89988449f9aa45d10d12184c0d099f768e37f"
+    },
+    {
+      "path": "backtrader/brokers/hft/recorder.py",
+      "mode": "100644",
+      "git_blob_sha1": "851dbb2983afeb0e38a62bd9b59d14ccf6cb1d94",
+      "size_bytes": 3630,
+      "sha256": "cd27df704594643fd2843a9324693ede6616e7bbbc12d82679fd88bd5c698143"
+    },
+    {
+      "path": "backtrader/brokers/hft/state.py",
+      "mode": "100644",
+      "git_blob_sha1": "c6e19ae777705455cb385327a2ade2b8cda76d5f",
+      "size_bytes": 5254,
+      "sha256": "723b7f49a039e32771449d49f5c414b516d76c2410d6f2a4bb9b8099eb80dc4c"
+    },
+    {
+      "path": "backtrader/brokers/impact_models.py",
+      "mode": "100644",
+      "git_blob_sha1": "4c54e633d3d618884e5b32edc2c5525eea0ac2d2",
+      "size_bytes": 3707,
+      "sha256": "01e08f0f2b9e482d4f7ad1a2858c285b586a2d1333aa8231d26c6dd0f7bb7fd6"
+    },
+    {
+      "path": "backtrader/brokers/mixbroker.py",
+      "mode": "100644",
+      "git_blob_sha1": "8580bd094e2652f6fe392264068e32109c36fe52",
+      "size_bytes": 35545,
+      "sha256": "ccbe39012f3afc6f16dbc95df45e318d0d16c655cb492c3ddbdceaab9a0ea613"
+    },
+    {
+      "path": "backtrader/brokers/tickbroker.py",
+      "mode": "100644",
+      "git_blob_sha1": "fdb5f5a1b7ff7eccb00a839f1b3904501db6f34f",
+      "size_bytes": 86826,
+      "sha256": "5266f0fe733d6df4405aaed1578df3e9c4982dc512c0ff4f86c2a73fed8d5f1c"
+    },
+    {
+      "path": "backtrader/btrun/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "c5d24fbbbb2bcc62e3589d99259f13b88bb9dab0",
+      "size_bytes": 341,
+      "sha256": "468625d8c11ae9ac90a72e0851834dec8d7d680f8f02ea90e22bc61129c1dfae"
+    },
+    {
+      "path": "backtrader/btrun/btrun.py",
+      "mode": "100644",
+      "git_blob_sha1": "804423f58637c4ea71dde659c1e63ce469f68b1e",
+      "size_bytes": 38169,
+      "sha256": "a3df8f902a32ae2a81e65d4d473a9d546ff2b90377e3a93de4d4dedea393f780"
+    },
+    {
+      "path": "backtrader/cerebro.py",
+      "mode": "100644",
+      "git_blob_sha1": "18415ca7f5f7e5eedb5707d332fb87d0c1e8e0c9",
+      "size_bytes": 33740,
+      "sha256": "dc04d83d8f610462e6b485dd78bd084751bf9e3b4fcf5ac4358bd59910523db0"
+    },
+    {
+      "path": "backtrader/channel.py",
+      "mode": "100644",
+      "git_blob_sha1": "70bdb187ebfa014204a13cf5f22472d94d884495",
+      "size_bytes": 22730,
+      "sha256": "6a58151f5cc056e70c7a17d3677671acf3f020d61883b38ccdeefcd0cfad2291"
+    },
+    {
+      "path": "backtrader/channels/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "a1480f0e8d574a07d02df6e17e255be5937a1f11",
+      "size_bytes": 650,
+      "sha256": "910afbf95a733e13b0956389a12e17a92473f796537b3c5b310ddde15b35ce1a"
+    },
+    {
+      "path": "backtrader/channels/bridge.py",
+      "mode": "100644",
+      "git_blob_sha1": "3c915892b5e8db0b20e80810ace77d9844640785",
+      "size_bytes": 5900,
+      "sha256": "9d13d498f0e6e62de784a76fd8aec9631d098c9a949b33ab52ba42d6964836a6"
+    },
+    {
+      "path": "backtrader/channels/funding.py",
+      "mode": "100644",
+      "git_blob_sha1": "d30dbc682bdefeee08806f26f5e9954c4b28d2dd",
+      "size_bytes": 9115,
+      "sha256": "6b2b28d18047963814b9a3c15267188fa4e44b4f1de45d3e5a3a17ecac109dca"
+    },
+    {
+      "path": "backtrader/channels/live_queue.py",
+      "mode": "100644",
+      "git_blob_sha1": "ef3a24a384f028144de248e5389d33db57603b29",
+      "size_bytes": 6561,
+      "sha256": "ec8a6fbe1e748c5b9f06d912ee04d5d08f709adb89d805a3298c246764f2d388"
+    },
+    {
+      "path": "backtrader/channels/live_validator.py",
+      "mode": "100644",
+      "git_blob_sha1": "2023d0d331c4b5c8e9d9132778d7397d2d0cf883",
+      "size_bytes": 10363,
+      "sha256": "8001ca5818aa379fa280706fa87dd6b84e009f007fe0221037163c00f5e0c14b"
+    },
+    {
+      "path": "backtrader/channels/orderbook.py",
+      "mode": "100644",
+      "git_blob_sha1": "42547f02c6b69cb450681edf634bafc89a571f0f",
+      "size_bytes": 8828,
+      "sha256": "1d5adc52027738588a1d65e590b6c71873111ba8c39e7a9f96359e6826c65f69"
+    },
+    {
+      "path": "backtrader/channels/tick.py",
+      "mode": "100644",
+      "git_blob_sha1": "2280798538a990cd9041c33cb975ca781421b8f7",
+      "size_bytes": 6954,
+      "sha256": "b1b56358a6b29493d67210be387883d37598bda0c85a602f1fe09ac0d8532307"
+    },
+    {
+      "path": "backtrader/comminfo.py",
+      "mode": "100644",
+      "git_blob_sha1": "da865290ce61bde54a38b5e7d6ad085a57c93dae",
+      "size_bytes": 26146,
+      "sha256": "b82553a7e513155dbc8476ac4c9c0a9594a36406331eb5dc31881162e44061c9"
+    },
+    {
+      "path": "backtrader/commissions/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "ae3919868757b9c29e1ea140b0195c2d0b66ab53",
+      "size_bytes": 2891,
+      "sha256": "b45b2105fb3fa3fb140d163d1b18ede12976eed401faf866401b1916d830f210"
+    },
+    {
+      "path": "backtrader/commissions/ctpoption.py",
+      "mode": "100644",
+      "git_blob_sha1": "6eb4b3c82a6add76c748d655b2af56fd2389a512",
+      "size_bytes": 41565,
+      "sha256": "b7ecdb9a75a7df6281b27d20fb6446339fa5f8298bda5fcb97e7d2d4cedcfe0d"
+    },
+    {
+      "path": "backtrader/configs/account_config_example.yaml",
+      "mode": "100644",
+      "git_blob_sha1": "5da4ecfa6d34dc7fcb5881e989c18ef980796cb6",
+      "size_bytes": 121,
+      "sha256": "fc10930e39b8d7f0c49702cd20560df5a44fa19b432e58d29ac9c7e0c77dda57"
+    },
+    {
+      "path": "backtrader/dataseries.py",
+      "mode": "100644",
+      "git_blob_sha1": "31234b4e93271820e0b39a785f277ebebbab6297",
+      "size_bytes": 11848,
+      "sha256": "1d6bc1317ac8f224764239c391f21daad5961bd564857031c3563ab5a34b3054"
+    },
+    {
+      "path": "backtrader/errors.py",
+      "mode": "100644",
+      "git_blob_sha1": "e2e4b1a8ab9e9d1aef9b7bd8f7c945dcb4880e54",
+      "size_bytes": 3564,
+      "sha256": "10aeecbdf7381235526d67e732fb6c0519780954949a9984d83f0d21ffa4efc4"
+    },
+    {
+      "path": "backtrader/events.py",
+      "mode": "100644",
+      "git_blob_sha1": "d5caf6b9b8ccb11047cf7718767d58e57f95ceda",
+      "size_bytes": 32572,
+      "sha256": "fc8eeaa4d9a336e2c144c180f8f38a8cfbed14bfb7ab42e0a85bb47b98ae30d1"
+    },
+    {
+      "path": "backtrader/feed.py",
+      "mode": "100644",
+      "git_blob_sha1": "c60be58548918f5f459011afa99df055d7f2afca",
+      "size_bytes": 56321,
+      "sha256": "d372b6ae51d2f7696c8990781b0744fa91c8623bd621eb29413ec3d9e5ab6fe1"
+    },
+    {
+      "path": "backtrader/feeds/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "8dd9db90d309f0eca627bd20757531359aa5a813",
+      "size_bytes": 2828,
+      "sha256": "937cf0e32f297e93d944e537371cfafe3795300b7c8cc53c8d17266e328418d3"
+    },
+    {
+      "path": "backtrader/feeds/barrier.py",
+      "mode": "100644",
+      "git_blob_sha1": "90d7027eb4dc07be2fe5117e5499d3b357018f49",
+      "size_bytes": 95293,
+      "sha256": "303d9affb7ba2d765a20953541135331e00d8563ba6ae7fadb4ae06bd622a30d"
+    },
+    {
+      "path": "backtrader/feeds/blaze.py",
+      "mode": "100644",
+      "git_blob_sha1": "f9bbc016536d28b6951223c049f65facf6c0c66a",
+      "size_bytes": 3438,
+      "sha256": "4631e58ad9cff08ba43d09a9ab1c74c4c2abbdef721bf22fd3dbbebc147a6aa2"
+    },
+    {
+      "path": "backtrader/feeds/btapifeed.py",
+      "mode": "100644",
+      "git_blob_sha1": "b6b4d1506ec8185a54c90ec925213cf7d4d4d39a",
+      "size_bytes": 72526,
+      "sha256": "8fb17141509516c33ed68720843273a6ebd3238cbf5adc07861f9e48b1533cbc"
+    },
+    {
+      "path": "backtrader/feeds/btcsv.py",
+      "mode": "100644",
+      "git_blob_sha1": "77370d95b821831b18df101eeb64d0e67aa53e21",
+      "size_bytes": 6545,
+      "sha256": "8bb35688e7631e89e0ca5493d9a2b1e720fa5cc0c8e005879b4d82fd37756eab"
+    },
+    {
+      "path": "backtrader/feeds/chainer.py",
+      "mode": "100644",
+      "git_blob_sha1": "8fd06180d0d2d2a11d38289101ad3ce0871b1a71",
+      "size_bytes": 3490,
+      "sha256": "f8733433dfc7154474ffe4b7624cdb02718af646458f63fefb49b9a6d25506a2"
+    },
+    {
+      "path": "backtrader/feeds/cryptohftdata.py",
+      "mode": "100644",
+      "git_blob_sha1": "3befaa8f75f3dd2f13bf82ae8bc4950927c8a358",
+      "size_bytes": 6111,
+      "sha256": "68b59e63fbf509abf6dcf6af4ee42a17f9f3587122a22c0743a504864e2b8cab"
+    },
+    {
+      "path": "backtrader/feeds/csvgeneric.py",
+      "mode": "100644",
+      "git_blob_sha1": "23b04bb9acdf3852d635e30f8062a446c60114db",
+      "size_bytes": 46846,
+      "sha256": "56f76e5ca9edfd207d76a434f40b0d8e22153cb9710a1fc38a9d2c9265fc17a8"
+    },
+    {
+      "path": "backtrader/feeds/ctpcohort.py",
+      "mode": "100644",
+      "git_blob_sha1": "82901e96582d89300ac46a41b1480ac5fab9f81e",
+      "size_bytes": 45799,
+      "sha256": "23cacb94a617558a79554ff647b54376c69808d3950fb6e82fe7e2edb4b5f9be"
+    },
+    {
+      "path": "backtrader/feeds/influxfeed.py",
+      "mode": "100644",
+      "git_blob_sha1": "8e109d78621399c57dfc53d658b1355106c68825",
+      "size_bytes": 4920,
+      "sha256": "08f2558036a31c7326ea61f712453aca189ee305163464836b296a67178dd459"
+    },
+    {
+      "path": "backtrader/feeds/livefeed.py",
+      "mode": "100644",
+      "git_blob_sha1": "f4be1b2955e0240aeb2e6683dcc71d129546c6db",
+      "size_bytes": 2294,
+      "sha256": "9ac7781e093c1b4dbb4f103bf9541454389f629befef32d394690dad2864bed8"
+    },
+    {
+      "path": "backtrader/feeds/mixed_channel.py",
+      "mode": "100644",
+      "git_blob_sha1": "bc40c79e889a1d94a9f7e1026ec2d5233a6daa6f",
+      "size_bytes": 3839,
+      "sha256": "7f6b5637f9550fc2beedcbc5af9e8051a25c8130c88bd52c190ad72bcf6daf2c"
+    },
+    {
+      "path": "backtrader/feeds/mt4csv.py",
+      "mode": "100644",
+      "git_blob_sha1": "e270dbd074e530e8fe686d76b93b40fecb3df849",
+      "size_bytes": 1043,
+      "sha256": "8db8103457ce816661bbe5de93b46d5d21f1f5dd918b4e2226c0ff7fbc4119c5"
+    },
+    {
+      "path": "backtrader/feeds/pandafeed.py",
+      "mode": "100644",
+      "git_blob_sha1": "69e2f028b8eed9511d9cd775bac975da00b33b8b",
+      "size_bytes": 13412,
+      "sha256": "c0f6a390435dbdb6c5bb14d4c450e2549847529cfa3f42d459fc402dfb652952"
+    },
+    {
+      "path": "backtrader/feeds/quandl.py",
+      "mode": "100644",
+      "git_blob_sha1": "1a86737a7f4c63eaa18e282b94092eac9909c438",
+      "size_bytes": 7038,
+      "sha256": "888255b3c124a7667752bbc1901b8687eb456784a8274e16578225f66a7764ef"
+    },
+    {
+      "path": "backtrader/feeds/rollover.py",
+      "mode": "100644",
+      "git_blob_sha1": "d78fbf376079f843068dd6881628bc46e4bb9588",
+      "size_bytes": 8113,
+      "sha256": "c3a03aeefcdfb2fee0691c450bfd0807fd44acf24eb51eeb81b63b8e1c9f9c0e"
+    },
+    {
+      "path": "backtrader/feeds/sierrachart.py",
+      "mode": "100644",
+      "git_blob_sha1": "1ee47d51a8b35c9d45bd1194f555aff1016250db",
+      "size_bytes": 805,
+      "sha256": "1f32151755647e1039c15fca9098936eab732a186d909a25286e8663f5474e31"
+    },
+    {
+      "path": "backtrader/feeds/vchart.py",
+      "mode": "100644",
+      "git_blob_sha1": "164b66aba8f0ccfe27f875ebe316ad39755986f9",
+      "size_bytes": 4480,
+      "sha256": "a896a106898d4c4193afe09cd41fdbd8dd205a9d0de09f490950e08ca36b5b18"
+    },
+    {
+      "path": "backtrader/feeds/vchartcsv.py",
+      "mode": "100644",
+      "git_blob_sha1": "7f4c575a3bcc56c964df9c4d55e32e36c8307da5",
+      "size_bytes": 2262,
+      "sha256": "99bf8a3a89dba98c9f837233cd0d06c5c685dd5beff808014d8b7f3363c4b500"
+    },
+    {
+      "path": "backtrader/feeds/vchartfile.py",
+      "mode": "100644",
+      "git_blob_sha1": "0cfc9071e1904a11cf154b945cca9eb745c4a48b",
+      "size_bytes": 4565,
+      "sha256": "07bb08728862401f3c813560ba61faa5d266188a9bc0d8c6362d6d156eb7692e"
+    },
+    {
+      "path": "backtrader/feeds/yahoo.py",
+      "mode": "100644",
+      "git_blob_sha1": "30a1b32e81eddb77328c63414dae3c03a72eef90",
+      "size_bytes": 12597,
+      "sha256": "d833d420b802a9a13434b8b554903839354896541f828ad6792f76a0d8e68289"
+    },
+    {
+      "path": "backtrader/fillers.py",
+      "mode": "100644",
+      "git_blob_sha1": "6ea2c988114c2cb09d2369edcf6f847407e0815e",
+      "size_bytes": 5198,
+      "sha256": "f88b1e868e20a872106ad71878e72f309aa15352dcc8ffbe1c4936624877e86c"
+    },
+    {
+      "path": "backtrader/filters/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "fe2cc99198dceed9ad88e5198f1b8f1345261ffa",
+      "size_bytes": 1181,
+      "sha256": "90bb8f58fb5d41eb6a80faa90f6c60234f91b0781a4a7a28224a6fa2c027254a"
+    },
+    {
+      "path": "backtrader/filters/bsplitter.py",
+      "mode": "100644",
+      "git_blob_sha1": "56ac9a4191106927b1682b1e33dd9539328b2fdd",
+      "size_bytes": 4149,
+      "sha256": "f90c3c1f1373078ab637b0f8c88de3a56d435d3b60c913887c9574974025c7a3"
+    },
+    {
+      "path": "backtrader/filters/calendardays.py",
+      "mode": "100644",
+      "git_blob_sha1": "cff0f902f9c4f7772a28e12bb8e7defdd26edf72",
+      "size_bytes": 3508,
+      "sha256": "ed0daf5a4a2e42e0a085763ca7b7f25530d96f145708a24c971c79c0204f4b32"
+    },
+    {
+      "path": "backtrader/filters/datafiller.py",
+      "mode": "100644",
+      "git_blob_sha1": "3e51a85de2782902fa7c775e0196bb8ff0bed989",
+      "size_bytes": 6550,
+      "sha256": "6182efe5923a61cb3c70631e7b50aa8e4db558e1091b2296c4ee86d77d7c6c6e"
+    },
+    {
+      "path": "backtrader/filters/datafilter.py",
+      "mode": "100644",
+      "git_blob_sha1": "9dbcbca6f146435768b82c32c530d88be31b0a7c",
+      "size_bytes": 2499,
+      "sha256": "caffeb9c93d0fc4f9bf4cecd2fd65f09af3231380def9a41cbe3d64575af384e"
+    },
+    {
+      "path": "backtrader/filters/daysteps.py",
+      "mode": "100644",
+      "git_blob_sha1": "3a2fb36edb0a247ca82aec93fc662219a8de7cf3",
+      "size_bytes": 3248,
+      "sha256": "8ad0650ca005bb357c2d6719c812baf2d33b1ff9668c098d1d18e406c502c6b3"
+    },
+    {
+      "path": "backtrader/filters/heikinashi.py",
+      "mode": "100644",
+      "git_blob_sha1": "c276dbd0c70857d7f21d2ea648c891b5ac594cd0",
+      "size_bytes": 1967,
+      "sha256": "1f5e796fba96ddfe9dbd74b12443935f1cea2bd9012b45e5f4b25f5a69fadc7e"
+    },
+    {
+      "path": "backtrader/filters/renko.py",
+      "mode": "100644",
+      "git_blob_sha1": "4c21128483d4766e123f59f882f18bbfdf9e27cc",
+      "size_bytes": 5353,
+      "sha256": "65c69d696fdc5254afc53acef0d6aa668bb68c641fa14da5d3428eb687238f4d"
+    },
+    {
+      "path": "backtrader/filters/session.py",
+      "mode": "100644",
+      "git_blob_sha1": "b79b2fc2cb8e83dc0d404d29dc580fbb7b48eaca",
+      "size_bytes": 9689,
+      "sha256": "b19b2fcf989011fa9c65e9073cb5e0fa6e61b59284f987a75d65c607125287e1"
+    },
+    {
+      "path": "backtrader/flt.py",
+      "mode": "100644",
+      "git_blob_sha1": "79f601ce0704ff7226e20f857b796f6b0f536597",
+      "size_bytes": 2160,
+      "sha256": "283a78dcc9d27701e8449bac65c2723e9e53275e86f88fc60cb7b6ab97103961"
+    },
+    {
+      "path": "backtrader/functions.py",
+      "mode": "100644",
+      "git_blob_sha1": "81e6a28379ba2950ea179cc914c53053f001cf0f",
+      "size_bytes": 32750,
+      "sha256": "08910eb3c1b56fd972d76066a23f12d819005f7b605c742624d96670f8c4562a"
+    },
+    {
+      "path": "backtrader/indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8384c1a7cdc2a8301feb8028e208b64d80ee2b1f",
+      "size_bytes": 18228,
+      "sha256": "3ddd8f5dc0de3b2e173869c2fb1fbeea81438636680bb8041a9df3b892e3da1f"
+    },
+    {
+      "path": "backtrader/indicators/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "0438af56df1a2f9e134a9b1adc91a39c2770418d",
+      "size_bytes": 4875,
+      "sha256": "cf9f9dd9fe81a599a54ea5b21453ef1663e36a01c7b6f2778143a553b529bc79"
+    },
+    {
+      "path": "backtrader/indicators/accdecoscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "bdad42a7a633b870f108f7412e3df49bf2640006",
+      "size_bytes": 3174,
+      "sha256": "b686d0e3a2c626a3eb7ae2a2770d40ce5b7fbb35ffcca08a4faea201b97c4374"
+    },
+    {
+      "path": "backtrader/indicators/aroon.py",
+      "mode": "100644",
+      "git_blob_sha1": "eb43cd2a557ae00bedd5df63d4d7911b8cb5f298",
+      "size_bytes": 9062,
+      "sha256": "ed4ed39815d98698a14109fa35cd2f1efac328f73d8c536c98e41ee8e355f11e"
+    },
+    {
+      "path": "backtrader/indicators/atr.py",
+      "mode": "100644",
+      "git_blob_sha1": "4784c7af3fdae35d2879b827ace653709e8e2f11",
+      "size_bytes": 10283,
+      "sha256": "e5388c9b4fc711c14811b91abc78c81db2a67d1b5536a52eba0151e099f083cf"
+    },
+    {
+      "path": "backtrader/indicators/awesomeoscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "5fe9129e1ee357c2b5e0fda37f9180f0b024d2cb",
+      "size_bytes": 3502,
+      "sha256": "9d34a9b777b1d1bc2b871c4939feff2bd97a258114f8ae1360562ecf4061cebd"
+    },
+    {
+      "path": "backtrader/indicators/basicops.py",
+      "mode": "100644",
+      "git_blob_sha1": "e87f9023f03dfa85725b46f7ffee66e934604065",
+      "size_bytes": 25429,
+      "sha256": "143bccd0dc55aa37d3a6701b95300607c231fea8b1cfc76a5b7d575247a2c6c0"
+    },
+    {
+      "path": "backtrader/indicators/bollinger.py",
+      "mode": "100644",
+      "git_blob_sha1": "da5b91a025e70a9ca5496f435a4393422540fcbd",
+      "size_bytes": 6597,
+      "sha256": "428922be3e9e731af3a8ec57a7247da13744ecc2a75e36e2d843689dc5cbb66d"
+    },
+    {
+      "path": "backtrader/indicators/cci.py",
+      "mode": "100644",
+      "git_blob_sha1": "dcf2b897c593956a5a42ad3558fb9cef9f67d931",
+      "size_bytes": 2765,
+      "sha256": "e86df05d7e235cbf6232850585f07e66f8888376f68f90ad26889418d48e5eea"
+    },
+    {
+      "path": "backtrader/indicators/channels_ext.py",
+      "mode": "100644",
+      "git_blob_sha1": "c16b60c2f398dec253772e0b953a32e78743f610",
+      "size_bytes": 2832,
+      "sha256": "b0b42dadca8bc558255adaaaff4763811d11e90edde745d0def336d73fe5c839"
+    },
+    {
+      "path": "backtrader/indicators/contrib/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "3ae2e3bf8e09aa0dee7ce17c39882d60a53f74d4",
+      "size_bytes": 6485,
+      "sha256": "3a4af9419db0d6dcd5c3cc8f3bf798ab2445badf085a018b4f55078e581afa60"
+    },
+    {
+      "path": "backtrader/indicators/contrib/absolutely_no_lag_lwma.py",
+      "mode": "100644",
+      "git_blob_sha1": "756e5d1a7f383f89b19c466d72af4959e2bed3ee",
+      "size_bytes": 771,
+      "sha256": "3e2a4bfb6a484860cb7db95f06740e78422b3198bb7a3e242bba35758a723508"
+    },
+    {
+      "path": "backtrader/indicators/contrib/absolutely_no_lag_lwma_color.py",
+      "mode": "100644",
+      "git_blob_sha1": "73d0d64e8cacee6105f2e1508d7fba320e46cd44",
+      "size_bytes": 1550,
+      "sha256": "8120ac7a4ac67d2c0c06855737aa70bcfced2d40564b89df0736ab3081a04da1"
+    },
+    {
+      "path": "backtrader/indicators/contrib/accumulation_distribution_line.py",
+      "mode": "100644",
+      "git_blob_sha1": "410285aca121cac98224f881d47c6cfcfa0a569f",
+      "size_bytes": 2902,
+      "sha256": "e11b95c05a1f8927629d49c419545e442db851645cb97c8e71600cc966965e14"
+    },
+    {
+      "path": "backtrader/indicators/contrib/adx_cross_hull_style_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "e1e36abc9dd5df4bf57b45fbc1b596e39ac3aff6",
+      "size_bytes": 9629,
+      "sha256": "d14021bf6dbc6b2302105f928a1215a1431c0ccce49213b804ef916f92c0d2ee"
+    },
+    {
+      "path": "backtrader/indicators/contrib/adxdmi.py",
+      "mode": "100644",
+      "git_blob_sha1": "9cf3a142d86a9208f8c7375b5eb8bbd093e10c0b",
+      "size_bytes": 1021,
+      "sha256": "d300929e9331e410ffd18347a0b64a114cf85dd53c4f12f4a60bf7eeed5fb639"
+    },
+    {
+      "path": "backtrader/indicators/contrib/ai_acceleration_deceleration_oscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "2b3f60d6c233f8dad7f9eca601b949aaad8994d3",
+      "size_bytes": 941,
+      "sha256": "75bb9d8c34b0ddd28e30c97ddda05785d6652a1637290fae797436519f306492"
+    },
+    {
+      "path": "backtrader/indicators/contrib/altr_trend_signal_v22.py",
+      "mode": "100644",
+      "git_blob_sha1": "fad102d80e775e820502133b898d1991792ba755",
+      "size_bytes": 2495,
+      "sha256": "0a3b1eebb9bd6a2a71a7406130d4ec9a45976ab659aceec4eb8703a01e6ef9fb"
+    },
+    {
+      "path": "backtrader/indicators/contrib/anchored_momentum_line.py",
+      "mode": "100644",
+      "git_blob_sha1": "8db679f0ddadb04079ecabde6e6bd28163d29b89",
+      "size_bytes": 3671,
+      "sha256": "280c3f21dd2138bdfc31eee16742cfefcd8ad66c684b7d11d2fe66823b12889a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/any_range_cld_tail_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "e03eb277e05f1b7a11f5eadb67c188f8c80180c2",
+      "size_bytes": 3087,
+      "sha256": "12fec168c6d28b881bf0038e4107347c0a1f32c79b3463730a54de89a5354ff7"
+    },
+    {
+      "path": "backtrader/indicators/contrib/aroon_horn_sign_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "53f6600d8f1e0a6a16c2db79faeb74b6418cd896",
+      "size_bytes": 3029,
+      "sha256": "60db2c4d05f48dff62cf2819c81f98c03cc9d59456903eb62c952a865ff45b21"
+    },
+    {
+      "path": "backtrader/indicators/contrib/aroon_oscillator_sign_alert.py",
+      "mode": "100644",
+      "git_blob_sha1": "716e02c627fc465fdaa3736b944cb97924cb185b",
+      "size_bytes": 1767,
+      "sha256": "d553cb0fbc152efe37bc978ae691a0be4150efb41703fe00e3ef37c9ce1bdcfc"
+    },
+    {
+      "path": "backtrader/indicators/contrib/arrows_curves_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "09618796633968dbe092d1dc8c3307d0e8198ef6",
+      "size_bytes": 3748,
+      "sha256": "68c057d5c099d43ee9841cbfbd599bc4dff53673edf4be191ec5fc4d076d0b00"
+    },
+    {
+      "path": "backtrader/indicators/contrib/as_ctrend_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "e0b90e499fa7c6ce165a7d07e1bc0e747868abdc",
+      "size_bytes": 4708,
+      "sha256": "faa79d9e3bfbf91a548e95bb75651dd91d61237817c5f5c026f86322159af2f1"
+    },
+    {
+      "path": "backtrader/indicators/contrib/asimmetric_stoch_nr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "77e7ad25d8aa3c68a92963b4ebb38dd4ec82f0bb",
+      "size_bytes": 7384,
+      "sha256": "588b62a58f94aec35e2bf9714be791fcc198dc69950ff6b805792c71537895e8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/atr_normalize_histogram.py",
+      "mode": "100644",
+      "git_blob_sha1": "a418b83723a9639d02ab13e9fc1be0bbc8330678",
+      "size_bytes": 4013,
+      "sha256": "8a1e2a7841360daac798891c9961e72f1b7d552522ae8194a597b141d493e874"
+    },
+    {
+      "path": "backtrader/indicators/contrib/average_change_candle.py",
+      "mode": "100644",
+      "git_blob_sha1": "14f88fe1e20d9023283e8dce8770ed239d6001c0",
+      "size_bytes": 5346,
+      "sha256": "33a32df6220151aff8aec95a4a41956cc5adb218307c1a1759eeeeb3cbe0b390"
+    },
+    {
+      "path": "backtrader/indicators/contrib/bb_squeeze_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "b8b4ff8d22c9a34166be9fa3ec36c99bf5e3c18c",
+      "size_bytes": 1856,
+      "sha256": "78cbb694c20db8472d0873cecdd431080b45fc12605f23b6ede8ef6f5fca1962"
+    },
+    {
+      "path": "backtrader/indicators/contrib/bezier_st_dev_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "16c85c336632862e9a8f7e0607a734590a020a72",
+      "size_bytes": 3900,
+      "sha256": "89cd8b3176d165a78b6330874f9453185b47a1af4c6d4d46aeba397fbc62171d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/binary_wave_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "1ea6e20c217036caab21f33421e371b66b45d1a4",
+      "size_bytes": 8122,
+      "sha256": "5617b3d8b7af51fec0f300028ec26e323307a592984b805e759aed30fa854042"
+    },
+    {
+      "path": "backtrader/indicators/contrib/blau_c_momentum_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "45bb6a2c294c6874a361ebf567a57608a8759b34",
+      "size_bytes": 3786,
+      "sha256": "99d169346e0fe634b34f15eb77587f80d4ab3d662c4f3667ced41cddbff96d6e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/blau_cmi_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "fbf6bb4ea36175196e45f9e5dce9238e286ea63c",
+      "size_bytes": 4498,
+      "sha256": "63cfcb44450d3b0a6dc0ca29e0bd65999dbd2b2a2d88ab5e595e7ac0fba11397"
+    },
+    {
+      "path": "backtrader/indicators/contrib/blau_csi.py",
+      "mode": "100644",
+      "git_blob_sha1": "0a956e48a7facca53407ae3fbc618f982c784eb5",
+      "size_bytes": 2456,
+      "sha256": "294142ddbeb4b305145dd2a0406c2b5b1e60e4b4274fab5ed81a34d493242bb0"
+    },
+    {
+      "path": "backtrader/indicators/contrib/blau_ergodic.py",
+      "mode": "100644",
+      "git_blob_sha1": "0d21c807b7b1bea4ce62de84d05f46a9a6767071",
+      "size_bytes": 1681,
+      "sha256": "a8e92a5382b734233d695d0df766a3484f648412475e1e9e16d867ee13211ace"
+    },
+    {
+      "path": "backtrader/indicators/contrib/blau_t_stoch_i.py",
+      "mode": "100644",
+      "git_blob_sha1": "1c7c6e1fdf18279618bdc4c638d144a5a868dcec",
+      "size_bytes": 2306,
+      "sha256": "361147d4a59754aef4f718970b9da556e740348ca2c27e76eb3df37d4cd9a5d9"
+    },
+    {
+      "path": "backtrader/indicators/contrib/blau_ts_stochastic.py",
+      "mode": "100644",
+      "git_blob_sha1": "d5048193861969d8a70108dfed3910f098ec1475",
+      "size_bytes": 2805,
+      "sha256": "2da4a90ae7b804d6946ae2efb2e2248ea544db19923c813de7d33275ce919c39"
+    },
+    {
+      "path": "backtrader/indicators/contrib/blau_tvi.py",
+      "mode": "100644",
+      "git_blob_sha1": "d32af90ae091c532ce525625167197f608fe9405",
+      "size_bytes": 1902,
+      "sha256": "5199726ea326668797cf99f8faf49807db0da479490c986c1790bba9d20c5efb"
+    },
+    {
+      "path": "backtrader/indicators/contrib/brain_trend2_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "fc241bb580bd1c9e6e99c2031f4055da9e7f5eea",
+      "size_bytes": 4556,
+      "sha256": "bcf2f81d1c172941527c62550c30754816d483f4832be7f416333fec58d39897"
+    },
+    {
+      "path": "backtrader/indicators/contrib/brain_trend_signal_proxy.py",
+      "mode": "100644",
+      "git_blob_sha1": "d74d181c9bf5811a5298094cec37b5b1c436309c",
+      "size_bytes": 1513,
+      "sha256": "4865dac42fd3bc27b2e88559e47d7e3d07fbbbe5bc426e5a437cc536afa1178b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/brake_parb_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "83fa0b1e15337e50729b0ef2e033c08d2b3fcc8d",
+      "size_bytes": 3299,
+      "sha256": "1da76a1006392aeb522f11cca6a8549c6b73d68a8612bbd18447a8b2ab87bb70"
+    },
+    {
+      "path": "backtrader/indicators/contrib/breakout_bars_trend_v2.py",
+      "mode": "100644",
+      "git_blob_sha1": "d39d7ea096b91f2680f95e57bee2dcd947bb21ce",
+      "size_bytes": 4238,
+      "sha256": "bbd844183e96a05bb4d7093bd53a3894fd5b262657b230cc3de43a8b0f985649"
+    },
+    {
+      "path": "backtrader/indicators/contrib/bsi_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "dfb1870a9acddd466a68f309cd568b0f006f6779",
+      "size_bytes": 3209,
+      "sha256": "f9c52036ac9070176edb0935ca6543c0fa75d018f4842fa42c9a90a7b5d9aef4"
+    },
+    {
+      "path": "backtrader/indicators/contrib/bulls_bears_eyes.py",
+      "mode": "100644",
+      "git_blob_sha1": "8dd4facb17202a9bb92a132128e914bcd292931c",
+      "size_bytes": 1863,
+      "sha256": "25667864cd67f10505f2fd9f356533ece94a1cc72d9602aa2d855dbc116c9c8d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/bulls_power.py",
+      "mode": "100644",
+      "git_blob_sha1": "6222a4ed22b0a7abb5eb79d80378f839d6dea0db",
+      "size_bytes": 1459,
+      "sha256": "2eba1a0bc2ad802cbd1814ccc12b67eedb5a38a38a409aab32e20b82aabd433c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/bw_wise_man1_signal.py",
+      "mode": "100644",
+      "git_blob_sha1": "d17f552f50c05ba3bfe3f72488f8dc2c84e839cc",
+      "size_bytes": 3435,
+      "sha256": "8d73c1da81b18b1a6937484fa9ad690a64bcefc27a080579c855a5bee166fda5"
+    },
+    {
+      "path": "backtrader/indicators/contrib/bykov_trend_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "a44fdc4cf78bce188f829852eb70c3f23714652a",
+      "size_bytes": 2529,
+      "sha256": "0d4845014443d4e64422261937e473594165d356c13584bdfe5bf3d4907ecac9"
+    },
+    {
+      "path": "backtrader/indicators/contrib/candle_stop_color.py",
+      "mode": "100644",
+      "git_blob_sha1": "90680f6c334e48763bb91a6aa477cc5f2bb6da23",
+      "size_bytes": 1630,
+      "sha256": "5ef31d266236895cbb842ec567e163828fa15d9ba7b07ef20e7323870d5e736a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/candles_x_smoothed_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7f8fe97851057be4dfbdabd0523fbff0dba0e491",
+      "size_bytes": 1978,
+      "sha256": "c46498b73a5ff2688fc69f1fd55b4030f9764bb08c157c308f1d7cf7951a3cfc"
+    },
+    {
+      "path": "backtrader/indicators/contrib/candlesticks_bw.py",
+      "mode": "100644",
+      "git_blob_sha1": "4965ce7d82515dfb265001fafba36348fc9d1fab",
+      "size_bytes": 1267,
+      "sha256": "97a11fbc9fcb30d5fb34eddb6fe46ba7e906014f28c688a77235be7e5ebbb067"
+    },
+    {
+      "path": "backtrader/indicators/contrib/caudate_x_period_candle_color.py",
+      "mode": "100644",
+      "git_blob_sha1": "7037bb2f8ae127481b834dbb8ee0ba95181fe8a9",
+      "size_bytes": 2076,
+      "sha256": "60e7ce691bfb3abe567160f1a180642b4be286580dc16fd6511bac64783496f3"
+    },
+    {
+      "path": "backtrader/indicators/contrib/cci_histogram_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "efc2c0e996ab90ccb489a59cd8ec20e100d1ed96",
+      "size_bytes": 1548,
+      "sha256": "5f2ed616dcfee258ede1a04c8b8c242ceb34f2856213678e39263906306f6fe4"
+    },
+    {
+      "path": "backtrader/indicators/contrib/cci_woodies_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "c1fba9920b72b5251237e69ca562cb1493ade6b1",
+      "size_bytes": 2505,
+      "sha256": "22cac06d94e6db627da677bc00316c6f9b7bad1a195ba02df80ee5e77e44ac27"
+    },
+    {
+      "path": "backtrader/indicators/contrib/center_of_gravity_candle_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "9a725d96e51ea30c9ce9ed666b32f50528814398",
+      "size_bytes": 2939,
+      "sha256": "7b088a9edc46f02871782f77ce7b3ac7dafe99852424e278d694aa95b894e5ee"
+    },
+    {
+      "path": "backtrader/indicators/contrib/center_of_gravity_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "17fdabc1a9723c21433d91cf67a270d49f820498",
+      "size_bytes": 2283,
+      "sha256": "b5d700eaa4154bea592a339180457ab827daf29fb99abb921600f6a78a2d9d9e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/cg_oscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "c92f26cc86bcf6d2e8a915e2501af987df2ac8c2",
+      "size_bytes": 1345,
+      "sha256": "84f2ddf395397d5b7b553e5ab810075ef1711cfd1da667c65f22bab0c25e6987"
+    },
+    {
+      "path": "backtrader/indicators/contrib/close_line_cci.py",
+      "mode": "100644",
+      "git_blob_sha1": "845dabc69eb518a354d2682fe4d7291d4f1b59e3",
+      "size_bytes": 949,
+      "sha256": "48442dde7c5672ec42bd6ec5e321b8fd065a7ef6a054c6ff7d4c796e502af6bc"
+    },
+    {
+      "path": "backtrader/indicators/contrib/close_price_fractals.py",
+      "mode": "100644",
+      "git_blob_sha1": "1e3736585080414e76f97023a71a200762955a25",
+      "size_bytes": 1556,
+      "sha256": "7343767a4139304b0c0e33844fbb49ab8ea6468ded09256371186950262efa55"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color3rd_gen_xma_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8473707bca2cfcc25b46ae356416a35cb937278d",
+      "size_bytes": 4117,
+      "sha256": "fc651a1ec90e00c372976f362034e43ce2a8c434ec5d12e29088af9027b02c96"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_bb_candles_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "996d26c6a3ca9a7ebd917c283760df46d2ca7657",
+      "size_bytes": 3452,
+      "sha256": "dfdb3ee3214ff12544ac2f0278cbf589851fcdf4fcf24023c5ea06538966c362"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_coppock_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "65d6cf74bedd97d89b9982cdbadec28acd0c6088",
+      "size_bytes": 4748,
+      "sha256": "9b8e50e49100a155a3f627f6126e7347f50da158abdd3b706e4da039d6fa9f3e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_hma.py",
+      "mode": "100644",
+      "git_blob_sha1": "61556aa5411c737e76bcba1ded72c4ea2a636cf9",
+      "size_bytes": 2344,
+      "sha256": "a4ea948a888ebabb520f8ed481791c43478adc73633b025ee018a2395f159716"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_j_variation_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7a7e793aa8837f4bda0fb34c45f68fea346ef237",
+      "size_bytes": 1551,
+      "sha256": "264411187a8a6366b049662247dcbec2150f8ee75975da16015dde49022ecd48"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_metro_de_marker_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "a7efad6b01c416ce4da7a586a15c01b604ad82ea",
+      "size_bytes": 2634,
+      "sha256": "650afa36360b9819afbc2d8303ad0c9298ecd62a8094634a465f7f1b1459cfe9"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_metro_stochastic_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "d4f76625d777a10374d04f3aae1d1478d6114e3e",
+      "size_bytes": 3047,
+      "sha256": "4d84883497e909ef8b67dc072c00d248780603289ed94bd0d55c3e4e389ed027"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_metro_wpr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8588e856f41826572766dcd115d58a82d6e13a39",
+      "size_bytes": 2806,
+      "sha256": "3dd9a369def7256c3f8c3b655d5e0c57197b56df46568c4223749cfb8ecb1b83"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_schaff_de_marker_trend_cycle.py",
+      "mode": "100644",
+      "git_blob_sha1": "16d8b0906b57830e84d73fa1894871479bb97859",
+      "size_bytes": 3284,
+      "sha256": "204c74c4f4daffd9307ff3acb9b64382722510227a013a1735f8c4459fdb026f"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_schaff_trend_cycle_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "bc924e8687228dc7d9d35ecb82740f018890b70b",
+      "size_bytes": 7012,
+      "sha256": "00bb12a10180fd69fe82f76e455e98fa5ab8e69627fca442d30bd068214f5af2"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_step_xccx_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "65338d0939de2b534d7de87475063482b52a6d68",
+      "size_bytes": 6414,
+      "sha256": "9eca5730d5d69c86bdac2726071af227420e6c3b618eb0ed73c4b7510c4f76a8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_x2_ma.py",
+      "mode": "100644",
+      "git_blob_sha1": "534d6c9fd60e796f96dec47c63e20f57c4280aac",
+      "size_bytes": 1322,
+      "sha256": "58ee8358bb5cc2bc0e514ca7a98bb163ae0258d7e35fe7069876dd15aaf53f86"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_x_derivative.py",
+      "mode": "100644",
+      "git_blob_sha1": "0261328244f3fc831b5542fa1454ef1c8bf82331",
+      "size_bytes": 2135,
+      "sha256": "ca8c3048df51ae7704a17f5e265f0946bba9f80df57bda817a09d41a3b8534a6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/color_zerolag_de_marker.py",
+      "mode": "100644",
+      "git_blob_sha1": "e1565ebc1f418b03b27a668710d26a6eedb63614",
+      "size_bytes": 2974,
+      "sha256": "69f34a2c5c38246ca1219f2d32fa85635b53c870c2e981f60ae5d0e29d54fd67"
+    },
+    {
+      "path": "backtrader/indicators/contrib/corrected_average_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "2e049077d24e0216cc9a8004d8282b14a68d74c1",
+      "size_bytes": 4130,
+      "sha256": "d430f688b4809d2b285688050eeb9240d54b23712e4d7ed62f43c966fe013b60"
+    },
+    {
+      "path": "backtrader/indicators/contrib/darvas_boxes_system.py",
+      "mode": "100644",
+      "git_blob_sha1": "35010dc343138c38a5af4b8e3a464a47b8235273",
+      "size_bytes": 2397,
+      "sha256": "f751c8f7148f7727e775dd1e5cbb2ea1bd0674620a46feca216ffa55b13aa119"
+    },
+    {
+      "path": "backtrader/indicators/contrib/dema_range_channel_color.py",
+      "mode": "100644",
+      "git_blob_sha1": "f0ba4e94ced1dcc12eb636ce3c986c7918db0d33",
+      "size_bytes": 1423,
+      "sha256": "d130198a24dad294f1e80d52cd316087115197e6c2832ee71fc76aa9968bafc0"
+    },
+    {
+      "path": "backtrader/indicators/contrib/derivative_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7f57bf12e118a4a14e2c0342dbbefed7ba98efa7",
+      "size_bytes": 2673,
+      "sha256": "6e8c4b1aa1d0079c48aebf90dba5615b8d31a2358c461ec533c392204763fa5b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/digital_ft01_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "ac9616b2d77ea233ac12f0d9ea75afb9bf5f1374",
+      "size_bytes": 3588,
+      "sha256": "be788e7da18c8a5e62068012b9d825ee89222a00e8681a3931d303cbbe35066d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/digital_macd.py",
+      "mode": "100644",
+      "git_blob_sha1": "3db9e82a02d61ed0ed63494a60c8c274f3e4a1c9",
+      "size_bytes": 5161,
+      "sha256": "b0b1e6b75355080b4fcee2722ed8ed43b02dd95f6425ff8b59e8a0f5a15d807e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/donchian_channels_system.py",
+      "mode": "100644",
+      "git_blob_sha1": "0e42b6a34d85e6a916825a2bb7b7500ce43ca805",
+      "size_bytes": 1472,
+      "sha256": "07773a10e8bb4bc7be5104ac7e33acf55874bc69b9c75d28cfdbc4f55d788419"
+    },
+    {
+      "path": "backtrader/indicators/contrib/dots_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8d657d28b2eacec25d7e678cb8de42c26ab79f16",
+      "size_bytes": 3000,
+      "sha256": "d5f3fe37791c23cb0d204b768763ad39788b27ccc29d1580c08378d8f8049c54"
+    },
+    {
+      "path": "backtrader/indicators/contrib/ef_distance_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f57e60a5965624efbb4e69d0c98b3aa6bde1f0c6",
+      "size_bytes": 2926,
+      "sha256": "a8f431e5453cf1ea5499545fb3aaeee97e3dea55c448162fd2e6833364fbc171"
+    },
+    {
+      "path": "backtrader/indicators/contrib/ema_rsi_va.py",
+      "mode": "100644",
+      "git_blob_sha1": "eefe029aafede77c0115d0062a8450e8084bc494",
+      "size_bytes": 2668,
+      "sha256": "3b0053bfdc52cd99801accb82b532333bfdc54a620993e06998e952b1a057223"
+    },
+    {
+      "path": "backtrader/indicators/contrib/envelopes_jp_alonso.py",
+      "mode": "100644",
+      "git_blob_sha1": "6dd840c60292a8b4b71350a99d93bf338c3179df",
+      "size_bytes": 914,
+      "sha256": "679b27c48c993753a820ee71dee060fc4352181e7886d9574760777d568d00c8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/f2a_ao_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8d029f83ce1ad8eda134bfd9270e324d72c7609b",
+      "size_bytes": 4814,
+      "sha256": "b13f3d19e7b785fdabd3dbd55b46d7401babba76c4a090622f12ede79eae8793"
+    },
+    {
+      "path": "backtrader/indicators/contrib/fatl_filter.py",
+      "mode": "100644",
+      "git_blob_sha1": "58a9b88e0f89ce87c09cfdb75e34f463669790bf",
+      "size_bytes": 6036,
+      "sha256": "cba088cef99e8caa57269bc6e944196949426904a965a9166076b1cdef7f3da4"
+    },
+    {
+      "path": "backtrader/indicators/contrib/fibo_candles_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7d93cd38d7448c61756390e84528965ff1fdee15",
+      "size_bytes": 2346,
+      "sha256": "b1a1aa9cff5ec11ced2e91e4bef70d9b2029930f2f75449a390a165d00162541"
+    },
+    {
+      "path": "backtrader/indicators/contrib/fine_tuning_ma.py",
+      "mode": "100644",
+      "git_blob_sha1": "a3fb6413d276659786bc4f4a6ad57643a4b11ef8",
+      "size_bytes": 3404,
+      "sha256": "65a2892aabb346e1dc95430fea92975152f154b7355234c72cc999690ac947d6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/fisher_org_v1.py",
+      "mode": "100644",
+      "git_blob_sha1": "4d9be181368d69691d34b2f944f9cb0f4b0b7d9c",
+      "size_bytes": 2866,
+      "sha256": "d376ea4020147d7976ae98a1d5ba09795a10dd4e2a12a8b1c148642626cc730a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/fisher_org_v1_sign.py",
+      "mode": "100644",
+      "git_blob_sha1": "19b0b8112e6339eff44eb7d47cfbac54f4291c51",
+      "size_bytes": 3621,
+      "sha256": "c1097e07bc258196720129304354a18762141f01dc9f58b1f2b7007b0a8f39f7"
+    },
+    {
+      "path": "backtrader/indicators/contrib/force_index_ema.py",
+      "mode": "100644",
+      "git_blob_sha1": "e5eb2043709f64be01b6c1f557af0c2ff452676c",
+      "size_bytes": 3269,
+      "sha256": "87c2eb608e2ea04f890d4a75b303158c476639b6adc6d9b0261bdc8a83bc7e55"
+    },
+    {
+      "path": "backtrader/indicators/contrib/force_index_ema_2.py",
+      "mode": "100644",
+      "git_blob_sha1": "2bc56fd5c7950320201ccaa5e6548cf72d7e8a10",
+      "size_bytes": 746,
+      "sha256": "63914580da7d7814e7071bf63360a36e15aa2e73df7f6c8384a993d9cb212696"
+    },
+    {
+      "path": "backtrader/indicators/contrib/forecast_oscilator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7d6c3fc7bc5d76d330400fda892aea487fa2c3e1",
+      "size_bytes": 5187,
+      "sha256": "e34763356808ed9b7e1d4bc15d9491d80360d9f746d7d31ead2fd6ac26f7154e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/fractal_amambk.py",
+      "mode": "100644",
+      "git_blob_sha1": "7a45582f84f84cc8809d48712ceaea5e2b2b87c0",
+      "size_bytes": 2641,
+      "sha256": "4b97240beb7a98c9bef358e4cd8cf67d71b2c284c5f2b9c8c166c90c5b919509"
+    },
+    {
+      "path": "backtrader/indicators/contrib/frama_series.py",
+      "mode": "100644",
+      "git_blob_sha1": "ba2259eb674c1ad724012f572fd892b27a5f1a46",
+      "size_bytes": 2904,
+      "sha256": "272b49883b383fa29f9350fe095c79311f5b4144b70801471de9d238e449d9ad"
+    },
+    {
+      "path": "backtrader/indicators/contrib/frasm_av2_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "5d5d9135b6bee7f670cae7522d87da3cc3cdd4e7",
+      "size_bytes": 3346,
+      "sha256": "2325c112a9aabab1fc13d9c632d2bf1277d51e221c62791446c026af09af9a4a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/go_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "0a66379b4d7fa054e67ec15fa3a5ac8931f8108c",
+      "size_bytes": 2792,
+      "sha256": "a00b2b216cf30b273d6a26d703567f6a2792de2f38d91a07278290c94e3c5e5d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/hlr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "27165e4433eab2b261280eda64491dd9842e9d3b",
+      "size_bytes": 3289,
+      "sha256": "ced37406b7ad631e392c28a7d3a7c73b156400edd01601760971a1e8becd1cd9"
+    },
+    {
+      "path": "backtrader/indicators/contrib/hma.py",
+      "mode": "100644",
+      "git_blob_sha1": "e2f77d315d650bdaf0ecaefd83734d15ef4b5341",
+      "size_bytes": 1552,
+      "sha256": "ce0e85166fa4650002802357704c1e2d0a3b311508b7f1c24864c3a7abd1b81e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/i4_drfv2.py",
+      "mode": "100644",
+      "git_blob_sha1": "3fd2b966f848d93f764859dc63bee16df848ea2e",
+      "size_bytes": 1013,
+      "sha256": "971783d45650abad5a4469ae5c2bd773e089a0715150de97556d47f898f91c5e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/i4_drfv3.py",
+      "mode": "100644",
+      "git_blob_sha1": "6a2e07529ae93e4cc8652d2ace0830c6dbf08eb1",
+      "size_bytes": 1200,
+      "sha256": "9ad3b12b35c2ba048ffa1ae9bbb48f6b68c7a208d4aaecd79b00ad3c453e181c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/i_anch_mom_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8bb8610f4ba7a595ee3f776b5db6ffeb5e85b529",
+      "size_bytes": 2490,
+      "sha256": "ee69446682901a90a450133efdc0d2fe2dd266801baf0bd87b8f1240609cd89e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/i_de_marker_sign_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "e219b59d8fa978b428bf1ce2c8895bfb9ad9d331",
+      "size_bytes": 2245,
+      "sha256": "8ce7c3046b448d31a198a09c767813e6f9327044bb2a04165702e63c3ba2693f"
+    },
+    {
+      "path": "backtrader/indicators/contrib/i_gap_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "fc0837c2e8d7738e3ca31cbfe805f1a942718cdc",
+      "size_bytes": 1545,
+      "sha256": "eb34d2e0801609200aa48d35e1ccacd14ab55078c81bc3150b2f6a28a4e90d1b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/i_stoch_komposter_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f677da996501ad5fe73d284aeae18f0e89ed9369",
+      "size_bytes": 2577,
+      "sha256": "9a31eb24244231de48de55d070a39a35a5cacf6f977eac1f59cbebba4728bb84"
+    },
+    {
+      "path": "backtrader/indicators/contrib/i_trend_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "ccb1251bd7468d9f45b3fcd79aab3e97379fce60",
+      "size_bytes": 4315,
+      "sha256": "46dc4e9350d21a83e200a85b8b2dd0c995b86927eb14613a19f6e354dab19461"
+    },
+    {
+      "path": "backtrader/indicators/contrib/iamma_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "b6eaf7a140c050e85554150a924638d67ebaf910",
+      "size_bytes": 1138,
+      "sha256": "b6dd74a0f3562a4afd35c4687d8b293df3cb8b38255afaae9bea0e51f12e2639"
+    },
+    {
+      "path": "backtrader/indicators/contrib/indexed_moving_average.py",
+      "mode": "100644",
+      "git_blob_sha1": "073f5218a7ce4bbd0d4bee2e49120cc82a9b24fd",
+      "size_bytes": 974,
+      "sha256": "a14bcd2d129578e62d368e570e34373a892a61f4eabf978b5b3237096865326c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/instantaneous_trend_filter_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f7326e5c271f672357632007a33bbd13963d0bb2",
+      "size_bytes": 1568,
+      "sha256": "449f083bde7c4338931a1239b98ab2c1411d47403e17a587348edf00c12c8b5d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/inverse_reaction_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "917276870ec8c9b63a69c45f6df1d429eba267bd",
+      "size_bytes": 1394,
+      "sha256": "7a3172e2c9419959fe9ed311d059db26981a50d805798267a55e1c7e33764d15"
+    },
+    {
+      "path": "backtrader/indicators/contrib/irsi_sign_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f931fad81b2860d20d0fdc4e8135fd6dd2ac738a",
+      "size_bytes": 3019,
+      "sha256": "1d59e049d2ba298e027678e13212ead865d0623ddcceb740335975d03795742d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/iwpr_sign_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "c03926e01afbf9b3783468e9434229ff1061a23b",
+      "size_bytes": 1931,
+      "sha256": "4fbdaf85264f930ee111a34c213260aa13f4be07c45adf419e2cca48ab191060"
+    },
+    {
+      "path": "backtrader/indicators/contrib/j_brain_trend1_sig_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "e86436c2819847d38bb877d0f251aee3c82f3317",
+      "size_bytes": 7755,
+      "sha256": "89c616a0b3ab3a8c017b50f8d59f567e5c08da709d621def576954ca1b486d94"
+    },
+    {
+      "path": "backtrader/indicators/contrib/j_tpo_proxy.py",
+      "mode": "100644",
+      "git_blob_sha1": "e2ada7d089b568db56ff1d812566d4aa7116af36",
+      "size_bytes": 905,
+      "sha256": "efb2dc2be4c43ac9b42afa8a97998cf8675939580a8b5e7dc189bac47293afde"
+    },
+    {
+      "path": "backtrader/indicators/contrib/jma_slope_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "01a53570ba54ba9d33ac61c12e610057f27a7ea1",
+      "size_bytes": 2499,
+      "sha256": "a4adbafff87138f6874cf999965aad1a82dac0ac56fedc997ba983870bd540b4"
+    },
+    {
+      "path": "backtrader/indicators/contrib/kalman_filter_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "06c64c3e8db700d24687e8abf5a08b71968e3475",
+      "size_bytes": 3537,
+      "sha256": "a4d02971dcf93c88852f9ffeb0c3453bcd02f84b282e5d24bb2327ad6c28dab9"
+    },
+    {
+      "path": "backtrader/indicators/contrib/kalman_filter_line.py",
+      "mode": "100644",
+      "git_blob_sha1": "f303ad25a519924356a86d4c422755f29707380f",
+      "size_bytes": 4201,
+      "sha256": "cb474b3a0b76c2ced7801fd5a1037056581028ce488bf24a662051f78f5be1d4"
+    },
+    {
+      "path": "backtrader/indicators/contrib/kama_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "cf572f59f8e0833562d89823b6aa66a78b4a8fa9",
+      "size_bytes": 5269,
+      "sha256": "62861efc5ce01dc0e677c4366ad5077892b530f060e10b4413f64592d0315261"
+    },
+    {
+      "path": "backtrader/indicators/contrib/karacatica_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f1bb79b375fccd49cdb1d38858f972b5f3dfae8a",
+      "size_bytes": 3555,
+      "sha256": "7459030ec9b6f3679a20a919bfa778950ab610cf3389ef7e7c8140a5daff45da"
+    },
+    {
+      "path": "backtrader/indicators/contrib/kdj_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "1f52cc5f3c647d578e889fe3523d712f7d6b1225",
+      "size_bytes": 1956,
+      "sha256": "f5d64beb19b813c01192ad8a2d756b9bf30ec43544dc128190674bc305ee931c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/kwan_ccc_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "153d8116dc8a3a667b3fd4accfef6fb8819cba2c",
+      "size_bytes": 6600,
+      "sha256": "b323326213b751eb326f96e7d687fadbd625d1495afdc45ae2807248c7c70d5c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/kwan_nrp_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "a3008f69961bd5857f9262cb551b0e2797de215a",
+      "size_bytes": 3107,
+      "sha256": "5cae3953142a3fe0cda98772eae9b0b2ff014df19eacfc9aff5af9f3259c68b7"
+    },
+    {
+      "path": "backtrader/indicators/contrib/kwan_rdp_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "365692db7b6cc789d6edc7d9ba1e6f045fb77f03",
+      "size_bytes": 6646,
+      "sha256": "aac63d4e480341b99df336a0e09116740f990977a7cae7559d49cc32e01655ae"
+    },
+    {
+      "path": "backtrader/indicators/contrib/laguerre_adx_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "800c0c8c8a62a3fa8217007f20b011234f82ca5c",
+      "size_bytes": 2694,
+      "sha256": "4fcbf72ef1a89306286bb192912373811ae00e23757459b477cff47b9fa55e5e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/laguerre_filter_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "2988620dbe427c44e587c3604d3b8c041074c105",
+      "size_bytes": 2002,
+      "sha256": "ae4a5c722161b8231a269be43827f137de313749c7feed8e9c33952bc7915b2e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/laguerre_plus_di_proxy.py",
+      "mode": "100644",
+      "git_blob_sha1": "dc7e106d17879177496666c770cbd1c854f09eeb",
+      "size_bytes": 1990,
+      "sha256": "683b493cd0d8d818a63417cecda7ac3ad40ffec65a5f1283a0219eaa78970e6f"
+    },
+    {
+      "path": "backtrader/indicators/contrib/laguerre_roc_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "63327960b6b094baa7515557e5561e72cb1a7f38",
+      "size_bytes": 2561,
+      "sha256": "9df70f1ba0daa45dde069d6aa9f036e435d7b9c464700c54a8daf54f6270e45d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/le_man_signal_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "52b2029fdae5494257ed44b0965508dcfcbfbd13",
+      "size_bytes": 2377,
+      "sha256": "35dfd5100e9d2481d5bbd6b7680f32de3a9f305c633560067f59b9c54864ec0d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/linear_reg_slope_v2_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "737840a20cc031f8c462dd7cec286a8dc775c4af",
+      "size_bytes": 4854,
+      "sha256": "241e9496635d8be596661c82baa23839fa0dea1fe4fce112d05399ddd760cc7e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/loco_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "5e10d5d048547fdcca44c40a5c282494694c9da7",
+      "size_bytes": 2999,
+      "sha256": "32f122f4114cc7f2d1dde3799c7cb77aac7fe800d485c690719ead45577db83f"
+    },
+    {
+      "path": "backtrader/indicators/contrib/lrma_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "36d53d4570c6f608de140cb9be5b35582ddfe88d",
+      "size_bytes": 6300,
+      "sha256": "7c3042faaccb3998967593dabce6f141357ffa92b7411fd8aa51b55c020213a8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/lsma_angle_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "64e8c15500940631a41e7d6d03b5336283f37abc",
+      "size_bytes": 3757,
+      "sha256": "0f96c7252d73b3558c8b189af2e9c58fac3143d86382beb67d7b8a9ab84f385a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/ma_rounding_channel_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "9a37c01c24a84d9bdcc65fdeedc2e1f2e7ec667b",
+      "size_bytes": 5093,
+      "sha256": "127a50383395111402132a697fc610267e5e16e2fc0dd017afca441d0aa65469"
+    },
+    {
+      "path": "backtrader/indicators/contrib/macd2_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "1f6cff51163d8332ba9f7b7c02ac1bccef00aa71",
+      "size_bytes": 1779,
+      "sha256": "08fedf21175620547e3a28e78bdf817acfcb6b5ac1f07d5ae645a0987f207533"
+    },
+    {
+      "path": "backtrader/indicators/contrib/macd_candle_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "2e3f4dd5918950a4a29ac1378812cb044bb39ccd",
+      "size_bytes": 2597,
+      "sha256": "531cd95b8554f22cfc29b7c24d22667d42b3ab3f6a3ae4674202fbdaac0e93af"
+    },
+    {
+      "path": "backtrader/indicators/contrib/malr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8a1dc3e06fc620b943177134608c521382ca5674",
+      "size_bytes": 2594,
+      "sha256": "ed4346c176066568826e1d41f02a4efe1ca90cf8160f36fbd29d363525545ce2"
+    },
+    {
+      "path": "backtrader/indicators/contrib/momentum_candle_sign_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "855e6a339c08de21800d1869e795e7d611f55b66",
+      "size_bytes": 1903,
+      "sha256": "7f4382a883d7b1748d452374f94ecd8da29ed76215ed386f9c849d399db25ac6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/moving_average_fn_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "c649fc34f295ad8bfda8a24fcb38ab971c325073",
+      "size_bytes": 4830,
+      "sha256": "4cc56d55f5e848e452f812998f57c4333a5d7850a5e477c51dff6bfccf335cec"
+    },
+    {
+      "path": "backtrader/indicators/contrib/mt5_stochastic_close_close.py",
+      "mode": "100644",
+      "git_blob_sha1": "fdfce51020f103d3b204b8682affa932c951c118",
+      "size_bytes": 1855,
+      "sha256": "7f473a989a6f7f50d278823a4862c8ccf3ad7e7d0dcb35ed9aeb3981de019576"
+    },
+    {
+      "path": "backtrader/indicators/contrib/muv_nor_diff_cloud_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "b59cc99ccb8e15134018d22f0b380b2adb6501fd",
+      "size_bytes": 4119,
+      "sha256": "248ffa643a4959fff0b4af12d7a27e2d2ccb954bc2f7193c5a21b6c7b004cdac"
+    },
+    {
+      "path": "backtrader/indicators/contrib/non_lag_dot_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "368f8bd85fcd965bb649da4b117c609abc66c3bc",
+      "size_bytes": 3563,
+      "sha256": "c4f46ff6fcbefb630831e14279af7c2c6a03fd2c0aa9503384866a24c04d55d4"
+    },
+    {
+      "path": "backtrader/indicators/contrib/nrtr_extr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "e126e972dfc4eeee45272e4582a1490623b2f77e",
+      "size_bytes": 3116,
+      "sha256": "a349312d485cddf2e6cb92003354f35a7699f7446698c530e431d2cf5a863ed5"
+    },
+    {
+      "path": "backtrader/indicators/contrib/nrtr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "4c686da2459845cd004a10a6d595aaa96ba44a4a",
+      "size_bytes": 3061,
+      "sha256": "d874205c48f39dfd15c9146137fc5e29e822440ad29d828ca2e1cfe16b1e94fe"
+    },
+    {
+      "path": "backtrader/indicators/contrib/p_channel_system.py",
+      "mode": "100644",
+      "git_blob_sha1": "65378709b78cf42ce70ceeaa69f317820555b690",
+      "size_bytes": 1273,
+      "sha256": "65ea205e4f8038a10934803cd37c7d61d248b9f6a351a095f590af65943a79a2"
+    },
+    {
+      "path": "backtrader/indicators/contrib/percent_envelope.py",
+      "mode": "100644",
+      "git_blob_sha1": "f089963dad1592c9ecd9856cce5dfadd3eec4559",
+      "size_bytes": 993,
+      "sha256": "c14801ccda349758b68235331178cf9fd150f13743d7429047175adccb0eb766"
+    },
+    {
+      "path": "backtrader/indicators/contrib/percentage_crossover_channel.py",
+      "mode": "100644",
+      "git_blob_sha1": "bb264fe59e71e3c808825bb12277b4ede58f2c0f",
+      "size_bytes": 1629,
+      "sha256": "fd34be26cdcf67680fd71912b121e3698a3fb8db1fddaa269d3f766080a83475"
+    },
+    {
+      "path": "backtrader/indicators/contrib/pivot_zig_zag_proxy.py",
+      "mode": "100644",
+      "git_blob_sha1": "7a24ffad6eefea9e525dbb171b63fdd375fd0f3f",
+      "size_bytes": 1832,
+      "sha256": "a640d06379f3774823740f5ffe417138913e003c5312275b70f59e6829a3632b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/price_channel_stop_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "ad18b8f515347523d179d0a4482008d3cb9ee3a7",
+      "size_bytes": 3182,
+      "sha256": "322a45e1acb9e9cd9776eadc02140c93db8d01e1599dda848c1ce285a4c3d7b7"
+    },
+    {
+      "path": "backtrader/indicators/contrib/price_extreme_channel.py",
+      "mode": "100644",
+      "git_blob_sha1": "86f6995071616e2571a8a56d744e8d946d072ebf",
+      "size_bytes": 963,
+      "sha256": "6134e7844b25b92ca0c24b8c1d65507edf3fbeed24e75366f656cacdb8c8962e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/qqe_cloud_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7da93915363f424808ad3d4af85cb53307568a76",
+      "size_bytes": 4139,
+      "sha256": "b2fdee5df3b844bb7ff729216fc33f633351f44434071f121efe9e15c26195da"
+    },
+    {
+      "path": "backtrader/indicators/contrib/ravi_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7d0fc4515f15c100bff38b4cd0525ff15c6e75f1",
+      "size_bytes": 1185,
+      "sha256": "d2e9f2cb960908106c8569344a75f926a5bb91f746d904afdadf122446a00937"
+    },
+    {
+      "path": "backtrader/indicators/contrib/raw_close_close_stochastic.py",
+      "mode": "100644",
+      "git_blob_sha1": "4815a46f994d6a281e00d683c90f6fcc4edd8312",
+      "size_bytes": 2443,
+      "sha256": "77f7e8ee0e9881efc91bd02360f2da27cbfba4379aadc77ed62b3fee020f6893"
+    },
+    {
+      "path": "backtrader/indicators/contrib/rd_trend_trigger_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "9e2bc68ca8f36e7d33dbd63a703536abf876b586",
+      "size_bytes": 1939,
+      "sha256": "f49d39dfa490752cc2b68295c980d22f4598b014650662aed03bc67a551f9f48"
+    },
+    {
+      "path": "backtrader/indicators/contrib/renko_level.py",
+      "mode": "100644",
+      "git_blob_sha1": "319c949b4ef452b31270ad4629422ceda7acadd7",
+      "size_bytes": 2839,
+      "sha256": "fea4eef4911b673cb8c8e3abe9908a1bdeefdf54b488eabf94baf9f17ea5c7df"
+    },
+    {
+      "path": "backtrader/indicators/contrib/renko_line_break.py",
+      "mode": "100644",
+      "git_blob_sha1": "86b5f8ce96bb9dc5a390927f8582d2ebfcaeb8c3",
+      "size_bytes": 2790,
+      "sha256": "bbdb65dd60f9cd9fa40e8952b67287b513d03ae2cc53af431a8c251aa628cd53"
+    },
+    {
+      "path": "backtrader/indicators/contrib/rftl_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "cc4870534e96d1cdbcfe468cd79bf82d52f29266",
+      "size_bytes": 985,
+      "sha256": "951519a7ac54aee6793b340adfc54821eaa9a5903db1f006bbcf47ada82018d7"
+    },
+    {
+      "path": "backtrader/indicators/contrib/rkd_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "ea4a6d3a169dde1e28f996f4fd6fa7749956859b",
+      "size_bytes": 1567,
+      "sha256": "a553055cec81302bea8ec90848c580ee1f5f054809fd308f0ca4cbd906f4420d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/roc2_vg_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "08013dca8327cf6dec4474507e4e5be3829d5147",
+      "size_bytes": 1974,
+      "sha256": "fa71d7ffc011fb41ab5bdc078c2173d62d07420113117c2e7b2857c6d0c7f3d9"
+    },
+    {
+      "path": "backtrader/indicators/contrib/rsi_histogram_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "b4a49ae56192cc9aa10547d30f462dbeb294f34b",
+      "size_bytes": 1188,
+      "sha256": "d0a294a7a13ed35bb6dd916de4ce6205a4a14baef1f39dbaa60d1cdd50034742"
+    },
+    {
+      "path": "backtrader/indicators/contrib/rsi_slowdown.py",
+      "mode": "100644",
+      "git_blob_sha1": "0fce9c66f2fa16c757af142b75ea54506e3313d3",
+      "size_bytes": 1860,
+      "sha256": "d3165c137c5f05bc98197cee881bc92d0df5aa10ea4f4b736d6caa5d1b00be6d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/rsioma_v2.py",
+      "mode": "100644",
+      "git_blob_sha1": "3b0b545f1a0f80707503f7d0d711b80c7bb7c158",
+      "size_bytes": 1275,
+      "sha256": "3aacbad5ec180dca0905c68ef42d226a81242748da79c5a6b5e88330601510a8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/rvi_histogram_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "1b3fd3b6c28ed2dba5e2a614347d9594c5ca6337",
+      "size_bytes": 3390,
+      "sha256": "0437bcc19df4cb4784b0cdeb1fc0cf8ba85cddc5029605fd10357edaec9ee4d0"
+    },
+    {
+      "path": "backtrader/indicators/contrib/safe_adx.py",
+      "mode": "100644",
+      "git_blob_sha1": "f64eb8f956308b3ad0136eb225c831fbf0b72e21",
+      "size_bytes": 3065,
+      "sha256": "7cf9582bbf098b60172f20ac1d9441a8b9905ca0702f58911bd8b7562416ebca"
+    },
+    {
+      "path": "backtrader/indicators/contrib/shared_strategy_indicators.py",
+      "mode": "100644",
+      "git_blob_sha1": "dd9917ee6cc646715235ed37c6e25996df7ef366",
+      "size_bytes": 58967,
+      "sha256": "2e22f069825c86fb63dc2ba0db632ff1f6cd7628667abcbf8561401bde8dab26"
+    },
+    {
+      "path": "backtrader/indicators/contrib/sidus_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "92eea813f72efe513b12d1670a8cc8dd64a6a829",
+      "size_bytes": 3667,
+      "sha256": "5d9df077f9fabd723d3a771042cc29cbf448ed664f38a34e0c4d11513ffc760c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/silver_trend_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "060bdb4672b1ffd988f30b44bef50a0aa5553e8b",
+      "size_bytes": 2424,
+      "sha256": "fe8beff90782ee5dc3771e88965da78812deaeb0e42fa549b90e39256c2db0a6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/sliding_range_color.py",
+      "mode": "100644",
+      "git_blob_sha1": "3b681ade2e4cb0eff0456dd4c2d9e75df920bc8c",
+      "size_bytes": 1994,
+      "sha256": "94c214e2328599a6f231766284c39d5910d348da56155798cf99828a39acb90f"
+    },
+    {
+      "path": "backtrader/indicators/contrib/slow_stoch.py",
+      "mode": "100644",
+      "git_blob_sha1": "e689db81ae8ab5d6930a465ad7f689380260f0b0",
+      "size_bytes": 1170,
+      "sha256": "42070a2827446a1a57bd757253392301c9c48e922f7c9b973e1f31418f59d6b8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/smoothed_adx_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "392430dac7320bfb92ae87382ed81457ed726afe",
+      "size_bytes": 2742,
+      "sha256": "89fe5c66d309cd27293deb759d674819fc6be0ef9ff511b65151aae209a0acf8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/smoothed_rsi.py",
+      "mode": "100644",
+      "git_blob_sha1": "18d89588ab281dcccefbc5ed73c3815a41258614",
+      "size_bytes": 749,
+      "sha256": "54c08c1edb65f9d73493534acefbd72c511bae9bab5a9550b94c375c9a9c9ec6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/spearman_rank_correlation_histogram.py",
+      "mode": "100644",
+      "git_blob_sha1": "0af1ecdbc93f46306ec364469df0e024a1641dfa",
+      "size_bytes": 1923,
+      "sha256": "905dca4130ca483c545cbf93012b48fa95bb830c3ba26329f881e231238a063a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/stalin_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "046313819c7c53ac9b04bbffeb3d280ec2c64a39",
+      "size_bytes": 5347,
+      "sha256": "0a22edb6233ef65d87ed12bcc4bc5a81270542e7ea9546fb4f8525e7e627bf70"
+    },
+    {
+      "path": "backtrader/indicators/contrib/starter_laguerre_filter.py",
+      "mode": "100644",
+      "git_blob_sha1": "a48d0d173cd1dbd18f1e2ee749a03e24c09b54e0",
+      "size_bytes": 2014,
+      "sha256": "7a56a77715aa52992167bb307bb1563ba1998f8f8f7260604f06c2cd3f80d28e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/step_manrtr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "2d55ab31c85a2f2b7b5e80fca174395829e18b5d",
+      "size_bytes": 4217,
+      "sha256": "ed9c163b958b2f9784664376c10f9968383c179511faa99ceaa0a21fe818935e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/stochastic_histogram_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "a3d6dc8d9098595e4e1d2eb25b700749da643be4",
+      "size_bytes": 5862,
+      "sha256": "06034300dd53d8c787b28da133c691bf538d047b3224348d38ce04a2799b2eb2"
+    },
+    {
+      "path": "backtrader/indicators/contrib/t3_alarm_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "bf1d2f616990784d335ece038a92335c4bf743fc",
+      "size_bytes": 4405,
+      "sha256": "cc5468257c9a9fb07a3ec02c486443b7a62ca31b0e48a92a171244e6ca632fe9"
+    },
+    {
+      "path": "backtrader/indicators/contrib/t3_average.py",
+      "mode": "100644",
+      "git_blob_sha1": "b8cca33c1d60632ef0da482a954359184c4a2d11",
+      "size_bytes": 2465,
+      "sha256": "a55660de2f85501072bd654daa64cb34333aff465956c7422d981a7639dcc7a6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/t3_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "5cd1939e30c65cd8e4cf730352f90ce42d8b45e9",
+      "size_bytes": 1117,
+      "sha256": "d09167e44ed8f2108c85bab7cb0712271e856e99e8ca804495f6fb197ea2befa"
+    },
+    {
+      "path": "backtrader/indicators/contrib/the20s_v020_signal.py",
+      "mode": "100644",
+      "git_blob_sha1": "67144e0030f6bd9eb08093d15ec065a1cff0ca10",
+      "size_bytes": 3455,
+      "sha256": "cba9363139cc03d9e055ede6db6228eec38424ca3aef7c130e37e54e524409bf"
+    },
+    {
+      "path": "backtrader/indicators/contrib/three_candles_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "95f436d343b22d1492ab3387f93f46149ca7f727",
+      "size_bytes": 2513,
+      "sha256": "eeb416c0c2fe80d325a18aba850cfeb72d93c01b16a90a980eee8817f01369d6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/three_line_break_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "cea45c092addf97e94762dd929f3b9a3e05bcf4a",
+      "size_bytes": 2176,
+      "sha256": "407215d4280d6ccb961d12fb7809de1d6e436eb62f03c66b5be1a3f9fb517554"
+    },
+    {
+      "path": "backtrader/indicators/contrib/time_line.py",
+      "mode": "100644",
+      "git_blob_sha1": "2e2febdacc1bec02649a77ed367254c3c2ae870a",
+      "size_bytes": 1987,
+      "sha256": "0d6874a64e5c04f81f292c993259313c1d1d01b7b63ae514e23e2ae8fc8d8571"
+    },
+    {
+      "path": "backtrader/indicators/contrib/trading_channel_index_proxy.py",
+      "mode": "100644",
+      "git_blob_sha1": "b96d131a68216f356d250f874c23c3c0f0798675",
+      "size_bytes": 1486,
+      "sha256": "e2bbac8802a5861a751b979cf477ac603b5c7fc5abaf2e07ba2fc782562a14b3"
+    },
+    {
+      "path": "backtrader/indicators/contrib/trend_arrows_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "87dc7b62c11a73e5f679b190a01870dd72b4bcd3",
+      "size_bytes": 3564,
+      "sha256": "1a33fcb793902811cc7eca1e75c69ac462de9d13760a55adeafc799de9cabbf1"
+    },
+    {
+      "path": "backtrader/indicators/contrib/trend_continuation_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "d6361c73d9b17fdc35d13df36429d1105f886f17",
+      "size_bytes": 4106,
+      "sha256": "70db15f2288fd39fbd6e522c03a3f93b01957e0ddff47151c642ed1d44e06f0b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/trend_intensity_index_proxy.py",
+      "mode": "100644",
+      "git_blob_sha1": "3e7cb6e89888fdcf5e7aa57e13e3936555579212",
+      "size_bytes": 1646,
+      "sha256": "ff5ec96a77dbe2bb24755fb2f8d20cd1e78f7e19dc724a31d8fd3d5c6acbbffa"
+    },
+    {
+      "path": "backtrader/indicators/contrib/trend_manager_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f9dae89819406d481792efefb563239341a2b900",
+      "size_bytes": 1174,
+      "sha256": "928df9c4015576ab09044d775e10f7906d697fcf7e6641f32ec4664eedb1af2b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/tri_x_candle_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "726c5db319dc0989b7b72d338b49ffa87647a2f9",
+      "size_bytes": 1557,
+      "sha256": "2b51cbf4459c65dac7181d2b140648a01f5c726ef26226bd334d5cb2dc3d192d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/trigger_line.py",
+      "mode": "100644",
+      "git_blob_sha1": "aec49a5559fab49830f801c19a49899b3f255e05",
+      "size_bytes": 2202,
+      "sha256": "f8d3f6905de83a1c90af5f808d5f093708375c3a879b144e3caf89ed11af20a6"
+    },
+    {
+      "path": "backtrader/indicators/contrib/triple_ema_rate.py",
+      "mode": "100644",
+      "git_blob_sha1": "6b60ea01c394e9124d7b2a0068916b4c5beeebd7",
+      "size_bytes": 1007,
+      "sha256": "4925fbd2dcc611727cb6151d74e5418fad79f6d8ae5900b80c690dc980be9250"
+    },
+    {
+      "path": "backtrader/indicators/contrib/trvi_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "a808aefecabda43d0b4a2a1b8d20180767d1b650",
+      "size_bytes": 5796,
+      "sha256": "a40fe08e2baa39d33e33dbd7da929d3e8df136acbc0591b92eebecb673de5db7"
+    },
+    {
+      "path": "backtrader/indicators/contrib/two_pb_ideal_xosma_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "a22b195fe94290a308c87028634a68bc7e62045b",
+      "size_bytes": 4572,
+      "sha256": "386c4aedd6c5914408cd4b29ea0929efc28ecedc5611226946e444737cba5512"
+    },
+    {
+      "path": "backtrader/indicators/contrib/ultra_absolutely_no_lag_lwma_color.py",
+      "mode": "100644",
+      "git_blob_sha1": "e21172a26619cc9251157909db7edf00a3ed3ca8",
+      "size_bytes": 3093,
+      "sha256": "c28497fa8ae87bf25815f61d6068a8338339bb8add27aa10785b27e4cb9dbabc"
+    },
+    {
+      "path": "backtrader/indicators/contrib/ultra_wpr_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "bf94819dfdda9e294e0255ee179e9bc066dea477",
+      "size_bytes": 6184,
+      "sha256": "03043403fcd4926d48f1349b9b71af4e8adfb32f7fd77f5d9b68bb3c218a6565"
+    },
+    {
+      "path": "backtrader/indicators/contrib/up_down_candle_strength.py",
+      "mode": "100644",
+      "git_blob_sha1": "b0186c920437e3dfba632b1410e26f31ba1e67bb",
+      "size_bytes": 2202,
+      "sha256": "30cf3431a15a717802880526724ff059427dfec09d1083bbd9eb21d512b9d85c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/vinin_i_trend_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "cd3f685fb217bafbee6e980f317034e512c85ae5",
+      "size_bytes": 4480,
+      "sha256": "f6b30801d8f1fb26fa8be57045cd219c2e19293556ea132fde06c2431ddc172a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/volume_weighted_ma_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "932a7b47f4d9126a411adda600a915d4bc06a68c",
+      "size_bytes": 2269,
+      "sha256": "0d0e057307f738d1cba1bedcf2bfd88df7dfc6c9544ec83fe10d19d76489c84c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/volume_weighted_ma_st_dev_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "8a68f8272f1a2b98d1379cca89f3c42419e61464",
+      "size_bytes": 3536,
+      "sha256": "a7b508ea7ccef077f2a6bcd91d145ade95173e9757c8dffe1847eae2aafa9a6e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/vwap_close_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "386e2dd72aacc0c8db9ec6e2ff6fbf2e41378530",
+      "size_bytes": 1817,
+      "sha256": "66045bce0e137e9081b959b799825d032a634bdf5c887dfc6865d2f3dad8cb6b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/vwma_candle.py",
+      "mode": "100644",
+      "git_blob_sha1": "ec46e19380a9e33e033e43586dded621281573cb",
+      "size_bytes": 1685,
+      "sha256": "c97e90be4565e90e61c0051c352cdada5f9fd0863e6448dfa9fbf12fc2a8e9d8"
+    },
+    {
+      "path": "backtrader/indicators/contrib/vwma_digit_system.py",
+      "mode": "100644",
+      "git_blob_sha1": "5973dce266aa399da3ca25c58567813b80d10ed1",
+      "size_bytes": 2295,
+      "sha256": "dd397a827455828947b4eeda664f1b802aa481adcc3ef2da866f5c240edf2e88"
+    },
+    {
+      "path": "backtrader/indicators/contrib/wami.py",
+      "mode": "100644",
+      "git_blob_sha1": "2d9848ad26c3065d6e3a8e99183bbe621343e1e1",
+      "size_bytes": 1332,
+      "sha256": "8b114a3dede97e46793e2f5d5bdd5bf5b3eb6629786ae6cb82bb445c4736239e"
+    },
+    {
+      "path": "backtrader/indicators/contrib/wprsi_signal_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "ab1d4cf705583f2aac87668f02440bc3a24804c9",
+      "size_bytes": 3484,
+      "sha256": "043f1e0757253235d0e587d155299417dedc351604b33ea6b254154e1c802e9a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/x_de_marker_histogram_vol_direct_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "0a69a3c35e579cecb34886ee9fffc212818c6109",
+      "size_bytes": 5248,
+      "sha256": "dcb4f1d0ed89647350a028f8860fbea10dffb0dc6a8b95feef2bd421dbeeee37"
+    },
+    {
+      "path": "backtrader/indicators/contrib/x_fisher_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "5a1e716985f6f0f1f7f4bcda8edf0656057f98b7",
+      "size_bytes": 1982,
+      "sha256": "ef2f6d26a315d1e89f24767090c17f982342e3e8581eac0c1778e5b578d2124b"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xcci_histogram_vol_direct_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "3760e4bf3c5494b693f7d402118bcc59025a2a34",
+      "size_bytes": 1979,
+      "sha256": "758536ef64b4eb9850eba5aa8e39decb0fff3e3b26092d77ec86ed98f64c1c2a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xcci_histogram_vol_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f7e0a51fc778f7d5dfad0fc6782bbb38c7ad8b6d",
+      "size_bytes": 2966,
+      "sha256": "7d5ba9cf9d5b45a9027ee12498c6ae02fcf623304b0049a3d749d1686009600c"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xma_ichimoku.py",
+      "mode": "100644",
+      "git_blob_sha1": "403c0afa46090a1f17246c207150db39108ca447",
+      "size_bytes": 5081,
+      "sha256": "a5421456bda9ee9f1422e4d4ce47723fe592af2030ae4ae460bcea715d02b61d"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xma_ishimoku_channel_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "e6ba94cee8c4c72c0f54070f29d0160f9d845622",
+      "size_bytes": 1887,
+      "sha256": "ca136d0081832fe8584993c1d0068a13875b61fc56aa9ee73c5199b27afc4d39"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xma_ishimoku_line.py",
+      "mode": "100644",
+      "git_blob_sha1": "3ac966a8abaa9180114479689469811aab95365a",
+      "size_bytes": 1975,
+      "sha256": "d9766cdb6a777d775acb2e8f86e5c732038718450fb21d6078b2e27b4d90f9aa"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xma_range_bands_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "94eae2f60788a19b9229baf74e4fbd77c49b30a3",
+      "size_bytes": 3652,
+      "sha256": "e5fbda96e5c9834e0d43c60b9a6849262f542e13a2894253e6368bbbeb236523"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xmacd_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "93c70d3dac51384d9259247eee9810d20654d219",
+      "size_bytes": 2405,
+      "sha256": "4f1f5bf63624d054807384fdd0999b36c189e917297d237dfc4e966740353e37"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xrsi_de_marker_histogram.py",
+      "mode": "100644",
+      "git_blob_sha1": "d15736b3461b1a2a114bb3543b44e974dbd123cd",
+      "size_bytes": 2140,
+      "sha256": "f0f20fd85c13518f7af13556edc7dd0ada836dc50866f638ebdd06778e4d7a9a"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xrsi_histogram_vol_direct_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "fd7a7922a76553abedb6e332a07fea9840576e14",
+      "size_bytes": 1864,
+      "sha256": "f3f2cad76e157e8333f93dd62ccf456b84f1e94f7c68148cda0700c33ab28e8f"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xrsi_histogram_vol_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "d9a9d3d3907fb6fda15a63baf24037e361bfaab5",
+      "size_bytes": 2885,
+      "sha256": "0ff3a71e4043ff6f8df37f027094731d43fe46baf2d387c0384d8da18b5e09b5"
+    },
+    {
+      "path": "backtrader/indicators/contrib/xrvi_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "802471b92932e28a6734f626a62ae765c916d2b0",
+      "size_bytes": 4978,
+      "sha256": "f7d92ae2e5767b9d1904775c80acb82457364de4c35a95b5de53d96070a47540"
+    },
+    {
+      "path": "backtrader/indicators/contrib/zero_lag_macd.py",
+      "mode": "100644",
+      "git_blob_sha1": "52cb36ac1d009d4bdd433d2a2d6c94963543b1bb",
+      "size_bytes": 1135,
+      "sha256": "9c4efc84733deee33c768853e79e7ee1cf9f9ecd58be9e76ae18348989c76839"
+    },
+    {
+      "path": "backtrader/indicators/contrib/zig_zag_recent_pivot_signal.py",
+      "mode": "100644",
+      "git_blob_sha1": "c13bef41a1c6d300e5d1127ec3d991f968c23adf",
+      "size_bytes": 3337,
+      "sha256": "954931401ac8239c101cb8755882016957246c21cafd8a96e9ea5d0961384e75"
+    },
+    {
+      "path": "backtrader/indicators/contrib/zpf_indicator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f815af65e2fe5e6b582f37911ec20567c7099401",
+      "size_bytes": 3896,
+      "sha256": "d2d6fb3247009a5059203266c08090f71358467975c4ed3e6dc4bd2d422d51d4"
+    },
+    {
+      "path": "backtrader/indicators/crossover.py",
+      "mode": "100644",
+      "git_blob_sha1": "757a71b97d298db7cd8ee22ccebe716ecbffacd7",
+      "size_bytes": 13303,
+      "sha256": "cc02cda9b638a6249b2f83b49b17c00a6be2d3408e6f677cdf9b859108ae436b"
+    },
+    {
+      "path": "backtrader/indicators/dema.py",
+      "mode": "100644",
+      "git_blob_sha1": "fb5f6b4be8dd2aa62412b9afb11b6691ec580a1b",
+      "size_bytes": 5592,
+      "sha256": "34dd06225a053cbe21a21fab02cf1ff3799d4877480ea3e505bfd717150fc808"
+    },
+    {
+      "path": "backtrader/indicators/demarker.py",
+      "mode": "100644",
+      "git_blob_sha1": "7fc69f75baea3d26295d2af05d7583fe7759887c",
+      "size_bytes": 10266,
+      "sha256": "0a8828ccfd2d1d69f768b26e6c1f34a56dccb8691b857386d99b0c8cb50680dc"
+    },
+    {
+      "path": "backtrader/indicators/deviation.py",
+      "mode": "100644",
+      "git_blob_sha1": "c791bc9ae7831495284db31dd2f8cf11a8518556",
+      "size_bytes": 9078,
+      "sha256": "90b9c53efa233eeba174af081072e2dc3f04dfc397b72f9a01c9c0dbfee885f6"
+    },
+    {
+      "path": "backtrader/indicators/directionalmove.py",
+      "mode": "100644",
+      "git_blob_sha1": "058ef87b728e1bbdadc3970e2e5af8bfc98f82ea",
+      "size_bytes": 37301,
+      "sha256": "637a08750f8a988764f1b6f4e7dcc466f6898cd6b124552e5c3fdfbd673a42f0"
+    },
+    {
+      "path": "backtrader/indicators/dma.py",
+      "mode": "100644",
+      "git_blob_sha1": "37d66499f21036706702e80cd4f956707d9d9239",
+      "size_bytes": 3464,
+      "sha256": "6427a30f8540c0713c5791c00dc5c449bb73f45f08acb5918a3b0e157b2983cc"
+    },
+    {
+      "path": "backtrader/indicators/dpo.py",
+      "mode": "100644",
+      "git_blob_sha1": "acaa2f5034a382d0798cba5bbd566d54500ada00",
+      "size_bytes": 2815,
+      "sha256": "06f3bad086d6e8e5c5f7d93f4186b247eb2a64a40927878a709d45a2525800a4"
+    },
+    {
+      "path": "backtrader/indicators/dv2.py",
+      "mode": "100644",
+      "git_blob_sha1": "cbc783e0d44d5b8cc46608dfba111c5bb63cc4e9",
+      "size_bytes": 1394,
+      "sha256": "ada3c75867ac6c40e8516ea4c10b366cf7b951a2f6b70b25cf08ede14f15dcee"
+    },
+    {
+      "path": "backtrader/indicators/ema.py",
+      "mode": "100644",
+      "git_blob_sha1": "e9c6fda8d5ac1b5669742f4964afb81751293bad",
+      "size_bytes": 4524,
+      "sha256": "426f03ab6c4fd60db37aa39e8f6de175ee5bdd54944834eac5a88aa0e53c23f5"
+    },
+    {
+      "path": "backtrader/indicators/envelope.py",
+      "mode": "100644",
+      "git_blob_sha1": "b46b1a72cef30cc2c6bbf652920f3485b6b6f7b8",
+      "size_bytes": 14512,
+      "sha256": "1629ba84bf52b6d241058cc56e410f8422f33706dd1c75488fc0c1409f1e10dc"
+    },
+    {
+      "path": "backtrader/indicators/hadelta.py",
+      "mode": "100644",
+      "git_blob_sha1": "4575a3f73e317f03fa63e21cd21cbd2a95e1efe7",
+      "size_bytes": 6137,
+      "sha256": "7548424586f5a3ab7ba91db0b7a0903c9580f056a0f676c7319eeec6fa9e8897"
+    },
+    {
+      "path": "backtrader/indicators/heikinashi.py",
+      "mode": "100644",
+      "git_blob_sha1": "2ab1780511df55629a2011df8cc2f5ba303ec416",
+      "size_bytes": 4980,
+      "sha256": "f8fdc77b5564da2c02eabd27e67325c8f62d98e15ffb57596ac0d6832bfee8f0"
+    },
+    {
+      "path": "backtrader/indicators/hma.py",
+      "mode": "100644",
+      "git_blob_sha1": "66d0ecaa1bee6ae73597842a48b8dcdd5cb0090f",
+      "size_bytes": 5173,
+      "sha256": "534fbd406a8e3fe0d5fb2e0967f873131f04c8ee5808c844b299708bb1cb7e68"
+    },
+    {
+      "path": "backtrader/indicators/hurst.py",
+      "mode": "100644",
+      "git_blob_sha1": "ad4790c155e1ed52b072709227e3403818a53e48",
+      "size_bytes": 5269,
+      "sha256": "c2273b55b2e9c579245593f9198b1b932844ba620578aebf76233cb116394c86"
+    },
+    {
+      "path": "backtrader/indicators/ichimoku.py",
+      "mode": "100644",
+      "git_blob_sha1": "96f7b5b6fb3330e3d1e04038cb8903ce02a67b50",
+      "size_bytes": 10234,
+      "sha256": "eb08cffee3e4d1e0969a2488e1b77679c4c888bab9dda93548347c0917953cc1"
+    },
+    {
+      "path": "backtrader/indicators/kama.py",
+      "mode": "100644",
+      "git_blob_sha1": "2e00cd889275eb411d4654717b7b4e0754bbc2a1",
+      "size_bytes": 5856,
+      "sha256": "5c4d0357973dd3bc56bf7606873ec35c0bec58138b998ce2de7efec4f1e3793b"
+    },
+    {
+      "path": "backtrader/indicators/kst.py",
+      "mode": "100644",
+      "git_blob_sha1": "b63873d2ed75bf71f5c97ccceb5bb8ab60c11998",
+      "size_bytes": 5359,
+      "sha256": "b41d0a5a32bc29ae11e22a22564f10510916eb7a17354f9a9139fced2aa2c22a"
+    },
+    {
+      "path": "backtrader/indicators/lrsi.py",
+      "mode": "100644",
+      "git_blob_sha1": "affa23d710f09287dbfb8bb44fb0e2333d90349e",
+      "size_bytes": 3637,
+      "sha256": "abde989678ef5444cabf62a94031bc549f3ce2075680127608dc31f04c213a5c"
+    },
+    {
+      "path": "backtrader/indicators/mabase.py",
+      "mode": "100644",
+      "git_blob_sha1": "4e6422ce89b4c2634191300f82e1a361cef680ab",
+      "size_bytes": 5335,
+      "sha256": "95e368014e752c6f788fcae79b9d9e5c32292e4924061a5c777de04834e77765"
+    },
+    {
+      "path": "backtrader/indicators/macd.py",
+      "mode": "100644",
+      "git_blob_sha1": "befe7113c13731b674a75d6ff8e48634404f9848",
+      "size_bytes": 10540,
+      "sha256": "9fd73fbd901ea8c7eedb9cafed0582062ba3f5085693a7c61837c7bbd949972f"
+    },
+    {
+      "path": "backtrader/indicators/momentum.py",
+      "mode": "100644",
+      "git_blob_sha1": "d40ef92732bb6c5efd84dffb6d4fcb3ea9b39f0f",
+      "size_bytes": 7397,
+      "sha256": "a1aa5270ba58b21abc2dcf0c1ba95b5ca0088d5417f8055be8091962c4a46864"
+    },
+    {
+      "path": "backtrader/indicators/moneyflow.py",
+      "mode": "100644",
+      "git_blob_sha1": "9d12a49e15af6f51c8430fa7a52738f59dc79d4f",
+      "size_bytes": 8902,
+      "sha256": "49a032e256b1699db76b8712c9da50257f19b3df119144c4db421dd04c02ac49"
+    },
+    {
+      "path": "backtrader/indicators/mt5atr.py",
+      "mode": "100644",
+      "git_blob_sha1": "66585f1f6945cbebd38cc485f4dab6a5ecba6f13",
+      "size_bytes": 4333,
+      "sha256": "1afcf8528705f16b94679b7055ecbab4c6bf8ba6c4516d2f9ed9b720b8244962"
+    },
+    {
+      "path": "backtrader/indicators/myind.py",
+      "mode": "100644",
+      "git_blob_sha1": "585071ac2a4e9e6bbae8a104b3c3c9a1a6e03b4c",
+      "size_bytes": 5776,
+      "sha256": "2ae12a5942a0eb343fca1dac1afeaed265020973ae1c9ef4fe80af3c8d53ca66"
+    },
+    {
+      "path": "backtrader/indicators/obv.py",
+      "mode": "100644",
+      "git_blob_sha1": "75ad476367d755995f1e2a69abb5f5c7ccb2cc3c",
+      "size_bytes": 2639,
+      "sha256": "e149905e5e22c4318c77504026d3ba23b31a036ea0190a1463242943816ad8a6"
+    },
+    {
+      "path": "backtrader/indicators/ols.py",
+      "mode": "100644",
+      "git_blob_sha1": "b6f9c8a89c5b6e0f18a33249221c11455b20f0a3",
+      "size_bytes": 8547,
+      "sha256": "6ba3d937dae3f7933b33937e3b15a65a1d0f2d3c235a82e23001553b4264d4e4"
+    },
+    {
+      "path": "backtrader/indicators/oscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "fdbc3e989e1f8f6f86ae4af99ef21a10245773e5",
+      "size_bytes": 5068,
+      "sha256": "e95b339db4e9c95032e30cf20366d999c9c08de0483ead8c153a4ea470e1f0da"
+    },
+    {
+      "path": "backtrader/indicators/percentchange.py",
+      "mode": "100644",
+      "git_blob_sha1": "825ef74d6e284a429cc27bb2064d806b1128546a",
+      "size_bytes": 2368,
+      "sha256": "724c2305d285e675e8981a3dbec3e143d896f6f387ddf477ba875aa5841b3083"
+    },
+    {
+      "path": "backtrader/indicators/percentrank.py",
+      "mode": "100644",
+      "git_blob_sha1": "d8e72804af92a9cf6873f92cc139001b4696cf1c",
+      "size_bytes": 1172,
+      "sha256": "7ac0637954bc1766f5c3cf813b9143e932b3e462b2f77702ad34bfdc3c7f3173"
+    },
+    {
+      "path": "backtrader/indicators/pivotpoint.py",
+      "mode": "100644",
+      "git_blob_sha1": "472356739e2175ff60e79cce27941231842a74da",
+      "size_bytes": 15338,
+      "sha256": "f563209fa8daa4606c7e289337d93c898f372b5b6991da77e70acad880a52b2f"
+    },
+    {
+      "path": "backtrader/indicators/prettygoodoscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "fee8c6ba9965dbd4b0294c835b0972133fe657f1",
+      "size_bytes": 3550,
+      "sha256": "1e6e933fbdbf904dc0263436b403cab66018f22093a561d9061ac56bda772de5"
+    },
+    {
+      "path": "backtrader/indicators/priceops_ext.py",
+      "mode": "100644",
+      "git_blob_sha1": "81bf63a09aa4141b0d0b4736fdb365139039279c",
+      "size_bytes": 3891,
+      "sha256": "e5050951a851fb0ead8598630d768d110d478e4e994d0fb9ff9e478d85873623"
+    },
+    {
+      "path": "backtrader/indicators/priceoscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "913047a5449571f8943fdd63357eef465f7bc2c6",
+      "size_bytes": 7976,
+      "sha256": "9d32c4521b7dd012b36f4cf723357eb875997a67f4eb0738994072f0ffdb0955"
+    },
+    {
+      "path": "backtrader/indicators/psar.py",
+      "mode": "100644",
+      "git_blob_sha1": "25d083ed564242b50db5aec2d573c535e1056424",
+      "size_bytes": 7208,
+      "sha256": "8a011239424d4d4ef4bfa973e67f2bb97975c59d606bf0d7031035b5643fd9c3"
+    },
+    {
+      "path": "backtrader/indicators/rmi.py",
+      "mode": "100644",
+      "git_blob_sha1": "2dc47c12e6dfaa8998d51668a80ec9ce3ee3f740",
+      "size_bytes": 2144,
+      "sha256": "c5991c31c0f8874c82be9f006c29dd61075f2948f87b55e0550c47de16161dec"
+    },
+    {
+      "path": "backtrader/indicators/rsi.py",
+      "mode": "100644",
+      "git_blob_sha1": "aac3e31d296ca65a0f38cc16db3d6b66c983e17f",
+      "size_bytes": 12275,
+      "sha256": "dbca74882b9ffd3fa6be10d001a81d314005b145f7246232a13773eb9bf96ac1"
+    },
+    {
+      "path": "backtrader/indicators/sma.py",
+      "mode": "100644",
+      "git_blob_sha1": "e225ee5d00929b225f753d89e721524055dca5a0",
+      "size_bytes": 4858,
+      "sha256": "10bc3ce3ea5d027060c4bc315051a0752d89bc973e2244ec7a036ac27c058b74"
+    },
+    {
+      "path": "backtrader/indicators/smma.py",
+      "mode": "100644",
+      "git_blob_sha1": "660a974b8b74d0efea7cf3b5736a38ebdc3d68d8",
+      "size_bytes": 3673,
+      "sha256": "0e5606551d127f13462f5b7333c1b47057ea58304cc85276a5f6f05a5dbb2525"
+    },
+    {
+      "path": "backtrader/indicators/spread.py",
+      "mode": "100644",
+      "git_blob_sha1": "0b3f06647e65973c8c847ebfbf8bf1e608641df5",
+      "size_bytes": 1873,
+      "sha256": "a9415f668fa5462a209487ecbb7bf9651f0db30582f5ec035f4700058deca691"
+    },
+    {
+      "path": "backtrader/indicators/stochastic.py",
+      "mode": "100644",
+      "git_blob_sha1": "fc2a87b1cefd79c0ea9bab2dc469147de0d5f1ad",
+      "size_bytes": 7673,
+      "sha256": "8df02574951ded68f90af5f7a049be968924c3a92608c75445ef8012d68366d7"
+    },
+    {
+      "path": "backtrader/indicators/supertrend.py",
+      "mode": "100644",
+      "git_blob_sha1": "d5bb3063cf28039d51e857698bd6795c1b558f64",
+      "size_bytes": 17185,
+      "sha256": "db0cb6704f2e09e91fdcaa6f815d24c50ceacd0ac391023fa2eac3c1a4d3e804"
+    },
+    {
+      "path": "backtrader/indicators/trend_ext.py",
+      "mode": "100644",
+      "git_blob_sha1": "27011846d8d1972285ec5e0d001972055bdc2339",
+      "size_bytes": 3785,
+      "sha256": "07f7b9e0e0d195e3d638c9ef3b65b3a01a07545b5319162b8a0a6e0f70d323e7"
+    },
+    {
+      "path": "backtrader/indicators/trix.py",
+      "mode": "100644",
+      "git_blob_sha1": "f7ab4fc7bd52814b43e86350b47d4aa37dab30b3",
+      "size_bytes": 6340,
+      "sha256": "6854281b681f864c4c01d3b901e3ea7c6d793a8c38f5f289dc15ba4389f28057"
+    },
+    {
+      "path": "backtrader/indicators/tsi.py",
+      "mode": "100644",
+      "git_blob_sha1": "6b17dbcf46b7de30d02789758946c92843d42f14",
+      "size_bytes": 4869,
+      "sha256": "175a2bbeacfe8902307be33965e4b87e4bab58d0f5d5a230d0a9a1de006d75e3"
+    },
+    {
+      "path": "backtrader/indicators/ultimateoscillator.py",
+      "mode": "100644",
+      "git_blob_sha1": "d2a3d6b0bfc7ddc2fb696e429d07ec9cec5108f8",
+      "size_bytes": 5212,
+      "sha256": "bd45e4bec7409710a8144b1981c956ccc3e9f0079b49223215481c6e61b3777c"
+    },
+    {
+      "path": "backtrader/indicators/vortex.py",
+      "mode": "100644",
+      "git_blob_sha1": "4f9c7a05075f202484defc1ea628334c12dc1518",
+      "size_bytes": 1726,
+      "sha256": "3815acc57221202adafbe7ade666e53b67172bdea322fdf88231e3fc4b23a560"
+    },
+    {
+      "path": "backtrader/indicators/williams.py",
+      "mode": "100644",
+      "git_blob_sha1": "e8a6c0bfdc8397dd52b00e49cb145bb487315f97",
+      "size_bytes": 6001,
+      "sha256": "7711667047494f675d2d843bbb72962a0a86d1ce42bfc5a87e858c12639bd0fb"
+    },
+    {
+      "path": "backtrader/indicators/wma.py",
+      "mode": "100644",
+      "git_blob_sha1": "66d6af2fd3b62b682d76a374e74da41593f87c3d",
+      "size_bytes": 3306,
+      "sha256": "f541654644df5abf0447874727232280abad07301d1cf8b94db65132357c13d0"
+    },
+    {
+      "path": "backtrader/indicators/zlema.py",
+      "mode": "100644",
+      "git_blob_sha1": "b39109dcf5f48cf9433580d4200c8de43465be89",
+      "size_bytes": 4186,
+      "sha256": "14f3adb2470c1aed7d158165ff22da58b10b51259abc03c7e3808b67305f6ac9"
+    },
+    {
+      "path": "backtrader/indicators/zlind.py",
+      "mode": "100644",
+      "git_blob_sha1": "747fffc3a56b26d4896449f2f406842128ab8697",
+      "size_bytes": 3260,
+      "sha256": "83a483cfdc21df72ba8c910fa2d44d62f2291193bb623477d35004282c41dd3e"
+    },
+    {
+      "path": "backtrader/linebuffer.py",
+      "mode": "100644",
+      "git_blob_sha1": "957f7d7e0d4867d408c766050aa8c537668db8e2",
+      "size_bytes": 126202,
+      "sha256": "e1aa38d9aed9430cc6fbc300c391ca6caeb492e029e6d7a0f9ba74f597b92f35"
+    },
+    {
+      "path": "backtrader/lineiterator.py",
+      "mode": "100644",
+      "git_blob_sha1": "7dfa16fceeba6ea78b80e68ffcb1dbdb3d6b6749",
+      "size_bytes": 114158,
+      "sha256": "30700a89eb9df793a676713e155de2858817ef7fb5367981f9e6ff317decd541"
+    },
+    {
+      "path": "backtrader/lineroot.py",
+      "mode": "100644",
+      "git_blob_sha1": "27a39820a72c88c178da9ecc8f79a8d5e9caf5e7",
+      "size_bytes": 42889,
+      "sha256": "31715f0feb8a23d9b401fd067b253f8ceacaa4708de5c1680abfb7bf676c5290"
+    },
+    {
+      "path": "backtrader/lineseries.py",
+      "mode": "100644",
+      "git_blob_sha1": "7368c0048c05dc99ef5915e7ef001ab7fed15556",
+      "size_bytes": 93619,
+      "sha256": "492ca9ee5a88057e821e41401d8954a5d5e9a645847ba852553a879875e02249"
+    },
+    {
+      "path": "backtrader/live_trading/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "07a8c4faeff6b45b2f7be91f99375707086bed89",
+      "size_bytes": 501,
+      "sha256": "570cc48aeffea0d79edcd5b028debdb31bb646570fcf7054917e1215eaeda583"
+    },
+    {
+      "path": "backtrader/live_trading/interface.py",
+      "mode": "100644",
+      "git_blob_sha1": "0d57c3efc0c7bab945efb5a2a92cc34c97a6b4ca",
+      "size_bytes": 13029,
+      "sha256": "5972157b24a754000cdd248be30551678a594baeb11e919ade18c750d9fabbc8"
+    },
+    {
+      "path": "backtrader/mathsupport.py",
+      "mode": "100644",
+      "git_blob_sha1": "6c459866e1e3d57dcab3c2bb3e87c445fac4a98b",
+      "size_bytes": 3119,
+      "sha256": "bc57cdf8f44e3da7b6bcf5b5c350f3775fa0f24db8d099035054419ba7256a32"
+    },
+    {
+      "path": "backtrader/metabase.py",
+      "mode": "100644",
+      "git_blob_sha1": "7c6b480c7b14582c307c34d8df6331165f3eff38",
+      "size_bytes": 75883,
+      "sha256": "d28e098e66891b0a9cd55e3857030e23d24f1df5cfb80371d9a666bfcb865a8d"
+    },
+    {
+      "path": "backtrader/mixins/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "e4577ce7ed194586d39e72d454f56e279f79f568",
+      "size_bytes": 479,
+      "sha256": "3326f72985bad1157ea7f6726eaa56037d5f8be3498af80f7123defd71d54725"
+    },
+    {
+      "path": "backtrader/mixins/singleton.py",
+      "mode": "100644",
+      "git_blob_sha1": "e39ac34d65447448b01af1ed4b780ad228b5746a",
+      "size_bytes": 3838,
+      "sha256": "07fd414a3132dba25dd8188ef648e83ecf184e516512808956108d77e0e81838"
+    },
+    {
+      "path": "backtrader/notifications/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "c5d9b947c92fa62c7ba66626f82f68779a1f29f8",
+      "size_bytes": 6157,
+      "sha256": "d0da7448906aa0e628d2e985b857a8c24ab4e6f2f3507417fc99aab8c0b7f7fb"
+    },
+    {
+      "path": "backtrader/notifications/_windows_anchor.py",
+      "mode": "100644",
+      "git_blob_sha1": "d23d40f152911e201d80ae5c7e7e86fbc618d07d",
+      "size_bytes": 37453,
+      "sha256": "6b9670eda097e214974aead79f539ad490967740f7465f96221af3f692964657"
+    },
+    {
+      "path": "backtrader/notifications/adapters.py",
+      "mode": "100644",
+      "git_blob_sha1": "b991f786f1d0ce9b98092a1bd2eff7e6f92479fa",
+      "size_bytes": 15713,
+      "sha256": "fc0f14be60fa05c7baa3467704d0ede6cd14824855cf1ed8206787786142932d"
+    },
+    {
+      "path": "backtrader/notifications/channels.py",
+      "mode": "100644",
+      "git_blob_sha1": "11e028f3d62ba0d7f89cf9dae5ae4828a6ec2c7c",
+      "size_bytes": 31631,
+      "sha256": "d4713a34c52a7f09f1fb59b702ed2362a9877ad3e966683b7a559943316073f4"
+    },
+    {
+      "path": "backtrader/notifications/config.py",
+      "mode": "100644",
+      "git_blob_sha1": "f178c6edfa5487215ad3380511a59fa7a516f7ce",
+      "size_bytes": 21496,
+      "sha256": "c9195a9dd87a9a2b8ee78cfa1193a38a9bc0ce7d87d707907d0fabea187c0735"
+    },
+    {
+      "path": "backtrader/notifications/core.py",
+      "mode": "100644",
+      "git_blob_sha1": "d0f4c054d704746789896d9d6668ba0af7a7b473",
+      "size_bytes": 30393,
+      "sha256": "a02b488a58c2cc1799f6cf9224883edeebf6420b9187b8cc37cace47feffa66c"
+    },
+    {
+      "path": "backtrader/notifications/security.py",
+      "mode": "100644",
+      "git_blob_sha1": "d0c634ed49495988c4a18a5158acaa3c6b585dbb",
+      "size_bytes": 2381,
+      "sha256": "c0560c3594e35c941bfa7548495cf084f22ae7b51ee0d465259dbc83a7d04184"
+    },
+    {
+      "path": "backtrader/notifications/session.py",
+      "mode": "100644",
+      "git_blob_sha1": "65ed4d3ed1f10f055d0a2445e6eafbd66bdf0442",
+      "size_bytes": 26700,
+      "sha256": "bc9fcee20d80d1a96131fff96033b3578ea424b5c9af97c18f79ae3ea03b5768"
+    },
+    {
+      "path": "backtrader/notifications/signatures.py",
+      "mode": "100644",
+      "git_blob_sha1": "0cd46d5e1bb4cbefe8cb0f6f68bd50b0f7911fab",
+      "size_bytes": 3072,
+      "sha256": "f6ff3f16a65fc65ffb9842c09fb319f3300e86d77e2685170b3ab265cc6fac44"
+    },
+    {
+      "path": "backtrader/notifications/transport.py",
+      "mode": "100644",
+      "git_blob_sha1": "a7bac4603bb4ab7d7e8675113ee5ef4315476c01",
+      "size_bytes": 10258,
+      "sha256": "66456a19bad2b297bcfe6d534613e7ddfbadd8ba0ab81497872840a412f98c2b"
+    },
+    {
+      "path": "backtrader/observer.py",
+      "mode": "100644",
+      "git_blob_sha1": "f89fdb4b7bb62a28437f0f6fed1e25de606d383d",
+      "size_bytes": 3673,
+      "sha256": "23f365a7db07bc4e4efca84aa5d55ed4dfd489e063598887df074a0659462487"
+    },
+    {
+      "path": "backtrader/observers/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "ae660d4aa5bb70dae861dba9964277fa2db3155a",
+      "size_bytes": 1476,
+      "sha256": "5f85a5e9a81945dfd492abf80b3d70fd2e430ba4cf2236fab80049b5ce53789d"
+    },
+    {
+      "path": "backtrader/observers/benchmark.py",
+      "mode": "100644",
+      "git_blob_sha1": "666a8cee5b26634c8fc5f8f03b769c565a2fc19b",
+      "size_bytes": 4128,
+      "sha256": "d3fc315e3336bc8a1051a028f848f94bd519c6cd6c938a6052c6a3293d01ec88"
+    },
+    {
+      "path": "backtrader/observers/broker.py",
+      "mode": "100644",
+      "git_blob_sha1": "b987b8ec19fd7ae963a517bd3dd22fcf6a7ec82a",
+      "size_bytes": 4529,
+      "sha256": "a5b2eb1eb5b5ecdc4a1f9b5a3f997d687e33ceaecbc5f7b608665bb184a4709d"
+    },
+    {
+      "path": "backtrader/observers/buysell.py",
+      "mode": "100644",
+      "git_blob_sha1": "2cebdcf4dffe688939d75e27dcc3da2f095845a3",
+      "size_bytes": 4557,
+      "sha256": "d4177845674c1387e90866de8ce9a32c58ac44017776dacaf2f690693839f015"
+    },
+    {
+      "path": "backtrader/observers/drawdown.py",
+      "mode": "100644",
+      "git_blob_sha1": "8a327c2e48ac01b07821753aaa8fde0a5d4fec30",
+      "size_bytes": 4061,
+      "sha256": "c7baf631efb504974afdbbaf9974880d86779853a433d9974845a9d5c78a735e"
+    },
+    {
+      "path": "backtrader/observers/logreturns.py",
+      "mode": "100644",
+      "git_blob_sha1": "64b32913ebae6a898e493bdc05b795534ea2e752",
+      "size_bytes": 3235,
+      "sha256": "1891ad8fd0fb2f32d7f53d25f7367f4e3313352ea3f0a501a3afa0ed7acf5bd2"
+    },
+    {
+      "path": "backtrader/observers/timereturn.py",
+      "mode": "100644",
+      "git_blob_sha1": "46725301b2bbc0e1178f0d27e74a20aa59bc259e",
+      "size_bytes": 2693,
+      "sha256": "2ea9493a29f25086679c4f0d8549215a9fd82e9d5988318a8193838d26c85364"
+    },
+    {
+      "path": "backtrader/observers/trade_logger.py",
+      "mode": "100644",
+      "git_blob_sha1": "32f8439edfb8d5d346abfba0528f7a5cd986ee20",
+      "size_bytes": 134254,
+      "sha256": "9700bf8ab0de0a1b36786cd2ba5c085b387378f597fe64b085d022ee33187a3c"
+    },
+    {
+      "path": "backtrader/observers/tradelogger.py",
+      "mode": "100644",
+      "git_blob_sha1": "e07b0bdbaebca002e1171696d9f211f2454a520e",
+      "size_bytes": 159,
+      "sha256": "38eb12c31c7961e4afb3e013d716fbcf05d0935f186ce63e4604ebeed2fcf3da"
+    },
+    {
+      "path": "backtrader/observers/trades.py",
+      "mode": "100644",
+      "git_blob_sha1": "654b50b529a2ae417a4539656789e1661b68a0f4",
+      "size_bytes": 7278,
+      "sha256": "ca1389cd5e3ae75ed9b527b73278777d5eea110aaab9a84364c8e9b1f815202a"
+    },
+    {
+      "path": "backtrader/order.py",
+      "mode": "100644",
+      "git_blob_sha1": "6257ed8013c4da334ccc9d3bb4e5ecabc6d47df7",
+      "size_bytes": 38069,
+      "sha256": "717b980d2afdf0a6a335b1071b867a73fee7a6e3fef019577a800f166b56ab19"
+    },
+    {
+      "path": "backtrader/parameters.py",
+      "mode": "100644",
+      "git_blob_sha1": "d0bd634e02f2f33d8859fbd83471735f1ae82552",
+      "size_bytes": 87424,
+      "sha256": "12fb2a24cb69cb6fedf2547380288ee928ae0634fbf90392b8419eeb83908e9e"
+    },
+    {
+      "path": "backtrader/plot/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "d4d3546c4e013b51f8ddef05353aa42cfeb66d51",
+      "size_bytes": 1536,
+      "sha256": "2810c46ddcb78c411770a53998a96abba4cd71ff87ee6bbb092e04d63398bb97"
+    },
+    {
+      "path": "backtrader/plot/finance.py",
+      "mode": "100644",
+      "git_blob_sha1": "6124ee0e123bbb1ce7ab206db060bf24b7ade04a",
+      "size_bytes": 34708,
+      "sha256": "5ea679af54e4d79f7dc1a08f370cb94c05939d16a202c0ca1260dd82ec4015e4"
+    },
+    {
+      "path": "backtrader/plot/formatters.py",
+      "mode": "100644",
+      "git_blob_sha1": "100a5e5744535dd4a3c86a57891a9f304eed4d6e",
+      "size_bytes": 6721,
+      "sha256": "a7c2b6a2c5116dde1a6b35eee5d5663880c52e86eb1cd401326599f0229bdab6"
+    },
+    {
+      "path": "backtrader/plot/locator.py",
+      "mode": "100644",
+      "git_blob_sha1": "f23308f309a5f6608917c9414e262f18708cc8ae",
+      "size_bytes": 12116,
+      "sha256": "749f44ae1cc1748d87cafd66e41b87ef36d0f5c60e4df0b8f392a22a3edee000"
+    },
+    {
+      "path": "backtrader/plot/multicursor.py",
+      "mode": "100644",
+      "git_blob_sha1": "614b63a8ae49a4be1339128669c2f42032cb2446",
+      "size_bytes": 18349,
+      "sha256": "d2e6c0759c933963bebd2099141cc8a55c0705136d215c4310c688edfdc0b640"
+    },
+    {
+      "path": "backtrader/plot/plot.py",
+      "mode": "100644",
+      "git_blob_sha1": "6965ee83549384e4b0914c08f35fa953204d5948",
+      "size_bytes": 99811,
+      "sha256": "14558e589753cb42be4b2e71aab20cecc51d09f6d70938d3911db921dc78f740"
+    },
+    {
+      "path": "backtrader/plot/plot_plotly.py",
+      "mode": "100644",
+      "git_blob_sha1": "c5fe24ffebca2aad4193029539a1721307546964",
+      "size_bytes": 46462,
+      "sha256": "4cceab3d849337b322d0acb27da0b757f2329d492f6ba96c7248af6d4d641edd"
+    },
+    {
+      "path": "backtrader/plot/scheme.py",
+      "mode": "100644",
+      "git_blob_sha1": "78f2b70f95b89fbfc003f98363df82e9ac6db3f1",
+      "size_bytes": 9030,
+      "sha256": "f9695848b9bbf5946efa9fcc269f52818f4ea60dddd7afce725bfee7547c3b3f"
+    },
+    {
+      "path": "backtrader/plot/utils.py",
+      "mode": "100644",
+      "git_blob_sha1": "412e4ffb8e05d3ebb8740e310a715bfefc3df878",
+      "size_bytes": 2715,
+      "sha256": "ae9b630421c0e9afd42fda6a8b8827106b042b8cc57a11d6698d3bc8dbb2b914"
+    },
+    {
+      "path": "backtrader/position.py",
+      "mode": "100644",
+      "git_blob_sha1": "14623f69caed08d6f044a2dc86a13c1de37e6559",
+      "size_bytes": 11583,
+      "sha256": "b921772e74628a50e3dfe68a523e4211f1ec15b056a4a86a9a9cde8013d790f1"
+    },
+    {
+      "path": "backtrader/position_modes.py",
+      "mode": "100644",
+      "git_blob_sha1": "83e4f4584ee9a494dbcd15eb7d60ee91eb4284ca",
+      "size_bytes": 4435,
+      "sha256": "39ac191740d36a46ba8f3f003bff8ac17ecb1fadee878660763a7522f79f576c"
+    },
+    {
+      "path": "backtrader/profiles.py",
+      "mode": "100644",
+      "git_blob_sha1": "00ae90268ab1ec18eaa08baba730a368b4e72818",
+      "size_bytes": 10899,
+      "sha256": "8680d8811ba20dc4ed2696b8f3671d810ac04dbfc6cc768fd2bef7b90735cfe3"
+    },
+    {
+      "path": "backtrader/reports/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "861e5661233476beeb872eca15bd0f6c09548bfc",
+      "size_bytes": 1027,
+      "sha256": "cf6824270527b5cd98d03452704832b279a803ca288c2fa88c326be6a69173b7"
+    },
+    {
+      "path": "backtrader/reports/charts.py",
+      "mode": "100644",
+      "git_blob_sha1": "9039ead6d9748fd7b4bdc623953023355e42a3ba",
+      "size_bytes": 11633,
+      "sha256": "11cb897d5ff899be10e033df108444920a0fe8fbf2403f5b41f7bb84e1acec72"
+    },
+    {
+      "path": "backtrader/reports/performance.py",
+      "mode": "100644",
+      "git_blob_sha1": "be913a3360d6e7a2f72837ddb0b1f4b825736f72",
+      "size_bytes": 22353,
+      "sha256": "eeeec80b3c74b0baa6df1b7c61d4476d7c1ad58442a288a8f9f2c809f05d2392"
+    },
+    {
+      "path": "backtrader/reports/reporter.py",
+      "mode": "100644",
+      "git_blob_sha1": "09463a968009757125a36b8c97f8a963af4a0ccc",
+      "size_bytes": 22152,
+      "sha256": "cb1baad648f5b5bc3e97f081a7f101ffcd650efc3c4805b65520459a801e3b06"
+    },
+    {
+      "path": "backtrader/resamplerfilter.py",
+      "mode": "100644",
+      "git_blob_sha1": "7e8d4c6599f2eaad91654032eb52e1bb90a7eee2",
+      "size_bytes": 37732,
+      "sha256": "c56d624aeafa20932b0cc2e79bba0bca81a8b636df59995a7452c9daba0a9ed2"
+    },
+    {
+      "path": "backtrader/runtime/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "d0d45beabc42d26f8ce163138d50899abe57f6bb",
+      "size_bytes": 257,
+      "sha256": "9bbf947ed588fa688321c0d2b2d5b44771f6d38630b8a27e4a36dffa8359e4c9"
+    },
+    {
+      "path": "backtrader/runtime/__main__.py",
+      "mode": "100644",
+      "git_blob_sha1": "e0c5b22f6f6549488d31bcb9f703252a304fcb7f",
+      "size_bytes": 149,
+      "sha256": "db3469952d274bbaec3cac2e4eb423fb0316c35ec3b76ac2130a1f709688f122"
+    },
+    {
+      "path": "backtrader/runtime/cli.py",
+      "mode": "100644",
+      "git_blob_sha1": "185276bd972ffe532bb5c49c7537bb32b45daede",
+      "size_bytes": 270,
+      "sha256": "d5d177f1272580221959a85131feaaa6bbd9a3bb72578db37279eb96c34f69e5"
+    },
+    {
+      "path": "backtrader/runtime/config.py",
+      "mode": "100644",
+      "git_blob_sha1": "7f24da8c4c1b4dfdb577218e19bebc2026ab56ab",
+      "size_bytes": 276,
+      "sha256": "d7357b68c5c017f69ee9d127cd0b3c7afed5e893396d24a2098e75768a04cd36"
+    },
+    {
+      "path": "backtrader/runtime/errors.py",
+      "mode": "100644",
+      "git_blob_sha1": "5dd34797f8479c1944c5db483199e95ba7119158",
+      "size_bytes": 485,
+      "sha256": "2d2ccddc81c174b5c5c8b614b18ae6a4c808301bcf20525d1eec174931b267e9"
+    },
+    {
+      "path": "backtrader/runtime/policy.py",
+      "mode": "100644",
+      "git_blob_sha1": "067146c3bc031f61ee6c2223de6fa427b8f01a1c",
+      "size_bytes": 276,
+      "sha256": "3440f9e02149f9761a7b49da6e6b2499c4306d50f171eddf3a5f015ad3ace0cc"
+    },
+    {
+      "path": "backtrader/runtime/registry.py",
+      "mode": "100644",
+      "git_blob_sha1": "9f74a5596ada8a072f9abfdbb7143856ce7dbf8a",
+      "size_bytes": 280,
+      "sha256": "c7024f6887f456ed298d2fa441ea42e6a93403d1db751618e3f415ed1bf4beb6"
+    },
+    {
+      "path": "backtrader/signal.py",
+      "mode": "100644",
+      "git_blob_sha1": "133bca4dde59757fe70e180c4861f37dda90dad2",
+      "size_bytes": 3556,
+      "sha256": "fb777cffe677e0418f71adfc146c4adb4eac9055fe801224113902dac7e7bd7f"
+    },
+    {
+      "path": "backtrader/signals/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "777b3726f091a8249dbffa654ebaff8a0567b95e",
+      "size_bytes": 600,
+      "sha256": "fb81fa0c707d08e86e542fc809c94a146313ad898c607c62e08b6f9eee76c146"
+    },
+    {
+      "path": "backtrader/sizer.py",
+      "mode": "100644",
+      "git_blob_sha1": "c9ae7145eaaa1136f26b265b316041d76d0c62f9",
+      "size_bytes": 3960,
+      "sha256": "acf506b087334ec9646488f17a3bdeea431151ff9d40e57fc92f4a66a59fd41c"
+    },
+    {
+      "path": "backtrader/sizers/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "a885268fea6266ae7bd2076e4044731eefad4746",
+      "size_bytes": 985,
+      "sha256": "7d4a2f266959b41a0bca331301b77e764f87f8689d658ae5daa8c6bf0b27e4db"
+    },
+    {
+      "path": "backtrader/sizers/allocation_sizer.py",
+      "mode": "100644",
+      "git_blob_sha1": "fd865c821088adb5d88ada143a47dd33798caf33",
+      "size_bytes": 3256,
+      "sha256": "7a3e93eced08f9ddc374d994c41ba417d3e6f7276745a890f15204f3311c1cd9"
+    },
+    {
+      "path": "backtrader/sizers/fixedsize.py",
+      "mode": "100644",
+      "git_blob_sha1": "e25d6ff0a8d329d269ebd0a5f6ebdc0e6336eed4",
+      "size_bytes": 5497,
+      "sha256": "d63da345be215066bd13400cc3db80f19f2b76cd73c734cddedb2c9f6de94aeb"
+    },
+    {
+      "path": "backtrader/sizers/percents_sizer.py",
+      "mode": "100644",
+      "git_blob_sha1": "6ed611d4b1428e3513743a37a0b304f72e06601b",
+      "size_bytes": 3697,
+      "sha256": "ab29078c8261e424a5bf3edb64ec55dd5f8b45b32b2c1ae40d218c085b1d7e01"
+    },
+    {
+      "path": "backtrader/store.py",
+      "mode": "100644",
+      "git_blob_sha1": "d968043ba8b1627a520c795427413464d3450569",
+      "size_bytes": 7768,
+      "sha256": "b7056a97fb9a4b3b9c36f6e409141d985af7ec5861b314f78243adca176cf47f"
+    },
+    {
+      "path": "backtrader/stores/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "20c2cebf38a9fb47970361324b0f5d396f265cd4",
+      "size_bytes": 1245,
+      "sha256": "d3532f5d3be68b602507c16ac44af3e514bdb4c7e52dc75b9edfd8df2828a3d8"
+    },
+    {
+      "path": "backtrader/stores/btapistore.py",
+      "mode": "100644",
+      "git_blob_sha1": "e71265fb0b90aff9de2923fe9ef7c2eaa35e5b3b",
+      "size_bytes": 794333,
+      "sha256": "9670cca751932c19241ac1a694513afd47a4514b1258bbbd73a88a07972a5ee1"
+    },
+    {
+      "path": "backtrader/stores/ctp_i9_managed_dispatch.py",
+      "mode": "100644",
+      "git_blob_sha1": "e6b2e21fd63e49abc301389b3e56f288589afbf4",
+      "size_bytes": 43222,
+      "sha256": "454c039e85b7559b7f37291bc7eb77f7e7a845cadf48faa9262cb7042636c6ad"
+    },
+    {
+      "path": "backtrader/stores/ctp_i9_parent_request_builder.py",
+      "mode": "100644",
+      "git_blob_sha1": "25ad4cbb636138d7158b9718a908c7bd0b75ee37",
+      "size_bytes": 38539,
+      "sha256": "4ef2264441adb020e92ad1eef3a52e58d870c66b406bd2dd795d737a6f0711e8"
+    },
+    {
+      "path": "backtrader/stores/ctp_managed_projection_bridge.py",
+      "mode": "100644",
+      "git_blob_sha1": "6057ab5584f6bb27a5d5e105e948699a1ee0bf92",
+      "size_bytes": 16764,
+      "sha256": "bb1c81335505b8f59edaedced6424a4bdd7671bdeb59ba9f34c16ffc56feebd4"
+    },
+    {
+      "path": "backtrader/stores/livestore.py",
+      "mode": "100644",
+      "git_blob_sha1": "c15f9471a70977ced6057633645e6cc0d33c6f57",
+      "size_bytes": 4488,
+      "sha256": "f60ae402c47322a7005fc7c978d5b960ec8ad7fd298ed856d181a491240d4b18"
+    },
+    {
+      "path": "backtrader/stores/managed_execution.py",
+      "mode": "100644",
+      "git_blob_sha1": "4139a5c6cc1bf79ef68c9e217eda9aae26d151c1",
+      "size_bytes": 36603,
+      "sha256": "1c31f89412e8e1177eb2e27389c62b50e074361ef808098846c06704f18440c5"
+    },
+    {
+      "path": "backtrader/stores/service_execution_adapter.py",
+      "mode": "100644",
+      "git_blob_sha1": "740c8c3cfe582fac6348d4dbdc651d2badbbf8f2",
+      "size_bytes": 41933,
+      "sha256": "9813c2344d5fbff95a6a3e9520cbf9ced8aa17d4b197ff170b5cb0a15eab2526"
+    },
+    {
+      "path": "backtrader/stores/service_execution_recovery.py",
+      "mode": "100644",
+      "git_blob_sha1": "12857743bef0a32a66d0e957b269f17a96d99c0f",
+      "size_bytes": 71062,
+      "sha256": "eabb7fb09b836b727ad41ce0a6945ffd805a522d962838e2bd7eec53af916c83"
+    },
+    {
+      "path": "backtrader/stores/service_execution_session.py",
+      "mode": "100644",
+      "git_blob_sha1": "56a043aaecbe852da1a5b8661e14bd4d27b41899",
+      "size_bytes": 46896,
+      "sha256": "0b266571fc696b072a45664b616ed8921dc79dec7a2947eaf5266a7dc20e5379"
+    },
+    {
+      "path": "backtrader/stores/service_read_proxy.py",
+      "mode": "100644",
+      "git_blob_sha1": "1f60e487c71571960e42fe96db14ddd30c4211ad",
+      "size_bytes": 36951,
+      "sha256": "00b31eba5962a39651fdb034088c19a20d4a95a230642dbad425761f38ddc9b4"
+    },
+    {
+      "path": "backtrader/stores/service_refresh_loop.py",
+      "mode": "100644",
+      "git_blob_sha1": "ec8a10bcb322887b9b3aa1f8b50ac1e11a2c2b75",
+      "size_bytes": 5782,
+      "sha256": "71b0974725bf0fa26b92e9546453df82c6c19be1c9a93ab0b381cda42f05b52c"
+    },
+    {
+      "path": "backtrader/stores/service_strategy_account_book.py",
+      "mode": "100644",
+      "git_blob_sha1": "cbc319ca05eee90c9cc93972336bdc28954b3b26",
+      "size_bytes": 24090,
+      "sha256": "a15100af912a917fbc57fcb395318a6527c3c19b2bd0c7c53e33e56440dc3f65"
+    },
+    {
+      "path": "backtrader/stores/vchartfile.py",
+      "mode": "100644",
+      "git_blob_sha1": "bc5c47d6057757329de61b4c36de58579b54fa8b",
+      "size_bytes": 2591,
+      "sha256": "799568271be111b450c1e725f10981ce79e25a85950f493b47c5e3a9817e2e0f"
+    },
+    {
+      "path": "backtrader/strategy.py",
+      "mode": "100644",
+      "git_blob_sha1": "20673707292e5ff8bebb3a9ab13a5d4190ee954e",
+      "size_bytes": 151163,
+      "sha256": "1b4f02a5e59774d057545fbc73b17e40c84add6c557c59c4a320d0b3223f043c"
+    },
+    {
+      "path": "backtrader/talib.py",
+      "mode": "100644",
+      "git_blob_sha1": "03ccbc46ff8a480d24b6b8d85d6204720f6a168d",
+      "size_bytes": 11366,
+      "sha256": "83e82906eb493258b10b3fd98f79d15549a0454234faee198091d7835b8ac8cd"
+    },
+    {
+      "path": "backtrader/test_helpers.py",
+      "mode": "100644",
+      "git_blob_sha1": "514f9d594a6f107ec80e754eff68a4014c087033",
+      "size_bytes": 3291,
+      "sha256": "a01dbc75f147ca5ab93516e3613594437b763aef12aff9c62174fcab0e8717ce"
+    },
+    {
+      "path": "backtrader/timer.py",
+      "mode": "100644",
+      "git_blob_sha1": "ab5d43220420ebd649f4708d47cefecc1688fcd2",
+      "size_bytes": 16159,
+      "sha256": "37a66490fbaafacdd2fb67af11a5769ab2bd0c52fce47d7c76aed16665fd046b"
+    },
+    {
+      "path": "backtrader/trade.py",
+      "mode": "100644",
+      "git_blob_sha1": "5017d5363f7fc61f6003dc2b7f2168f7d9ef8f47",
+      "size_bytes": 17277,
+      "sha256": "1dea60fe5201e51a148dbc66ce8cac6fb5a836bd017df9cc08135fd377f86897"
+    },
+    {
+      "path": "backtrader/tradingcal.py",
+      "mode": "100644",
+      "git_blob_sha1": "6b5b30ee2c18cd0424ae6eec7bed2b3234c0fea8",
+      "size_bytes": 13896,
+      "sha256": "cc2d4cd37516fee25051ed374833156d1b39efd66c2fccaa0230467c79d7e869"
+    },
+    {
+      "path": "backtrader/utils/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "5656f54706bf15072d0170b7d0d8154d6cc1cf76",
+      "size_bytes": 2258,
+      "sha256": "d5f0c97f0edfe5d3f64a3689b4e605b1733511f479fac3261bfabc26f77d52e8"
+    },
+    {
+      "path": "backtrader/utils/autodict.py",
+      "mode": "100644",
+      "git_blob_sha1": "9fb2ecccf033983a2b7ce5434b07596fbd58d42d",
+      "size_bytes": 7846,
+      "sha256": "4abf4dcc47ca6c5e7b9cd9e608523ea862afdd3bbcb2f1f0f4d93cb81e8d6f86"
+    },
+    {
+      "path": "backtrader/utils/date.py",
+      "mode": "100644",
+      "git_blob_sha1": "c1be049d3d9f590c74a00d2328d4a4d064862064",
+      "size_bytes": 1794,
+      "sha256": "650981f3f21945c3102db868638e1d87b3595f8cbc385b103a61d06549ce66fa"
+    },
+    {
+      "path": "backtrader/utils/dateintern.py",
+      "mode": "100644",
+      "git_blob_sha1": "48c7cacbcf8017758f5eb2eaa4456da84102c0b8",
+      "size_bytes": 15533,
+      "sha256": "788bf9a0c9195faa6a1877d1c076436a77e2413a9d1c49bfb928b627667319f8"
+    },
+    {
+      "path": "backtrader/utils/flushfile.py",
+      "mode": "100644",
+      "git_blob_sha1": "4c3ad4ce017a278251992a3166d1995e9ac7b17d",
+      "size_bytes": 3055,
+      "sha256": "2e5b421ad1b8c1ee7a9476aa18daa0014dd3ccc2f6dd5b93dbe24e4f25948791"
+    },
+    {
+      "path": "backtrader/utils/fractal.py",
+      "mode": "100644",
+      "git_blob_sha1": "fe503fea0df8801ee3b9f5393ee8fbcd3061855c",
+      "size_bytes": 3338,
+      "sha256": "28c91ed4b4cb1e2a23102e9394ebdbe968fdd5b48105f562155f05d95085877b"
+    },
+    {
+      "path": "backtrader/utils/get_metrics.py",
+      "mode": "100644",
+      "git_blob_sha1": "0b77d9e1b56ac4a540e2eaabd25dbf7700daf62e",
+      "size_bytes": 3742,
+      "sha256": "fb5641a7e5c818f491913845e0ee8cfc08e89a49227a80966297288e9e83e593"
+    },
+    {
+      "path": "backtrader/utils/load_data.py",
+      "mode": "100644",
+      "git_blob_sha1": "6737a7c41d6feb363fcbc9c89ceb7a92464632bc",
+      "size_bytes": 6615,
+      "sha256": "76bc300f6e164f998eedd5fb5e9ae8bd100235d86080cf748a0a1971c494aa04"
+    },
+    {
+      "path": "backtrader/utils/log_message.py",
+      "mode": "100644",
+      "git_blob_sha1": "abdc3ab57a5f1bf2d2c8c703fb7149a91fc3c1c4",
+      "size_bytes": 40966,
+      "sha256": "2b863c0838807d12fc4f457f45a5674ba63d4ef94ec9f3b16930a62a06aece08"
+    },
+    {
+      "path": "backtrader/utils/ordereddefaultdict.py",
+      "mode": "100644",
+      "git_blob_sha1": "84a437b311a430ab1f25d48964dc3e9642757bb3",
+      "size_bytes": 2952,
+      "sha256": "05bfefc5ef19c5b13d9d596f211509959d8065e96dde1a64dcb422800014fdce"
+    },
+    {
+      "path": "backtrader/utils/py3.py",
+      "mode": "100644",
+      "git_blob_sha1": "bfa38f65ec50633ba828eb5f7200a012b51248ee",
+      "size_bytes": 8273,
+      "sha256": "840aa54b668e6ee0d0de25fcc188e6dfc4bc24b0198d9ed82afd3274877b46f2"
+    },
+    {
+      "path": "backtrader/version.py",
+      "mode": "100644",
+      "git_blob_sha1": "3f2bb42a125ba9725c9ba9fc46f42373dfac8cc7",
+      "size_bytes": 556,
+      "sha256": "c1c6000e4a78507b77c5c0b654749cb2915557e4eb3d5f8e36af073ca90d9c68"
+    },
+    {
+      "path": "backtrader/writer.py",
+      "mode": "100644",
+      "git_blob_sha1": "cd05a4ab3ba6cab22edf02230c4944766da65307",
+      "size_bytes": 13055,
+      "sha256": "1c04bd996025425b37abc4dfee6f2db8712c0b63f565431ec19e0cd7b201b542"
+    },
+    {
+      "path": "backtrader_runtime/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "b2847f5ffa0dc606e439b8162008efa9cf4fae7d",
+      "size_bytes": 7246,
+      "sha256": "4a17eb44e84ded2189500405cd7d683c104b180795fef9ea924b8d94ae021e19"
+    },
+    {
+      "path": "backtrader_runtime/__main__.py",
+      "mode": "100644",
+      "git_blob_sha1": "8e54763e76df3a6eb3fd594c600a0c282d5006fc",
+      "size_bytes": 113,
+      "sha256": "36053545f4682a69c27b05cb17c38872e7c4a2f5933f7d38abbbdcde14b57dd0"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_backtest_fixture/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "08f613286e52420433230969ec976d55a6a2ed48",
+      "size_bytes": 296,
+      "sha256": "5c6e093cda9dbb0b4108135337304d9c4979b4012c76adc5af0c3b506c7a925e"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_backtest_fixture/data/bars.csv",
+      "mode": "100644",
+      "git_blob_sha1": "4e9f9f51dc89d84c9c4a832de6383673dfca7de4",
+      "size_bytes": 211,
+      "sha256": "d9d93c0abd275e35fcc7b8b225d1cff88367b59124f63b897cb46f0f5b08864d"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_backtest_fixture/run.py",
+      "mode": "100644",
+      "git_blob_sha1": "6fffa91768f05afc8f537692f555801f0495e511",
+      "size_bytes": 7062,
+      "sha256": "b274305ad4998f4dfded31ed6525b7a83bd406cfd8b2bc6cf0777bed22c1a20f"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_backtest_fixture/runtimes/local_backtest/config.yaml",
+      "mode": "100644",
+      "git_blob_sha1": "66f26e9fc4a0d3774d668b9d3d0506f55895df2b",
+      "size_bytes": 156,
+      "sha256": "847f42c783a30818b823bcdcab1303f2a93420839b012c14dd2e68b272e71090"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_l2_fixture/__init__.py",
+      "mode": "100644",
+      "git_blob_sha1": "cc1f75553e3f18ccf55ff5f9deb2cd16d671b975",
+      "size_bytes": 259,
+      "sha256": "d305892f4a20e3427d2dfd5e2fbf80a11dd9f01c2413bb75ac861fc6af4cb5ec"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_l2_fixture/managed_013_3.py",
+      "mode": "100644",
+      "git_blob_sha1": "e7e1e415b189fb58e43a32a03db025284b051457",
+      "size_bytes": 24157,
+      "sha256": "62b518900d132f83d3abf402485ddfbc78178519c98ee8b0ee5fe03068287b26"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_l2_fixture/mechanical_cycle.py",
+      "mode": "100644",
+      "git_blob_sha1": "28298bc1008a9b191992f2aeace8703476623cb7",
+      "size_bytes": 21195,
+      "sha256": "10e23ad231ea38be16a6e622302fb26856464323208c51539e92e3d33ed02c70"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_l2_fixture/mechanical_p1b.py",
+      "mode": "100644",
+      "git_blob_sha1": "492452ae5680963061b7372e08c3aa7df76aa6e5",
+      "size_bytes": 41041,
+      "sha256": "a1993d66bbd4cbebab37bf2e7e7776e9c891f0d3b0cb9870bcaaaaae8a4be42e"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_l2_fixture/runtimes/managed_013_3/config.yaml",
+      "mode": "100644",
+      "git_blob_sha1": "4755dc42e59439dfe35cc381d0ab6028f9c1e0d9",
+      "size_bytes": 136,
+      "sha256": "b1d552084d0b59847e973d9df7bab810b7a74d7e3dac3f2ed2b6b0d2212773bb"
+    },
+    {
+      "path": "backtrader_runtime/_iteration41_l2_fixture/runtimes/mechanical_p1b/config.yaml",
+      "mode": "100644",
+      "git_blob_sha1": "1db602857699646af2899b897cb035964d9eaae8",
+      "size_bytes": 160,
+      "sha256": "06ea0123e876de4d3366031d10e8105d7640fcbf01c05851986b9c8a350f1f67"
+    },
+    {
+      "path": "backtrader_runtime/capability_imports.py",
+      "mode": "100644",
+      "git_blob_sha1": "f5b8738e2ad494faa1fb9c5a7f2245b02f37eba4",
+      "size_bytes": 33973,
+      "sha256": "6bbf61cb72c2df588d4934b5cb8b811c0a3c9076a9daa9e5b802aed672881d54"
+    },
+    {
+      "path": "backtrader_runtime/cli.py",
+      "mode": "100644",
+      "git_blob_sha1": "ae123fa3970d616376c1769a524d42c672059297",
+      "size_bytes": 68214,
+      "sha256": "64eec200e4cb61b78dbc5fc72e48262e30c8e6b3850ea24f604532994954d7b4"
+    },
+    {
+      "path": "backtrader_runtime/config.py",
+      "mode": "100644",
+      "git_blob_sha1": "ad4dadd3f9f2b8cfca4b3c1f52c5970ff459285b",
+      "size_bytes": 65738,
+      "sha256": "1bf287696e5cf2b8787309ae2d50b7b2a1a748b9de48c490fa7c0740a452f6e1"
+    },
+    {
+      "path": "backtrader_runtime/credential_resolver.py",
+      "mode": "100644",
+      "git_blob_sha1": "694da666598c8b61ebe5a69590399e4d21777f4c",
+      "size_bytes": 68801,
+      "sha256": "90c0dfff8f2499a2641cc8d31f20cdbdfcaffa3656982eeb100048283def59c2"
+    },
+    {
+      "path": "backtrader_runtime/ctp_artifact_provenance.py",
+      "mode": "100644",
+      "git_blob_sha1": "96641379ec4e7c5693159c17f5b380fea50952e5",
+      "size_bytes": 47141,
+      "sha256": "78f7b385db4c33f522a645e160b23076d7b600cf539cf6a121897483c49b3c75"
+    },
+    {
+      "path": "backtrader_runtime/ctp_configured_front_check.py",
+      "mode": "100644",
+      "git_blob_sha1": "19dbe970bd25948379d846b33bfa3fe86dba2e22",
+      "size_bytes": 15189,
+      "sha256": "6a7a7f9fa21ee7da6f7a00e51690c81664eb129128fabf0ff77b0e067bd670f1"
+    },
+    {
+      "path": "backtrader_runtime/ctp_front_pair_probe.py",
+      "mode": "100644",
+      "git_blob_sha1": "03288294802a56c898477d9e7a9f7f9718c5505b",
+      "size_bytes": 23819,
+      "sha256": "fe634001c7467aede16c38f0b4062c6617206358fcb4ca2e193c16ddc1d996de"
+    },
+    {
+      "path": "backtrader_runtime/ctp_preflight.py",
+      "mode": "100644",
+      "git_blob_sha1": "90a56891dacffde6ea535fa833bce5368ad2a45f",
+      "size_bytes": 39532,
+      "sha256": "3effc1d05763a6eb685c322f8ca5514893adf2e2b60513512d78a83a7ddf7386"
+    },
+    {
+      "path": "backtrader_runtime/ctp_private_config_setup.py",
+      "mode": "100644",
+      "git_blob_sha1": "6844961f72fdb2e706ab07182451323bc96ff4e7",
+      "size_bytes": 66515,
+      "sha256": "a4450dc44f1ca4b7d77a2f2cffd277614e8249dd833622cca8a519837e4ffb41"
+    },
+    {
+      "path": "backtrader_runtime/ctp_sandbox_readonly_admission.py",
+      "mode": "100644",
+      "git_blob_sha1": "f77d9105b2e49cff52cc65c456ae5d79a7b2e6d0",
+      "size_bytes": 39471,
+      "sha256": "8de0737ae19bd1789772f83c24632f50f2def407025aa7eeb62338823a8786d9"
+    },
+    {
+      "path": "backtrader_runtime/ctp_sdk_market_readonly.py",
+      "mode": "100644",
+      "git_blob_sha1": "b867ca28e861558fa92a41984065da27b840de54",
+      "size_bytes": 52286,
+      "sha256": "ffb1233b313feb89ce1d1f2f6d526f68b79cf54eff86f897347aef6f1f67c368"
+    },
+    {
+      "path": "backtrader_runtime/ctp_sdk_readonly.py",
+      "mode": "100644",
+      "git_blob_sha1": "ab55f5f1a9e062fe650485e77659a7b12e992b29",
+      "size_bytes": 35924,
+      "sha256": "5b42ecd25c91d5b76894fc9bd68c1950a053cc2e69dd55cbee3fcb207d779c7a"
+    },
+    {
+      "path": "backtrader_runtime/ctp_simnow_operator.py",
+      "mode": "100644",
+      "git_blob_sha1": "824e97c40d0db96c68ce82badb74f12c57863e90",
+      "size_bytes": 22971,
+      "sha256": "9112a8411a8f13045a1e2c3b040517bb06c4db1f8c959a2650a4f2ab3afcc6db"
+    },
+    {
+      "path": "backtrader_runtime/ctp_simnow_readonly_runtime.py",
+      "mode": "100644",
+      "git_blob_sha1": "909ec530b4969d5c148024b3e5663085d2be591b",
+      "size_bytes": 29089,
+      "sha256": "778be3b5efb64ee4dd4c6a735f0c6b5bff329fc455f9e460338a6ea298e30bc5"
+    },
+    {
+      "path": "backtrader_runtime/errors.py",
+      "mode": "100644",
+      "git_blob_sha1": "14723eb1e437c94ad65de066ebd2897a0e2c7606",
+      "size_bytes": 2606,
+      "sha256": "07a6a77cfddd1c9f59602a77a4ecb317bc6b21e7e0435860423a2c4fd05921be"
+    },
+    {
+      "path": "backtrader_runtime/evidence_bundle.py",
+      "mode": "100644",
+      "git_blob_sha1": "34d7b2c716a36ffbd95c98fffca68d15c438a4de",
+      "size_bytes": 12280,
+      "sha256": "53b00574eb75cfb6a8a5763a93551c8ab916f78f6c9eefbdb4db7ae139712fa5"
+    },
+    {
+      "path": "backtrader_runtime/framework_projection.py",
+      "mode": "100644",
+      "git_blob_sha1": "a511e4155ffef0bc96d4cdbd69d6ac6ee8ac41e8",
+      "size_bytes": 50088,
+      "sha256": "b3fbeaeea8665fea84bcb3ad46366b3a12285fcf6f5f6f7c37470aaefe85bbb0"
+    },
+    {
+      "path": "backtrader_runtime/inventory.py",
+      "mode": "100644",
+      "git_blob_sha1": "00a3cec5d276795f6119ee71462db7d55f5492df",
+      "size_bytes": 13558,
+      "sha256": "af50f2b16e2a6f22f89353a788f4b2120a67442a0698d5c4b7ae2a5ff4ad408c"
+    },
+    {
+      "path": "backtrader_runtime/legacy.py",
+      "mode": "100644",
+      "git_blob_sha1": "0c5b35e81354c62cdb4922cfc4dbdbe986a15489",
+      "size_bytes": 2887,
+      "sha256": "ac5dfa8cc770f1c30f38cf96bb55048236bc2040647382f42a4d2086aaa9b47c"
+    },
+    {
+      "path": "backtrader_runtime/managed_execution.py",
+      "mode": "100644",
+      "git_blob_sha1": "0215f2ac8f5fd842c3bbfd3ac4ba8d5d51fb202b",
+      "size_bytes": 153275,
+      "sha256": "2ea43b4be82c4645333b15289ff582278415bca9781e9c4d735f230983174dec"
+    },
+    {
+      "path": "backtrader_runtime/policy.py",
+      "mode": "100644",
+      "git_blob_sha1": "29cfc8ccc36dd523fb940a7dfc08440e8467acee",
+      "size_bytes": 5299,
+      "sha256": "631b326ed570e076cb9199ff73755d1ad8ec268197d0964008725b0c58983074"
+    },
+    {
+      "path": "backtrader_runtime/provider_deployment.py",
+      "mode": "100644",
+      "git_blob_sha1": "95ec880a010611e5267e90edc48d10874b47126d",
+      "size_bytes": 33478,
+      "sha256": "571c4b2ca179ee1be8268330e5db6c6f240d13164d2be89ccbc9a492021cd0eb"
+    },
+    {
+      "path": "backtrader_runtime/provider_preflight.py",
+      "mode": "100644",
+      "git_blob_sha1": "cb505a6e3d906d9806ad72bd32591b016ba8bcbf",
+      "size_bytes": 16931,
+      "sha256": "32e2567ab56e6cf5edd147725a1e5849f580be6d4ec5ed39ce5f0bffde86d99f"
+    },
+    {
+      "path": "backtrader_runtime/registry.py",
+      "mode": "100644",
+      "git_blob_sha1": "ef3fa2dfa184fa733e7b85960499a2181054f132",
+      "size_bytes": 86819,
+      "sha256": "f359e0d0576662bc8d5f966ef2345fe723c8802cd504ad383323e59959fe5a01"
+    },
+    {
+      "path": "backtrader_runtime/review_evidence.py",
+      "mode": "100644",
+      "git_blob_sha1": "2c29f7dd00382546f8cb3f002b46316b5498d8b5",
+      "size_bytes": 18855,
+      "sha256": "b6cf1ea6ee3cf040c8ab59f5a3b33f721daa4ff6c3ef3eba8047d0b1c22a7649"
+    },
+    {
+      "path": "backtrader_runtime/runner.py",
+      "mode": "100644",
+      "git_blob_sha1": "297dfa0c3bf91776057cf269159ca585de0b1e18",
+      "size_bytes": 55010,
+      "sha256": "7111dc382a3c75cd663663fafabf1b9b276d232a6797888a8dd4b060241729f4"
+    },
+    {
+      "path": "backtrader_runtime/test_execution_profile.py",
+      "mode": "100644",
+      "git_blob_sha1": "d2c26621a90cde168f23e9fec5fc459e5d7886e0",
+      "size_bytes": 32293,
+      "sha256": "c44ea4c38db24d7e00a4b9446611429cfcb9c95b56da5b5d41a792f242dba913"
+    }
+  ]
+}

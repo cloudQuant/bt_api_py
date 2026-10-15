@@ -1,0 +1,46 @@
+{
+  "repository": "D:/source_code/backtrader",
+  "parent": "db96d8566188bc602a77ae37539dc1269fe7e8ea",
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-round135-backtrader-postcommit.json",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "tests/integration/test_cfg05_v4_local_backtest_runtime.py": "815e923a395761bd45344d9bd894124363963a48985d2475018f706d0052163a"
+  },
+  "evidence_sha256": {
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\spec.json": "56679c50444e7807db7e95bf06727fa19e18688228ea14e92a32c278cc7c25cc",
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\result.json": "a1a8036c20f253d77b3ceb53ceebc798daf4c3934c8031c2c5c159d014fa539e",
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\stdout.log": "1a433f7404fea72380a5b3c6906b04a1a6c3575a542e3f9f78c3a030be753fd5",
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\junit.xml": "d556a975ddc4c98a4948e3274bfcbc64c3a096b52029014e1fe7a144060c24dc",
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\source-before.json": "ac95fc02dabf4b8b48099b55b78739e32a602876a732d1205f505d119d9f1aa8",
+    "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\source-after.json": "ac95fc02dabf4b8b48099b55b78739e32a602876a732d1205f505d119d9f1aa8"
+  },
+  "junit": "D:\\bt_api_py\\.codex-tmp\\cfg05-v4-root-qa-db96d856-r4\\junit.xml",
+  "tests_passed": 1,
+  "evidence_level": "FIXED_DB96_PRODUCTION_V4_CLI_REAL_CEREBRO_OFFLINE",
+  "message": "test: verify v4 normal CLI runs the real offline Cerebro fixture",
+  "paths": [
+    "tests/integration/test_cfg05_v4_local_backtest_runtime.py"
+  ],
+  "filtered_blob_ids": {
+    "tests/integration/test_cfg05_v4_local_backtest_runtime.py": "854f0d65b749eaebe329deb517177f16af2643ac"
+  },
+  "unrelated_paths": [
+    "0",
+    "backtrader/brokers/btapibroker.py",
+    "backtrader/stores/service_execution_adapter.py",
+    "backtrader/stores/service_execution_recovery.py",
+    "backtrader/stores/service_execution_session.py",
+    "backtrader/stores/service_strategy_account_book.py",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "unrelated_diff_sha256": "feff8e874684eb3469b0c0ed973009268731c3c5ab173d80406d3af1032d143b",
+  "unrelated_status_sha256": "8daad9b84d33184af752c5623a313a7c88c197e0cf66a29d6d351b675bef3b88",
+  "head": "4c316d342a221e94c681bd8717430491ac119d59",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "whitespace_preservation": "tests/integration/test_cfg05_v4_local_backtest_runtime.py:278: new blank line at EOF.",
+  "recovery": "No restaging or accepted source edits."
+}
