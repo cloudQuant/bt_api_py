@@ -94,6 +94,7 @@ class ServiceAccountClient:
         expected_account: AccountKey,
         required_coverage: tuple[AccountResourceKey, ...],
         require_open_orders: bool = False,
+        expected_scope_ref: str | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not isinstance(runtime, ServiceClientRuntime):
@@ -117,6 +118,12 @@ class ServiceAccountClient:
             raise ServiceAccountError("INVALID_REQUIRED_COVERAGE")
         if type(require_open_orders) is not bool:
             raise ServiceAccountError("INVALID_REQUIRE_OPEN_ORDERS")
+        if expected_scope_ref is not None and (
+            type(expected_scope_ref) is not str
+            or not expected_scope_ref
+            or expected_scope_ref != expected_scope_ref.strip()
+        ):
+            raise ServiceAccountError("INVALID_EXPECTED_SCOPE_REF")
         if not callable(monotonic_clock):
             raise ServiceAccountError("INVALID_MONOTONIC_CLOCK")
 
@@ -126,6 +133,7 @@ class ServiceAccountClient:
         self._expected_account = expected_account
         self._required_coverage = required_coverage
         self._require_open_orders = require_open_orders
+        self._expected_scope_ref = expected_scope_ref
         self._monotonic_clock = monotonic_clock
         self._owner_thread_id = threading.get_ident()
         self._closed = False
@@ -420,11 +428,14 @@ class ServiceAccountClient:
         return observation, cursor, snapshot_id, generation, fresh_for
 
     def _get_binding(self) -> ServiceAccountBindingView:
-        return self._runtime.account_binding_view(
+        binding = self._runtime.account_binding_view(
             self.mount,
             self.account_ref,
             required_operations=frozenset({_ACCOUNT_SNAPSHOT_OPERATION}),
         )
+        if self._expected_scope_ref is not None and binding.scope_ref != self._expected_scope_ref:
+            raise ServiceAccountError("SCOPE_DENIED")
+        return binding
 
     @staticmethod
     def _binding_signature(binding: ServiceAccountBindingView) -> tuple[object, ...]:

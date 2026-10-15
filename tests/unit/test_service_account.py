@@ -250,7 +250,12 @@ class LocalControlTransport:
         self.closed = True
 
 
-def _make_client(tmp_path, *, require_open_orders: bool = False):
+def _make_client(
+    tmp_path,
+    *,
+    require_open_orders: bool = False,
+    expected_scope_ref: str | None = None,
+):
     capability = ServiceCapability("account-instance", "service.account_read", _OPERATIONS)
     grant = ResourceGrant(
         "account-instance",
@@ -327,6 +332,7 @@ def _make_client(tmp_path, *, require_open_orders: bool = False):
         expected_account=_ACCOUNT,
         required_coverage=_COVERAGE,
         require_open_orders=require_open_orders,
+        expected_scope_ref=expected_scope_ref,
         monotonic_clock=clock,
     )
     return client, runtime, registry, source, transport, clock
@@ -376,6 +382,59 @@ def test_refresh_preserves_provider_units_and_cached_view_is_immutable(tmp_path)
         client.close()
         assert runtime.state == "registered"
         assert transport.closed is False
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_expected_scope_ref_accepts_the_registered_scope(tmp_path):
+    client, runtime, registry, _source, transport, _clock = _make_client(
+        tmp_path, expected_scope_ref="account-scope-v1"
+    )
+    try:
+        client.refresh()
+
+        snapshot_requests = [
+            request
+            for request in transport.requests
+            if request.header.operation == "account.snapshot"
+        ]
+        assert len(snapshot_requests) == 1
+        assert snapshot_requests[0].header.scope.account_ref == _ACCOUNT_REF
+        assert runtime.state == "registered"
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_expected_scope_ref_rejects_change_after_maintain_before_rpc(tmp_path, monkeypatch):
+    client, runtime, registry, _source, transport, _clock = _make_client(
+        tmp_path, expected_scope_ref="account-scope-v1"
+    )
+    original_maintain = runtime.maintain
+    original_account_binding_view = runtime.account_binding_view
+    changed = False
+
+    def maintain_then_change_scope():
+        nonlocal changed
+        result = original_maintain()
+        changed = True
+        return result
+
+    def account_binding_view_after_renewal(*args, **kwargs):
+        binding = original_account_binding_view(*args, **kwargs)
+        if not changed:
+            return binding
+        return replace(binding, scope_ref="account-scope-rebound")
+
+    monkeypatch.setattr(runtime, "maintain", maintain_then_change_scope)
+    monkeypatch.setattr(runtime, "account_binding_view", account_binding_view_after_renewal)
+    try:
+        with pytest.raises(ServiceAccountError) as error:
+            client.refresh()
+
+        assert error.value.code == "SCOPE_DENIED"
+        assert not any(
+            request.header.operation == "account.snapshot" for request in transport.requests
+        )
     finally:
         _close_all(client, runtime, registry)
 
