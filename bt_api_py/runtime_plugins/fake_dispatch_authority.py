@@ -21,6 +21,7 @@ from typing import Any
 
 _SCHEMA_VERSION = 2
 _HEX = frozenset("0123456789abcdef")
+_OFFLINE_FAKE_FEE_CONTRACT = "bt-api-offline-replay-no-fee-v1"
 
 
 class FakeDispatchJournalError(RuntimeError):
@@ -53,6 +54,54 @@ def _valid_sha256(value: object) -> bool:
         and len(value) == 64
         and all(character in _HEX for character in value)
     )
+
+
+def _offline_fake_fee_evidence() -> dict[str, Any]:
+    """Return the versioned fee statement owned by the offline fake provider.
+
+    The managed replay fixture has an explicit no-commission simulation
+    contract. This is a normalized simulation fact, not a field inferred from
+    an execution record or from missing provider data. The enclosing fake
+    provider response digest persists and binds the entire object.
+    """
+
+    return {
+        "contract": _OFFLINE_FAKE_FEE_CONTRACT,
+        "fee_history_complete": True,
+        "fee_record_count": 0,
+        "fee_records": [],
+        "source": "offline_fake_provider_simulation_contract",
+    }
+
+
+def _require_offline_fake_fee_evidence(response: Any) -> dict[str, Any]:
+    """Require an exact complete zero-fee fact from the fixture contract."""
+
+    if type(response) is not dict:
+        raise FakeDispatchJournalError("fake fee evidence has no provider response")
+    evidence = response.get("fee_evidence")
+    if type(evidence) is not dict or set(evidence) != {
+        "contract",
+        "fee_history_complete",
+        "fee_record_count",
+        "fee_records",
+        "source",
+    }:
+        raise FakeDispatchJournalError("fake no-fill row lacks complete fee evidence")
+    if (
+        type(evidence["contract"]) is not str
+        or evidence["contract"] != _OFFLINE_FAKE_FEE_CONTRACT
+        or type(evidence["source"]) is not str
+        or evidence["source"] != "offline_fake_provider_simulation_contract"
+        or type(evidence["fee_records"]) is not list
+        or evidence["fee_records"] != []
+        or type(evidence["fee_record_count"]) is not int
+        or evidence["fee_record_count"] != 0
+        or type(evidence["fee_history_complete"]) is not bool
+        or evidence["fee_history_complete"] is not True
+    ):
+        raise FakeDispatchJournalError("fake no-fill fee evidence is incomplete or contradictory")
+    return evidence
 
 
 class ManagedFakeProviderJournalAuthority:
@@ -118,7 +167,10 @@ class ManagedFakeProviderJournalAuthority:
         Accepted observations create an outstanding exposure reservation only
         when the response has one exact stable provider ID and proves zero
         fills.  Missing IDs and ambiguous outcomes remain journaled without a
-        reservation and therefore cannot clear the dispatch latch.
+        reservation and therefore cannot clear the dispatch latch. The exact
+        no-fill REJECTED projection also carries the versioned, fee-free
+        offline simulation contract; this is explicit fake-provider
+        normalization evidence, not a zero inferred from omitted fields.
         """
 
         self._require_intent_scope(intent)
@@ -145,6 +197,8 @@ class ManagedFakeProviderJournalAuthority:
             "scope_key": intent.scope.key,
             "state": state,
         }
+        if state == "REJECTED" and filled_quantity == "0" and average_price is None:
+            response["fee_evidence"] = _offline_fake_fee_evidence()
         response_sha256 = _sha256(response)
         response_json = _canonical(response)
         exposure = (
@@ -372,9 +426,20 @@ class ManagedFakeProviderJournalAuthority:
                 exposure_reservation_sha256=str(exposure["reservation_sha256"]),
             )
         if record.state.value == "REJECTED" and exposure is None:
+            if (
+                str(row["provider_filled_quantity"]) != "0"
+                or int(row["provider_trade_count"]) != 0
+                or record.average_price is not None
+            ):
+                raise FakeDispatchJournalError("fake rejection is not a complete no-fill outcome")
+            fee_evidence = _require_offline_fake_fee_evidence(
+                json.loads(row["provider_response_json"])
+            )
             return self._risk_types.DispatchTerminalProof(
                 **common,
                 terminal_state=self._risk_types.DispatchTerminalState.REJECTED_NO_FILL,
+                fee_record_count=fee_evidence["fee_record_count"],
+                fee_history_complete=fee_evidence["fee_history_complete"],
             )
         raise FakeDispatchJournalError("SDK outcome has no eligible fake dispatch resolution")
 
@@ -444,6 +509,9 @@ class ManagedFakeProviderJournalAuthority:
                 ):
                     raise FakeDispatchJournalError("ACKED exposure transfer is not exact")
             elif type(proof) is self._risk_types.DispatchTerminalProof:
+                fee_evidence = _require_offline_fake_fee_evidence(
+                    json.loads(row["provider_response_json"])
+                )
                 if (
                     proof.terminal_state
                     is not self._risk_types.DispatchTerminalState.REJECTED_NO_FILL
@@ -456,6 +524,9 @@ class ManagedFakeProviderJournalAuthority:
                     or _decimal_text(record.filled_quantity) != "0"
                     or str(row["provider_filled_quantity"]) != "0"
                     or int(row["provider_trade_count"]) != 0
+                    or record.average_price is not None
+                    or proof.fee_record_count != fee_evidence["fee_record_count"]
+                    or proof.fee_history_complete is not fee_evidence["fee_history_complete"]
                 ):
                     raise FakeDispatchJournalError("rejected no-fill proof is not exact")
             else:
@@ -644,6 +715,17 @@ class ManagedFakeProviderJournalAuthority:
             raise FakeDispatchJournalError(
                 "SDK execution projection differs from fake provider observation"
             )
+        is_no_fill_rejection = (
+            row["provider_state"] == "REJECTED"
+            and str(row["provider_filled_quantity"]) == "0"
+            and response_average_price is None
+        )
+        if is_no_fill_rejection:
+            if int(row["provider_trade_count"]) != 0:
+                raise FakeDispatchJournalError("fake no-fill rejection has trade records")
+            _require_offline_fake_fee_evidence(response)
+        elif "fee_evidence" in response:
+            raise FakeDispatchJournalError("fake fee evidence is not applicable to this response")
         expected_reconciliation_sha256 = _sha256(
             {
                 "exposure_reservation_sha256": row["exposure_reservation_sha256"],

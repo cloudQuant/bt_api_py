@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import replace
@@ -92,6 +94,19 @@ def _ack(intent: Any, provider_order_id: str = "fake-order-stable-17") -> Any:
     return execution.ProviderObservation.accepted(intent.intent_id, provider_order_id)
 
 
+def _reject(intent: Any) -> Any:
+    return execution.ProviderObservation(
+        intent_id=intent.intent_id,
+        state=execution.ExecutionState.REJECTED,
+        reason_code="fixture_rejected",
+    )
+
+
+def _canonical_sha256(value: Any) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def test_acked_fake_order_transfers_to_durable_exposure_and_keeps_risk_counted(
     tmp_path: Path,
 ) -> None:
@@ -131,6 +146,159 @@ def test_acked_fake_order_transfers_to_durable_exposure_and_keeps_risk_counted(
             assert restarted_gate.snapshot(runtime.risk_scope)["increase_notional"] == Decimal("12")
         finally:
             restarted_gate.close()
+    finally:
+        runtime.close()
+
+
+def test_rejected_no_fill_has_typed_fee_complete_resolution_after_risk_reopen(
+    tmp_path: Path,
+) -> None:
+    runtime = _compose(tmp_path)
+    intent = _intent(runtime, "fake-rejected-no-fill-fees")
+    captured: list[Any] = []
+    create_proof = runtime.fake_dispatch_authority.create_resolution_proof
+
+    def capture_proof(intent_id: str, risk_gate: Any) -> Any:
+        proof = create_proof(intent_id, risk_gate)
+        captured.append(proof)
+        return proof
+
+    runtime.fake_dispatch_authority.create_resolution_proof = capture_proof
+    try:
+        record = runtime.submit(intent, _reject)
+        assert record.state is execution.ExecutionState.REJECTED
+        assert record.permit_reference is not None
+        assert len(captured) == 1
+        proof = captured[0]
+        assert type(proof) is risk.DispatchTerminalProof
+        assert proof.fee_record_count == 0
+        assert proof.fee_history_complete is True
+
+        with sqlite3.connect(runtime.state_directory / "fake_dispatch.sqlite3") as connection:
+            row = connection.execute(
+                "SELECT provider_response_json, provider_response_sha256, "
+                "reconciliation_evidence_sha256, provider_trade_count "
+                "FROM fake_dispatch_journal WHERE intent_id = ?",
+                (intent.intent_id,),
+            ).fetchone()
+        assert row is not None
+        response_json, response_sha256, reconciliation_sha256, trade_count = row
+        response = json.loads(response_json)
+        assert response["fee_evidence"] == {
+            "contract": "bt-api-offline-replay-no-fee-v1",
+            "fee_history_complete": True,
+            "fee_record_count": 0,
+            "fee_records": [],
+            "source": "offline_fake_provider_simulation_contract",
+        }
+        assert trade_count == 0
+        assert _canonical_sha256(response) == response_sha256
+        assert reconciliation_sha256 == _canonical_sha256(
+            {
+                "exposure_reservation_sha256": None,
+                "provider_response_sha256": response_sha256,
+                "schema": "fake-dispatch-evidence-v1",
+            }
+        )
+
+        receipt = runtime.risk_gate.dispatch_terminal_resolution_receipt(
+            record.permit_reference
+        )
+        assert (
+            receipt.status
+            is risk.DispatchTerminalResolutionReceiptStatus.NO_FILL_TERMINAL_RESOLVED
+        )
+        assert receipt.proof == proof
+        assert receipt.proof_sha256 == proof.fingerprint
+        assert receipt.claim.permit_id == record.permit_reference
+        assert receipt.dispatch_latch_active is False
+        assert receipt.has_other_active_freezes is False
+        assert receipt.fee_record_count == 0
+        assert receipt.fee_history_complete is True
+        assert runtime.risk_gate.active_freeze_reasons(runtime.risk_scope) == []
+    finally:
+        runtime.close()
+
+    reopened_gate = risk.DurableRiskGate(
+        tmp_path / "state" / "risk.sqlite3",
+        risk.RiskPolicy(_POLICY, Decimal("10000"), 20),
+    )
+    try:
+        reopened = reopened_gate.dispatch_terminal_resolution_receipt(record.permit_reference)
+        assert reopened == receipt
+        assert reopened.proof == proof
+        assert reopened.fee_record_count == 0
+        assert reopened.fee_history_complete is True
+        assert reopened_gate.active_freeze_reasons(runtime.risk_scope) == []
+    finally:
+        reopened_gate.close()
+
+
+@pytest.mark.parametrize("fee_mutation", ["missing", "count_conflict", "incomplete"])
+def test_no_fill_terminal_fee_history_must_be_explicit_and_consistent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fee_mutation: str,
+) -> None:
+    monkeypatch.setattr(
+        ManagedExecutionRuntime, "_finish_coordinated_freeze_if_ready", lambda *_: None
+    )
+    runtime = _compose(tmp_path)
+    intent = _intent(runtime, "fake-no-fill-fees-" + fee_mutation)
+    cause_id = "dispatch-inflight:" + intent.intent_id
+    try:
+        record = runtime.submit(intent, _reject)
+        assert record.state is execution.ExecutionState.REJECTED
+        assert record.permit_reference is not None
+        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
+
+        database_path = runtime.state_directory / "fake_dispatch.sqlite3"
+        with sqlite3.connect(database_path) as connection:
+            row = connection.execute(
+                "SELECT provider_response_json, exposure_reservation_sha256 "
+                "FROM fake_dispatch_journal WHERE intent_id = ?",
+                (intent.intent_id,),
+            ).fetchone()
+            assert row is not None
+            response = json.loads(row[0])
+            if fee_mutation == "missing":
+                response.pop("fee_evidence")
+            elif fee_mutation == "count_conflict":
+                response["fee_evidence"]["fee_record_count"] = 1
+            else:
+                response["fee_evidence"]["fee_history_complete"] = False
+            response_json = json.dumps(
+                response, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            )
+            response_sha256 = hashlib.sha256(response_json.encode("utf-8")).hexdigest()
+            reconciliation_sha256 = _canonical_sha256(
+                {
+                    "exposure_reservation_sha256": row[1],
+                    "provider_response_sha256": response_sha256,
+                    "schema": "fake-dispatch-evidence-v1",
+                }
+            )
+            connection.execute(
+                "UPDATE fake_dispatch_journal SET provider_response_json = ?, "
+                "provider_response_sha256 = ?, reconciliation_evidence_sha256 = ? "
+                "WHERE intent_id = ?",
+                (response_json, response_sha256, reconciliation_sha256, intent.intent_id),
+            )
+
+        with pytest.raises(FakeDispatchJournalError, match="fee"):
+            runtime.fake_dispatch_authority.create_resolution_proof(
+                intent.intent_id, runtime.risk_gate
+            )
+        unresolved = runtime.risk_gate.dispatch_terminal_resolution_receipt(
+            record.permit_reference
+        )
+        assert unresolved.status is risk.DispatchTerminalResolutionReceiptStatus.UNRESOLVED_ACTIVE
+        assert unresolved.proof is None
+        assert unresolved.proof_sha256 is None
+        assert unresolved.dispatch_latch_active is True
+        assert unresolved.fee_record_count is None
+        assert unresolved.fee_history_complete is False
+        assert cause_id in runtime.risk_gate.active_freeze_reasons(runtime.risk_scope)
     finally:
         runtime.close()
 
