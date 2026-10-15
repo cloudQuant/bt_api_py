@@ -1,0 +1,20 @@
+{
+  "status": "PASS_SCOPED_PACKAGE_POSTCOMMIT",
+  "branch": "dev",
+  "parent": "bf5760da891168ba83cd0cc18ee174bbbca2f4e7",
+  "head": "9943e7bb26ba91754462b23308bc24d352faa16d",
+  "paths": [
+    "src/bt_api_execution/admission.py",
+    "tests/test_group_admission_identity.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_execution/admission.py": "8a9f2c4eed1a365cfaa54edb5193f1f49d5536be588b974075be502efc2a2ac4",
+    "tests/test_group_admission_identity.py": "482c687ef34554ce48c31424a30ad5129b0fc0b91d307e550da15c4f79fe8743"
+  },
+  "index_empty": true,
+  "qa_repeated": false,
+  "focused_qa": "1 passed in 0.47 seconds, exit 0, no warnings",
+  "independent_static_review": "backtrader_entry_review GO at the exact final pins",
+  "evidence_level": "PACKAGE_SYNTHETIC_IDENTITY_ONLY",
+  "formal_case_progress": false
+}

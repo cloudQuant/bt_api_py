@@ -1,0 +1,72 @@
+{
+  "after": {
+    "base_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "base_status": "",
+    "execution_head": "bf5760da891168ba83cd0cc18ee174bbbca2f4e7",
+    "execution_status": "M src/bt_api_execution/admission.py\n?? tests/test_group_admission_identity.py",
+    "files": {
+      "admission": {
+        "bytes": 7302,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\admission.py",
+        "sha256": "8a9f2c4eed1a365cfaa54edb5193f1f49d5536be588b974075be502efc2a2ac4"
+      },
+      "base_wire_protocol": {
+        "bytes": 26174,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+        "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+      },
+      "package_api": {
+        "bytes": 10449,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\__init__.py",
+        "sha256": "62a34d56c8492225c91046d381ed5c25e9f6a49c4b7ea4cb55953b05f83a9063"
+      },
+      "test": {
+        "bytes": 1598,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\tests\\test_group_admission_identity.py",
+        "sha256": "482c687ef34554ce48c31424a30ad5129b0fc0b91d307e550da15c4f79fe8743"
+      }
+    }
+  },
+  "base_head_unchanged": true,
+  "before": {
+    "base_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "base_status": "",
+    "execution_head": "bf5760da891168ba83cd0cc18ee174bbbca2f4e7",
+    "execution_status": "M src/bt_api_execution/admission.py\n?? tests/test_group_admission_identity.py",
+    "files": {
+      "admission": {
+        "bytes": 7302,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\admission.py",
+        "sha256": "8a9f2c4eed1a365cfaa54edb5193f1f49d5536be588b974075be502efc2a2ac4"
+      },
+      "base_wire_protocol": {
+        "bytes": 26174,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+        "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+      },
+      "package_api": {
+        "bytes": 10449,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\__init__.py",
+        "sha256": "62a34d56c8492225c91046d381ed5c25e9f6a49c4b7ea4cb55953b05f83a9063"
+      },
+      "test": {
+        "bytes": 1598,
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\tests\\test_group_admission_identity.py",
+        "sha256": "482c687ef34554ce48c31424a30ad5129b0fc0b91d307e550da15c4f79fe8743"
+      }
+    }
+  },
+  "execution_head_unchanged": true,
+  "junit": {
+    "bytes": 350,
+    "path": "D:\\temp\\iteration10-execution-admission-gate-identity-20261015-r1\\junit.xml",
+    "sha256": "f5bcac5a17e38aae8c6c0ff51371247b249184ff27d55133939001c6fc28db2b"
+  },
+  "pytest_exit_code": 0,
+  "raw_log": {
+    "bytes": 201,
+    "path": "D:\\temp\\iteration10-execution-admission-gate-identity-20261015-r1\\pytest-output.raw.log",
+    "sha256": "470156fa1769726c73a19492d0cd47572ae359509ce47f91e56479dbf35165d1"
+  },
+  "source_pins_unchanged": true
+}

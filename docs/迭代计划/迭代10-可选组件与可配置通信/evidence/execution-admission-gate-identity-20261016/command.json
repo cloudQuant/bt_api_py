@@ -1,0 +1,27 @@
+{
+  "base_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+  "command": [
+    "C:\\Anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--junitxml",
+    "D:\\temp\\iteration10-execution-admission-gate-identity-20261015-r1\\junit.xml",
+    "tests/test_group_admission_identity.py::test_account_scoped_adapter_requires_exact_gate_identity"
+  ],
+  "cwd": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "environment_overrides": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1",
+    "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src"
+  },
+  "node": "tests/test_group_admission_identity.py::test_account_scoped_adapter_requires_exact_gate_identity",
+  "package_head": "bf5760da891168ba83cd0cc18ee174bbbca2f4e7",
+  "python_executable": "C:\\Anaconda3\\python.exe",
+  "python_version": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]"
+}
