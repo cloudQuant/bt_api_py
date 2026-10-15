@@ -175,10 +175,17 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
                 "service.owner_control",
             }
         ),
+        "group_account_owner": frozenset(
+            {
+                "service.order_entry",
+                "service.order_query",
+            }
+        ),
         "group_coordinator": frozenset({"service.order_group_entry"}),
     },
     "risk": {
         "account_owner": frozenset({"service.order_entry", "service.order_query"}),
+        "group_reservations": frozenset({"service.group_reservations"}),
         "account_admission": frozenset(
             {
                 "service.order_admission",
@@ -939,6 +946,9 @@ def _validate_component_options(
                     raw, "provider_session_ref", options_path
                 )
             return result
+        if role == "group_account_owner":
+            _check_keys(raw, {"role"}, options_path)
+            return {"role": role}
         fields = {"role", "portfolio_ref"}
         _check_keys(raw, fields, options_path)
         return {
@@ -952,6 +962,9 @@ def _validate_component_options(
                 "role": role,
                 "account_policy_ref": _versioned_ref(raw, "account_policy_ref", options_path),
             }
+        if role == "group_reservations":
+            _check_keys(raw, {"role"}, options_path)
+            return {"role": role}
         if role == "group_policy":
             _check_keys(raw, {"role", "group_policy_ref"}, options_path)
             return {
