@@ -1,0 +1,28 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T18:08:54.642543+00:00",
+  "source_count": 367,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "fdfb84fd7a815fb1a1c06d4e04b829e9aa87f8b9",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "1373b13ecf29d78addc988921a0234d24101c837",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+    "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "fdfb84fd7a815fb1a1c06d4e04b829e9aa87f8b9",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "1373b13ecf29d78addc988921a0234d24101c837",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+    "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "1a981dfffbb6fdd516fd6b7bd206c540395197899c4f12aac37c3d798f2bab83",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "LOCAL_REAL_SERVICE_HANDLE_SQLITE_PERSISTED_FINANCIAL_READ_SYNTHETIC_FACTS_NO_CURVE_OR_LIVE_FRESHNESS"
+}

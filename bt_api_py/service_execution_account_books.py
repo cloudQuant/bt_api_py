@@ -20,6 +20,7 @@ from typing import Any, Protocol
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     AccountBookReconciliation,
+    AccountFinancialProjectionV1,
     AllocationOwnerKind,
     ExecutionAccountBookService,
     ExecutionAccountSnapshot,
@@ -29,6 +30,11 @@ from bt_api_execution import (
     ExecutionScopeDirectory,
     ExecutionState,
     ExternalActivitySnapshot,
+    FinancialDataUnavailableError,
+    FinancialOwnerDirectoryV1,
+    FinancialOwnerKind,
+    FinancialSourceKind,
+    OwnerFinancialBookV1,
     SqliteExecutionStore,
 )
 from bt_api_execution.service_order_entry import (
@@ -109,6 +115,17 @@ class ExecutionAccountBookSource(Protocol):
         execution_cursor: int,
     ) -> ExecutionAccountBookReadInputsV1:
         """Read the account owner directory and snapshots at a trusted cut."""
+
+
+class ExecutionAccountFinancialDirectorySource(Protocol):
+    """Optional trusted resource for the persisted financial projection.
+
+    Implementations must resolve this complete directory from host-bound
+    account resources. RPC callers never provide an owner list or baseline.
+    """
+
+    def read_financial_owner_directory(self, *, account_key: str) -> FinancialOwnerDirectoryV1:
+        """Return the complete, trusted directory used to install the ledger."""
 
 
 class ExecutionAccountBookReadAdapter:
@@ -218,6 +235,11 @@ class ExecutionAccountBookReadAdapter:
                 allocation_baseline=inputs.allocation_baseline,
                 external_activity=inputs.external_activity,
             )
+            financial = self._read_financial_projection(
+                view,
+                journal_generation=journal_generation,
+                execution_cursor=execution_cursor,
+            )
             # The package reconciler has its own before/after outbox check, but
             # its initial sample can occur after the trusted snapshot source
             # captured ``execution_cursor``. Bind both phases to this adapter's
@@ -232,6 +254,10 @@ class ExecutionAccountBookReadAdapter:
                 if view is _FULL_ACCOUNT_VIEW
                 else _owner_projection(reconciliation, view)
             )
+            # The persisted financial ledger is a separately sourced cut. It
+            # is deliberately nested and labelled so callers cannot mistake
+            # it for the legacy reconciliation's provider/activity snapshot.
+            result["financial"] = financial
             projected = _json_value(result)
             encoded = json.dumps(projected, sort_keys=True, separators=(",", ":")).encode("utf-8")
         except Exception:
@@ -240,6 +266,116 @@ class ExecutionAccountBookReadAdapter:
             # This surface does not silently truncate a book or its coverage.
             return _reply(False, "REPLY_TOO_LARGE", {})
         return _reply(True, "OK", projected)
+
+    def _read_financial_projection(
+        self,
+        view: tuple[AllocationOwnerKind, str],
+        *,
+        journal_generation: str,
+        execution_cursor: int,
+    ) -> Mapping[str, Any]:
+        read_directory = getattr(self._source, "read_financial_owner_directory", None)
+        if not callable(read_directory):
+            # Keep existing resource bundles usable while making the absence
+            # of this optional view explicit to authorized query callers.
+            return _financial_unavailable("FINANCIAL_DIRECTORY_UNAVAILABLE")
+        try:
+            directory = read_directory(account_key=self._account_key)
+        except Exception:
+            return _financial_unavailable("FINANCIAL_DIRECTORY_UNAVAILABLE")
+        if (
+            type(directory) is not FinancialOwnerDirectoryV1
+            or directory.account_key != self._account_key
+            or not directory.complete
+            or not _financial_directory_matches_targets(directory, self._targets)
+        ):
+            return _financial_unavailable("FINANCIAL_DIRECTORY_MISMATCH")
+
+        try:
+            projection = self._store.read_account_financial_projection(
+                self._account_key,
+                expected_directory=directory,
+            )
+        except FinancialDataUnavailableError:
+            return _financial_unavailable("PERSISTED_PROJECTION_UNAVAILABLE")
+        except Exception:
+            return _financial_unavailable("PERSISTED_PROJECTION_UNAVAILABLE")
+        if (
+            type(projection) is not AccountFinancialProjectionV1
+            or not projection.complete
+            or projection.cut.account_key != self._account_key
+            or projection.cut.owner_directory_revision != directory.revision
+        ):
+            return _financial_unavailable("INCOMPLETE_PERSISTED_PROJECTION")
+
+        try:
+            execution_watermark = projection.cut.watermark(FinancialSourceKind.EXECUTION_OUTBOX)
+        except Exception:
+            return _financial_unavailable("PERSISTED_PROJECTION_UNAVAILABLE")
+        if (
+            execution_watermark.generation != journal_generation
+            or execution_watermark.cursor != execution_cursor
+        ):
+            return _financial_unavailable("FINANCIAL_EXECUTION_CUT_MISMATCH")
+
+        expected_owner_keys = {item.key for item in directory.owners}
+        book_keys: list[tuple[str, str]] = []
+        for book in projection.books:
+            if (
+                type(book) is not OwnerFinancialBookV1
+                or book.ledger_cut != projection.cut
+                or book.owner.key not in expected_owner_keys
+            ):
+                return _financial_unavailable("INCOMPLETE_PERSISTED_PROJECTION")
+            book_keys.append(book.owner.key)
+        if len(book_keys) != len(set(book_keys)) or set(book_keys) != expected_owner_keys:
+            return _financial_unavailable("INCOMPLETE_PERSISTED_PROJECTION")
+
+        cut_facts = {
+            "source": "PERSISTED_EXECUTION_FINANCIAL_PROJECTION",
+            "freshness": "PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED",
+            "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+            "complete": projection.complete,
+            "ledger_cut": projection.cut,
+        }
+        if view is _FULL_ACCOUNT_VIEW:
+            return {
+                "available": True,
+                **cut_facts,
+                "state": projection.state,
+                "books": projection.books,
+                "unallocated": {
+                    "cash": projection.unallocated_cash_residual,
+                    "positions": projection.unallocated_position_residual,
+                    "fees": projection.unallocated_fee_residual,
+                },
+            }
+
+        owner_kind, owner_ref = view
+        try:
+            financial_kind = FinancialOwnerKind(owner_kind.value)
+        except (TypeError, ValueError):
+            return _financial_unavailable("OWNER_FINANCIAL_BOOK_UNAVAILABLE")
+        book = next(
+            (
+                item
+                for item in projection.books
+                if item.owner.key == (financial_kind.value, owner_ref)
+            ),
+            None,
+        )
+        if book is None:
+            return _financial_unavailable("OWNER_FINANCIAL_BOOK_UNAVAILABLE")
+        return {
+            "available": True,
+            **cut_facts,
+            "view": "OWNER_BOOK",
+            "owner_kind": financial_kind.value,
+            "owner_ref": owner_ref,
+            # Account-wide projection state and UNALLOCATED residuals are
+            # intentionally absent from strategy/manual views.
+            "books": (book,),
+        }
 
     def _authorized_view(
         self, principal_ref: str, identity: WireIdentity, scope: WireScope
@@ -412,6 +548,32 @@ def _owner_tuple(
     return execution_scope.key, wire_scope, kind, owner_ref
 
 
+def _financial_directory_matches_targets(
+    directory: FinancialOwnerDirectoryV1,
+    targets: Mapping[WireScope, ExecutionScope],
+) -> bool:
+    """Bind persisted owner keys to the host's complete configured routes."""
+
+    expected: dict[tuple[str, str], tuple[str | None, ...]] = {}
+    for wire_scope, execution_scope in targets.items():
+        if wire_scope.strategy_ref is not None:
+            owner_key = (FinancialOwnerKind.STRATEGY.value, execution_scope.strategy_id)
+            if owner_key in expected:
+                return False
+            expected[owner_key] = (execution_scope.key,)
+        else:
+            owner_key = (FinancialOwnerKind.MANUAL_BOOK.value, wire_scope.manual_book_ref)
+            if owner_key in expected:
+                return False
+            # Manual books may be account-level books with no execution scope,
+            # or may name the configured source scope explicitly.
+            expected[owner_key] = (None, execution_scope.key)
+    actual = {owner.key: owner.execution_scope_key for owner in directory.owners}
+    if len(actual) != len(directory.owners) or set(actual) != set(expected):
+        return False
+    return all(actual[key] in allowed_scopes for key, allowed_scopes in expected.items())
+
+
 def _resolve_target(
     targets: Mapping[WireScope, ExecutionScope], requested: WireScope
 ) -> tuple[WireScope, ExecutionScope] | None:
@@ -440,6 +602,15 @@ def _resolve_target(
         )
     ]
     return matches[0] if len(matches) == 1 else None
+
+
+def _financial_unavailable(code: str) -> Mapping[str, Any]:
+    return {
+        "available": False,
+        "code": code,
+        "freshness": "NOT_ESTABLISHED",
+        "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+    }
 
 
 def _is_account_scope(scope: WireScope) -> bool:
@@ -551,6 +722,7 @@ def _is_principal(value: object) -> bool:
 
 __all__ = [
     "ACCOUNT_BOOKS_QUERY_OPERATION",
+    "ExecutionAccountFinancialDirectorySource",
     "ExecutionAccountBookReadAdapter",
     "ExecutionAccountBookReadInputsV1",
     "ExecutionAccountBookSource",

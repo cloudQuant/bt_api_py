@@ -544,6 +544,19 @@ class _TrustedAccountBooksSource:
         return inputs
 
 
+class _TrustedFinancialAccountBooksSource(_TrustedAccountBooksSource):
+    """Synthetic host-bound account source with a persisted finance directory."""
+
+    def __init__(self, store, targets, financial_directory) -> None:
+        super().__init__(store, targets)
+        self._financial_directory = financial_directory
+
+    def read_financial_owner_directory(self, *, account_key):
+        if account_key != _ACCOUNT_KEY:
+            raise AssertionError("financial directory requested for another account")
+        return self._financial_directory
+
+
 def _targets():
     return {
         _WIRE_A: ExecutionScope("PAPER", "simulation", _ACCOUNT, _STRATEGY_A, "20261015"),
@@ -1123,5 +1136,353 @@ def test_exe03_account_book_refuses_a_snapshot_if_execution_advances_after_its_c
         assert response == {"ok": False, "code": "UNAVAILABLE", "result": {}}
         assert source.read_count == 1
         assert dispatch.calls == 1
+    finally:
+        store.close()
+
+
+def _persist_financial_projection_for_account_books(store, targets):
+    """Seed typed owner facts and persist them through Execution's real ledger."""
+
+    from bt_api_execution import (
+        AccountFinancialBaselineV1,
+        FinancialActivityBatchV1,
+        FinancialInstrumentSpecV1,
+        FinancialLedgerCutV1,
+        FinancialLedgerPolicyV1,
+        FinancialOwnerBaselineV1,
+        FinancialOwnerDirectoryV1,
+        FinancialOwnerKind,
+        FinancialOwnerV1,
+        FinancialSourceKind,
+        FinancialWatermarkV1,
+        OwnerPositionCostV1,
+        ProviderAccountFinancialSnapshotV1,
+    )
+    from bt_api_execution.account_financial_ledger import CurrencyAmountV1
+
+    account_key = targets[_WIRE_A].account_key
+    strategy_a = FinancialOwnerV1(FinancialOwnerKind.STRATEGY, _STRATEGY_A, targets[_WIRE_A].key)
+    strategy_b = FinancialOwnerV1(FinancialOwnerKind.STRATEGY, _STRATEGY_B, targets[_WIRE_B].key)
+    manual = FinancialOwnerV1(FinancialOwnerKind.MANUAL_BOOK, _MANUAL_BOOK, None)
+    directory = FinancialOwnerDirectoryV1(
+        account_key,
+        "account-books-financial-owner-directory-r1",
+        "synthetic-trusted-account-resource-r1",
+        (strategy_a, strategy_b, manual),
+    )
+    scope = targets[_WIRE_A]
+    lease = store.acquire_or_renew_lease(
+        scope, "account-books-financial-seed", ttl_ns=30_000_000_000
+    )
+    try:
+        cursor_snapshot = store.capture_account_financial_execution_cursors(scope, lease)
+        captured_at_ns = max(time.time_ns(), cursor_snapshot.as_of_ns)
+        execution_baseline = FinancialWatermarkV1(
+            FinancialSourceKind.EXECUTION_OUTBOX,
+            "sqlite-execution-outbox",
+            cursor_snapshot.journal_generation,
+            cursor_snapshot.cursor,
+            cursor_snapshot.as_of_ns,
+        )
+        facts_baseline = FinancialWatermarkV1(
+            FinancialSourceKind.ACCOUNT_FACTS,
+            "synthetic-provider-account-facts",
+            "provider-account-facts-generation-r1",
+            1,
+            captured_at_ns,
+        )
+        activity_baseline = FinancialWatermarkV1(
+            FinancialSourceKind.ACCOUNT_ACTIVITY,
+            "synthetic-provider-account-activity",
+            "provider-account-activity-generation-r1",
+            0,
+            captured_at_ns,
+        )
+        baseline_cut = FinancialLedgerCutV1(
+            account_key,
+            directory.revision,
+            captured_at_ns,
+            (execution_baseline, facts_baseline, activity_baseline),
+        )
+        baseline_account = ProviderAccountFinancialSnapshotV1(
+            account_key,
+            facts_baseline.source_ref,
+            facts_baseline.generation,
+            facts_baseline.cursor,
+            captured_at_ns,
+            (CurrencyAmountV1("USDT", Decimal("2000")),),
+            ((_INSTRUMENT, Decimal("3")),),
+            (CurrencyAmountV1("USDT", Decimal("0.75")),),
+        )
+        baseline = AccountFinancialBaselineV1(
+            account_key,
+            "account-books-financial-baseline-r1",
+            1,
+            "synthetic-baseline-authority-r1",
+            "synthetic-baseline-source-r1",
+            directory.revision,
+            baseline_cut,
+            baseline_account,
+            (
+                FinancialOwnerBaselineV1(
+                    strategy_a,
+                    (CurrencyAmountV1("USDT", Decimal("1000")),),
+                    (
+                        OwnerPositionCostV1(
+                            _INSTRUMENT,
+                            Decimal("2"),
+                            Decimal("100000"),
+                            "USDT",
+                            metadata_version="account-books-spot-r1",
+                        ),
+                    ),
+                    (CurrencyAmountV1("USDT", Decimal("0.25")),),
+                ),
+                FinancialOwnerBaselineV1(
+                    strategy_b,
+                    (CurrencyAmountV1("USDT", Decimal("500")),),
+                    (
+                        OwnerPositionCostV1(
+                            _INSTRUMENT,
+                            Decimal("1"),
+                            Decimal("45000"),
+                            "USDT",
+                            metadata_version="account-books-spot-r1",
+                        ),
+                    ),
+                    (CurrencyAmountV1("USDT", Decimal("0.50")),),
+                ),
+                FinancialOwnerBaselineV1(
+                    manual,
+                    (CurrencyAmountV1("USDT", Decimal("500")),),
+                    (),
+                    (CurrencyAmountV1("USDT", Decimal("0")),),
+                ),
+            ),
+            execution_cursors=cursor_snapshot,
+        )
+        store.install_account_financial_baseline(
+            baseline,
+            directory,
+            writer_scope=scope,
+            writer_lease=lease,
+        )
+
+        now_ns = time.time_ns()
+        execution_current = FinancialWatermarkV1(
+            FinancialSourceKind.EXECUTION_OUTBOX,
+            "sqlite-execution-outbox",
+            cursor_snapshot.journal_generation,
+            cursor_snapshot.cursor,
+            now_ns,
+        )
+        facts_current = FinancialWatermarkV1(
+            FinancialSourceKind.ACCOUNT_FACTS,
+            "synthetic-provider-account-facts",
+            "provider-account-facts-generation-r1",
+            2,
+            now_ns,
+        )
+        activity_current = FinancialWatermarkV1(
+            FinancialSourceKind.ACCOUNT_ACTIVITY,
+            "synthetic-provider-account-activity",
+            "provider-account-activity-generation-r1",
+            0,
+            now_ns,
+        )
+        current_cut = FinancialLedgerCutV1(
+            account_key,
+            directory.revision,
+            now_ns,
+            (execution_current, facts_current, activity_current),
+        )
+        current_account = ProviderAccountFinancialSnapshotV1(
+            account_key,
+            facts_current.source_ref,
+            facts_current.generation,
+            facts_current.cursor,
+            now_ns,
+            (CurrencyAmountV1("USDT", Decimal("2000")),),
+            ((_INSTRUMENT, Decimal("3")),),
+            (CurrencyAmountV1("USDT", Decimal("0.75")),),
+        )
+        activity = FinancialActivityBatchV1(
+            activity_current.source_ref,
+            activity_current.generation,
+            0,
+            0,
+            now_ns,
+            (),
+        )
+        store.reconcile_account_financials(
+            baseline,
+            directory,
+            current_account=current_account,
+            current_cut=current_cut,
+            activity_batch=activity,
+            instrument_specs={
+                _INSTRUMENT: FinancialInstrumentSpecV1(
+                    _INSTRUMENT,
+                    "account-books-spot-r1",
+                    "SPOT",
+                    "BTC",
+                    "USDT",
+                )
+            },
+            policy=FinancialLedgerPolicyV1(
+                "USDT",
+                10**19,
+                10**19,
+                10**19,
+                "USDT",
+                10**19,
+                10**19,
+            ),
+            writer_scope=scope,
+            writer_lease=lease,
+            now_ns=now_ns,
+        )
+    finally:
+        store.release_lease(
+            scope,
+            lease.owner_id,
+            fencing_token=lease.fencing_token,
+        )
+    return directory
+
+
+@pytest.mark.unit
+def test_exe03_service_query_reads_persisted_financial_projection_by_authorized_owner(
+    tmp_path,
+) -> None:
+    from bt_api_execution import SqliteExecutionStore
+
+    from bt_api_py.service_execution_account_books import ExecutionOrderEntryService
+
+    store = SqliteExecutionStore(str(tmp_path / "account-books-persisted-financial.sqlite3"))
+    targets = _targets()
+    financial_directory = _persist_financial_projection_for_account_books(store, targets)
+    source = _TrustedFinancialAccountBooksSource(store, targets, financial_directory)
+    service = ExecutionOrderEntryService(
+        store,
+        targets,
+        _SyntheticAcceptedDispatch(),
+        allow_unprotected=True,
+        writer_id="account-books-financial-query-test",
+        account_books_source=source,
+    )
+    try:
+        changes_before_queries = store._connection.total_changes
+        strategy_response = service.handle(
+            _BOOKS_OPERATION,
+            principal_ref=_STRATEGY_A_PRINCIPAL,
+            identity=_IDENTITY_A,
+            scope=_WIRE_A,
+            arguments={},
+        )
+        account_response = service.handle(
+            _BOOKS_OPERATION,
+            principal_ref=_ACCOUNT_READER_PRINCIPAL,
+            identity=_IDENTITY_ACCOUNT,
+            scope=_WIRE_ACCOUNT,
+            arguments={},
+        )
+        assert store._connection.total_changes == changes_before_queries
+        assert strategy_response["ok"] is True and strategy_response["code"] == "OK"
+        assert account_response["ok"] is True and account_response["code"] == "OK"
+
+        strategy_result = strategy_response["result"]
+        # The existing projection remains intact, including its delta fee name.
+        assert len(strategy_result["books"]) == 1
+        assert "fees_since_baseline" in strategy_result["books"][0]
+        strategy_financial = strategy_result["financial"]
+        assert strategy_financial["available"] is True
+        assert strategy_financial["source"] == "PERSISTED_EXECUTION_FINANCIAL_PROJECTION"
+        assert strategy_financial["freshness"] == "PERSISTED_CUT_NOT_LIVE_SOURCE_VERIFIED"
+        assert strategy_financial["cut_relationship"] == ("INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT")
+        assert len(strategy_financial["books"]) == 1
+        assert "unallocated" not in strategy_financial
+        assert "state" not in strategy_financial
+        strategy_book = strategy_financial["books"][0]
+        assert strategy_book["owner"]["kind"] == "STRATEGY"
+        assert strategy_book["owner"]["owner_ref"] == _STRATEGY_A
+        assert [row["amount"] for row in strategy_book["cash"]] == ["1000"]
+        assert [row["cost_basis"] for row in strategy_book["positions"]] == ["100000"]
+        assert [row["cost_currency"] for row in strategy_book["positions"]] == ["USDT"]
+        assert [row["amount"] for row in strategy_book["cumulative_fees"]] == ["0.25"]
+        assert "fees_since_baseline" not in strategy_book
+
+        account_financial = account_response["result"]["financial"]
+        assert account_financial["available"] is True
+        assert account_financial["state"] == "BALANCED"
+        assert {
+            (row["owner"]["kind"], row["owner"]["owner_ref"]) for row in account_financial["books"]
+        } == {
+            ("STRATEGY", _STRATEGY_A),
+            ("STRATEGY", _STRATEGY_B),
+            ("MANUAL_BOOK", _MANUAL_BOOK),
+        }
+        assert set(account_financial["unallocated"]) == {"cash", "positions", "fees"}
+
+        # Existing resource bundles need not implement the optional financial
+        # directory source. Their legacy projection remains intact, while the
+        # additional financial view explicitly reports why it is unavailable.
+        legacy_source = _TrustedAccountBooksSource(store, targets)
+        legacy_service = ExecutionOrderEntryService(
+            store,
+            targets,
+            _SyntheticAcceptedDispatch(),
+            allow_unprotected=True,
+            writer_id="account-books-legacy-source-test",
+            account_books_source=legacy_source,
+        )
+        legacy_response = legacy_service.handle(
+            _BOOKS_OPERATION,
+            principal_ref=_STRATEGY_A_PRINCIPAL,
+            identity=_IDENTITY_A,
+            scope=_WIRE_A,
+            arguments={},
+        )
+        assert store._connection.total_changes == changes_before_queries
+        assert legacy_response["ok"] is True and legacy_response["code"] == "OK"
+        legacy_result = legacy_response["result"]
+        assert set(legacy_result) == set(strategy_result)
+        assert legacy_result["financial"] == {
+            "available": False,
+            "code": "FINANCIAL_DIRECTORY_UNAVAILABLE",
+            "freshness": "NOT_ESTABLISHED",
+            "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+        }
+        assert legacy_result["view"] == strategy_result["view"] == "OWNER_BOOK"
+        assert legacy_result["owner_kind"] == strategy_result["owner_kind"] == "STRATEGY"
+        assert legacy_result["owner_ref"] == strategy_result["owner_ref"] == _STRATEGY_A
+        assert len(legacy_result["books"]) == 1
+        assert "fees_since_baseline" in legacy_result["books"][0]
+
+        submitted = service.handle(
+            "orders.submit",
+            principal_ref=_STRATEGY_A_PRINCIPAL,
+            identity=_IDENTITY_A,
+            scope=_WIRE_A,
+            arguments=_order_arguments(
+                "financial-head-advance", quantity="1", side="BUY", price="100"
+            ),
+        )
+        assert submitted["ok"] is True and submitted["code"] == "OK"
+        stale = service.handle(
+            _BOOKS_OPERATION,
+            principal_ref=_STRATEGY_A_PRINCIPAL,
+            identity=_IDENTITY_A,
+            scope=_WIRE_A,
+            arguments={},
+        )
+        assert stale["ok"] is True and stale["code"] == "OK"
+        assert stale["result"]["financial"] == {
+            "available": False,
+            "code": "PERSISTED_PROJECTION_UNAVAILABLE",
+            "freshness": "NOT_ESTABLISHED",
+            "cut_relationship": "INDEPENDENT_OF_LEGACY_ACCOUNT_BOOK_CUT",
+        }
+        assert "fees_since_baseline" in stale["result"]["books"][0]
     finally:
         store.close()
