@@ -91,14 +91,14 @@ from bt_api_py.service_registry import (
 )
 from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
 from bt_api_py.service_risk_order_journal import RiskOrderJournal
-from tests.unit.test_service_risk_order_exposure_integration import (
-    _V2SyntheticBtApiFeed,
+from tests.unit._service_group_provider_fixtures import (
     _V2_FILL_SCHEMA,
     _V2_INSTRUMENT,
     _V2_METADATA_VERSION,
     _V2_ORDER_SCHEMA,
+    _V2_PROVIDER_ACCOUNT,
+    _V2SyntheticBtApiFeed,
 )
-from tests.unit import test_service_risk_only_order_integration as risk_base
 
 _DOMAIN = "paper:group-adapter"
 _STRATEGY = "strategy-a"
@@ -734,12 +734,13 @@ def test_normal_group_services_complete_two_filled_legs_from_source_backed_provi
         valuation_unit="USD",
     )
     registry = InstrumentRiskRegistry((metadata,))
-    risk_scope = AccountScope("fixture", risk_base._PROVIDER_ACCOUNT, "simulation")
+    provider_account = _V2_PROVIDER_ACCOUNT
+    risk_scope = AccountScope("fixture", provider_account, "simulation")
     risk_target = RiskOrderTarget(
         account_scope=risk_scope,
         strategy_id=_STRATEGY,
         exchange_name="FIXTURE___SPOT",
-        provider_account_id=risk_base._PROVIDER_ACCOUNT,
+        provider_account_id=provider_account,
         registry=registry,
     )
     class _GroupMappedV2SyntheticFeed(_V2SyntheticBtApiFeed):
@@ -776,7 +777,7 @@ def test_normal_group_services_complete_two_filled_legs_from_source_backed_provi
             )
 
     provider = _GroupMappedV2SyntheticFeed(
-        str(tmp_path / "group-provider.sqlite3"), ("filled", "filled")
+        str(tmp_path / "group-provider.sqlite3"), ("filled", "filled"), provider_account
     )
 
     # FIXTURE___SPOT is synthetic and intentionally absent from the production
@@ -799,7 +800,7 @@ def test_normal_group_services_complete_two_filled_legs_from_source_backed_provi
             side=BtSide.BUY,
             order_type=BtOrderType.LIMIT,
             quantity=Decimal("1"),
-            account_id=risk_base._PROVIDER_ACCOUNT,
+            account_id=provider_account,
             client_order_id="group-fixture-preflight",
             price=Decimal("100"),
             time_in_force="IOC",

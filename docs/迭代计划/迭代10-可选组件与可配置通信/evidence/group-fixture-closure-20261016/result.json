@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T20:02:28.065111+00:00",
+  "source_count": 582,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "7d7bd2e2e5342a75fccda0deaf9658daaf3e7426ced9f09dae1d9c7843b34e6b",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "ARTIFACT_COLLECTION_ONLY"
+}

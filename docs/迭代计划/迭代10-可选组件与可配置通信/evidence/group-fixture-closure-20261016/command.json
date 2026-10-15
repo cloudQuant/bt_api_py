@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "--collect-only",
+    "--junitxml=D:\\temp\\iteration10-group-fixture-closure-collection-20261016-r1\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-group-fixture-closure-collection-20261016-r1\\pytest-tmp",
+    "tests/integration/test_service_execution_group_local_process.py::test_spawned_curve_group_hosts_complete_two_legs_and_preserve_unknown_hold",
+    "tests/unit/test_service_execution_group.py::test_normal_group_services_complete_two_filled_legs_from_source_backed_provider_facts"
+  ],
+  "cwd": "D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk;D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk\\bt_api\\bt_api_base\\src;D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk\\bt_api\\bt_api_execution\\src;D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk\\bt_api\\bt_api_risk\\src;D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk\\bt_api\\bt_api_gateway\\src;D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk\\bt_api\\bt_api_transport_zmq\\src;D:\\temp\\iteration10-group-fixture-closure-source-20261016-r1\\source\\sdk\\bt_api\\bt_api_monitor\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T20:02:25.805357+00:00"
+}

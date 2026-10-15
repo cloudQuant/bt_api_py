@@ -92,13 +92,13 @@ from bt_api_py.service_runtime import (
     ServiceClientRuntime,
     ZmqTransportFactory,
 )
-from tests.unit import test_service_risk_only_order_integration as risk_base
-from tests.unit.test_service_risk_order_exposure_integration import (
+from tests.unit._service_group_provider_fixtures import (
     _V2_FILL_SCHEMA,
     _V2_INSTRUMENT,
     _V2_METADATA_VERSION,
     _V2_ORDER_SCHEMA,
     _V2SyntheticBtApiFeed,
+    _arm_incomplete_fills,
 )
 
 _DOMAIN = "paper:group-process"
@@ -482,8 +482,7 @@ def _new_account_resource_graph(
     metadata_reference_ns: int,
 ) -> _AccountResourceGraph:
     provider_account = f"provider-{account_ref}"
-    risk_base._PROVIDER_ACCOUNT = provider_account
-    provider = _GroupMappedV2SyntheticFeed(paths["provider"], initial_states)
+    provider = _GroupMappedV2SyntheticFeed(paths["provider"], initial_states, provider_account)
 
     from bt_api_py._venue_mappers import MAPPERS
 
@@ -785,10 +784,6 @@ def _account_host_process(
                     )
                     control.send(("activated", generation.registration_id, generation.generation))
                 elif isinstance(command, tuple) and command[0] == "arm-incomplete-fills":
-                    from tests.unit.test_service_risk_order_exposure_integration import (
-                        _arm_incomplete_fills,
-                    )
-
                     _arm_incomplete_fills(paths["provider"])
                     control.send(("armed", account_ref))
                 elif isinstance(command, tuple) and command[0] == "status":
