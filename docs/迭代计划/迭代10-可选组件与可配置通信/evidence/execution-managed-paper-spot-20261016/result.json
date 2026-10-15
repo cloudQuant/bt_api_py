@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T19:01:52.226898+00:00",
+  "source_count": 142,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "743a0b9feef5b625fbd98269e8ab374f4d80adc8",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "743a0b9feef5b625fbd98269e8ab374f4d80adc8",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "c039044dac046bb5928860440716a899aff3c016e68538a4bb9b364ded5e186a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "PACKAGE_SYNTHETIC_PAPER_AND_NONPAPER_DISPATCH_RECOVERY_ONLY"
+}

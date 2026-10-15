@@ -1,0 +1,39 @@
+{
+  "repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "parent": "743a0b9feef5b625fbd98269e8ab374f4d80adc8",
+  "paths": [
+    "src/bt_api_execution/__init__.py",
+    "src/bt_api_execution/facade.py",
+    "src/bt_api_execution/paper_execution.py",
+    "src/bt_api_execution/service_order_entry.py",
+    "src/bt_api_execution/store.py",
+    "tests/test_paper_execution.py",
+    "tests/test_paper_execution_store.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_execution/__init__.py": "5d326dd010a226cd926cac6ed622e77c1fa2f7773aadcffcb5b5c3e2491b794e",
+    "src/bt_api_execution/facade.py": "fca5c342b4bc3eecd2bed2a09bef1f865d528893ca22bae3d9fc67264f3e7879",
+    "src/bt_api_execution/paper_execution.py": "69de000f6768272aeaabd258301e34ad15e81ec7309cb00682919057869072e8",
+    "src/bt_api_execution/service_order_entry.py": "c9a14f78920bd8d14e36b5c09d641c9c08e26a4130a6b80e8aeeb2d4a533a8ea",
+    "src/bt_api_execution/store.py": "5b80bbf005a8c1f73e7cf07e9c76299dce764fc44226e24ed9a09fc8c46b70bc",
+    "tests/test_paper_execution.py": "b2a491ff7e5717aaa911905fce4d3f5460d0090a4c0cccf048db8f4ef11abaae",
+    "tests/test_paper_execution_store.py": "0d4e66cec7715ca25cf057a758133bd181b8f2daf2416c1dfd80f8d8946a278a"
+  },
+  "filtered_blob_ids": {
+    "src/bt_api_execution/__init__.py": "401a4714bfbce0c2db60d0a641c967dc96995d02",
+    "src/bt_api_execution/facade.py": "072ef639c0a1fa7471ebe0b1a1f61b4170fa7c94",
+    "src/bt_api_execution/paper_execution.py": "7dd4b2c3fde6ed248b45afa46710f321ca46dec2",
+    "src/bt_api_execution/service_order_entry.py": "4e80b2ec38047f4e768a6e3ecee8713dcc11c2d7",
+    "src/bt_api_execution/store.py": "11a7ba202a9c7db525116609efc36f17192be8f7",
+    "tests/test_paper_execution.py": "916f46d3d6119954ae3e9f22e4833ca134949ac0",
+    "tests/test_paper_execution_store.py": "9d7c49bcf10a5b7618b598fe6cc43a49efeaea35"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "qa_result": "D:\\temp\\iteration10-paper-root-20261016-r1\\result.json",
+  "evidence_level": "PACKAGE_SYNTHETIC_PAPER_AND_NONPAPER_DISPATCH_RECOVERY_ONLY"
+}

@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "C:/anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "-o",
+    "addopts=",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-paper-root-20261016-r1\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-paper-root-20261016-r1\\pytest-tmp",
+    "tests/test_paper_execution.py",
+    "tests/test_paper_execution_store.py",
+    "tests/test_execution_facade.py::test_dispatch_failure_latches_unknown_and_reconcile_does_not_replay",
+    "tests/test_execution_facade.py::test_observation_advances_acknowledged_order_without_second_permit_settlement",
+    "tests/test_execution_facade.py::test_same_partial_cumulative_observations_are_monotonic_snapshot_events",
+    "tests/test_execution_facade.py::test_observation_event_is_not_returned_when_admission_settlement_fails",
+    "tests/test_execution_facade.py::test_invalid_observation_event_raises_only_after_durable_review_latch",
+    "tests/test_service_order_entry.py::test_unknown_provider_outcome_is_recorded_and_never_redispatched",
+    "tests/test_service_order_entry.py::test_submit_dispatches_once_and_a_duplicate_returns_the_same_record",
+    "tests/test_service_order_entry_crash_recovery.py::test_crash_restart_recovers_claims_without_duplicate_provider_dispatch"
+  ],
+  "cwd": "D:/bt_api_py/bt_api/bt_api_execution",
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONPATH": "D:/bt_api_py/bt_api/bt_api_execution/src;D:/bt_api_py/bt_api/bt_api_base/src",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T19:01:45.754376+00:00"
+}
