@@ -356,13 +356,15 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             validator_module_name="bt_api_monitor.service_control",
         ),
         ("execution", "account_owner"): _Builtin(
-            module_name="bt_api_execution.service_order_entry",
+            module_name="bt_api_py.service_execution_account_books",
             operations_attribute=("SUPPORTED_OPERATIONS",),
             resource_keys=frozenset({"store", "targets", "dispatch", "admission"}),
             public_ports=MappingProxyType(
                 {
                     "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
-                    "service.order_query": frozenset({"orders.query"}),
+                    "service.order_query": frozenset(
+                        {"orders.query", "execution.account_books.query"}
+                    ),
                 }
             ),
             internal_ports=frozenset({"service.owner_control"}),
@@ -727,6 +729,15 @@ def build_component(
             tracked_by_caller = True
         public_ports = frozenset(prepared.operations_by_port)
         expected_keys = builtin.resource_keys if public_ports else frozenset()
+        if (
+            spec.component == "execution"
+            and spec.options.get("role") == "account_owner"
+            and "service.order_query" in public_ports
+            and "account_books" in resources.values
+        ):
+            if resources.values["account_books"] is None:
+                raise ServiceComponentError("INVALID_ACCOUNT_BOOK_RESOURCES")
+            expected_keys = expected_keys | {"account_books"}
         if set(resources.values) != set(expected_keys):
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
         if any(port not in builtin.internal_ports for port in resources.internal_ports):
@@ -821,6 +832,7 @@ def build_component(
                     cancel_admission_gate=cancel_gate,
                     basic_admission_gate=basic_gate,
                     allow_unprotected=allow_unprotected,
+                    account_books_source=values.get("account_books"),
                 )
                 if "service.order_entry" in spec.bind_ports:
                     recover = getattr(adapter, "recover_interrupted_dispatches", None)
@@ -886,6 +898,17 @@ def build_component(
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()
         for port, operations in prepared.operations_by_port.items():
+            if spec.component == "execution" and spec.options.get("role") == "account_owner":
+                configured_operations = getattr(adapter, "supported_operations", None)
+                expected_operations = frozenset({"orders.submit", "orders.cancel", "orders.query"})
+                if "account_books" in resources.values:
+                    expected_operations = expected_operations | {"execution.account_books.query"}
+                if (
+                    type(configured_operations) is not frozenset
+                    or configured_operations != expected_operations
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured_operations)
             if spec.component == "gateway" and spec.options.get("role") == "market_hub":
                 configured_operations = getattr(adapter, "supported_operations", None)
                 if type(configured_operations) is not frozenset or configured_operations not in (

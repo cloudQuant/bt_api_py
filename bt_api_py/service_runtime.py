@@ -60,7 +60,14 @@ PORT_OPERATIONS = MappingProxyType(
         ),
         "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
         "service.order_query": frozenset(
-            {"orders.query", "orders.snapshot", "orders.head", "orders.read_after", "orders.ack"}
+            {
+                "orders.query",
+                "orders.snapshot",
+                "orders.head",
+                "orders.read_after",
+                "orders.ack",
+                "execution.account_books.query",
+            }
         ),
         "service.order_group_entry": frozenset({"groups.submit", "groups.query", "groups.cancel"}),
         "service.risk_query": frozenset(
@@ -1087,6 +1094,10 @@ class ServiceClientRuntime:
             # for existing read-only clients and grants. Consumers opt in to
             # ACK/progress explicitly through requested_operations.
             operations = operations.intersection(_DEFAULT_ACCOUNT_READ_OPERATIONS)
+        elif port == "service.order_query":
+            # Account-book views need their own explicit request and grant.
+            # Existing order readers retain their prior capability set.
+            operations = operations.difference({"execution.account_books.query"})
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients
             # keep the generic telemetry operation unless they explicitly opt
