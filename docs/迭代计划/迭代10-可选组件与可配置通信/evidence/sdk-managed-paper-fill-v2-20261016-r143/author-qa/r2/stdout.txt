@@ -1,0 +1,18 @@
+F...                                                                     [100%]
+================================== FAILURES ===================================
+_____ test_recovery_v2_projects_only_the_validated_managed_paper_receipt ______
+tests\unit\test_service_execution_paper_fill_recovery.py:304: in test_recovery_v2_projects_only_the_validated_managed_paper_receipt
+    assert fill["match_time_ns"] != event.created_at_ns
+E   AssertionError: assert 1792104781765642600 != 1792104781765642600
+E    +  where 1792104781765642600 = ExecutionEvent(sequence=4, event_id='ad110adad6cd4af4bb78e327d9fd9129', intent_id='fill-v2-order', scope_key='scope:fd...e, 'source': 'provider'}, created_at_ns=1792104781765642600, journal_incarnation_id='b5bda6c7d6d5477fb2d51120545f0a7a').created_at_ns
+============================== warnings summary ===============================
+C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\bt_api_py\.codex-tmp\iteration10-paper-fill-recovery-20261016-r2\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_execution_paper_fill_recovery.py::test_recovery_v2_projects_only_the_validated_managed_paper_receipt
+1 failed, 3 passed, 1 warning in 1.34s

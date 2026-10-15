@@ -1,0 +1,77 @@
+{
+  "round": "Iteration 10 SDK managed-paper V2 recovery projection",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent": "e57d692f43858bcb785decb54ced4c832e99865e",
+  "source_paths": {
+    "bt_api_py/service_execution.py": "90AE00C99BA2EC2EE24A5A367B47AD73DB456590C33913C838591D130D0B4318",
+    "bt_api_py/service_execution_account_books.py": "92DBDF0644C89A2C6C0A0491F86151BDF7FE181657A589FC3F86ED70B85C2E6A",
+    "tests/unit/test_service_execution_paper_fill_recovery.py": "FA18D8316422E28D1D3775540AA49F739A6C1C9879CE5D00416F1EB06293B136"
+  },
+  "diff_scope_review": {
+    "tracked_changes": [
+      "bt_api_py/service_execution.py",
+      "bt_api_py/service_execution_account_books.py"
+    ],
+    "new_test": "tests/unit/test_service_execution_paper_fill_recovery.py",
+    "finding": "The two tracked diffs are the explicit EVENTS_AFTER v2 client opt-in and validated managed-paper V2 receipt projection. No unrelated hunks were found in these paths. The test is new and belongs to this round."
+  },
+  "qa_rounds": [
+    {
+      "round": "r1",
+      "result": "2 failed, 2 passed, exit 1, 1 existing pytest config warning",
+      "cause": "Fixture defect: MARKET submit omitted the required price:null argument; service returned INVALID_REQUEST before quote access or intent/outbox/receipt writes. Corrected in r2.",
+      "test_pin": "1E02D848C43A6CF8A9ABA972385BCB8FFDF66E087CE33F6B67F6014D37ECBB34"
+    },
+    {
+      "round": "r2",
+      "result": "1 failed, 3 passed, exit 1, 1 existing pytest config warning",
+      "cause": "Fixture assumption: real match and event commit clock samples happened to be numerically equal, so the test's inequality assertion was nondeterministic. Repaired by injecting an incrementing clock through the accepted store-module seam; production sources unchanged.",
+      "test_pin": "8B98BE6CB88F19741B18AA2BDC10192487BAB92032563E5D97967348ED7EC463"
+    },
+    {
+      "round": "r3",
+      "result": "4 passed, exit 0, 1 existing pytest config warning, 1.49s",
+      "cause": null,
+      "test_pin": "FA18D8316422E28D1D3775540AA49F739A6C1C9879CE5D00416F1EB06293B136"
+    }
+  ],
+  "focused_node": "tests/unit/test_service_execution_paper_fill_recovery.py",
+  "r3_command": [
+    "C:\\Anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:asyncio",
+    "-q",
+    "tests/unit/test_service_execution_paper_fill_recovery.py",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r3\\junit.xml",
+    "--basetemp=D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r3\\pytest-tmp"
+  ],
+  "r3_environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTEST_PLUGINS": null,
+    "PYTEST_ADDOPTS": null,
+    "PYTHONHOME": null,
+    "PYTHONPATH": null
+  },
+  "static_review": {
+    "reviewer": "acceptance_review",
+    "status": "GO",
+    "production_pins": {
+      "bt_api_py/service_execution_account_books.py": "92DBDF0644C89A2C6C0A0491F86151BDF7FE181657A589FC3F86ED70B85C2E6A",
+      "bt_api_py/service_execution.py": "90AE00C99BA2EC2EE24A5A367B47AD73DB456590C33913C838591D130D0B4318"
+    },
+    "final_test_pin": "FA18D8316422E28D1D3775540AA49F739A6C1C9879CE5D00416F1EB06293B136",
+    "finding": "The final deterministic clock fixture mirrors the accepted Execution package V2 test pattern; its +1s clock origin remains within the 30s quote freshness limit, and pytest restores the monkeypatched store module clock."
+  },
+  "evidence_level": "SDK_AUTHOR_FOCUSED_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "limitations": [
+    "Does not establish ServiceHost integration, Backtrader consumption, or complete BT02 acceptance.",
+    "The existing asyncio_default_fixture_loop_scope PytestConfigWarning remains; pytest-asyncio was disabled for this synchronous node because the installed plugin is incompatible.",
+    "R1 and R2 remain preserved separately as failed fixture runs; they are not combined with r3's pass count."
+  ],
+  "formal_progress": "24/68 after SDK parent e57d692f; this component evidence does not increment the formal count."
+}

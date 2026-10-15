@@ -1,0 +1,22 @@
+FF..                                                                     [100%]
+================================== FAILURES ===================================
+_____ test_recovery_v2_projects_only_the_validated_managed_paper_receipt ______
+tests\unit\test_service_execution_paper_fill_recovery.py:267: in test_recovery_v2_projects_only_the_validated_managed_paper_receipt
+    assert result["ok"] is True and result["code"] == "OK"
+E   assert (False is True)
+__________ test_recovery_v2_never_promotes_a_legacy_v1_paper_receipt __________
+tests\unit\test_service_execution_paper_fill_recovery.py:330: in test_recovery_v2_never_promotes_a_legacy_v1_paper_receipt
+    assert result["ok"] is True and result["code"] == "OK"
+E   assert (False is True)
+============================== warnings summary ===============================
+C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\Anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\bt_api_py\.codex-tmp\iteration10-paper-fill-recovery-20261016-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_execution_paper_fill_recovery.py::test_recovery_v2_projects_only_the_validated_managed_paper_receipt
+FAILED tests/unit/test_service_execution_paper_fill_recovery.py::test_recovery_v2_never_promotes_a_legacy_v1_paper_receipt
+2 failed, 2 passed, 1 warning in 1.61s

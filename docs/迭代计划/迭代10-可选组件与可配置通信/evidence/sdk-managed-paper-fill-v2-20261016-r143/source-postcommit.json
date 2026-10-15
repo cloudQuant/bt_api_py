@@ -1,0 +1,62 @@
+{
+  "repository": "D:\\bt_api_py",
+  "parent": "e57d692f43858bcb785decb54ced4c832e99865e",
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-v2-source-postcommit-r1.json",
+  "message": "feat(execution): project managed paper fill v2 recovery",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "bt_api_py/service_execution.py": "90AE00C99BA2EC2EE24A5A367B47AD73DB456590C33913C838591D130D0B4318",
+    "bt_api_py/service_execution_account_books.py": "92DBDF0644C89A2C6C0A0491F86151BDF7FE181657A589FC3F86ED70B85C2E6A",
+    "tests/unit/test_service_execution_paper_fill_recovery.py": "FA18D8316422E28D1D3775540AA49F739A6C1C9879CE5D00416F1EB06293B136"
+  },
+  "evidence_sha256": {
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r1\\stdout.txt": "6FD4E5CB1BB82362E6E33BE5385B430BB3BF96C0ECC9F386D02D629C2E1E3105",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r1\\stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r1\\junit.xml": "C8E95570047C472CD9A55530827E1B25EFB52DEC5C998D13655601A06ED18466",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r1\\run.json": "CB92DB4E7A398C38728C827E41AF76A6A0340B796057E0CD17B0720984A1F758",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r2\\stdout.txt": "34824D04D8C5FB7A1EAAEFD2829662427D119E3C8163EC95457743862FC200C3",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r2\\stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r2\\junit.xml": "837773BB47BD7313FBB2EBD75FBCF1BA0609029AC93531AF47DEF2D5CAF28029",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r2\\run.json": "CB269003E7D064A7406BCBE92FB604D699F39B92C53F773DD26C6F9B2A7E68FF",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r3\\stdout.txt": "D219363EBC19D5A789FA077423EF7066B2DFF381803BE5E79BC026EC1E098F31",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r3\\stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r3\\junit.xml": "496A625E2CBFEBADDA6B4FD4BBCC42C837468668ECF0E060E971B6E58D7885F3",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r3\\run.json": "87341C196CFABF6A0174F146F78775622E36925126A18353CC13B09323D4D288",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-scoped-source-delivery-r3.py": "B0C98264C6782594325B2E4510C6EEE19270D55E6E99E9A82C626084CFDF3DF9",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-v2-source-assessment.json": "8DD4F2A12D393BF8E235F79FBB1202575EEAA57E5992AE6B2F1FC0867D9B00AA"
+  },
+  "junit": "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r3\\junit.xml",
+  "tests_passed": 4,
+  "allowed_blank_at_eof": {},
+  "allowed_markdown_hardbreaks": {},
+  "round": 143,
+  "delivery_evidence_level": "SDK_AUTHOR_FOCUSED_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "assessment": "D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-v2-source-assessment.json",
+  "paths": [
+    "bt_api_py/service_execution.py",
+    "bt_api_py/service_execution_account_books.py",
+    "tests/unit/test_service_execution_paper_fill_recovery.py"
+  ],
+  "filtered_blob_ids": {
+    "bt_api_py/service_execution.py": "57bc01cec26dadf89f4f120912bd07f9023a1357",
+    "bt_api_py/service_execution_account_books.py": "74a213c864bee4d978b35afad5078fca2cd32d16",
+    "tests/unit/test_service_execution_paper_fill_recovery.py": "666f2492ec5ac3f31b042ee7c96efdc3fbb758d8"
+  },
+  "unrelated_paths": [
+    "bt_api_py/service_components.py",
+    "bt_api_py/service_deployment.py",
+    "bt_api_py/service_host.py",
+    "bt_api_py/service_registry.py",
+    "bt_api_py/service_risk_order_entry.py",
+    "bt_api_py/service_risk_order_journal.py",
+    "tests/unit/test_service_order_entry_components.py",
+    "tests/unit/test_service_risk_only_order_integration.py"
+  ],
+  "unrelated_diff_sha256": "03f337bccbd6f715f6e40f5a54ad0c0c1e135dac59878713a2f4ed85fc513c72",
+  "unrelated_status_sha256": "545c10fe6ce515cdfcca6a982d76237a13f110c385c51e46d6aca5c874968d0e",
+  "head": "13f17e4b6397b129dcb82d627221a0fa8894e151",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "unrelated_untracked_sha256": {},
+  "unrelated_untracked_preserved": true
+}

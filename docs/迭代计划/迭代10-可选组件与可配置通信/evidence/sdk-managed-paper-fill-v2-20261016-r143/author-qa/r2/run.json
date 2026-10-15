@@ -1,0 +1,37 @@
+{
+  "cwd": "D:\\bt_api_py",
+  "argv": [
+    "C:\\Anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:asyncio",
+    "-q",
+    "tests/unit/test_service_execution_paper_fill_recovery.py",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r2\\junit.xml",
+    "--basetemp=D:\\bt_api_py\\.codex-tmp\\iteration10-paper-fill-recovery-20261016-r2\\pytest-tmp"
+  ],
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTEST_PLUGINS": null,
+    "PYTEST_ADDOPTS": null,
+    "PYTHONHOME": null,
+    "PYTHONPATH": null
+  },
+  "source_sha256_before": {
+    "tests/unit/test_service_execution_paper_fill_recovery.py": "8B98BE6CB88F19741B18AA2BDC10192487BAB92032563E5D97967348ED7EC463",
+    "bt_api_py/service_execution_account_books.py": "92DBDF0644C89A2C6C0A0491F86151BDF7FE181657A589FC3F86ED70B85C2E6A",
+    "bt_api_py/service_execution.py": "90AE00C99BA2EC2EE24A5A367B47AD73DB456590C33913C838591D130D0B4318"
+  },
+  "result": {
+    "exit_code": 1,
+    "source_sha256_after": {
+      "tests/unit/test_service_execution_paper_fill_recovery.py": "8B98BE6CB88F19741B18AA2BDC10192487BAB92032563E5D97967348ED7EC463",
+      "bt_api_py/service_execution_account_books.py": "92DBDF0644C89A2C6C0A0491F86151BDF7FE181657A589FC3F86ED70B85C2E6A",
+      "bt_api_py/service_execution.py": "90AE00C99BA2EC2EE24A5A367B47AD73DB456590C33913C838591D130D0B4318"
+    },
+    "junit_xml_exists": true
+  }
+}
