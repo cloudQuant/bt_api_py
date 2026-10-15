@@ -363,7 +363,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
 
 
 _ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
-    {"order_gate", "cancel_gate", "allow_unprotected"}
+    {"order_gate", "cancel_gate", "basic_admission_gate", "allow_unprotected"}
 )
 
 _EXECUTION_OWNER_LOCK_GUARD = threading.Lock()
@@ -787,10 +787,16 @@ def build_component(
                     raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
                 order_gate = admission.get("order_gate")
                 cancel_gate = admission.get("cancel_gate")
+                basic_gate = admission.get("basic_admission_gate")
                 allow_unprotected = admission.get("allow_unprotected", False)
                 if type(allow_unprotected) is not bool:
                     raise ServiceComponentError("INVALID_ADMISSION_RESOURCES")
-                if order_gate is None and cancel_gate is None and not allow_unprotected:
+                if (
+                    order_gate is None
+                    and cancel_gate is None
+                    and basic_gate is None
+                    and not allow_unprotected
+                ):
                     # A provider-capable write route must not silently become
                     # unprotected; the composition root states its policy.
                     raise ServiceComponentError("ADMISSION_POLICY_REQUIRED")
@@ -800,6 +806,7 @@ def build_component(
                     values["dispatch"],
                     admission_gate=order_gate,
                     cancel_admission_gate=cancel_gate,
+                    basic_admission_gate=basic_gate,
                     allow_unprotected=allow_unprotected,
                 )
                 if "service.order_entry" in spec.bind_ports:
