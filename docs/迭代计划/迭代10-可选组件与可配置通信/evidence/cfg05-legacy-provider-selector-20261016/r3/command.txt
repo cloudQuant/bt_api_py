@@ -1,0 +1,1 @@
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; python -m pytest -q --noconftest -p no:cacheprovider tests/unit/runtime/test_legacy_remote_config_migration.py::test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry --junitxml=.codex-tmp\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\junit.xml

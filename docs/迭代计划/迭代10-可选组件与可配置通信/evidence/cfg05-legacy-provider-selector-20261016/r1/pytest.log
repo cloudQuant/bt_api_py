@@ -1,0 +1,22 @@
+
+=================================== ERRORS ====================================
+________________________ ERROR collecting test session ________________________
+C:\anaconda3\Lib\site-packages\pluggy\_hooks.py:513: in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+C:\anaconda3\Lib\site-packages\pluggy\_manager.py:120: in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+C:\anaconda3\Lib\site-packages\pytest_asyncio\plugin.py:610: in pytest_collectstart
+    collector.obj.__pytest_asyncio_scoped_event_loop = scoped_event_loop
+E   AttributeError: 'Package' object has no attribute 'obj'
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\source_code\backtrader\.codex-tmp\iteration10_cfg05_bt_store_provider_gateway_r1_20261016\junit.xml -
+=========================== short test summary info ===========================
+ERROR  - AttributeError: 'Package' object has no attribute 'obj'
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 warning, 1 error in 0.47s

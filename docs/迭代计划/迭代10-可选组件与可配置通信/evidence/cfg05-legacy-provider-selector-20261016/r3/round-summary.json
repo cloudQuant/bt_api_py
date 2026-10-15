@@ -1,0 +1,54 @@
+{
+  "evidence_level": "TARGETED_SYNTHETIC_UNIT_QA_ONLY",
+  "repository": "D:/source_code/backtrader",
+  "branch_head": "a50aea8c4cc863341cdb1338aebc38edee25fb8a",
+  "final_source_pins": {
+    "test": "tests/unit/runtime/test_legacy_remote_config_migration.py: 16,064 bytes, SHA-256 299c14697feb22c49df9a15c64a2e3b419743a20d9571af8bbca5e21b678b176",
+    "cli": "backtrader_runtime/cli.py: 69,895 bytes, SHA-256 383900be50ba029b25a747e385c35e5afe5a93334df7a939859a8d10faa29c78"
+  },
+  "static_review": "GO from /root/iteration10_parallel_assessment on these exact pins; static only, no QA execution.",
+  "attempts": [
+    {
+      "id": "r1",
+      "log": ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r1_20261016/pytest.log",
+      "candidate_test_executions": 0,
+      "junit": ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r1_20261016/junit.xml",
+      "status": "collection failure before candidate tests",
+      "cause": "pytest_asyncio collector accessed Package.obj; source untouched",
+      "pytest_exit": 2
+    },
+    {
+      "status": "test assertion failure",
+      "cause": "the raw trimmed exact Gateway input overlapped the fixed generic error message; corrected in test only",
+      "passed": 4,
+      "candidate_instances": 5,
+      "id": "r2",
+      "junit": ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r2_20261016/junit.xml",
+      "log": ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r2_20261016/pytest.log",
+      "failed": 1,
+      "pytest_exit": 1
+    },
+    {
+      "status": "passed",
+      "passed": 3,
+      "candidate_instances": 3,
+      "command": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1; python -m pytest -q --noconftest -p no:cacheprovider tests/unit/runtime/test_legacy_remote_config_migration.py::test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry",
+      "id": "r3",
+      "junit": ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r3_20261016/junit.xml",
+      "log": ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r3_20261016/pytest.log",
+      "failed": 0,
+      "pytest_exit": 0
+    }
+  ],
+  "positive_direct_nodes": {
+    "r2_test_pin": "15,690 bytes / 9a33fea3d3a91839f73a81c7dfda4ac75ce66a9283731dc9765a17d3a3b276d0",
+    "names": [
+      "test_bt_store_provider_direct_or_unset_keeps_v4_legacy_entry_available[direct-ctp]",
+      "test_bt_store_provider_direct_or_unset_keeps_v4_legacy_entry_available[unset]"
+    ],
+    "status": "two positive parameter instances passed in r2; intentionally not rerun after a test-only redaction assertion correction",
+    "cli_pin_unchanged": "69,895 bytes / 383900be50ba029b25a747e385c35e5afe5a93334df7a939859a8d10faa29c78"
+  },
+  "aggregation_note": "Do not describe these as a single 5/5 run: r2 had 4 passed/1 failed; after the assertion-only repair, r3 passed the three rejection instances.",
+  "r3_result": ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r3_20261016/result.json"
+}

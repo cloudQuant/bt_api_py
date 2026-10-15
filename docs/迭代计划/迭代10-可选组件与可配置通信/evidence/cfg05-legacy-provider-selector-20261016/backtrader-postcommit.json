@@ -1,0 +1,51 @@
+{
+  "repository": "D:\\source_code\\backtrader",
+  "parent": "a50aea8c4cc863341cdb1338aebc38edee25fb8a",
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-round133-backtrader-postcommit.json",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "backtrader_runtime/cli.py": "383900be50ba029b25a747e385c35e5afe5a93334df7a939859a8d10faa29c78",
+    "tests/unit/runtime/test_legacy_remote_config_migration.py": "299c14697feb22c49df9a15c64a2e3b419743a20d9571af8bbca5e21b678b176"
+  },
+  "evidence_sha256": {
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\command.txt": "4749959b3fc9943f1afd1189becdb913465f7d2f44cd6fe99a52ec823f34f555",
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\pytest.log": "5197428adb4aaebe4e0baa4b5d1bd735df8957a00f9320b73d47a14fb16eaf30",
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\junit.xml": "f2da66a1a118a6dd04770aae784e4ce03e35aeb13fd1f114dc7d88ea6d6217f6",
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\result.json": "5703b65a98aaa074d7fe23b7ee168ee0d26f387f0e6ae3e3bb67a03b1b777d57",
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\round-summary.json": "054dfad6cc740b29477c8432100956a1cdc820c56e78fd19d3318acb4505bba3",
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r2_20261016\\junit.xml": "912d6b74180ba52afc2bf924d8aad448acb84c16fc79129dfeaf9e93509de4bf"
+  },
+  "junit": "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\junit.xml",
+  "tests_passed": 3,
+  "reported_pytest_exit": 0,
+  "earlier_positive_instances": [
+    "test_bt_store_provider_direct_or_unset_keeps_v4_legacy_entry_available[direct-ctp]",
+    "test_bt_store_provider_direct_or_unset_keeps_v4_legacy_entry_available[unset]"
+  ],
+  "evidence_level": "TARGETED_NORMAL_ENTRY_SYNTHETIC_UNIT_QA_ONLY",
+  "limitations": [
+    "R3 three refusal instances passed; two unaffected direct positives passed in R2 whose overall result was four pass and one failure. Not a single 5/5 run.",
+    "Positive backtest runner is synthetic; full v4 production runtime backtest still pending.",
+    "No real provider/account actions; v5 unsupported but is not a required new implementation for CFG05."
+  ],
+  "message": "fix: reject legacy Gateway selection through BT_STORE_PROVIDER",
+  "paths": [
+    "backtrader_runtime/cli.py",
+    "tests/unit/runtime/test_legacy_remote_config_migration.py"
+  ],
+  "filtered_blob_ids": {
+    "backtrader_runtime/cli.py": "ae123fa3970d616376c1769a524d42c672059297",
+    "tests/unit/runtime/test_legacy_remote_config_migration.py": "e200e0044ddbdd2e360dc01ebd2dd048575acba9"
+  },
+  "unrelated_paths": [
+    "0",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "unrelated_diff_sha256": "9e790e9053c0081adc3d63c9474664a688b67231761fbeb4763212bf2f4750b1",
+  "unrelated_status_sha256": "b7bef090ac83180c0564beb1416b022de0e6d73220ce2f739c609adc8840a144",
+  "head": "db96d8566188bc602a77ae37539dc1269fe7e8ea",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true
+}

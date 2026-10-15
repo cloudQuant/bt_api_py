@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="5" time="0.439" timestamp="2026-10-16T05:04:59.359215" hostname="yun"><testcase classname="tests.unit.runtime.test_legacy_remote_config_migration" name="test_bt_store_provider_direct_or_unset_keeps_v4_legacy_entry_available[direct-ctp]" time="0.041" /><testcase classname="tests.unit.runtime.test_legacy_remote_config_migration" name="test_bt_store_provider_direct_or_unset_keeps_v4_legacy_entry_available[unset]" time="0.017" /><testcase classname="tests.unit.runtime.test_legacy_remote_config_migration" name="test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry[trimmed-case-insensitive-suffix]" time="0.011" /><testcase classname="tests.unit.runtime.test_legacy_remote_config_migration" name="test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry[trimmed-exact-gateway]" time="0.010"><failure message="assert ' Gateway ' not in '{&quot;diagnosti..._migration&quot;}'&#10;  &#10;  ' Gateway ' is contained here:&#10;     a retired Gateway backend through the current runtime; convert it offline to the explicit service/client configuration or keep the matching historical release&quot;, &quot;reason&quot;: &quot;legacy_gateway_environment_requires_migration&quot;}&#10;  ?           +++++++++">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-910/test_bt_store_provider_gateway1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001F059805C50&gt;
+provider_selector = ' Gateway '
+
+    @pytest.mark.parametrize(
+        "provider_selector",
+        (
+            pytest.param("ctp_gateway", id="gateway-suffix"),
+            pytest.param(" Gateway ", id="trimmed-exact-gateway"),
+            pytest.param(" MT5_GATEWAY ", id="trimmed-case-insensitive-suffix"),
+        ),
+    )
+    def test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        provider_selector: str,
+    ) -&gt; None:
+        """The original registered entry rejects the retired selector before runner effects."""
+    
+        runtime_dir = tmp_path / "registered-runtime"
+        _write_config(runtime_dir)
+        registry = _runtime_registry(runtime_dir, "cfg05_synthetic_runner")
+        monkeypatch.setattr(runtime_cli, "default_runtime_registry", lambda: registry)
+        monkeypatch.setattr(runtime_cli.os, "environ", {"BT_STORE_PROVIDER": provider_selector})
+        effects = _guard_service_side_effects(monkeypatch)
+        dispatches: list[object] = []
+    
+        def forbidden_dispatch(*args: object, **kwargs: object) -&gt; dict:
+            dispatches.append((args, kwargs))
+            raise AssertionError("retired provider selector reached the code-owned runner")
+    
+        monkeypatch.setattr(runtime_cli, "dispatch_registered_runtime", forbidden_dispatch)
+        result, stdout_payload, stderr_payload = _invoke_legacy_entry(runtime_dir)
+    
+        assert result == 2
+        assert stdout_payload == {}
+        assert stderr_payload["error_code"] == MIGRATION_REVIEW_REQUIRED
+        assert stderr_payload["field_path"] == "environment.BT_STORE_PROVIDER"
+        assert stderr_payload["reason"] == "legacy_gateway_environment_requires_migration"
+        assert stderr_payload["diagnostic"]["offline"] is True
+        assert dispatches == []
+        assert effects == []
+&gt;       assert provider_selector not in json.dumps(stderr_payload)
+E       assert ' Gateway ' not in '{"diagnosti..._migration"}'
+E         
+E         ' Gateway ' is contained here:
+E            a retired Gateway backend through the current runtime; convert it offline to the explicit service/client configuration or keep the matching historical release", "reason": "legacy_gateway_environment_requires_migration"}
+E         ?           +++++++++
+
+tests\unit\runtime\test_legacy_remote_config_migration.py:392: AssertionError</failure></testcase><testcase classname="tests.unit.runtime.test_legacy_remote_config_migration" name="test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry[gateway-suffix]" time="0.008" /></testsuite></testsuites>

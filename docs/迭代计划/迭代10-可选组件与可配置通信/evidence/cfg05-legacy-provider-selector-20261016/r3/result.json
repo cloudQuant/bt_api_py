@@ -1,0 +1,30 @@
+{
+  "evidence_level": "TARGETED_SYNTHETIC_UNIT_QA_ONLY",
+  "git_head": "a50aea8c4cc863341cdb1338aebc38edee25fb8a",
+  "cwd": "D:\\source_code\\backtrader",
+  "command": "$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'; python -m pytest -q --noconftest -p no:cacheprovider tests/unit/runtime/test_legacy_remote_config_migration.py::test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry --junitxml=.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\junit.xml",
+  "environment": {
+    "PYTEST_ADDOPTS": "not overridden",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "selected_node": "tests/unit/runtime/test_legacy_remote_config_migration.py::test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry",
+  "junit": {
+    "path": "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\junit.xml",
+    "failures": 0,
+    "errors": 0,
+    "testcases": 3,
+    "passed": 3
+  },
+  "cli": {
+    "bytes": 69895,
+    "path": "backtrader_runtime/cli.py",
+    "sha256": "383900be50ba029b25a747e385c35e5afe5a93334df7a939859a8d10faa29c78"
+  },
+  "test": {
+    "bytes": 16064,
+    "path": "tests/unit/runtime/test_legacy_remote_config_migration.py",
+    "sha256": "299c14697feb22c49df9a15c64a2e3b419743a20d9571af8bbca5e21b678b176"
+  },
+  "log_path": "D:\\source_code\\backtrader\\.codex-tmp\\iteration10_cfg05_bt_store_provider_gateway_r3_20261016\\pytest.log",
+  "exit_code": 0
+}

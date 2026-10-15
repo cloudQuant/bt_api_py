@@ -1,0 +1,65 @@
+...F.                                                                    [100%]
+================================== FAILURES ===================================
+_ test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry[trimmed-exact-gateway] _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-910/test_bt_store_provider_gateway1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001F059805C50>
+provider_selector = ' Gateway '
+
+    @pytest.mark.parametrize(
+        "provider_selector",
+        (
+            pytest.param("ctp_gateway", id="gateway-suffix"),
+            pytest.param(" Gateway ", id="trimmed-exact-gateway"),
+            pytest.param(" MT5_GATEWAY ", id="trimmed-case-insensitive-suffix"),
+        ),
+    )
+    def test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        provider_selector: str,
+    ) -> None:
+        """The original registered entry rejects the retired selector before runner effects."""
+    
+        runtime_dir = tmp_path / "registered-runtime"
+        _write_config(runtime_dir)
+        registry = _runtime_registry(runtime_dir, "cfg05_synthetic_runner")
+        monkeypatch.setattr(runtime_cli, "default_runtime_registry", lambda: registry)
+        monkeypatch.setattr(runtime_cli.os, "environ", {"BT_STORE_PROVIDER": provider_selector})
+        effects = _guard_service_side_effects(monkeypatch)
+        dispatches: list[object] = []
+    
+        def forbidden_dispatch(*args: object, **kwargs: object) -> dict:
+            dispatches.append((args, kwargs))
+            raise AssertionError("retired provider selector reached the code-owned runner")
+    
+        monkeypatch.setattr(runtime_cli, "dispatch_registered_runtime", forbidden_dispatch)
+        result, stdout_payload, stderr_payload = _invoke_legacy_entry(runtime_dir)
+    
+        assert result == 2
+        assert stdout_payload == {}
+        assert stderr_payload["error_code"] == MIGRATION_REVIEW_REQUIRED
+        assert stderr_payload["field_path"] == "environment.BT_STORE_PROVIDER"
+        assert stderr_payload["reason"] == "legacy_gateway_environment_requires_migration"
+        assert stderr_payload["diagnostic"]["offline"] is True
+        assert dispatches == []
+        assert effects == []
+>       assert provider_selector not in json.dumps(stderr_payload)
+E       assert ' Gateway ' not in '{"diagnosti..._migration"}'
+E         
+E         ' Gateway ' is contained here:
+E            a retired Gateway backend through the current runtime; convert it offline to the explicit service/client configuration or keep the matching historical release", "reason": "legacy_gateway_environment_requires_migration"}
+E         ?           +++++++++
+
+tests\unit\runtime\test_legacy_remote_config_migration.py:392: AssertionError
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\source_code\backtrader\.codex-tmp\iteration10_cfg05_bt_store_provider_gateway_r2_20261016\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/runtime/test_legacy_remote_config_migration.py::test_bt_store_provider_gateway_selector_is_migration_rejected_by_legacy_entry[trimmed-exact-gateway]
+1 failed, 4 passed, 1 warning in 0.61s
