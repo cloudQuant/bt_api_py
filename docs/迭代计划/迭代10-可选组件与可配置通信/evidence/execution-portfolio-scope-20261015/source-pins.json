@@ -1,0 +1,161 @@
+{
+  "base_tracked_status_unchanged": true,
+  "execution_tracked_diff_paths_unchanged": true,
+  "post": {
+    "base": {
+      "branch": "dev",
+      "files": {
+        "src/bt_api_base/service_protocol.py": {
+          "bytes": 26174,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+          "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+        }
+      },
+      "head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "tracked_status": ""
+    },
+    "captured_utc": "2026-10-15T15:47:39.974019+00:00",
+    "execution": {
+      "branch": "dev",
+      "files": {
+        "pyproject.toml": {
+          "bytes": 1786,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\pyproject.toml",
+          "sha256": "8c93913088d48ef6742a0d8c444d1a59ae7cfdcc2e32f9de2285d6afaa0d50ec"
+        },
+        "src/bt_api_execution/__init__.py": {
+          "bytes": 10449,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\__init__.py",
+          "sha256": "62a34d56c8492225c91046d381ed5c25e9f6a49c4b7ea4cb55953b05f83a9063"
+        },
+        "src/bt_api_execution/admission.py": {
+          "bytes": 7006,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\admission.py",
+          "sha256": "386370f20c059e5908dc4004cee71d11a71d4b18da4816ffc75b60c8748516d8"
+        },
+        "src/bt_api_execution/contracts.py": {
+          "bytes": 60653,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\contracts.py",
+          "sha256": "842a0bc6a6c2b6d1267fa8d875c14ac2f7a65dcffccf6a6ae742d719e8893394"
+        },
+        "src/bt_api_execution/facade.py": {
+          "bytes": 49427,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\facade.py",
+          "sha256": "06c4edad1c86412ef8eda56d863b2e8912f480a57996016ab8cfb4a9dc44579c"
+        },
+        "src/bt_api_execution/group_contracts.py": {
+          "bytes": 15182,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\group_contracts.py",
+          "sha256": "961e137c925ab5bbed362c65f9b39f32e8b53622f6b2ffc55786ca22a167fb4a"
+        },
+        "src/bt_api_execution/service_component.py": {
+          "bytes": 11190,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\service_component.py",
+          "sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302"
+        },
+        "src/bt_api_execution/service_order_entry.py": {
+          "bytes": 35099,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\service_order_entry.py",
+          "sha256": "bc5aa35be4d2e101cbb5765091bcb2938acfde29ceda3612a18c9cfb7e839c43"
+        },
+        "src/bt_api_execution/store.py": {
+          "bytes": 714482,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\store.py",
+          "sha256": "6c107068156e4807e29acad8689fe9d52651872bade257aa321ae2132ed3932f"
+        },
+        "tests/test_group_order_entry.py": {
+          "bytes": 48974,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\tests\\test_group_order_entry.py",
+          "sha256": "b41963a70fe6c0fefa7ee6754a69fa518c6dfeae5befa50523db9489f05dc6e5"
+        }
+      },
+      "head": "d2b49c44fdc8689e5728ed2f01a9919c1ee66afe",
+      "owned_changed_paths_only": true,
+      "tracked_diff_paths": [
+        "src/bt_api_execution/service_order_entry.py",
+        "tests/test_group_order_entry.py"
+      ],
+      "tracked_status": "M src/bt_api_execution/service_order_entry.py\n M tests/test_group_order_entry.py"
+    }
+  },
+  "pre": {
+    "base": {
+      "branch": "dev",
+      "files": {
+        "src/bt_api_base/service_protocol.py": {
+          "bytes": 26174,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py",
+          "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+        }
+      },
+      "head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "tracked_status": ""
+    },
+    "captured_utc": "2026-10-15T15:47:38.293346+00:00",
+    "execution": {
+      "branch": "dev",
+      "files": {
+        "pyproject.toml": {
+          "bytes": 1786,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\pyproject.toml",
+          "sha256": "8c93913088d48ef6742a0d8c444d1a59ae7cfdcc2e32f9de2285d6afaa0d50ec"
+        },
+        "src/bt_api_execution/__init__.py": {
+          "bytes": 10449,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\__init__.py",
+          "sha256": "62a34d56c8492225c91046d381ed5c25e9f6a49c4b7ea4cb55953b05f83a9063"
+        },
+        "src/bt_api_execution/admission.py": {
+          "bytes": 7006,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\admission.py",
+          "sha256": "386370f20c059e5908dc4004cee71d11a71d4b18da4816ffc75b60c8748516d8"
+        },
+        "src/bt_api_execution/contracts.py": {
+          "bytes": 60653,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\contracts.py",
+          "sha256": "842a0bc6a6c2b6d1267fa8d875c14ac2f7a65dcffccf6a6ae742d719e8893394"
+        },
+        "src/bt_api_execution/facade.py": {
+          "bytes": 49427,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\facade.py",
+          "sha256": "06c4edad1c86412ef8eda56d863b2e8912f480a57996016ab8cfb4a9dc44579c"
+        },
+        "src/bt_api_execution/group_contracts.py": {
+          "bytes": 15182,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\group_contracts.py",
+          "sha256": "961e137c925ab5bbed362c65f9b39f32e8b53622f6b2ffc55786ca22a167fb4a"
+        },
+        "src/bt_api_execution/service_component.py": {
+          "bytes": 11190,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\service_component.py",
+          "sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302"
+        },
+        "src/bt_api_execution/service_order_entry.py": {
+          "bytes": 35099,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\service_order_entry.py",
+          "sha256": "bc5aa35be4d2e101cbb5765091bcb2938acfde29ceda3612a18c9cfb7e839c43"
+        },
+        "src/bt_api_execution/store.py": {
+          "bytes": 714482,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\store.py",
+          "sha256": "6c107068156e4807e29acad8689fe9d52651872bade257aa321ae2132ed3932f"
+        },
+        "tests/test_group_order_entry.py": {
+          "bytes": 48974,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\tests\\test_group_order_entry.py",
+          "sha256": "b41963a70fe6c0fefa7ee6754a69fa518c6dfeae5befa50523db9489f05dc6e5"
+        }
+      },
+      "head": "d2b49c44fdc8689e5728ed2f01a9919c1ee66afe",
+      "owned_changed_paths_only": true,
+      "tracked_diff_paths": [
+        "src/bt_api_execution/service_order_entry.py",
+        "tests/test_group_order_entry.py"
+      ],
+      "tracked_status": "M src/bt_api_execution/service_order_entry.py\n M tests/test_group_order_entry.py"
+    }
+  },
+  "purpose": "exact source bindings for one focused Execution portfolio-scope regression; no broader package claim",
+  "relevant_files_unchanged_during_test": true,
+  "schema_version": 1
+}

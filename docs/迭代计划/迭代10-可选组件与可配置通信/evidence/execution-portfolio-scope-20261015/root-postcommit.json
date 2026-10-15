@@ -1,0 +1,20 @@
+{
+  "status": "PASS_SCOPED_PACKAGE_POSTCOMMIT",
+  "branch": "dev",
+  "parent": "d2b49c44fdc8689e5728ed2f01a9919c1ee66afe",
+  "head": "bf5760da891168ba83cd0cc18ee174bbbca2f4e7",
+  "paths": [
+    "src/bt_api_execution/service_order_entry.py",
+    "tests/test_group_order_entry.py"
+  ],
+  "raw_sha256": {
+    "src/bt_api_execution/service_order_entry.py": "bc5aa35be4d2e101cbb5765091bcb2938acfde29ceda3612a18c9cfb7e839c43",
+    "tests/test_group_order_entry.py": "b41963a70fe6c0fefa7ee6754a69fa518c6dfeae5befa50523db9489f05dc6e5"
+  },
+  "index_empty": true,
+  "qa_repeated": false,
+  "focused_qa": "1 passed, exit 0, no warnings",
+  "independent_static_review": "backtrader_entry_review GO at the exact final pins",
+  "evidence_level": "PACKAGE_SYNTHETIC_SQLITE_ONLY",
+  "formal_case_progress": false
+}

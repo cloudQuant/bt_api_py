@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--junitxml=D:\\temp\\iteration10-execution-portfolio-scope-fix-20261015-r1\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-execution-portfolio-scope-fix-20261015-r1\\pytest-tmp",
+    "tests/test_group_order_entry.py::test_group_leg_target_resolution_preserves_portfolio_with_same_run_scope"
+  ],
+  "cwd": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+  "node": "tests/test_group_order_entry.py::test_group_leg_target_resolution_preserves_portfolio_with_same_run_scope",
+  "python": "C:\\anaconda3\\python.exe",
+  "python_version": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+  "selected_environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src"
+  }
+}
