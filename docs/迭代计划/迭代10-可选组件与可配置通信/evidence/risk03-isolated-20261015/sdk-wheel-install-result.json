@@ -1,0 +1,63 @@
+{
+  "commands": [
+    {
+      "command": [
+        "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "wheel",
+        "--no-deps",
+        "--disable-pip-version-check",
+        "--wheel-dir",
+        "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\wheelhouse",
+        "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\source\\bt_api_py_sdk"
+      ],
+      "exit_code": 0,
+      "name": "sdk-wheel-build",
+      "stderr_log": "logs/sdk-wheel-build.stderr.txt",
+      "stdout_log": "logs/sdk-wheel-build.stdout.txt"
+    },
+    {
+      "command": [
+        "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--report",
+        "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\logs\\sdk-pip-install-report.json",
+        "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\wheelhouse\\bt_api_py-0.15.5-py3-none-any.whl"
+      ],
+      "exit_code": 0,
+      "name": "sdk-wheel-install",
+      "stderr_log": "logs/sdk-wheel-install.stderr.txt",
+      "stdout_log": "logs/sdk-wheel-install.stdout.txt"
+    },
+    {
+      "command": [
+        "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "check"
+      ],
+      "exit_code": 0,
+      "name": "sdk-pip-check",
+      "stderr_log": "logs/sdk-pip-check.stderr.txt",
+      "stdout_log": "logs/sdk-pip-check.stdout.txt"
+    }
+  ],
+  "forbidden_distributions_requested": [],
+  "install_report": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\logs\\sdk-pip-install-report.json",
+  "pytest_executed": false,
+  "sdk_commit": "0821e41f2ec967aa7bce01234dd1824e3aeb4f95",
+  "sdk_source_archive": {
+    "bytes": 3707420,
+    "name": "bt_api_py-0821e41.zip",
+    "sha256": "04BD26E9E421E966763AF25A8AADB89C3E0D449C84CDCED1CB4F5D049D089455"
+  },
+  "sdk_wheel": {
+    "bytes": 1113796,
+    "name": "bt_api_py-0.15.5-py3-none-any.whl",
+    "sha256": "473B65FBBC45F7506209C102F0BCD0A33995DD428231B34A0DE6440BA675EA9F"
+  }
+}

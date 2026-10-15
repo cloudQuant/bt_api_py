@@ -1,0 +1,117 @@
+{
+  "built_wheels": [
+    {
+      "bytes": 177472,
+      "name": "bt_api_base-0.15.8-py3-none-any.whl",
+      "sha256": "46404F8CCD536D7F0CD240D7C1767A1B2B235155DD0AF9115D4D6F533102F18D"
+    },
+    {
+      "bytes": 151666,
+      "name": "bt_api_risk-0.1.0-py3-none-any.whl",
+      "sha256": "6A967E4B67256AB91E1983E845906F784A64A200D0B8D9783AE747AC921FAA9A"
+    },
+    {
+      "bytes": 26056,
+      "name": "bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+      "sha256": "6EF5CBF5CAF1BC663FD2978AA6B7517DE19EC8C159D5E4E5FFE29D70206FAF37"
+    }
+  ],
+  "forbidden_distributions": [],
+  "forbidden_modules": [
+    "bt_api_execution",
+    "bt_api_gateway",
+    "bt_api_monitor"
+  ],
+  "import_origins": {
+    "bt_api_base.service_protocol": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_base\\service_protocol.py",
+    "bt_api_py": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\__init__.py",
+    "bt_api_py.bt_api": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\bt_api.py",
+    "bt_api_py.service_components": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_components.py",
+    "bt_api_py.service_config": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_config.py",
+    "bt_api_py.service_execution": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_execution.py",
+    "bt_api_py.service_host": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_host.py",
+    "bt_api_py.service_registry": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_registry.py",
+    "bt_api_py.service_risk_order_entry": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_risk_order_entry.py",
+    "bt_api_py.service_risk_order_journal": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_risk_order_journal.py",
+    "bt_api_py.service_runtime": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py\\service_runtime.py",
+    "bt_api_risk": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_risk\\__init__.py",
+    "bt_api_transport_zmq": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_transport_zmq\\__init__.py",
+    "nacl": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\nacl\\__init__.py",
+    "pytest": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\pytest\\__init__.py",
+    "spawn_helpers": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\source\\bt_api_py_sdk\\tests\\unit\\_spawned_process_helpers.py",
+    "test_target": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\source\\bt_api_py_sdk\\tests\\unit\\test_service_risk_only_order_integration.py",
+    "zmq": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\zmq\\__init__.py"
+  },
+  "include_system_site_packages": false,
+  "installed_distribution_count": 57,
+  "installed_versions": {
+    "bt-api-base": "0.15.8",
+    "bt-api-py": "0.15.5",
+    "bt-api-risk": "0.1.0",
+    "bt-api-transport-zmq": "0.1.0",
+    "pytest": "9.1.1"
+  },
+  "pip_check_exit": 0,
+  "pip_check_stdout": "No broken requirements found.",
+  "pip_install_exit": 0,
+  "pytest_executed": false,
+  "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+  "python_executable": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Scripts\\python.exe",
+  "sdk_commit": "0821e41f2ec967aa7bce01234dd1824e3aeb4f95",
+  "sdk_install_provenance": {
+    "direct_url": {
+      "archive_info": {
+        "hash": "sha256=473b65fbbc45f7506209c102f0bcd0a33995dd428231b34a0de6440ba675ea9f",
+        "hashes": {
+          "sha256": "473b65fbbc45f7506209c102f0bcd0a33995dd428231b34a0de6440ba675ea9f"
+        }
+      },
+      "url": "file:///D:/temp/iteration10-risk03-isolated-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl"
+    },
+    "dist_info": "D:\\temp\\iteration10-risk03-isolated-20261015-r1\\venv\\Lib\\site-packages\\bt_api_py-0.15.5.dist-info"
+  },
+  "sdk_note": "Installed from the scoped SDK dev commit 0821e41f; no editable install and no Execution/Gateway/Monitor package.",
+  "sdk_version": "0.15.5",
+  "sdk_wheel": {
+    "bytes": 1113796,
+    "name": "bt_api_py-0.15.5-py3-none-any.whl",
+    "sha256": "473B65FBBC45F7506209C102F0BCD0A33995DD428231B34A0DE6440BA675EA9F"
+  },
+  "sdk_wheel_installed": true,
+  "source_archives": [
+    {
+      "bytes": 313021,
+      "name": "bt_api_base-b4aabd1.zip",
+      "sha256": "7F78937269321564AA692A439918078CAC4449A97FB98AAF6A10A47ABFB34937"
+    },
+    {
+      "bytes": 229819,
+      "name": "bt_api_risk-72d955e.zip",
+      "sha256": "0C54B61D1023315429C81F3483C1EB6436DC6D1439E5DB298DA36CA8287E901E"
+    },
+    {
+      "bytes": 47903,
+      "name": "bt_api_transport_zmq-614e2d3.zip",
+      "sha256": "817EB0CE2485F5FE51AA2EA2D86F46E5A4AD66756AFB7BD88B91AD9335DC6FEC"
+    }
+  ],
+  "source_commits": {
+    "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api_risk": "72d955e6ff1ddc35aabaf67ef88dc48a765f38df",
+    "bt_api_transport_zmq": "614e2d3837e93bd9a8d30066b883e47a03020d51"
+  },
+  "spawn_targets": {
+    "_host_process": {
+      "module": "tests.unit.test_service_risk_only_order_integration",
+      "pickle_importable": true,
+      "qualname": "_host_process"
+    },
+    "_strategy_process": {
+      "module": "tests.unit.test_service_risk_only_order_integration",
+      "pickle_importable": true,
+      "qualname": "_strategy_process"
+    }
+  },
+  "status": "READY_FOR_ROOT_FORMAL_NODE",
+  "working_directory": "D:\\temp\\iteration10-risk03-isolated-20261015-r1"
+}

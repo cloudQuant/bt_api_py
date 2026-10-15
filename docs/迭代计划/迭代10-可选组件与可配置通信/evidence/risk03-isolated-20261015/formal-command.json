@@ -1,0 +1,19 @@
+{
+  "PYTHONPATH": "D:/temp/iteration10-risk03-isolated-20261015-r1/formal-node-test-root;D:/temp/iteration10-risk03-isolated-20261015-r1/provenance",
+  "source_newline_note": "Git LF blobs and exported/installed CRLF sources compare equal after CRLF-to-LF only; exact export and test-copy pins preserved",
+  "installed_sdk_commit": "0821e41f2ec967aa7bce01234dd1824e3aeb4f95",
+  "cwd": "D:\\temp\\iteration10-risk03-isolated-20261015-r1",
+  "executable": "D:/temp/iteration10-risk03-isolated-20261015-r1/venv/Scripts/python.exe",
+  "argv": [
+    "-m",
+    "pytest",
+    "--import-mode=importlib",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-v",
+    "formal-node-test-root/tests/unit/test_service_risk_only_order_integration.py::test_spawned_risk_service_gates_idempotent_orders_and_metadata_scope",
+    "--junitxml=D:\\temp\\iteration10-risk03-isolated-20261015-r1\\formal-run/junit.xml",
+    "--basetemp=D:\\temp\\iteration10-risk03-isolated-20261015-r1\\formal-run/pytest-tmp"
+  ]
+}

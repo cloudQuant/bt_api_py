@@ -1,0 +1,64 @@
+{
+  "case": "RISK03",
+  "status": "PASS_ISOLATED_LOCAL_SERVICE_NODE",
+  "sdk_commit": "0821e41f2ec967aa7bce01234dd1824e3aeb4f95",
+  "test_count": 1,
+  "pytest_exit": 0,
+  "sdk_processes": [
+    {
+      "file": "provenance\\observations\\process-2260.json",
+      "pid": 2260,
+      "module_count": 118,
+      "all_recorded_file_origins_installed": true,
+      "namespace_without_file_origin": [
+        "bt_api_risk.containers"
+      ],
+      "forbidden_optional_modules": [],
+      "sha256": "0ea93bfa5cc1a63bcf9906d026ead484f370cc263df7364e103cdc68b1eacc14"
+    },
+    {
+      "file": "provenance\\observations\\process-25444.json",
+      "pid": 25444,
+      "module_count": 107,
+      "all_recorded_file_origins_installed": true,
+      "namespace_without_file_origin": [
+        "bt_api_risk.containers"
+      ],
+      "forbidden_optional_modules": [],
+      "sha256": "d96b58f41fbe0b042510d02f67dfee465191f0d93b7773d8e7173273c37e82a6"
+    },
+    {
+      "file": "provenance\\observations\\process-45392.json",
+      "pid": 45392,
+      "module_count": 101,
+      "all_recorded_file_origins_installed": true,
+      "namespace_without_file_origin": [
+        "bt_api_risk.containers"
+      ],
+      "forbidden_optional_modules": [],
+      "sha256": "39687cc47affb5cecc0d7a568dedc31618e639be775e5b4a9ba5ad557330556c"
+    },
+    {
+      "file": "provenance\\observations\\process-72428.json",
+      "pid": 72428,
+      "module_count": 107,
+      "all_recorded_file_origins_installed": true,
+      "namespace_without_file_origin": [
+        "bt_api_risk.containers"
+      ],
+      "forbidden_optional_modules": [],
+      "sha256": "0051f8b1c2dcae227d34d4bf5f8d38f6ee91d70b17f60b660edb46825a973a2f"
+    }
+  ],
+  "ancillary_records": [
+    {
+      "file": "provenance\\observations\\process-39848.json",
+      "pid": 39848,
+      "executable": "C:\\anaconda3\\python.exe",
+      "loaded_sdk_module_count": 0
+    }
+  ],
+  "forbidden_optional_modules_observed": [],
+  "origin_limit": "bt_api_risk.containers is a namespace without __file__; its __path__ was not captured. All recorded concrete SDK/package file origins are in venv; no all-interpreter-isolated claim is made for ancillary no-SDK records.",
+  "runtime_evidence": "Exact test asserts service gate, idempotency, explicit queries, zero provider-write delta on denial and zero fallback cleanup; synthetic provider"
+}

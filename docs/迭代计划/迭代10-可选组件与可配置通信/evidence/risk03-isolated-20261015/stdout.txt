@@ -1,0 +1,9 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-9.1.1, pluggy-1.7.0 -- D:\temp\iteration10-risk03-isolated-20261015-r1\venv\Scripts\python.exe
+rootdir: D:\temp\iteration10-risk03-isolated-20261015-r1
+collecting ... collected 1 item
+
+formal-node-test-root/tests/unit/test_service_risk_only_order_integration.py::test_spawned_risk_service_gates_idempotent_orders_and_metadata_scope PASSED [100%]
+
+- generated xml file: D:\temp\iteration10-risk03-isolated-20261015-r1\formal-run\junit.xml -
+============================== 1 passed in 4.49s ==============================
