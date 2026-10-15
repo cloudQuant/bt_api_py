@@ -1,0 +1,43 @@
+{
+  "command": "C:/anaconda3/python.exe -m pytest --noconftest --import-mode=importlib -q --junitxml=D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\junit.xml tests/unit/stores/test_service_execution_broker_recovery.py",
+  "cwd": "D:\\source_code\\backtrader",
+  "interpreter": "C:/anaconda3/python.exe",
+  "pytest_disable_plugin_autoload": "1",
+  "stdout_path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\stdout.log",
+  "stdout_sha256": "8ABEDFC13294C56EF5EEFED64F993D564BA84A0B160AE989ED441AB7E8AF6353",
+  "stderr_path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\stderr.log",
+  "stderr_sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+  "junit": {
+    "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\junit.xml",
+    "size": 9123,
+    "sha256": "089F7FE7024B5E5A5EA458DA88851CEB33ACDC3AF6C15CBAFAB5A84F1A881550"
+  },
+  "exit_code": 1,
+  "source_pins": [
+    {
+      "path": "D:\\source_code\\backtrader\\backtrader\\brokers\\btapibroker.py",
+      "size": 420385,
+      "sha256": "030004B70A10D339057D3252622391AD0D1307D6EE6BCE40ECBE810B779F27CF"
+    },
+    {
+      "path": "D:\\source_code\\backtrader\\backtrader\\stores\\service_execution_adapter.py",
+      "size": 61319,
+      "sha256": "6B5B67D22C95BA8416A6889CDCA28CE17E5646AB23ABB7D9B2F27DA005E66D87"
+    },
+    {
+      "path": "D:\\source_code\\backtrader\\backtrader\\stores\\service_execution_recovery.py",
+      "size": 110812,
+      "sha256": "D03C8827BFCB74DE65F27177035033F319C84E0E314578F236A22B5A60F55F57"
+    },
+    {
+      "path": "D:\\source_code\\backtrader\\backtrader\\strategy.py",
+      "size": 154477,
+      "sha256": "00535AED00A24331B59FAAF6E9D49FF453F23CA60D3ED02041B30224FDF6875A"
+    },
+    {
+      "path": "D:\\source_code\\backtrader\\tests\\unit\\stores\\test_service_execution_broker_recovery.py",
+      "size": 35866,
+      "sha256": "DCF7D5635E7FCC6BC03E5A4E040CD7AA25F6A23C2A6D6937F01CE60B63BC43C7"
+    }
+  ]
+}

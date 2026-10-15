@@ -1,0 +1,149 @@
+..F..........F                                                           [100%]
+================================== FAILURES ===================================
+___ test_broker_restores_snapshot_order_scalars_without_booking_owner_state ___
+
+    def test_broker_restores_snapshot_order_scalars_without_booking_owner_state() -> None:
+        broker = BtApiBroker(store=None, cash=1000.0)
+        order = _RecoveryOrder()
+        broker._service_execution_session = SimpleNamespace(
+            adapter=SimpleNamespace(
+                recovery_manifest=lambda intent_id: {
+                    "submit_fingerprint": "submit-fingerprint",
+                    "recovery_binding": {"tradeid": 7, "data_name": "BTC-USDT"},
+                }
+            ),
+            recovery_journal=object(),
+        )
+        response = {
+            "kind": "service_execution_recovery_restore",
+            "intent_id": "run-open",
+            "submit_fingerprint": "submit-fingerprint",
+            "order_state": {
+                "intent_id": "run-open",
+                "submit_fingerprint": "submit-fingerprint",
+                "quantity": "2",
+                "filled_quantity": "1",
+                "average_price": None,
+                "cumulative_commission": None,
+                "state": "PARTIALLY_FILLED",
+                "provider_order_id": "provider-1",
+                "unknown_reason_code": None,
+                "review_required": False,
+                "latest_source_sequence": 10,
+                "latest_source_event_id": f"{10:032x}",
+            },
+        }
+    
+        broker.orders[order.ref] = order
+>       broker._restore_service_execution_order(order, response)
+
+tests\unit\stores\test_service_execution_broker_recovery.py:396: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4524: in _restore_service_execution_order
+    self._fence_service_execution_recovery(order, "recovery_order_side_mismatch")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiBroker(parameters=34)
+order = <tests.unit.stores.test_service_execution_broker_recovery._RecoveryOrder object at 0x0000014A858F0510>
+reason = 'recovery_order_side_mismatch'
+
+    def _fence_service_execution_recovery(self, order, reason):
+        self._managed_provider_projection_failed = True
+        self._trading_enabled = False
+        self._startup_ready = False
+        if order is not None:
+            order.addinfo(
+                service_execution_recovery_managed=True,
+                service_execution_recovery_error=str(reason),
+                execution_unknown=True,
+            )
+        freeze = getattr(self.store, "freeze_openings", None)
+        if callable(freeze):
+            freeze("service_execution_recovery_projection_unavailable")
+>       raise RuntimeError("service execution recovery projection unavailable") from None
+E       RuntimeError: service execution recovery projection unavailable
+
+backtrader\brokers\btapibroker.py:4912: RuntimeError
+_ test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose __
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-935/test_multiple_intent_facts_rec0')
+
+    def test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose(tmp_path) -> None:
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "trade-projection.sqlite3")
+        namespace = _namespace()
+        _install_flat_baseline(journal)
+        payloads = (
+            _submit_payload(
+                "open-a", side="BUY", effect="OPEN", quantity="2", reduce_only=False
+            ),
+            _submit_payload(
+                "close-a", side="SELL", effect="CLOSE", quantity="1", reduce_only=True
+            ),
+            _submit_payload(
+                "open-b", side="BUY", effect="OPEN", quantity="1", reduce_only=False
+            ),
+        )
+        fingerprints = {}
+        for payload in payloads:
+            fingerprints[payload["intent_id"]] = journal.prepare_intent(
+                namespace,
+                intent_id=payload["intent_id"],
+                submit_payload=payload,
+                recovery_binding={"tradeid": 11, "data_name": "BTC-USDT"},
+            )
+        events = [
+            _fill_event("open-a", fingerprints["open-a"], 1, quantity="2"),
+            _fill_event("close-a", fingerprints["close-a"], 2, quantity="1"),
+            _fill_event("open-b", fingerprints["open-b"], 3, quantity="1"),
+        ]
+        assert journal.apply_events_page(namespace, _page(events, 3)) is True
+        journal.install_snapshot(
+            namespace,
+            _snapshot(
+                [
+                    _order_row(
+                        intent_id, fingerprints[intent_id], side=payload["side"],
+                        effect=payload["position_effect"], quantity=payload["quantity"],
+                        filled=payload["quantity"], sequence=index,
+                    )
+                    for index, (intent_id, payload) in enumerate(
+                        ((item["intent_id"], item) for item in payloads), start=1
+                    )
+                ],
+                3,
+            ),
+        )
+        assert journal.strategy_trade_positions(namespace) == {
+            ("BTC-USDT", 11): pytest.approx(2)
+        }
+    
+        # A same-trade close cannot exceed the attributable open quantity.
+        overclose = _submit_payload(
+            "close-too-much", side="SELL", effect="CLOSE", quantity="3", reduce_only=True
+        )
+        journal.prepare_intent(
+            namespace,
+            intent_id="close-too-much",
+            submit_payload=overclose,
+            recovery_binding={"tradeid": 11, "data_name": "BTC-USDT"},
+        )
+        too_much_event = _fill_event(
+            "close-too-much", journal.intent_manifest(namespace, "close-too-much")["submit_fingerprint"],
+            4, quantity="3",
+        )
+>       with pytest.raises(ServiceExecutionRecoveryError, match="RECOVERY_TRADE_CLOSE_CAPACITY_INVALID"):
+E       Failed: DID NOT RAISE <class 'backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError'>
+
+tests\unit\stores\test_service_execution_broker_recovery.py:963: Failed
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\source_code\backtrader\.codex-tmp\bt-recovery-callback-20261016-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/stores/test_service_execution_broker_recovery.py::test_broker_restores_snapshot_order_scalars_without_booking_owner_state
+FAILED tests/unit/stores/test_service_execution_broker_recovery.py::test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose
+2 failed, 12 passed, 1 warning in 5.35s

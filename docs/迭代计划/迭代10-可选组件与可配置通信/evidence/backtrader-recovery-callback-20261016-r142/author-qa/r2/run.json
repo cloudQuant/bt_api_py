@@ -1,0 +1,68 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-q",
+    "--junitxml=D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r2\\junit.xml",
+    "tests/unit/stores/test_service_execution_broker_recovery.py"
+  ],
+  "cwd": "D:\\source_code\\backtrader",
+  "environment_override": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "exit_code": 0,
+  "junit_bytes": 3165,
+  "junit_sha256": "A176C4249410809D4F1ED75540E270677763BA122123B45770FC371B43B70F0D",
+  "python_executable": "C:\\anaconda3\\python.exe",
+  "source_pins_after": {
+    "backtrader/brokers/btapibroker.py": {
+      "bytes": 420385,
+      "sha256": "030004B70A10D339057D3252622391AD0D1307D6EE6BCE40ECBE810B779F27CF"
+    },
+    "backtrader/stores/service_execution_adapter.py": {
+      "bytes": 61319,
+      "sha256": "6B5B67D22C95BA8416A6889CDCA28CE17E5646AB23ABB7D9B2F27DA005E66D87"
+    },
+    "backtrader/stores/service_execution_recovery.py": {
+      "bytes": 115574,
+      "sha256": "2D01F5B0B59568653F67897CDE94F72B77E43FC508109F6892B5BF7E966A334C"
+    },
+    "backtrader/strategy.py": {
+      "bytes": 154477,
+      "sha256": "00535AED00A24331B59FAAF6E9D49FF453F23CA60D3ED02041B30224FDF6875A"
+    },
+    "tests/unit/stores/test_service_execution_broker_recovery.py": {
+      "bytes": 36157,
+      "sha256": "FC4A0FE48D144EEFE074EBBC2389A81BBED0B1A3658A346967DAE91BA5FBEDEF"
+    }
+  },
+  "source_pins_before": {
+    "backtrader/brokers/btapibroker.py": {
+      "bytes": 420385,
+      "sha256": "030004B70A10D339057D3252622391AD0D1307D6EE6BCE40ECBE810B779F27CF"
+    },
+    "backtrader/stores/service_execution_adapter.py": {
+      "bytes": 61319,
+      "sha256": "6B5B67D22C95BA8416A6889CDCA28CE17E5646AB23ABB7D9B2F27DA005E66D87"
+    },
+    "backtrader/stores/service_execution_recovery.py": {
+      "bytes": 115574,
+      "sha256": "2D01F5B0B59568653F67897CDE94F72B77E43FC508109F6892B5BF7E966A334C"
+    },
+    "backtrader/strategy.py": {
+      "bytes": 154477,
+      "sha256": "00535AED00A24331B59FAAF6E9D49FF453F23CA60D3ED02041B30224FDF6875A"
+    },
+    "tests/unit/stores/test_service_execution_broker_recovery.py": {
+      "bytes": 36157,
+      "sha256": "FC4A0FE48D144EEFE074EBBC2389A81BBED0B1A3658A346967DAE91BA5FBEDEF"
+    }
+  },
+  "stderr_bytes": 0,
+  "stderr_sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+  "stdout_bytes": 656,
+  "stdout_sha256": "3AAFED429CC515CE213F00633C0A0E0CAA44D4C30C952AAE5E050354B40C844B"
+}

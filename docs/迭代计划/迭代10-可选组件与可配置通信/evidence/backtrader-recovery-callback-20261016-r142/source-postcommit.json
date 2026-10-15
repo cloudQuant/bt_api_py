@@ -1,0 +1,59 @@
+{
+  "repository": "D:/source_code/backtrader",
+  "parent": "4c316d342a221e94c681bd8717430491ac119d59",
+  "post_path": "D:\\source_code\\backtrader\\.codex-tmp\\iteration10-bt-recovery-dev-postcommit-r3-20261016.json",
+  "message": "Add durable execution recovery projection",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "backtrader/brokers/btapibroker.py": "030004b70a10d339057d3252622391ad0d1307d6ee6bce40ecbe810b779f27cf",
+    "backtrader/stores/service_execution_adapter.py": "6b5b67d22c95ba8416a6889cdca28ce17e5646ab23abb7d9b2f27da005e66d87",
+    "backtrader/stores/service_execution_recovery.py": "2d01f5b0b59568653f67897cde94f72b77e43fc508109f6892b5bf7e966a334c",
+    "backtrader/strategy.py": "00535aed00a24331b59faaf6e9d49ff453f23ca60d3ed02041b30224fdf6875a",
+    "tests/unit/stores/test_service_execution_broker_recovery.py": "fc4a0fe48d144eefe074ebbc2389a81bbed0b1a3658a346967dae91ba5fbedef"
+  },
+  "evidence_sha256": {
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\stdout.log": "8abedfc13294c56ef5eefed64f993d564ba84a0b160ae989ed441ab7e8af6353",
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\junit.xml": "089f7fe7024b5e5a5ea458da88851ceb33acdc3af6c15cbafab5a84f1a881550",
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r1\\run.json": "b26ee5460fd2f44e462a84a3aa9243a6d40ea25ec7ae17fcbdf430925dd3fb59",
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r2\\stdout.log": "3aafed429cc515ce213f00633c0a0e0caa44d4c30c952aae5e050354b40c844b",
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r2\\stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r2\\junit.xml": "a176c4249410809d4f1ed75540e270677763ba122123b45770fc371b43b70f0d",
+    "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r2\\run.json": "a862e0a39b2f311a4db22e6c1024735483dc873712a39ecec81feaa3a13a67c1",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-scoped-source-delivery-r3.py": "b0c98264c6782594325b2e4510c6eee19270d55e6e99e9a82c626084cfdf3df9",
+    "D:\\source_code\\backtrader\\.codex-tmp\\iteration10-bt-recovery-delivery-r3-assessment-20261016.json": "988b0b4edd48756372e11c20cf17e542a0f0e8f8e60da6f55ca0a5b1faf7651f"
+  },
+  "junit": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-callback-20261016-r2\\junit.xml",
+  "tests_passed": 16,
+  "allowed_blank_at_eof": {},
+  "allowed_markdown_hardbreaks": {},
+  "paths": [
+    "backtrader/brokers/btapibroker.py",
+    "backtrader/stores/service_execution_adapter.py",
+    "backtrader/stores/service_execution_recovery.py",
+    "backtrader/strategy.py",
+    "tests/unit/stores/test_service_execution_broker_recovery.py"
+  ],
+  "filtered_blob_ids": {
+    "backtrader/brokers/btapibroker.py": "ee9e755a243023efe485dcbef5e3abd86f6dedc0",
+    "backtrader/stores/service_execution_adapter.py": "6f5f7139f75c26951bcb7b73ffbcf5d20bff718e",
+    "backtrader/stores/service_execution_recovery.py": "141030c4fdd2d9372eb8fd0fd964741cbff83933",
+    "backtrader/strategy.py": "2c3cfb24f348a896b1baa44fd6d6ca5a0b25c570",
+    "tests/unit/stores/test_service_execution_broker_recovery.py": "bf413219ee13a00dc357176835241efd52b704da"
+  },
+  "unrelated_paths": [
+    "0",
+    "backtrader/stores/service_execution_session.py",
+    "backtrader/stores/service_strategy_account_book.py",
+    "backtrader_runtime/ctp_configured_front_check.py",
+    "backtrader_runtime/ctp_simnow_operator.py",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+  ],
+  "unrelated_diff_sha256": "3be3bc156635c6b320ae28b6bdf511f077d4ebd8682de151169c3f7246821793",
+  "unrelated_status_sha256": "b93f8847d607cf1daf8bc1b529912e4052957c9c2f2afb7344d787ad54241ae5",
+  "head": "48bde5d76bd666ce876763a613f27b92e9c62074",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "unrelated_untracked_sha256": {},
+  "unrelated_untracked_preserved": true
+}
