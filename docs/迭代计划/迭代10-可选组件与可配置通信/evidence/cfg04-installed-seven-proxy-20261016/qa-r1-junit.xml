@@ -1,0 +1,649 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="3" time="9.850" timestamp="2026-10-16T04:16:41.870699+08:00" hostname="yun"><testcase classname="tests.unit.test_iteration10_optional_install_matrix" name="test_installed_gateway_component_serves_a_registered_strategy_without_other_domains" time="0.066"><failure message="AssertionError: Root must provide the separate installed Gateway server interpreter&#10;assert None">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-883/test_installed_gateway_compone0')
+
+    def test_installed_gateway_component_serves_a_registered_strategy_without_other_domains(
+        tmp_path: Path,
+    ) -&gt; None:
+        """A committed-wheel client and one declared Gateway service exchange a real frame."""
+    
+        assert sys.prefix != sys.base_prefix, "formal node must run in an isolated client venv"
+        client_prefix = str(Path(sys.prefix).resolve())
+        direct_url = _read_direct_url()
+        assert not (direct_url or {}).get("dir_info", {}).get("editable", False)
+        client_distributions = _distribution_versions()
+        _assert_exact_wheel_versions(client_distributions, _EXPECTED_CLIENT_DISTRIBUTIONS)
+        client_domain_presence = _domain_presence()
+        _assert_domain_absence(client_domain_presence)
+        client_origins = {
+            module_name: _assert_installed_origin(module_name)
+            for module_name in (
+                "bt_api_py.service_market",
+                "bt_api_base.market_protocol",
+                "bt_api_base.service_protocol",
+                "bt_api_transport_zmq.market_v2",
+            )
+        }
+    
+        server_python_raw = os.environ.get("BT_API_ITERATION10_CFG02_SERVER_PYTHON")
+&gt;       assert server_python_raw, "Root must provide the separate installed Gateway server interpreter"
+E       AssertionError: Root must provide the separate installed Gateway server interpreter
+E       assert None
+
+tests\unit\test_iteration10_optional_install_matrix.py:586: AssertionError</failure></testcase><testcase classname="tests.unit.test_iteration10_optional_install_matrix" name="test_isolated_strategy_runs_implemented_proxies_without_domain_distributions" time="1.989" /><testcase classname="tests.integration.test_cfg04_installed_group_proxy" name="test_isolated_client_uses_order_group_proxy_with_installed_server" time="7.064"><failure message="AssertionError: assert False&#10; +  where False = &lt;built-in method endswith of str object at 0x000001FD9BBBFED0&gt;('-leg-b')&#10; +    where &lt;built-in method endswith of str object at 0x000001FD9BBBFED0&gt; = 'group:group-unknown-process-02:leg:leg-b'.endswith">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-883/test_isolated_client_uses_orde0')
+
+    @pytest.mark.integration
+    def test_isolated_client_uses_order_group_proxy_with_installed_server(tmp_path: Path) -&gt; None:
+        """Submit two real group legs and retain an UNKNOWN risk hold across query."""
+    
+        assert sys.prefix != sys.base_prefix, "CFG04 client must use its fresh isolated venv"
+        client_distributions = _assert_client_installation()
+        client_origins = {
+            name: _assert_installed_origin(name)
+            for name in (
+                "bt_api_base.service_protocol",
+                "bt_api_py.service_config",
+                "bt_api_py.service_runtime",
+                "bt_api_transport_zmq.client",
+            )
+        }
+        cold_import = _cold_import_probe(tmp_path)
+        assert cold_import["attempted"] == []
+        assert cold_import["loaded"] == []
+        assert all(value is None for value in cold_import["domain_versions"].values())
+    
+        server_python_raw = os.environ.get("BT_API_ITERATION10_CFG04_SERVER_PYTHON")
+        assert server_python_raw, "Root must provide the separate seven-package server venv"
+        server_python = Path(server_python_raw).resolve()
+        assert server_python.is_file()
+        support_root = Path(__file__).resolve().parents[2]
+        support_payloads = _support_payload_map(support_root)
+        server_script = support_root / "tests" / "integration" / "cfg04_group_server.py"
+        endpoint = _endpoint()
+        account_endpoints = {account: _endpoint() for account in _GROUP_ACCOUNTS}
+        account_server_keys = {account: zmq.curve_keypair() for account in _GROUP_ACCOUNTS}
+        coordinator_server_public, coordinator_server_secret = zmq.curve_keypair()
+        coordinator_client_public, coordinator_client_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        server = _LineServer(
+            server_python,
+            server_script,
+            tmp_path / "cfg04-group-server-stderr.txt",
+            tmp_path,
+        )
+        runtime: ServiceClientRuntime | None = None
+        primary_error: BaseException | None = None
+        cleanup_failures: list[str] = []
+        normal_server_close: dict[str, Any] | None = None
+        try:
+            ready = server.start(
+                {
+                    "root": str(tmp_path / "group-server-data"),
+                    "test_support_root": str(support_root),
+                    "support_payloads": support_payloads,
+                    "account_endpoints": account_endpoints,
+                    "coordinator_endpoint": endpoint,
+                    "account_server_keys": {
+                        account: {
+                            "public": _encode_key(keys[0]),
+                            "secret": _encode_key(keys[1]),
+                        }
+                        for account, keys in account_server_keys.items()
+                    },
+                    "coordinator_server": {
+                        "public": _encode_key(coordinator_server_public),
+                        "secret": _encode_key(coordinator_server_secret),
+                    },
+                    "coordinator_client": {
+                        "public": _encode_key(coordinator_client_public),
+                        "secret": _encode_key(coordinator_client_secret),
+                    },
+                    "strategy_client": {"public": _encode_key(strategy_public)},
+                    "metadata_reference_ns": time.time_ns(),
+                }
+            )
+            assert ready["kind"] == "ready", ready
+            server_prefix = Path(ready["prefix"]).resolve()
+            server_base_prefix = Path(ready["base_prefix"]).resolve()
+            assert server_prefix != Path(sys.prefix).resolve()
+            assert server_prefix != server_base_prefix
+            assert Path(ready["working_directory"]).resolve() == tmp_path.resolve()
+            allowed_server_path_roots = (
+                server_prefix,
+                server_base_prefix,
+                support_root.resolve(),
+                tmp_path.resolve(),
+            )
+            assert all(
+                any(
+                    Path(item).resolve() == allowed_root
+                    or Path(item).resolve().is_relative_to(allowed_root)
+                    for allowed_root in allowed_server_path_roots
+                )
+                for item in ready["sys_path"]
+            ), ready["sys_path"]
+            assert ready["source_support"] == support_payloads
+            assert ready["service_id"] == _GROUP_SERVICE_ID
+            assert ready["service_principal"] == _GROUP_SERVICE_PRINCIPAL
+            assert ready["instance_id"] == _GROUP_INSTANCE
+            assert ready["scope_ref"] == _GROUP_SCOPE_REF
+            assert ready["domain"] == _GROUP_DOMAIN
+            assert ready["strategy_ref"] == _GROUP_STRATEGY
+            assert ready["strategy_principal"] == _GROUP_PRINCIPAL
+            assert ready["portfolio_ref"] == _GROUP_PORTFOLIO
+            assert ready["run_id"] == _GROUP_RUN
+            assert tuple(ready["accounts"]) == _GROUP_ACCOUNTS
+            assert ready["pid"] != os.getpid()
+            all_host_pids = {
+                ready["pid"],
+                ready["coordinator_host_pid"],
+                *ready["account_host_pids"].values(),
+            }
+            assert len(all_host_pids) == 4
+            assert all(type(pid) is int and pid &gt; 0 for pid in all_host_pids)
+            assert all(pid != os.getpid() for pid in all_host_pids)
+            assert all(
+                pid != ready["pid"]
+                for pid in (
+                    ready["coordinator_host_pid"],
+                    *ready["account_host_pids"].values(),
+                )
+            )
+            assert ready["distributions"] == _SERVER_DISTRIBUTIONS
+            assert all(
+                row
+                == {
+                    "distribution_installed": True,
+                    "import_spec_available": True,
+                    "module_loaded": True,
+                }
+                for row in ready["domain_presence"].values()
+            )
+            server_site = Path(ready["prefix"]).resolve() / "Lib" / "site-packages"
+            assert all(
+                Path(origin).resolve().is_relative_to(server_site)
+                for origin in ready["origins"].values()
+            ), ready["origins"]
+            assert Path(ready["support_origin"]).resolve().is_relative_to(support_root.resolve())
+            assert not ready["direct_url_editable"]
+    
+            account_routes = ready["upstream_bindings"]
+            assert len(account_routes) == 6
+            expected_routes = (
+                {
+                    (
+                        "upstream.orders",
+                        account,
+                        f"order-entry-route-{account}",
+                        ("orders.resolve_group_leg", "orders.submit_group_leg"),
+                    )
+                    for account in _GROUP_ACCOUNTS
+                }
+                | {
+                    (
+                        "upstream.order_query",
+                        account,
+                        f"order-query-route-{account}",
+                        ("orders.query_group_leg",),
+                    )
+                    for account in _GROUP_ACCOUNTS
+                }
+                | {
+                    (
+                        "upstream.account_reservations",
+                        account,
+                        f"reservation-route-{account}",
+                        ("reservations.query", "reservations.release", "reservations.reserve"),
+                    )
+                    for account in _GROUP_ACCOUNTS
+                }
+            )
+            actual_routes = {
+                (
+                    item["mount"],
+                    item["account_ref"],
+                    item["scope_ref"],
+                    tuple(item["operations"]),
+                )
+                for item in account_routes
+            }
+            assert actual_routes == expected_routes, actual_routes
+    
+            runtime = _runtime(
+                endpoint,
+                ClientCurveKeys(
+                    server_key=coordinator_server_public,
+                    public_key=strategy_public,
+                    secret_key=strategy_secret,
+                ),
+            )
+            registration = runtime.start()
+            assert registration.degraded_count == 0
+            assert len(registration.bindings) == 1
+            binding = registration.bindings[0]
+            assert binding.mount == "broker.order_groups"
+            assert binding.scope.account_refs == _GROUP_ACCOUNTS
+            assert binding.scope.strategy_ref == _GROUP_STRATEGY
+            assert binding.scope.portfolio_ref == _GROUP_PORTFOLIO
+            assert binding.scope.run_id == _GROUP_RUN
+            assert binding.operations == _GROUP_OPERATIONS
+    
+            first_request_record = server.command({"action": "request", "group_id": _GROUP_ONE})
+            assert first_request_record["kind"] == "request"
+            first_request = first_request_record["request"]
+            assert first_request["group_id"] == _GROUP_ONE
+            first_reply = runtime.call(
+                "broker.order_groups",
+                "groups.submit",
+                first_request,
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            paired = _assert_group_reply(first_reply, _GROUP_ONE)
+            paired_query = runtime.call(
+                "broker.order_groups",
+                "groups.query",
+                {"group_id": _GROUP_ONE},
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            assert _assert_group_reply(paired_query, _GROUP_ONE) == paired
+            assert paired["state"] == "PAIRED"
+            assert paired["error_code"] is None
+            assert len(paired["reservations"]) == len(paired["legs"]) == 2
+            assert all(item["child_status"]["state"] == "FILLED" for item in paired["legs"])
+            assert all(item["claim_receipt"] is not None for item in paired["legs"])
+            assert all(
+                item["resolution_receipt"]["resolution_kind"] == "TERMINAL_EXPOSURE_RESOLVED"
+                and item["resolution_receipt"]["trade_count"] == 1
+                and item["resolution_receipt"]["dispatch_latch_active"] is False
+                for item in paired["legs"]
+            )
+    
+            assert server.command({"action": "arm_unknown"}) == {
+                "kind": "armed",
+                "account_ref": "account-b",
+            }
+            second_request_record = server.command({"action": "request", "group_id": _GROUP_TWO})
+            assert second_request_record["kind"] == "request"
+            second_request = second_request_record["request"]
+            assert second_request["group_id"] == _GROUP_TWO
+            unknown_reply = runtime.call(
+                "broker.order_groups",
+                "groups.submit",
+                second_request,
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            unknown = _assert_group_reply(unknown_reply, _GROUP_TWO)
+            assert unknown["state"] == "RECOVERY_REQUIRED"
+            leg_a = next(item for item in unknown["legs"] if item["leg_id"] == "leg-a")
+            leg_b = next(item for item in unknown["legs"] if item["leg_id"] == "leg-b")
+            assert leg_a["child_status"]["state"] == "FILLED"
+            assert leg_a["resolution_receipt"] is not None
+            assert leg_b["child_status"]["state"] == "UNKNOWN"
+            assert leg_b["phase"] == "UNKNOWN"
+            assert leg_b["resolution_receipt"] is None
+            unknown_query = runtime.call(
+                "broker.order_groups",
+                "groups.query",
+                {"group_id": _GROUP_TWO},
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            assert _assert_group_reply(unknown_query, _GROUP_TWO) == unknown
+    
+            runtime.close()
+            assert runtime.state == "closed"
+            assert runtime.cleanup_failures == 0
+            assert runtime.unregister_uncertainties == 0
+            status = server.command({"action": "status"})
+            assert status["kind"] == "status"
+            assert status["accounts"]["account-b"]["pending_holds"]
+            assert status["accounts"]["account-a"]["pending_holds"] == []
+    
+            normal_server_close = server.close_normally()
+            assert len(normal_server_close["normal_closes"]) == 3
+            assert all(
+                item["normal_close"] and item["exitcode"] == 0
+                for item in normal_server_close["normal_closes"]
+            )
+            durable = normal_server_close["durable"]
+            assert durable["paired"]["state"] == "PAIRED"
+            assert durable["unknown"]["state"] == "RECOVERY_REQUIRED"
+            assert "GROUP_PAIRED" in durable["paired_event_types"]
+            assert "GROUP_RECOVERY_REQUIRED" in durable["unknown_event_types"]
+            account_a = durable["accounts"]["account-a"]
+            account_b = durable["accounts"]["account-b"]
+            assert all(item["claimed"] and item["resolved"] for item in account_a["paired_risk_legs"])
+            assert all(item["claimed"] and item["resolved"] for item in account_b["paired_risk_legs"])
+            assert account_a["authority_pending_hold_intents"] == []
+            assert len(account_b["authority_pending_hold_intents"]) == 1
+            assert account_b["authority_pending_hold_intents"][0].endswith("-leg-b")
+            assert account_b["unknown_risk_legs"] == [
+                {"leg_id": "leg-b", "claimed": True, "resolved": False}
+            ]
+            assert account_a["execution"]["unknown"] == "FILLED"
+            assert account_b["execution"]["unknown"] == "UNKNOWN"
+            assert account_a["execution"]["paired_dispatch_attempts"] == 1
+            assert account_b["execution"]["paired_dispatch_attempts"] == 1
+            assert len(account_a["provider_writes"]) == len(account_b["provider_writes"]) == 2
+            assert (
+                account_a["provider_counters"]
+                == account_b["provider_counters"]
+                == {
+                    "order_queries": 2,
+                    "fill_queries": 2,
+                }
+            )
+            assert _domain_presence() == {
+                package: {
+                    "distribution_installed": False,
+                    "import_spec_available": False,
+                    "module_loaded": False,
+                }
+                for package in _DOMAIN_PACKAGES
+            }
+        except BaseException as error:
+            primary_error = error
+        finally:
+            if runtime is not None and runtime.state != "closed":
+                try:
+                    runtime.close()
+                except BaseException as error:
+                    cleanup_failures.append(f"client_runtime_close:{type(error).__name__}")
+            cleanup_failures.extend(server.finish_after_failure())
+    
+        if primary_error is not None:
+            if cleanup_failures:
+                raise AssertionError(f"cleanup failures: {cleanup_failures}") from primary_error
+&gt;           raise primary_error
+
+tests\integration\test_cfg04_installed_group_proxy.py:798: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-883/test_isolated_client_uses_orde0')
+
+    @pytest.mark.integration
+    def test_isolated_client_uses_order_group_proxy_with_installed_server(tmp_path: Path) -&gt; None:
+        """Submit two real group legs and retain an UNKNOWN risk hold across query."""
+    
+        assert sys.prefix != sys.base_prefix, "CFG04 client must use its fresh isolated venv"
+        client_distributions = _assert_client_installation()
+        client_origins = {
+            name: _assert_installed_origin(name)
+            for name in (
+                "bt_api_base.service_protocol",
+                "bt_api_py.service_config",
+                "bt_api_py.service_runtime",
+                "bt_api_transport_zmq.client",
+            )
+        }
+        cold_import = _cold_import_probe(tmp_path)
+        assert cold_import["attempted"] == []
+        assert cold_import["loaded"] == []
+        assert all(value is None for value in cold_import["domain_versions"].values())
+    
+        server_python_raw = os.environ.get("BT_API_ITERATION10_CFG04_SERVER_PYTHON")
+        assert server_python_raw, "Root must provide the separate seven-package server venv"
+        server_python = Path(server_python_raw).resolve()
+        assert server_python.is_file()
+        support_root = Path(__file__).resolve().parents[2]
+        support_payloads = _support_payload_map(support_root)
+        server_script = support_root / "tests" / "integration" / "cfg04_group_server.py"
+        endpoint = _endpoint()
+        account_endpoints = {account: _endpoint() for account in _GROUP_ACCOUNTS}
+        account_server_keys = {account: zmq.curve_keypair() for account in _GROUP_ACCOUNTS}
+        coordinator_server_public, coordinator_server_secret = zmq.curve_keypair()
+        coordinator_client_public, coordinator_client_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        server = _LineServer(
+            server_python,
+            server_script,
+            tmp_path / "cfg04-group-server-stderr.txt",
+            tmp_path,
+        )
+        runtime: ServiceClientRuntime | None = None
+        primary_error: BaseException | None = None
+        cleanup_failures: list[str] = []
+        normal_server_close: dict[str, Any] | None = None
+        try:
+            ready = server.start(
+                {
+                    "root": str(tmp_path / "group-server-data"),
+                    "test_support_root": str(support_root),
+                    "support_payloads": support_payloads,
+                    "account_endpoints": account_endpoints,
+                    "coordinator_endpoint": endpoint,
+                    "account_server_keys": {
+                        account: {
+                            "public": _encode_key(keys[0]),
+                            "secret": _encode_key(keys[1]),
+                        }
+                        for account, keys in account_server_keys.items()
+                    },
+                    "coordinator_server": {
+                        "public": _encode_key(coordinator_server_public),
+                        "secret": _encode_key(coordinator_server_secret),
+                    },
+                    "coordinator_client": {
+                        "public": _encode_key(coordinator_client_public),
+                        "secret": _encode_key(coordinator_client_secret),
+                    },
+                    "strategy_client": {"public": _encode_key(strategy_public)},
+                    "metadata_reference_ns": time.time_ns(),
+                }
+            )
+            assert ready["kind"] == "ready", ready
+            server_prefix = Path(ready["prefix"]).resolve()
+            server_base_prefix = Path(ready["base_prefix"]).resolve()
+            assert server_prefix != Path(sys.prefix).resolve()
+            assert server_prefix != server_base_prefix
+            assert Path(ready["working_directory"]).resolve() == tmp_path.resolve()
+            allowed_server_path_roots = (
+                server_prefix,
+                server_base_prefix,
+                support_root.resolve(),
+                tmp_path.resolve(),
+            )
+            assert all(
+                any(
+                    Path(item).resolve() == allowed_root
+                    or Path(item).resolve().is_relative_to(allowed_root)
+                    for allowed_root in allowed_server_path_roots
+                )
+                for item in ready["sys_path"]
+            ), ready["sys_path"]
+            assert ready["source_support"] == support_payloads
+            assert ready["service_id"] == _GROUP_SERVICE_ID
+            assert ready["service_principal"] == _GROUP_SERVICE_PRINCIPAL
+            assert ready["instance_id"] == _GROUP_INSTANCE
+            assert ready["scope_ref"] == _GROUP_SCOPE_REF
+            assert ready["domain"] == _GROUP_DOMAIN
+            assert ready["strategy_ref"] == _GROUP_STRATEGY
+            assert ready["strategy_principal"] == _GROUP_PRINCIPAL
+            assert ready["portfolio_ref"] == _GROUP_PORTFOLIO
+            assert ready["run_id"] == _GROUP_RUN
+            assert tuple(ready["accounts"]) == _GROUP_ACCOUNTS
+            assert ready["pid"] != os.getpid()
+            all_host_pids = {
+                ready["pid"],
+                ready["coordinator_host_pid"],
+                *ready["account_host_pids"].values(),
+            }
+            assert len(all_host_pids) == 4
+            assert all(type(pid) is int and pid &gt; 0 for pid in all_host_pids)
+            assert all(pid != os.getpid() for pid in all_host_pids)
+            assert all(
+                pid != ready["pid"]
+                for pid in (
+                    ready["coordinator_host_pid"],
+                    *ready["account_host_pids"].values(),
+                )
+            )
+            assert ready["distributions"] == _SERVER_DISTRIBUTIONS
+            assert all(
+                row
+                == {
+                    "distribution_installed": True,
+                    "import_spec_available": True,
+                    "module_loaded": True,
+                }
+                for row in ready["domain_presence"].values()
+            )
+            server_site = Path(ready["prefix"]).resolve() / "Lib" / "site-packages"
+            assert all(
+                Path(origin).resolve().is_relative_to(server_site)
+                for origin in ready["origins"].values()
+            ), ready["origins"]
+            assert Path(ready["support_origin"]).resolve().is_relative_to(support_root.resolve())
+            assert not ready["direct_url_editable"]
+    
+            account_routes = ready["upstream_bindings"]
+            assert len(account_routes) == 6
+            expected_routes = (
+                {
+                    (
+                        "upstream.orders",
+                        account,
+                        f"order-entry-route-{account}",
+                        ("orders.resolve_group_leg", "orders.submit_group_leg"),
+                    )
+                    for account in _GROUP_ACCOUNTS
+                }
+                | {
+                    (
+                        "upstream.order_query",
+                        account,
+                        f"order-query-route-{account}",
+                        ("orders.query_group_leg",),
+                    )
+                    for account in _GROUP_ACCOUNTS
+                }
+                | {
+                    (
+                        "upstream.account_reservations",
+                        account,
+                        f"reservation-route-{account}",
+                        ("reservations.query", "reservations.release", "reservations.reserve"),
+                    )
+                    for account in _GROUP_ACCOUNTS
+                }
+            )
+            actual_routes = {
+                (
+                    item["mount"],
+                    item["account_ref"],
+                    item["scope_ref"],
+                    tuple(item["operations"]),
+                )
+                for item in account_routes
+            }
+            assert actual_routes == expected_routes, actual_routes
+    
+            runtime = _runtime(
+                endpoint,
+                ClientCurveKeys(
+                    server_key=coordinator_server_public,
+                    public_key=strategy_public,
+                    secret_key=strategy_secret,
+                ),
+            )
+            registration = runtime.start()
+            assert registration.degraded_count == 0
+            assert len(registration.bindings) == 1
+            binding = registration.bindings[0]
+            assert binding.mount == "broker.order_groups"
+            assert binding.scope.account_refs == _GROUP_ACCOUNTS
+            assert binding.scope.strategy_ref == _GROUP_STRATEGY
+            assert binding.scope.portfolio_ref == _GROUP_PORTFOLIO
+            assert binding.scope.run_id == _GROUP_RUN
+            assert binding.operations == _GROUP_OPERATIONS
+    
+            first_request_record = server.command({"action": "request", "group_id": _GROUP_ONE})
+            assert first_request_record["kind"] == "request"
+            first_request = first_request_record["request"]
+            assert first_request["group_id"] == _GROUP_ONE
+            first_reply = runtime.call(
+                "broker.order_groups",
+                "groups.submit",
+                first_request,
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            paired = _assert_group_reply(first_reply, _GROUP_ONE)
+            paired_query = runtime.call(
+                "broker.order_groups",
+                "groups.query",
+                {"group_id": _GROUP_ONE},
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            assert _assert_group_reply(paired_query, _GROUP_ONE) == paired
+            assert paired["state"] == "PAIRED"
+            assert paired["error_code"] is None
+            assert len(paired["reservations"]) == len(paired["legs"]) == 2
+            assert all(item["child_status"]["state"] == "FILLED" for item in paired["legs"])
+            assert all(item["claim_receipt"] is not None for item in paired["legs"])
+            assert all(
+                item["resolution_receipt"]["resolution_kind"] == "TERMINAL_EXPOSURE_RESOLVED"
+                and item["resolution_receipt"]["trade_count"] == 1
+                and item["resolution_receipt"]["dispatch_latch_active"] is False
+                for item in paired["legs"]
+            )
+    
+            assert server.command({"action": "arm_unknown"}) == {
+                "kind": "armed",
+                "account_ref": "account-b",
+            }
+            second_request_record = server.command({"action": "request", "group_id": _GROUP_TWO})
+            assert second_request_record["kind"] == "request"
+            second_request = second_request_record["request"]
+            assert second_request["group_id"] == _GROUP_TWO
+            unknown_reply = runtime.call(
+                "broker.order_groups",
+                "groups.submit",
+                second_request,
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            unknown = _assert_group_reply(unknown_reply, _GROUP_TWO)
+            assert unknown["state"] == "RECOVERY_REQUIRED"
+            leg_a = next(item for item in unknown["legs"] if item["leg_id"] == "leg-a")
+            leg_b = next(item for item in unknown["legs"] if item["leg_id"] == "leg-b")
+            assert leg_a["child_status"]["state"] == "FILLED"
+            assert leg_a["resolution_receipt"] is not None
+            assert leg_b["child_status"]["state"] == "UNKNOWN"
+            assert leg_b["phase"] == "UNKNOWN"
+            assert leg_b["resolution_receipt"] is None
+            unknown_query = runtime.call(
+                "broker.order_groups",
+                "groups.query",
+                {"group_id": _GROUP_TWO},
+                portfolio_ref=_GROUP_PORTFOLIO,
+            )
+            assert _assert_group_reply(unknown_query, _GROUP_TWO) == unknown
+    
+            runtime.close()
+            assert runtime.state == "closed"
+            assert runtime.cleanup_failures == 0
+            assert runtime.unregister_uncertainties == 0
+            status = server.command({"action": "status"})
+            assert status["kind"] == "status"
+            assert status["accounts"]["account-b"]["pending_holds"]
+            assert status["accounts"]["account-a"]["pending_holds"] == []
+    
+            normal_server_close = server.close_normally()
+            assert len(normal_server_close["normal_closes"]) == 3
+            assert all(
+                item["normal_close"] and item["exitcode"] == 0
+                for item in normal_server_close["normal_closes"]
+            )
+            durable = normal_server_close["durable"]
+            assert durable["paired"]["state"] == "PAIRED"
+            assert durable["unknown"]["state"] == "RECOVERY_REQUIRED"
+            assert "GROUP_PAIRED" in durable["paired_event_types"]
+            assert "GROUP_RECOVERY_REQUIRED" in durable["unknown_event_types"]
+            account_a = durable["accounts"]["account-a"]
+            account_b = durable["accounts"]["account-b"]
+            assert all(item["claimed"] and item["resolved"] for item in account_a["paired_risk_legs"])
+            assert all(item["claimed"] and item["resolved"] for item in account_b["paired_risk_legs"])
+            assert account_a["authority_pending_hold_intents"] == []
+            assert len(account_b["authority_pending_hold_intents"]) == 1
+&gt;           assert account_b["authority_pending_hold_intents"][0].endswith("-leg-b")
+E           AssertionError: assert False
+E            +  where False = &lt;built-in method endswith of str object at 0x000001FD9BBBFED0&gt;('-leg-b')
+E            +    where &lt;built-in method endswith of str object at 0x000001FD9BBBFED0&gt; = 'group:group-unknown-process-02:leg:leg-b'.endswith
+
+tests\integration\test_cfg04_installed_group_proxy.py:760: AssertionError</failure></testcase></testsuite></testsuites>

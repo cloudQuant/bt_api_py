@@ -1,0 +1,29 @@
+{
+  "attempt_id": "qa-r2",
+  "status": "HARNESS_COLLECTION_FAILURE_NO_TESTS_COLLECTED",
+  "exit_code": 4,
+  "working_directory": "D:\\bt_api_py",
+  "rootdir": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\test-support-r2",
+  "cause": "The process working directory remained the mutable checkout. Pytest resolved relative node IDs under D:\\bt_api_py\\tests instead of the fixed external test-support-r2 tree; those checkout modules shadowed the installed bt_api_py package and import failed before collection.",
+  "collection_errors": [
+    "test_iteration10_optional_install_matrix.py import failed on bt_api_py.service_account",
+    "test_cfg04_installed_group_proxy.py import failed on bt_api_py.service_config"
+  ],
+  "test_bodies_started": 0,
+  "service_hosts_started": 0,
+  "stdout_stderr": {
+    "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\qa-r2\\pytest-stdout-stderr.txt",
+    "bytes": 2227,
+    "sha256": "f0c6d63d34f8405eebd05c8ad95632896e4678877d072f241ecdb0ca239fd62e"
+  },
+  "junit": {
+    "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\qa-r2\\junit.xml",
+    "bytes": 1183,
+    "sha256": "b47c53960f8541b1190eee382c714a3986f6e756cd4d5e24c2f28fc51a437752"
+  },
+  "run_manifest": {
+    "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\qa-r2\\run-manifest.json",
+    "bytes": 7480,
+    "sha256": "403f720716157def1efb57914c686b9c94e24afc2d07f3017e1aec40ccaf0404"
+  }
+}

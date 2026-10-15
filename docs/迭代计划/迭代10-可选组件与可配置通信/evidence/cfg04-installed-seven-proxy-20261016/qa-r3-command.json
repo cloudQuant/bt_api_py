@@ -1,0 +1,35 @@
+{
+  "argv": [
+    "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\client-venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:asyncio",
+    "-p",
+    "no:cacheprovider",
+    "--rootdir",
+    "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\test-support-r2",
+    "-q",
+    "-o",
+    "markers=integration: installed-wheel integration acceptance",
+    "--junitxml=D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\qa-r3\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\qa-r3\\pytest-tmp",
+    "tests/unit/test_iteration10_optional_install_matrix.py::test_installed_gateway_component_serves_a_registered_strategy_without_other_domains",
+    "tests/integration/test_cfg04_installed_group_proxy.py::test_isolated_client_uses_order_group_proxy_with_installed_server"
+  ],
+  "cwd": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\test-support-r2",
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTEST_PLUGINS": "",
+    "BT_API_ITERATION10_CFG02_SERVER_PYTHON": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\cfg02-server-venv\\Scripts\\python.exe",
+    "BT_API_ITERATION10_CFG04_SERVER_PYTHON": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\server-venv\\Scripts\\python.exe"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T20:32:16.825237+00:00"
+}

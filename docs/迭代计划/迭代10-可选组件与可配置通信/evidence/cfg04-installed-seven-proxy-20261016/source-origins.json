@@ -1,0 +1,3339 @@
+{
+  "source_commits": {
+    "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api_execution": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+    "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+    "bt_api_py": "9d1dc457af0e0e4e94895ca215a27137e86fa20f",
+    "bt_api_risk": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+    "bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "checked_wheel_project_files_by_package": {
+    "bt_api_py": 177,
+    "bt_api_base": 111,
+    "bt_api_execution": 25,
+    "bt_api_gateway": 12,
+    "bt_api_monitor": 20,
+    "bt_api_risk": 20,
+    "bt_api_transport_zmq": 7
+  },
+  "source_archive_equals_wheel": true,
+  "git_source_content_matches": true,
+  "newline_only_exceptions": [
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/__init__.py",
+      "git_bytes": 10864,
+      "wheel_bytes": 11263,
+      "git_sha256": "4eaf3c55315f158b67d8e2506db6f387ad2dfeae237c335da72db69a25c61dc7",
+      "wheel_sha256": "bab4d2b9383a9326cb0930025c96872e468ae99d78bf7539b6c354cab1ab20ba",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_compat.py",
+      "git_bytes": 86,
+      "wheel_bytes": 91,
+      "git_sha256": "08d2bd8479603efd08f919afd13e3a9aaa27465f4f03f6a1d25b2e71814f5cef",
+      "wheel_sha256": "c6ec2a276107cc41e7987a43607aec58c35d28d5de504db7e5c83c50801fb500",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_ctp_budget.py",
+      "git_bytes": 26120,
+      "wheel_bytes": 26804,
+      "git_sha256": "cf5cae63435f48239477ce181bc46b5c27b8b1f9cc57077b3c2552e81e0c802b",
+      "wheel_sha256": "9e773dd36ccb8eab8d55a36303afd7558dad22972cb23e6ee162764c85b225ca",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_ctp_credential_binding.py",
+      "git_bytes": 17729,
+      "wheel_bytes": 18200,
+      "git_sha256": "698ca7aac861f02daca61262be2485548b6494b043b60c471dc4814bf4a0b48e",
+      "wheel_sha256": "94356cdf93be9c557a2e9d5f5f6fe717f2a008d8b38904efe688bf4093ec9e37",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_ctp_execution_authorization.py",
+      "git_bytes": 62306,
+      "wheel_bytes": 63955,
+      "git_sha256": "ddb1098ca16da975f4d8a6bc60f9ce89cbe600d4feedb43179e955577a7f08c0",
+      "wheel_sha256": "cc6a1bb05b3d14af425e99a3296514ebc46276312bbd7e3e89b83eafb0a8cb37",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_ctp_probe.py",
+      "git_bytes": 2986,
+      "wheel_bytes": 3078,
+      "git_sha256": "2027cde4a15de95fef8826a6732eb64bd9b14687626b6051196c924f9a595611",
+      "wheel_sha256": "987ab6b197cfa2e0756ccd29e12c2c9ec2f014d40b4298f76efd38b429db8d40",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_direct_backend.py",
+      "git_bytes": 18616,
+      "wheel_bytes": 19124,
+      "git_sha256": "ce7de29e81426701bdd717ce15721dc0605c636c35e93440911308a36549fa55",
+      "wheel_sha256": "003a016bd883a56acf420988a1c8acddf5021d7a06909e1dcc752a81bc681073",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_execution_session.py",
+      "git_bytes": 493214,
+      "wheel_bytes": 504168,
+      "git_sha256": "50567f940ad0a013834f976cb1ef61d5ce9fb58c47ece1fb26fbd550606b28b8",
+      "wheel_sha256": "8668d18c7b178e16e748c6a202df236032d9b931bdc30086963d24c8ef0ed5a1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_feed_adapter.py",
+      "git_bytes": 2187,
+      "wheel_bytes": 2251,
+      "git_sha256": "576dde325a1f86a127b5ef0fb73bde61525a4a4449fc06f364059583b5b8e038",
+      "wheel_sha256": "321f2703d713d17b3ee3c752341f04a64b7c10e7693fbd97a7095659c7b0ac27",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_normalization.py",
+      "git_bytes": 106347,
+      "wheel_bytes": 109280,
+      "git_sha256": "157d43ec3186cf7c91072c1ca1384515ce99eed356f813d88a82e723b4335f87",
+      "wheel_sha256": "90bde31374395e49eef13886c1b6c345cd002e85974798c91fbc19c2aaf37a25",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_operation_backend.py",
+      "git_bytes": 3212,
+      "wheel_bytes": 3348,
+      "git_sha256": "6fe48ce146f232882899de8197f25687dd8f6118a3a95c98cfa95cb011c45f4b",
+      "wheel_sha256": "9a71b8d9909655b2c5197ecba80ff75fb91ff2e6b0594ed6817715c8cb3ae684",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_plugin_catalog.py",
+      "git_bytes": 4876,
+      "wheel_bytes": 5018,
+      "git_sha256": "5ba67cedf2eb0808b88b854624bab0700cb3058b22f022d7be45951a1c91d216",
+      "wheel_sha256": "2b8e5562cfecea1f0c39d3684486cdb2ef4e6df46c5a851ac8c57822c999addb",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/balance_manager.py",
+      "git_bytes": 3680,
+      "wheel_bytes": 3764,
+      "git_sha256": "1bd2ae19a35a26f6c197de874b2fcac893c0df4255361447114d6d452f9d1a4d",
+      "wheel_sha256": "9523efbe14860525b6911d37f4dedaa53a789a536a0f3454ce6fddc4e09a0cc9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/bt_api.py",
+      "git_bytes": 418271,
+      "wheel_bytes": 428386,
+      "git_sha256": "621f26a6dbd5b91a1a60c2381d31a1d420e4a30293bcdda59233c54faa230245",
+      "wheel_sha256": "a3fbe7928d2be64feaf0f4544fcc084e438144bf6266d336ead5719786efa29f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/cross_venue.py",
+      "git_bytes": 34263,
+      "wheel_bytes": 35095,
+      "git_sha256": "5cd8b6e4f28b9a41b31c7d8e5b4e34eeb58fd3322d40eb12f2a0a415896dcb23",
+      "wheel_sha256": "7a33b3aa872e79266eafc15ed8dc07d1fcb1da49cbd98e1bb1856b31aa95d8c2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/ctp_close_plan.py",
+      "git_bytes": 73437,
+      "wheel_bytes": 75267,
+      "git_sha256": "fdb4a9032dff5955a4af3d3578077cf78825b0582c6dceefdca8b99b286a546c",
+      "wheel_sha256": "d365a681b47782645871b812b0534c627aa23d883cf6feb462135b148a0695eb",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/ctp_env_selector.py",
+      "git_bytes": 8805,
+      "wheel_bytes": 9081,
+      "git_sha256": "49a55d0f7edf20ae236dbd03beb687e97003152a75e84c5287882b99452ccf99",
+      "wheel_sha256": "3c9068cd984a50987e1e587c6f9e85645c7ddaac6b9b1a7f412548d08a37dde0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/ctp_simnow_execution.py",
+      "git_bytes": 44194,
+      "wheel_bytes": 45230,
+      "git_sha256": "e97822f7d7c408688400cc5e61d1d5860477c9524b1426eb0145bd8905356323",
+      "wheel_sha256": "0c51e0342fc47542f65f4fc37b376fcd662c55149399a9c5f001d71f9b41be6b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/data_downloader.py",
+      "git_bytes": 6647,
+      "wheel_bytes": 6839,
+      "git_sha256": "d1fd10df1d24873341242033bfc6cf179ee03337a98080c5fe7c24f329ad6111",
+      "wheel_sha256": "1bedb90078ffdfe48d59506ba95c3ce34b3f5afa52095e0e0a4f6a54dad88564",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/doctor.py",
+      "git_bytes": 1613,
+      "wheel_bytes": 1665,
+      "git_sha256": "c83a63261e8d7de4544613cbc8fb1e7fe8490b04ddd816ac5995d3344b93f90d",
+      "wheel_sha256": "ae23433de03bb90b8ecf9ef5f9a8659847ee9bdb7cb15835193ec3b864aaeaa3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/exceptions.py",
+      "git_bytes": 1599,
+      "wheel_bytes": 1666,
+      "git_sha256": "1776f03b4a62438c94793e5fc8522d8ca7152e2965fbb42dd4d435fe2d0dcd08",
+      "wheel_sha256": "eed1d3b9cf7d2953cde1d2b979eefe917bcfad896b22bb1e6444451d3dc368cc",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_account.py",
+      "git_bytes": 18534,
+      "wheel_bytes": 19025,
+      "git_sha256": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+      "wheel_sha256": "2cf2939b065f809ccf9242390d2b9ebd445961c14315878a647c67d4a247ffea",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_account_consumer.py",
+      "git_bytes": 22539,
+      "wheel_bytes": 23112,
+      "git_sha256": "ab826191d444465e33900d316a709158ca3dacd6328727e10ce2be46ef9d2f58",
+      "wheel_sha256": "cbdb877b0a54428a99584c06c16a6ea0875cac8e114cb24ddba5a0ecba5e8018",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_account_projection.py",
+      "git_bytes": 37131,
+      "wheel_bytes": 38014,
+      "git_sha256": "ab32d2cf59a87093c9567bf9ea22ae541448c5a8ffcb822f6d50c0c0a497da14",
+      "wheel_sha256": "d618c880b2cbb5d69ddd25b2915404925f10d0e0c97f5036e6f9035ef10e1d8c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_components.py",
+      "git_bytes": 89498,
+      "wheel_bytes": 91450,
+      "git_sha256": "aa4bbc716b6108524a46c47bf9794110d49e7d758b6cb5b9f40fe46312933799",
+      "wheel_sha256": "0c5c260c2ba418d79c4b46a7fb536123ba437771262f5f3dfa966ebb61b6db8f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_config.py",
+      "git_bytes": 45951,
+      "wheel_bytes": 47157,
+      "git_sha256": "599aab9beb2f97aef3e59c7f9ac4a4ea733bb1e0880b6f5ed37ef72c0cf8458c",
+      "wheel_sha256": "6518fb59849db9624edea84a532d8b03e9c4c3dee14322c05e9c5eb85252ac1b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_config_io.py",
+      "git_bytes": 5033,
+      "wheel_bytes": 5166,
+      "git_sha256": "54890a5c41bfe0046b8a39fac40d08a2fcf6caa8a38df6b5fc6a739e9918e4b4",
+      "wheel_sha256": "6cb5ee086b407e217299b9939b4021c88f3f822f1feee3f9b025b55617531465",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_deployment.py",
+      "git_bytes": 21792,
+      "wheel_bytes": 22322,
+      "git_sha256": "0184ef0647df85b76a94c14c330129325c4ab5f4910e06cac2edae80584caa31",
+      "wheel_sha256": "a99db89d91eacdde6e6e98b7b9c5dc7f671579139dba8a6fadf967465e27f2c4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_execution.py",
+      "git_bytes": 21330,
+      "wheel_bytes": 21964,
+      "git_sha256": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e",
+      "wheel_sha256": "97cdd95286993a01b277a55b6e7f450fd3593f9b25e1f7e2103fe0ddc929000c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_execution_account_books.py",
+      "git_bytes": 29209,
+      "wheel_bytes": 29946,
+      "git_sha256": "fb51f9f6b3d45583e61e6f1b3e40048cf2b6896fb03ef090e354b88341caf112",
+      "wheel_sha256": "63cb7eb84017fd0aa791e95e4a023d0fc6e551f7d54ca5dfc65e99e0efab0eb7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_execution_group.py",
+      "git_bytes": 78661,
+      "wheel_bytes": 80451,
+      "git_sha256": "8f718bfd4ceb8f4bfe1e59f645764990b5f31f5118926051042cb882592c1ff2",
+      "wheel_sha256": "c33da11ac468733cc08998b86a89da3bfb810b334f5f3e7682cf39345d27ef30",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_execution_group_authority.py",
+      "git_bytes": 85233,
+      "wheel_bytes": 87143,
+      "git_sha256": "5d2de5abfbb841429f9ea5d9e2c6852022d9dc854957ebc6a87ddc2a057d1091",
+      "wheel_sha256": "c3690f242e51df5c443f2676fb8f2bbb3bc0ea0dcb8f49ede62c48104da0a7aa",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_execution_group_client.py",
+      "git_bytes": 62674,
+      "wheel_bytes": 64129,
+      "git_sha256": "37a20e823c82980b55a347ae4b366429e4215bdbfd85f58f324743aadc59ffe7",
+      "wheel_sha256": "2951659f1c8750a716f3be0c7bd7ed8966fd70a701fd0b1c1bbc4ccc4bafeeaa",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_execution_group_proofs.py",
+      "git_bytes": 163912,
+      "wheel_bytes": 167543,
+      "git_sha256": "e1a9b3157081de231dcdc44f82a0eec7911e3ed7f8b5e3eab18d2926f4541250",
+      "wheel_sha256": "619c7f28f3f1f026454ecfa438ec4fae28e9cd2aad577f66d581b8415564c6a2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_execution_monitor.py",
+      "git_bytes": 42136,
+      "wheel_bytes": 43199,
+      "git_sha256": "6e10bc4bb3978d9011d796e903639ac7896168719a9f6e442302895787f4537d",
+      "wheel_sha256": "b5bee0ee67c82d5535ce39e43bde8c447f4ee05a3eb542181e8f3cd79448dd2f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_group_reservations.py",
+      "git_bytes": 32413,
+      "wheel_bytes": 33177,
+      "git_sha256": "9be82fad857df28f8eff99505af19e5d541d3cf689a5ab55a573d9291de47a2b",
+      "wheel_sha256": "5ff6a3ba41ab2c42a9fae72c1252ac3e81d0d1f21d9346cc981be58b2bf4766b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_host.py",
+      "git_bytes": 63350,
+      "wheel_bytes": 64740,
+      "git_sha256": "04b9bebbde3f21e7a7adf2eb0db6e94c8a77a32ce0368af1d5f44aa341393fe2",
+      "wheel_sha256": "9bb985bef5f8582bdb3878e5738e2e646bd25741c9077170f4592b1679a17778",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_market.py",
+      "git_bytes": 51773,
+      "wheel_bytes": 53046,
+      "git_sha256": "5b7a357693ef4ddc50ef397f4bfc67ca7116ab2809850c03ee07f05a18bc75b6",
+      "wheel_sha256": "c0e6c96113875e7dcfb2c1668ce1b8318b86e9e3ae135e16d7523ff28cd7e3c3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_market_monitor.py",
+      "git_bytes": 19211,
+      "wheel_bytes": 19719,
+      "git_sha256": "de2831bd99d0103d09cb7018140f548c61a43945faa223e2787fd78e380a4f52",
+      "wheel_sha256": "6f2637856a1599c590c14021f47250db05d335000dea0e694f5bd908081dff95",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_monitor.py",
+      "git_bytes": 10062,
+      "wheel_bytes": 10343,
+      "git_sha256": "6fbc850967e8417b5f9e669b3fce8aee23b3987df37099787d316995cc67abd6",
+      "wheel_sha256": "e8cc99373b292741a0c5c66819162a7951e1de46997b3605403f9ce5bccbe70b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_monitor_control.py",
+      "git_bytes": 19885,
+      "wheel_bytes": 20340,
+      "git_sha256": "d2f3ac6abc804632778d612a8944f0195da6798d5275ad696802f62c6a9e3c45",
+      "wheel_sha256": "3f941e8d2a49673974687c7848f30900d8dfa707ba489a3b5efd2d417161ccfb",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_registry.py",
+      "git_bytes": 98050,
+      "wheel_bytes": 100372,
+      "git_sha256": "20be883a520fd52ee48de411058c7c9d7f2c043f3a8be6104a0d33d1cb2c1276",
+      "wheel_sha256": "ac1e72b44b5c4a021927b884592769fb05ebf6b04b4faab8e5f7451fb30ee733",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_risk_order_entry.py",
+      "git_bytes": 109488,
+      "wheel_bytes": 112197,
+      "git_sha256": "ea199bed8e048f390b4c7e488bbc5cee8b79c3966e5f9845f3e8a564428620de",
+      "wheel_sha256": "8a74c5a7ab73343c9653ff30499b4eaf5bea7aa8dfa3fd815da7f2780715c3c4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_risk_order_journal.py",
+      "git_bytes": 118395,
+      "wheel_bytes": 121060,
+      "git_sha256": "bcb6976f6c2d93c08186cacccf4dff7c53b024f54adcbce012e79ec5663e72cf",
+      "wheel_sha256": "58f24235352d0f30992d55bd9ce04b4754215679f518539328b267e0961e7932",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_runtime.py",
+      "git_bytes": 73555,
+      "wheel_bytes": 75328,
+      "git_sha256": "2bfb185b231847cc930ba44a11b0a860924b8a9e1fae87111cd6e7a39a9fa3b0",
+      "wheel_sha256": "3511ce8e18ce7b1e352ccaee2c75606c8a86725606e557f9ef3930c5b1208197",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/service_telemetry.py",
+      "git_bytes": 18683,
+      "wheel_bytes": 19191,
+      "git_sha256": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489",
+      "wheel_sha256": "edade61cf73a7be3b0ec0a2f13184b6ad2feb3672ccf4614ad97138d3d9a5cb7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_contracts/__init__.py",
+      "git_bytes": 2373,
+      "wheel_bytes": 2470,
+      "git_sha256": "98aaa5ada0d3f02d54f1a27290cb6ff378296c70c8ba5475611571e9d2b14b96",
+      "wheel_sha256": "9854ca8349497eaea4d84d942cbf01418a93601aecc75167a0ffb2ecf86a34b6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_contracts/cache_policy.py",
+      "git_bytes": 1531,
+      "wheel_bytes": 1583,
+      "git_sha256": "30e60a9d18d55d2903818e1a3dca1adfbbeb914412ead955a1f57d2fba46cf67",
+      "wheel_sha256": "b2067d1cac711040cb64520ed261e46ed939503c622d77806531d147737a66d9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_contracts/capabilities.py",
+      "git_bytes": 746,
+      "wheel_bytes": 771,
+      "git_sha256": "303a368f412d8ceba67ab867f717fd6f81dff21d522cb0eaa59838b5b90861c2",
+      "wheel_sha256": "a5dd8ad64553a4f214b6b5d2f0cf07cf82fecc99ec39fa69a5df65490d6ac8f1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_contracts/errors.py",
+      "git_bytes": 4961,
+      "wheel_bytes": 5107,
+      "git_sha256": "7b63b0ec38ea99a9962a1a609ea64d6ccf4ff1271c148fae7dae520a5d16cff0",
+      "wheel_sha256": "73f2cbeffce0ddd510a9d6d88f823a37d12c9c88e675ec6f50cfa7df453ff3b1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_contracts/models.py",
+      "git_bytes": 45714,
+      "wheel_bytes": 46891,
+      "git_sha256": "f2d90e8680820867bd300bf893f777995b1c4b1505059615aaacd566215e0a70",
+      "wheel_sha256": "5299c383a63e1c1d82e163ddf7cde6be648da252d0bcd6351124774f0a2b2221",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_contracts/subscriptions.py",
+      "git_bytes": 360,
+      "wheel_bytes": 376,
+      "git_sha256": "876c49dc25a03a0fb2c8a72880e124b97aa599a816e30a29659682ad1761e2ac",
+      "wheel_sha256": "cd571f7982b44a2b0c8ade7e58eb9539e4bc2a71a5fd370e25119f53e8237e98",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_venue_mappers/__init__.py",
+      "git_bytes": 1029,
+      "wheel_bytes": 1061,
+      "git_sha256": "e5cf4d9d32546df33474c573d42cb9c4a0afb881957bb73319d8c29000d67a2d",
+      "wheel_sha256": "650d3af5a789920e614ecbdc7d81045d184746c12109b328adac5a3cd4921df4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_venue_mappers/_position.py",
+      "git_bytes": 1100,
+      "wheel_bytes": 1124,
+      "git_sha256": "07731f2b859b64726da9f7cf01686f6fc96162cfb9e264d67c553f8a7f2feb26",
+      "wheel_sha256": "79af31a48180a13de9316a343f6560fe644f88e86701e78f55391b568e506f80",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_venue_mappers/binance.py",
+      "git_bytes": 12046,
+      "wheel_bytes": 12350,
+      "git_sha256": "dec78456b33bbf3bc91445aee9245daf524a68f04be4dc367022491700181cdf",
+      "wheel_sha256": "78fd7b3078472eac2d9f0b75c11d048409b350e15a5b8bd86df51c6739beac56",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_venue_mappers/ctp.py",
+      "git_bytes": 2073,
+      "wheel_bytes": 2126,
+      "git_sha256": "bbcaf0c68b9500a7ac3382d97eeb247cf9ef7fa0d36a9e1faa1000176124fb09",
+      "wheel_sha256": "643909d043077ec6dbcbe9bed01ad80c2a64fb0baf15409a589b0f49620c71af",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/_venue_mappers/okx.py",
+      "git_bytes": 12102,
+      "wheel_bytes": 12397,
+      "git_sha256": "7b65d4e2705af33680ae17e56086c3e0a6c2ceafa460c60027cf4c24438ca907",
+      "wheel_sha256": "59c6150a6d22fe1dc757c289d224f98fab29f152f018eeef28d68fe6d9c051f9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/backtrader/__init__.py",
+      "git_bytes": 115,
+      "wheel_bytes": 120,
+      "git_sha256": "1f60fecf573884c1136a0dfecfbea597736c0c4c1eb130311e7ce393b9dad7ee",
+      "wheel_sha256": "6a3c12aca427989860f6249feed8c2df380f7ce4dac3b0bad85b6b97cace911f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/backtrader/btapibroker.py",
+      "git_bytes": 965,
+      "wheel_bytes": 994,
+      "git_sha256": "72bbc048572db21934a2a1e6bb00b8fb4dd930f83cebd4e1150fe225042e8a8e",
+      "wheel_sha256": "322debf4285f67ef95201c0d96ac7c195f0860801da6e239fdb405a794da741b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/__init__.py",
+      "git_bytes": 967,
+      "wheel_bytes": 1002,
+      "git_sha256": "297c7ab0b357cd3da5615a34f1140c27d98dc24529803a0b8638311cecc03c1e",
+      "wheel_sha256": "35ce5848de6d3e48478a89f8b7ab04b522713892593454c67fa201798f1e1fce",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/base.py",
+      "git_bytes": 2482,
+      "wheel_bytes": 2569,
+      "git_sha256": "8047d767f641b5862fdceeacda1dfd47406e5d0eb6af6177abecc740cac4e83b",
+      "wheel_sha256": "c74222813bd8b73a7c2426059f340dea2c5500ae606ef91b969e9e7436556333",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/errors.py",
+      "git_bytes": 1067,
+      "wheel_bytes": 1108,
+      "git_sha256": "ca53549dc5e1b74e8b28400f3dc18690074759e64eb1e151ee4390efd84462e6",
+      "wheel_sha256": "b0e5ed38c6c54800534285444c6a43ee983e12ca9389233c2d95c9afe872bba2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/feed_bridge.py",
+      "git_bytes": 7195,
+      "wheel_bytes": 7374,
+      "git_sha256": "27c2db4480cc24500d76c83b6ae0b7877cd31e00b0c90991a898f564928caac0",
+      "wheel_sha256": "652fd3f0f00996901cc1a44a929cf627eaea75e69691ec53c2d59d9db9c9940d",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/gateway_bridge.py",
+      "git_bytes": 2846,
+      "wheel_bytes": 2934,
+      "git_sha256": "324c484f891a2f5ed4493ba6ecb47555c4121324be6218a7f1284c4b1a263e9e",
+      "wheel_sha256": "034e7d8a58a6832f890f66ad48ead7068d907aff6c06b60f6be40416b09e0e5b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/loader.py",
+      "git_bytes": 2347,
+      "wheel_bytes": 2428,
+      "git_sha256": "7783377146b7e2e49e9f38b6c11106970083dd6d07345ee6a0fe35562d9c940a",
+      "wheel_sha256": "ffbdd8c8be34ae2af771d3c9e265a238dbe8cc491b3a099eab39be4867fa1f38",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/mock.py",
+      "git_bytes": 6014,
+      "wheel_bytes": 6164,
+      "git_sha256": "93bc87c1429ba99eefcb0dba58f1c69963eeda56585902e1abc34b55f318cc3b",
+      "wheel_sha256": "0fc308a8f25c0900bebe3559cdef08885f6b664cb54d36967fe070fa630ed4ce",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/registry.py",
+      "git_bytes": 964,
+      "wheel_bytes": 999,
+      "git_sha256": "837378568d4144cea14a3677a11afbadfdb08c764b9c9f6cb5da8cc567533a4a",
+      "wheel_sha256": "f5fb7efd6bc2715968ffcacea95b129c3a2d2c696399b29d1efcfac6ded18722",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/brokers/types.py",
+      "git_bytes": 2832,
+      "wheel_bytes": 2943,
+      "git_sha256": "204f02fc4e22edde80f8545cce6d8aab494b60dd7bb406f834d2efc08ac82a2b",
+      "wheel_sha256": "0eeb98b8a24a50d78ee8e893d8e8ed516776d87af1b3af8c928b90ca29316c19",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/certification/__init__.py",
+      "git_bytes": 722,
+      "wheel_bytes": 749,
+      "git_sha256": "ab6a4abbe7d32dced1176f6d2fd0eac1cea20134e40050f6fbf6ead965164b58",
+      "wheel_sha256": "1c0d0659f10da2f7d42ea36f2f0e6359a8ee1818bab737774e09a7292c7004e8",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/certification/audit.py",
+      "git_bytes": 3887,
+      "wheel_bytes": 4014,
+      "git_sha256": "9dcf9b582e85096f92b07462408fc9c3655a2d9d1222ed49de4c2a9585ec9569",
+      "wheel_sha256": "3bf20e2fd51e07d89dd16c9f401def88b2521e48d6d3e7657190bab14a675a54",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/certification/scenarios.py",
+      "git_bytes": 8552,
+      "wheel_bytes": 8852,
+      "git_sha256": "2b51bbfadba54adc9977c5b7b82ebcc2dead0f99fe87a50f1fc1f56ce92a3b24",
+      "wheel_sha256": "65c684dc41effbbbc15ab0b6e485947f850cb64bd23ff5d8045b83b1b0419eee",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/__init__.py",
+      "git_bytes": 66,
+      "wheel_bytes": 69,
+      "git_sha256": "7d851e1d0ee44e5085d40ba4ba4b4dbda328cefc0fe97c40ff0bd46283d75161",
+      "wheel_sha256": "9965dc39111c5c53330b91988f63e5d7273d81c0243c506e513ecdfeaa3dd9ae",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/account_config_example.yaml",
+      "git_bytes": 488,
+      "wheel_bytes": 516,
+      "git_sha256": "e84ba13d97917acb82552591871f09ee759dd14220c3212ae49d03083ccaf27a",
+      "wheel_sha256": "16e591cb4f19782f05d58d55c750b67a56029feb8be2def4a1a8a8f6c3649315",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/balancer.yaml",
+      "git_bytes": 15756,
+      "wheel_bytes": 16135,
+      "git_sha256": "312807e77ad6ecda79a422e01be81f6d5ecf5f9e3e382919979f9a5776ea15dd",
+      "wheel_sha256": "4c79425f378f5862d8254a9dae914e1b47e6a47b09dfe5d5ac2a41653d97141b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/cow_swap.yaml",
+      "git_bytes": 1655,
+      "wheel_bytes": 1733,
+      "git_sha256": "8555bdf6498f1b7e8fff63af2866e516b99ebaffc2ccab987b29711650aedd55",
+      "wheel_sha256": "7720d0358fac855a95bba2830ce62f032d53fb210b0e73277f1ab99a8f7bbb07",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/curve.yaml",
+      "git_bytes": 2212,
+      "wheel_bytes": 2309,
+      "git_sha256": "a8faabc99f1ecb141ca0204029360b4389498bae5f38f1ec3e2a48d21090f9a6",
+      "wheel_sha256": "67d0c288ad68f7a5a869ee0ce3587bf81277ed089987ab78107ac66e597c18a2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/exchange-bundles.toml",
+      "git_bytes": 967,
+      "wheel_bytes": 1000,
+      "git_sha256": "107730a8a2c1198dec086fba83792ed0e7bde62a884afeb02b2e50e72edeebf4",
+      "wheel_sha256": "8029bbfae741cabaa70f19d6129bb23c6c7910612b17cb07664cd7a29e6c6e9d",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/pancakeswap.yaml",
+      "git_bytes": 999,
+      "wheel_bytes": 1049,
+      "git_sha256": "208829c91a4925b15e9190c4a5096064894913724cf0b31f6c9d2de49cbebc6e",
+      "wheel_sha256": "3389e02b77aefa10b809c42f7b6dae0146d2cee8106bee8a65abbcd8c9d82ec9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/raydium.yaml",
+      "git_bytes": 3007,
+      "wheel_bytes": 3132,
+      "git_sha256": "e17dee398a9021d3ea2024711fc032ba942c78c33f739cab5ea8961f42d71a0b",
+      "wheel_sha256": "75b480132900ee665659b0d1b3532c816fb84033ea164247761cc5872cdeef53",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/sushiswap.yaml",
+      "git_bytes": 4950,
+      "wheel_bytes": 5142,
+      "git_sha256": "34169f8b39369fb855c64d92516e39d9cafb1e92d8c5375d4a7ff5b43fd94b30",
+      "wheel_sha256": "5da1590d4495b22f2ccd05fd9a7da5f5b1d9a3c82720999ac095205a3c1b2a91",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/configs/uniswap.yaml",
+      "git_bytes": 6664,
+      "wheel_bytes": 6881,
+      "git_sha256": "325b820f132771f0636bb06ca3959427bde302c66a586e3d421958e1f128b3d3",
+      "wheel_sha256": "81d9d5032d7f92b319d85dd34505d224c509c32d86878bea68a313add4c5f2ba",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/__init__.py",
+      "git_bytes": 1543,
+      "wheel_bytes": 1594,
+      "git_sha256": "b732bb74dc6c810305e268c006644e935441d740c9b00c756f29789663c6d964",
+      "wheel_sha256": "767bf95bae111ed2941ccccab6b04e60bac2348345dc3bf1c0b2cb668a7754c5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/btapi_adapter.py",
+      "git_bytes": 485,
+      "wheel_bytes": 499,
+      "git_sha256": "31d41bb3063828a1a68a14e0d4344118431760269c1ef096b10851242ed4b9d6",
+      "wheel_sha256": "c9892076fbb3ead022c363a20e18d55ea15276b6d5325570ecaac569d8219762",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/btapi_backend.py",
+      "git_bytes": 30612,
+      "wheel_bytes": 31386,
+      "git_sha256": "0e6b80a8caed783bdeb996e318bc58f305af8bd1cbdf66957fe13561d0cf9dff",
+      "wheel_sha256": "3f41d052e54633bcee439237a6cf7cf8af6157b0646fc470d7261102b41eb92b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/btapi_bridge.py",
+      "git_bytes": 4352,
+      "wheel_bytes": 4485,
+      "git_sha256": "f68eae4290eb6b86dc480d5a2f46a3eb35298f256ef58060d8c701bcf2c1228f",
+      "wheel_sha256": "7a34f2c8ef90eadcfc4867444f06b668ca099228ae6b8d1ce69443078dd76171",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/client.py",
+      "git_bytes": 32197,
+      "wheel_bytes": 33014,
+      "git_sha256": "c88c32290dce7114e6fb3cca9a19372f5b84eb60ab8736a41adc4aed51ae3112",
+      "wheel_sha256": "2e90c9ce295fe0cc6d44fa1dee9b18c08c7ebdfbb37222500761f659d6e0b023",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/hub.py",
+      "git_bytes": 4334,
+      "wheel_bytes": 4477,
+      "git_sha256": "6d66f0b049e47137d9617ca6fa58b4febf0327974fa2d6057afb70e335cbe9b3",
+      "wheel_sha256": "15cbe9329ed734a64a1d3a0f1c19d4aadffb9b317785ae21157d95952e31400a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/memory.py",
+      "git_bytes": 9962,
+      "wheel_bytes": 10219,
+      "git_sha256": "31d72c6c302f85c9ed128aa4b37245c1a4308b969955b6177461dc6b0c91188f",
+      "wheel_sha256": "4df10e68b66d5445d2e04793cee9219e50bb883ac8ca196750e5749b0afc98f1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/private_event_pump.py",
+      "git_bytes": 1835,
+      "wheel_bytes": 1882,
+      "git_sha256": "e072f0e0a3064feb78754993f76e492d4eafde2fa649546e7d53d8076122c204",
+      "wheel_sha256": "b03e4e7db06868ffa8d05a26c9bda6d9a85de7252aeaaa6c9c960b782dbc035c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/router.py",
+      "git_bytes": 38687,
+      "wheel_bytes": 39645,
+      "git_sha256": "f674d9f9505f0eef76bfcc0269e24a9629852fb08a48f814f54ea58ac084c451",
+      "wheel_sha256": "ae5215f1c36d2d6951b0b4fb19d1efaa6bd88fb91eb7d99ef8317bb256a3a55b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/schema.py",
+      "git_bytes": 12417,
+      "wheel_bytes": 12785,
+      "git_sha256": "22e81d33ce9d6cb7c75a28886485397e39258d64acd8a2d618b3db7d30496eb8",
+      "wheel_sha256": "60f0a2f1fb06db0f562dc502d7ceb521379556db9cc16d328d59ab0b5bacd4f6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/service.py",
+      "git_bytes": 9277,
+      "wheel_bytes": 9516,
+      "git_sha256": "c63f9eec9adad608a8605830f2fe22babea9a37ae3001b3a27a35a2f9057814a",
+      "wheel_sha256": "7a84f886e9d590ba29e4b00b380af50b99e4ca206d06e90cb9ac50247c5cacd5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/source_supervisor.py",
+      "git_bytes": 2775,
+      "wheel_bytes": 2858,
+      "git_sha256": "4e95d31b8a8e150427cf6782a685b4973f33e84cd3f94b7afa41a8b264d76670",
+      "wheel_sha256": "df1d9c8903aba2f3e89e8fb2a622a779ba936c2ad87d3ea5a67550509dc06aa6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/state.py",
+      "git_bytes": 8407,
+      "wheel_bytes": 8628,
+      "git_sha256": "db43dc100dc5543540c47e339d3549ee52aed25c295f5d26e267737342bee59f",
+      "wheel_sha256": "09cf2408cfbf496ae140a487ee671131a549bad8ff015dc69dd816023e1bcde4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/forwarding/transport.py",
+      "git_bytes": 8956,
+      "wheel_bytes": 9222,
+      "git_sha256": "5e21b8c7000ced10f402bc1dcf6a60037db1cae519f8d916fa525d2c6eb0c621",
+      "wheel_sha256": "256ef497faae316de362a550ebca6897addc56d87e8b2420276333f5cac42285",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/gateway/__init__.py",
+      "git_bytes": 402,
+      "wheel_bytes": 416,
+      "git_sha256": "13684b26fc3d3d65cadb239887e2f2bd8b354bd350fe49dd95eede13110fcb3e",
+      "wheel_sha256": "e813cd7a29584783c203ce9025fb412a1818140763748371403dca672ff9a8a1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/gateway/client.py",
+      "git_bytes": 3048,
+      "wheel_bytes": 3129,
+      "git_sha256": "e8041f311e5e6387679d24ac4e6131be0f2d06ddfb9dee614420cafb42efd1d3",
+      "wheel_sha256": "25893a98d0519101a745538c17627f2542083f0aa428d9756742d461710dee28",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/gateway/config.py",
+      "git_bytes": 3270,
+      "wheel_bytes": 3348,
+      "git_sha256": "18444c395be639015ef47963ccdc346a6d1e2ccc87eab380c2a6e2157ca41f88",
+      "wheel_sha256": "b8547eee0508ac206a23c6457a855a6f082a59e5ac3a42806c708b21f452a05a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/gateway/safety.py",
+      "git_bytes": 942,
+      "wheel_bytes": 968,
+      "git_sha256": "505061ff9e0b9226aba7b28fadba9d917f4543af305b2097700bc239dd93a35b",
+      "wheel_sha256": "ec5635cc62000367d8226f7aeb634b9ce987af338fc0554aac4846301c39cbaa",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/__init__.py",
+      "git_bytes": 3104,
+      "wheel_bytes": 3241,
+      "git_sha256": "8190223c7a30a61cb86bcfd422ee9f5cf41c97f338262853e017d83eb5be21ce",
+      "wheel_sha256": "7e396e1a7fba5810a70f1a613416428e4791f89c3198872a114388e03eab7a5c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/collector.py",
+      "git_bytes": 9599,
+      "wheel_bytes": 9862,
+      "git_sha256": "c5b889ef455389ca95d744d58b46545ef28b69ebd42b4982b45e7477d274c411",
+      "wheel_sha256": "d71a42d0bbcac999fa333ccd18e7684e47d4dbf2d96fdfe7286366eeadfc7be7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/config.py",
+      "git_bytes": 9883,
+      "wheel_bytes": 10175,
+      "git_sha256": "26874a4e15fb3f57c7ab1f2e99fab00b0e478854827504c15d658d276cd2d335",
+      "wheel_sha256": "a0fe2685afae9b54996ebf6a16d748ea7adf22712e9c770907e42e0d58a7aa42",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/decorators.py",
+      "git_bytes": 8717,
+      "wheel_bytes": 8988,
+      "git_sha256": "c83f0d72868aeb37f89880fe89201433ce5c55a919457c740f90bd8d32fe32f8",
+      "wheel_sha256": "0ff21eca092608a24de333f2f59ba3b298b61519557fe133b1aa4b019d0e6c5f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/elk.py",
+      "git_bytes": 19153,
+      "wheel_bytes": 19712,
+      "git_sha256": "77bbb6fa02d47777e0430cae04d8b52d8554325c93f89e2a791b42d4ef715dec",
+      "wheel_sha256": "af45ee743b760ff73a03e686287ca9e26daad84e09ade6165bda29c3bfb0cb9a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/exchange_health.py",
+      "git_bytes": 13560,
+      "wheel_bytes": 13952,
+      "git_sha256": "b88d2bbb86c80d231ab9a57a0dabf1b8421ba1cc7df24ae7c50401fce10f3ca7",
+      "wheel_sha256": "d127f2db85550a9aec72a7c84a5d5243163ce67d480719cfb6b8b0af150887d5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/grafana.py",
+      "git_bytes": 20326,
+      "wheel_bytes": 20950,
+      "git_sha256": "44cd3a50f2097255b55b8be90bf0b2bd2153b0d56e53a398ffc774698604599f",
+      "wheel_sha256": "1c326ae12345ff4beab041060e8ef6dbedfcfddace6ee58c052d62302c5d2154",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/metrics.py",
+      "git_bytes": 8004,
+      "wheel_bytes": 8286,
+      "git_sha256": "c6d5dcfabb6d04f51fff4b7e6bc578a7f900c87043c7efbd954f2d86b7a3525d",
+      "wheel_sha256": "c1f116af942dc321eeac5e350cf0e6de3149692d720616ad0aa7280385ca38e0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/prometheus.py",
+      "git_bytes": 11132,
+      "wheel_bytes": 11461,
+      "git_sha256": "f6d8a31f37df86350bfb5e5f98780b029e5215ed8244a376b3167134bc73e8e1",
+      "wheel_sha256": "504d2ba9b772416ef45e769b906f88d61fa9bc9cf38cb450fcc536fdec72f25e",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/monitoring/system_metrics.py",
+      "git_bytes": 13633,
+      "wheel_bytes": 14015,
+      "git_sha256": "d3e4d480b37ff45025029ed21c50889db34f2804be6045d79695d0bbd7ec4d6c",
+      "wheel_sha256": "f6c48fb62a2e8c3816d296c159f4f587577c1da672e2176ea6c2ba46fdb8e5dc",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/__init__.py",
+      "git_bytes": 1899,
+      "wheel_bytes": 1992,
+      "git_sha256": "2eb76ff5c598cd82c3ce3d47b324683e729294995715fa5253feeb303c638f3e",
+      "wheel_sha256": "f491aa8cfe777930505bf8ae0b990c3aa9dbb36e45c5faa5e76d7bfe9c189ae6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/containers/__init__.py",
+      "git_bytes": 317,
+      "wheel_bytes": 332,
+      "git_sha256": "fcf688536e7c6232fa6c47021e56fb06acef2675bd96f0a07f44dc24c75b37b1",
+      "wheel_sha256": "40c2259ab241fa6faa5dad9ad0541e0968e9a946de20a53f039ceaf99ec53d07",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/containers/risk_events.py",
+      "git_bytes": 10709,
+      "wheel_bytes": 11047,
+      "git_sha256": "05b8322b4153ac350b2e2d86ab20e1ff92a94fffc891227495072b764ad58160",
+      "wheel_sha256": "43632993f29d92c250c66654d75a6072871558aef9d02fbebc302547259dbaaf",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/containers/risk_metrics.py",
+      "git_bytes": 10210,
+      "wheel_bytes": 10464,
+      "git_sha256": "2a80eeb7f2b73c392d46367a150c3fc105272fd00b0d0f8a0e7b8c010163dd8e",
+      "wheel_sha256": "e260265e54900c20ea5efd4b2c597606e8ec3e4f320290def44b4504434d1458",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/__init__.py",
+      "git_bytes": 366,
+      "wheel_bytes": 383,
+      "git_sha256": "1d9f2658384bcd3906d7b942e2596ea22f48a72bbd1660f4ac3bdd7344d59fc7",
+      "wheel_sha256": "3951c85fcfaf8ac5a806056797fa6a6ccdc2310c81dd492d7ab97a169db06eb1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/actions.py",
+      "git_bytes": 6032,
+      "wheel_bytes": 6214,
+      "git_sha256": "cdcf56694488510ce4c11c97090449a98e866b8b41f23270359caa4697dcd85b",
+      "wheel_sha256": "ffd8f07ad46686745f64dc6627827b688ca0cebe5bc20b619a30516db88a06c8",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/compliance_limits.py",
+      "git_bytes": 689,
+      "wheel_bytes": 717,
+      "git_sha256": "7c961b2955fb324a4dc685206a2fe156430ea476c6fe42a18c0ddcbcffa060ee",
+      "wheel_sha256": "8731b2ee8b9b935b4f098b62c7d36ce9a17a82838bcff82e3f06ccec93ba038c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/compliance_risk.py",
+      "git_bytes": 3421,
+      "wheel_bytes": 3512,
+      "git_sha256": "1eb5153ae1c6b40f694fcd158cb7374c1dc41da74c3b02297b1c768dd041341c",
+      "wheel_sha256": "6ea411378e4821382baf27c8bd1d80b5328b7802864d0704cafe95bfd2edf9c9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/credit_risk.py",
+      "git_bytes": 3719,
+      "wheel_bytes": 3826,
+      "git_sha256": "00fbe7b968929ca40a554e2d55510b4d4c4332c72ce32a7847c15ebe0ff8b287",
+      "wheel_sha256": "3fae221afba73d08b08b2583c00e26c7482f26ae5b003a81256864d28957579f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/limits_manager.py",
+      "git_bytes": 16610,
+      "wheel_bytes": 17125,
+      "git_sha256": "a330168d3079143ac6963d3181b68a703177f6191cc636617b55a5ed4bc2d46c",
+      "wheel_sha256": "411bd2e841295cf9808d6fc3df201eda7415661ed3fac06caec4f903805e1fd9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/limits_types.py",
+      "git_bytes": 2175,
+      "wheel_bytes": 2253,
+      "git_sha256": "a90a3a0948f8148abdbb06bef737843be92958ec4426eea77cbc0f57ee888557",
+      "wheel_sha256": "77a2599084d55784a7921705e8be511f5c90eca52e9383cc91588144107874cd",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/liquidity_risk.py",
+      "git_bytes": 4596,
+      "wheel_bytes": 4735,
+      "git_sha256": "04bcf059b476822805bafd3e501feffaf811807374a29981b572b2041c8a9867",
+      "wheel_sha256": "ac1e6e3f21a48b6b877e9dc6f39e4574e5ed0939cf7c76d63db44caaa8b80183",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/margin_limits.py",
+      "git_bytes": 2058,
+      "wheel_bytes": 2115,
+      "git_sha256": "958261c8a9f2837fa35a8df3a784cb59420d5de672e2b38ac85ee73a6ca27255",
+      "wheel_sha256": "63a9caf8c0806d18f05155f2c7e5279b6771021da16bb197fd2910b0bf34142e",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/market_risk.py",
+      "git_bytes": 7209,
+      "wheel_bytes": 7420,
+      "git_sha256": "25da6c2a4f309c28e55f61938575ceeb681d4ac3f8d0d1e9113efd68b5899354",
+      "wheel_sha256": "78fe12ca72a4545dacbdb4c9da3b5df6aa492c9ecc8bcd5eb63085d0d9bd2470",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/operational_risk.py",
+      "git_bytes": 5231,
+      "wheel_bytes": 5368,
+      "git_sha256": "7d0615b73b7e37c69427d66b68cd6c99c228169e70ef2f7c191ed317e430ec65",
+      "wheel_sha256": "99cb2c6f3b89f2a3c57dfc6626073b0229aba47fe6074aba1255588599e51ac8",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/order_limits.py",
+      "git_bytes": 3531,
+      "wheel_bytes": 3632,
+      "git_sha256": "cab4129cda754898fe7bc367fc0958c96ac31a5db47eb68ed041c146b4920086",
+      "wheel_sha256": "eeb785887861bd186aa9dddd18c5a22d5bb9a6a245662d7d3d3a40ab8b8a8050",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/policy_engine.py",
+      "git_bytes": 20382,
+      "wheel_bytes": 21022,
+      "git_sha256": "f51abf5bcd9d8a62b1fb97ddd124868c2108ec1ca56b060931e0afe8a20ac6e2",
+      "wheel_sha256": "f1e5ba1157bbf9f9e3f9e1190dbcba1b14ed71759966ae04566cdf364093462c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/policy_types.py",
+      "git_bytes": 904,
+      "wheel_bytes": 946,
+      "git_sha256": "0ff3c67d4960fd6669365aad1031352c7ad5981ca7aca69a8d185f77143453f4",
+      "wheel_sha256": "9918a80cad0da259ebd2ac9f7722a7ae51f74cec62c278e943fe15860c3c5ee7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/position_limits.py",
+      "git_bytes": 7585,
+      "wheel_bytes": 7792,
+      "git_sha256": "d53a5069715743071d4611db48cafad0c77c2803f4f4b82c402cda1699d0c52f",
+      "wheel_sha256": "da12687e11f63014fbf02453e4b77bd5187e30c1f38f53537aea65cbf88fe2f4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/position_risk.py",
+      "git_bytes": 2165,
+      "wheel_bytes": 2230,
+      "git_sha256": "ec115badcfe5a2696ee289636c1ae2bebcb590a343926cd2e97c69b57bd8c3e3",
+      "wheel_sha256": "abe1e9bf9e6a87624bf4340578a5af8224fabb378300b34d191c61d449dca1f0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/risk_assessor.py",
+      "git_bytes": 16842,
+      "wheel_bytes": 17402,
+      "git_sha256": "80fa6a339f4b81e0dd79118ae53806c68b540266cc195a2cf3363938fd884613",
+      "wheel_sha256": "c652da48da1e78f79ca03bb65abe983c3f349210c997f968a244f86640fb0c05",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/risk_calculator.py",
+      "git_bytes": 10436,
+      "wheel_bytes": 10722,
+      "git_sha256": "27d53af7481cf764237c2641803370101ea48e0e0775ed7b694696684ba9b822",
+      "wheel_sha256": "55cf1d25959ce8448416f5a76eaa5e4b54082aa9568da1e6d4c3bf836600c4e5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/risk_limits.py",
+      "git_bytes": 2298,
+      "wheel_bytes": 2371,
+      "git_sha256": "461f676bc03c627d5de00c51bdead1176d49b04adab3dea099f91790b31d3f86",
+      "wheel_sha256": "5ea996fd2305bcc0cf980eb246df7dd9a4c41659e1ef94086f2369e2917d2dfb",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/core/risk_manager.py",
+      "git_bytes": 15022,
+      "wheel_bytes": 15407,
+      "git_sha256": "8168e80d9330c678d8a1b4ca314c3975cff2d6e962cb77525675f2c53ed33cbf",
+      "wheel_sha256": "1c9f93787279b75ea8b6095b47328b58686b3967f59233f26f9c5dca0eeba5d9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/ml_models/__init__.py",
+      "git_bytes": 251,
+      "wheel_bytes": 264,
+      "git_sha256": "1b80d8b9d96e863d1510f79162e392ef49a5a7318881ad9229ffe5969ab09e93",
+      "wheel_sha256": "b06c15929e74d671318bbb951a57a62dce53d4e38674e7fc5561b5a03ab69829",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/ml_models/anomaly_detector.py",
+      "git_bytes": 21836,
+      "wheel_bytes": 22479,
+      "git_sha256": "0f510599fad3590fc370f039a5aa8ebce539265430bb513a380e07dcfd704bdf",
+      "wheel_sha256": "811b3eb33159ecf0ef02cf2e3e919d847ac8f8b9165b7bed7da0214e85671d72",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/ml_models/anomaly_detectors.py",
+      "git_bytes": 9100,
+      "wheel_bytes": 9317,
+      "git_sha256": "138aa4dc8ee965f3310c39cc6154d0976fd4b5e5e1136d0492f71c3763ba81a4",
+      "wheel_sha256": "83c2a234e8a601e714650dc18909673c720129ee668bab0250d4abcc62bc7303",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/ml_models/anomaly_types.py",
+      "git_bytes": 2148,
+      "wheel_bytes": 2226,
+      "git_sha256": "7044944dde3a7141139f160d7c962a7f71b4c367c58f10e5343edbedafcff2cc",
+      "wheel_sha256": "da61760f9005e8fe2e4e814d7545845c573c0b38429feb554e518a7a411d2510",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/ml_models/ensemble_model.py",
+      "git_bytes": 24915,
+      "wheel_bytes": 25645,
+      "git_sha256": "058ec4b48eb415ca9fb85fe18ff541d045ebf2e2260be7e790834eda641127aa",
+      "wheel_sha256": "7aee6dd9287a3d8f8d21a72e490c5623b2d2694f4a504729d14de7ffa6ce6e32",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/risk_management/ml_models/ml_base.py",
+      "git_bytes": 13906,
+      "wheel_bytes": 14376,
+      "git_sha256": "ff082deee368cbb589c62d125e3f50efa0a4d72139ac8b1d1039171c76e79743",
+      "wheel_sha256": "67572ccf135f2d522b4fd3f81400b7c260fad2afafb1dc5017e4f198a02266f6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/__init__.py",
+      "git_bytes": 4227,
+      "wheel_bytes": 4359,
+      "git_sha256": "585097eb7f9d3c76908530fd44c1f998a965428aea3d3afa6feab3169e9e3c0e",
+      "wheel_sha256": "984011be8e830e018c82dd9adc46bc8d677d249360f0c73e484883c826f3e12f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/cancellation_control.py",
+      "git_bytes": 60346,
+      "wheel_bytes": 61736,
+      "git_sha256": "c54b52eb85b349640e71f6a32b424b6119a5516eaa0d15560b9d5ca2278b5837",
+      "wheel_sha256": "f003a88f47ea5a845653c4dacef800b8a8197f98289731efb63a74268ef2950b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/catalog.py",
+      "git_bytes": 5274,
+      "wheel_bytes": 5412,
+      "git_sha256": "bcef090d2c3fbec6bf4af5d6f370f3da271f56edad3018676babb1fe08d91148",
+      "wheel_sha256": "57ab4152eeace62f324ea00f39e4a874c848e05b1315bc7d568baffaa1f0ef11",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/contracts.py",
+      "git_bytes": 8345,
+      "wheel_bytes": 8545,
+      "git_sha256": "bf00684cd9c7d76a391b034ce61e5572bdaa7b7a4b3c00653abc12238791fc84",
+      "wheel_sha256": "59694e448de97d8d1517562a79d305a008aa2d8b56950beddc57b3c5ec7858a2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/fake_dispatch_authority.py",
+      "git_bytes": 46420,
+      "wheel_bytes": 47410,
+      "git_sha256": "6948e8c9f812f8f159cfde3399531cacec78c081e18dbedd7a97adf43555649a",
+      "wheel_sha256": "7fdc9134ba80d33d707b5e1fda393df706339f451d89a9210741393365fd6630",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/gateway_dispatch.py",
+      "git_bytes": 47746,
+      "wheel_bytes": 48985,
+      "git_sha256": "d733d775df55757596ddd2c09ef76165d3c0237fc051552391f59150e70be573",
+      "wheel_sha256": "b2ca93b815d57901c82fdb126547a367564f65d5db4d0cee8101846e4da0eec2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/instrument_risk.py",
+      "git_bytes": 29378,
+      "wheel_bytes": 30111,
+      "git_sha256": "0b1c976b6e8247c29214354ad4845602ef46088ad54f89b62c9e2a10f5b3340a",
+      "wheel_sha256": "a050f4471d59723e8c4bce1830d7a9a44394244ced7de9da7e214e14b9422a9b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/managed.py",
+      "git_bytes": 49066,
+      "wheel_bytes": 50173,
+      "git_sha256": "31e9760c254882104c99698522df758547ad5405dbe5fd75008cac57945e0b5c",
+      "wheel_sha256": "a7821b967d3cd94b573eb40c5900cd76a05da5887f956b5d2bcb5df9fa1d6606",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/managed_recovery.py",
+      "git_bytes": 34386,
+      "wheel_bytes": 35230,
+      "git_sha256": "a6e5267b46620ad1a69c49fd6b4f8033c0ac5ab96fb8f98dacd34c580fda2bae",
+      "wheel_sha256": "1bf531d409cd3f8640aed80588a95cc64ba1f2ae07292ea591674733afa3d621",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/runtime_plugins/reconcile_control.py",
+      "git_bytes": 59661,
+      "wheel_bytes": 61078,
+      "git_sha256": "b044e98bbc2a8a37232bbce80a22360371bd530f6a694db9d8e89cdd304f8413",
+      "wheel_sha256": "4f1933a4162063816140a456516ca2743ced61c2604074e06dc16c2f1e3ef50e",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/__init__.py",
+      "git_bytes": 2839,
+      "wheel_bytes": 2932,
+      "git_sha256": "8e1e9fbd329ca8c8bda656f1f5af8963d3e974d414f9f6f1331b0cf2581e82de",
+      "wheel_sha256": "658a12c56017cf3d5c96d0f08907b47efcc8c4b5bd244dafaa3431aeac0bedce",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/framework.py",
+      "git_bytes": 16113,
+      "wheel_bytes": 16528,
+      "git_sha256": "2b14597e9bf77b98749b270687fd127b31a39b100f3c973e8a79f9618bdb4186",
+      "wheel_sha256": "1d9682559c4ccf67a2d8b29fcce2bbadf28a2508b2f5deece2532879e9693eca",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/auth/__init__.py",
+      "git_bytes": 221,
+      "wheel_bytes": 229,
+      "git_sha256": "3c1ae8922cf4db36766a5ee2a4c5b0c98b3112521d11ca5b3abf53a9b9d435fc",
+      "wheel_sha256": "730ddfefcadbc8c60909acc774cc899fe62518fad81f70d5036316a6657b0df7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/auth/mfa_provider.py",
+      "git_bytes": 19068,
+      "wheel_bytes": 19661,
+      "git_sha256": "1b24d0441f6a18136868ed874d116d06a9e60200f26b341dcad04090337b05d4",
+      "wheel_sha256": "accc8e3f147d1d3ac80c8b8ba338aac982af0d73c15b01295043563ec719417b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/auth/oauth2_provider.py",
+      "git_bytes": 25833,
+      "wheel_bytes": 26577,
+      "git_sha256": "c1b9bb056451553a9a90cf884d138999070216746c0bf29971d3d5bfc46cc26d",
+      "wheel_sha256": "500f013e34badd820f7348741e46e3ed0ee79ca09369ab646e9b381ded0d8573",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/core/__init__.py",
+      "git_bytes": 724,
+      "wheel_bytes": 751,
+      "git_sha256": "ba8b07858d362ebbbcd86e091e5ba2e4cfecc28937adba8781c736f1db13833f",
+      "wheel_sha256": "642e6bf38ea31cfd0bb931586162ad71e570c235e33235a72789f91a8d084cf0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/core/access_control.py",
+      "git_bytes": 14584,
+      "wheel_bytes": 15030,
+      "git_sha256": "ac429bbc89ede481f9b57fdeecd504836c9bccf9fbe35e97950c31bbec97e227",
+      "wheel_sha256": "f0ea17199fd9331ec792d83573859c3f419dde79812d83d0908bbd6bd3668e6b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/core/audit_logger.py",
+      "git_bytes": 19614,
+      "wheel_bytes": 20194,
+      "git_sha256": "bda6fbdfc2a4d962dd702f67202b79d0578c96643901e337f18f7807c8f609cf",
+      "wheel_sha256": "46efa64acc4ca090990e4d59c896f8b01da254539d728bd3fee6495d22c0de6e",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/core/compliance_monitor.py",
+      "git_bytes": 5190,
+      "wheel_bytes": 5350,
+      "git_sha256": "ab053b46fc2dec288db8575612fb17db4aed057cb9753f5c1f0d7218b388a670",
+      "wheel_sha256": "b8322ca3d8890be2664766bcc70df02db75a62f029a25a1756e7ebfc0722ca53",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/core/encryption_manager.py",
+      "git_bytes": 24019,
+      "wheel_bytes": 24689,
+      "git_sha256": "5aa22b432bc2edc466f240f3decc54a1503c5c541d7cd7195e2ea5132b5e5fe8",
+      "wheel_sha256": "31e41e0aba4ed0331ae651bf4722fd233751abe076a20cf6bff394fab4b54dc8",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/core/identity_manager.py",
+      "git_bytes": 15605,
+      "wheel_bytes": 16075,
+      "git_sha256": "69453004fd133a0360a1a651f4317bc0919fda5bdb1d481246a843f35a10b733",
+      "wheel_sha256": "685f7a946ab4b61b0cf619b81e4fbf81636323efcd809e6feea0145c3ed8e7c4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/core/threat_detection.py",
+      "git_bytes": 12778,
+      "wheel_bytes": 13145,
+      "git_sha256": "3fb5e416c6e3386e080351b264947151d96f5e25bef8aa91f12af7a16716fff8",
+      "wheel_sha256": "18e521779d5d940b3e69aba36dea397b991645283d682df7dd7cc56315bac7ed",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/data/__init__.py",
+      "git_bytes": 178,
+      "wheel_bytes": 185,
+      "git_sha256": "1aeb92652b1ebcbd10aaae2b656315ac8675e6226711442d94f794ce95ad0e7a",
+      "wheel_sha256": "9ebb5f3e133a9b6f48d3513cb93d65a06b7d3a29c63d5654c82ade300f56cc4e",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/data/protection.py",
+      "git_bytes": 15240,
+      "wheel_bytes": 15636,
+      "git_sha256": "66b581d8e81376f464661b9c0595cdeef71abb817312a75501d11216fb2ee244",
+      "wheel_sha256": "1816f3967b5efc583fdaf86986c884d034ce842fc95587773a55771102c793a1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/monitoring/__init__.py",
+      "git_bytes": 176,
+      "wheel_bytes": 183,
+      "git_sha256": "27c634b67d8c496e01f8543205e7a4b16637d6d93bec4661084b0ac9c9bd00d6",
+      "wheel_sha256": "7fd1b35ed68b85f0a9b9d7b307884b508ce099541148aab18ee140f138980b17",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/monitoring/security_monitoring.py",
+      "git_bytes": 4614,
+      "wheel_bytes": 4762,
+      "git_sha256": "c6111b29d505bb6f4f0db004b66c658e52c6453ed15d1921baca39e94462bc24",
+      "wheel_sha256": "886d5c35fdda4d7965b2b836166ca2bdb21167c4120587a1b386f6e753054ae8",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/network/__init__.py",
+      "git_bytes": 181,
+      "wheel_bytes": 189,
+      "git_sha256": "9b9b96a1aaef6db0d682a01501e12457822ae09e88e8f9390e9f4bd3004f8f6b",
+      "wheel_sha256": "2d830c6ae792e8271e0b4072acf2717177de779f0220366abbae317f3176ed83",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/network/tls_manager.py",
+      "git_bytes": 2427,
+      "wheel_bytes": 2499,
+      "git_sha256": "3b1ede421053c83d1c56db73769dc504b090f6a31bda10d610a05bf16cd66682",
+      "wheel_sha256": "5cf0e3f4b63d1535b8309b54966c645e798f203361b4e86010933d9fb6319692",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/recovery/__init__.py",
+      "git_bytes": 182,
+      "wheel_bytes": 189,
+      "git_sha256": "11ae110f554b58e25834037dbe51d297b8dd1477d12318ff141d3653e76eebd8",
+      "wheel_sha256": "ec6feb3761587ff8e010085db840361253114e7e81c89241cdd4da663f9c6590",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/security_compliance/recovery/disaster_recovery.py",
+      "git_bytes": 7225,
+      "wheel_bytes": 7450,
+      "git_sha256": "c5cb598ec6b7391249cba4ba392a8b57d6d4cf849d81fb8b3597c7299ad13db5",
+      "wheel_sha256": "07ceb85752b1967b2dbfa609bea948e45c4edd1adba1545f295953f29a536731",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/testing/__init__.py",
+      "git_bytes": 455,
+      "wheel_bytes": 474,
+      "git_sha256": "a81cb87945c7d6caa135d3f4949b41ed2674d216ba31444655d0ae612e55e7d5",
+      "wheel_sha256": "ff0e2a69a1130d2025937db40a6b474592032c33dac2ed4d1c44add832f936a2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/testing/contract_cases.py",
+      "git_bytes": 2503,
+      "wheel_bytes": 2569,
+      "git_sha256": "369195317037a0c5b561a3d56974625c8cb27c6c99c0e50887cdc0075403a035",
+      "wheel_sha256": "27b1d7c3baa97763ad0f5fbdc4e51c93e92a02535ae7a7a5902190067d309758",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/testing/fixtures.py",
+      "git_bytes": 1737,
+      "wheel_bytes": 1805,
+      "git_sha256": "0c8b7b0d65a057254321b7aa514b6da3ac6df5bc47283eb29e84f6adeef42847",
+      "wheel_sha256": "f15a0f8b9da5e48735e41b8c44028dbf9ae1fb9f8b8631940872b1ea86c43ba2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/utils/__init__.py",
+      "git_bytes": 37,
+      "wheel_bytes": 38,
+      "git_sha256": "a606304c901dde0f6d2a6e3520560d56841bd3045d9392df9104994654fe6f1a",
+      "wheel_sha256": "db7d6a1d5b42c4e4ac2c290793524bb5ee53245aca290fdf63e5403b4e6dafd2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_py",
+      "path": "bt_api_py/utils/hyperliquid_types.py",
+      "git_bytes": 750,
+      "wheel_bytes": 785,
+      "git_sha256": "8960ea276fdbee5d85738e02e2ecbbae5ada178853b0afd1c3ad9b85c08d3898",
+      "wheel_sha256": "a2f4ad19abea61b91f0f5db1884e4833a6c0c7c7511ef62577b3c97c702bff41",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/__init__.py",
+      "git_bytes": 550,
+      "wheel_bytes": 573,
+      "git_sha256": "db6d46bcc43662b65ddbb34ee4386a25410927c55cf426b940bf70b1397ea580",
+      "wheel_sha256": "6b2a075e68d4c1663d28fd7110fae84d780ddec39de4654774f9395151261590",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/_compat.py",
+      "git_bytes": 713,
+      "wheel_bytes": 744,
+      "git_sha256": "1774a7fa74cf579f6f86a8c1396a83b70ad4f2f36439c2a81bb8035436957e69",
+      "wheel_sha256": "17a12e28c7963fc249c58ad6531421f0c9cdf7ff637dbd170a033f472034a869",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/_plugin_shims.py",
+      "git_bytes": 887,
+      "wheel_bytes": 917,
+      "git_sha256": "5dc77358812959dce26674f3189f7034ec4d500cef73d88e64d659ea1d3709c8",
+      "wheel_sha256": "28e724334696992db8c28e71ea80d41aa2900f7c30d07b7fa1f1f827273e54e4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/_version.py",
+      "git_bytes": 92,
+      "wheel_bytes": 97,
+      "git_sha256": "cf89b9075380ede9257a509bb33f36aadc1997356aed261416c1f828bccebce8",
+      "wheel_sha256": "567f790afd9549fbf5eb4eb5202c8e95cd68e55f91bd13df2240e820e9cee32a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/account_protocol.py",
+      "git_bytes": 28973,
+      "wheel_bytes": 29687,
+      "git_sha256": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c",
+      "wheel_sha256": "aaae92cc6a99a328398cefe670ccf223e6ec3ba4c4fef51afb0b1323c4021774",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/auth_config.py",
+      "git_bytes": 5905,
+      "wheel_bytes": 6083,
+      "git_sha256": "5722124358fb6abef8e3ea741cf3bc5ac276d4ea48705c3502cdaa0b1a0fa986",
+      "wheel_sha256": "52f2a2489acb10f376a8278a84c50bb50dc69fd8abcdff2aa97138fe69587c43",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/balance_utils.py",
+      "git_bytes": 2953,
+      "wheel_bytes": 3048,
+      "git_sha256": "cce93cca82d7686914dd497982690f7b5c62b59a111f0f634f75f21025aa4420",
+      "wheel_sha256": "afbc308263d56ff41222239f652e1a745ea4e41ab0842139841e50201ca4bca3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/cache.py",
+      "git_bytes": 7408,
+      "wheel_bytes": 7642,
+      "git_sha256": "570378c7d81b771cacf7347db1f316de1839682c31638243491159fea8848592",
+      "wheel_sha256": "6366c0ed14291ce5785bd5612086f914956583905b824be4fc77fc09b0007fb9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/config_loader.py",
+      "git_bytes": 9109,
+      "wheel_bytes": 9413,
+      "git_sha256": "c7b5c843e4bb44917c758ed43300ade898f04a77ce57ec1464700e818ee87d4b",
+      "wheel_sha256": "c3566937b63fc330b1eb8c9d82436d7e4ef7647eb0a421310a7be14093722672",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/connection_pool.py",
+      "git_bytes": 7667,
+      "wheel_bytes": 7927,
+      "git_sha256": "c0f90a8fe6251f6593127c037505b6f3d2353aa1448e2998ed6ef62265d5948b",
+      "wheel_sha256": "b4bd8f519296481591fc97e699ab0446a1aee9d54f136a9ac5e550be38a8e6e5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/deployment_evidence.py",
+      "git_bytes": 17372,
+      "wheel_bytes": 17791,
+      "git_sha256": "755418506fdfb43e0a720264f3d1d8adcc4243c2611e752b6f1b44d8846e9e45",
+      "wheel_sha256": "78a87b1d8ad1463cd631dba29c0d9010738e78abad9a118eb5013b4e9f20b256",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/error.py",
+      "git_bytes": 17274,
+      "wheel_bytes": 17787,
+      "git_sha256": "b99400ee90e49b497fa10eadd7bf01e25e03cf18061bd3742f754c6c3602c35f",
+      "wheel_sha256": "e72e9692456bb68f1251f898e8234505f16c3b18eae8bc70cc396ce33a664653",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/event_bus.py",
+      "git_bytes": 4487,
+      "wheel_bytes": 4631,
+      "git_sha256": "91fe6b094f03e1a395251bd786e8115709de8bd03343f669fa9b2ca2a2c89966",
+      "wheel_sha256": "a812b093b75d402ccf01df3c518de68258d15f55dd0900315d42109996edf8c1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/event_clock.py",
+      "git_bytes": 564,
+      "wheel_bytes": 583,
+      "git_sha256": "4138d1586c2a7c51ced6d712d8a2542b937f70cacbc225fd80dcb3350b04c688",
+      "wheel_sha256": "8c1b192889ecde3a9b76890743695c76693c718cb2ef450d108055f915ac453c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/exceptions.py",
+      "git_bytes": 10432,
+      "wheel_bytes": 10808,
+      "git_sha256": "95269b9029f201f2554c1fb78ad45747b1b1364c8622046cba4fb066bb81b43f",
+      "wheel_sha256": "272e9714e6ea237bbe34294d8e6ee78c7c5a3c2464fd01612e009c3aa56ba631",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/instrument_manager.py",
+      "git_bytes": 4522,
+      "wheel_bytes": 4657,
+      "git_sha256": "5c0a9f7d62cdd778225a82c7fded5c63d3973063f6ee8a66b4918cefdf3f4de9",
+      "wheel_sha256": "2b4a78ffcbea884845196656bd86fe28278673c0be03ef26b336f428420725f0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/logging_factory.py",
+      "git_bytes": 6557,
+      "wheel_bytes": 6735,
+      "git_sha256": "979a2fdc85965a157202a617c1ccc7695512f22ec52ee9c5e03b5a7a693fe947",
+      "wheel_sha256": "238e4e376457340f68e7444e6afda8cbc09ca913f79c49ed2dfa336f918df296",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/market_history_protocol.py",
+      "git_bytes": 11394,
+      "wheel_bytes": 11689,
+      "git_sha256": "21096e58d14ebfb05554cf76012793de25846e9f2474b1c42d149edaf6b469ae",
+      "wheel_sha256": "c056abf770b00bbdc8b04c2d997ed6ba02c54b2214ffb7e2192c49cd4b2db994",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/market_observation_protocol.py",
+      "git_bytes": 8366,
+      "wheel_bytes": 8600,
+      "git_sha256": "fd3a85080f6ac795becbffee5ce6c0812fc2f83ec9532049432097efad7d5c82",
+      "wheel_sha256": "0b8b0304793bf4354d89220122f910dd74f6acbdfc63e25febcb5239ba25b936",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/market_protocol.py",
+      "git_bytes": 5880,
+      "wheel_bytes": 6061,
+      "git_sha256": "9ad1a16842dfee03587a815ecf4a9915559287c9ce995f6cff8df15c00309108",
+      "wheel_sha256": "fb110ba6818fbd0f2e0d98036eeb3834cbf312b74018980a454b28272c22410a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/rate_limiter.py",
+      "git_bytes": 9781,
+      "wheel_bytes": 10100,
+      "git_sha256": "0332ed05a1b9366921e4151879cb875573763c6f0ef1427f639c1b0f4ed67955",
+      "wheel_sha256": "0ff147b831784e168cc5a15a073d3c5228fb7af57c868a7ae6dca474057065a0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/registry.py",
+      "git_bytes": 11083,
+      "wheel_bytes": 11360,
+      "git_sha256": "4bf53c13d228de94b2cf7c5c7a4df0256da815200d4cbedd39c83ede917b2434",
+      "wheel_sha256": "4f66487a7d2cdedd81303b142c329f85cba298153016d6d4aa324918a15524de",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/security.py",
+      "git_bytes": 7546,
+      "wheel_bytes": 7764,
+      "git_sha256": "f973c8dd55a0de7c405a909579152d6cc7f08b24df7112002b1d6f8ec3f54b12",
+      "wheel_sha256": "ae6928db08d7f80add4044a91e48eb14d6080e997e361f39e8c6ea34249a3c17",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/service_protocol.py",
+      "git_bytes": 26174,
+      "wheel_bytes": 26884,
+      "git_sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+      "wheel_sha256": "ef31a048e95785c5128f6cbc9e202b939955d2f845c5680ecf2d8a8e28421b87",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/telemetry_protocol.py",
+      "git_bytes": 8505,
+      "wheel_bytes": 8772,
+      "git_sha256": "fc7f2e1907f4bc733f3919a45e7fce189e0d9d03b342872c41289294142987ec",
+      "wheel_sha256": "414d0161272f9c94e76b6094bfd86312c34cdc4553f26e66804189d83720122c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/websocket_manager.py",
+      "git_bytes": 22434,
+      "wheel_bytes": 23030,
+      "git_sha256": "679f929f944425b346c4010c14c40805886b9be4b0880c21a331a688f1bb50ec",
+      "wheel_sha256": "e7e3b98f8c4ac68f345893532ec7e525ae80fe034442c7b42e26a5b7f3b70a0a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/__init__.py",
+      "git_bytes": 1452,
+      "wheel_bytes": 1497,
+      "git_sha256": "d0fb3497e7d4b64e45f925fdfd8ca855081b4f50cb5bcd5213a51d7c12b90af8",
+      "wheel_sha256": "3eb233cbbe4257ba4e92171ca6558881dbe1858b4ebe772b476080de67ee4810",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/auto_init_mixin.py",
+      "git_bytes": 1894,
+      "wheel_bytes": 1957,
+      "git_sha256": "94345716d216e3aedd0aaa3d2cf2588b440d7d277a9237ab4b6cb9bb14ce7ced",
+      "wheel_sha256": "213c7ff0d03ce85749779e406ab87dae5c53e82cb0760fcbffff9f35d25af3ed",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/instrument.py",
+      "git_bytes": 4631,
+      "wheel_bytes": 4804,
+      "git_sha256": "52edcf378ef3fd078dfa1d0126534ceb772471e6bd0d7015dce69062038bc32b",
+      "wheel_sha256": "23a81c871eeff53e6683ae550c6f39311ed4d366bec1acc9f863a36ef7d2d027",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/accounts/__init__.py",
+      "git_bytes": 127,
+      "wheel_bytes": 134,
+      "git_sha256": "ef9a0b561832fd193a761b551ff0bc3c775f6ff22698227d447b19d52e0f6b64",
+      "wheel_sha256": "3ddec34dd2c2e462cfbe4a6ba9a9c488d5eae57d96a47125d2e2738a3524b627",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/accounts/account.py",
+      "git_bytes": 8011,
+      "wheel_bytes": 8222,
+      "git_sha256": "14a403d07e106438e25d16f5bf2b209adf0374bd1ecfa53e153a1a1d8dfa6d50",
+      "wheel_sha256": "ec0ada503098d8a0c18e1187f2b9ec5452c926569fe8e862f0871cb16ffe1675",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/balances/__init__.py",
+      "git_bytes": 127,
+      "wheel_bytes": 134,
+      "git_sha256": "ec0dd1c1e31a6ed546991f63b1288594d419900d50630059b03b5145a85762f1",
+      "wheel_sha256": "5fb712caa8f43b0827d10f58138b3aa8cf79db84f5117f129a628cb0d186dec3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/balances/balance.py",
+      "git_bytes": 5677,
+      "wheel_bytes": 5900,
+      "git_sha256": "fdca4237ebe0b82437db1a493b633a46d0a7be5daeeb4b3e1dc4cc96a7631e77",
+      "wheel_sha256": "fdcb1cd74edf2758fae47b6df67b796bf295071dadbf3b846080d7c94a0279c7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/bars/__init__.py",
+      "git_bytes": 115,
+      "wheel_bytes": 122,
+      "git_sha256": "470eb47b950c999cdce22444aa38b36fd12a8ee3faf57d462d75ae56cf07e1c5",
+      "wheel_sha256": "a84f124df852da27c3a0879306238db02e34d8ec7fd2eca16bda7a8ba224e000",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/bars/bar.py",
+      "git_bytes": 3203,
+      "wheel_bytes": 3320,
+      "git_sha256": "f71b5811846d179b7c5e8e9c78947a749d4fbab84e30900d0999a644da0c0f5f",
+      "wheel_sha256": "831e634a612327636788596644fe6e491b69f42e844ed27d2eed79d7c3029495",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/exchanges/__init__.py",
+      "git_bytes": 135,
+      "wheel_bytes": 142,
+      "git_sha256": "8fd87e19ebe25868f5cd5d03ed4c7dbeb1c0f06feb9cac4f82becc2f52beec46",
+      "wheel_sha256": "ab012118d09169fd8b024bb2b0e8be1d5968cbfd585a0a7ebf29cae353cbbe3b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/exchanges/exchange_data.py",
+      "git_bytes": 2650,
+      "wheel_bytes": 2741,
+      "git_sha256": "a7e627c5b4e34ff43b80c483df31f9698a106f7f3d6e5568abbb7570660d49ff",
+      "wheel_sha256": "485ed8aa25565b4a16af60eacbac04b097582fa2583aff61e1b63087ec62f059",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/fundingrates/__init__.py",
+      "git_bytes": 140,
+      "wheel_bytes": 147,
+      "git_sha256": "e41a4fccd0b137131030e868688de2302fa499c81472de6bfdf37dfb538b81a4",
+      "wheel_sha256": "ffe57587056cd347c15d830d1565c22cfade1c452c7e8748be92fd587bba1cc7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/fundingrates/funding_rate.py",
+      "git_bytes": 5132,
+      "wheel_bytes": 5275,
+      "git_sha256": "434acac9cdf9ab98170974bfe927a8b8e5b70ed608ba273696c0c74d3f7ac7b3",
+      "wheel_sha256": "6f70d8440499af69eabd66669ec6303f790d9cfa512faf0c60ea874321177968",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/greeks/__init__.py",
+      "git_bytes": 124,
+      "wheel_bytes": 131,
+      "git_sha256": "f0fef9798a82ef1fcdd0eab9fc3a23bee80e2b0f55356e4dcc9fe0ffe0675652",
+      "wheel_sha256": "924a2bd4e7abeffa03db5228f9b2627a13fa2e723ff38b1b384d5f85b4df619a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/greeks/greeks.py",
+      "git_bytes": 1842,
+      "wheel_bytes": 1908,
+      "git_sha256": "36b16cfe8c4f7b5f259f94f34c10ba63efe05dbba557ac3cf13d05894538be4a",
+      "wheel_sha256": "2b8003612b13439091a07a733a97b3b290f12b24fe93be0210cf5c4d0b38006a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/incomes/__init__.py",
+      "git_bytes": 124,
+      "wheel_bytes": 131,
+      "git_sha256": "48ac24cb8557b843a5190fa5bc2d0164e63c55e4663cc0c9085ccd30c2599db1",
+      "wheel_sha256": "f16e650e2c201724e7dd9f8a4a7417065186a3d5706d3b0beb0cd35414c96ccf",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/incomes/income.py",
+      "git_bytes": 2832,
+      "wheel_bytes": 2921,
+      "git_sha256": "307ca01a54f164eaa8bfa5457ad0b21a775f352760a64b5b33424d6313c93c0a",
+      "wheel_sha256": "05eb00c2f0244e25156f70430a4d56da02595521f449d679062587726e7d2490",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/liquidations/__init__.py",
+      "git_bytes": 139,
+      "wheel_bytes": 146,
+      "git_sha256": "674e68a54f763e007b39a260c891f5c44a93481c926935331c6f108266779069",
+      "wheel_sha256": "3b3f3a048fb558d1e20b3197f09c3382e7f51d9d70c4f01e6c9b7696065729df",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/liquidations/liquidation.py",
+      "git_bytes": 2243,
+      "wheel_bytes": 2313,
+      "git_sha256": "16c67ce2dc3f74c34faf381d5c43797442191c77a221d42286e016d6f202e84c",
+      "wheel_sha256": "8a1954efb9d1e98c7436157ecddaed8059049caf562d79d386ce8e3ccebafdff",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/markprices/__init__.py",
+      "git_bytes": 134,
+      "wheel_bytes": 141,
+      "git_sha256": "723b8f2f3b9415b437fd9774b112a5a8f5a88f9afdb5c80e37ae70eb1274ebcb",
+      "wheel_sha256": "e0ab8614d84fb7cc0d8e036a4ac4055bb7be106474c14c43ce1f06bc3ffe3cdb",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/markprices/mark_price.py",
+      "git_bytes": 2657,
+      "wheel_bytes": 2736,
+      "git_sha256": "847a83042f927e0af3acff6fca4f366e62450e0e8469c3771aba7c8d1be73e31",
+      "wheel_sha256": "62c5b860cd75f4c4536397fcc2662c43d323890cbca0869efd0501452c76e49a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/orderbooks/__init__.py",
+      "git_bytes": 133,
+      "wheel_bytes": 140,
+      "git_sha256": "8d0006f7dfa95a86a40613ab4290fb71cfa800919440a234049a33334a43775d",
+      "wheel_sha256": "08652de2e7269f1d7748e01b985f05cde77d08d4b8ee2bfdf3102a727928b5c3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/orderbooks/orderbook.py",
+      "git_bytes": 3805,
+      "wheel_bytes": 3914,
+      "git_sha256": "42c2da2745d49afcd805b85406930f5fa2e77f057b0cf4a22d6749b65fe406db",
+      "wheel_sha256": "b022e7396f6e670b5a72f45d5c8ae6fee3561ed22c806b944cfb209875bc8324",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/orders/__init__.py",
+      "git_bytes": 121,
+      "wheel_bytes": 128,
+      "git_sha256": "ab750e365d17144a1d961e5d44b11835c6021e3fdb08e92486d314ad17a2c62c",
+      "wheel_sha256": "b3a4fcccedcbbd7d246081691b65030da670b20e910ae677c26236cca7deb2fe",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/orders/order.py",
+      "git_bytes": 10303,
+      "wheel_bytes": 10606,
+      "git_sha256": "6c260b0d749a9bf4536a8d6a7d4dfc6c4195a4e00ca717f743a1ef80a0454b86",
+      "wheel_sha256": "9440d65f74725e0fa3237a8d08f16d7579788fa8fe17954fdcdba07e6a23469b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/positions/__init__.py",
+      "git_bytes": 130,
+      "wheel_bytes": 137,
+      "git_sha256": "5af7f9b8bf045ecc81ad3867a51b18983c7cdf9cd5ab23b340474842b7bd11ca",
+      "wheel_sha256": "2c6cb89ee5d070fcdcf3e73bf1d6cab14579557450ba2c6c368de22cccf72cf0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/positions/position.py",
+      "git_bytes": 6628,
+      "wheel_bytes": 6827,
+      "git_sha256": "46ef3a7c1af482b11049af0b483ed0ae901861e181878b56440781c09a2a4e5e",
+      "wheel_sha256": "021faf8c50bb9949ff13167f5217c9b16fa58b4674266919e1de8e7e170adac9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/requestdatas/__init__.py",
+      "git_bytes": 132,
+      "wheel_bytes": 139,
+      "git_sha256": "8b2da1398da899139f74f5084017a22f8c70e618c39d7013ab8c96ea76567535",
+      "wheel_sha256": "f8ef6f79baccc9cb4e7623a5df8c74dd2a8ed24bdf80e3e57cd48a1291bbbca6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/requestdatas/request_data.py",
+      "git_bytes": 4808,
+      "wheel_bytes": 4968,
+      "git_sha256": "c66566c0e37558fa92b52cb49b5f64346fb17fda3590c57b953bea132a0f1546",
+      "wheel_sha256": "2c855ef1dc27e5b9913d357ef2d81cce9d5d5fc62daae3fadcfaf9bc52354f43",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/symbols/__init__.py",
+      "git_bytes": 124,
+      "wheel_bytes": 131,
+      "git_sha256": "c52a55863320364d86b0bc376c134078415e7bde55d54358bdad21dbe6ea2fd9",
+      "wheel_sha256": "5254a4a459afc31a0e54594d75a1f3b06a10758769148434bde7a3fa64d8ed58",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/symbols/symbol.py",
+      "git_bytes": 3252,
+      "wheel_bytes": 3383,
+      "git_sha256": "b3a24d075332dd7250802b14acdba47d65b2df1b3f81f196365bd6d86f411369",
+      "wheel_sha256": "9444b8cdaaa42094bd8db1f8dffe20d5dd69763e606324204a44bd60fef30c56",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/tickers/__init__.py",
+      "git_bytes": 124,
+      "wheel_bytes": 131,
+      "git_sha256": "79799a2072673630d1de968ca422553cd38bbf7c61b47bf8bd13723c2b4c6148",
+      "wheel_sha256": "32d2fb5c1fed1fadcd67fc38eff142f7444076faeb2e401dfeeb5e301dc7ded7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/tickers/ticker.py",
+      "git_bytes": 3296,
+      "wheel_bytes": 3449,
+      "git_sha256": "fc3f1ad9ac7889dd7455f46868d354663934fc0b796e2e9e0d38d2e51dd9148a",
+      "wheel_sha256": "9092e59e2e846feebdef0640d0ea4bb9bd143de1070c9410cf786706ad56ca63",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/timers/__init__.py",
+      "git_bytes": 121,
+      "wheel_bytes": 128,
+      "git_sha256": "7f8d81477a63d08d9ec256c8dc1c629f71791ca912dfd5433af87cb4689a885f",
+      "wheel_sha256": "d27412a2b17a26bd205e6cfea8e1190b86a1f7d0cb0fede0367483b135995116",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/timers/timer.py",
+      "git_bytes": 423,
+      "wheel_bytes": 444,
+      "git_sha256": "fb2b449b41cabaf00ad2eb50e6c9ce780eb9555c803357ad6499a1e32c1f65bf",
+      "wheel_sha256": "6a799546660e1508ce01f0f27174d63c459451b9c4669bb5a2457c560e0b0274",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/trades/__init__.py",
+      "git_bytes": 121,
+      "wheel_bytes": 128,
+      "git_sha256": "16a2d79eb8074856f5739f083e3d59bf35382d20f45fb9fcd1f116b1175ad6a7",
+      "wheel_sha256": "b43b4f97c557117a299b401da8459b916c9e717aca6c22e9916813644cc68545",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/containers/trades/trade.py",
+      "git_bytes": 4670,
+      "wheel_bytes": 4824,
+      "git_sha256": "106ca6dca7d0854f8b40a8f9bb172b8345a9030c5b73cab9b368910f3bb0fd7d",
+      "wheel_sha256": "c2d5104d33e90a77b4219d5c62015329d4ed44ad45b96de145de7b5bf9b641fb",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/core/__init__.py",
+      "git_bytes": 977,
+      "wheel_bytes": 1023,
+      "git_sha256": "3c369463b6b7acb786366862d1b1b5db7564619e2ffabe7cac58ec8276d16b6d",
+      "wheel_sha256": "4fd86536356f5421c1332d0e9eded8370e38473869a015171e34dd63696e45dd",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/core/async_context.py",
+      "git_bytes": 15949,
+      "wheel_bytes": 16428,
+      "git_sha256": "cd08805ffbcf6d9a0ac4cb0077789c54c2536ef12569cc470f29531987e69ccd",
+      "wheel_sha256": "67f1e125266c80cd28b63c42de87e7588b31d357a41cbd8301b90563cedd1d20",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/core/dependency_injection.py",
+      "git_bytes": 9151,
+      "wheel_bytes": 9415,
+      "git_sha256": "9c250590660547a86d355f8039068c137fd5a8f54db138cd4ac2a4bf39ea3099",
+      "wheel_sha256": "96c178e4c6d387212cb17252a84775652bb2fb86d4f0db5338597e90929b8993",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/core/interfaces.py",
+      "git_bytes": 8808,
+      "wheel_bytes": 9133,
+      "git_sha256": "df436fb4f16ff65accfaa7de5c0311af51c5cae14c6bdde868c6a2abf48d0617",
+      "wheel_sha256": "3cc776e956c2766d3946d218b754372cedc312196cac510df18197f05dd2d523",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/core/services.py",
+      "git_bytes": 23391,
+      "wheel_bytes": 24021,
+      "git_sha256": "fbda5b5de8fff9c923fadaa92901e2e7c333aa93c3af8a4f5996b539d0e620ce",
+      "wheel_sha256": "f384a09db545a2a293756a26efbeac8f77bcb62d8392be15813878f2880a4f05",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/__init__.py",
+      "git_bytes": 512,
+      "wheel_bytes": 530,
+      "git_sha256": "eb46d51c9623154bc3bf726a4bd2c70d75a180ad019eb9bc8e62f20fdb12a20e",
+      "wheel_sha256": "af7bc27664c005cda5b2d68d939fc41856bfeae7027632c198839a6515656fe4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/abstract_feed.py",
+      "git_bytes": 9221,
+      "wheel_bytes": 9543,
+      "git_sha256": "15537c26945cbb2a7d8362e0cfb6c84fbec5fd7fdfa78a11b966c3c85abea9cb",
+      "wheel_sha256": "7a9b240aca00f5036eac4d1a4e14122c8998036fa2334681cb6bac3459a73b5c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/base_stream.py",
+      "git_bytes": 3240,
+      "wheel_bytes": 3360,
+      "git_sha256": "58caf56e7880e43545d2d12bbf167e05cea76c3c9e5d37acd15a6cc59b6d8bc6",
+      "wheel_sha256": "e77bedc168fafb64484e91873b51bcd6e71eacba685986747aebeac5f1461235",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/capability.py",
+      "git_bytes": 2813,
+      "wheel_bytes": 2924,
+      "git_sha256": "83f9f6b43ad407379998a5b95c9ad707461ec992116c0443f45835941eb78358",
+      "wheel_sha256": "6c20a41828d283c61dc2d5778dc20cc4ce015c9d830c6270232e871053f979e4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/connection_mixin.py",
+      "git_bytes": 1883,
+      "wheel_bytes": 1955,
+      "git_sha256": "91fac238d55fad5efa464c438cd5d86b66e154fa6c94a65d4fcadfbc75223e8a",
+      "wheel_sha256": "31b1390c018e639bfcf88421aad0503c13731f61fcb4654010531e7bf2efadf0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/feed.py",
+      "git_bytes": 24441,
+      "wheel_bytes": 25060,
+      "git_sha256": "e16021b07aad6d18066e5ef263e9fee552756631cf5fcdac6a1483b3ff401f07",
+      "wheel_sha256": "f1d5b72970d7e4f9855248617d06d774890eedbbb6277caa1ef96701f89040a4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/http_client.py",
+      "git_bytes": 11636,
+      "wheel_bytes": 11976,
+      "git_sha256": "b039d560320646b9cacbb1c8f1a57d28e3891f0b838396427ba6642be78a6937",
+      "wheel_sha256": "c7314563284e1308446f48995ec2be018e7d4f8bb7b27ac975f7107ff2110b47",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/my_websocket_app.py",
+      "git_bytes": 29560,
+      "wheel_bytes": 30266,
+      "git_sha256": "bee2c32323b0042244480aee9f58fbdde3cff54bcd6c3f7f8a3f8892d774a0c2",
+      "wheel_sha256": "cb6e538676723dfd3afcc10ba49aa8684e3b287676201521a4a45245ec542bf6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/feeds/transport_safety.py",
+      "git_bytes": 6002,
+      "wheel_bytes": 6185,
+      "git_sha256": "2078ba69c5306f92573263c1d8ecd37d13d22c1d65ca4c40f9fea695b8c455e3",
+      "wheel_sha256": "ba111fec0052e3d47ddfdb4a31337de15cd6f2dce20b42a74e5b3618bd3f83ae",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/__init__.py",
+      "git_bytes": 124,
+      "wheel_bytes": 131,
+      "git_sha256": "dc374680220fd0cd5fadcaf7a09825943192bf41bb6f04ac4ecb70a00f1f9378",
+      "wheel_sha256": "7bd75e9b04b4c22b9236a7155a6d3bcaaf777e4ac06961118c4837ffa6ded960",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/async_base.py",
+      "git_bytes": 7639,
+      "wheel_bytes": 7842,
+      "git_sha256": "fef7f7300d710192d528b24361f74ed1281645f3f595ca3c8731d5b5ff9f69d8",
+      "wheel_sha256": "637ae9cb7aed8c64b84c8b80a3334e2cb6f3b6b6d3666d84bd51697d8ef97400",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/calculate_time.py",
+      "git_bytes": 3452,
+      "wheel_bytes": 3572,
+      "git_sha256": "eb0174a00f608a066f057b3708b53e82abe9566ae169cba8e3995c497265b31b",
+      "wheel_sha256": "1b1c65c637c880e1f4d1795ad6437dedaa6a9c61298e3ebf5f57abbe4247435c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/log_message.py",
+      "git_bytes": 5275,
+      "wheel_bytes": 5431,
+      "git_sha256": "b7510bb9fa5e7c6ec2a139c7ec48dbf72c289c8b01650bd680254587ee7ea8f7",
+      "wheel_sha256": "b7802a512380a51ec7147539bde1d69676f0476f00ab7548b53636d9b5faeb69",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/rate_limiters.py",
+      "git_bytes": 782,
+      "wheel_bytes": 807,
+      "git_sha256": "4134cbfcaf04974ae1a3ce36c590854cc2dbe5057de8ea6a5d448833a5b609b1",
+      "wheel_sha256": "8159082bb93c587fa46213e4ebda3e7bfae0658bdd3521124cec115f3ddaf5c8",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/signers.py",
+      "git_bytes": 654,
+      "wheel_bytes": 672,
+      "git_sha256": "32ce9b58815f1999a3464ba7de57342faa806df663129740b47040aaf3d23eb1",
+      "wheel_sha256": "f6a2e057dd720c7f2549b0fddccdd983619d0b077177c23996f8f1c8d534def1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/timestamps.py",
+      "git_bytes": 635,
+      "wheel_bytes": 657,
+      "git_sha256": "3b1db4601b23d573a43dd7796c9eb9355b569a8ab5e8cb7c6096c28bec00f7df",
+      "wheel_sha256": "faa4e7613f1acbd1703967401b48643a3f022e40b6e862454cd5a48579d39740",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/functions/utils.py",
+      "git_bytes": 10358,
+      "wheel_bytes": 10664,
+      "git_sha256": "99be102e5b67bf86fde17572daf81d963024d2fc417bfdbcfba7fb855fc393a5",
+      "wheel_sha256": "481ed5c55b23c7ebc08d6b285c5e466090432d0556774f5df6b8d7fb07fb9829",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/__init__.py",
+      "git_bytes": 1403,
+      "wheel_bytes": 1443,
+      "git_sha256": "421bfa9c7175e5b28801ecc124d4672ed6bd4f381bbb2e3febc70132c17b7cf5",
+      "wheel_sha256": "40b5f76e8ffb72e72f2ef5e6785d77614c6577bb7ec45137a89d1cd6f90102fe",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/config.py",
+      "git_bytes": 13879,
+      "wheel_bytes": 14244,
+      "git_sha256": "fa17cb493459d812094fa9da1487f8259d77ad5ddee8d94b5adbd0dc08687eeb",
+      "wheel_sha256": "cd38681697016d5909301bd66af8a0bcf4c13bcfa46a5143af10b223155f61ef",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/health.py",
+      "git_bytes": 4618,
+      "wheel_bytes": 4757,
+      "git_sha256": "2fd9f4cf649a16f8a2f40192eabbfc1a80e56ff6c7dec76fbceed9c991a6a130",
+      "wheel_sha256": "85f0b5781e679f0a8fb9a616501046c85a462aca190d141e678f60e3f3657cd7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/models.py",
+      "git_bytes": 3570,
+      "wheel_bytes": 3672,
+      "git_sha256": "e501bcd4fe9bebfce228136479385d504afb2f62cbdfa3b356512b6680fb0b0e",
+      "wheel_sha256": "6a50201863f5bf99d64d79131fa63f78604fae15d84041f72626db6f98e2ff1d",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/order_identity_map.py",
+      "git_bytes": 4905,
+      "wheel_bytes": 5049,
+      "git_sha256": "ad88ceb23194bbfe16e3d139c5c1f87c0f33a586a5105c303fb6454949c66d7b",
+      "wheel_sha256": "c2d50f9e6b4cfa5576152cb524282a51245ace4047fc2eaf278c05d025911c28",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/order_ref_allocator.py",
+      "git_bytes": 4853,
+      "wheel_bytes": 4990,
+      "git_sha256": "ed53d75fbb01c22b5b8438909d1f98c60ebc93d987301419e72fbd02cbc4560a",
+      "wheel_sha256": "dccdd68687e46173516736631d245200fd7cf718b2a46e685a317261a3830758",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/protocol.py",
+      "git_bytes": 1161,
+      "wheel_bytes": 1205,
+      "git_sha256": "5484189df2504d3e839c524268c65d11330fd9a61b93ece9bcfab2f2250a5efb",
+      "wheel_sha256": "358c172189ff63eec4f3227fe1d015d3e191a41a8bc286c6a6bdf63f4c5a2121",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/registrar.py",
+      "git_bytes": 1273,
+      "wheel_bytes": 1318,
+      "git_sha256": "086baf02bbcfec210a2f84572ac41fae449629cc38f1f3acae235fffc6744db0",
+      "wheel_sha256": "ca01a47bb6d07ef046bd0a41ad9b474ebe6c8cc9ff369edf9d1249db6d620202",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/runtime.py",
+      "git_bytes": 19554,
+      "wheel_bytes": 20039,
+      "git_sha256": "4ff7bd82ca15cbc666417399667c2a2d9189c87956d1f3f30fa069d7ef5b7024",
+      "wheel_sha256": "40981ca7a151d6d50a0bdd3ce75c1c16f2149a295970c68e51e33e6f110affe1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/runtime_remote.py",
+      "git_bytes": 29799,
+      "wheel_bytes": 30552,
+      "git_sha256": "02b066fa5b07d0ea1a8a85799bafc2c567aa00bc0fcf32be0127a01be198d86a",
+      "wheel_sha256": "b6076aa99ae7655ce3cf3047a5aeb0b97b53007da51d174c0deefae49a94dd82",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/subscription_manager.py",
+      "git_bytes": 3384,
+      "wheel_bytes": 3475,
+      "git_sha256": "cc7574160b83abf4b3fd7db44152c1a989bb7967c2f5c6fb7a0af25241ea01a7",
+      "wheel_sha256": "8cb513012ed24502a76e208be7fed4c7a84924a9809c9ec043d2588bdb2cc971",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/adapters/__init__.py",
+      "git_bytes": 1593,
+      "wheel_bytes": 1643,
+      "git_sha256": "089d956ee708310077b51c08a0cc1bb8726abbe098f916886f434ca3a55aa708",
+      "wheel_sha256": "2efe644785b03f3939796fc12b7758f7038def8d86dcd28cd46b6dad74ed1300",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/adapters/base.py",
+      "git_bytes": 2393,
+      "wheel_bytes": 2474,
+      "git_sha256": "5b91673066dc7ba46a29fd995f5861cc44ff13318b23b1b22f86bce106bb8658",
+      "wheel_sha256": "44cf3d8e5c65ccec999b2078731a489dca29cebc763c36dd248b91e321810616",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/adapters/plugin_adapter.py",
+      "git_bytes": 3705,
+      "wheel_bytes": 3806,
+      "git_sha256": "1f4e912c1315158a5bbf3b30db7c4b692f96db04e1c0b70cd666088d4ac53072",
+      "wheel_sha256": "c5f749199759db97c9188122084d341caf659b21711415251b16d57c5c547fe0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/storage/__init__.py",
+      "git_bytes": 125,
+      "wheel_bytes": 130,
+      "git_sha256": "b675f84027ab9f00a1aa4a41dcca9afeb415e67a2a1320a9f5cf61475cd5fcfb",
+      "wheel_sha256": "601bae070451478c72c917253aab473952f04f1809342662b5ad68f2d70b2522",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/gateway/storage/tick_writer.py",
+      "git_bytes": 6312,
+      "wheel_bytes": 6497,
+      "git_sha256": "63942bd94040855123c0e1d43cea0e872b0b1689750f8e08ba102f0ecd689399",
+      "wheel_sha256": "5b2bc4acc046cff6a2c14cb7d99bb693f9bed7a0c74fc76219bb2f3316834e95",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/plugins/__init__.py",
+      "git_bytes": 553,
+      "wheel_bytes": 576,
+      "git_sha256": "d2aaaa22452c898ed078159d2826aa2eaf44ead7f38fd84c14290d195d78ab90",
+      "wheel_sha256": "16d16ab8ce5f14c66e1a1a6ecdcab97e42c2856b189a14819b81a027e749244f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/plugins/errors.py",
+      "git_bytes": 455,
+      "wheel_bytes": 478,
+      "git_sha256": "ea865cb2d9ff65dd211975da93b72d4e2c83ecb0c3329bc77cdc1d3c29d29b75",
+      "wheel_sha256": "970f689c58929f9a2b4f16fbc360a5554cb900803ee0bd45426bd5549a75a1a4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/plugins/loader.py",
+      "git_bytes": 11596,
+      "wheel_bytes": 11884,
+      "git_sha256": "ab2f466e1653f824b6da13470eab46abc16931a3f81126a632c7f44a9ffe1dc2",
+      "wheel_sha256": "bf25754bd084861dc8d22e26fa40c498f71e23ac83a22ff2fb72999792286413",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/plugins/protocol.py",
+      "git_bytes": 413,
+      "wheel_bytes": 434,
+      "git_sha256": "eae454ba5ca7eac01666c2592b11729ec79b0bf7da6d768610eac62aae6e1f19",
+      "wheel_sha256": "b9dec7282c65e7789023b60e3d8b72adb47b3a1ea4913db101b3bcae666cacf7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/testing/__init__.py",
+      "git_bytes": 322,
+      "wheel_bytes": 337,
+      "git_sha256": "a1903f41fd0a95779ae8010a4773a4a6bc4f8c45e067e40e46a7c3fe6b40b20e",
+      "wheel_sha256": "69c327f3a51d81352965a8618ef345d36e64e35ff8d83fec140c0ecae73bc16c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/testing/fixtures.py",
+      "git_bytes": 909,
+      "wheel_bytes": 946,
+      "git_sha256": "92eeb7e38dd4ca7ab7b7a43337b78cae8c75a6844d6530965d6ae7332c97e350",
+      "wheel_sha256": "0defef577f719f0c3113e25a2805050f8e2eb5e5ce7dd3f89c05343dbd48d5b7",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/utils/__init__.py",
+      "git_bytes": 125,
+      "wheel_bytes": 130,
+      "git_sha256": "6815755ee6e1198f1ebfdd3fb8b102fa9d6c565041712cec64154aa4d8138665",
+      "wheel_sha256": "d41a1dd7fe6e489fa65a61c92cf27798e7c2b611b38f80560e30bd3852b708a0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/utils/time.py",
+      "git_bytes": 745,
+      "wheel_bytes": 774,
+      "git_sha256": "45bda4c5cfc0847107c695f8433ba19890f12da80828b5110160ca47ddfa70ae",
+      "wheel_sha256": "5568933b28438c17a9056831247a53e3e9020104d58b7fdeef4e7f2f9a0784c4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/websocket/__init__.py",
+      "git_bytes": 1099,
+      "wheel_bytes": 1140,
+      "git_sha256": "2bd32ce7ba3d94c2291d0033212c5bca2802b02c3e03e81ed989bb7f2222583b",
+      "wheel_sha256": "0e4b8b72f2db6eca5a2f2b2dc1de13df9fda1d83d179b1cb36e8a305bfb83532",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/websocket/exchange_adapters.py",
+      "git_bytes": 17304,
+      "wheel_bytes": 17794,
+      "git_sha256": "400f338fd41e23654ca26f8b6b41727a0b4b60bdf5aea4bfbcf3593e3aa896c4",
+      "wheel_sha256": "df3dd3723ea900d8f06a3b4b2dabb3ba0f52b710032bb826134518e2cd6bef0a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/__init__.py",
+      "git_bytes": 13645,
+      "wheel_bytes": 14124,
+      "git_sha256": "750bc6b28e1b96033f09633968a4c8110a9953c048c47db37ef06cd788058274",
+      "wheel_sha256": "5d326dd010a226cd926cac6ed622e77c1fa2f7773aadcffcb5b5c3e2491b794e",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/account_financial_ledger.py",
+      "git_bytes": 82953,
+      "wheel_bytes": 84823,
+      "git_sha256": "f72cc024378f225ad7743e5d76ae8eeab192d7beeb5ee570ee31ead77fd3f8d0",
+      "wheel_sha256": "122ebabac60d5b6b1bac7ff4ca49aad62a73ab27045567fc5a7e6633c079322f",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/account_reconciliation.py",
+      "git_bytes": 61541,
+      "wheel_bytes": 62951,
+      "git_sha256": "f20350e7284d6d6e5a3d8a94965f442298d34c74c715dbfe2b3122d7857b6fb5",
+      "wheel_sha256": "6a325700ee18654b4cc63c3ff855e86979b249fb372d9e527a9aef5cea9a70db",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/admission.py",
+      "git_bytes": 7128,
+      "wheel_bytes": 7302,
+      "git_sha256": "3529958357e51fc3c6219715c1e1b910f98ca71d7ec702775c2e98602d710a3b",
+      "wheel_sha256": "8a9f2c4eed1a365cfaa54edb5193f1f49d5536be588b974075be502efc2a2ac4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/basic_admission.py",
+      "git_bytes": 29584,
+      "wheel_bytes": 30258,
+      "git_sha256": "6ae74b5e5ccdc6314f6d6ac9662be12aef03527d988c15e51ce9d63ae9d940d3",
+      "wheel_sha256": "5e9da583397920e86c6147ef36f2009e88d32cfd9ee189e07a744116e6d96ba3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/cancellation.py",
+      "git_bytes": 19657,
+      "wheel_bytes": 20177,
+      "git_sha256": "68ffd8e790fca9309896075633193f9198e00ee8e8da545efa9ac011e083d4d5",
+      "wheel_sha256": "a38acbc96ed81ee71044393f8774449480547cae62d9479cad33488ff7e099cd",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/contracts.py",
+      "git_bytes": 59198,
+      "wheel_bytes": 60653,
+      "git_sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477",
+      "wheel_sha256": "842a0bc6a6c2b6d1267fa8d875c14ac2f7a65dcffccf6a6ae742d719e8893394",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/ctp_callback_ledger_adapter.py",
+      "git_bytes": 11589,
+      "wheel_bytes": 11853,
+      "git_sha256": "30e4a822103f296e64242be5285c36bdfab570e4e908d26480cb215f9ef25ee1",
+      "wheel_sha256": "d260453ce69617493205c0fad564a18cac436ccf4d70cb1fb3c5afa6a530916c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/ctp_callback_session.py",
+      "git_bytes": 18636,
+      "wheel_bytes": 19096,
+      "git_sha256": "767301c60b5b1d16b028554ab438c0ce737f6a214f87b66098b5c13df7b9c94c",
+      "wheel_sha256": "cbdde6bb0d9e497d0544e20672ff6853454884eccd1c97138c0ee457fa97aac2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/ctp_callback_source_bridge.py",
+      "git_bytes": 34095,
+      "wheel_bytes": 34883,
+      "git_sha256": "d4298b54a8d066eab5d63319ebf0199eddc3fca609ccec548e68eca413985d6f",
+      "wheel_sha256": "a916b0eb74bc8af6c8ecd98e5a23f9ac7f86c93f5fb4d712a2fcce9df52d1c51",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/ctp_native_callbacks.py",
+      "git_bytes": 40537,
+      "wheel_bytes": 41503,
+      "git_sha256": "0d8bf4f20f5759f413e2f46a38dbc06a662fd6d93fe15341f0e7c44547366329",
+      "wheel_sha256": "a4852d568a90845faf946a5be773a13d514bc63156091d2caf0d548dfc2e75ae",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/ctp_single_worker_candidate.py",
+      "git_bytes": 28936,
+      "wheel_bytes": 29557,
+      "git_sha256": "44961e5ed863b13c9646fd6d90ff555e7250186a1c71f3a0c8d6549159f261f2",
+      "wheel_sha256": "2cedc35f4f42fc9429c89f69987bbfd64e7b45f6595e6f4c0f3e92f6b04f3a71",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/errors.py",
+      "git_bytes": 2311,
+      "wheel_bytes": 2388,
+      "git_sha256": "d1ea5a2a8bb596562f94cfa0acccf2229546e8d815aa84bd0ad52a0cfdbc6bab",
+      "wheel_sha256": "0bfb6a07431911f699e051589c82890aa1957287bf7dc32f6f5995de6f60628b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/facade.py",
+      "git_bytes": 51174,
+      "wheel_bytes": 52384,
+      "git_sha256": "76921b8c6ef2806d2ab3f9a3464a279f3e60051eb3e1e065379ffd6d78fe5de9",
+      "wheel_sha256": "fca5c342b4bc3eecd2bed2a09bef1f865d528893ca22bae3d9fc67264f3e7879",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/group_contracts.py",
+      "git_bytes": 15182,
+      "wheel_bytes": 15579,
+      "git_sha256": "961e137c925ab5bbed362c65f9b39f32e8b53622f6b2ffc55786ca22a167fb4a",
+      "wheel_sha256": "6d7bf6d20f7dfb34d9c2fc471d133c76c49395e37e91c09967eae60146a3be09",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/group_coordinator.py",
+      "git_bytes": 59825,
+      "wheel_bytes": 61151,
+      "git_sha256": "3d7412e9b52698560db26cc866c3e1a3a80e27b2972bfe031c7c29400f8b615f",
+      "wheel_sha256": "8967bd8d0f56376f41bb83abd13ca49348a9bad843ebaa971dbe622198a96dfd",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/group_order_contracts.py",
+      "git_bytes": 45570,
+      "wheel_bytes": 46654,
+      "git_sha256": "380629ad863dc6b8c177149f829b910acda94a17d40a00332dab9e2005cc9ed1",
+      "wheel_sha256": "e7dc09b7cff8b9d5a886dc62a7ba0c2b8d514dc29e9719abcc0cd5b924637a2d",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/group_store.py",
+      "git_bytes": 24656,
+      "wheel_bytes": 25230,
+      "git_sha256": "525486b96003a7929a39feda13f3da87f6e1230ae3cfa8d36d427f3c2c9499f4",
+      "wheel_sha256": "6d7dab71f708c6843ba238e4f027131014e95bd52e14cde2ad72ae75902d8d04",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/journal_reader.py",
+      "git_bytes": 15734,
+      "wheel_bytes": 16153,
+      "git_sha256": "d032cf69ade5e4869af5a0b523526b87d230029b4d9a24dabd3a99d4e7429500",
+      "wheel_sha256": "cd70115720b6da49ffcf508b815cef06c912908e5579350287d66357e02f53dd",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/paper_execution.py",
+      "git_bytes": 50285,
+      "wheel_bytes": 51512,
+      "git_sha256": "69de000f6768272aeaabd258301e34ad15e81ec7309cb00682919057869072e8",
+      "wheel_sha256": "570cf7418732d485308fab397564a785ba8fdd370a2811b39e42e1ae7ad7ed80",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/ports.py",
+      "git_bytes": 1445,
+      "wheel_bytes": 1488,
+      "git_sha256": "9e6fe2df31d6daca74f1b176271ea34ef41e5c5bc2780fe078874f16d3860847",
+      "wheel_sha256": "bf84c0424e962fb6d0ad2a9fc2112fbaa72d281e2bac9d2fa58fc959c1ee40b9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/py.typed",
+      "git_bytes": 1,
+      "wheel_bytes": 2,
+      "git_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "wheel_sha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/service_component.py",
+      "git_bytes": 11190,
+      "wheel_bytes": 11473,
+      "git_sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+      "wheel_sha256": "34bd68d8d662326720915bbe340e46a501d3e35a22e010e95ecc6cedf4e85829",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/service_order_entry.py",
+      "git_bytes": 37147,
+      "wheel_bytes": 37956,
+      "git_sha256": "c9a14f78920bd8d14e36b5c09d641c9c08e26a4130a6b80e8aeeb2d4a533a8ea",
+      "wheel_sha256": "a6d554f30020f28cf2a757f766eed9c3875756291665151c4f0147c3a7dec457",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_execution",
+      "path": "src/bt_api_execution/store.py",
+      "git_bytes": 844587,
+      "wheel_bytes": 862225,
+      "git_sha256": "c13aa1bd6ce1b9b909cd853e46fcadbe6c6e5b56e94259502b9a88f5d48bf76a",
+      "wheel_sha256": "5b80bbf005a8c1f73e7cf07e9c76299dce764fc44226e24ed9a09fc8c46b70bc",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/__init__.py",
+      "git_bytes": 2062,
+      "wheel_bytes": 2141,
+      "git_sha256": "c772784c83ba6019d403633bc735c9ff26391d92885678dddc0f287e89db5cc7",
+      "wheel_sha256": "d807f831efed22e4f041cbdb1d87fe767ebe7c6c2fba8a64460db05c4fe0ac7c",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/account_session_worker.py",
+      "git_bytes": 41127,
+      "wheel_bytes": 42032,
+      "git_sha256": "0006b8a9cfe014d881e8bd8efabebe943ae301af2d5f167211d29cf4cc8545e1",
+      "wheel_sha256": "0feb752ec77307f49db32325c3e0224ebf5fc7fd63854cb829f0556b083ca603",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/account_view_projection.py",
+      "git_bytes": 18858,
+      "wheel_bytes": 19320,
+      "git_sha256": "a038cde6e32f8597d2a111a9ee3f63a6143590d35ba5ed691d5bce99b3075f09",
+      "wheel_sha256": "f4742742d5b0e9ed78eac7b5bf09d0b2d6f9a6cda051de6010e41d93b714b8b5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/database_identity.py",
+      "git_bytes": 2796,
+      "wheel_bytes": 2868,
+      "git_sha256": "a66cf0c742c08ab6b17c69d00dc8ebfa817ced209b82c76a0a42d573890d2002",
+      "wheel_sha256": "4247ca03ff5d7cf5a9e7c90303a9ec3fd55db50526f5970492e5146adf4184d4",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/event_journal.py",
+      "git_bytes": 102036,
+      "wheel_bytes": 104463,
+      "git_sha256": "b189e1ed50d21594093dd4c0dc9cb266fa0652cb87cb57f29b0d35399bc47446",
+      "wheel_sha256": "69c97df8b49b19c96b5819fbe06170e19509b2c50cd47ab2513c3c1bf2998c4d",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/market_hub.py",
+      "git_bytes": 53018,
+      "wheel_bytes": 54282,
+      "git_sha256": "68066602191877afc24c72623eb8f81d4defe7f093fbdb53d104cc68153675d3",
+      "wheel_sha256": "80f60a6a2ca86223bd6fea608cf40956c3655adc1419e3e229abf8b3bbf9f1a0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/resolution.py",
+      "git_bytes": 25548,
+      "wheel_bytes": 26147,
+      "git_sha256": "ed6ed311a9b7824ae48f5e56a338e162db4199db26d85389453de0fe914861f1",
+      "wheel_sha256": "491f340b87cbcc94a5827cc5469574b454ba36f6957888f54c031312e208393b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/router.py",
+      "git_bytes": 29851,
+      "wheel_bytes": 30559,
+      "git_sha256": "fb0c18b68331a571c1530311a084ea5fa71709a81b068b9d37d17538ea528d62",
+      "wheel_sha256": "8e923b0228f9dcbf2e782a43835a7be286620664a9835e6ec862843588fef96d",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/service_component.py",
+      "git_bytes": 35467,
+      "wheel_bytes": 36278,
+      "git_sha256": "d5e3d4e7814413885672484a11c666dd1603ebfeeb39e412916bab430821fc0c",
+      "wheel_sha256": "380bb31bff5f440e3091b7c68c086ad8a423b062ac47c3b97f8d8fad751fa8b1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/session_guard.py",
+      "git_bytes": 22894,
+      "wheel_bytes": 23468,
+      "git_sha256": "8910462b67ace265577b8ab6fb2ac3c68d9d841e0c5499cf652f4c74f75ad682",
+      "wheel_sha256": "57728487d4cfe10ccb95ed77998965940842bd5728589924aebfc58336ca9047",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/wire_mapping.py",
+      "git_bytes": 6091,
+      "wheel_bytes": 6236,
+      "git_sha256": "d1a9e4c057311f17a72bdcc46ec5825486aa528ca30f1f9d512a9de1753eefab",
+      "wheel_sha256": "67227d1e81c20da9c6231b39e27c51b329eeaecd1c0235d87c06669a846f6b58",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/writer_authority.py",
+      "git_bytes": 35979,
+      "wheel_bytes": 36823,
+      "git_sha256": "1b75b687d455afd44b582858424630bad8fc1c67a2c343fdc7473c25f2002fbe",
+      "wheel_sha256": "a399da18987f6743bc6d1661ac2c2dc8a41b3fb5edb5242b813d54bbb3cdecca",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/__init__.py",
+      "git_bytes": 8660,
+      "wheel_bytes": 8985,
+      "git_sha256": "847e64688cf0fc42a2288a513e81611efe6cd8faa8fad634cbd52ac8d9895089",
+      "wheel_sha256": "034325712acd114dcd6e23131ea6bdc19e521bdcad81802c47bd0e62136b34e5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/collector.py",
+      "git_bytes": 9563,
+      "wheel_bytes": 9825,
+      "git_sha256": "68f10f693941df2ce5e67de83a33b06fc167df684c42664a689774f1d9bf6fed",
+      "wheel_sha256": "212dc1e50282a8930d19fece02ae844b58a7ff8d799f678e029f813682a31a06",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/config.py",
+      "git_bytes": 6390,
+      "wheel_bytes": 6588,
+      "git_sha256": "2fc2804d2662c202efcb421f0b3e9e88d2d58c4dc48d1a3b37a2c9bcf8635046",
+      "wheel_sha256": "829a8dc4985443de27c92c9ffcf06c6156fc32cce4433c8325ce1d4a1844b2aa",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/control.py",
+      "git_bytes": 49351,
+      "wheel_bytes": 50581,
+      "git_sha256": "15571dcfc5eb873e85989eee5f74ac9802c4a875b80839fb7eec3154a2013e4c",
+      "wheel_sha256": "c7e1a8c2dbb512c160f9485714333dd6b2f9f984624c81871d27e8dd448c4b98",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/decorators.py",
+      "git_bytes": 8782,
+      "wheel_bytes": 9063,
+      "git_sha256": "57226fd0363d01820e05095d5f56549a8fc137bd317fb27934ed50dc56ca6b56",
+      "wheel_sha256": "3bd7402667721f1e6f4d9de232d68effd539986e0b7f045e2c16a16d10c60867",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/durable.py",
+      "git_bytes": 28679,
+      "wheel_bytes": 29406,
+      "git_sha256": "f3646d0b7aeff51189d737496ea1105df3f5bb313e048ee5201cab57eb77de73",
+      "wheel_sha256": "35b1aa96c834baf540bda1b45b08e33204570374be386a4715b9a29e55d68557",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/elk.py",
+      "git_bytes": 16820,
+      "wheel_bytes": 17315,
+      "git_sha256": "2a362e1a370f9d3fa73d38e1367e587a266cb5a1f7adfe3c20f32b653d24f9b5",
+      "wheel_sha256": "b10288de3fc84c8e764c33d5d7145e38a2d5cb9804c1609aaa87c7cc02895747",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/exchange_health.py",
+      "git_bytes": 13524,
+      "wheel_bytes": 13915,
+      "git_sha256": "6d33750681d80c281717f3f5542adcc0644bb1a0e813c1ca44b0588eaea267f5",
+      "wheel_sha256": "21fd184ce99d67a149ade4e421e1be09a2d1a162d5904fc227c3ea425abb7926",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/facts.py",
+      "git_bytes": 35190,
+      "wheel_bytes": 36060,
+      "git_sha256": "170843b973a9b0576254e3299313deb95eda7135a41fecab8293a0e1f696e1a5",
+      "wheel_sha256": "749ccf017b2b083a34cff46414151d421ef3726f1234b91472996bf22e9c0968",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/grafana.py",
+      "git_bytes": 20296,
+      "wheel_bytes": 20919,
+      "git_sha256": "96b18623adc9bbb32237a9c73d472c4504887ea074153caf2925f58e665b5135",
+      "wheel_sha256": "81bd9d876bc78da520a01e87c0e453bf12fe241fcdafc919fb4f2bdef6ef36cd",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/ingress.py",
+      "git_bytes": 22374,
+      "wheel_bytes": 22914,
+      "git_sha256": "38b9065b0fd44e0eb6bd0cb454eb82472e7bffb47e380e45da9d00e814a20e26",
+      "wheel_sha256": "baf400c9338f863c951c095ec14e0b33d1e16f0e9a70c053e9910448c554ef17",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/market_observation.py",
+      "git_bytes": 1938,
+      "wheel_bytes": 1994,
+      "git_sha256": "30959e253ffb9718370e5e530ecf65f9fb23e1fd7445414e44d138639e2cfe15",
+      "wheel_sha256": "6b09c7b3cd28a7a4fa9e5709bbf2aa2c75a0b9e0c1d696252a79167c627d4952",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/metrics.py",
+      "git_bytes": 7793,
+      "wheel_bytes": 8068,
+      "git_sha256": "be008fb4fdce69ef76d742fc71278d5527e53babdbdb9f30bb83b07c45382d69",
+      "wheel_sha256": "7a7fed4142afbac2728e42fc8289a4fa773d369c755ed81172d830692f301c11",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/prometheus.py",
+      "git_bytes": 9915,
+      "wheel_bytes": 10216,
+      "git_sha256": "2fa6a310928bce33496babb99e6308c15a27e1499e2fc23e23ca1ea59c39f558",
+      "wheel_sha256": "b16bb01895567ac5daa639f1c01e7d3137d16f977ea200f9879239e96d2e301e",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/service_component.py",
+      "git_bytes": 12286,
+      "wheel_bytes": 12605,
+      "git_sha256": "f21a5256c60e759f24e305a1f78a360df332544bab36551fbd95d7a81a696247",
+      "wheel_sha256": "c5b71a49d8aedbe02c84aa4696bf91684df635a9a54dc1bbfe37d3cbd91c0566",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/service_control.py",
+      "git_bytes": 30097,
+      "wheel_bytes": 30815,
+      "git_sha256": "222b3da3a1568c213e8ba5d271c7988d651ec66c6f4fbeb3e00e4c54df2918d2",
+      "wheel_sha256": "7df78752a497b81ba8c6509549a0233371113e27ede89271019732ec9b82fef5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/service_ingress.py",
+      "git_bytes": 16141,
+      "wheel_bytes": 16561,
+      "git_sha256": "0b65d791cd92ddd8d05e33a17e0b9b0ead1033340fcdd71719fa5f91eb7b3bd3",
+      "wheel_sha256": "a65c63400830ef027951263c34f6f3d1a2245f7f04a477be970baaa856b2eea6",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/service_telemetry.py",
+      "git_bytes": 19549,
+      "wheel_bytes": 20059,
+      "git_sha256": "e5d9063f7f1eba84d48e500bfb273869ab7039e56f31981bd3083ea039463c2b",
+      "wheel_sha256": "5963339250ac0e79b4295a74c57695a61e76fbb2883b5caa6f26d5f52e618b89",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_monitor",
+      "path": "src/bt_api_monitor/system_metrics.py",
+      "git_bytes": 13567,
+      "wheel_bytes": 13947,
+      "git_sha256": "3a5c314f24b11a209f1c9f5e6b727454219264d31ca13a422dd188243a4e38af",
+      "wheel_sha256": "37b567de340e35e2a134cd60a4bc96f87b200e174cd8de7647ea9805b550a1f9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/__init__.py",
+      "git_bytes": 7699,
+      "wheel_bytes": 7955,
+      "git_sha256": "6c4a6cc60d4661bf40fc630fcd976d766d4f75efd4249a37e140e8290d68f66f",
+      "wheel_sha256": "198da2a9969746e6d4829596c2ec460641d701a1c7ad235b8376415cef25ddc3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/allocation_sizing.py",
+      "git_bytes": 5730,
+      "wheel_bytes": 5865,
+      "git_sha256": "7e9a5286d00537a2b8ff133f1b35f39c1f91a0bd75becd4ac8aefc78c5e51cc7",
+      "wheel_sha256": "11d8141ab61044cf6a02859a6238d0c9ebe8eae898b2d6d84497d11bac332cff",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/order_admission.py",
+      "git_bytes": 19436,
+      "wheel_bytes": 19906,
+      "git_sha256": "1828460401a001cc14da4494a9576752cdbb4e7912659193894c27ab3a6ff95b",
+      "wheel_sha256": "74fde5a0d3d65e4b3c6d3868ec0e6862adb536281bd58baf624f931b6858a127",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/service_component.py",
+      "git_bytes": 14714,
+      "wheel_bytes": 15103,
+      "git_sha256": "dfee4aae3048bd4286a66cffa65ee501b4bb991389b452ddcf67c2e414e51f50",
+      "wheel_sha256": "88d403e0b96e7b1d88b0a80db71b1b50ce6d6bcd8722255b5cc904ff3d9848cd",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/containers/risk_events.py",
+      "git_bytes": 13049,
+      "wheel_bytes": 13385,
+      "git_sha256": "34f537957106ed97262194f5b05cc8bee4aa9be9e2549cfc9e2734316c2c932c",
+      "wheel_sha256": "3cb7b37bc8e186a630e047858eb120666fc4837ba25045984ee11fb8ffb35b4a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/containers/risk_metrics.py",
+      "git_bytes": 11132,
+      "wheel_bytes": 11377,
+      "git_sha256": "54ef9c169dafd0063af46cd4ce5480e6add9460883b07d39f7dc9c762c28bc4e",
+      "wheel_sha256": "20156a825d28b9a837cae73674b601e81220576ab4f8a03b0dbc405a39c4a0a9",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/__init__.py",
+      "git_bytes": 4957,
+      "wheel_bytes": 5128,
+      "git_sha256": "f228c8053d2123992cba1319b32ce796491b7436de870ab05f560e03bd668181",
+      "wheel_sha256": "5ce0af0703ac84b7ff01a2c0852671ad3520e152e4789298074008d548af6d07",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/admission.py",
+      "git_bytes": 425978,
+      "wheel_bytes": 434832,
+      "git_sha256": "9569dab050e037b171fb203182d2654d530a04f64b20fcfa05f9d49f0ebc5296",
+      "wheel_sha256": "8f1648126ad4c3e6d11323f41af17fdbd7c22186976c41cb95a5f92bd55797f2",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/exposure.py",
+      "git_bytes": 30312,
+      "wheel_bytes": 31019,
+      "git_sha256": "2af433523d1060ffb5b86a8d0d63fd55903eb94de6e519559992b1bf3d30e7cc",
+      "wheel_sha256": "8ed4c3ca842e14d4e7219f2b203474b4dcba9a1f425760efde08e27cce83e342",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/freeze_activation.py",
+      "git_bytes": 3379,
+      "wheel_bytes": 3469,
+      "git_sha256": "4940638bc24b0103169aa9217126cfed389bc4ee3ee2bf32d92a2545843c0655",
+      "wheel_sha256": "d755dd109bd531b599ad7b28d5a98f434d3a10d761b284b3dc1945bdaa6b2aaa",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/instrument.py",
+      "git_bytes": 40192,
+      "wheel_bytes": 41116,
+      "git_sha256": "766b009a71f43779ad4ea00201167a6602be5800f66fc9f1d15a7b183b176014",
+      "wheel_sha256": "059f5e7a20d2652bbe2d041a3ffd7cb7a595e3e20ed17773c898cdc420017116",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/limits_manager.py",
+      "git_bytes": 33669,
+      "wheel_bytes": 34616,
+      "git_sha256": "379878f312bdfed5c3590c00eef7d9d3aa692f7c27447b8b1109dc30e9f2e6fe",
+      "wheel_sha256": "eb1e026351478b240037b74c6d3fc721e3a2c60074e829dbabb0414da5e6921a",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/policy_engine.py",
+      "git_bytes": 28266,
+      "wheel_bytes": 29113,
+      "git_sha256": "daf63873daf43228bb04c0ef995f82c01ad334b0e2a28d75a4b0f78367ce35a0",
+      "wheel_sha256": "f85befc83ee4f82506977491a420c07b3b92e702af3a3a09f496f2937af77296",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/risk_assessor.py",
+      "git_bytes": 20265,
+      "wheel_bytes": 20852,
+      "git_sha256": "666bd8b401bf24151d9339676422e6e0b4c6a436a22f03b30ce401fc2d957c08",
+      "wheel_sha256": "4c22a94caebdf4658e1bfce8d9712b6bbe2fac56058395698c15bae56b4ee585",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/risk_calculator.py",
+      "git_bytes": 37110,
+      "wheel_bytes": 38074,
+      "git_sha256": "3fbaae7049e870fe62338e2cb07732978f402e639bf3400a37cd2c11143d4c48",
+      "wheel_sha256": "9f077bd4688fdc92b7791b1390cb310192724246933a95fd647e70b02d8d86e5",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/core/risk_manager.py",
+      "git_bytes": 15058,
+      "wheel_bytes": 15442,
+      "git_sha256": "01deaa193a978ada7d6e6eaa30738ed347a4087fe6839e1fecfec387340d804f",
+      "wheel_sha256": "0d9ff11d5ee36c025ff874a3a66966e625b806154b2af56a3446ee46a2699843",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/ml_models/__init__.py",
+      "git_bytes": 284,
+      "wheel_bytes": 297,
+      "git_sha256": "a183b98f8b50cd53867e55485c4293ffbb67653f3296c18eb89f8447dfdd2498",
+      "wheel_sha256": "0001006fd9f64f72f32c487b31107dca23a7c636b9d3352a92821667adac28f3",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/ml_models/anomaly_detector.py",
+      "git_bytes": 34402,
+      "wheel_bytes": 35316,
+      "git_sha256": "c45945c501edf1c9cce3f9a39d9b7fd17ca41e367997e05d16a7d2e27c0cccbf",
+      "wheel_sha256": "1fe79d5ac5748426580a0c58c0759a94c38d3b05c92fd70fc2b0acd46b69a9f0",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/ml_models/ensemble_model.py",
+      "git_bytes": 27242,
+      "wheel_bytes": 27974,
+      "git_sha256": "674ef551ffcc3516ebe0eb9bfacca308be3cf9ca8ef56a13f23d0ddcca90b9fa",
+      "wheel_sha256": "da6a149ee7ac66e3ba29f548eeafa2ee5a104a22c5ecdb9750a6bfd1b4ff555d",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_risk",
+      "path": "src/bt_api_risk/ml_models/ml_base.py",
+      "git_bytes": 14869,
+      "wheel_bytes": 15351,
+      "git_sha256": "00b7ad85583d5e4220f73831ac591bd8acf1fdf79d63c2ea49d0b0d729f732ad",
+      "wheel_sha256": "6aa19bb0100e937feb0df22ed5a928cd0da8e992e4e9b11d629f444416a6a4c1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_transport_zmq",
+      "path": "src/bt_api_transport_zmq/__init__.py",
+      "git_bytes": 1306,
+      "wheel_bytes": 1356,
+      "git_sha256": "bd0a9854d01062f77a032d2b3af3923ac609dc61d50d88860641b92aa7426227",
+      "wheel_sha256": "d5e41ad4c46ad33f39238e3bfb74f13fd4f3ab70094175b56e2747371dbb4530",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_transport_zmq",
+      "path": "src/bt_api_transport_zmq/client.py",
+      "git_bytes": 4208,
+      "wheel_bytes": 4308,
+      "git_sha256": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354",
+      "wheel_sha256": "2208c3953f7b1327ad4555c0defc9c6ce8fa61e00bf3bab825439ff599a88cee",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_transport_zmq",
+      "path": "src/bt_api_transport_zmq/events.py",
+      "git_bytes": 3648,
+      "wheel_bytes": 3744,
+      "git_sha256": "5e8fb7c9f4481b2f1386c5f197e3b563a079acf84d47ba8f0c90c694bb56e999",
+      "wheel_sha256": "1f9e9edb2c412205bffd732a8bb7e75b08150fc4a6aca970e5b20992ef1b5017",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_transport_zmq",
+      "path": "src/bt_api_transport_zmq/market_v2.py",
+      "git_bytes": 26379,
+      "wheel_bytes": 27052,
+      "git_sha256": "051cb114a41300d9f94630f95ee9a773ce252f36a9f01d94e0d99561db36ac91",
+      "wheel_sha256": "fb86e8288c835e6b600e9c1be5ca01f05d166a778f0595e5192c06cb25d2f24b",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_transport_zmq",
+      "path": "src/bt_api_transport_zmq/server.py",
+      "git_bytes": 16527,
+      "wheel_bytes": 16949,
+      "git_sha256": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df",
+      "wheel_sha256": "717c551079cc6f56e55cc845f7b05276987fba172d3caf812275511d46fb35b1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_transport_zmq",
+      "path": "src/bt_api_transport_zmq/service_v2.py",
+      "git_bytes": 29701,
+      "wheel_bytes": 30440,
+      "git_sha256": "bc17344835fcd80409cdcfd8037345ccf92b5ece5f57817aeb1eda33af17b280",
+      "wheel_sha256": "e635040621641f0dd7e34d3982090347a538f7240111c65e92993997f2ec83ff",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    },
+    {
+      "package": "bt_api_transport_zmq",
+      "path": "src/bt_api_transport_zmq/wire.py",
+      "git_bytes": 6621,
+      "wheel_bytes": 6804,
+      "git_sha256": "60ef5ea0ea89ff11d1e62c65865a39256cf91c31981553a301f7687394f6372b",
+      "wheel_sha256": "441e7184fa197a8926ff2f7032f357f590e03729e7f50bd2b069c36898f8fda1",
+      "difference": "CRLF/LF only; UTF-8 text with no NUL"
+    }
+  ],
+  "installed_project_files_equal_wheels_in_root_qa_preflight": true,
+  "qa_r3": "qa-r3/result.json",
+  "scope": "project package files only; no claim about every third-party installed dependency"
+}

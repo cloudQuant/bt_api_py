@@ -1,0 +1,12 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T20:32:25.085258+00:00",
+  "source_count": 1004,
+  "sources_unchanged": true,
+  "heads_before": {},
+  "heads_after": {},
+  "heads_unchanged": true,
+  "stdout_sha256": "43b2096e8a47fd5c985c04ebae2a904b41e048e4dc2960a3a170c49eb072d19a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FIXED_INSTALLED_WHEEL_LOCAL_SYNTHETIC_CFG04_REMAINING_TWO_NODES"
+}

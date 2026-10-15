@@ -1,0 +1,559 @@
+{
+  "artifact_id": "iteration10-cfg04-installed-seven-proxy-20261016-r1",
+  "candidate_test_overlays": {
+    "tests/integration/cfg04_group_server.py": {
+      "bytes": 28693,
+      "sha256": "28c2041b5ab76f0bf5fbd9e5668303a3ded6c818bfe0241a472a28dbf6e593d7"
+    },
+    "tests/integration/test_cfg04_installed_group_proxy.py": {
+      "bytes": 33399,
+      "sha256": "976c73690658e50a6fb46985b2d54aa8aabb4737a700e1d8628bf4ca30a08865"
+    }
+  },
+  "client": {
+    "dependencies_lock": {
+      "bytes": 815,
+      "sha256": "151a96ab1c26524337317d2c2490d4b4497addbec90df63cb97bb8a5e7b64616"
+    },
+    "dependency_wheels": {
+      "aiohappyeyeballs-2.7.1-py3-none-any.whl": {
+        "bytes": 15038,
+        "sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472"
+      },
+      "aiohttp-3.14.5-cp311-cp311-win_amd64.whl": {
+        "bytes": 512575,
+        "sha256": "6f275c11d1aa6d4c458e05a68be084efe3c55a113d99e3f46a318098e52948fc"
+      },
+      "aiosignal-1.4.0-py3-none-any.whl": {
+        "bytes": 7490,
+        "sha256": "053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e"
+      },
+      "annotated_types-0.8.0-py3-none-any.whl": {
+        "bytes": 13427,
+        "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+      },
+      "anyio-4.15.1-py3-none-any.whl": {
+        "bytes": 132079,
+        "sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101"
+      },
+      "attrs-26.1.0-py3-none-any.whl": {
+        "bytes": 67548,
+        "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"
+      },
+      "certifi-2026.7.22-py3-none-any.whl": {
+        "bytes": 136983,
+        "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
+      },
+      "cffi-2.1.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 185096,
+        "sha256": "42f6930c31dc7f50732c9ae793c2786c7b6b044195967bbdde40bb9be81c4cc0"
+      },
+      "charset_normalizer-3.5.2-cp311-cp311-win_amd64.whl": {
+        "bytes": 214932,
+        "sha256": "87e50a3e7cb90af586b6c5faf23e302a970415ac73bd7bd90a515a04b427ef96"
+      },
+      "colorama-0.4.6-py2.py3-none-any.whl": {
+        "bytes": 25335,
+        "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"
+      },
+      "frozenlist-1.8.0-cp311-cp311-win_amd64.whl": {
+        "bytes": 44064,
+        "sha256": "ac913f8403b36a2c8610bbfd25b8013488533e71e62b4b4adce9c86c8cea905b"
+      },
+      "h11-0.16.0-py3-none-any.whl": {
+        "bytes": 37515,
+        "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+      },
+      "httpcore-1.0.9-py3-none-any.whl": {
+        "bytes": 78784,
+        "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"
+      },
+      "httpx-0.28.1-py3-none-any.whl": {
+        "bytes": 73517,
+        "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"
+      },
+      "idna-3.20-py3-none-any.whl": {
+        "bytes": 69583,
+        "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+      },
+      "iniconfig-2.3.1-py3-none-any.whl": {
+        "bytes": 7552,
+        "sha256": "9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7"
+      },
+      "multidict-7.1.0-cp311-cp311-win_amd64.whl": {
+        "bytes": 93586,
+        "sha256": "396ba9917fe489ec3a5942ae3e29e91324c8b9956f371f7e124c971c71379e7a"
+      },
+      "numpy-2.4.6-cp311-cp311-win_amd64.whl": {
+        "bytes": 12608406,
+        "sha256": "1e254a00cdf42b1e4d5b3d68d33af63268d41340d8885df2ab6470f2e1500147"
+      },
+      "packaging-26.3-py3-none-any.whl": {
+        "bytes": 129956,
+        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+      },
+      "pandas-3.0.6-cp311-cp311-win_amd64.whl": {
+        "bytes": 9859246,
+        "sha256": "2e5fa32ff162dfdbc280157d664f44d23049ae414725af9676df339c501d82cd"
+      },
+      "pluggy-1.7.0-py3-none-any.whl": {
+        "bytes": 27082,
+        "sha256": "7dd7b0d8832ba3cb632c306926ded123429211b83641b35dc5c41ad2d34f9bec"
+      },
+      "propcache-0.5.4-cp311-cp311-win_amd64.whl": {
+        "bytes": 46268,
+        "sha256": "e904d4d01f36bd6e197590be1533c44e06058771e0746dd073a8ebb3ef880858"
+      },
+      "pyarrow-25.0.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 27857263,
+        "sha256": "62cd0d785b8aa6675ee355f9fc02252a340f4441257c42674937826fd7594325"
+      },
+      "pycparser-3.11-py3-none-any.whl": {
+        "bytes": 51178,
+        "sha256": "51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80"
+      },
+      "pydantic-2.14.1-py3-none-any.whl": {
+        "bytes": 488106,
+        "sha256": "9195d967ec791692a04438115466764fb8b9a27b31f14a760437694f40d6b454"
+      },
+      "pydantic_core-2.50.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 2176332,
+        "sha256": "0048b6dddc8ef4b64fccaad878bd143b0c3882ea9936279dc11d613f6b7dd1bc"
+      },
+      "pygments-2.21.0-py3-none-any.whl": {
+        "bytes": 1250147,
+        "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"
+      },
+      "pynacl-1.6.2-cp38-abi3-win_amd64.whl": {
+        "bytes": 239754,
+        "sha256": "62985f233210dee6548c223301b6c25440852e13d59a8b81490203c3227c5ba0"
+      },
+      "pytest-9.1.1-py3-none-any.whl": {
+        "bytes": 386536,
+        "sha256": "37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c"
+      },
+      "python_dateutil-2.9.0.post0-py2.py3-none-any.whl": {
+        "bytes": 229892,
+        "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+      },
+      "python_dotenv-1.2.4-py3-none-any.whl": {
+        "bytes": 23266,
+        "sha256": "42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc"
+      },
+      "python_rapidjson-1.25-cp311-cp311-win_amd64.whl": {
+        "bytes": 346798,
+        "sha256": "cd41d5ea2cc8c9278e92e3f7df6250db5b98a3f7b4a143a6b8fb18335813b12e"
+      },
+      "pytz-2026.5-py2.py3-none-any.whl": {
+        "bytes": 506342,
+        "sha256": "e658af3757f9e26a9d25dd2aff38335acd92bc9104f890a894b2c1ba28311b03"
+      },
+      "pyyaml-6.0.3-cp311-cp311-win_amd64.whl": {
+        "bytes": 158763,
+        "sha256": "9f3bfb4965eb874431221a3ff3fdcddc7e74e3b07799e0e84ca4a0f867d449bf"
+      },
+      "pyzmq-27.2.0-cp311-cp311-win_amd64.whl": {
+        "bytes": 644845,
+        "sha256": "8b86e04f55af0f4d8cd8ecf14c0b8b81ebc8fd66fa20126b753514628ecadc7e"
+      },
+      "requests-2.34.2-py3-none-any.whl": {
+        "bytes": 73075,
+        "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+      },
+      "six-1.17.0-py2.py3-none-any.whl": {
+        "bytes": 11050,
+        "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+      },
+      "tornado-6.5.10-cp39-abi3-win_amd64.whl": {
+        "bytes": 468828,
+        "sha256": "37ae8f150cecfdbf747fc4e12f5e9a97ecd8cf1d4cdb3f119e2de84b11196918"
+      },
+      "typing_extensions-4.16.0-py3-none-any.whl": {
+        "bytes": 45571,
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      },
+      "typing_inspection-0.4.4-py3-none-any.whl": {
+        "bytes": 14750,
+        "sha256": "65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147"
+      },
+      "tzdata-2026.5-py2.py3-none-any.whl": {
+        "bytes": 347996,
+        "sha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac"
+      },
+      "urllib3-2.8.0-py3-none-any.whl": {
+        "bytes": 135717,
+        "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
+      },
+      "websocket_client-1.9.2-py3-none-any.whl": {
+        "bytes": 95786,
+        "sha256": "e1a673830a9c7bfa47b1cd3d5e4178f4c9651d80a4eab02c9c23a1c3ec6250ce"
+      },
+      "websockets-17.2-cp311-cp311-win_amd64.whl": {
+        "bytes": 218523,
+        "sha256": "55c5b9eab079540bfb639b40b07b7b467e5c5a7ecf97a65cc8665781381c9856"
+      },
+      "yarl-1.25.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 102894,
+        "sha256": "d7306dee25b8a0e737363f347362b875094b4dc4e367311470656ae420fdbf8e"
+      }
+    },
+    "installed_freeze": {
+      "bytes": 1434,
+      "sha256": "a11cf0f2c46b938cd2a86696301c3f020abb4e23634c56d57b972a90af6ab970"
+    },
+    "installed_project_distributions": [
+      "bt_api_py==0.15.5",
+      "bt_api_base==0.15.8",
+      "bt_api_transport_zmq==0.1.0"
+    ],
+    "pip_check": {
+      "bytes": 31,
+      "sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf"
+    },
+    "python": "3.11.5",
+    "venv": "client-venv"
+  },
+  "evidence_level": "PREPARED_INSTALLED_WHEEL_ARTIFACT_NOT_EXECUTED",
+  "execution_status": "No pytest or ServiceHost was launched while preparing this artifact.",
+  "package_versions": {
+    "bt_api_base": "0.15.8",
+    "bt_api_execution": "0.2.0",
+    "bt_api_gateway": "0.1.0",
+    "bt_api_monitor": "0.1.0",
+    "bt_api_py": "0.15.5",
+    "bt_api_risk": "0.1.0",
+    "bt_api_transport_zmq": "0.1.0"
+  },
+  "scheduled_test_nodes": [
+    "tests/unit/test_iteration10_optional_install_matrix.py::test_installed_gateway_component_serves_a_registered_strategy_without_other_domains",
+    "tests/unit/test_iteration10_optional_install_matrix.py::test_isolated_strategy_runs_implemented_proxies_without_domain_distributions",
+    "tests/integration/test_cfg04_installed_group_proxy.py::test_isolated_client_uses_order_group_proxy_with_installed_server"
+  ],
+  "server": {
+    "dependencies_lock": {
+      "bytes": 858,
+      "sha256": "33040beefc80e8c8176621b75d53cb0792928f97adb9431917a3c02b001a8335"
+    },
+    "dependency_wheels": {
+      "aiohappyeyeballs-2.7.1-py3-none-any.whl": {
+        "bytes": 15038,
+        "sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472"
+      },
+      "aiohttp-3.14.5-cp311-cp311-win_amd64.whl": {
+        "bytes": 512575,
+        "sha256": "6f275c11d1aa6d4c458e05a68be084efe3c55a113d99e3f46a318098e52948fc"
+      },
+      "aiosignal-1.4.0-py3-none-any.whl": {
+        "bytes": 7490,
+        "sha256": "053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e"
+      },
+      "annotated_types-0.8.0-py3-none-any.whl": {
+        "bytes": 13427,
+        "sha256": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+      },
+      "anyio-4.15.1-py3-none-any.whl": {
+        "bytes": 132079,
+        "sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101"
+      },
+      "attrs-26.1.0-py3-none-any.whl": {
+        "bytes": 67548,
+        "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309"
+      },
+      "certifi-2026.7.22-py3-none-any.whl": {
+        "bytes": 136983,
+        "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
+      },
+      "cffi-2.1.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 185096,
+        "sha256": "42f6930c31dc7f50732c9ae793c2786c7b6b044195967bbdde40bb9be81c4cc0"
+      },
+      "charset_normalizer-3.5.2-cp311-cp311-win_amd64.whl": {
+        "bytes": 214932,
+        "sha256": "87e50a3e7cb90af586b6c5faf23e302a970415ac73bd7bd90a515a04b427ef96"
+      },
+      "cloudpickle-3.1.2-py3-none-any.whl": {
+        "bytes": 22228,
+        "sha256": "9acb47f6afd73f60dc1df93bb801b472f05ff42fa6c84167d25cb206be1fbf4a"
+      },
+      "frozenlist-1.8.0-cp311-cp311-win_amd64.whl": {
+        "bytes": 44064,
+        "sha256": "ac913f8403b36a2c8610bbfd25b8013488533e71e62b4b4adce9c86c8cea905b"
+      },
+      "h11-0.16.0-py3-none-any.whl": {
+        "bytes": 37515,
+        "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
+      },
+      "httpcore-1.0.9-py3-none-any.whl": {
+        "bytes": 78784,
+        "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55"
+      },
+      "httpx-0.28.1-py3-none-any.whl": {
+        "bytes": 73517,
+        "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad"
+      },
+      "idna-3.20-py3-none-any.whl": {
+        "bytes": 69583,
+        "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+      },
+      "joblib-1.6.0-py3-none-any.whl": {
+        "bytes": 306115,
+        "sha256": "3dbbf9f6e4b592a2357b854608e980fe6390d131d7a82f011a377ef2ebef7aba"
+      },
+      "multidict-7.1.0-cp311-cp311-win_amd64.whl": {
+        "bytes": 93586,
+        "sha256": "396ba9917fe489ec3a5942ae3e29e91324c8b9956f371f7e124c971c71379e7a"
+      },
+      "narwhals-2.27.1-py3-none-any.whl": {
+        "bytes": 483211,
+        "sha256": "d057df13f5852b8e157596e82eb5e955fad267425df5e420e0ee9863da483b31"
+      },
+      "numpy-2.4.6-cp311-cp311-win_amd64.whl": {
+        "bytes": 12608406,
+        "sha256": "1e254a00cdf42b1e4d5b3d68d33af63268d41340d8885df2ab6470f2e1500147"
+      },
+      "packaging-26.3-py3-none-any.whl": {
+        "bytes": 129956,
+        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+      },
+      "pandas-3.0.6-cp311-cp311-win_amd64.whl": {
+        "bytes": 9859246,
+        "sha256": "2e5fa32ff162dfdbc280157d664f44d23049ae414725af9676df339c501d82cd"
+      },
+      "propcache-0.5.4-cp311-cp311-win_amd64.whl": {
+        "bytes": 46268,
+        "sha256": "e904d4d01f36bd6e197590be1533c44e06058771e0746dd073a8ebb3ef880858"
+      },
+      "psutil-7.2.2-cp37-abi3-win_amd64.whl": {
+        "bytes": 137737,
+        "sha256": "eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988"
+      },
+      "pyarrow-25.0.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 27857263,
+        "sha256": "62cd0d785b8aa6675ee355f9fc02252a340f4441257c42674937826fd7594325"
+      },
+      "pycparser-3.11-py3-none-any.whl": {
+        "bytes": 51178,
+        "sha256": "51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80"
+      },
+      "pydantic-2.14.1-py3-none-any.whl": {
+        "bytes": 488106,
+        "sha256": "9195d967ec791692a04438115466764fb8b9a27b31f14a760437694f40d6b454"
+      },
+      "pydantic_core-2.50.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 2176332,
+        "sha256": "0048b6dddc8ef4b64fccaad878bd143b0c3882ea9936279dc11d613f6b7dd1bc"
+      },
+      "pynacl-1.6.2-cp38-abi3-win_amd64.whl": {
+        "bytes": 239754,
+        "sha256": "62985f233210dee6548c223301b6c25440852e13d59a8b81490203c3227c5ba0"
+      },
+      "python_dateutil-2.9.0.post0-py2.py3-none-any.whl": {
+        "bytes": 229892,
+        "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427"
+      },
+      "python_dotenv-1.2.4-py3-none-any.whl": {
+        "bytes": 23266,
+        "sha256": "42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc"
+      },
+      "python_rapidjson-1.25-cp311-cp311-win_amd64.whl": {
+        "bytes": 346798,
+        "sha256": "cd41d5ea2cc8c9278e92e3f7df6250db5b98a3f7b4a143a6b8fb18335813b12e"
+      },
+      "pytz-2026.5-py2.py3-none-any.whl": {
+        "bytes": 506342,
+        "sha256": "e658af3757f9e26a9d25dd2aff38335acd92bc9104f890a894b2c1ba28311b03"
+      },
+      "pyyaml-6.0.3-cp311-cp311-win_amd64.whl": {
+        "bytes": 158763,
+        "sha256": "9f3bfb4965eb874431221a3ff3fdcddc7e74e3b07799e0e84ca4a0f867d449bf"
+      },
+      "pyzmq-27.2.0-cp311-cp311-win_amd64.whl": {
+        "bytes": 644845,
+        "sha256": "8b86e04f55af0f4d8cd8ecf14c0b8b81ebc8fd66fa20126b753514628ecadc7e"
+      },
+      "requests-2.34.2-py3-none-any.whl": {
+        "bytes": 73075,
+        "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+      },
+      "scikit_learn-1.9.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 8329877,
+        "sha256": "220fa18152852a5ce29c49e1eaba9d44ec44631cd2e5cf65f5a40eafa5ab3412"
+      },
+      "scipy-1.17.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 36607512,
+        "sha256": "d30e57c72013c2a4fe441c2fcb8e77b14e152ad48b5464858e07e2ad9fbfceff"
+      },
+      "six-1.17.0-py2.py3-none-any.whl": {
+        "bytes": 11050,
+        "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"
+      },
+      "threadpoolctl-3.7.0-py3-none-any.whl": {
+        "bytes": 26362,
+        "sha256": "cd8b60b5641b45c67bbf73c64c843235fc2d8a480c87389f52f5dbee893b86be"
+      },
+      "tornado-6.5.10-cp39-abi3-win_amd64.whl": {
+        "bytes": 468828,
+        "sha256": "37ae8f150cecfdbf747fc4e12f5e9a97ecd8cf1d4cdb3f119e2de84b11196918"
+      },
+      "typing_extensions-4.16.0-py3-none-any.whl": {
+        "bytes": 45571,
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+      },
+      "typing_inspection-0.4.4-py3-none-any.whl": {
+        "bytes": 14750,
+        "sha256": "65b8397ba37ccbce054456aaccddfc91e6e3083c92824df348d96ca832f3f147"
+      },
+      "tzdata-2026.5-py2.py3-none-any.whl": {
+        "bytes": 347996,
+        "sha256": "b683bd1b6659ddcd810ff02ad09ba821d4bf1065072805063eb35c49617905ac"
+      },
+      "urllib3-2.8.0-py3-none-any.whl": {
+        "bytes": 135717,
+        "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
+      },
+      "websocket_client-1.9.2-py3-none-any.whl": {
+        "bytes": 95786,
+        "sha256": "e1a673830a9c7bfa47b1cd3d5e4178f4c9651d80a4eab02c9c23a1c3ec6250ce"
+      },
+      "websockets-17.2-cp311-cp311-win_amd64.whl": {
+        "bytes": 218523,
+        "sha256": "55c5b9eab079540bfb639b40b07b7b467e5c5a7ecf97a65cc8665781381c9856"
+      },
+      "yarl-1.25.1-cp311-cp311-win_amd64.whl": {
+        "bytes": 102894,
+        "sha256": "d7306dee25b8a0e737363f347362b875094b4dc4e367311470656ae420fdbf8e"
+      }
+    },
+    "installed_freeze": {
+      "bytes": 2303,
+      "sha256": "4c3e2e63bf520a08b03851208fea4a61e476453e2a56042b97e9452889dd3ab2"
+    },
+    "installed_project_distributions": [
+      "bt_api_py==0.15.5",
+      "bt_api_base==0.15.8",
+      "bt_api_transport_zmq==0.1.0",
+      "bt_api_gateway==0.1.0",
+      "bt_api_execution==0.2.0",
+      "bt_api_risk==0.1.0",
+      "bt_api_monitor==0.1.0"
+    ],
+    "pip_check": {
+      "bytes": 31,
+      "sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf"
+    },
+    "python": "3.11.5",
+    "venv": "server-venv"
+  },
+  "source_archives": {
+    "base.zip": {
+      "bytes": 313021,
+      "sha256": "7f78937269321564aa692a439918078cac4449a97fb98aaf6a10a47abfb34937"
+    },
+    "execution.zip": {
+      "bytes": 441998,
+      "sha256": "ec431c564e98e376421ef30189571dffaee7abaa124f18ff3c010d5f0edb7a75"
+    },
+    "gateway.zip": {
+      "bytes": 155705,
+      "sha256": "488fcc6906398a7ea28b5c3eb623565020cf4695a824777484552b609fee7ece"
+    },
+    "monitor.zip": {
+      "bytes": 146798,
+      "sha256": "5661910a7d628f0b948f010078e69623eb7449b89ee88659851547ab6ce65e44"
+    },
+    "risk.zip": {
+      "bytes": 247492,
+      "sha256": "09dcd179772a2516a77632263c11542b36191fb0a76d706f07f4403a721c3caf"
+    },
+    "sdk-package.zip": {
+      "bytes": 1208410,
+      "sha256": "894833f9a22425268073340aff1770c412942a54e816de40658004e4b1a8c7f0"
+    },
+    "sdk-tests.zip": {
+      "bytes": 862613,
+      "sha256": "fdc6c216d808305bbf20d6f844aa792adfbb0e510331a743e9a02db67ab8f444"
+    },
+    "test-support-213f1114.zip": {
+      "bytes": 33901,
+      "sha256": "5996ee4de3161204e598f58d3c7ff2a3dbec2c0a5d5cb5c3fad74d6249984358"
+    },
+    "transport.zip": {
+      "bytes": 54444,
+      "sha256": "d8a02e4a50df59a309a48c7b4592b09897c056a3973fc7a0a9ae76f667378702"
+    }
+  },
+  "source_commits": {
+    "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api_execution": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+    "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+    "bt_api_py": "9d1dc457af0e0e4e94895ca215a27137e86fa20f",
+    "bt_api_risk": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+    "bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "test_support_base_commit": "213f1114f69416bbad250f1a226e5fa1ccc2638e",
+  "test_support_files": {
+    "cfg04_group_support_manifest.json": {
+      "bytes": 1305,
+      "sha256": "5c6581f9e2961f8e0ce2bd44dfe31b01e33bcc878ec5de26da5d4aa5ab3c3ca1"
+    },
+    "tests/__init__.py": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tests/integration/cfg04_group_server.py": {
+      "bytes": 28693,
+      "sha256": "28c2041b5ab76f0bf5fbd9e5668303a3ded6c818bfe0241a472a28dbf6e593d7"
+    },
+    "tests/integration/test_cfg04_installed_group_proxy.py": {
+      "bytes": 33399,
+      "sha256": "976c73690658e50a6fb46985b2d54aa8aabb4737a700e1d8628bf4ca30a08865"
+    },
+    "tests/integration/test_service_execution_group_local_process.py": {
+      "bytes": 58805,
+      "sha256": "9b6f55a68cd9222b7c6596267ca28f4287897451700b3134e47d8172d24a4792"
+    },
+    "tests/unit/_service_group_provider_fixtures.py": {
+      "bytes": 8975,
+      "sha256": "4f3e3fa3e75856862d26d8a726f407ff79e480cb8f25d5d8c379fe42bab850ab"
+    },
+    "tests/unit/test_iteration10_optional_install_matrix.py": {
+      "bytes": 100851,
+      "sha256": "dd2db38a9775bd189810a28ef61d130d756f86089e794b28d8cd21520aeb715d"
+    }
+  },
+  "test_support_manifest": {
+    "bytes": 1305,
+    "sha256": "5c6581f9e2961f8e0ce2bd44dfe31b01e33bcc878ec5de26da5d4aa5ab3c3ca1"
+  },
+  "wheels": {
+    "bt_api_base-0.15.8-py3-none-any.whl": {
+      "bytes": 177432,
+      "sha256": "5a91f0987eb5b44ead58fc63349b336a39df64fc4b4f8e2cc9ab663995483e11"
+    },
+    "bt_api_execution-0.2.0-py3-none-any.whl": {
+      "bytes": 274125,
+      "sha256": "5d44e4ac257b7b083b2be535084ae17fbcd19d35216afad07d215a9d87253fe1"
+    },
+    "bt_api_gateway-0.1.0-py3-none-any.whl": {
+      "bytes": 85546,
+      "sha256": "1907d0b021f58e43575f8fa7ae964e5d17b7d86a448a8a941637af4cc32cdc6e"
+    },
+    "bt_api_monitor-0.1.0-py3-none-any.whl": {
+      "bytes": 90463,
+      "sha256": "322abf6132dd4eaa29976ee76b5f2dc2d7d311da49978a89e0bb8c955974ce67"
+    },
+    "bt_api_py-0.15.5-py3-none-any.whl": {
+      "bytes": 1207036,
+      "sha256": "2b5c7fa950703d728e4bb2a50d118a4e74c9eadaa0ab2a1d162ba8dc02c169b4"
+    },
+    "bt_api_risk-0.1.0-py3-none-any.whl": {
+      "bytes": 157526,
+      "sha256": "e1821f0db7604e164b2dfee4eb718ba4b4d00584fccaf73a6f451fdc85e211dd"
+    },
+    "bt_api_transport_zmq-0.1.0-py3-none-any.whl": {
+      "bytes": 27690,
+      "sha256": "05c50f93c4459f08ab144b632fb53a663b2e329c07cc309959819c0c90a13bb1"
+    }
+  }
+}

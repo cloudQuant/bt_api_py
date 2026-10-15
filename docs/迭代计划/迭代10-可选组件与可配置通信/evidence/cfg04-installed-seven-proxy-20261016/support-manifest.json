@@ -1,0 +1,34 @@
+{
+  "candidate_overlays": [
+    "tests/integration/cfg04_group_server.py",
+    "tests/integration/test_cfg04_installed_group_proxy.py"
+  ],
+  "files": {
+    "tests/__init__.py": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "tests/integration/cfg04_group_server.py": {
+      "bytes": 28693,
+      "sha256": "28c2041b5ab76f0bf5fbd9e5668303a3ded6c818bfe0241a472a28dbf6e593d7"
+    },
+    "tests/integration/test_cfg04_installed_group_proxy.py": {
+      "bytes": 33436,
+      "sha256": "54589e404c72ade1e39cefa12d435e27f9cc360d301d84c74e007ad9b66a71e1"
+    },
+    "tests/integration/test_service_execution_group_local_process.py": {
+      "bytes": 58805,
+      "sha256": "9b6f55a68cd9222b7c6596267ca28f4287897451700b3134e47d8172d24a4792"
+    },
+    "tests/unit/_service_group_provider_fixtures.py": {
+      "bytes": 8975,
+      "sha256": "4f3e3fa3e75856862d26d8a726f407ff79e480cb8f25d5d8c379fe42bab850ab"
+    },
+    "tests/unit/test_iteration10_optional_install_matrix.py": {
+      "bytes": 100851,
+      "sha256": "dd2db38a9775bd189810a28ef61d130d756f86089e794b28d8cd21520aeb715d"
+    }
+  },
+  "sdk_wheel_source_commit": "9d1dc457af0e0e4e94895ca215a27137e86fa20f",
+  "test_support_base_commit": "213f1114f69416bbad250f1a226e5fa1ccc2638e"
+}

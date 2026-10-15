@@ -1,0 +1,16 @@
+{
+  "reviewer": "acceptance_review",
+  "kind": "independent read-only formal criterion mapping",
+  "decision": "GO_CFG04_FIXED_INSTALLED_WHEEL_COMBINATION",
+  "qa_r1": "five-proxy node passed; other two failed and preserved",
+  "qa_r3": "remaining market and group nodes passed; 1004 unchanged inputs; exit 0; empty stderr",
+  "requirements": [
+    "seven proxy mounts perform actual local-process interactions",
+    "components/embedded/server-side slot rejected in client config",
+    "four domain packages absent and unavailable in client venv",
+    "server processes separate and installed package origins checked",
+    "normal host/server shutdown assertions passed"
+  ],
+  "scope": "SDK9d1dc457 plus exact pinned package wheels; local synthetic provider; no claim about current latest source or real accounts",
+  "root_source_mapping": "372 wheel project files map to specified Git commits; 368 text files differ only by CRLF/LF; archive/wheel/installed files exact; details in root-source-origin-verification.json"
+}

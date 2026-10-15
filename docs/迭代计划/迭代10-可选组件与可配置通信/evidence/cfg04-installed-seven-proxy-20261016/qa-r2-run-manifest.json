@@ -1,0 +1,157 @@
+{
+  "artifact_id": "iteration10-cfg04-installed-seven-proxy-20261016-r2",
+  "status": "PREPARED_NOT_EXECUTED",
+  "base_installed_wheel_artifact": {
+    "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\cfg04-installed-seven-proxy-artifact-manifest.json",
+    "bytes": 22318,
+    "sha256": "4ff0711f04e641cf20661fee8bbb58889ca9eb9d99c99ca4b43ae99ef87b5725",
+    "sdk_source_commit": "9d1dc457af0e0e4e94895ca215a27137e86fa20f",
+    "package_source_commits": {
+      "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "bt_api_execution": "ae1dffd4c13f9c55551258a1b01a3a5324d8f11d",
+      "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "bt_api_py": "9d1dc457af0e0e4e94895ca215a27137e86fa20f",
+      "bt_api_risk": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+      "bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+    },
+    "fixed_wheels": {
+      "bt_api_base-0.15.8-py3-none-any.whl": {
+        "bytes": 177432,
+        "sha256": "5a91f0987eb5b44ead58fc63349b336a39df64fc4b4f8e2cc9ab663995483e11"
+      },
+      "bt_api_execution-0.2.0-py3-none-any.whl": {
+        "bytes": 274125,
+        "sha256": "5d44e4ac257b7b083b2be535084ae17fbcd19d35216afad07d215a9d87253fe1"
+      },
+      "bt_api_gateway-0.1.0-py3-none-any.whl": {
+        "bytes": 85546,
+        "sha256": "1907d0b021f58e43575f8fa7ae964e5d17b7d86a448a8a941637af4cc32cdc6e"
+      },
+      "bt_api_monitor-0.1.0-py3-none-any.whl": {
+        "bytes": 90463,
+        "sha256": "322abf6132dd4eaa29976ee76b5f2dc2d7d311da49978a89e0bb8c955974ce67"
+      },
+      "bt_api_py-0.15.5-py3-none-any.whl": {
+        "bytes": 1207036,
+        "sha256": "2b5c7fa950703d728e4bb2a50d118a4e74c9eadaa0ab2a1d162ba8dc02c169b4"
+      },
+      "bt_api_risk-0.1.0-py3-none-any.whl": {
+        "bytes": 157526,
+        "sha256": "e1821f0db7604e164b2dfee4eb718ba4b4d00584fccaf73a6f451fdc85e211dd"
+      },
+      "bt_api_transport_zmq-0.1.0-py3-none-any.whl": {
+        "bytes": 27690,
+        "sha256": "05c50f93c4459f08ab144b632fb53a663b2e329c07cc309959819c0c90a13bb1"
+      }
+    },
+    "original_client_venv": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\client-venv\\Scripts\\python.exe",
+    "original_seven_package_server_venv": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\server-venv\\Scripts\\python.exe"
+  },
+  "cfg02_gateway_subset_server": {
+    "python": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\cfg02-server-venv\\Scripts\\python.exe",
+    "python_version": "3.11.5",
+    "pyvenv_cfg": {
+      "bytes": 236,
+      "sha256": "e1771face7802ff1c4fe9d4749dc162c692f19d6f26dc44c4a30a7a2e365b869"
+    },
+    "project_distributions": {
+      "bt_api_py": "0.15.5",
+      "bt_api_base": "0.15.8",
+      "bt_api_transport_zmq": "0.1.0",
+      "bt_api_gateway": "0.1.0"
+    },
+    "project_wheel_source": "Same exact wheel files and SHA-256 pins as base_installed_wheel_artifact; domains execution/risk/monitor intentionally absent for CFG02.",
+    "installed_freeze": {
+      "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\cfg02-server-installed-freeze.txt",
+      "bytes": 1717,
+      "sha256": "29e5987914c1c4852f3e9e0dd66bfaa6d8ba6c3e532b894b4a71c3cde672d0d2"
+    },
+    "pip_check": {
+      "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\cfg02-server-pip-check.txt",
+      "bytes": 31,
+      "sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf",
+      "output": "No broken requirements found."
+    }
+  },
+  "test_support": {
+    "base_commit": "213f1114f69416bbad250f1a226e5fa1ccc2638e",
+    "root": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\test-support-r2",
+    "manifest": {
+      "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\test-support-r2\\cfg04_group_support_manifest.json",
+      "bytes": 1339,
+      "sha256": "1f2380fce176e4527600c1001f61d78b1376ceb4928fa32059efc3c50f7b9cee"
+    },
+    "archive": {
+      "path": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\archives\\test-support-r2.zip",
+      "bytes": 49574,
+      "sha256": "bd953ff85066040de04bf20f7e723fe939ccc4749c419e91a3f7aa86ffb422da"
+    },
+    "files": {
+      "tests/__init__.py": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "tests/integration/cfg04_group_server.py": {
+        "bytes": 28693,
+        "sha256": "28c2041b5ab76f0bf5fbd9e5668303a3ded6c818bfe0241a472a28dbf6e593d7"
+      },
+      "tests/integration/test_cfg04_installed_group_proxy.py": {
+        "bytes": 33436,
+        "sha256": "54589e404c72ade1e39cefa12d435e27f9cc360d301d84c74e007ad9b66a71e1"
+      },
+      "tests/integration/test_service_execution_group_local_process.py": {
+        "bytes": 58805,
+        "sha256": "9b6f55a68cd9222b7c6596267ca28f4287897451700b3134e47d8172d24a4792"
+      },
+      "tests/unit/_service_group_provider_fixtures.py": {
+        "bytes": 8975,
+        "sha256": "4f3e3fa3e75856862d26d8a726f407ff79e480cb8f25d5d8c379fe42bab850ab"
+      },
+      "tests/unit/test_iteration10_optional_install_matrix.py": {
+        "bytes": 100851,
+        "sha256": "dd2db38a9775bd189810a28ef61d130d756f86089e794b28d8cd21520aeb715d"
+      }
+    }
+  },
+  "qa_r1_preserved": {
+    "output_root": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\qa-r1",
+    "exit_code": 1,
+    "junit": {
+      "bytes": 33007,
+      "sha256": "7dffab4f2c686f8df913d0ff0b63e91fa3c4f30f3be7bbe395333d2b5411d765"
+    },
+    "combined_output": {
+      "bytes": 32501,
+      "sha256": "aee6a238da54e3c02e8cfc2b3a903c910e3e9c8337e0b67014f9471130b01d2a"
+    },
+    "classification": [
+      "CFG02 matrix test launch omitted BT_API_ITERATION10_CFG02_SERVER_PYTHON; setup assertion failed before host startup.",
+      "Previously passing isolated strategy proxy node passed.",
+      "CFG04 group node completed synthetic group paths and normal server close; only stale test expectation for exact GroupOrderIntent ID failed."
+    ]
+  },
+  "scheduled_test_nodes": [
+    "tests/unit/test_iteration10_optional_install_matrix.py::test_installed_gateway_component_serves_a_registered_strategy_without_other_domains",
+    "tests/integration/test_cfg04_installed_group_proxy.py::test_isolated_client_uses_order_group_proxy_with_installed_server"
+  ],
+  "pytest_configuration": {
+    "client_python": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\client-venv\\Scripts\\python.exe",
+    "rootdir": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\test-support-r2",
+    "plugins": [
+      "--noconftest",
+      "-p no:asyncio",
+      "-p no:cacheprovider"
+    ],
+    "environment": {
+      "BT_API_ITERATION10_CFG02_SERVER_PYTHON": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\cfg02-server-venv\\Scripts\\python.exe",
+      "BT_API_ITERATION10_CFG04_SERVER_PYTHON": "D:\\temp\\iteration10-cfg04-installed-seven-proxy-20261016-r1\\server-venv\\Scripts\\python.exe",
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTEST_ADDOPTS": "",
+      "PYTEST_PLUGINS": "",
+      "PYTHONPATH": "unset",
+      "PYTHONHOME": "unset"
+    }
+  }
+}
