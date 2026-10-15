@@ -29,6 +29,11 @@ _CLOCK_DOMAIN_SEED = f"{socket.gethostname()}:{os.getpid()}:{time.monotonic_ns()
 CLOCK_DOMAIN_ID = hashlib.sha256(_CLOCK_DOMAIN_SEED.encode()).hexdigest()[:24]
 _EXPLICIT_IDENTITY_FIELDS = "_explicit_identity_fields"
 _RISK_ORDER_PROVENANCE_SCHEMA = "bt-api-order-source-provenance-v1"
+_RISK_ORDER_PROVENANCE_SCHEMA_V2 = "bt-api-order-source-provenance-v2"
+_ORDER_V2_SOURCE_FIELDS = frozenset(
+    {"order_revision", "fill_revision", "fee_amount", "fee_currency"}
+)
+_ORDER_V2_ENVELOPE_FIELDS = frozenset({"fill_watermark"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +153,13 @@ _ORDER_PROVENANCE_FIELDS = frozenset(
         "executedQty",
         "VolumeTraded",
         "quantity",
+        # Risk exposure proofs may use only explicitly supplied monotone
+        # revisions and signed fee facts.  The aliases are preserved as raw
+        # evidence; this module never manufactures them from timestamps.
+        "order_revision",
+        "fill_revision",
+        "fee_amount",
+        "fee_currency",
         "size",
         "order_size",
         "sz",
@@ -186,6 +198,7 @@ _ORDER_PROVENANCE_FIELDS = frozenset(
         "response_operation",
         "response_schema",
         "response_watermark",
+        "fill_watermark",
     }
 )
 _ORDER_ENVELOPE_FIELDS = frozenset(
@@ -209,6 +222,7 @@ _ORDER_ENVELOPE_FIELDS = frozenset(
         "response_operation",
         "response_schema",
         "response_watermark",
+        "fill_watermark",
     }
 )
 
@@ -244,10 +258,28 @@ def _order_source_provenance(raw, operation, row=None):
         for key, value in envelope.items()
         if key in _ORDER_ENVELOPE_FIELDS and _provenance_scalar(value) is not None
     }
+    nested_rows = envelope.get("data")
+    explicit_v2 = bool(
+        set(row).intersection(_ORDER_V2_SOURCE_FIELDS)
+        or set(envelope).intersection(_ORDER_V2_ENVELOPE_FIELDS)
+        or (
+            isinstance(nested_rows, list)
+            and any(
+                isinstance(item, dict)
+                and bool(set(item).intersection(_ORDER_V2_SOURCE_FIELDS))
+                for item in nested_rows
+            )
+        )
+    )
+    schema = (
+        _RISK_ORDER_PROVENANCE_SCHEMA_V2
+        if explicit_v2
+        else _RISK_ORDER_PROVENANCE_SCHEMA
+    )
     projection = {
         "envelope_values": envelope_values,
         "operation": operation,
-        "schema": _RISK_ORDER_PROVENANCE_SCHEMA,
+        "schema": schema,
         "source_fields": source_fields,
         "source_values": source_values,
     }
@@ -261,7 +293,7 @@ def _order_source_provenance(raw, operation, row=None):
         ).encode("utf-8", errors="strict")
     ).hexdigest()
     return NormalizationProvenance(
-        schema=_RISK_ORDER_PROVENANCE_SCHEMA,
+        schema=schema,
         operation=operation,
         source_fields=source_fields,
         source_values=tuple(sorted(source_values.items())),
@@ -2479,12 +2511,19 @@ def trade(row, exchange_name, symbol=None):
         exchange_id=pick(row, "exchange_id", "ExchangeID"),
         account_id=pick(row, "account_id", "AccountID", "InvestorID"),
         trading_day=pick(row, "trading_day", "TradingDay"),
-        fee=number(pick(row, "fee", "trade_fee", "commission")),
+        # Risk's versioned source contract names the unmodified provider fee
+        # amount explicitly. Prefer that field when present while preserving
+        # the legacy aliases for every existing provider payload.
+        fee=number(pick(row, "fee_amount", "fee", "trade_fee", "commission")),
         fee_currency=pick(row, "fee_currency", "trade_fee_symbol", "commissionAsset", "feeCcy"),
         **_timestamps(row),
     )
     result[_EXPLICIT_IDENTITY_FIELDS] = _explicit_execution_identity_fields(row)
-    if row.get("feeCcy") and row.get("fee") not in (None, ""):
+    if (
+        "fee_amount" not in row
+        and row.get("feeCcy")
+        and row.get("fee") not in (None, "")
+    ):
         result["fee"] = -number(row["fee"])
     if row.get("fee_unresolved") is True or row.get("trade_fee_verified") is False:
         result["fee"] = None

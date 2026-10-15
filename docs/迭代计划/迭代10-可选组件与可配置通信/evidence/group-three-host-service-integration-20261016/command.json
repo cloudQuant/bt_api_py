@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-group-host-root-20261016-r6\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-group-host-root-20261016-r6\\pytest-tmp",
+    "tests/integration/test_service_execution_group_local_process.py::test_spawned_curve_group_hosts_complete_two_legs_and_preserve_unknown_hold",
+    "tests/unit/test_service_execution_group_wire_reply.py"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\temp\\iteration10-execution-743a-root-raw-source-20261016\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src;D:\\bt_api_py\\bt_api\\bt_api_monitor\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-15T18:49:48.546747+00:00"
+}

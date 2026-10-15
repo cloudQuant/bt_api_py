@@ -58,7 +58,14 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.progress",
             }
         ),
-        "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
+        "service.order_entry": frozenset(
+            {
+                "orders.submit",
+                "orders.cancel",
+                "orders.submit_group_leg",
+                "orders.resolve_group_leg",
+            }
+        ),
         "service.order_query": frozenset(
             {
                 "orders.query",
@@ -66,6 +73,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.head",
                 "orders.read_after",
                 "orders.ack",
+                "orders.query_group_leg",
                 "execution.account_books.query",
             }
         ),
@@ -97,6 +105,9 @@ _DEFAULT_ACCOUNT_READ_OPERATIONS = frozenset(
     {"account.read_after", "account.snapshot", "account.head"}
 )
 _DEFAULT_TELEMETRY_INGRESS_OPERATIONS = frozenset({"telemetry.append"})
+_GROUP_ORDER_ENTRY_OPERATIONS = frozenset(
+    {"orders.submit_group_leg", "orders.resolve_group_leg"}
+)
 _REGISTRATION_POLICY_FIELDS = frozenset(
     {
         "access_policy_ref",
@@ -1183,9 +1194,16 @@ class ServiceClientRuntime:
             # ACK/progress explicitly through requested_operations.
             operations = operations.intersection(_DEFAULT_ACCOUNT_READ_OPERATIONS)
         elif port == "service.order_query":
-            # Account-book views need their own explicit request and grant.
-            # Existing order readers retain their prior capability set.
-            operations = operations.difference({"execution.account_books.query"})
+            # Account-book and group-leg views each need an explicit request
+            # and grant. Existing order readers retain their prior set.
+            operations = operations.difference(
+                {"execution.account_books.query", "orders.query_group_leg"}
+            )
+        elif port == "service.order_entry":
+            # Group-owner writes are available only to callers that explicitly
+            # request them; adding a remote capability cannot expand ordinary
+            # application or service registrations.
+            operations = operations.difference(_GROUP_ORDER_ENTRY_OPERATIONS)
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients
             # keep the generic telemetry operation unless they explicitly opt
@@ -1196,7 +1214,14 @@ class ServiceClientRuntime:
         # Risk-only owners may expose submit without a cancel implementation.
         # Register only advertised operations; absent cancel never gets a route.
         if port == "service.order_entry" and "orders.submit" not in operations:
-            raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
+            explicit_group_owner = (
+                requested is not None
+                and requested.intersection(PORT_OPERATIONS[port])
+                == _GROUP_ORDER_ENTRY_OPERATIONS
+                and operations == _GROUP_ORDER_ENTRY_OPERATIONS
+            )
+            if not explicit_group_owner:
+                raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         digest = hashlib.sha256(
             json.dumps(dict(binding), sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()

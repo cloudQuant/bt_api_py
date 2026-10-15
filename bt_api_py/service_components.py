@@ -24,14 +24,18 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Final, Protocol
 
-from bt_api_base.service_protocol import WireScope
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from .service_registry import (
     AccountRiskPolicyBinding,
+    ActiveRegistrationContext,
     ServiceCallContext,
     ServiceCapability,
     ServiceOperationDeniedError,
     ServiceResultTooLargeError,
+    TrustedGroupReservationPolicy,
+    TrustedGroupResolutionPolicy,
+    TrustedGroupWritePolicy,
 )
 
 
@@ -74,6 +78,54 @@ class TrustedRiskPolicyBinding:
             raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
         if self.policy is None:
             raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
+
+
+class BorrowedServiceClient:
+    """Call-only view of the Host's already-started upstream runtime.
+
+    The Host retains lifecycle ownership. Component adapters receive no
+    ``start``, ``maintain``, ``close`` or recovery API, and this facade is
+    pinned to the constructing owner thread.
+    """
+
+    __slots__ = ("_runtime", "_owner_thread")
+
+    def __init__(self, runtime: object) -> None:
+        call = getattr(runtime, "call", None)
+        state = getattr(runtime, "state", None)
+        if not callable(call) or state != "registered":
+            raise ServiceComponentError("UPSTREAM_CLIENT_NOT_READY")
+        try:
+            healthy = runtime.healthy  # type: ignore[attr-defined]
+        except Exception:
+            healthy = False
+        if healthy is not True:
+            raise ServiceComponentError("UPSTREAM_CLIENT_NOT_READY")
+        self._runtime = runtime
+        self._owner_thread = threading.get_ident()
+
+    def call(
+        self,
+        mount: str,
+        operation: str,
+        arguments: Mapping[str, Any],
+        *,
+        account_ref: str | None = None,
+        portfolio_ref: str | None = None,
+        scope_ref: str | None = None,
+        max_reply_message_bytes: int | None = None,
+    ) -> Mapping[str, Any]:
+        if threading.get_ident() != self._owner_thread:
+            raise ServiceComponentError("OWNER_THREAD_REQUIRED")
+        return self._runtime.call(  # type: ignore[attr-defined, no-any-return]
+            mount,
+            operation,
+            arguments,
+            account_ref=account_ref,
+            portfolio_ref=portfolio_ref,
+            scope_ref=scope_ref,
+            max_reply_message_bytes=max_reply_message_bytes,
+        )
 
 
 def _borrowed_noop() -> None:
@@ -246,6 +298,9 @@ class ServiceComponent:
     maintain: Callable[[frozenset[str]], object] | None = field(
         default=None, repr=False, compare=False
     )
+    maintain_registrations: Callable[[tuple[ActiveRegistrationContext, ...]], object] | None = (
+        field(default=None, repr=False, compare=False)
+    )
     account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = ()
     account_risk_policy_required_ports: frozenset[str] = frozenset()
 
@@ -266,6 +321,8 @@ class ServiceComponent:
         if not callable(self.readiness) or not callable(self.close):
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
         if self.maintain is not None and not callable(self.maintain):
+            raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
+        if self.maintain_registrations is not None and not callable(self.maintain_registrations):
             raise ServiceComponentError("INVALID_COMPONENT_LIFECYCLE")
         if type(self.account_risk_policy_bindings) is not tuple or any(
             type(binding) is not AccountRiskPolicyBinding
@@ -436,6 +493,71 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {"service.order_entry": frozenset({"orders.submit", "orders.cancel"})}
             ),
             validator_module_name="bt_api_execution.service_component",
+        ),
+        ("execution", "group_account_owner"): _Builtin(
+            module_name="bt_api_py.service_execution_group",
+            operations_attribute=("GROUP_ACCOUNT_OWNER_OPERATIONS",),
+            resource_keys=frozenset(
+                {
+                    "store",
+                    "dispatch",
+                    "accepted_group_store",
+                    "group_authority",
+                    "group_runtime_bundle",
+                }
+            ),
+            public_ports=MappingProxyType(
+                {
+                    "service.order_entry": frozenset(
+                        {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                    ),
+                    "service.order_query": frozenset({"orders.query_group_leg"}),
+                }
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {
+                    "service.order_entry": frozenset(
+                        {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                    )
+                }
+            ),
+        ),
+        ("execution", "group_coordinator"): _Builtin(
+            module_name="bt_api_py.service_execution_group",
+            operations_attribute=("GROUP_COORDINATOR_OPERATIONS",),
+            resource_keys=frozenset({"store", "targets", "run_bindings"}),
+            public_ports=MappingProxyType(
+                {"service.order_group_entry": frozenset({"groups.submit", "groups.query"})}
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {"service.order_group_entry": frozenset({"groups.submit"})}
+            ),
+        ),
+        ("risk", "group_reservations"): _Builtin(
+            module_name="bt_api_py.service_group_reservations",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"accepted_group_store", "group_runtime_bundle"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.group_reservations": frozenset(
+                        {
+                            "reservations.reserve",
+                            "reservations.query",
+                            "reservations.release",
+                        }
+                    )
+                }
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {
+                    "service.group_reservations": frozenset(
+                        {"reservations.reserve", "reservations.release"}
+                    )
+                }
+            ),
         ),
         ("risk", "account_owner"): _Builtin(
             module_name="bt_api_py.service_risk_order_entry",
@@ -777,6 +899,100 @@ def order_components(prepared: Sequence[PreparedComponent]) -> tuple[PreparedCom
     return tuple(ordered)
 
 
+def _group_runtime_bundle(value: object) -> object:
+    """Validate the provider-owned, group-only Risk/Execution composition."""
+
+    try:
+        module = importlib.import_module("bt_api_py.service_execution_group_proofs")
+    except Exception:
+        raise ServiceComponentError("GROUP_RUNTIME_BUNDLE_UNAVAILABLE") from None
+    bundle_type = getattr(module, "GroupProofRuntimeBundle", None)
+    if not isinstance(bundle_type, type) or type(value) is not bundle_type:
+        raise ServiceComponentError("GROUP_RUNTIME_BUNDLE_INVALID")
+    try:
+        risk_admission = value.risk_admission  # type: ignore[attr-defined]
+        account_scoped_admission = value.account_scoped_admission  # type: ignore[attr-defined]
+        proof_source = value.proof_source  # type: ignore[attr-defined]
+        reservation_targets = value.reservation_targets  # type: ignore[attr-defined]
+        proof_targets = value.proof_targets  # type: ignore[attr-defined]
+        reservation_target_for = value.reservation_target_for  # type: ignore[attr-defined]
+        proof_target_for = value.proof_target_for  # type: ignore[attr-defined]
+        execution_scope_for = value.execution_scope_for  # type: ignore[attr-defined]
+        require_runtime_bundle = value.require_runtime_bundle  # type: ignore[attr-defined]
+    except Exception:
+        raise ServiceComponentError("GROUP_RUNTIME_BUNDLE_INVALID") from None
+    if (
+        type(risk_admission) is not getattr(module, "DurableRiskAdmissionAdapter", None)
+        or type(account_scoped_admission)
+        is not getattr(module, "AccountScopedGroupAdmissionAdapter", None)
+        or type(proof_source) is not getattr(module, "GroupProofSource", None)
+        or type(reservation_targets) is not MappingProxyType
+        or type(proof_targets) is not MappingProxyType
+        or not reservation_targets
+        or set(reservation_targets) != set(proof_targets)
+        or not callable(reservation_target_for)
+        or not callable(proof_target_for)
+        or not callable(execution_scope_for)
+        or not callable(require_runtime_bundle)
+    ):
+        raise ServiceComponentError("GROUP_RUNTIME_BUNDLE_INVALID")
+    target_for_template = getattr(proof_source, "target_for_template", None)
+    reservation_target_type = getattr(module, "GroupReservationTarget", None)
+    execution_scope_type = getattr(module, "ExecutionScope", None)
+    account_scope_type = getattr(module, "AccountScope", None)
+    risk_scope_fingerprint = getattr(module, "risk_account_scope_fingerprint", None)
+    if (
+        not callable(target_for_template)
+        or not isinstance(reservation_target_type, type)
+        or not isinstance(execution_scope_type, type)
+        or not isinstance(account_scope_type, type)
+        or not callable(risk_scope_fingerprint)
+    ):
+        raise ServiceComponentError("GROUP_RUNTIME_BUNDLE_INVALID")
+    try:
+        require_runtime_bundle(
+            account_scoped_admission=account_scoped_admission,
+            risk_admission=risk_admission,
+        )
+        account_scoped_admission.require_admission_gate(risk_admission)
+        for wire_scope in reservation_targets:
+            if (
+                type(wire_scope) is not WireScope
+                or wire_scope.group_id is not None
+                or wire_scope.leg_id is not None
+            ):
+                raise TypeError("invalid group scope key")
+            reservation_target = reservation_targets[wire_scope]
+            if (
+                type(reservation_target) is not reservation_target_type
+                or reservation_target_for(wire_scope) is not reservation_target
+                or reservation_target.admission is not risk_admission
+                or type(reservation_target.account_scope) is not account_scope_type
+                or account_scoped_admission.risk_scope_fingerprint
+                != risk_scope_fingerprint(reservation_target.account_scope.key)
+            ):
+                raise TypeError("reservation target lookup changed identity")
+            proof_target = proof_targets[wire_scope]
+            if type(proof_target) is not getattr(module, "GroupProofTarget", None):
+                raise TypeError("invalid group proof target")
+            execution_scope = proof_target.execution_scope
+            if (
+                type(execution_scope) is not execution_scope_type
+                or proof_target.account_scope != reservation_target.account_scope
+                or execution_scope.account_ref != wire_scope.account_ref
+                or execution_scope.strategy_id != wire_scope.strategy_ref
+            ):
+                raise TypeError("group proof target scope binding changed")
+            # Bundle keys are stable account templates. The public
+            # proof_target_for()/execution_scope_for() methods resolve a
+            # per-leg child scope and correctly reject this key shape.
+            if target_for_template(wire_scope) is not proof_target:
+                raise TypeError("proof target template lookup changed identity")
+    except Exception:
+        raise ServiceComponentError("GROUP_RUNTIME_BUNDLE_INVALID") from None
+    return value
+
+
 def _account_risk_policy_metadata(
     resources: ComponentResources,
     *,
@@ -899,6 +1115,11 @@ def build_component(
     scope: WireScope,
     resource_provider: ServiceResourceProvider,
     on_resources: Callable[[ComponentResources], None] | None = None,
+    borrowed_upstream: BorrowedServiceClient | None = None,
+    service_identity: WireIdentity | None = None,
+    trusted_group_write_policies: tuple[TrustedGroupWritePolicy, ...] = (),
+    trusted_group_reservation_policies: tuple[TrustedGroupReservationPolicy, ...] = (),
+    trusted_group_resolution_policies: tuple[TrustedGroupResolutionPolicy, ...] = (),
 ) -> ServiceComponent:
     """Resolve trusted resources and construct one fixed adapter."""
 
@@ -906,6 +1127,24 @@ def build_component(
         raise ServiceComponentError("INVALID_COMPONENT_BUILD")
     if not callable(resource_provider):
         raise ServiceComponentError("RESOURCE_PROVIDER_REQUIRED")
+    if borrowed_upstream is not None and type(borrowed_upstream) is not BorrowedServiceClient:
+        raise ServiceComponentError("INVALID_BORROWED_UPSTREAM")
+    if service_identity is not None and type(service_identity) is not WireIdentity:
+        raise ServiceComponentError("INVALID_SERVICE_IDENTITY")
+    if type(trusted_group_write_policies) is not tuple or any(
+        type(policy) is not TrustedGroupWritePolicy for policy in trusted_group_write_policies
+    ):
+        raise ServiceComponentError("INVALID_GROUP_WRITE_POLICIES")
+    if type(trusted_group_reservation_policies) is not tuple or any(
+        type(policy) is not TrustedGroupReservationPolicy
+        for policy in trusted_group_reservation_policies
+    ):
+        raise ServiceComponentError("INVALID_GROUP_RESERVATION_POLICIES")
+    if type(trusted_group_resolution_policies) is not tuple or any(
+        type(policy) is not TrustedGroupResolutionPolicy
+        for policy in trusted_group_resolution_policies
+    ):
+        raise ServiceComponentError("INVALID_GROUP_RESOLUTION_POLICIES")
     spec = prepared.spec
     builtin = _builtin_for_spec(spec)
     if builtin is None:
@@ -916,7 +1155,7 @@ def build_component(
     execution_owner_lock_transferred = False
     defer_resource_tracking = (
         spec.component == "execution"
-        and spec.options.get("role") == "account_owner"
+        and spec.options.get("role") in {"account_owner", "group_account_owner"}
         and "service.order_entry" in spec.bind_ports
     )
     try:
@@ -1017,6 +1256,27 @@ def build_component(
                 else:
                     constructor = getattr(module, "MonitorReadService", None)
                     adapter = constructor(values["outbox"], values["targets"])
+            elif spec.component == "risk" and spec.options.get("role") == "group_reservations":
+                if not trusted_group_reservation_policies or any(
+                    policy.instance_id != spec.instance_id
+                    for policy in trusted_group_reservation_policies
+                ):
+                    raise ServiceComponentError("GROUP_RESERVATION_POLICY_REQUIRED")
+                bundle = _group_runtime_bundle(values["group_runtime_bundle"])
+                targets = bundle.reservation_targets  # type: ignore[attr-defined]
+                risk_admission = bundle.risk_admission  # type: ignore[attr-defined]
+                if any(
+                    getattr(target, "admission", None) is not risk_admission
+                    or bundle.reservation_target_for(wire_scope) is not target  # type: ignore[attr-defined]
+                    for wire_scope, target in targets.items()
+                ):
+                    raise ServiceComponentError("GROUP_RUNTIME_BUNDLE_INVALID")
+                constructor = getattr(module, "GroupReservationsService", None)
+                adapter = constructor(
+                    targets,
+                    values["accepted_group_store"],
+                    trusted_group_reservation_policies,
+                )
             elif spec.component == "risk" and spec.options.get("role") == "account_owner":
                 constructor = getattr(module, "RiskOrderEntryService", None)
                 adapter = constructor(
@@ -1097,6 +1357,109 @@ def build_component(
             elif spec.component == "risk":
                 constructor = getattr(module, "RiskReadService", None)
                 adapter = constructor(values["gate"], values["targets"])
+            elif spec.component == "execution" and spec.options.get("role") == "group_coordinator":
+                if (
+                    borrowed_upstream is None
+                    or type(service_identity) is not WireIdentity
+                    or service_identity.role is not WireRole.SERVICE
+                ):
+                    raise ServiceComponentError("GROUP_COORDINATOR_AUTHORITY_REQUIRED")
+                constructor = getattr(module, "GroupCoordinatorService", None)
+                adapter = constructor(
+                    values["store"],
+                    values["targets"],
+                    values["run_bindings"],
+                    borrowed_upstream,
+                    service_identity,
+                    instance_id=spec.instance_id,
+                )
+            elif (
+                spec.component == "execution" and spec.options.get("role") == "group_account_owner"
+            ):
+                if (
+                    not trusted_group_write_policies
+                    or not trusted_group_resolution_policies
+                    or any(
+                        policy.instance_id != spec.instance_id
+                        for policy in trusted_group_write_policies
+                    )
+                    or any(
+                        policy.instance_id != spec.instance_id
+                        for policy in trusted_group_resolution_policies
+                    )
+                ):
+                    raise ServiceComponentError("GROUP_ACCOUNT_OWNER_POLICIES_REQUIRED")
+                writes = {
+                    (
+                        policy.principal_ref,
+                        policy.identity,
+                        policy.scope_ref,
+                        policy.scope,
+                        policy.run_id,
+                        policy.scope.account_ref,
+                    )
+                    for policy in trusted_group_write_policies
+                    if policy.instance_id == spec.instance_id
+                }
+                resolutions = {
+                    (
+                        policy.principal_ref,
+                        policy.identity,
+                        policy.scope_ref,
+                        policy.scope,
+                        policy.run_id,
+                        policy.account_ref,
+                    )
+                    for policy in trusted_group_resolution_policies
+                    if policy.instance_id == spec.instance_id
+                }
+                if not writes or writes != resolutions:
+                    raise ServiceComponentError("GROUP_ACCOUNT_OWNER_POLICIES_MISMATCH")
+                bundle = _group_runtime_bundle(values["group_runtime_bundle"])
+                execution_targets = MappingProxyType(
+                    {
+                        wire_scope: proof_target.execution_scope
+                        for wire_scope, proof_target in bundle.proof_targets.items()  # type: ignore[attr-defined]
+                    }
+                )
+                constructor = getattr(module, "ExecutionGroupOrderEntryService", None)
+                adapter = constructor(
+                    values["store"],
+                    execution_targets,
+                    values["dispatch"],
+                    bundle.account_scoped_admission,  # type: ignore[attr-defined]
+                    values["accepted_group_store"],
+                    values["group_authority"],
+                    bundle.proof_source,  # type: ignore[attr-defined]
+                    trusted_group_write_policies,
+                    trusted_group_resolution_policies,
+                    writer_id=spec.instance_id,
+                )
+                if "service.order_entry" in spec.bind_ports:
+                    execution_owner_lock = _acquire_execution_owner_lock(values["store"])
+                    recover = getattr(adapter, "recover_interrupted_dispatches", None)
+                    if not callable(recover):
+                        raise ServiceComponentError("ORDER_RECOVERY_UNAVAILABLE")
+                    try:
+                        recovered = recover()
+                    except Exception:
+                        raise ServiceComponentError("ORDER_RECOVERY_FAILED") from None
+                    try:
+                        from bt_api_execution import ExecutionRecord, ExecutionState
+
+                        expected_scope_keys = {target.key for target in execution_targets.values()}
+                        recovery_result_valid = type(recovered) is tuple and all(
+                            type(record) is ExecutionRecord
+                            and record.state is ExecutionState.UNKNOWN
+                            and record.unknown_reason == "interrupted_order_dispatch"
+                            and record.review_required is True
+                            and record.scope_key in expected_scope_keys
+                            for record in recovered
+                        )
+                    except Exception:
+                        recovery_result_valid = False
+                    if not recovery_result_valid:
+                        raise ServiceComponentError("ORDER_RECOVERY_INVALID")
             elif spec.component == "execution" and spec.options.get("role") == "account_owner":
                 constructor = getattr(module, "ExecutionOrderEntryService", None)
                 admission = values["admission"]
@@ -1196,6 +1559,35 @@ def build_component(
                 expected_operations = frozenset({"orders.submit", "orders.cancel", "orders.query"})
                 if "account_books" in resources.values:
                     expected_operations = expected_operations | {"execution.account_books.query"}
+                if (
+                    type(configured_operations) is not frozenset
+                    or configured_operations != expected_operations
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured_operations)
+            if spec.component == "risk" and spec.options.get("role") == "group_reservations":
+                configured_operations = getattr(adapter, "supported_operations", None)
+                if type(
+                    configured_operations
+                ) is not frozenset or configured_operations != frozenset(
+                    prepared.module.SUPPORTED_OPERATIONS
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured_operations)
+            if spec.component == "execution" and spec.options.get("role") in {
+                "group_coordinator",
+                "group_account_owner",
+            }:
+                configured_operations = getattr(adapter, "supported_operations", None)
+                expected_operations = frozenset(
+                    getattr(
+                        prepared.module,
+                        "GROUP_COORDINATOR_OPERATIONS"
+                        if spec.options.get("role") == "group_coordinator"
+                        else "GROUP_ACCOUNT_OWNER_OPERATIONS",
+                        frozenset(),
+                    )
+                )
                 if (
                     type(configured_operations) is not frozenset
                     or configured_operations != expected_operations
@@ -1367,6 +1759,21 @@ def build_component(
                         ):
                             raise ServiceResultTooLargeError() from None
                         raise
+                if spec.component == "risk" and spec.options.get("role") == "group_reservations":
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        context=context,
+                        arguments=arguments,
+                    )
+                if spec.component == "execution" and spec.options.get("role") in {
+                    "group_coordinator",
+                    "group_account_owner",
+                }:
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        context=context,
+                        arguments=arguments,
+                    )
                 if (
                     spec.component in {"execution", "risk"}
                     and spec.options.get("role") == "account_owner"
@@ -1388,6 +1795,7 @@ def build_component(
             handlers[operation] = handler
 
         maintain = None
+        maintain_registrations = None
         readiness = resources.ready
         if registration_bound:
             candidate_maintain = getattr(adapter, "maintain", None)
@@ -1430,6 +1838,31 @@ def build_component(
 
             readiness = account_worker_readiness
 
+        if (
+            spec.component == "execution"
+            and spec.options.get("role")
+            in {
+                "group_coordinator",
+                "group_account_owner",
+            }
+        ) or (spec.component == "risk" and spec.options.get("role") == "group_reservations"):
+            candidate_maintain_contexts = getattr(adapter, "maintain_registrations", None)
+            if not callable(candidate_maintain_contexts):
+                raise ServiceComponentError("GROUP_REGISTRATION_LIFECYCLE_UNAVAILABLE")
+            maintain_registrations = candidate_maintain_contexts
+
+            def group_component_readiness(
+                *,
+                resource_ready: Callable[[], bool] = resources.ready,
+                group_adapter: object = adapter,
+            ) -> bool:
+                try:
+                    return resource_ready() is True and group_adapter.ready is True  # type: ignore[attr-defined]
+                except Exception:
+                    return False
+
+            readiness = group_component_readiness
+
         component_resources = _resources_with_execution_owner_lock(resources, execution_owner_lock)
         component = ServiceComponent(
             component=spec.component,
@@ -1440,6 +1873,7 @@ def build_component(
             readiness=readiness,
             close=component_resources.close,
             maintain=maintain,
+            maintain_registrations=maintain_registrations,
             account_risk_policy_bindings=account_risk_policy_bindings,
             account_risk_policy_required_ports=account_risk_policy_required_ports,
         )
@@ -1503,6 +1937,7 @@ def _copy_callable_mapping(
 
 
 __all__ = [
+    "BorrowedServiceClient",
     "ComponentResources",
     "ComponentSpec",
     "PreparedComponent",

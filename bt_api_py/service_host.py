@@ -28,6 +28,7 @@ from bt_api_base.service_protocol import (
 )
 
 from .service_components import (
+    BorrowedServiceClient,
     ComponentResources,
     PreparedComponent,
     ServiceComponent,
@@ -41,10 +42,14 @@ from .service_components import (
 from .service_config import ServiceConfig, ServiceConfigError
 from .service_deployment import validate_deployment
 from .service_registry import (
+    ActiveRegistrationContext,
     PrincipalGrant,
     ServiceCapability,
     ServiceRegistry,
     ServiceRegistryStartupCleanupError,
+    TrustedGroupReservationPolicy,
+    TrustedGroupResolutionPolicy,
+    TrustedGroupWritePolicy,
     validate_capabilities_and_grants,
 )
 from .service_runtime import RegistrationSummary, ServiceClientRuntime
@@ -84,6 +89,9 @@ class TrustedServiceAuthority:
     curve_secret_key: bytes = field(repr=False)
     principals: Mapping[bytes, str] = field(repr=False)
     grants: Mapping[str, tuple[PrincipalGrant, ...]] = field(repr=False)
+    group_write_policies: tuple[TrustedGroupWritePolicy, ...] = ()
+    group_reservation_policies: tuple[TrustedGroupReservationPolicy, ...] = ()
+    group_resolution_policies: tuple[TrustedGroupResolutionPolicy, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE:
@@ -133,9 +141,28 @@ class TrustedServiceAuthority:
             grants[principal_ref] = entries
         if set(principals.values()) != set(grants):
             raise ServiceHostError("PRINCIPAL_GRANT_SET_MISMATCH")
+        group_write_policies = self.group_write_policies
+        if type(group_write_policies) is not tuple or any(
+            type(policy) is not TrustedGroupWritePolicy for policy in group_write_policies
+        ):
+            raise ServiceHostError("INVALID_GROUP_WRITE_POLICIES")
+        group_reservation_policies = self.group_reservation_policies
+        if type(group_reservation_policies) is not tuple or any(
+            type(policy) is not TrustedGroupReservationPolicy
+            for policy in group_reservation_policies
+        ):
+            raise ServiceHostError("INVALID_GROUP_RESERVATION_POLICIES")
+        group_resolution_policies = self.group_resolution_policies
+        if type(group_resolution_policies) is not tuple or any(
+            type(policy) is not TrustedGroupResolutionPolicy for policy in group_resolution_policies
+        ):
+            raise ServiceHostError("INVALID_GROUP_RESOLUTION_POLICIES")
 
         object.__setattr__(self, "principals", MappingProxyType(principals))
         object.__setattr__(self, "grants", MappingProxyType(grants))
+        object.__setattr__(self, "group_write_policies", group_write_policies)
+        object.__setattr__(self, "group_reservation_policies", group_reservation_policies)
+        object.__setattr__(self, "group_resolution_policies", group_resolution_policies)
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,6 +256,7 @@ class ServiceHost:
         self._prepared: tuple[PreparedComponent, ...] = ()
         self._components: list[ServiceComponent] = []
         self._pending_resources: list[tuple[str, str, ComponentResources]] = []
+        self._group_runtime_resources: list[tuple[PreparedComponent, ComponentResources]] = []
         self._registry: ServiceRegistry | None = None
         self._reply_size_checker: Callable[[Any, Mapping[str, Any], int | None], bool] | None = None
         self._server: Any = None
@@ -489,12 +517,40 @@ class ServiceHost:
                     ):
                         raise ServiceHostError("PROVIDER_SESSION_UNAVAILABLE")
 
+                borrowed_upstream = None
+                if (
+                    item.spec.component == "execution"
+                    and item.spec.options.get("role") == "group_coordinator"
+                ):
+                    if self._upstream is None:
+                        raise ServiceHostError("GROUP_COORDINATOR_UPSTREAM_REQUIRED")
+                    try:
+                        borrowed_upstream = BorrowedServiceClient(self._upstream)
+                    except ServiceComponentError as exc:
+                        raise ServiceHostError(exc.code) from None
                 component = build_component(
                     item,
                     scope=self._authority.scope,
                     resource_provider=self._resource_provider,
                     on_resources=lambda resource, prepared_item=item: self._track_resources(
                         prepared_item, resource
+                    ),
+                    borrowed_upstream=borrowed_upstream,
+                    service_identity=self._authority.identity,
+                    trusted_group_write_policies=tuple(
+                        policy
+                        for policy in self._authority.group_write_policies
+                        if policy.instance_id == item.spec.instance_id
+                    ),
+                    trusted_group_reservation_policies=tuple(
+                        policy
+                        for policy in self._authority.group_reservation_policies
+                        if policy.instance_id == item.spec.instance_id
+                    ),
+                    trusted_group_resolution_policies=tuple(
+                        policy
+                        for policy in self._authority.group_resolution_policies
+                        if policy.instance_id == item.spec.instance_id
                     ),
                 )
                 self._components.append(component)
@@ -506,6 +562,8 @@ class ServiceHost:
                     raise ServiceHostError("RESOURCE_TRACKING_FAILED")
                 self._pending_resources.pop()
                 built_by_instance[component.instance_id] = component
+
+            self._validate_group_runtime_bundle_sharing()
 
             component_capabilities = tuple(
                 capability
@@ -577,9 +635,12 @@ class ServiceHost:
                     access_policy_ref=self._authority.registration_policy_ref,
                     requirements_ref=self._authority.service_requirements_ref,
                     ready=False,
+                    reply_size_checker=self._reply_size_checker,
+                    trusted_group_write_policies=self._authority.group_write_policies,
+                    trusted_group_reservation_policies=self._authority.group_reservation_policies,
+                    trusted_group_resolution_policies=self._authority.group_resolution_policies,
                     account_risk_policy_bindings=account_risk_policy_bindings,
                     account_risk_policy_required_routes=account_risk_policy_required_routes,
-                    reply_size_checker=self._reply_size_checker,
                 )
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
@@ -587,6 +648,17 @@ class ServiceHost:
             for component in self._components:
                 for operation, handler in component.handlers.items():
                     self._registry.register_handler(component.instance_id, operation, handler)
+
+            # Reconcile durable registration-bound component state before the
+            # listener can accept a request.  A Registry file may contain
+            # still-live leases from an earlier Host process; group owners
+            # must seed/activate their exact trusted run before those routes
+            # become visible again.  This also keeps startup fail-closed when
+            # the read-only eligibility projection or owner reconciliation
+            # fails.
+            self._maintain_components(registrations_only=True)
+            if self._component_maintenance_faults:
+                raise ServiceHostError("COMPONENT_MAINTENANCE_FAILED")
 
             # The same validated inputs are used to create the owner-thread
             # listener. Its constructor owns partial socket/authenticator
@@ -741,10 +813,52 @@ class ServiceHost:
             raise ServiceHostError("LISTENER_PROFILE_INVALID")
         return profile
 
+    def _validate_group_runtime_bundle_sharing(self) -> None:
+        """Require Risk/Execution group roles for one account to share a bundle."""
+
+        by_account: dict[tuple[str, str], object] = {}
+        for item, resources in self._group_runtime_resources:
+            bundle = resources.values.get("group_runtime_bundle")
+            role = item.spec.options.get("role")
+            scope_map_name = (
+                "reservation_targets"
+                if item.spec.component == "risk" and role == "group_reservations"
+                else "proof_targets"
+            )
+            try:
+                scopes = getattr(bundle, scope_map_name)
+                if type(scopes) is not MappingProxyType or not scopes:
+                    raise TypeError("group runtime scope map is invalid")
+                for scope in scopes:
+                    if type(scope) is not WireScope:
+                        raise TypeError("group runtime scope is invalid")
+                    if (
+                        type(scope.execution_domain_ref) is not str
+                        or type(scope.account_ref) is not str
+                        or scope.account_refs
+                    ):
+                        raise TypeError("group runtime account scope is invalid")
+                    account_key = (scope.execution_domain_ref, scope.account_ref)
+                    existing = by_account.get(account_key)
+                    if existing is not None and existing is not bundle:
+                        raise ServiceHostError("GROUP_RUNTIME_BUNDLE_MISMATCH")
+                    by_account[account_key] = bundle
+            except ServiceHostError:
+                raise
+            except Exception:
+                raise ServiceHostError("GROUP_RUNTIME_BUNDLE_INVALID") from None
+
     def _track_resources(self, item: PreparedComponent, resources: ComponentResources) -> None:
         """Retain resources before binding a validated market publisher."""
 
         self._pending_resources.append((item.spec.component, item.spec.instance_id, resources))
+        if (
+            item.spec.component == "risk" and item.spec.options.get("role") == "group_reservations"
+        ) or (
+            item.spec.component == "execution"
+            and item.spec.options.get("role") == "group_account_owner"
+        ):
+            self._group_runtime_resources.append((item, resources))
         if "service.market_source" not in item.operations_by_port:
             return
         if set(resources.values) != {"hub"}:
@@ -1026,7 +1140,7 @@ class ServiceHost:
         except Exception:
             raise ServiceHostError("READINESS_UPDATE_FAILED") from None
 
-    def _maintain_components(self) -> None:
+    def _maintain_components(self, *, registrations_only: bool = False) -> None:
         """Prune per-registration component state using current registry leases."""
 
         registry = self._registry
@@ -1034,16 +1148,76 @@ class ServiceHost:
             return
         active_market_registrations = 0
         for component in self._components:
-            maintain = component.maintain
-            if maintain is None:
+            maintain = None if registrations_only else component.maintain
+            maintain_registrations = component.maintain_registrations
+            if maintain is None and maintain_registrations is None:
                 continue
+            active_ids: frozenset[str] | None = None
             try:
-                active_ids = registry.active_registration_ids(instance_id=component.instance_id)
-                if type(active_ids) is not frozenset or any(
-                    type(registration_id) is not str for registration_id in active_ids
-                ):
-                    raise TypeError("invalid registry registration projection")
-                maintain(active_ids)
+                if maintain is not None:
+                    active_ids = registry.active_registration_ids(instance_id=component.instance_id)
+                    if type(active_ids) is not frozenset or any(
+                        type(registration_id) is not str for registration_id in active_ids
+                    ):
+                        raise TypeError("invalid registry registration projection")
+                    maintain(active_ids)
+                if maintain_registrations is not None:
+                    contexts = tuple(
+                        context
+                        for capability in component.capabilities
+                        for context in registry.active_registration_contexts(
+                            instance_id=component.instance_id,
+                            port=capability.port,
+                        )
+                    )
+                    if type(contexts) is not tuple or any(
+                        type(context) is not ActiveRegistrationContext for context in contexts
+                    ):
+                        raise TypeError("invalid registry registration context projection")
+                    for context in contexts:
+                        operation = None
+                        if (
+                            context.port == "service.order_entry"
+                            and "orders.submit_group_leg" in context.write_operations
+                        ):
+                            operation = "orders.submit_group_leg"
+                        elif (
+                            context.port == "service.group_reservations"
+                            and "reservations.reserve" in context.write_operations
+                        ):
+                            operation = "reservations.reserve"
+                        if operation is None:
+                            continue
+                        scope = context.context.scope
+                        if (
+                            scope.execution_domain_ref is None
+                            or scope.strategy_ref is None
+                            or scope.account_ref is None
+                            or scope.account_refs
+                        ):
+                            raise TypeError("invalid trusted group registration scope")
+                        registry.bind_trusted_group_run(
+                            scope.execution_domain_ref,
+                            scope.strategy_ref,
+                            scope.account_ref,
+                            registration_id=context.context.registration_id,
+                        )
+                    # Seeding is a one-time local registry mapping. Adapters
+                    # receive the resulting persistent run projection, never
+                    # an unbound eligibility snapshot.
+                    contexts = tuple(
+                        context
+                        for capability in component.capabilities
+                        for context in registry.active_registration_contexts(
+                            instance_id=component.instance_id,
+                            port=capability.port,
+                        )
+                    )
+                    if type(contexts) is not tuple or any(
+                        type(context) is not ActiveRegistrationContext for context in contexts
+                    ):
+                        raise TypeError("invalid registry registration context projection")
+                    maintain_registrations(contexts)
             except Exception:
                 self._component_maintenance_faults.add(component.instance_id)
             else:
@@ -1054,6 +1228,7 @@ class ServiceHost:
                     for capability in component.capabilities
                 )
                 and component.instance_id not in self._component_maintenance_faults
+                and active_ids is not None
             ):
                 active_market_registrations = len(active_ids)
         self._market_active_registration_count = active_market_registrations
@@ -1150,6 +1325,8 @@ class ServiceHost:
         component_resources_remain = bool(
             market_publisher_failed or self._pending_resources or self._components
         )
+        if not component_resources_remain:
+            self._group_runtime_resources.clear()
         upstream = self._upstream
         if upstream is not None and not component_resources_remain:
             try:

@@ -207,6 +207,223 @@ class ServiceCallContext:
     result_fits: Callable[[Mapping[str, Any]], bool] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ActiveRegistrationContext:
+    """Read-only owner projection of one currently eligible registration.
+
+    The context is captured from a single Registry SQLite read snapshot. It
+    deliberately says nothing about component-owned coordinator authority:
+    callers must still activate and check that separate durable generation.
+    Expired leases are omitted without deleting their rows or releasing any
+    accepted business responsibility.
+    """
+
+    context: ServiceCallContext
+    instance_id: str
+    port: str
+    scope_ref: str
+    operations: frozenset[str]
+    write_operations: frozenset[str]
+    service_epoch: str
+    policy_version: str
+    requirements_version: str
+    expires_at: float
+    strategy_write_run_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.context) is not ServiceCallContext:
+            raise TypeError("context must be ServiceCallContext")
+        if not all(_text(value) for value in (self.instance_id, self.port, self.scope_ref)):
+            raise ValueError("registration identifiers are invalid")
+        if type(self.operations) is not frozenset or not self.operations:
+            raise TypeError("operations must be a non-empty frozenset")
+        if type(self.write_operations) is not frozenset or not self.write_operations.issubset(
+            self.operations
+        ):
+            raise TypeError("write_operations must be a subset of operations")
+        if not all(
+            _text(value)
+            for value in (self.service_epoch, self.policy_version, self.requirements_version)
+        ):
+            raise ValueError("registration versions are invalid")
+        if type(self.expires_at) not in (int, float) or not math.isfinite(self.expires_at):
+            raise ValueError("expires_at is invalid")
+        if self.strategy_write_run_id is not None and not _text(self.strategy_write_run_id):
+            raise ValueError("strategy_write_run_id is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class TrustedGroupWritePolicy:
+    """Exact local policy for an accepted service-coordinated group write.
+
+    This is an operator/deployment capability, never a service-manifest or
+    wire value. The account-owner route and operation are fixed so an ordinary
+    SERVICE ACL cannot turn another order route into a coordinator write.
+    """
+
+    instance_id: str
+    principal_ref: str
+    identity: WireIdentity
+    scope_ref: str
+    scope: WireScope
+    run_id: str
+    port: str = "service.order_entry"
+    operation: str = "orders.submit_group_leg"
+
+    def __post_init__(self) -> None:
+        if not all(
+            _text(value) for value in (self.instance_id, self.principal_ref, self.scope_ref)
+        ):
+            raise ValueError("group write policy identifiers are invalid")
+        if type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE:
+            raise ValueError("group write policy requires a service identity")
+        if self.principal_ref != self.identity.principal_ref:
+            raise ValueError("group write policy principal does not match its identity")
+        if type(self.scope) is not WireScope:
+            raise TypeError("group write policy scope must be WireScope")
+        if (
+            self.port != "service.order_entry"
+            or self.operation != "orders.submit_group_leg"
+            or not _text(self.run_id)
+            or self.scope.execution_domain_ref is None
+            or self.scope.account_ref is None
+            or self.scope.account_refs
+            or self.scope.strategy_ref is None
+            or self.scope.run_id is not None
+            or self.scope.manual_book_ref is not None
+            or self.scope.portfolio_ref is None
+            or self.scope.group_id is not None
+            or self.scope.leg_id is not None
+        ):
+            raise ValueError("group write policy scope is invalid")
+
+
+_GROUP_RESERVATION_OPERATIONS = frozenset(
+    {"reservations.reserve", "reservations.query", "reservations.release"}
+)
+_GROUP_RESERVATION_WRITE_OPERATIONS = frozenset({"reservations.reserve", "reservations.release"})
+
+
+@dataclass(frozen=True, slots=True)
+class TrustedGroupReservationPolicy:
+    """Exact operator policy for one account owner's group reservation route."""
+
+    instance_id: str
+    principal_ref: str
+    identity: WireIdentity
+    scope_ref: str
+    scope: WireScope
+    run_id: str
+    account_ref: str
+    port: str = "service.group_reservations"
+
+    def __post_init__(self) -> None:
+        if not all(
+            _text(value)
+            for value in (
+                self.instance_id,
+                self.principal_ref,
+                self.scope_ref,
+                self.run_id,
+                self.account_ref,
+            )
+        ):
+            raise ValueError("group reservation policy identifiers are invalid")
+        if type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE:
+            raise ValueError("group reservation policy requires a service identity")
+        if self.principal_ref != self.identity.principal_ref:
+            raise ValueError("group reservation policy principal does not match its identity")
+        if type(self.scope) is not WireScope:
+            raise TypeError("group reservation policy scope must be WireScope")
+        if (
+            self.port != "service.group_reservations"
+            or self.scope.execution_domain_ref is None
+            or self.scope.account_ref != self.account_ref
+            or self.scope.account_refs
+            or self.scope.strategy_ref is None
+            or self.scope.run_id is not None
+            or self.scope.manual_book_ref is not None
+            or self.scope.portfolio_ref is None
+            or self.scope.group_id is not None
+            or self.scope.leg_id is not None
+        ):
+            raise ValueError("group reservation policy scope is invalid")
+
+    @property
+    def operations(self) -> frozenset[str]:
+        return _GROUP_RESERVATION_OPERATIONS
+
+    @property
+    def write_operations(self) -> frozenset[str]:
+        return _GROUP_RESERVATION_WRITE_OPERATIONS
+
+
+@dataclass(frozen=True, slots=True)
+class TrustedGroupResolutionPolicy:
+    """Exact operator policy for resolving one accepted account group leg."""
+
+    instance_id: str
+    principal_ref: str
+    identity: WireIdentity
+    scope_ref: str
+    scope: WireScope
+    run_id: str
+    account_ref: str
+    port: str = "service.order_entry"
+    operation: str = "orders.resolve_group_leg"
+
+    def __post_init__(self) -> None:
+        if not all(
+            _text(value)
+            for value in (
+                self.instance_id,
+                self.principal_ref,
+                self.scope_ref,
+                self.run_id,
+                self.account_ref,
+            )
+        ):
+            raise ValueError("group resolution policy identifiers are invalid")
+        if type(self.identity) is not WireIdentity or self.identity.role is not WireRole.SERVICE:
+            raise ValueError("group resolution policy requires a service identity")
+        if self.principal_ref != self.identity.principal_ref:
+            raise ValueError("group resolution policy principal does not match its identity")
+        if type(self.scope) is not WireScope:
+            raise TypeError("group resolution policy scope must be WireScope")
+        if (
+            self.port != "service.order_entry"
+            or self.operation != "orders.resolve_group_leg"
+            or self.scope.execution_domain_ref is None
+            or self.scope.account_ref != self.account_ref
+            or self.scope.account_refs
+            or self.scope.strategy_ref is None
+            or self.scope.run_id is not None
+            or self.scope.manual_book_ref is not None
+            or self.scope.portfolio_ref is None
+            or self.scope.group_id is not None
+            or self.scope.leg_id is not None
+        ):
+            raise ValueError("group resolution policy scope is invalid")
+
+
+class ServiceRegistryStrategyRunConflictError(RuntimeError):
+    """Trusted group mapping conflicts with an existing logical strategy run."""
+
+    code = "DUPLICATE_ACTIVE_RUN"
+
+    def __init__(self) -> None:
+        super().__init__(self.code)
+
+
+class ServiceRegistryGroupWritePolicyError(RuntimeError):
+    """No operator-configured policy authorizes a trusted group run binding."""
+
+    code = "SCOPE_DENIED"
+
+    def __init__(self) -> None:
+        super().__init__(self.code)
+
+
 class ServiceResultTooLargeError(RuntimeError):
     """A trusted adapter could not fit a bounded response page."""
 
@@ -290,8 +507,9 @@ class ServiceRegistry:
     (for example, a CURVE public-key identity). Wire identity/scope values are
     always compared with ``grants``; they are never treated as credentials.
 
-    Service-role portfolio writes remain denied until a separate trusted
-    coordinator-generation claim path is available.
+    Service-role portfolio writes remain denied. The only service-role
+    strategy-scoped write is the exact account group-leg operation admitted by
+    an operator policy and a persistent logical-run claim.
     """
 
     _owner_guard: ClassVar[threading.Lock] = threading.Lock()
@@ -313,6 +531,9 @@ class ServiceRegistry:
         max_registration_keys: int = _DEFAULT_REGISTRATION_KEYS,
         reply_size_checker: Callable[[WireEnvelope, Mapping[str, Any], int | None], bool]
         | None = None,
+        trusted_group_write_policies: tuple[TrustedGroupWritePolicy, ...] = (),
+        trusted_group_reservation_policies: tuple[TrustedGroupReservationPolicy, ...] = (),
+        trusted_group_resolution_policies: tuple[TrustedGroupResolutionPolicy, ...] = (),
         access_policy_ref: str | None = None,
         requirements_ref: str | None = None,
         account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = (),
@@ -375,6 +596,100 @@ class ServiceRegistry:
             for route in account_risk_policy_required_routes
         ):
             raise ValueError("required account Risk policy route has no binding")
+        if type(trusted_group_write_policies) is not tuple or any(
+            type(policy) is not TrustedGroupWritePolicy for policy in trusted_group_write_policies
+        ):
+            raise TypeError("trusted_group_write_policies must be a tuple of trusted policies")
+        if type(trusted_group_reservation_policies) is not tuple or any(
+            type(policy) is not TrustedGroupReservationPolicy
+            for policy in trusted_group_reservation_policies
+        ):
+            raise TypeError(
+                "trusted_group_reservation_policies must be a tuple of trusted policies"
+            )
+        if type(trusted_group_resolution_policies) is not tuple or any(
+            type(policy) is not TrustedGroupResolutionPolicy
+            for policy in trusted_group_resolution_policies
+        ):
+            raise TypeError("trusted_group_resolution_policies must be a tuple of trusted policies")
+        policy_keys: set[tuple[object, ...]] = set()
+        logical_runs: dict[tuple[str, str, str], str] = {}
+        policy_routes: list[tuple[object, frozenset[str], frozenset[str], str]] = [
+            (policy, frozenset({policy.operation}), frozenset({policy.operation}), "write")
+            for policy in trusted_group_write_policies
+        ]
+        policy_routes.extend(
+            (
+                policy,
+                policy.operations,
+                policy.write_operations,
+                "reservation",
+            )
+            for policy in trusted_group_reservation_policies
+        )
+        policy_routes.extend(
+            (
+                policy,
+                frozenset({policy.operation}),
+                frozenset({policy.operation}),
+                "resolution",
+            )
+            for policy in trusted_group_resolution_policies
+        )
+        for policy, operations, write_operations, policy_kind in policy_routes:
+            instance_id = policy.instance_id  # type: ignore[attr-defined]
+            port = policy.port  # type: ignore[attr-defined]
+            operation_tuple = tuple(sorted(operations))
+            key = (
+                policy_kind,
+                instance_id,
+                port,
+                operation_tuple,
+                policy.principal_ref,  # type: ignore[attr-defined]
+                policy.identity,  # type: ignore[attr-defined]
+                policy.scope_ref,  # type: ignore[attr-defined]
+                policy.scope,  # type: ignore[attr-defined]
+            )
+            if key in policy_keys:
+                raise ValueError("duplicate trusted group route policy")
+            policy_keys.add(key)
+            capability = capability_map.get((instance_id, port))
+            if (
+                capability is None
+                or not operations.issubset(capability.operations)
+                or not write_operations.issubset(capability.write_operations)
+                or operations.intersection(capability.write_operations) != write_operations
+            ):
+                raise ValueError("trusted group policy is outside the local capability")
+            matching_grants = [
+                resource
+                for principal_grant in trusted_grants.get(
+                    policy.principal_ref,
+                    (),  # type: ignore[attr-defined]
+                )
+                if principal_grant.identity == policy.identity  # type: ignore[attr-defined]
+                for resource in principal_grant.resources
+                if resource.instance_id == instance_id
+                and resource.port == port
+                and resource.scope_ref == policy.scope_ref  # type: ignore[attr-defined]
+                and resource.scope == policy.scope  # type: ignore[attr-defined]
+                and operations.issubset(resource.operations)
+            ]
+            if len(matching_grants) != 1:
+                raise ValueError("trusted group policy does not match one exact grant")
+            policy_scope = policy.scope  # type: ignore[attr-defined]
+            account_ref = (
+                policy_scope.account_ref if policy_kind == "write" else policy.account_ref  # type: ignore[attr-defined]
+            )
+            logical_key = (
+                policy_scope.execution_domain_ref,
+                policy_scope.strategy_ref,
+                account_ref,
+            )
+            policy_run_id = policy.run_id  # type: ignore[attr-defined]
+            prior_run = logical_runs.setdefault(logical_key, policy_run_id)
+            if prior_run != policy_run_id:
+                raise ValueError("conflicting trusted group logical runs")
 
         self.service_id = service_id
         self.policy_version = policy_version
@@ -390,6 +705,9 @@ class ServiceRegistry:
         self._reply_size_checker = reply_size_checker
         self._capabilities = capability_map
         self._grants = trusted_grants
+        self._trusted_group_write_policies = trusted_group_write_policies
+        self._trusted_group_reservation_policies = trusted_group_reservation_policies
+        self._trusted_group_resolution_policies = trusted_group_resolution_policies
         self._handlers: dict[
             tuple[str, str], Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]]
         ] = {}
@@ -609,6 +927,27 @@ class ServiceRegistry:
             else:
                 self._db.commit()
 
+    @contextmanager
+    def _read_snapshot(self) -> Iterator[None]:
+        """Hold one SQLite read snapshot without expiring or deleting leases."""
+
+        with self._lock:
+            if self._closed or self._db is None:
+                raise sqlite3.ProgrammingError("registry is closed")
+            self._db.execute("BEGIN")
+            try:
+                row = self._db.execute(
+                    "SELECT value FROM registry_meta WHERE key='service_epoch'"
+                ).fetchone()
+                if row is None or row["value"] != self._epoch:
+                    raise _StaleOwnerError
+                yield
+            except BaseException:
+                self._db.rollback()
+                raise
+            else:
+                self._db.commit()
+
     def _now(self) -> float:
         value = self._clock()
         if type(value) not in (int, float) or not math.isfinite(value):
@@ -686,6 +1025,259 @@ class ServiceRegistry:
                 for row in rows
                 if self._registration_policy_matches(row)
             )
+
+    def active_registration_contexts(
+        self, *, instance_id: str, port: str
+    ) -> tuple[ActiveRegistrationContext, ...]:
+        """Project eligible registrations from one read-only SQLite snapshot.
+
+        This is an owner-thread lifecycle input, not a remotely callable
+        operation. It deliberately does not require a separate component
+        authority generation to be active: the receiving component uses this
+        eligibility snapshot to activate or reconcile that generation.
+        Expired and stale-version rows are omitted without deleting them.
+        """
+
+        if not _text(instance_id) or not _text(port):
+            raise ValueError("registration capability is invalid")
+        if (instance_id, port) not in self._capabilities:
+            raise ValueError("instance_id and port are not a declared capability")
+        now = self._now()
+        result: list[ActiveRegistrationContext] = []
+        with self._read_snapshot():
+            rows = self._db.execute(
+                "SELECT * FROM sessions WHERE instance_id=? AND port=? "
+                "AND service_epoch=? AND policy_version=? AND requirements_version=? "
+                "AND expires_at>? ORDER BY registration_id",
+                (
+                    instance_id,
+                    port,
+                    self._epoch,
+                    self.policy_version,
+                    self.requirements_version,
+                    now,
+                ),
+            ).fetchall()
+            for row in rows:
+                identity = self._stored_identity(row["identity_json"])
+                scope = self._stored_scope(row["scope_json"])
+                principal = row["principal"]
+                operations = frozenset(json.loads(row["operations_json"]))
+                write_operations = frozenset(json.loads(row["write_operations_json"]))
+                if not self._identity_is_trusted(principal, identity):
+                    continue
+                if not self._registration_policy_matches(row):
+                    continue
+                if not operations or not write_operations.issubset(operations):
+                    continue
+                if any(
+                    not self._current_resource_allows(
+                        principal,
+                        identity,
+                        instance_id=instance_id,
+                        port=port,
+                        scope_ref=row["scope_ref"],
+                        scope=scope,
+                        operation=operation,
+                    )
+                    for operation in operations
+                ):
+                    continue
+                run_id = self._scope_strategy_write_run_id_in_snapshot(scope)
+                result.append(
+                    ActiveRegistrationContext(
+                        context=ServiceCallContext(
+                            identity=identity,
+                            scope=scope,
+                            registration_id=row["registration_id"],
+                            principal_ref=principal,
+                        ),
+                        instance_id=instance_id,
+                        port=port,
+                        scope_ref=row["scope_ref"],
+                        operations=operations,
+                        write_operations=write_operations,
+                        service_epoch=row["service_epoch"],
+                        policy_version=row["policy_version"],
+                        requirements_version=row["requirements_version"],
+                        expires_at=float(row["expires_at"]),
+                        strategy_write_run_id=run_id,
+                    )
+                )
+        return tuple(result)
+
+    def _scope_strategy_write_run_id_in_snapshot(self, scope: WireScope) -> str | None:
+        """Return one exact durable run shared by every account in the scope.
+
+        Group coordinators can be registered for a fixed account vector. Their
+        lifecycle context must prove the same persistent logical run on every
+        account before an owner may activate a group route. Missing or
+        conflicting claims stay ineligible.
+        """
+
+        if scope.strategy_ref is None:
+            return None
+        if scope.account_ref is not None and not scope.account_refs:
+            return self._strategy_write_run_id_in_snapshot(
+                scope.execution_domain_ref,
+                scope.strategy_ref,
+                scope.account_ref,
+            )
+        if scope.account_ref is not None or not scope.account_refs or scope.run_id is None:
+            return None
+        account_refs = scope.account_refs
+        run_ids = tuple(
+            self._strategy_write_run_id_in_snapshot(
+                scope.execution_domain_ref,
+                scope.strategy_ref,
+                account_ref,
+            )
+            for account_ref in account_refs
+        )
+        if any(run_id is None for run_id in run_ids):
+            return None
+        first = run_ids[0]
+        if first != scope.run_id or any(run_id != first for run_id in run_ids[1:]):
+            return None
+        return first
+
+    def _strategy_write_run_id_in_snapshot(
+        self,
+        execution_domain_ref: str | None,
+        strategy_ref: str | None,
+        account_ref: str | None,
+    ) -> str | None:
+        if execution_domain_ref is None or strategy_ref is None or account_ref is None:
+            return None
+        row = self._db.execute(
+            "SELECT run_id FROM strategy_write_claims "
+            "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
+            (execution_domain_ref, strategy_ref, account_ref),
+        ).fetchone()
+        return None if row is None else row["run_id"]
+
+    def strategy_write_run_id(
+        self, execution_domain_ref: str, strategy_ref: str, account_ref: str
+    ) -> str | None:
+        """Read the persistent logical strategy run without requiring a lease."""
+
+        refs = (execution_domain_ref, strategy_ref, account_ref)
+        if any(not _text(value) for value in refs):
+            raise ValueError("strategy claim identifiers are invalid")
+        with self._read_snapshot():
+            return self._strategy_write_run_id_in_snapshot(*refs)
+
+    def bind_trusted_group_run(
+        self,
+        execution_domain_ref: str,
+        strategy_ref: str,
+        account_ref: str,
+        *,
+        registration_id: str,
+    ) -> str:
+        """Bind one active, exact group-owner registration to its trusted run.
+
+        Only an eligible registration with the exact operator policy and its
+        corresponding writable operation may seed the logical run. Group
+        reservation owners seed on ``reservations.reserve``; account owners
+        seed on ``orders.submit_group_leg``. Query/release registrations,
+        expired rows, and caller-selected runs cannot seed a claim. Repeating
+        the same mapping is idempotent; a different run is rejected. This
+        never sets or modifies ``active_registration_id``.
+        """
+
+        refs = (execution_domain_ref, strategy_ref, account_ref, registration_id)
+        if any(not _text(value) for value in refs):
+            raise ValueError("strategy claim identifiers are invalid")
+        with self._transaction():
+            now = self._now()
+            registration = self._db.execute(
+                "SELECT * FROM sessions WHERE registration_id=? AND service_epoch=? "
+                "AND policy_version=? AND requirements_version=? AND expires_at>?",
+                (
+                    registration_id,
+                    self._epoch,
+                    self.policy_version,
+                    self.requirements_version,
+                    now,
+                ),
+            ).fetchone()
+            if registration is None or not self._registration_policy_matches(registration):
+                raise ServiceRegistryGroupWritePolicyError
+            identity = self._stored_identity(registration["identity_json"])
+            scope = self._stored_scope(registration["scope_json"])
+            operations = frozenset(json.loads(registration["operations_json"]))
+            write_operations = frozenset(json.loads(registration["write_operations_json"]))
+            principal = registration["principal"]
+            operation = (
+                "orders.submit_group_leg"
+                if registration["port"] == "service.order_entry"
+                else "reservations.reserve"
+                if registration["port"] == "service.group_reservations"
+                else None
+            )
+            policy = (
+                None
+                if operation is None
+                else self._trusted_group_policy(
+                    principal,
+                    identity,
+                    instance_id=registration["instance_id"],
+                    port=registration["port"],
+                    scope_ref=registration["scope_ref"],
+                    scope=scope,
+                    operation=operation,
+                )
+            )
+            policy_account_ref = (
+                policy.scope.account_ref
+                if type(policy) is TrustedGroupWritePolicy
+                else policy.account_ref
+                if type(policy) is TrustedGroupReservationPolicy
+                else None
+            )
+            capability = self._capabilities.get((registration["instance_id"], registration["port"]))
+            if (
+                operation is None
+                or policy is None
+                or scope.execution_domain_ref != execution_domain_ref
+                or scope.strategy_ref != strategy_ref
+                or policy_account_ref != account_ref
+                or principal != policy.principal_ref
+                or identity != policy.identity
+                or not self._identity_is_trusted(principal, identity)
+                or capability is None
+                or operation not in operations
+                or operation not in write_operations
+                or operation not in capability.write_operations
+                or not self._current_resource_allows(
+                    principal,
+                    identity,
+                    instance_id=registration["instance_id"],
+                    port=registration["port"],
+                    scope_ref=registration["scope_ref"],
+                    scope=scope,
+                    operation=operation,
+                )
+            ):
+                raise ServiceRegistryGroupWritePolicyError
+            run_id = policy.run_id
+            row = self._db.execute(
+                "SELECT run_id FROM strategy_write_claims "
+                "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
+                (execution_domain_ref, strategy_ref, account_ref),
+            ).fetchone()
+            if row is not None:
+                if row["run_id"] != run_id:
+                    raise ServiceRegistryStrategyRunConflictError
+                return run_id
+            self._db.execute(
+                "INSERT INTO strategy_write_claims "
+                "(execution_domain_ref, strategy_ref, account_ref, run_id, created_at, active_registration_id) "
+                "VALUES(?,?,?,?,?,NULL)",
+                (execution_domain_ref, strategy_ref, account_ref, run_id, self._now()),
+            )
+        return run_id
 
     def _ensure_open(self) -> None:
         if self._closed or self._db is None:
@@ -903,6 +1495,164 @@ class ServiceRegistry:
             )
         return requested == template
 
+    def _trusted_group_write_policy(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operation: str,
+    ) -> TrustedGroupWritePolicy | None:
+        if identity.role is not WireRole.SERVICE:
+            return None
+        for policy in self._trusted_group_write_policies:
+            if (
+                policy.principal_ref == principal
+                and policy.identity == identity
+                and policy.instance_id == instance_id
+                and policy.port == port
+                and policy.scope_ref == scope_ref
+                and policy.scope == scope
+                and policy.operation == operation
+            ):
+                return policy
+        return None
+
+    def _trusted_group_reservation_policy(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operation: str,
+    ) -> TrustedGroupReservationPolicy | None:
+        if identity.role is not WireRole.SERVICE or port != "service.group_reservations":
+            return None
+        for policy in self._trusted_group_reservation_policies:
+            if (
+                policy.principal_ref == principal
+                and policy.identity == identity
+                and policy.instance_id == instance_id
+                and policy.port == port
+                and policy.scope_ref == scope_ref
+                and policy.scope == scope
+                and operation in policy.operations
+            ):
+                return policy
+        return None
+
+    def _trusted_group_resolution_policy(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operation: str,
+    ) -> TrustedGroupResolutionPolicy | None:
+        if identity.role is not WireRole.SERVICE:
+            return None
+        for policy in self._trusted_group_resolution_policies:
+            if (
+                policy.principal_ref == principal
+                and policy.identity == identity
+                and policy.instance_id == instance_id
+                and policy.port == port
+                and policy.scope_ref == scope_ref
+                and policy.scope == scope
+                and policy.operation == operation
+            ):
+                return policy
+        return None
+
+    def _trusted_group_policy(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operation: str,
+    ) -> (
+        TrustedGroupWritePolicy
+        | TrustedGroupReservationPolicy
+        | TrustedGroupResolutionPolicy
+        | None
+    ):
+        return (
+            self._trusted_group_write_policy(
+                principal,
+                identity,
+                instance_id=instance_id,
+                port=port,
+                scope_ref=scope_ref,
+                scope=scope,
+                operation=operation,
+            )
+            or self._trusted_group_reservation_policy(
+                principal,
+                identity,
+                instance_id=instance_id,
+                port=port,
+                scope_ref=scope_ref,
+                scope=scope,
+                operation=operation,
+            )
+            or self._trusted_group_resolution_policy(
+                principal,
+                identity,
+                instance_id=instance_id,
+                port=port,
+                scope_ref=scope_ref,
+                scope=scope,
+                operation=operation,
+            )
+        )
+
+    def _trusted_group_write_run_matches(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operation: str,
+    ) -> bool:
+        policy = self._trusted_group_policy(
+            principal,
+            identity,
+            instance_id=instance_id,
+            port=port,
+            scope_ref=scope_ref,
+            scope=scope,
+            operation=operation,
+        )
+        if policy is None:
+            return False
+        account_ref = (
+            policy.scope.account_ref
+            if type(policy) is TrustedGroupWritePolicy
+            else policy.account_ref
+        )
+        return (
+            self._strategy_write_run_id_in_snapshot(
+                scope.execution_domain_ref, scope.strategy_ref, account_ref
+            )
+            == policy.run_id
+        )
+
     def _authorized_resource(
         self,
         principal: str,
@@ -944,16 +1694,49 @@ class ServiceRegistry:
         granted = requested_operations & capability.operations & allowed
         if not requested_operations or granted != requested_operations:
             return "SCOPE_DENIED", capability, frozenset()
-        if granted & capability.write_operations:
+        if (
+            identity.role is WireRole.SERVICE
+            and port == "service.group_reservations"
+            and any(
+                self._trusted_group_reservation_policy(
+                    principal,
+                    identity,
+                    instance_id=instance_id,
+                    port=port,
+                    scope_ref=scope_ref,
+                    scope=scope,
+                    operation=operation,
+                )
+                is None
+                for operation in requested_operations
+            )
+        ):
+            return "SCOPE_DENIED", capability, frozenset()
+        granted_write_operations = granted & capability.write_operations
+        if granted_write_operations:
             if identity.role is WireRole.STRATEGY_CLIENT:
                 # Strategy writes are admitted below only when the concrete
                 # scope supplies both strategy and run identifiers.
                 if scope.strategy_ref is None or scope.run_id is None:
                     return "SCOPE_DENIED", capability, frozenset()
             elif scope.strategy_ref is not None:
-                # A trusted app/service grant cannot become a strategy writer
-                # without an explicit delegated-generation contract.
-                return "SCOPE_DENIED", capability, frozenset()
+                # Service group writes are the sole narrow exception. The
+                # exact operator policy is checked again at dispatch and the
+                # persistent strategy run must still match before effects.
+                if any(
+                    self._trusted_group_policy(
+                        principal,
+                        identity,
+                        instance_id=instance_id,
+                        port=port,
+                        scope_ref=scope_ref,
+                        scope=scope,
+                        operation=operation,
+                    )
+                    is None
+                    for operation in granted_write_operations
+                ):
+                    return "SCOPE_DENIED", capability, frozenset()
             elif identity.role is WireRole.SERVICE and scope.portfolio_ref is not None:
                 # Portfolio coordination needs its own durable active-generation
                 # claim; this registry does not admit an unclaimed coordinator.
@@ -1335,6 +2118,21 @@ class ServiceRegistry:
                 and not self._strategy_claim_exists(scope, row["registration_id"])
             ):
                 return self._failure("DUPLICATE_ACTIVE_RUN")
+            if (
+                identity.role is WireRole.SERVICE
+                and scope.strategy_ref is not None
+                and (operation in write_ops or row["port"] == "service.group_reservations")
+                and not self._trusted_group_write_run_matches(
+                    principal,
+                    identity,
+                    instance_id=instance_id,
+                    port=row["port"],
+                    scope_ref=row["scope_ref"],
+                    scope=scope,
+                    operation=operation,
+                )
+            ):
+                return self._failure("DUPLICATE_ACTIVE_RUN")
 
             def result_fits(result: Mapping[str, Any]) -> bool:
                 normalized_result = self._normalize_result(result)
@@ -1436,14 +2234,59 @@ class ServiceRegistry:
         capability = self._capabilities.get((instance_id, port))
         if capability is None or operation not in capability.operations:
             return False
+        if (
+            identity.role is WireRole.SERVICE
+            and port == "service.group_reservations"
+            and (
+                self._trusted_group_reservation_policy(
+                    principal,
+                    identity,
+                    instance_id=instance_id,
+                    port=port,
+                    scope_ref=scope_ref,
+                    scope=scope,
+                    operation=operation,
+                )
+                is None
+            )
+        ):
+            return False
+        if (
+            identity.role is WireRole.SERVICE
+            and port == "service.order_entry"
+            and operation == "orders.resolve_group_leg"
+            and self._trusted_group_resolution_policy(
+                principal,
+                identity,
+                instance_id=instance_id,
+                port=port,
+                scope_ref=scope_ref,
+                scope=scope,
+                operation=operation,
+            )
+            is None
+        ):
+            return False
         if operation in capability.write_operations:
             if identity.role is WireRole.STRATEGY_CLIENT:
                 if scope.strategy_ref is None or scope.run_id is None:
                     return False
-            elif (
-                (identity.role is WireRole.SERVICE and scope.portfolio_ref is not None)
-                or scope.strategy_ref is not None
-                or (scope.manual_book_ref is None and scope.portfolio_ref is None)
+            elif scope.strategy_ref is not None:
+                if (
+                    self._trusted_group_policy(
+                        principal,
+                        identity,
+                        instance_id=instance_id,
+                        port=port,
+                        scope_ref=scope_ref,
+                        scope=scope,
+                        operation=operation,
+                    )
+                    is None
+                ):
+                    return False
+            elif (identity.role is WireRole.SERVICE and scope.portfolio_ref is not None) or (
+                scope.manual_book_ref is None and scope.portfolio_ref is None
             ):
                 return False
         return any(

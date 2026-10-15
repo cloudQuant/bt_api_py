@@ -1,0 +1,22 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T17:32:46.841393+00:00",
+  "source_count": 323,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "f4fd2a1f7bbb182e33b607c43b7c651bd1c45d7e",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "79c04d30a541f473311b7d48727370c7e331ed10"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "f4fd2a1f7bbb182e33b607c43b7c651bd1c45d7e",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "dadd0a6bc7c1d31aba0f58e4d6101478be8d3ebc",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "79c04d30a541f473311b7d48727370c7e331ed10"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "1dcad9f7c6b865e7324c3197dddee747ffdc135ba4746a113ae4155bdaca153d",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "REAL_REGISTRY_RUNTIME_IN_PROCESS_TRANSPORT_SHIM_NOT_HOST_ACCEPTANCE"
+}

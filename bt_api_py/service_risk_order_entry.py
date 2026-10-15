@@ -89,6 +89,11 @@ _WIRE_SCOPE_FIELDS = (
 )
 _WIRE_SCOPE_FIELDS_SET = frozenset((*_WIRE_SCOPE_FIELDS, "run_id"))
 _ORDER_PROVENANCE_SCHEMA = "bt-api-order-source-provenance-v1"
+_ORDER_PROVENANCE_SCHEMA_V2 = "bt-api-order-source-provenance-v2"
+_RISK_ORDER_CONTRACT_SCHEMA_V2 = "bt-api-risk-provider-contract-v2"
+_SUPPORTED_PROVIDER_TIME_IN_FORCE = frozenset(
+    {("GTC",), ("IOC",), ("GTC", "IOC")}
+)
 _OPEN_ORDER_STATES = frozenset({"accepted"})
 _PROVIDER_STATUS_KEYS = frozenset(
     {
@@ -294,6 +299,12 @@ class RiskBtApiProviderContract:
     supported_time_in_force: tuple[str, ...]
     supported_position_effects: tuple[str, ...]
     normalizer_schema: str = _ORDER_PROVENANCE_SCHEMA
+    order_revision_field: str | None = None
+    fill_revision_field: str | None = None
+    fill_watermark_field: str | None = None
+    fee_amount_field: str | None = None
+    fee_currency_field: str | None = None
+    quote_currency_by_instrument: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("exchange_name", "profile_id", "order_schema", "fill_schema"):
@@ -313,12 +324,16 @@ class RiskBtApiProviderContract:
             raise RiskOrderEntryError("PROVIDER_CONTRACT_INVALID")
         for name, expected in (
             ("supported_order_types", ("LIMIT",)),
-            ("supported_time_in_force", ("GTC",)),
             ("supported_position_effects", ("OPEN",)),
         ):
             value = getattr(self, name)
             if type(value) is not tuple or value != expected:
                 raise RiskOrderEntryError("PROVIDER_ORDER_CAPABILITY_UNSUPPORTED")
+        if (
+            type(self.supported_time_in_force) is not tuple
+            or self.supported_time_in_force not in _SUPPORTED_PROVIDER_TIME_IN_FORCE
+        ):
+            raise RiskOrderEntryError("PROVIDER_ORDER_CAPABILITY_UNSUPPORTED")
         mapping = self.provider_status_mapping
         if type(mapping) is not tuple or not mapping:
             raise RiskOrderEntryError("PROVIDER_STATUS_MAPPING_REQUIRED")
@@ -346,8 +361,57 @@ class RiskBtApiProviderContract:
         if not any(value in _OPEN_ORDER_STATES for _, value in normalized):
             raise RiskOrderEntryError("PROVIDER_OPEN_STATE_UNAVAILABLE")
         object.__setattr__(self, "provider_status_mapping", tuple(normalized))
-        if self.normalizer_schema != _ORDER_PROVENANCE_SCHEMA:
+        if self.normalizer_schema not in {
+            _ORDER_PROVENANCE_SCHEMA,
+            _ORDER_PROVENANCE_SCHEMA_V2,
+        }:
             raise RiskOrderEntryError("PROVIDER_NORMALIZER_UNSUPPORTED")
+        if (
+            "IOC" in self.supported_time_in_force
+            and self.normalizer_schema != _ORDER_PROVENANCE_SCHEMA_V2
+        ):
+            raise RiskOrderEntryError("PROVIDER_V2_SOURCE_CONTRACT_REQUIRED")
+        v2_fields = (
+            self.order_revision_field,
+            self.fill_revision_field,
+            self.fill_watermark_field,
+            self.fee_amount_field,
+            self.fee_currency_field,
+        )
+        if self.normalizer_schema == _ORDER_PROVENANCE_SCHEMA_V2:
+            if v2_fields != (
+                "order_revision",
+                "fill_revision",
+                "fill_watermark",
+                "fee_amount",
+                "fee_currency",
+            ):
+                raise RiskOrderEntryError("PROVIDER_V2_SOURCE_CONTRACT_INVALID")
+            if "partial" not in {value for _, value in normalized}:
+                raise RiskOrderEntryError("PROVIDER_PARTIAL_STATE_UNAVAILABLE")
+        elif any(value is not None for value in v2_fields) or self.quote_currency_by_instrument:
+            raise RiskOrderEntryError("PROVIDER_V2_SOURCE_CONTRACT_INVALID")
+        quote_rows = self.quote_currency_by_instrument
+        if type(quote_rows) is not tuple:
+            raise RiskOrderEntryError("PROVIDER_QUOTE_CURRENCY_MAPPING_INVALID")
+        seen_instruments: set[str] = set()
+        checked_quotes: list[tuple[str, str]] = []
+        for item in quote_rows:
+            if (
+                type(item) is not tuple
+                or len(item) != 2
+                or type(item[0]) is not str
+                or type(item[1]) is not str
+                or not _REFERENCE.fullmatch(item[0])
+                or re.fullmatch(r"[A-Z][A-Z0-9]{1,15}", item[1]) is None
+                or item[0] in seen_instruments
+            ):
+                raise RiskOrderEntryError("PROVIDER_QUOTE_CURRENCY_MAPPING_INVALID")
+            seen_instruments.add(item[0])
+            checked_quotes.append(item)
+        if tuple(checked_quotes) != tuple(sorted(checked_quotes)):
+            raise RiskOrderEntryError("PROVIDER_QUOTE_CURRENCY_MAPPING_INVALID")
+        object.__setattr__(self, "quote_currency_by_instrument", tuple(checked_quotes))
 
     @property
     def write_ready(self) -> bool:
@@ -362,28 +426,74 @@ class RiskBtApiProviderContract:
         )
 
     @property
-    def fingerprint(self) -> str:
-        return sha256_text(
-            canonical_json(
+    def risk_only_write_ready(self) -> bool:
+        """Whether the normal risk-only dispatcher can use its fixed GTC path."""
+
+        return self.write_ready and "GTC" in self.supported_time_in_force
+
+    @property
+    def exposure_ready(self) -> bool:
+        """Whether the trusted profile supplies the explicit v2 observation contract."""
+
+        return (
+            self.write_ready
+            and self.normalizer_schema == _ORDER_PROVENANCE_SCHEMA_V2
+            and all(
+                value is not None
+                for value in (
+                    self.order_revision_field,
+                    self.fill_revision_field,
+                    self.fill_watermark_field,
+                    self.fee_amount_field,
+                    self.fee_currency_field,
+                )
+            )
+            and bool(self.quote_currency_by_instrument)
+            and "partial" in {value for _, value in self.provider_status_mapping}
+        )
+
+    def quote_currency(self, instrument: str) -> str | None:
+        return dict(self.quote_currency_by_instrument).get(instrument)
+
+    def to_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "client_order_id_query": self.client_order_id_query,
+            "client_order_id_query_unique": self.client_order_id_query_unique,
+            "complete_fill_history": self.complete_fill_history,
+            "complete_order_snapshot": self.complete_order_snapshot,
+            "exchange_name": self.exchange_name,
+            "fill_schema": self.fill_schema,
+            "normalizer_schema": self.normalizer_schema,
+            "order_schema": self.order_schema,
+            "profile_id": self.profile_id,
+            "provider_accepts_client_order_id": self.provider_accepts_client_order_id,
+            "provider_status_mapping": [list(item) for item in self.provider_status_mapping],
+            "supported_order_types": list(self.supported_order_types),
+            "supported_position_effects": list(self.supported_position_effects),
+            "supported_time_in_force": list(self.supported_time_in_force),
+        }
+        if self.normalizer_schema == _ORDER_PROVENANCE_SCHEMA_V2:
+            payload.update(
                 {
-                    "client_order_id_query": self.client_order_id_query,
-                    "client_order_id_query_unique": self.client_order_id_query_unique,
-                    "complete_fill_history": self.complete_fill_history,
-                    "complete_order_snapshot": self.complete_order_snapshot,
-                    "exchange_name": self.exchange_name,
-                    "fill_schema": self.fill_schema,
-                    "normalizer_schema": self.normalizer_schema,
-                    "order_schema": self.order_schema,
-                    "profile_id": self.profile_id,
-                    "provider_accepts_client_order_id": self.provider_accepts_client_order_id,
-                    "provider_status_mapping": self.provider_status_mapping,
-                    "supported_order_types": self.supported_order_types,
-                    "supported_position_effects": self.supported_position_effects,
-                    "supported_time_in_force": self.supported_time_in_force,
-                    "schema": "bt-api-risk-provider-contract-v1",
+                    "fee_amount_field": self.fee_amount_field,
+                    "fee_currency_field": self.fee_currency_field,
+                    "fill_revision_field": self.fill_revision_field,
+                    "fill_watermark_field": self.fill_watermark_field,
+                    "order_revision_field": self.order_revision_field,
+                    "quote_currency_by_instrument": [
+                        list(item) for item in self.quote_currency_by_instrument
+                    ],
+                    "schema": _RISK_ORDER_CONTRACT_SCHEMA_V2,
                 }
             )
-        )
+        else:
+            # Keep v1 profile fingerprints byte-for-byte compatible.
+            payload["schema"] = "bt-api-risk-provider-contract-v1"
+        return payload
+
+    @property
+    def fingerprint(self) -> str:
+        return sha256_text(canonical_json(self.to_payload()))
 
 
 class _PositionEffect(StrEnum):
@@ -487,6 +597,8 @@ class RiskOrderEntryService:
             target = target_copy.get(scope)
             if target is None or contract.exchange_name != target.exchange_name:
                 raise RiskOrderEntryError("PROVIDER_CONTRACT_SCOPE_MISMATCH")
+            if not contract.risk_only_write_ready:
+                raise RiskOrderEntryError("PROVIDER_GTC_CAPABILITY_REQUIRED")
             contract_copy[scope] = contract
 
         self._bt_api = bt_api
@@ -590,7 +702,7 @@ class RiskOrderEntryService:
         contract = binding[3]
         return MappingProxyType(
             {
-                SUBMIT_OPERATION: contract is not None and contract.write_ready,
+                SUBMIT_OPERATION: contract is not None and contract.risk_only_write_ready,
                 QUERY_OPERATION: True,
                 CANCEL_OPERATION: False,
             }
@@ -675,7 +787,7 @@ class RiskOrderEntryService:
         contract: RiskBtApiProviderContract | None,
         arguments: Mapping[str, Any],
     ) -> Mapping[str, Any]:
-        if contract is None or not contract.write_ready:
+        if contract is None or not contract.risk_only_write_ready:
             return _reply(False, "CAPABILITY_UNAVAILABLE", {"found": False, "record": None})
         if not _has_exact_argument_fields(arguments, _ORDER_FIELDS):
             return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
