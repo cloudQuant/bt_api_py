@@ -1,0 +1,122 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0
+rootdir: D:\bt_api_py\bt_api\bt_api_risk\.codex-tmp\iteration10-risk-fx-admission-20261016-r2
+configfile: pytest.ini
+collected 25 items
+
+.codex-tmp\iteration10-risk-fx-admission-20261016-r2 ................... [ 76%]
+..F..F                                                                   [100%]
+
+================================== FAILURES ===================================
+____________ test_dispatch_claim_rechecks_fx_at_the_final_gate_cut ____________
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-920/test_dispatch_claim_rechecks_f0')
+
+    def test_dispatch_claim_rechecks_fx_at_the_final_gate_cut(tmp_path) -> None:
+        metadata = _metadata()
+        fx_rate = _fx_rate()
+        scope = AccountScope("fixture", "risk-account", "sandbox")
+        mapper_now_ns = [1_500]
+        gate_clock = SimpleNamespace(phase="reserve", reads=0)
+    
+        def gate_now_ns() -> int:
+            if gate_clock.phase == "reserve":
+                return 1_500
+            gate_clock.reads += 1
+            return 1_799 if gate_clock.reads == 1 else 1_800
+    
+        mapper = InstrumentRiskAdmissionMapper(
+            scope,
+            InstrumentRiskRegistry((metadata,)),
+            clock_ns=lambda: mapper_now_ns[0],
+            fx_rates_by_instrument=(fx_rate,),
+        )
+        gate = DurableRiskGate(
+            tmp_path / "fx-claim-cut.sqlite3",
+            RiskPolicy("fx-claim-cut-policy", Decimal("1000"), 3, notional_unit="USD"),
+            clock=lambda: 1_700_000_000.0,
+            clock_ns=gate_now_ns,
+        )
+        try:
+            permit = gate.reserve(mapper(_execution_shape(metadata, fx_rate)))
+            gate_clock.phase = "claim"
+            mapper_now_ns[0] = 1_799
+            claim_intent = mapper(_execution_shape(metadata, fx_rate))
+    
+            with pytest.raises(PermitInvalidError) as stale:
+                gate.claim_for_dispatch(permit.permit_id, claim_intent)
+    
+            assert stale.value.code == "INSTRUMENT_FACTS_STALE"
+>           assert gate_clock.reads == 2
+E           AssertionError: assert 3 == 2
+E            +  where 3 = namespace(phase='claim', reads=3).reads
+
+tests\test_instrument_fx_admission.py:393: AssertionError
+_ test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged __
+
+    def test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged() -> None:
+        metadata = InstrumentRiskMetadata(
+            instrument="fixture/legacy-contract",
+            metadata_version="legacy-v1",
+            as_of_ns=1_000,
+            expires_at_ns=2_000,
+            tick_size=Decimal("0.1"),
+            quantity_step=Decimal("0.25"),
+            contract_multiplier=Decimal("3"),
+            max_gross_notional=Decimal("1000"),
+            min_quantity=Decimal("0.5"),
+            max_quantity=Decimal("10"),
+            taker_fee_bps=Decimal("10"),
+            fixed_fee=Decimal("0.2"),
+            max_slippage_bps=Decimal("50"),
+        )
+        order = _order(metadata, None)
+        assessment = InstrumentRiskRegistry((metadata,)).assess(order, now_ns=1_500)
+    
+        old_metadata_payload = {
+            "as_of_ns": 1_000,
+            "contract_multiplier": "3",
+            "expires_at_ns": 2_000,
+            "fixed_fee": "0.2",
+            "instrument": "fixture/legacy-contract",
+            "max_gross_notional": "1000",
+            "max_quantity": "10",
+            "max_slippage_bps": "50",
+            "metadata_version": "legacy-v1",
+            "min_quantity": "0.5",
+            "quantity_step": "0.25",
+            "schema": "bt_api_risk.instrument-admission.v1",
+            "taker_fee_bps": "10",
+            "tick_size": "0.1",
+        }
+        old_metadata_digest = hashlib.sha256(
+            json.dumps(old_metadata_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        old_admission_payload = {
+            "gross_notional": "603.8030",
+            "intent_fingerprint": "b" * 64,
+            "metadata_digest": old_metadata_digest,
+            "quoted_notional": "600",
+            "schema": "bt_api_risk.instrument-admission.v1",
+            "worst_case_fee": "0.8030",
+            "worst_case_notional": "603.0",
+            "worst_case_price": "100.5",
+        }
+    
+        assert metadata.to_payload() == old_metadata_payload
+        assert metadata.digest == old_metadata_digest
+        assert assessment.gross_notional == Decimal("603.8030")
+>       assert assessment.bound_payload_fingerprint("b" * 64) == hashlib.sha256(
+            json.dumps(old_admission_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+E       AssertionError: assert 'd2e2d41272e4...178f1f20a3638' == 'c090e829e290...0534a8e092b8b'
+E         
+E         - c090e829e290e7cede37681f2eb5b8f32f5c801a2020e9b303e0534a8e092b8b
+E         + d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638
+
+tests\test_instrument_fx_admission.py:609: AssertionError
+- generated xml file: D:\bt_api_py\bt_api\bt_api_risk\.codex-tmp\iteration10-risk-fx-admission-20261016-r2\junit.xml -
+=========================== short test summary info ===========================
+FAILED ::test_dispatch_claim_rechecks_fx_at_the_final_gate_cut - AssertionErr...
+FAILED ::test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged
+======================== 2 failed, 23 passed in 1.79s =========================

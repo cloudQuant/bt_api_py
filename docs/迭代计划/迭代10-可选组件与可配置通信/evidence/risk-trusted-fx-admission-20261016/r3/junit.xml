@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="0.570" timestamp="2026-10-16T06:00:35.034567" hostname="yun"><testcase classname="" name="test_dispatch_claim_rechecks_fx_at_the_final_gate_cut" time="0.190" /><testcase classname="" name="test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them" time="0.177" /><testcase classname="" name="test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged" time="0.001"><failure message="AssertionError: assert 'd2e2d41272e4...178f1f20a3638' == 'c090e829e290...0534a8e092b8b'&#10;  &#10;  - c090e829e290e7cede37681f2eb5b8f32f5c801a2020e9b303e0534a8e092b8b&#10;  + d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638">def test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged() -&gt; None:
+        metadata = InstrumentRiskMetadata(
+            instrument="fixture/legacy-contract",
+            metadata_version="legacy-v1",
+            as_of_ns=1_000,
+            expires_at_ns=2_000,
+            tick_size=Decimal("0.1"),
+            quantity_step=Decimal("0.25"),
+            contract_multiplier=Decimal("3"),
+            max_gross_notional=Decimal("1000"),
+            min_quantity=Decimal("0.5"),
+            max_quantity=Decimal("10"),
+            taker_fee_bps=Decimal("10"),
+            fixed_fee=Decimal("0.2"),
+            max_slippage_bps=Decimal("50"),
+        )
+        order = _order(metadata, None)
+        assessment = InstrumentRiskRegistry((metadata,)).assess(order, now_ns=1_500)
+    
+        old_metadata_payload = {
+            "as_of_ns": 1_000,
+            "contract_multiplier": "3",
+            "expires_at_ns": 2_000,
+            "fixed_fee": "0.2",
+            "instrument": "fixture/legacy-contract",
+            "max_gross_notional": "1000",
+            "max_quantity": "10",
+            "max_slippage_bps": "50",
+            "metadata_version": "legacy-v1",
+            "min_quantity": "0.5",
+            "quantity_step": "0.25",
+            "schema": "bt_api_risk.instrument-admission.v1",
+            "taker_fee_bps": "10",
+            "tick_size": "0.1",
+        }
+        old_metadata_digest = hashlib.sha256(
+            json.dumps(old_metadata_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        old_admission_payload = {
+            "gross_notional": "603.8030",
+            "intent_fingerprint": "b" * 64,
+            "metadata_digest": old_metadata_digest,
+            "quoted_notional": "600",
+            "schema": "bt_api_risk.instrument-admission.v1",
+            "worst_case_fee": "0.8030",
+            "worst_case_notional": "603.0",
+            "worst_case_price": "100.5",
+        }
+    
+        assert metadata.to_payload() == old_metadata_payload
+        assert metadata.digest == old_metadata_digest
+        assert assessment.gross_notional == Decimal("603.8030")
+&gt;       assert assessment.bound_payload_fingerprint("b" * 64) == hashlib.sha256(
+            json.dumps(old_admission_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+E       AssertionError: assert 'd2e2d41272e4...178f1f20a3638' == 'c090e829e290...0534a8e092b8b'
+E         
+E         - c090e829e290e7cede37681f2eb5b8f32f5c801a2020e9b303e0534a8e092b8b
+E         + d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638
+
+tests\test_instrument_fx_admission.py:661: AssertionError</failure></testcase></testsuite></testsuites>

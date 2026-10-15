@@ -1,0 +1,91 @@
+{
+  "artifact_pins": [
+    {
+      "bytes": 10,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\pytest.ini",
+      "sha256": "578FC1CD12D8D642DF8EFF41D71D5119626E9F88F21FAFADBA6B1092AC840A93"
+    },
+    {
+      "bytes": 5900,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run.py",
+      "sha256": "E0F79AD062C0678371B00E28364B92061FF646E64D6FDE3C5559272E187FB02E"
+    },
+    {
+      "bytes": 4482,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run-pre.json",
+      "sha256": "27BF770D799696F6826C09DF76B67C942DF3A14717FE82D51F2C6AADE822DBAC"
+    },
+    {
+      "bytes": 3627,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\stdout.txt",
+      "sha256": "792D016154426640BA79B7350D1205497A4021EE90CBD2B9D46E386E719C4DBF"
+    },
+    {
+      "bytes": 0,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\stderr.txt",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "bytes": 3554,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\junit.xml",
+      "sha256": "8AB5C0A8A25202876C70DD4040647FC0B49B2A5ECE1A5FBA8EB7E2CA322CCF94"
+    },
+    {
+      "bytes": 3,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\exit-code.txt",
+      "sha256": "F1B2F662800122BED0FF255693DF89C4487FBDCF453D3524A42D4EC20C3D9C04"
+    }
+  ],
+  "base_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+  "base_repo": "D:\\bt_api_py\\bt_api\\bt_api_base",
+  "base_status": [],
+  "completed_at": "2026-10-15T22:00:36.117060+00:00",
+  "evidence_level": "PACKAGE_FOCUSED_UNIT_QA_ONLY",
+  "git_status": [
+    " M src/bt_api_risk/__init__.py",
+    " M src/bt_api_risk/allocation_sizing.py",
+    " M src/bt_api_risk/core/__init__.py",
+    " M src/bt_api_risk/core/admission.py",
+    " M src/bt_api_risk/core/instrument.py",
+    "?? .codex-tmp/",
+    "?? tests/test_instrument_fx_admission.py"
+  ],
+  "package_head": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+  "package_repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "pytest_exit_code": 1,
+  "source_pins": [
+    {
+      "bytes": 8011,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+      "sha256": "52DF4B679403C18B6FA25F97A4371DA84F2F7EFBB04612322D786D2221B85C52"
+    },
+    {
+      "bytes": 6153,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\allocation_sizing.py",
+      "sha256": "4EC0E5E0C16E43E9584A9D0AD8EC24BCA4FCB9265A1C7DEE2A92E591939AB4A2"
+    },
+    {
+      "bytes": 5184,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\__init__.py",
+      "sha256": "6BED992DE8F9B924A7568CE78640E6805E6C776CD70286EFF29430D5D64460D2"
+    },
+    {
+      "bytes": 437438,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+      "sha256": "8733C5E934529051FC37EC1A65881182E1FF98DB4FAA38C03F0939CDEB97B8C0"
+    },
+    {
+      "bytes": 56027,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+      "sha256": "D4D31088E77DB2A3FEA8C8B210D5C97B7AAA1AD23F9C8703737587382F4F8F44"
+    },
+    {
+      "bytes": 23842,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_instrument_fx_admission.py",
+      "sha256": "1D03F936C1AD5EF24A580134071B6D2A561FACE4B67439809675F694FC2F56F5"
+    }
+  ],
+  "source_pins_unchanged": true,
+  "stderr_sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+  "stdout_sha256": "792D016154426640BA79B7350D1205497A4021EE90CBD2B9D46E386E719C4DBF"
+}

@@ -1,0 +1,452 @@
+{
+  "accepted_round_scope": [
+    "src/bt_api_risk/__init__.py",
+    "src/bt_api_risk/allocation_sizing.py",
+    "src/bt_api_risk/core/__init__.py",
+    "src/bt_api_risk/core/admission.py",
+    "src/bt_api_risk/core/instrument.py",
+    "tests/test_instrument_fx_admission.py"
+  ],
+  "coverage_by_changed_node": [
+    {
+      "assertion": "Freshness expires at the pre-insert check after the verified third gate ns read, including _expire_active.",
+      "node": "tests/test_instrument_fx_admission.py::test_dispatch_claim_rechecks_fx_at_the_final_gate_cut",
+      "qa_round": "r3",
+      "result": "passed"
+    },
+    {
+      "assertion": "The wrapper observes real claim and active freeze rows in the same transaction before advancing to expiry; a fresh connection confirms both rows rolled back and dispatch binding rejects.",
+      "node": "tests/test_instrument_fx_admission.py::test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them",
+      "qa_round": "r3",
+      "result": "passed"
+    },
+    {
+      "assertion": "Exact legacy metadata payload/digest and HEAD public admission fingerprint are preserved.",
+      "node": "tests/test_instrument_fx_admission.py::test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged",
+      "qa_round": "r4",
+      "result": "passed"
+    }
+  ],
+  "created_at_utc": "2026-10-15T22:12:01.463752+00:00",
+  "delivery_state": "ready_for_parent_scoped_commit",
+  "evidence_level": "PACKAGE_FOCUSED_UNIT_QA_ONLY",
+  "final_source_pins": [
+    {
+      "bytes": 8011,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+      "sha256": "52DF4B679403C18B6FA25F97A4371DA84F2F7EFBB04612322D786D2221B85C52"
+    },
+    {
+      "bytes": 6153,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\allocation_sizing.py",
+      "sha256": "4EC0E5E0C16E43E9584A9D0AD8EC24BCA4FCB9265A1C7DEE2A92E591939AB4A2"
+    },
+    {
+      "bytes": 5184,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\__init__.py",
+      "sha256": "6BED992DE8F9B924A7568CE78640E6805E6C776CD70286EFF29430D5D64460D2"
+    },
+    {
+      "bytes": 437438,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+      "sha256": "8733C5E934529051FC37EC1A65881182E1FF98DB4FAA38C03F0939CDEB97B8C0"
+    },
+    {
+      "bytes": 56027,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+      "sha256": "D4D31088E77DB2A3FEA8C8B210D5C97B7AAA1AD23F9C8703737587382F4F8F44"
+    },
+    {
+      "bytes": 24054,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_instrument_fx_admission.py",
+      "sha256": "3400CF8F1DD9EC322F30BE422E452D83DB35CBF6EAFFA026C0B60A97D14E9276"
+    }
+  ],
+  "legacy_head_comparison": {
+    "artifact_directory": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-legacy-compare-20261016-r1",
+    "comparison_record": {
+      "bytes": 4934,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-legacy-compare-20261016-r1\\comparison.json",
+      "sha256": "8247A8ABF634A80D57EE43A9D680F4992285ECA1FBE4F30903DBD6F36C208EC8"
+    },
+    "evidence_level": "FIXED_HEAD_PUBLIC_API_COMPATIBILITY_DIAGNOSTIC_ONLY",
+    "finding": "The old test's .8030/603.8030 fingerprint text was not emitted by HEAD; old and current public API both emit .803/603.803 and the same fingerprint. The test oracle, not production arithmetic, was corrected.",
+    "head_instrument_source": {
+      "bytes": 41116,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-legacy-compare-20261016-r1\\head-source\\src\\bt_api_risk\\core\\instrument.py",
+      "sha256": "059F5E7A20D2652BBE2D041A3FFD7CB7A595E3E20ED17773C898CDC420017116"
+    },
+    "head_result": {
+      "admission_fingerprint": "d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638",
+      "gross_notional": "603.803",
+      "worst_case_fee": "0.803"
+    },
+    "same_public_result": true,
+    "working_instrument_source": {
+      "bytes": 56027,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+      "sha256": "D4D31088E77DB2A3FEA8C8B210D5C97B7AAA1AD23F9C8703737587382F4F8F44"
+    },
+    "working_tree_result": {
+      "admission_fingerprint": "d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638",
+      "gross_notional": "603.803",
+      "worst_case_fee": "0.803"
+    }
+  },
+  "limitations": [
+    "There is no single 25/25 test invocation. R2 remains 23/25; later narrow runs separately cover the affected nodes.",
+    "The R2 23 passing tests ran before the final no-FX Decimal precision tuple adjustment; they remain historical evidence at the R2 source pin, not a blanket claim for the final pin.",
+    "No Host, provider, account, or real-account acceptance was run; this package unit evidence does not increase formal case counts."
+  ],
+  "qa_rounds": [
+    {
+      "argv": [
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-p",
+        "no:cacheprovider",
+        "-c",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\pytest.ini",
+        "--junitxml=D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\junit.xml",
+        "tests/test_instrument_fx_admission.py"
+      ],
+      "artifact_directory": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2",
+      "artifacts": {
+        "exit_code": {
+          "bytes": 3,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\exit-code.txt",
+          "sha256": "F1B2F662800122BED0FF255693DF89C4487FBDCF453D3524A42D4EC20C3D9C04"
+        },
+        "junit": {
+          "bytes": 8064,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\junit.xml",
+          "sha256": "3B3A1D7B5BE924159A9A5B7B21094CA7B87B28DDC1FA5C022B69C2A95E74CB9C"
+        },
+        "post": {
+          "bytes": 3322,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\run-post.json",
+          "sha256": "A2028E6E6D3FC2E7181B8F4CB89C961257E7149CFE914ACF2ECA511BAE9CFC75"
+        },
+        "pre": {
+          "bytes": 2202,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\run-pre.json",
+          "sha256": "2E207C364428085F757A70232BE1B4D9E7FCAE84BB1140A458849315FA71B1E3"
+        },
+        "pytest_config": {
+          "bytes": 10,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\pytest.ini",
+          "sha256": "578FC1CD12D8D642DF8EFF41D71D5119626E9F88F21FAFADBA6B1092AC840A93"
+        },
+        "stderr": {
+          "bytes": 0,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\stderr.txt",
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        },
+        "stdout": {
+          "bytes": 5681,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\stdout.txt",
+          "sha256": "F46200A1B6E0BFD07B5F2FF60D8C719742C809708C7595BAAF706B8080B0B703"
+        }
+      },
+      "counts": {
+        "collected": 25,
+        "failed": 2,
+        "passed": 23
+      },
+      "cwd": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "environment": {
+        "PYTEST_ADDOPTS": "",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTEST_PLUGINS": "",
+        "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src"
+      },
+      "id": "r2",
+      "interpretation": "One stale-cut node asserted two clock reads but observed three (Root confirmed the extra _expire_active sample); one legacy fingerprint node used incorrect trailing-zero text. Neither is represented as a pass in this run.",
+      "pytest_exit_code": 1,
+      "source_pins": [
+        [
+          {
+            "bytes": 8011,
+            "path": "src/bt_api_risk/__init__.py",
+            "sha256": "52DF4B679403C18B6FA25F97A4371DA84F2F7EFBB04612322D786D2221B85C52"
+          },
+          {
+            "bytes": 6153,
+            "path": "src/bt_api_risk/allocation_sizing.py",
+            "sha256": "4EC0E5E0C16E43E9584A9D0AD8EC24BCA4FCB9265A1C7DEE2A92E591939AB4A2"
+          },
+          {
+            "bytes": 5184,
+            "path": "src/bt_api_risk/core/__init__.py",
+            "sha256": "6BED992DE8F9B924A7568CE78640E6805E6C776CD70286EFF29430D5D64460D2"
+          },
+          {
+            "bytes": 437438,
+            "path": "src/bt_api_risk/core/admission.py",
+            "sha256": "8733C5E934529051FC37EC1A65881182E1FF98DB4FAA38C03F0939CDEB97B8C0"
+          },
+          {
+            "bytes": 55993,
+            "path": "src/bt_api_risk/core/instrument.py",
+            "sha256": "7F49E016AB199E407F37BAA51F41FAE0BE505A03352A182621D9016F415529AA"
+          },
+          {
+            "bytes": 21641,
+            "path": "tests/test_instrument_fx_admission.py",
+            "sha256": "721338D951B2BDFA7FA866CA5B7783BE61DF6B4539217420F73253CDD0A38FCC"
+          }
+        ]
+      ],
+      "source_pins_unchanged": true,
+      "summary": "Broad focused FX module run; original failure evidence retained."
+    },
+    {
+      "argv": [
+        "C:\\anaconda3\\python.exe",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-p",
+        "no:cacheprovider",
+        "-c",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\pytest.ini",
+        "--junitxml=D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\junit.xml",
+        "tests/test_instrument_fx_admission.py::test_dispatch_claim_rechecks_fx_at_the_final_gate_cut",
+        "tests/test_instrument_fx_admission.py::test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them",
+        "tests/test_instrument_fx_admission.py::test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged"
+      ],
+      "artifact_directory": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3",
+      "artifacts": {
+        "exit_code": {
+          "bytes": 3,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\exit-code.txt",
+          "sha256": "F1B2F662800122BED0FF255693DF89C4487FBDCF453D3524A42D4EC20C3D9C04"
+        },
+        "junit": {
+          "bytes": 3554,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\junit.xml",
+          "sha256": "8AB5C0A8A25202876C70DD4040647FC0B49B2A5ECE1A5FBA8EB7E2CA322CCF94"
+        },
+        "post": {
+          "bytes": 3927,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run-post.json",
+          "sha256": "F722476B9FCEC86B50FF8F37F34EF6256991C34CDA9DFC182ADF0B14CBFFA325"
+        },
+        "pre": {
+          "bytes": 4482,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run-pre.json",
+          "sha256": "27BF770D799696F6826C09DF76B67C942DF3A14717FE82D51F2C6AADE822DBAC"
+        },
+        "pytest_config": {
+          "bytes": 10,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\pytest.ini",
+          "sha256": "578FC1CD12D8D642DF8EFF41D71D5119626E9F88F21FAFADBA6B1092AC840A93"
+        },
+        "runner": {
+          "bytes": 5900,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run.py",
+          "sha256": "E0F79AD062C0678371B00E28364B92061FF646E64D6FDE3C5559272E187FB02E"
+        },
+        "stderr": {
+          "bytes": 0,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\stderr.txt",
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        },
+        "stdout": {
+          "bytes": 3627,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\stdout.txt",
+          "sha256": "792D016154426640BA79B7350D1205497A4021EE90CBD2B9D46E386E719C4DBF"
+        }
+      },
+      "counts": {
+        "collected": 3,
+        "failed": 1,
+        "passed": 2
+      },
+      "cwd": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "environment": {
+        "PATH_sha256": "88D1C8D8893A6CEC7DFB98B07AA87A26718C84EA3A98903109ED7C957B3D4CF5",
+        "PYTEST_ADDOPTS": "",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTEST_PLUGINS": "",
+        "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+        "SystemRoot": null,
+        "TEMP": "C:\\Users\\yunji\\AppData\\Local\\Temp",
+        "TMP": "C:\\Users\\yunji\\AppData\\Local\\Temp",
+        "inherited_environment_sha256": "51306D081BF1F59074C0FEF510843DFC5C192039493C8146722F49A4B5989618"
+      },
+      "id": "r3",
+      "interpretation": "The two passes cover pre-insert expiry and actual claim-plus-freeze rollback. The remaining failure was the legacy test's inaccurate trailing-zero oracle, later checked against fixed HEAD public code.",
+      "pytest_exit_code": 1,
+      "source_pins": [
+        {
+          "bytes": 8011,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+          "sha256": "52DF4B679403C18B6FA25F97A4371DA84F2F7EFBB04612322D786D2221B85C52"
+        },
+        {
+          "bytes": 6153,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\allocation_sizing.py",
+          "sha256": "4EC0E5E0C16E43E9584A9D0AD8EC24BCA4FCB9265A1C7DEE2A92E591939AB4A2"
+        },
+        {
+          "bytes": 5184,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\__init__.py",
+          "sha256": "6BED992DE8F9B924A7568CE78640E6805E6C776CD70286EFF29430D5D64460D2"
+        },
+        {
+          "bytes": 437438,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+          "sha256": "8733C5E934529051FC37EC1A65881182E1FF98DB4FAA38C03F0939CDEB97B8C0"
+        },
+        {
+          "bytes": 56027,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+          "sha256": "D4D31088E77DB2A3FEA8C8B210D5C97B7AAA1AD23F9C8703737587382F4F8F44"
+        },
+        {
+          "bytes": 23842,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_instrument_fx_admission.py",
+          "sha256": "1D03F936C1AD5EF24A580134071B6D2A561FACE4B67439809675F694FC2F56F5"
+        }
+      ],
+      "source_pins_unchanged": true,
+      "summary": "Three-node repair focus on current FX source; transaction nodes passed, old legacy oracle failed."
+    },
+    {
+      "argv": [
+        "C:\\anaconda3\\python.exe",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-p",
+        "no:cacheprovider",
+        "-c",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\pytest.ini",
+        "--junitxml=D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\junit.xml",
+        "tests/test_instrument_fx_admission.py::test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged"
+      ],
+      "artifact_directory": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4",
+      "artifacts": {
+        "exit_code": {
+          "bytes": 3,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\exit-code.txt",
+          "sha256": "13BF7B3039C63BF5A50491FA3CFD8EB4E699D1BA1436315AEF9CBE5711530354"
+        },
+        "junit": {
+          "bytes": 333,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\junit.xml",
+          "sha256": "F8CF01C4502A6BD6E7DB1A1B41176AABFF6297BCCC6F50B2758A30615B560D33"
+        },
+        "post": {
+          "bytes": 3925,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\run-post.json",
+          "sha256": "85DEF936BF857CCFFB0D42D6F403A936DC0718CBC3A024CE8D2E92067EAB9765"
+        },
+        "pre": {
+          "bytes": 4052,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\run-pre.json",
+          "sha256": "41919BA4C0CBF7142573D958BC66B37B4DAF3E22E55EB5FE0DEE26EB21D6AC8C"
+        },
+        "pytest_config": {
+          "bytes": 10,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\pytest.ini",
+          "sha256": "578FC1CD12D8D642DF8EFF41D71D5119626E9F88F21FAFADBA6B1092AC840A93"
+        },
+        "runner": {
+          "bytes": 5689,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\run.py",
+          "sha256": "1F30B6B716C0922F2648C054C9CD0982E528F5447F5947869AB2AC63847D8E96"
+        },
+        "stderr": {
+          "bytes": 0,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\stderr.txt",
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        },
+        "stdout": {
+          "bytes": 565,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\stdout.txt",
+          "sha256": "1C0FEC3A4289898B19224C7C48F474BBDC1A5D34395D5EDF07C1EF694D51E308"
+        }
+      },
+      "counts": {
+        "collected": 1,
+        "failed": 0,
+        "passed": 1
+      },
+      "cwd": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "environment": {
+        "PATH_sha256": "88D1C8D8893A6CEC7DFB98B07AA87A26718C84EA3A98903109ED7C957B3D4CF5",
+        "PYTEST_ADDOPTS": "",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTEST_PLUGINS": "",
+        "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+        "SystemRoot": null,
+        "TEMP": "C:\\Users\\yunji\\AppData\\Local\\Temp",
+        "TMP": "C:\\Users\\yunji\\AppData\\Local\\Temp",
+        "inherited_environment_sha256": "51306D081BF1F59074C0FEF510843DFC5C192039493C8146722F49A4B5989618"
+      },
+      "id": "r4",
+      "pytest_exit_code": 0,
+      "source_pins": [
+        {
+          "bytes": 8011,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+          "sha256": "52DF4B679403C18B6FA25F97A4371DA84F2F7EFBB04612322D786D2221B85C52"
+        },
+        {
+          "bytes": 6153,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\allocation_sizing.py",
+          "sha256": "4EC0E5E0C16E43E9584A9D0AD8EC24BCA4FCB9265A1C7DEE2A92E591939AB4A2"
+        },
+        {
+          "bytes": 5184,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\__init__.py",
+          "sha256": "6BED992DE8F9B924A7568CE78640E6805E6C776CD70286EFF29430D5D64460D2"
+        },
+        {
+          "bytes": 437438,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+          "sha256": "8733C5E934529051FC37EC1A65881182E1FF98DB4FAA38C03F0939CDEB97B8C0"
+        },
+        {
+          "bytes": 56027,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+          "sha256": "D4D31088E77DB2A3FEA8C8B210D5C97B7AAA1AD23F9C8703737587382F4F8F44"
+        },
+        {
+          "bytes": 24054,
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_instrument_fx_admission.py",
+          "sha256": "3400CF8F1DD9EC322F30BE422E452D83DB35CBF6EAFFA026C0B60A97D14E9276"
+        }
+      ],
+      "source_pins_unchanged": true,
+      "summary": "Single changed legacy compatibility node on final six-file pins."
+    }
+  ],
+  "repository": {
+    "base_dependency": {
+      "head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "status": "clean"
+    },
+    "branch": "dev",
+    "head": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+    "index": "not staged by this task",
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_risk"
+  },
+  "schema": "iteration10-risk-fx-admission-delivery-assessment/v1",
+  "staged_or_committed_by_this_task": false,
+  "static_review": {
+    "no_tests_imports_or_hosts_by_reviewer": true,
+    "result": "GO",
+    "reviewed_test_pin": {
+      "bytes": 24054,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_instrument_fx_admission.py",
+      "sha256": "3400CF8F1DD9EC322F30BE422E452D83DB35CBF6EAFFA026C0B60A97D14E9276"
+    },
+    "reviewer": "trn02_acceptance",
+    "scope": "final six source/test pins; source pin review plus final test-only oracle review"
+  }
+}

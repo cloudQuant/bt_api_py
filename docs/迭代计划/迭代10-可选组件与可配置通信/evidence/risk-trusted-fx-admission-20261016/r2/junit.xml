@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="25" time="1.326" timestamp="2026-10-16T05:53:38.761794" hostname="yun"><testcase classname="" name="test_cross_currency_assessment_keeps_quote_price_and_converts_all_costs[3-USD-3.4824-485.8824]" time="0.002" /><testcase classname="" name="test_cross_currency_assessment_keeps_quote_price_and_converts_all_costs[30-EUR-24.4824-506.8824]" time="0.001" /><testcase classname="" name="test_fx_facts_are_immutable_and_bind_all_source_fields" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides0-rate]" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides1-rate]" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides2-rate]" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides3-observed_at_ns]" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides4-valid_until_ns]" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides5-source_revision]" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides6-source_record_sha256]" time="0.001" /><testcase classname="" name="test_fx_fact_rejects_malformed_values[overrides7-cross-currency]" time="0.001" /><testcase classname="" name="test_cross_currency_nonzero_fixed_fee_requires_a_declared_unit" time="0.001" /><testcase classname="" name="test_cross_currency_gross_limit_is_checked_in_valuation_unit" time="0.001" /><testcase classname="" name="test_registry_rejects_missing_mismatched_or_stale_fx[None-1500-INSTRUMENT_FX_REQUIRED]" time="0.001" /><testcase classname="" name="test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate1-1500-INSTRUMENT_FX_PAIR_MISMATCH]" time="0.004" /><testcase classname="" name="test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate2-1500-INSTRUMENT_FX_SOURCE_MISMATCH]" time="0.003" /><testcase classname="" name="test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate3-1500-INSTRUMENT_FX_STALE]" time="0.001" /><testcase classname="" name="test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate4-1500-INSTRUMENT_FX_STALE]" time="0.001" /><testcase classname="" name="test_mapper_requires_exact_trusted_fx_object_and_binds_fact_to_risk_intent" time="0.001" /><testcase classname="" name="test_claim_rechecks_fx_freshness_before_creating_a_dispatch_claim" time="0.253" /><testcase classname="" name="test_reserve_rechecks_fx_at_the_risk_transaction_cut" time="0.160" /><testcase classname="" name="test_dispatch_claim_rechecks_fx_at_the_final_gate_cut" time="0.167"><failure message="AssertionError: assert 3 == 2&#10; +  where 3 = namespace(phase='claim', reads=3).reads">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-920/test_dispatch_claim_rechecks_f0')
+
+    def test_dispatch_claim_rechecks_fx_at_the_final_gate_cut(tmp_path) -&gt; None:
+        metadata = _metadata()
+        fx_rate = _fx_rate()
+        scope = AccountScope("fixture", "risk-account", "sandbox")
+        mapper_now_ns = [1_500]
+        gate_clock = SimpleNamespace(phase="reserve", reads=0)
+    
+        def gate_now_ns() -&gt; int:
+            if gate_clock.phase == "reserve":
+                return 1_500
+            gate_clock.reads += 1
+            return 1_799 if gate_clock.reads == 1 else 1_800
+    
+        mapper = InstrumentRiskAdmissionMapper(
+            scope,
+            InstrumentRiskRegistry((metadata,)),
+            clock_ns=lambda: mapper_now_ns[0],
+            fx_rates_by_instrument=(fx_rate,),
+        )
+        gate = DurableRiskGate(
+            tmp_path / "fx-claim-cut.sqlite3",
+            RiskPolicy("fx-claim-cut-policy", Decimal("1000"), 3, notional_unit="USD"),
+            clock=lambda: 1_700_000_000.0,
+            clock_ns=gate_now_ns,
+        )
+        try:
+            permit = gate.reserve(mapper(_execution_shape(metadata, fx_rate)))
+            gate_clock.phase = "claim"
+            mapper_now_ns[0] = 1_799
+            claim_intent = mapper(_execution_shape(metadata, fx_rate))
+    
+            with pytest.raises(PermitInvalidError) as stale:
+                gate.claim_for_dispatch(permit.permit_id, claim_intent)
+    
+            assert stale.value.code == "INSTRUMENT_FACTS_STALE"
+&gt;           assert gate_clock.reads == 2
+E           AssertionError: assert 3 == 2
+E            +  where 3 = namespace(phase='claim', reads=3).reads
+
+tests\test_instrument_fx_admission.py:393: AssertionError</failure></testcase><testcase classname="" name="test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them" time="0.179" /><testcase classname="" name="test_live_gross_claim_rechecks_fx_after_final_exposure_scan" time="0.225" /><testcase classname="" name="test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged" time="0.001"><failure message="AssertionError: assert 'd2e2d41272e4...178f1f20a3638' == 'c090e829e290...0534a8e092b8b'&#10;  &#10;  - c090e829e290e7cede37681f2eb5b8f32f5c801a2020e9b303e0534a8e092b8b&#10;  + d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638">def test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged() -&gt; None:
+        metadata = InstrumentRiskMetadata(
+            instrument="fixture/legacy-contract",
+            metadata_version="legacy-v1",
+            as_of_ns=1_000,
+            expires_at_ns=2_000,
+            tick_size=Decimal("0.1"),
+            quantity_step=Decimal("0.25"),
+            contract_multiplier=Decimal("3"),
+            max_gross_notional=Decimal("1000"),
+            min_quantity=Decimal("0.5"),
+            max_quantity=Decimal("10"),
+            taker_fee_bps=Decimal("10"),
+            fixed_fee=Decimal("0.2"),
+            max_slippage_bps=Decimal("50"),
+        )
+        order = _order(metadata, None)
+        assessment = InstrumentRiskRegistry((metadata,)).assess(order, now_ns=1_500)
+    
+        old_metadata_payload = {
+            "as_of_ns": 1_000,
+            "contract_multiplier": "3",
+            "expires_at_ns": 2_000,
+            "fixed_fee": "0.2",
+            "instrument": "fixture/legacy-contract",
+            "max_gross_notional": "1000",
+            "max_quantity": "10",
+            "max_slippage_bps": "50",
+            "metadata_version": "legacy-v1",
+            "min_quantity": "0.5",
+            "quantity_step": "0.25",
+            "schema": "bt_api_risk.instrument-admission.v1",
+            "taker_fee_bps": "10",
+            "tick_size": "0.1",
+        }
+        old_metadata_digest = hashlib.sha256(
+            json.dumps(old_metadata_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        old_admission_payload = {
+            "gross_notional": "603.8030",
+            "intent_fingerprint": "b" * 64,
+            "metadata_digest": old_metadata_digest,
+            "quoted_notional": "600",
+            "schema": "bt_api_risk.instrument-admission.v1",
+            "worst_case_fee": "0.8030",
+            "worst_case_notional": "603.0",
+            "worst_case_price": "100.5",
+        }
+    
+        assert metadata.to_payload() == old_metadata_payload
+        assert metadata.digest == old_metadata_digest
+        assert assessment.gross_notional == Decimal("603.8030")
+&gt;       assert assessment.bound_payload_fingerprint("b" * 64) == hashlib.sha256(
+            json.dumps(old_admission_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+E       AssertionError: assert 'd2e2d41272e4...178f1f20a3638' == 'c090e829e290...0534a8e092b8b'
+E         
+E         - c090e829e290e7cede37681f2eb5b8f32f5c801a2020e9b303e0534a8e092b8b
+E         + d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638
+
+tests\test_instrument_fx_admission.py:609: AssertionError</failure></testcase></testsuite></testsuites>

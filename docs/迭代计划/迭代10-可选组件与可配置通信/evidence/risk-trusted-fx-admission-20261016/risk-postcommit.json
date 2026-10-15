@@ -1,0 +1,135 @@
+{
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "parent": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+  "independent_static_review": "GO",
+  "source_sha256": {
+    "src/bt_api_risk/__init__.py": "52df4b679403c18b6fa25f97a4371da84f2f7efbb04612322d786d2221b85c52",
+    "src/bt_api_risk/allocation_sizing.py": "4ec0e5e0c16e43e9584a9d0ad8ec24bca4fcb9265a1c7dee2a92e591939ab4a2",
+    "src/bt_api_risk/core/__init__.py": "6bed992de8f9b924a7568ce78640e6805e6c776cd70286eff29430d5d64460d2",
+    "src/bt_api_risk/core/admission.py": "8733c5e934529051fc37ec1a65881182e1ff98db4faa38c03f0939cdeb97b8c0",
+    "src/bt_api_risk/core/instrument.py": "d4d31088e77db2a3fea8c8b210d5c97b7aaa1ad23f9c8703737587382f4f8f44",
+    "tests/test_instrument_fx_admission.py": "3400cf8f1dd9ec322f30be422e452d83db35cbf6eaffa026c0b60a97d14e9276"
+  },
+  "evidence_sha256": {
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-delivery-assessment-20261016.json": "bf32a2781637155582a10b35a8f17fea40e3ce60becad47255d1a29c9e011d17",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\exit-code.txt": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\junit.xml": "3b3a1d7b5be924159a9a5b7b21094ca7b87b28ddc1fa5c022b69c2a95e74cb9c",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\run-post.json": "a2028e6e6d3fc2e7181b8f4cb89c961257e7149cfe914acf2eca511bae9cfc75",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\run-pre.json": "2e207c364428085f757a70232be1b4d9e7fcae84bb1140a458849315fa71b1e3",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\pytest.ini": "578fc1cd12d8d642df8eff41d71d5119626e9f88f21fafadba6b1092ac840a93",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\stdout.txt": "f46200a1b6e0bfd07b5f2ff60d8c719742c809708c7595baaf706b8080b0b703",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\exit-code.txt": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\junit.xml": "8ab5c0a8a25202876c70dd4040647fc0b49b2a5ece1a5fba8eb7e2ca322ccf94",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run-post.json": "f722476b9fcec86b50ff8f37f34ef6256991c34cda9dfc182adf0b14cbffa325",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run-pre.json": "27bf770d799696f6826c09df76b67c942df3a14717fe82d51f2c6aade822dbac",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\pytest.ini": "578fc1cd12d8d642df8eff41d71d5119626e9f88f21fafadba6b1092ac840a93",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run.py": "e0f79ad062c0678371b00e28364b92061ff646e64d6fde3c5559272e187fb02e",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\stdout.txt": "792d016154426640ba79b7350d1205497a4021ee90cbd2b9d46e386e719c4dbf",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\junit.xml": "f8cf01c4502a6bd6e7db1a1b41176aabff6297bccc6f50b2758a30615b560d33",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\run-post.json": "85def936bf857ccffb0d42d6f403a936dc0718cbc3a024ce8d2e92067eab9765",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\run-pre.json": "41919ba4c0cbf7142573d958bc66b37b4daf3e22e55eb5fe0dee26eb21d6ac8c",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\pytest.ini": "578fc1cd12d8d642df8eff41d71d5119626e9f88f21fafadba6b1092ac840a93",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\run.py": "1f30b6b716c0922f2648c054c9cd0982e528f5447f5947869ab2ac63847d8e96",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\stdout.txt": "1c0fec3a4289898b19224c7c48f474bbdc1a5d34395d5edf07c1ef694d51e308",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-legacy-compare-20261016-r1\\comparison.json": "8247a8abf634a80d57ee43a9d680f4992285eca1fbe4f30903dbd6f36c208ec8"
+  },
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-round138-risk-postcommit.json",
+  "junit": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r4\\junit.xml",
+  "tests_passed": 1,
+  "message": "feat(risk): bind trusted FX valuation and transaction freshness",
+  "allowed_blank_at_eof": {
+    "tests/test_instrument_fx_admission.py": 1
+  },
+  "acceptance_level": "AUTHOR_PACKAGE_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "separate_rounds": [
+    {
+      "id": "r2",
+      "counts": {
+        "collected": 25,
+        "failed": 2,
+        "passed": 23
+      },
+      "passed_nodes": [
+        "::test_cross_currency_assessment_keeps_quote_price_and_converts_all_costs[3-USD-3.4824-485.8824]",
+        "::test_cross_currency_assessment_keeps_quote_price_and_converts_all_costs[30-EUR-24.4824-506.8824]",
+        "::test_fx_facts_are_immutable_and_bind_all_source_fields",
+        "::test_fx_fact_rejects_malformed_values[overrides0-rate]",
+        "::test_fx_fact_rejects_malformed_values[overrides1-rate]",
+        "::test_fx_fact_rejects_malformed_values[overrides2-rate]",
+        "::test_fx_fact_rejects_malformed_values[overrides3-observed_at_ns]",
+        "::test_fx_fact_rejects_malformed_values[overrides4-valid_until_ns]",
+        "::test_fx_fact_rejects_malformed_values[overrides5-source_revision]",
+        "::test_fx_fact_rejects_malformed_values[overrides6-source_record_sha256]",
+        "::test_fx_fact_rejects_malformed_values[overrides7-cross-currency]",
+        "::test_cross_currency_nonzero_fixed_fee_requires_a_declared_unit",
+        "::test_cross_currency_gross_limit_is_checked_in_valuation_unit",
+        "::test_registry_rejects_missing_mismatched_or_stale_fx[None-1500-INSTRUMENT_FX_REQUIRED]",
+        "::test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate1-1500-INSTRUMENT_FX_PAIR_MISMATCH]",
+        "::test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate2-1500-INSTRUMENT_FX_SOURCE_MISMATCH]",
+        "::test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate3-1500-INSTRUMENT_FX_STALE]",
+        "::test_registry_rejects_missing_mismatched_or_stale_fx[fx_rate4-1500-INSTRUMENT_FX_STALE]",
+        "::test_mapper_requires_exact_trusted_fx_object_and_binds_fact_to_risk_intent",
+        "::test_claim_rechecks_fx_freshness_before_creating_a_dispatch_claim",
+        "::test_reserve_rechecks_fx_at_the_risk_transaction_cut",
+        "::test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them",
+        "::test_live_gross_claim_rechecks_fx_after_final_exposure_scan"
+      ]
+    },
+    {
+      "id": "r3",
+      "counts": {
+        "collected": 3,
+        "failed": 1,
+        "passed": 2
+      },
+      "passed_nodes": [
+        "::test_dispatch_claim_rechecks_fx_at_the_final_gate_cut",
+        "::test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them"
+      ]
+    },
+    {
+      "id": "r4",
+      "counts": {
+        "collected": 1,
+        "failed": 0,
+        "passed": 1
+      },
+      "passed_nodes": [
+        "::test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged"
+      ]
+    }
+  ],
+  "limitations": [
+    "There is no single 25/25 test invocation. R2 remains 23/25; later narrow runs separately cover the affected nodes.",
+    "The R2 23 passing tests ran before the final no-FX Decimal precision tuple adjustment; they remain historical evidence at the R2 source pin, not a blanket claim for the final pin.",
+    "No Host, provider, account, or real-account acceptance was run; this package unit evidence does not increase formal case counts."
+  ],
+  "paths": [
+    "src/bt_api_risk/__init__.py",
+    "src/bt_api_risk/allocation_sizing.py",
+    "src/bt_api_risk/core/__init__.py",
+    "src/bt_api_risk/core/admission.py",
+    "src/bt_api_risk/core/instrument.py",
+    "tests/test_instrument_fx_admission.py"
+  ],
+  "filtered_blob_ids": {
+    "src/bt_api_risk/__init__.py": "b73c4b2005011aa8045f5a995fd550c194c720a6",
+    "src/bt_api_risk/allocation_sizing.py": "9d6e49ff311450d9239e040859c1551d7ea623da",
+    "src/bt_api_risk/core/__init__.py": "5d63cb23bcadb380b2a735cf86cd2698c0f24905",
+    "src/bt_api_risk/core/admission.py": "157cfa01d2c6c201d7fe3b3f205ef5324a484cf6",
+    "src/bt_api_risk/core/instrument.py": "34f3e4aa115b9c08fe63d4dce80e5bd638b1e588",
+    "tests/test_instrument_fx_admission.py": "4aea3a40d12aa4cdecad65137c7ceb43bb06a962"
+  },
+  "unrelated_paths": [],
+  "unrelated_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "unrelated_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "head": "c6fcacda5efb5153d8c3e2be7b17f335f2732a9e",
+  "index_empty": true,
+  "unrelated_tracked_preserved": true,
+  "unrelated_untracked_sha256": {},
+  "unrelated_untracked_preserved": true
+}

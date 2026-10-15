@@ -1,0 +1,98 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-c",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\pytest.ini",
+    "--junitxml=D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\junit.xml",
+    "tests/test_instrument_fx_admission.py::test_dispatch_claim_rechecks_fx_at_the_final_gate_cut",
+    "tests/test_instrument_fx_admission.py::test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them",
+    "tests/test_instrument_fx_admission.py::test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged"
+  ],
+  "base_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+  "base_repo": "D:\\bt_api_py\\bt_api\\bt_api_base",
+  "base_status": [],
+  "cwd": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "environment": {
+    "PATH_sha256": "88D1C8D8893A6CEC7DFB98B07AA87A26718C84EA3A98903109ED7C957B3D4CF5",
+    "PYTEST_ADDOPTS": "",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTEST_PLUGINS": "",
+    "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "SystemRoot": null,
+    "TEMP": "C:\\Users\\yunji\\AppData\\Local\\Temp",
+    "TMP": "C:\\Users\\yunji\\AppData\\Local\\Temp",
+    "inherited_environment_sha256": "51306D081BF1F59074C0FEF510843DFC5C192039493C8146722F49A4B5989618"
+  },
+  "evidence_level": "PACKAGE_FOCUSED_UNIT_QA_ONLY",
+  "git_status": [
+    " M src/bt_api_risk/__init__.py",
+    " M src/bt_api_risk/allocation_sizing.py",
+    " M src/bt_api_risk/core/__init__.py",
+    " M src/bt_api_risk/core/admission.py",
+    " M src/bt_api_risk/core/instrument.py",
+    "?? .codex-tmp/",
+    "?? tests/test_instrument_fx_admission.py"
+  ],
+  "package_branch": "dev",
+  "package_head": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+  "package_repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "pytest_config_pin": {
+    "bytes": 10,
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\pytest.ini",
+    "sha256": "578FC1CD12D8D642DF8EFF41D71D5119626E9F88F21FAFADBA6B1092AC840A93"
+  },
+  "python_executable": "C:\\anaconda3\\python.exe",
+  "python_version": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+  "runner_argv": [
+    "C:\\anaconda3\\python.exe",
+    ".codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run.py"
+  ],
+  "runner_pin": {
+    "bytes": 5900,
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r3\\run.py",
+    "sha256": "E0F79AD062C0678371B00E28364B92061FF646E64D6FDE3C5559272E187FB02E"
+  },
+  "selected_nodes": [
+    "tests/test_instrument_fx_admission.py::test_dispatch_claim_rechecks_fx_at_the_final_gate_cut",
+    "tests/test_instrument_fx_admission.py::test_expiry_after_dispatch_claim_and_freeze_writes_rolls_back_them",
+    "tests/test_instrument_fx_admission.py::test_legacy_same_currency_metadata_and_admission_fingerprint_are_unchanged"
+  ],
+  "source_pins": [
+    {
+      "bytes": 8011,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\__init__.py",
+      "sha256": "52DF4B679403C18B6FA25F97A4371DA84F2F7EFBB04612322D786D2221B85C52"
+    },
+    {
+      "bytes": 6153,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\allocation_sizing.py",
+      "sha256": "4EC0E5E0C16E43E9584A9D0AD8EC24BCA4FCB9265A1C7DEE2A92E591939AB4A2"
+    },
+    {
+      "bytes": 5184,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\__init__.py",
+      "sha256": "6BED992DE8F9B924A7568CE78640E6805E6C776CD70286EFF29430D5D64460D2"
+    },
+    {
+      "bytes": 437438,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+      "sha256": "8733C5E934529051FC37EC1A65881182E1FF98DB4FAA38C03F0939CDEB97B8C0"
+    },
+    {
+      "bytes": 56027,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+      "sha256": "D4D31088E77DB2A3FEA8C8B210D5C97B7AAA1AD23F9C8703737587382F4F8F44"
+    },
+    {
+      "bytes": 23842,
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_instrument_fx_admission.py",
+      "sha256": "1D03F936C1AD5EF24A580134071B6D2A561FACE4B67439809675F694FC2F56F5"
+    }
+  ],
+  "started_at": "2026-10-15T22:00:34.767727+00:00"
+}

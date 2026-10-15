@@ -1,0 +1,120 @@
+{
+  "base_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+  "base_repo": "D:\\bt_api_py\\bt_api\\bt_api_base",
+  "completed_at": "2026-10-15T22:02:29.913453+00:00",
+  "evidence_level": "FIXED_HEAD_PUBLIC_API_COMPATIBILITY_DIAGNOSTIC_ONLY",
+  "git_status": [
+    " M src/bt_api_risk/__init__.py",
+    " M src/bt_api_risk/allocation_sizing.py",
+    " M src/bt_api_risk/core/__init__.py",
+    " M src/bt_api_risk/core/admission.py",
+    " M src/bt_api_risk/core/instrument.py",
+    "?? .codex-tmp/",
+    "?? tests/test_instrument_fx_admission.py"
+  ],
+  "head_instrument_pin": {
+    "bytes": 41116,
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-legacy-compare-20261016-r1\\head-source\\src\\bt_api_risk\\core\\instrument.py",
+    "sha256": "059F5E7A20D2652BBE2D041A3FFD7CB7A595E3E20ED17773C898CDC420017116"
+  },
+  "head_matches_test_fingerprint": false,
+  "head_result": {
+    "admission_fingerprint": "d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638",
+    "admission_payload": {
+      "gross_notional": "603.803",
+      "intent_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "metadata_digest": "77f0518bd18e4ab8087c509ace86e9c5b9132fbc95d2ae04fef2a707ecbf1540",
+      "quoted_notional": "600",
+      "schema": "bt_api_risk.instrument-admission.v1",
+      "worst_case_fee": "0.803",
+      "worst_case_notional": "603.0",
+      "worst_case_price": "100.5"
+    },
+    "assessment": {
+      "gross_notional": "603.803",
+      "quoted_notional": "600",
+      "worst_case_fee": "0.803",
+      "worst_case_notional": "603.0",
+      "worst_case_price": "100.5"
+    },
+    "metadata_digest": "77f0518bd18e4ab8087c509ace86e9c5b9132fbc95d2ae04fef2a707ecbf1540",
+    "metadata_payload": {
+      "as_of_ns": 1000,
+      "contract_multiplier": "3",
+      "expires_at_ns": 2000,
+      "fixed_fee": "0.2",
+      "instrument": "fixture/legacy-contract",
+      "max_gross_notional": "1000",
+      "max_quantity": "10",
+      "max_slippage_bps": "50",
+      "metadata_version": "legacy-v1",
+      "min_quantity": "0.5",
+      "quantity_step": "0.25",
+      "schema": "bt_api_risk.instrument-admission.v1",
+      "taker_fee_bps": "10",
+      "tick_size": "0.1"
+    }
+  },
+  "package_head": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+  "package_repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "probe_pin": {
+    "bytes": 2025,
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-legacy-compare-20261016-r1\\probe.py",
+    "sha256": "C6C0D4F4D4F1F54A4A2E0DD920E0E5C794E5C3064721AE0AC75182FDC3421F3D"
+  },
+  "same_public_result": true,
+  "test_hardcoded_fingerprint": "c090e829e290e7cede37681f2eb5b8f32f5c801a2020e9b303e0534a8e092b8b",
+  "test_hardcoded_payload": {
+    "gross_notional": "603.8030",
+    "intent_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "metadata_digest": "77f0518bd18e4ab8087c509ace86e9c5b9132fbc95d2ae04fef2a707ecbf1540",
+    "quoted_notional": "600",
+    "schema": "bt_api_risk.instrument-admission.v1",
+    "worst_case_fee": "0.8030",
+    "worst_case_notional": "603.0",
+    "worst_case_price": "100.5"
+  },
+  "working_instrument_pin": {
+    "bytes": 56027,
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\instrument.py",
+    "sha256": "D4D31088E77DB2A3FEA8C8B210D5C97B7AAA1AD23F9C8703737587382F4F8F44"
+  },
+  "working_tree_matches_test_fingerprint": false,
+  "working_tree_result": {
+    "admission_fingerprint": "d2e2d41272e4d48a44dd62091f3aa86a173864f98834dd6023d178f1f20a3638",
+    "admission_payload": {
+      "gross_notional": "603.803",
+      "intent_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "metadata_digest": "77f0518bd18e4ab8087c509ace86e9c5b9132fbc95d2ae04fef2a707ecbf1540",
+      "quoted_notional": "600",
+      "schema": "bt_api_risk.instrument-admission.v1",
+      "worst_case_fee": "0.803",
+      "worst_case_notional": "603.0",
+      "worst_case_price": "100.5"
+    },
+    "assessment": {
+      "gross_notional": "603.803",
+      "quoted_notional": "600",
+      "worst_case_fee": "0.803",
+      "worst_case_notional": "603.0",
+      "worst_case_price": "100.5"
+    },
+    "metadata_digest": "77f0518bd18e4ab8087c509ace86e9c5b9132fbc95d2ae04fef2a707ecbf1540",
+    "metadata_payload": {
+      "as_of_ns": 1000,
+      "contract_multiplier": "3",
+      "expires_at_ns": 2000,
+      "fixed_fee": "0.2",
+      "instrument": "fixture/legacy-contract",
+      "max_gross_notional": "1000",
+      "max_quantity": "10",
+      "max_slippage_bps": "50",
+      "metadata_version": "legacy-v1",
+      "min_quantity": "0.5",
+      "quantity_step": "0.25",
+      "schema": "bt_api_risk.instrument-admission.v1",
+      "taker_fee_bps": "10",
+      "tick_size": "0.1"
+    }
+  }
+}

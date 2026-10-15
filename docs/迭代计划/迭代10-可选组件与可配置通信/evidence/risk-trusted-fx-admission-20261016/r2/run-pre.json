@@ -1,0 +1,61 @@
+{
+  "evidence_level": "PACKAGE_FOCUSED_UNIT_QA_ONLY",
+  "package_repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "package_head": "5f6ba0b2d7dd7a5589392e299ce2ecb90fef9d7b",
+  "base_repo": "D:\\bt_api_py\\bt_api\\bt_api_base",
+  "base_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+  "cwd": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "python_executable": "C:\\anaconda3\\python.exe",
+  "argv": [
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-c",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\pytest.ini",
+    "--junitxml=D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\iteration10-risk-fx-admission-20261016-r2\\junit.xml",
+    "tests/test_instrument_fx_admission.py"
+  ],
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTEST_ADDOPTS": "",
+    "PYTEST_PLUGINS": "",
+    "PYTHONPATH": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_base\\src"
+  },
+  "source_pins": [
+    [
+      {
+        "path": "src/bt_api_risk/__init__.py",
+        "bytes": 8011,
+        "sha256": "52DF4B679403C18B6FA25F97A4371DA84F2F7EFBB04612322D786D2221B85C52"
+      },
+      {
+        "path": "src/bt_api_risk/allocation_sizing.py",
+        "bytes": 6153,
+        "sha256": "4EC0E5E0C16E43E9584A9D0AD8EC24BCA4FCB9265A1C7DEE2A92E591939AB4A2"
+      },
+      {
+        "path": "src/bt_api_risk/core/__init__.py",
+        "bytes": 5184,
+        "sha256": "6BED992DE8F9B924A7568CE78640E6805E6C776CD70286EFF29430D5D64460D2"
+      },
+      {
+        "path": "src/bt_api_risk/core/admission.py",
+        "bytes": 437438,
+        "sha256": "8733C5E934529051FC37EC1A65881182E1FF98DB4FAA38C03F0939CDEB97B8C0"
+      },
+      {
+        "path": "src/bt_api_risk/core/instrument.py",
+        "bytes": 55993,
+        "sha256": "7F49E016AB199E407F37BAA51F41FAE0BE505A03352A182621D9016F415529AA"
+      },
+      {
+        "path": "tests/test_instrument_fx_admission.py",
+        "bytes": 21641,
+        "sha256": "721338D951B2BDFA7FA866CA5B7783BE61DF6B4539217420F73253CDD0A38FCC"
+      }
+    ]
+  ],
+  "started_at": "2026-10-16T05:53:38.4462656+08:00"
+}
