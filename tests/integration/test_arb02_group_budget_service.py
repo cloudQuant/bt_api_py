@@ -53,6 +53,7 @@ from bt_api_risk import (
     ExposureAccountingMode,
     InstrumentRiskAdmissionMapper,
     InstrumentRiskRegistry,
+    RiskDeniedError,
     RiskPolicy,
 )
 
@@ -1725,7 +1726,6 @@ def test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen(
         gate = DurableRiskGate(account_paths[account_ref]["risk_gate"], policy)
         try:
             admitted = gate.read_group_vector_snapshot(risk_scope, _GROUP_ACCEPTED)
-            denied = gate.read_group_vector_snapshot(risk_scope, _GROUP_DENIED)
             assert admitted is not None and len(admitted.legs) == 1
             assert admitted.legs[0].expires_at_ns > time.time_ns()
             if account_ref == "account-a":
@@ -1734,7 +1734,10 @@ def test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen(
             else:
                 assert admitted.legs[0].claimed is False
                 assert admitted.legs[0].resolved is False
-            assert denied is None, "portfolio-denied group created an account Risk vector"
+            with pytest.raises(RiskDeniedError) as denied_error:
+                gate.read_group_vector_snapshot(risk_scope, _GROUP_DENIED)
+            assert type(denied_error.value) is RiskDeniedError
+            assert denied_error.value.code == "GROUP_NOT_FOUND"
         finally:
             gate.close()
 

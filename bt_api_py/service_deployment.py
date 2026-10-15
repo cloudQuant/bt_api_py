@@ -154,7 +154,13 @@ def validate_deployment(
     dependencies: dict[str, set[str]] = {service_id: set() for service_id in service_public}
     activations: list[ComponentActivation] = []
     binding_requests: list[ClientBindingRequest] = []
-    account_writers: dict[str, tuple[str | None, int | None, str, int]] = {}
+    account_writers: dict[
+        str,
+        tuple[
+            tuple[str | None, int | None, str, str, str, str, str | None, str | None, str],
+            set[str],
+        ],
+    ] = {}
     service_instances: dict[str, dict[str, frozenset[str]]] = {}
 
     # Inspect only normalized parser output. Sorting service IDs and aliases
@@ -470,20 +476,37 @@ def _is_wildcard_host(host: str) -> bool:
 
 
 def _record_writer(
-    writers: dict[str, tuple[str | None, int | None, str, int]],
+    writers: dict[
+        str,
+        tuple[
+            tuple[str | None, int | None, str, str, str, str, str | None, str | None, str],
+            set[str],
+        ],
+    ],
     request: ClientBindingRequest,
     request_index: int,
 ) -> None:
     if request.mount not in _WRITER_MOUNTS or request.account_ref is None:
         return
-    if request.account_ref in writers:
-        _fail("WRITER_CONFLICT", f"$.bindings[{request_index}]")
-    writers[request.account_ref] = (
+    identity = (
         request.requester_service_id,
         request.client_index,
         request.client_alias,
-        request.binding_index,
+        request.service_id,
+        request.instance_id,
+        request.mount,
+        request.account_ref,
+        request.portfolio_ref,
+        request.transport_ref,
     )
+    existing = writers.get(request.account_ref)
+    if existing is None:
+        writers[request.account_ref] = (identity, {request.scope_ref})
+        return
+    existing_identity, scope_refs = existing
+    if existing_identity != identity or request.scope_ref in scope_refs:
+        _fail("WRITER_CONFLICT", f"$.bindings[{request_index}]")
+    scope_refs.add(request.scope_ref)
 
 
 def _topological_order(dependencies: Mapping[str, set[str]]) -> tuple[str, ...]:
