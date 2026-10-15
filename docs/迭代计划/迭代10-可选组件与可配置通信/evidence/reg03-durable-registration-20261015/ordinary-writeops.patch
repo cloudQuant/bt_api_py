@@ -1,0 +1,136 @@
+--- a/bt_api_py/service_components.py
++++ b/bt_api_py/service_components.py
+@@ -187,10 +187,11 @@
+ 
+     spec: ComponentSpec
+     options: Mapping[str, object]
+     module: object = field(repr=False, compare=False)
+     operations_by_port: Mapping[str, frozenset[str]]
++    write_operations_by_port: Mapping[str, frozenset[str]]
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+ class ServiceComponent:
+     """A concrete component with exact public handlers and internal objects."""
+@@ -236,10 +237,13 @@
+     module_name: str
+     operations_attribute: tuple[str, ...]
+     resource_keys: frozenset[str]
+     public_ports: Mapping[str, frozenset[str]]
+     internal_ports: frozenset[str]
++    write_operations_by_port: Mapping[str, frozenset[str]] = field(
++        default_factory=lambda: MappingProxyType({})
++    )
+     validator_module_name: str | None = None
+ 
+ 
+ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
+     {
+@@ -366,10 +370,13 @@
+                         {"orders.query", "execution.account_books.query"}
+                     ),
+                 }
+             ),
+             internal_ports=frozenset({"service.owner_control"}),
++            write_operations_by_port=MappingProxyType(
++                {"service.order_entry": frozenset({"orders.submit", "orders.cancel"})}
++            ),
+             validator_module_name="bt_api_execution.service_component",
+         ),
+         ("risk", "account_owner"): _Builtin(
+             module_name="bt_api_py.service_risk_order_entry",
+             operations_attribute=("SUPPORTED_OPERATIONS",),
+@@ -381,10 +388,13 @@
+                     "service.order_entry": frozenset({"orders.submit"}),
+                     "service.order_query": frozenset({"orders.query"}),
+                 }
+             ),
+             internal_ports=frozenset(),
++            write_operations_by_port=MappingProxyType(
++                {"service.order_entry": frozenset({"orders.submit"})}
++            ),
+         ),
+     }
+ )
+ 
+ 
+@@ -637,27 +647,35 @@
+             operations = getattr(operations, attribute, None)
+         if type(operations) is not frozenset or any(type(item) is not str for item in operations):
+             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+ 
+         by_port: dict[str, frozenset[str]] = {}
++        write_by_port: dict[str, frozenset[str]] = {}
+         for port in spec.bind_ports:
+             allowed = builtin.public_ports.get(port)
+             if allowed is not None:
+                 supported = frozenset(allowed.intersection(operations))
+                 if not supported:
+                     raise ServiceComponentError("PUBLIC_PORT_HAS_NO_SUPPORTED_OPERATIONS")
++                write_operations = builtin.write_operations_by_port.get(port, frozenset())
++                if type(write_operations) is not frozenset or not write_operations.issubset(
++                    supported
++                ):
++                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                 by_port[port] = supported
++                write_by_port[port] = write_operations
+             elif port in builtin.internal_ports:
+                 continue
+             else:
+                 raise ServiceComponentError("UNSUPPORTED_PUBLIC_PORT")
+         prepared.append(
+             PreparedComponent(
+                 spec=spec,
+                 options=MappingProxyType(dict(normalized)),
+                 module=module,
+                 operations_by_port=MappingProxyType(by_port),
++                write_operations_by_port=MappingProxyType(write_by_port),
+             )
+         )
+     return tuple(prepared)
+ 
+ 
+@@ -1009,11 +1027,16 @@
+                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                 operations = configured_operations
+             if operations.intersection(all_operations):
+                 raise ServiceComponentError("DUPLICATE_COMPONENT_OPERATION")
+             all_operations.update(operations)
+-            capabilities.append(ServiceCapability(spec.instance_id, port, operations))
++            write_operations = prepared.write_operations_by_port[port]
++            if not write_operations.issubset(operations):
++                raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
++            capabilities.append(
++                ServiceCapability(spec.instance_id, port, operations, write_operations)
++            )
+ 
+         handlers: dict[
+             str,
+             Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]],
+         ] = {}
+--- a/bt_api_py/service_host.py
++++ b/bt_api_py/service_host.py
+@@ -337,10 +337,11 @@
+             planned_capabilities = tuple(
+                 ServiceCapability(
+                     item.spec.instance_id,
+                     port,
+                     operations,
++                    item.write_operations_by_port[port],
+                     market_wire_version=(
+                         market_wire_version if port == "service.market_source" else None
+                     ),
+                 )
+                 for item in self._prepared
+@@ -532,10 +533,11 @@
+                 )
+             )
+             if any(
+                 actual.instance_id != planned.instance_id
+                 or actual.port != planned.port
++                or actual.write_operations != planned.write_operations
+                 or (
+                     actual.operations != planned.operations
+                     and not (
+                         (
+                             planned.port == "service.market_source"

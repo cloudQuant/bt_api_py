@@ -339,6 +339,7 @@ class ServiceHost:
                     item.spec.instance_id,
                     port,
                     operations,
+                    item.write_operations_by_port[port],
                     market_wire_version=(
                         market_wire_version if port == "service.market_source" else None
                     ),
@@ -511,8 +512,8 @@ class ServiceHost:
                 for component in self._components
                 for capability in component.capabilities
             )
-            # History is a trusted resource capability, known only after the
-            # market hub is resolved. All other planned capabilities stay exact.
+            # Optional read sources are known only after resources resolve.
+            # All other planned operations must remain exact.
             if len(component_capabilities) != len(planned_capabilities):
                 raise ServiceHostError("CAPABILITY_PLAN_MISMATCH")
             capabilities = tuple(
@@ -534,11 +535,19 @@ class ServiceHost:
             if any(
                 actual.instance_id != planned.instance_id
                 or actual.port != planned.port
+                or actual.write_operations != planned.write_operations
                 or (
                     actual.operations != planned.operations
                     and not (
-                        planned.port == "service.market_source"
-                        and actual.operations == planned.operations - {"market.history"}
+                        (
+                            planned.port == "service.market_source"
+                            and actual.operations == planned.operations - {"market.history"}
+                        )
+                        or (
+                            planned.port == "service.order_query"
+                            and actual.operations
+                            == planned.operations - {"execution.account_books.query"}
+                        )
                     )
                 )
                 or actual.market_wire_version != planned.market_wire_version

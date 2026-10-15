@@ -1,0 +1,68 @@
+{
+  "root_parent": "d873609deba9f457f8bac51a0664296cb0c110f4",
+  "evidence_level": "REAL_LOCAL_SERVICE_REGISTRATION_LIFECYCLE_WITH_SYNTHETIC_PROVIDER",
+  "formal_case": "REG03",
+  "executed_test_sha256": "392f509ae2b059413d29ffeacb6429bf90ffdd0d2f6aaf8b1c09e91213bf1096",
+  "canonical_test_static_only_sha256": "c20eb948dd7000c2350f3a64f0ef5735d1ece8896463576494b7ffab888b05f0",
+  "tested_production_sources": [
+    {
+      "path": "bt_api_py/service_components.py",
+      "bytes": 61001,
+      "sha256": "40c533472bd05a58a834ea270921150bd12b7a1ce57419141fb213af6837e9b4",
+      "normalized_lf_sha256": "b3cdaa0f96449059572b469251a121299546376362636cffb5c1639a8c7d0098"
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "bytes": 54006,
+      "sha256": "c19e1a81fd7220631d433758eeca15fbcb564712cad4ab02f7b576f360bf166e",
+      "normalized_lf_sha256": "e0aaaf0258050b63ceb8058d7300d31a4a0d6d491949dc7c40aeff75e8934493"
+    }
+  ],
+  "archives": [
+    {
+      "path": "executed-test.py",
+      "bytes": 42065,
+      "sha256": "392f509ae2b059413d29ffeacb6429bf90ffdd0d2f6aaf8b1c09e91213bf1096"
+    },
+    {
+      "path": "pytest.stdout.txt",
+      "bytes": 201,
+      "sha256": "11630a376e1cc6ce47db19869da1fec06047468314041b6f4e7aa263452b86ec"
+    },
+    {
+      "path": "pytest.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "junit.xml",
+      "bytes": 382,
+      "sha256": "96211f710464d50350842b91360a4704a239019a61ce130eb8e98d8fd179f416"
+    },
+    {
+      "path": "exit-code.txt",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "path": "invocation.json",
+      "bytes": 1670,
+      "sha256": "2e80cfb024ec15d3408c7f6e031dc6d4c368c36d20a26ad47cc2593a6c1d70ad"
+    },
+    {
+      "path": "observation.json",
+      "bytes": 15892,
+      "sha256": "d6f8ebab844a12a1d1f5ec8a60fce90a95c4e1bbc1dbd45b9389cea160df7e35"
+    },
+    {
+      "path": "source-verification.json",
+      "bytes": 35575,
+      "sha256": "c369aa0dfed660cc1abc003d2b9f692386425ac8e54cabb59a742dce5aa06b02"
+    },
+    {
+      "path": "ordinary-writeops.patch",
+      "bytes": 5669,
+      "sha256": "56d03a4c06a6f6ceffad2d327a4ae4951e1292d59ceb35a952392f7645588fa1"
+    }
+  ]
+}

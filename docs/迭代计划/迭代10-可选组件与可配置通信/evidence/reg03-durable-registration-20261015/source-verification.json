@@ -1,0 +1,817 @@
+{
+  "schema": "reg03-c6-ordinary-writeops-overlay/v1",
+  "created_at_utc": "2026-10-15T13:53:29.712872+00:00",
+  "evidence_level": "SOURCE_EXPORT_AND_STATIC_SCOPE_VERIFICATION_ONLY",
+  "formal_reg03_pass_claimed": false,
+  "tests_run_by_this_builder": false,
+  "base_export": "D:\\temp\\reg03-durable-business-c6-hostfix-20261015-r5\\source",
+  "base_manifest": {
+    "path": "D:\\temp\\reg03-durable-business-c6-hostfix-20261015-r5\\source-verification.json",
+    "bytes": 5530,
+    "sha256": "4CF48831A6E9518E4626BFB721221462F9264A5F4A124B72FA2EBF3220C6AC2A",
+    "root_commit": "c6c832f4e12bf999dd554ba518d9421ecf6b1eb8",
+    "submodule_commits": {
+      "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "bt_api/bt_api_execution": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "bt_api/bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "bt_api/bt_api_risk": "72d955e6ff1ddc35aabaf67ef88dc48a765f38df",
+      "bt_api/bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+    }
+  },
+  "inherited_prior_host_delta": {
+    "path": "bt_api_py/service_host.py",
+    "preserved_r5_candidate_sha256": "8A01506542D3065B3224DA688B2905FB611227F36C942A6888B1DBDD9A8E943F",
+    "note": "The already reviewed optional execution.account_books.query host capability omission remains inherited unchanged before this write-operations overlay."
+  },
+  "scope": {
+    "changed_existing_paths": [
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_host.py"
+    ],
+    "added_paths": [
+      "tests/unit/test_service_registration_durable_business_lifecycle.py",
+      "tests/unit/test_service_write_capability_registration.py"
+    ],
+    "removed_paths": [],
+    "all_unmodified_base_files_byte_identical": true,
+    "base_files": 1331,
+    "candidate_files": 1333,
+    "changed_paths": [
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_host.py"
+    ],
+    "new_paths": [
+      "tests/unit/test_service_write_capability_registration.py"
+    ],
+    "added_paths_classification": {
+      "tests/unit/test_service_registration_durable_business_lifecycle.py": "frozen, pinned REG03 acceptance input restored byte-identically from r5; unchanged",
+      "tests/unit/test_service_write_capability_registration.py": "new dedicated write-capability regression"
+    }
+  },
+  "pinned_test_input": {
+    "path": "D:\\bt_api_py\\tests\\unit\\test_service_write_capability_registration.py",
+    "bytes": 6319,
+    "sha256": "5D4B88C0A6EF2C8A8E3640AE00F9D1FB33960CF894D1A5E6187EC203DCFEF6EB"
+  },
+  "patch": {
+    "path": "ordinary-writeops.patch",
+    "bytes": 5669,
+    "sha256": "56D03A4C06A6F6CEFFAD2D327A4AE4951E1292D59CEB35A952392F7645588FA1"
+  },
+  "file_pins": [
+    {
+      "path": "bt_api_py/service_components.py",
+      "base_bytes": 59752,
+      "base_sha256": "A5C2DD423AFFDC027CC8D4CC702F1146D6D9F0C1129433DB6D61F05C73A65E90",
+      "candidate_bytes": 61001,
+      "candidate_sha256": "40C533472BD05A58A834EA270921150BD12B7A1CE57419141FB213AF6837E9B4",
+      "scope": "ordinary owner write-operation metadata and exact Host propagation only"
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "base_bytes": 53876,
+      "base_sha256": "8A01506542D3065B3224DA688B2905FB611227F36C942A6888B1DBDD9A8E943F",
+      "candidate_bytes": 54006,
+      "candidate_sha256": "C19E1A81FD7220631D433758EECA15FBCB564712CAD4AB02F7B576F360BF166E",
+      "scope": "ordinary owner write-operation metadata and exact Host propagation only"
+    },
+    {
+      "path": "tests/unit/test_service_write_capability_registration.py",
+      "base_bytes": 0,
+      "base_sha256": null,
+      "candidate_bytes": 6319,
+      "candidate_sha256": "5D4B88C0A6EF2C8A8E3640AE00F9D1FB33960CF894D1A5E6187EC203DCFEF6EB",
+      "scope": "pinned focused regression; does not alter existing frozen REG03 node"
+    }
+  ],
+  "syntax_only": {
+    "ast_parsed_paths": [
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_host.py",
+      "tests/unit/test_service_write_capability_registration.py"
+    ],
+    "imports_or_execution_performed": false
+  },
+  "verified_at_utc": "2026-10-15T13:55:40.953006+00:00",
+  "source_export_filter": {
+    "method": "compare extracted r5 tree to the six verified PAX archive member paths; remove from this derived copy only paths absent from all c6/submodule archives, preserving source r5 and its run evidence",
+    "archive_files_and_symlinks": 1331,
+    "candidate_files_after_filter": 1333,
+    "excluded_nonarchive_files_from_r5_tree": 135,
+    "excluded_paths": [
+      {
+        "path": ".pytest_cache/.gitignore",
+        "bytes": 39,
+        "sha256": "E7C6BB30148CF667606DCD63E7CA77ACAA3CFB0C8303BF09E6419E1E1669DC6D"
+      },
+      {
+        "path": ".pytest_cache/CACHEDIR.TAG",
+        "bytes": 191,
+        "sha256": "37DC88EF9A0ABEDDBE81053A6DD8FDFB13AFB613045EA1EB4A5C815A74A3BDE4"
+      },
+      {
+        "path": ".pytest_cache/README.md",
+        "bytes": 310,
+        "sha256": "420E808D79A6C25D3CDA0AF33BC4782314A14949866682C68CE8149E89B66B70"
+      },
+      {
+        "path": ".pytest_cache/v/cache/lastfailed",
+        "bytes": 186,
+        "sha256": "CBBA807F1DAF98AA82E1270433F133C42CB6E1CB9B7E3C1D883A1F88C68A7543"
+      },
+      {
+        "path": ".pytest_cache/v/cache/nodeids",
+        "bytes": 180,
+        "sha256": "8C0C2330D31422856B833085F7546FCFF333FD3734F45B42ED9FA952EB8E374F"
+      },
+      {
+        "path": ".pytest_cache/v/cache/stepwise",
+        "bytes": 2,
+        "sha256": "4F53CDA18C2BAA0C0354BB5F9A3ECBE5ED12AB4D8E11BA873C2F11161202B945"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 786,
+        "sha256": "13A7FF2979E4050D1C1BB39F5CDAD139807692F26FE635EC6AD90BFACDECF6C7"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/_compat.cpython-311.pyc",
+        "bytes": 1332,
+        "sha256": "A02FFAEF9C5C1F45E2492BCD3A11222080107BA07BF4E9534DC7C8078B153948"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/_version.cpython-311.pyc",
+        "bytes": 350,
+        "sha256": "41B1248780C93FCDB072CF33DB4066C3EE76E23376AB07DEFBBF01E482F5B521"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/auth_config.cpython-311.pyc",
+        "bytes": 9247,
+        "sha256": "910D5C6CB12AA86CEE3708A933712E54A70000C7037644BD2EA05857E8E32B19"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/balance_utils.cpython-311.pyc",
+        "bytes": 3980,
+        "sha256": "A9996ACF11572E04FA3ADCB8ACFFEF3A385E21A02772E2D17E83D3AEE41EC371"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/deployment_evidence.cpython-311.pyc",
+        "bytes": 25516,
+        "sha256": "614F3DF485CB0710194E047B6E8763A917D58E104EBE06651AC509C2392933FA"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/error.cpython-311.pyc",
+        "bytes": 18920,
+        "sha256": "9EA3FAA934E838425A14A9C31DAA0B96DA9B7F1722446CEECCF8F568FCB365CF"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/event_bus.cpython-311.pyc",
+        "bytes": 7993,
+        "sha256": "78FE96BBBA8226AAA7A723BE8A21C601193E8E5C2305422DC8F1BF831740B23A"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/exceptions.cpython-311.pyc",
+        "bytes": 17043,
+        "sha256": "6CE753652D9D199F32545D45F6E310B1A4B9222B3BCAC9621D09FCA071777533"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/instrument_manager.cpython-311.pyc",
+        "bytes": 9411,
+        "sha256": "1AC1646D15FE3D8F393D8E7CA5DCE81569A1D0EF7E6EB53C221E7079CFB09711"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/logging_factory.cpython-311.pyc",
+        "bytes": 10148,
+        "sha256": "5EBE23BE116C38AC86244EA64F309BD75F7B8F685488EBAAB7FC17B1935377FE"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/registry.cpython-311.pyc",
+        "bytes": 20449,
+        "sha256": "3A147A7F35BF994FB721B79F614E1288D2BD3B3A294F24D29C1BFED0297C0150"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/__pycache__/service_protocol.cpython-311.pyc",
+        "bytes": 40458,
+        "sha256": "978EFF1A8B9EB48C194DD05BCE22BDBAEDB42CE9AD47C19418A5C06D7F97714E"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 1936,
+        "sha256": "DAA6D6F0F282542AB3A39BC0A14D8317A9778D5C51CFF0D19F841B3B4A2E795A"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/__pycache__/auto_init_mixin.cpython-311.pyc",
+        "bytes": 2310,
+        "sha256": "98F04DDEE778E8FA2C2293695652AC9FE48B5773063C9318A34E48B8CA2E1D10"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/__pycache__/instrument.cpython-311.pyc",
+        "bytes": 6285,
+        "sha256": "BFDB7DF5AB10B4BD1F8FA9C2896F3A16B3295303590B134724132837D59FB5A2"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/accounts/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 429,
+        "sha256": "AA2B231142EEC7E08104A98F92A1465B9A90733CBA080C86771E0262D242A564"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/accounts/__pycache__/account.cpython-311.pyc",
+        "bytes": 10058,
+        "sha256": "7D7D6EF3A0EC0214B14B000C15A50E6A6BCECF208180B6997FA7E40A30EFF103"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/balances/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 429,
+        "sha256": "89982D8CB315435F162B192E2B5A71F1260AE7AC6515331C796D43E8B8D52E93"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/balances/__pycache__/balance.cpython-311.pyc",
+        "bytes": 7994,
+        "sha256": "705DA93CDC0EFDF51C782562DBFD5C3D00278A0441147B7EE74319C84834F536"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/bars/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 417,
+        "sha256": "E9AA7917304D3E9D5668E205E311ABBF1F903A2B5B68EE5AD02689789AF9D3EE"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/bars/__pycache__/bar.cpython-311.pyc",
+        "bytes": 5550,
+        "sha256": "0590CE9234F214D8524ADFDE08827DA319B60D66283231ED65C885BB7F8D1277"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/exchanges/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 438,
+        "sha256": "1D4EB9CFB39AA92340B3AB7396A1A5683826DB78CFE87476EB76E65015435147"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/exchanges/__pycache__/exchange_data.cpython-311.pyc",
+        "bytes": 4358,
+        "sha256": "367D02DA3F9A2014CB67C0989B28AE6CF580E7A4E146D92F9E60A51F4C2CBA12"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/fundingrates/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 443,
+        "sha256": "3FD64A3CCFF3F6E93995CB8EB8AF86EE419B1D1A3024FD8327418AE154A03E7E"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/fundingrates/__pycache__/funding_rate.cpython-311.pyc",
+        "bytes": 7088,
+        "sha256": "CB8B0A71D401675854C5F7D6291EF116D1E1CBA882EFE318A5E5FFC62F5FD229"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/greeks/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 425,
+        "sha256": "8595598E5B7A6C1D9CBCEBF041EDCB6ED93426E22FC2A96E33A2993F0D539643"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/greeks/__pycache__/greeks.cpython-311.pyc",
+        "bytes": 3085,
+        "sha256": "526C73B8E8C7D95EC47B7CDCFC2BC0247204EB3ED36238E54E661C8B38CBDDDE"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/incomes/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 426,
+        "sha256": "30E4E4D7867F125416E9BDAFEB312BE6B22AEC6A291BFF5A21098BEFDF4C604C"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/incomes/__pycache__/income.cpython-311.pyc",
+        "bytes": 4285,
+        "sha256": "CD56B0C7763D497CFC8D108FE4D0DD944A8162551CF9891708D9A17C3507B023"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/liquidations/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 442,
+        "sha256": "38EF0CC06D2B906906AE8FC140AD6A806F5CEF16DC5B76989628139287F5CF33"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/liquidations/__pycache__/liquidation.cpython-311.pyc",
+        "bytes": 3622,
+        "sha256": "F64B6C978AD114507DAF839D564D6081E646D56C72D41A1B53FA06139BE997A5"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/markprices/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 437,
+        "sha256": "D03F669D422B297D703CA5BE57BB8B84BE664884037B5A611E867BADA77AD4E2"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/markprices/__pycache__/mark_price.cpython-311.pyc",
+        "bytes": 3831,
+        "sha256": "F8915D6F600FDC510C7A922F3218BEA792BE92AFC858C25BEE084C01DBB24E7F"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/orderbooks/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 436,
+        "sha256": "C84983CDE0C26170AB6012A5ACBE9531C1767BE96508906146E1BDA69F7BB31F"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/orderbooks/__pycache__/orderbook.cpython-311.pyc",
+        "bytes": 5262,
+        "sha256": "3F02A6585379189F5C5B1C0674CD218339D65370392980E3B5AECCAC85F1B084"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/orders/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 423,
+        "sha256": "6E475950A00DF25BD211F98D793CD328F347279C53D7AF4277B28EF8986C3ACA"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/orders/__pycache__/order.cpython-311.pyc",
+        "bytes": 13534,
+        "sha256": "60FD489A306475ADF940EE7F8D40A71CC2B60AE5131203D672276CB2F24E5313"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/positions/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 433,
+        "sha256": "6DD46CD51FEA0CBF6BF926FAE676B7D43A2E0C5BBFDD542AEF101C0C2D8755EB"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/positions/__pycache__/position.cpython-311.pyc",
+        "bytes": 8753,
+        "sha256": "2F6757531BC7F2187EAF8ECA9BB226721158F9C4C3AC1D4DC6E5ED0F746A1BE1"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/requestdatas/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 438,
+        "sha256": "27F7FA1BBD8B0859B3F3D787B093CEF73174E05AF66F7A5660D425ADB323513F"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/requestdatas/__pycache__/request_data.cpython-311.pyc",
+        "bytes": 7076,
+        "sha256": "CBEB7309847B785A8217E03B98FE1D0DB4D9BE8D44D06556656B05CF2278A65A"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/symbols/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 426,
+        "sha256": "F603C2195F27DAB484BA18C82FD9C3853CB8CA8B5266847F3A10B3D9BF522D1C"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/symbols/__pycache__/symbol.cpython-311.pyc",
+        "bytes": 6042,
+        "sha256": "66919DE2ECEDEB0C60F4E48C14345767741AA910B30D81F2D834E819B22D62E0"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/tickers/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 426,
+        "sha256": "F6FD2B902CD402D7B719D898B3ECE5F49DB2971A463A8B10DCBCDC919DD021D5"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/tickers/__pycache__/ticker.cpython-311.pyc",
+        "bytes": 5226,
+        "sha256": "9552690668A94F551644A050C31ECB2605670D042DDA086B3CB8153900C1A34D"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/timers/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 423,
+        "sha256": "9C2E7F0F967A3BEBB17F46FFA11225E7817D227A3323938464A6A657360DF341"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/timers/__pycache__/timer.cpython-311.pyc",
+        "bytes": 1322,
+        "sha256": "E97EC9FBE06B3E8C6EBBB8BC34C9EBFA8F822F6F6F4265AA7E2F7A8C13B3F6C1"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/trades/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 423,
+        "sha256": "D56DABC8A2D2D56B44350776C848DA8916BBF87AA46FAB42195D73163324DC59"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/containers/trades/__pycache__/trade.cpython-311.pyc",
+        "bytes": 6535,
+        "sha256": "EAA1CBC2596EDDF5110EE64B3A70A70686452D91D80E652819148706F49EC64F"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/functions/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 415,
+        "sha256": "34F45CA5FE8FD1A17D9E7FC113213E3F6DE5AE6BFAD504AA9F4AD457D50C6A47"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/functions/__pycache__/log_message.cpython-311.pyc",
+        "bytes": 7420,
+        "sha256": "66EBD5F2B43FDDBBB84F5A4032146691C1FCF1CC19DA886BFE0A3E40CC14EE91"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/bt_api_base/functions/__pycache__/utils.cpython-311.pyc",
+        "bytes": 16687,
+        "sha256": "0B5E6CBC57C7D51692F88E72EBE3EF30F12573F023821E7BA80311330B6EBD0D"
+      },
+      {
+        "path": "bt_api/bt_api_base/src/logs/bt_api_registry.log",
+        "bytes": 0,
+        "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 8920,
+        "sha256": "600168C9BC34D18A7A5AC7432EA5A1BF76346F9D79D349D72449639ABED0A1D0"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/account_reconciliation.cpython-311.pyc",
+        "bytes": 81326,
+        "sha256": "48FCC4DB5345DF64E4CDB96C74BE4AB15699D2BC05EAADCFBDD6021D1569A0E6"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/admission.cpython-311.pyc",
+        "bytes": 10768,
+        "sha256": "95853453CCA9572E1736E19F65AB966149E39ECB6C046967B252D8B2D945BF81"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/basic_admission.cpython-311.pyc",
+        "bytes": 39785,
+        "sha256": "67AD3EC623CC9BC7C55DD55250E50030BEEE8DEB5038697D8FB747D1504B1393"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/cancellation.cpython-311.pyc",
+        "bytes": 23513,
+        "sha256": "16D96C8527D723B6E46C52293106D90523BF63A8924BBA7C29F31B7377BBF0FF"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/contracts.cpython-311.pyc",
+        "bytes": 77244,
+        "sha256": "AA55E8BBD6ACF8A7C5E30A175FF5145719ACA85B0E672402E8E8ECC60CDB2455"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/ctp_callback_ledger_adapter.cpython-311.pyc",
+        "bytes": 14142,
+        "sha256": "D4106EA130778677DDC0316DD33DF5EBF863AF019A40429A9408F3575A6AFB00"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/ctp_callback_session.cpython-311.pyc",
+        "bytes": 20525,
+        "sha256": "D3E997018B3AA3C3BC84DEB57B747A91B206E198A0ABBCC313E5CA6F7E187CFD"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/ctp_callback_source_bridge.cpython-311.pyc",
+        "bytes": 40389,
+        "sha256": "9BC068DB9253091118C7110FE0CB9CED0F8F332B6DCD5CCCCDD99312AA84DA6C"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/ctp_native_callbacks.cpython-311.pyc",
+        "bytes": 43613,
+        "sha256": "0EE96BEDB6CD33F8DC2FE2DBB4E27C969FA082299E511F880293E79AA5A8A8AB"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/errors.cpython-311.pyc",
+        "bytes": 4247,
+        "sha256": "69FEFCF1C8A52CA9865385D4362CA2251051D7B2F04DD3D996833B2031F2BE8A"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/facade.cpython-311.pyc",
+        "bytes": 42095,
+        "sha256": "F7B98F6614AE66C1B07CE7F4D9C4E90C13BA8831216DBD82345BCD95DC7269EE"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/group_contracts.cpython-311.pyc",
+        "bytes": 17508,
+        "sha256": "17F73BDD37218F9A41891719E1C67940E2D00D6C4B467CC6CAA81008B7A966D3"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/group_coordinator.cpython-311.pyc",
+        "bytes": 72579,
+        "sha256": "3E9AB87AB6D66E36770C21B24620C03270732C887D11D5A123C9C0DBA54384CB"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/group_order_contracts.cpython-311.pyc",
+        "bytes": 58735,
+        "sha256": "2209C1D329EDB6785BC2B311011FF487BE4B3A43B3ED33F0C8B3D9C2BDAD707D"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/group_store.cpython-311.pyc",
+        "bytes": 31466,
+        "sha256": "F23CA5A14BA5191BD102AB901BA11408E920EE7A5CA179E1F0CCA0384D8A2264"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/ports.cpython-311.pyc",
+        "bytes": 3192,
+        "sha256": "88C022AF5593B8AD8C540F3F186598CA9F8F9BA44DD870CB9155542EA341BB6B"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/service_component.cpython-311.pyc",
+        "bytes": 16309,
+        "sha256": "F49BD23F589AA1C96F0BD1314B1A2422EDBD77DAD2D2574813630D23F754BEE1"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/service_order_entry.cpython-311.pyc",
+        "bytes": 30141,
+        "sha256": "4ACFA916A1BBBA7F6DED7E269B47E6854830F4D98C24102A9DD21F8AA9C32351"
+      },
+      {
+        "path": "bt_api/bt_api_execution/src/bt_api_execution/__pycache__/store.cpython-311.pyc",
+        "bytes": 686864,
+        "sha256": "F4C48BCBB150E88594698A231843C664068F5BFA7C6BB03612C15312845C5A13"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 7257,
+        "sha256": "A03E04D797EE61A658E6C168AD441737AF9B39F5D6C2427DA4F9E6B50BA62739"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/__pycache__/order_admission.cpython-311.pyc",
+        "bytes": 19043,
+        "sha256": "79B407E1D89AA51100F2022B9C8EE0EBA7385C98753BDB48E36DC4859909ADEE"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/containers/__pycache__/risk_events.cpython-311.pyc",
+        "bytes": 17559,
+        "sha256": "8937A83788B29F6DDE676EFCDA9D27F34E487EF1FA8165D7F345F6A3B99DA050"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/containers/__pycache__/risk_metrics.cpython-311.pyc",
+        "bytes": 21959,
+        "sha256": "2E94269ED28A580D911EF173ED7093BA4A313D2E84797385178E0D911F1ADEA9"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/core/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 4870,
+        "sha256": "67D565448EE8D262EE903AD61B2EFA2071F445DC2AD55E9224BE9CFEE8FF6683"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/core/__pycache__/admission.cpython-311.pyc",
+        "bytes": 405123,
+        "sha256": "7D3F749EFD8AFEF82765821BD5400CAA70A77D034BFC637AEA9579F4F3924DCD"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/core/__pycache__/exposure.cpython-311.pyc",
+        "bytes": 43036,
+        "sha256": "9DE3C240FCFABA60E9EAFF46859AB27EFEAEFCEBD305650DAD055B2FA21F62E6"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/core/__pycache__/freeze_activation.cpython-311.pyc",
+        "bytes": 5080,
+        "sha256": "B1C0BA23DC5A2A52A8B053B0B85B20FEEEB0639B4C0A2D25379E63739DB4DEC2"
+      },
+      {
+        "path": "bt_api/bt_api_risk/src/bt_api_risk/core/__pycache__/instrument.cpython-311.pyc",
+        "bytes": 40514,
+        "sha256": "C18C42F4A4F63DE549920F24999447094E386B5D9AB388B1E1A71564DC3C44D6"
+      },
+      {
+        "path": "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 1538,
+        "sha256": "DB4CA05DA0BDEEC759CC2B814E2114CACF127FB5C0F3CEEB101976D4B8F165A6"
+      },
+      {
+        "path": "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/__pycache__/client.cpython-311.pyc",
+        "bytes": 6344,
+        "sha256": "6EE09D065089832FB191E931B68CCE70030F53A3657623582F975C3DD1DB4803"
+      },
+      {
+        "path": "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/__pycache__/events.cpython-311.pyc",
+        "bytes": 7120,
+        "sha256": "310BC101DF1A56FC5D4A26DF118EF638FBB702EED717C8E27B2AB99B7ABA6A14"
+      },
+      {
+        "path": "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/__pycache__/server.cpython-311.pyc",
+        "bytes": 23730,
+        "sha256": "CEB4E29FC46424449769C346E16766C8C43B3FDB7D2EEA4BC4FDB5982D48C8BF"
+      },
+      {
+        "path": "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/__pycache__/service_v2.cpython-311.pyc",
+        "bytes": 41839,
+        "sha256": "A3E986C1911FA478B296F21E93288893D4B6BBF325F4E69130779455503AF412"
+      },
+      {
+        "path": "bt_api/bt_api_transport_zmq/src/bt_api_transport_zmq/__pycache__/wire.cpython-311.pyc",
+        "bytes": 10474,
+        "sha256": "6BC9D8530BB10FD43962278F2FCBB79876368A58622B33A96AA6189EAEB3F251"
+      },
+      {
+        "path": "bt_api_py/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 9769,
+        "sha256": "450579547AE9957F66BE29BF449B34E6C1CC730DCA556F02E9FCCF48B1EF51C7"
+      },
+      {
+        "path": "bt_api_py/__pycache__/_ctp_budget.cpython-311.pyc",
+        "bytes": 36124,
+        "sha256": "DD1DA8F1F1E96A4530D6263E5A6DD44762A9987AAADBCFA94DBEA98125D234FF"
+      },
+      {
+        "path": "bt_api_py/__pycache__/_ctp_credential_binding.cpython-311.pyc",
+        "bytes": 24093,
+        "sha256": "1C4B8195488D64FACC59C94E251506B38F11C44881562E1CB7DE7410C5348C77"
+      },
+      {
+        "path": "bt_api_py/__pycache__/_ctp_execution_authorization.cpython-311.pyc",
+        "bytes": 79056,
+        "sha256": "EF6653EF16D2423DB9539C5944A4C7169221E97DB83B121678546E8C2BBEF65F"
+      },
+      {
+        "path": "bt_api_py/__pycache__/_execution_session.cpython-311.pyc",
+        "bytes": 527610,
+        "sha256": "E3BDFD5C88DA64617A20B6C5BA06AD90D96E380CA992D63AAEF2DC3432160921"
+      },
+      {
+        "path": "bt_api_py/__pycache__/_normalization.cpython-311.pyc",
+        "bytes": 122582,
+        "sha256": "BAE57E850DB46E826C272A286D16100FF2ADE424E902880C8CDF4C3C88425B1A"
+      },
+      {
+        "path": "bt_api_py/__pycache__/balance_manager.cpython-311.pyc",
+        "bytes": 5827,
+        "sha256": "7A630ADFAC8755EE13CE76DD0675CE41DF330785D30F4CE9ABA61B01105556CC"
+      },
+      {
+        "path": "bt_api_py/__pycache__/bt_api.cpython-311.pyc",
+        "bytes": 443488,
+        "sha256": "EEA6887B5B0F55C65C695B7D00D9620D3CED26AF5B29DE2C4C6F49F2D626934B"
+      },
+      {
+        "path": "bt_api_py/__pycache__/cross_venue.cpython-311.pyc",
+        "bytes": 44108,
+        "sha256": "0A6C28FD20217CE1A584FFBDD1575F5C13E57ECECF04B0B7746A3EB7F1E819E7"
+      },
+      {
+        "path": "bt_api_py/__pycache__/data_downloader.cpython-311.pyc",
+        "bytes": 9366,
+        "sha256": "850926CB80C5A505FD1067FDFED70147F595A76BEC2BCEBE092406FC23302F70"
+      },
+      {
+        "path": "bt_api_py/__pycache__/exceptions.cpython-311.pyc",
+        "bytes": 2239,
+        "sha256": "9A8AF5C634B2FC3C64A71D4B4201EF0BC36F2EBFA56E372003094AE233509518"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_components.cpython-311.pyc",
+        "bytes": 64007,
+        "sha256": "DFA0B5DEA70D2220FE5736819003C47DE3C040A0EC6C297103A9576129CBE25B"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_config.cpython-311.pyc",
+        "bytes": 54227,
+        "sha256": "765EE6B1428F1BD0504BCD155B2ADC7CAE57749FC316E679FA95B5B5D4CB140D"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_deployment.cpython-311.pyc",
+        "bytes": 28546,
+        "sha256": "77A07ABAB559CE9B7F3C58D742F9283C7C608EC08E7A3DF306D35B0000A92C87"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_execution.cpython-311.pyc",
+        "bytes": 27825,
+        "sha256": "3A185057F4B0C7B2D8D94AB0D5FE74DA4C2C4978EA323A852F3E35776D17FB6E"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_execution_account_books.cpython-311.pyc",
+        "bytes": 28162,
+        "sha256": "BC5F2ECBEE1D3A7C2A8E1346B17254633692DA0F4CE44ECB7F79163C522D89E5"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_host.cpython-311.pyc",
+        "bytes": 60552,
+        "sha256": "57D7AA8336CADD5BB2D6B39C827274F0070ABABD3AB12C587BE861DA900CA322"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_registry.cpython-311.pyc",
+        "bytes": 76797,
+        "sha256": "C0B2C64F08FA0AF57AF9761D9F4BB40F38ADF9EB79863C15083799C33B9DB920"
+      },
+      {
+        "path": "bt_api_py/__pycache__/service_runtime.cpython-311.pyc",
+        "bytes": 82391,
+        "sha256": "BA39B6DE7A367919C48BAD8416147A693A7497BFBE82973E0B4648779570E496"
+      },
+      {
+        "path": "bt_api_py/_contracts/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 2539,
+        "sha256": "B790E58E5826416A24845A3E43919A92E2D57154AE8ADACEC8471B7EFA783A3A"
+      },
+      {
+        "path": "bt_api_py/_contracts/__pycache__/cache_policy.cpython-311.pyc",
+        "bytes": 3167,
+        "sha256": "5AC454C2CF341EB9354729E9B8D6F686C1411710A46ECB57665BA8C463EFC2D7"
+      },
+      {
+        "path": "bt_api_py/_contracts/__pycache__/capabilities.cpython-311.pyc",
+        "bytes": 1693,
+        "sha256": "101591AFFEA77A1C6160D14E87F56E860DFED4C140AB7FFB738CDBA00A3B843B"
+      },
+      {
+        "path": "bt_api_py/_contracts/__pycache__/errors.cpython-311.pyc",
+        "bytes": 8771,
+        "sha256": "488FB1CF0D7AF117E416B86C19107893360E34FB200DBEB1AC098A6F204AA616"
+      },
+      {
+        "path": "bt_api_py/_contracts/__pycache__/models.cpython-311.pyc",
+        "bytes": 63240,
+        "sha256": "DB2443124E5D9F4972042509CE1EC3375B4086C1C7BA471EA290F0CE9E271CB4"
+      },
+      {
+        "path": "bt_api_py/_contracts/__pycache__/subscriptions.cpython-311.pyc",
+        "bytes": 997,
+        "sha256": "7F7B34FCF6C67D1B22F83CD8D729A042166F07F540EFF42249DF5503BB122845"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 1209,
+        "sha256": "A1F437EAA3132943E4A1317F8E069B7C5C65DFDEEDBC3992AB8F67041CFEE47F"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/base.cpython-311.pyc",
+        "bytes": 4473,
+        "sha256": "F5134A6744870BE2EFD7F1F0DCBA7677588E37AEE6E597409F00A2DB6C794C6E"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/errors.cpython-311.pyc",
+        "bytes": 2156,
+        "sha256": "74AF038E942A007F49145EEB762C939C387B972753A0DCFED0197E751DE9011D"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/feed_bridge.cpython-311.pyc",
+        "bytes": 11774,
+        "sha256": "63B0F7D18AF94C54EF752D57CE2FA0F97FF2FE8113CE13D2EF0FCBACBC5BD03C"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/gateway_bridge.cpython-311.pyc",
+        "bytes": 4686,
+        "sha256": "1D7A0D7C9441169461C15642F3444CAF92090B5A214F4D5BA2809CE6FDB7E06B"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/loader.cpython-311.pyc",
+        "bytes": 3726,
+        "sha256": "513D06C59717350D47D656EDCC5712DC513A131990227A537FB2672CAE66A495"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/mock.cpython-311.pyc",
+        "bytes": 8978,
+        "sha256": "F038CDD92E1E1BB75C1C70247F7A031EE131E2B0F1E7BC303AEF80D5BB7B12F4"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/registry.cpython-311.pyc",
+        "bytes": 1968,
+        "sha256": "852C588CCFC94D97C70257D68975BE2420FF3BB6778E70A07DDCD440EF37E416"
+      },
+      {
+        "path": "bt_api_py/brokers/__pycache__/types.cpython-311.pyc",
+        "bytes": 6657,
+        "sha256": "B61E76676935BC5936E5258F52FE8273A9BB7103445A0A0E045C3B43AF702FC4"
+      },
+      {
+        "path": "bt_api_py/certification/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 902,
+        "sha256": "272F2D81B78D143B1F6DCA566C525B18585405C0E9FA531B5C055F11CAE0C379"
+      },
+      {
+        "path": "bt_api_py/certification/__pycache__/audit.cpython-311.pyc",
+        "bytes": 8880,
+        "sha256": "18DB1AD5749613A0FB349BC5596C32A4F2E669E757FA0388011F0C17FBEA9159"
+      },
+      {
+        "path": "bt_api_py/certification/__pycache__/scenarios.cpython-311.pyc",
+        "bytes": 7791,
+        "sha256": "14E1C874A126FA7DA9BFC17A93BA504C09CB572CEC3541BF0E3A1B5916CC82F2"
+      },
+      {
+        "path": "tests/__pycache__/__init__.cpython-311.pyc",
+        "bytes": 187,
+        "sha256": "C4A302E14760B789EF6EB5E65467729F42E318A2FA208B05A9B38C2C2D3A6647"
+      },
+      {
+        "path": "tests/unit/__pycache__/test_service_registration_durable_business_lifecycle.cpython-311-pytest-8.0.0.pyc",
+        "bytes": 112672,
+        "sha256": "6D151051FA36D54F012F553CE5F63FD09FD80106439F6CD856A5D272D5825BF5"
+      },
+      {
+        "path": "tests/unit/__pycache__/test_service_registration_durable_business_lifecycle.cpython-311.pyc",
+        "bytes": 55684,
+        "sha256": "44E5700B3FD078B8C850AD01C3F0623E8700C9849343EBE8A90984685D8F6E75"
+      },
+      {
+        "path": "tests/unit/test_service_registration_durable_business_lifecycle.py",
+        "bytes": 41814,
+        "sha256": "351C067187D824FAC1B1D0C8DC53AFE4E46981D018FA7827498B829C85F8E7AF"
+      }
+    ],
+    "archives": {
+      "root-c6.tar": {
+        "members": 1134,
+        "source_files_or_symlinks": 971
+      },
+      "base-b4aabd1.tar": {
+        "members": 261,
+        "source_files_or_symlinks": 204
+      },
+      "execution-84d97c9.tar": {
+        "members": 61,
+        "source_files_or_symlinks": 55
+      },
+      "gateway-59b164a.tar": {
+        "members": 41,
+        "source_files_or_symlinks": 36
+      },
+      "risk-72d955e.tar": {
+        "members": 56,
+        "source_files_or_symlinks": 47
+      },
+      "transport-29ab21e.tar": {
+        "members": 23,
+        "source_files_or_symlinks": 18
+      }
+    },
+    "scope_contained_in_candidate_root": true,
+    "reintroduced_pinned_test_input": {
+      "path": "tests/unit/test_service_registration_durable_business_lifecycle.py",
+      "bytes": 41814,
+      "sha256": "351C067187D824FAC1B1D0C8DC53AFE4E46981D018FA7827498B829C85F8E7AF",
+      "reason": "This frozen REG03 lifecycle node is an explicit pinned test input in the r5 verification manifest, though it is not a member of the c6 source archive. It was restored byte-for-byte after archive-member filtering; it was not edited or rerun."
+    }
+  }
+}

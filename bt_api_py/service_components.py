@@ -189,6 +189,7 @@ class PreparedComponent:
     options: Mapping[str, object]
     module: object = field(repr=False, compare=False)
     operations_by_port: Mapping[str, frozenset[str]]
+    write_operations_by_port: Mapping[str, frozenset[str]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +239,9 @@ class _Builtin:
     resource_keys: frozenset[str]
     public_ports: Mapping[str, frozenset[str]]
     internal_ports: frozenset[str]
+    write_operations_by_port: Mapping[str, frozenset[str]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     validator_module_name: str | None = None
 
 
@@ -368,6 +372,9 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 }
             ),
             internal_ports=frozenset({"service.owner_control"}),
+            write_operations_by_port=MappingProxyType(
+                {"service.order_entry": frozenset({"orders.submit", "orders.cancel"})}
+            ),
             validator_module_name="bt_api_execution.service_component",
         ),
         ("risk", "account_owner"): _Builtin(
@@ -383,6 +390,9 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 }
             ),
             internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {"service.order_entry": frozenset({"orders.submit"})}
+            ),
         ),
     }
 )
@@ -639,13 +649,20 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
             raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
 
         by_port: dict[str, frozenset[str]] = {}
+        write_by_port: dict[str, frozenset[str]] = {}
         for port in spec.bind_ports:
             allowed = builtin.public_ports.get(port)
             if allowed is not None:
                 supported = frozenset(allowed.intersection(operations))
                 if not supported:
                     raise ServiceComponentError("PUBLIC_PORT_HAS_NO_SUPPORTED_OPERATIONS")
+                write_operations = builtin.write_operations_by_port.get(port, frozenset())
+                if type(write_operations) is not frozenset or not write_operations.issubset(
+                    supported
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 by_port[port] = supported
+                write_by_port[port] = write_operations
             elif port in builtin.internal_ports:
                 continue
             else:
@@ -656,6 +673,7 @@ def validate_components(specs: Sequence[ComponentSpec]) -> tuple[PreparedCompone
                 options=MappingProxyType(dict(normalized)),
                 module=module,
                 operations_by_port=MappingProxyType(by_port),
+                write_operations_by_port=MappingProxyType(write_by_port),
             )
         )
     return tuple(prepared)
@@ -1011,7 +1029,12 @@ def build_component(
             if operations.intersection(all_operations):
                 raise ServiceComponentError("DUPLICATE_COMPONENT_OPERATION")
             all_operations.update(operations)
-            capabilities.append(ServiceCapability(spec.instance_id, port, operations))
+            write_operations = prepared.write_operations_by_port[port]
+            if not write_operations.issubset(operations):
+                raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+            capabilities.append(
+                ServiceCapability(spec.instance_id, port, operations, write_operations)
+            )
 
         handlers: dict[
             str,

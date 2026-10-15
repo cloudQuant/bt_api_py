@@ -1,0 +1,25 @@
+{
+  "executable": "C:/anaconda3/python.exe",
+  "args": [
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "--rootdir=D:/temp/reg03-durable-business-c6-writeops-20261015-r3/test-copy",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "--junitxml=D:/temp/reg03-durable-business-c6-writeops-20261015-r3/run/pytest-junit.xml",
+    "--basetemp=D:/temp/reg03-durable-business-c6-writeops-20261015-r3/run/pytest-tmp",
+    "D:/temp/reg03-durable-business-c6-writeops-20261015-r3/test-copy/test_reg03_decimal_r3.py::test_real_registration_lifecycle_preserves_unknown_order_and_risk_across_unregister_expiry_and_restart"
+  ],
+  "cwd": "D:/temp/reg03-durable-business-c6-writeops-20261015-r3/run",
+  "environment": {
+    "PYTHONPATH": "D:/temp/reg03-durable-business-c6-writeops-20261015-r3/test-copy;D:/temp/reg03-durable-business-c6-writeops-20261015-r1/source/bt_api/bt_api_base/src;D:/temp/reg03-durable-business-c6-writeops-20261015-r1/source/bt_api/bt_api_execution/src;D:/temp/reg03-durable-business-c6-writeops-20261015-r1/source/bt_api/bt_api_risk/src;D:/temp/reg03-durable-business-c6-writeops-20261015-r1/source/bt_api/bt_api_gateway/src;D:/temp/reg03-durable-business-c6-writeops-20261015-r1/source/bt_api/bt_api_transport_zmq/src;D:/temp/reg03-durable-business-c6-writeops-20261015-r1/source",
+    "BTAPI_REG03_FIXED_SOURCE_ROOT": "D:/temp/reg03-durable-business-c6-writeops-20261015-r1/source",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "test_sha256": "392F509AE2B059413D29FFEACB6429BF90FFDD0D2F6AAF8B1C09E91213BF1096",
+  "started_utc": "2026-10-15T14:18:46.1558488Z"
+}
