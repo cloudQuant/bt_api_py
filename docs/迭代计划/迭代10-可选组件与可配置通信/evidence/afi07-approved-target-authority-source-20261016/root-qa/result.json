@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-15T22:40:24.042840+00:00",
+  "source_count": 13,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "a6d769474ece728818710d293ea9ad61ca55a4c7"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "a6d769474ece728818710d293ea9ad61ca55a4c7"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "467941819cc997a5932383060dd22f28be5b6d95179c367e16f55a9b208811f3",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "AFI07_APPROVED_TARGET_SQLITE_PERSISTENCE_AUTHORITY_COMPONENT_ONLY_NOT_HTTP_SDK_EXECUTION_HOST_ACCEPTANCE"
+}

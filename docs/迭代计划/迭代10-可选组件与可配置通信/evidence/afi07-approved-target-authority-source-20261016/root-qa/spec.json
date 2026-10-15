@@ -1,0 +1,55 @@
+{
+  "python": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "output": "D:\\temp\\afi_iter10_afi07_authority_source_root_20261016_r1",
+  "source_sha256": {
+    "D:\\source_code\\ai-for-investor\\src\\backend\\alembic\\versions\\20261016_strategy_approval_authority_sources.py": "35e8be8e273042612f24a98875275616b91ec6bdccd1c0d5797a91ecd29871b4",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\models\\__init__.py": "c64c5aad4ad484132721b9a504eb56dc686ed19ca4f2eca21b097b495ea95cca",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\models\\permission.py": "4432bb14585e7d3de318772f567c4ea472aa739438737febf4aea71805d65970",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\models\\strategy_approval_authority.py": "a118a725f5a76791ae66b73bb15ab0039bd8222904337e74de442374d3beae80",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\models\\strategy_target_approval.py": "be1acc93202fa2d81a6908eb86ace1c0f83360b776eeb02880140c8c455f1eb3",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\models\\strategy_version.py": "17c7bc618b86d03ff1f93c5f256e5459b5decc7f7e47396ec872b7d95371c3e6",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\services\\portfolio_composition.py": "57a6c4cfffdf14ff32e4aceb9658601560a0dcfcc85254a829a52697905168a8",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\services\\strategy\\core.py": "5502f2a57d5eacb47ff470cb56b1cf17daaa7e92f46c1d7ab7310e079c3b218c",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\services\\strategy\\version.py": "b60ec0c23479009ed9191226ac53c9d77fcc653f4dcef4f39affbb4e057c8f4b",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\services\\strategy_approval_authority.py": "6021020907507605708c187bea0117b8ad49d5d04e8c1014c3b9e4a2af321b48",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\app\\services\\strategy_target_approvals.py": "4518985a3c1487b329e0f8dea7911a4796c8259afbede8eed6ee6b237f5284db",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_strategy_approval_authority.py": "31acdcb76f4233546c1f550590af9bee718838160c8a5c83ab1ec59779b94102",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_strategy_target_approvals.py": "007cf9c961ab45d4a879dcc56630e21d5686c13a88324acbc5a9403a7c893d0e"
+  },
+  "repositories": {
+    "D:\\source_code\\ai-for-investor": "a6d769474ece728818710d293ea9ad61ca55a4c7"
+  },
+  "environment": {
+    "PYTHONPATH": "D:\\source_code\\ai-for-investor\\src\\backend",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS",
+    "PYTEST_PLUGINS"
+  ],
+  "pytest_options": [
+    "--noconftest",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-p",
+    "no:cacheprovider",
+    "-o",
+    "addopts=",
+    "-q",
+    "--tb=short",
+    "-c",
+    "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\iteration10_afi07_authority_source_r2\\pytest.ini",
+    "--rootdir",
+    "D:\\source_code\\ai-for-investor\\src\\backend"
+  ],
+  "nodes": [
+    "tests/test_strategy_approval_authority.py",
+    "tests/test_strategy_target_approvals.py"
+  ],
+  "evidence_level": "AFI07_APPROVED_TARGET_SQLITE_PERSISTENCE_AUTHORITY_COMPONENT_ONLY_NOT_HTTP_SDK_EXECUTION_HOST_ACCEPTANCE",
+  "review_manifest": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\iteration10_afi07_authority_source_r2\\reviewed-source-pins.json",
+  "review_manifest_sha256": "9efe7481e34671f0c9d73eb352e5414588e34660827e9402fcd100c0ce19168a",
+  "pytest_config_sha256": "da9808d584f4d7bf9f89efb0e294727a7abd06903d9ae8fbc45f5dd93c59b684"
+}
