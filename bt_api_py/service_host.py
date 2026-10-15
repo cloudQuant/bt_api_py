@@ -240,6 +240,7 @@ class ServiceHost:
         self._market_transport_module: Any = None
         self._market_startup_cleanup_error_type: type[BaseException] | None = None
         self._market_endpoint: str | None = None
+        self._planned_market_wire_version: int | None = None
         self._market_active_registration_count = 0
         self._component_maintenance_faults: set[str] = set()
         self._endpoint: str | None = None
@@ -313,7 +314,15 @@ class ServiceHost:
             )
             if len(market_items) > 1:
                 raise ServiceHostError("MULTIPLE_MARKET_SOURCE_COMPONENTS")
-            selected_endpoints = self._listener_profile()["endpoints"]
+            listener_profile = self._listener_profile()
+            selected_endpoints = listener_profile["endpoints"]
+            listener_options = listener_profile["options"]
+            market_wire_version = listener_options.get("market_wire_version", 1)
+            if type(market_wire_version) is not int or market_wire_version not in (1, 2):
+                raise ServiceHostError("MARKET_WIRE_VERSION_INVALID")
+            self._planned_market_wire_version = (
+                market_wire_version if "market_bind" in selected_endpoints else None
+            )
             if "market_bind" in selected_endpoints and not market_items:
                 raise ServiceHostError("MARKET_ENDPOINT_WITHOUT_COMPONENT")
             if market_items and "market_bind" not in selected_endpoints:
@@ -326,7 +335,14 @@ class ServiceHost:
                 else ordered
             )
             planned_capabilities = tuple(
-                ServiceCapability(item.spec.instance_id, port, operations)
+                ServiceCapability(
+                    item.spec.instance_id,
+                    port,
+                    operations,
+                    market_wire_version=(
+                        market_wire_version if port == "service.market_source" else None
+                    ),
+                )
                 for item in self._prepared
                 for port, operations in item.operations_by_port.items()
             )
@@ -409,14 +425,19 @@ class ServiceHost:
                         market_v2 as market_transport_module,  # type: ignore[import-not-found]
                     )
 
+                    publisher_validation_options = {
+                        "credentials": server_credentials,
+                        "high_water_mark": market_options.get("high_water_mark", 1000),
+                        "max_message_bytes": market_options.get("max_message_bytes", 1_048_576),
+                    }
+                    if market_wire_version == 2:
+                        publisher_validation_options["wire_version"] = 2
                     market_transport_module.validate_publisher_configuration(
                         market_endpoint,
                         self._authority.identity,
                         self._authority.scope,
                         self._authority.principals,
-                        credentials=server_credentials,
-                        high_water_mark=market_options.get("high_water_mark", 1000),
-                        max_message_bytes=market_options.get("max_message_bytes", 1_048_576),
+                        **publisher_validation_options,
                     )
                 except ImportError:
                     raise ServiceHostError("MARKET_TRANSPORT_UNAVAILABLE") from None
@@ -485,14 +506,32 @@ class ServiceHost:
                 self._pending_resources.pop()
                 built_by_instance[component.instance_id] = component
 
-            capabilities = tuple(
+            component_capabilities = tuple(
                 capability
                 for component in self._components
                 for capability in component.capabilities
             )
             # History is a trusted resource capability, known only after the
             # market hub is resolved. All other planned capabilities stay exact.
-            if len(capabilities) != len(planned_capabilities) or any(
+            if len(component_capabilities) != len(planned_capabilities):
+                raise ServiceHostError("CAPABILITY_PLAN_MISMATCH")
+            capabilities = tuple(
+                ServiceCapability(
+                    actual.instance_id,
+                    actual.port,
+                    actual.operations,
+                    actual.write_operations,
+                    market_wire_version=(
+                        planned.market_wire_version
+                        if planned.port == "service.market_source"
+                        else None
+                    ),
+                )
+                for actual, planned in zip(
+                    component_capabilities, planned_capabilities, strict=True
+                )
+            )
+            if any(
                 actual.instance_id != planned.instance_id
                 or actual.port != planned.port
                 or (
@@ -502,6 +541,7 @@ class ServiceHost:
                         and actual.operations == planned.operations - {"market.history"}
                     )
                 )
+                or actual.market_wire_version != planned.market_wire_version
                 for actual, planned in zip(capabilities, planned_capabilities, strict=True)
             ):
                 raise ServiceHostError("CAPABILITY_PLAN_MISMATCH")
@@ -702,6 +742,19 @@ class ServiceHost:
             raise ServiceHostError("MARKET_ENDPOINT_MISSING")
         if not isinstance(options, Mapping):
             raise ServiceHostError("MARKET_PROFILE_INVALID")
+        profile_market_wire_version = options.get("market_wire_version", 1)
+        if (
+            type(profile_market_wire_version) is not int
+            or profile_market_wire_version not in (1, 2)
+            or profile_market_wire_version != self._planned_market_wire_version
+        ):
+            raise ServiceHostError("MARKET_WIRE_VERSION_MISMATCH")
+        publisher_options = {
+            "high_water_mark": options.get("high_water_mark", 1000),
+            "max_message_bytes": options.get("max_message_bytes", 1_048_576),
+        }
+        if self._planned_market_wire_version == 2:
+            publisher_options["wire_version"] = 2
         try:
             from bt_api_transport_zmq.service_v2 import CurveServerCredentials
 
@@ -709,14 +762,13 @@ class ServiceHost:
                 public_key=self._authority.curve_public_key,
                 secret_key=self._authority.curve_secret_key,
             )
+            publisher_options["credentials"] = credentials
             publisher = module.ZmqMarketPublisher(
                 endpoint,
                 self._authority.identity,
                 self._authority.scope,
                 self._authority.principals,
-                credentials=credentials,
-                high_water_mark=options.get("high_water_mark", 1000),
-                max_message_bytes=options.get("max_message_bytes", 1_048_576),
+                **publisher_options,
             )
         except BaseException as exc:
             cleanup_error = self._market_startup_cleanup_error_type

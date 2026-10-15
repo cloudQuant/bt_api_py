@@ -109,6 +109,7 @@ class ServiceCapability:
     port: str
     operations: frozenset[str]
     write_operations: frozenset[str] = frozenset()
+    market_wire_version: int | None = None
 
     def __post_init__(self) -> None:
         if not _text(self.instance_id) or not _text(self.port):
@@ -121,6 +122,12 @@ class ServiceCapability:
             raise ValueError("write_operations contains an invalid operation")
         if not writes.issubset(operations):
             raise ValueError("write_operations must be a subset of operations")
+        if self.market_wire_version is not None and (
+            self.port != "service.market_source"
+            or type(self.market_wire_version) is not int
+            or self.market_wire_version not in (1, 2)
+        ):
+            raise ValueError("market_wire_version is valid only for a market source")
 
 
 @dataclass(frozen=True, slots=True)
@@ -677,6 +684,12 @@ class ServiceRegistry:
                         "instance_id": capability.instance_id,
                         "port": capability.port,
                         "operations": sorted(capability.operations),
+                        **(
+                            {"market_wire_version": capability.market_wire_version}
+                            if capability.port == "service.market_source"
+                            and capability.market_wire_version is not None
+                            else {}
+                        ),
                     }
                     for capability in sorted(
                         self._capabilities.values(), key=lambda item: (item.instance_id, item.port)

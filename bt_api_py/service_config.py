@@ -217,7 +217,7 @@ _MONITOR_CLIENT_OPTIONS: Final[frozenset[str]] = _CLIENT_OPTIONS.union(
     {"telemetry_queue_max_events", "telemetry_queue_max_bytes"}
 )
 _PROFILE_OPTIONS: Final[frozenset[str]] = frozenset(
-    {"request_timeout_ms", "high_water_mark", "max_message_bytes"}
+    {"request_timeout_ms", "high_water_mark", "max_message_bytes", "market_wire_version"}
 )
 _ENDPOINTS_BY_SIDE: Final[dict[str, frozenset[str]]] = {
     "client": frozenset({"rpc_connect", "market_connect"}),
@@ -643,6 +643,7 @@ def _parse_options(raw: object, allowed: frozenset[str], path: str) -> dict[str,
             "request_timeout_ms",
             "high_water_mark",
             "max_message_bytes",
+            "market_wire_version",
             "max_concurrent_tasks",
             "max_input_bytes",
             "telemetry_queue_max_events",
@@ -652,6 +653,7 @@ def _parse_options(raw: object, allowed: frozenset[str], path: str) -> dict[str,
                 "request_timeout_ms": (1, 120_000),
                 "high_water_mark": (1, 100_000),
                 "max_message_bytes": (1, 1_048_576),
+                "market_wire_version": (1, 2),
                 "max_concurrent_tasks": (1, 64),
                 "max_input_bytes": (1, 67_108_864),
                 "telemetry_queue_max_events": (1, 4096),
@@ -720,6 +722,10 @@ def _parse_communication(raw: object, sides: set[str]) -> dict[str, Any]:
         options = _parse_options(
             profile_raw.get("options", {}), _PROFILE_OPTIONS, f"{profile_path}.options"
         )
+        if "market_wire_version" in options and not (
+            "market_connect" in endpoints or "market_bind" in endpoints
+        ):
+            _fail("MARKET_WIRE_VERSION_REQUIRES_MARKET_ENDPOINT", f"{profile_path}.options")
         normalized_options = {
             "request_timeout_ms": 2000,
             "high_water_mark": 1000,

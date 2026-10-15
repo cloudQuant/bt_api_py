@@ -239,6 +239,7 @@ class ServiceMarketBindingView:
     security_profile_ref: str
     high_water_mark: int
     max_message_bytes: int
+    market_wire_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -430,6 +431,9 @@ class ServiceClientRuntime:
         max_message_bytes = (
             options.get("max_message_bytes") if isinstance(options, Mapping) else None
         )
+        market_wire_version = (
+            options.get("market_wire_version", 1) if isinstance(options, Mapping) else None
+        )
         if not isinstance(endpoint, str) or not endpoint:
             raise ServiceRuntimeError("MARKET_ENDPOINT_REQUIRED")
         if not isinstance(security_ref, str) or not security_ref:
@@ -438,6 +442,8 @@ class ServiceClientRuntime:
             raise ServiceRuntimeError("INVALID_MARKET_TRANSPORT_OPTIONS")
         if type(max_message_bytes) is not int or max_message_bytes <= 0:
             raise ServiceRuntimeError("INVALID_MARKET_TRANSPORT_OPTIONS")
+        if type(market_wire_version) is not int or market_wire_version not in (1, 2):
+            raise ServiceRuntimeError("MARKET_WIRE_VERSION_MISMATCH")
         return ServiceMarketBindingView(
             mount=binding.mount,
             service_id=binding.service_id,
@@ -454,6 +460,7 @@ class ServiceClientRuntime:
             security_profile_ref=security_ref,
             high_water_mark=high_water_mark,
             max_message_bytes=max_message_bytes,
+            market_wire_version=market_wire_version,
         )
 
     def account_binding_view(
@@ -536,6 +543,12 @@ class ServiceClientRuntime:
                         if isinstance(error, ServiceRuntimeStartupCleanupError):
                             raise
                         if self._state != "starting":
+                            raise
+                        if (
+                            isinstance(error, ServiceRuntimeError)
+                            and error.code
+                            in {"INVALID_MARKET_CAPABILITY", "MARKET_WIRE_VERSION_MISMATCH"}
+                        ):
                             raise
                         if binding.get("required", True):
                             if isinstance(error, ServiceRuntimeError):
@@ -1077,11 +1090,70 @@ class ServiceClientRuntime:
             and c.get("instance_id") == binding["instance_id"]
             and c.get("port") == port
         ]
-        if len(available) != 1 or not isinstance(available[0].get("operations"), (list, tuple)):
-            raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
-        remote_operations = available[0]["operations"]
-        if not all(isinstance(op, str) for op in remote_operations):
-            raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
+        if port == "service.market_source":
+            market_descriptors = [
+                capability
+                for capability in capabilities
+                if isinstance(capability, Mapping)
+                and capability.get("port") == "service.market_source"
+            ]
+            if not market_descriptors:
+                raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
+            legacy_fields = frozenset({"instance_id", "port", "operations"})
+            versioned_fields = legacy_fields | {"market_wire_version"}
+            normalized_descriptors = []
+            for capability in market_descriptors:
+                fields = frozenset(capability)
+                if fields not in (legacy_fields, versioned_fields):
+                    raise ServiceRuntimeError("INVALID_MARKET_CAPABILITY")
+                if (
+                    type(capability.get("instance_id")) is not str
+                    or type(capability.get("port")) is not str
+                    or capability["port"] != "service.market_source"
+                    or not isinstance(capability.get("operations"), (list, tuple))
+                    or any(type(operation) is not str for operation in capability["operations"])
+                ):
+                    raise ServiceRuntimeError("INVALID_MARKET_CAPABILITY")
+                remote_version = (
+                    1
+                    if fields == legacy_fields
+                    else capability.get("market_wire_version")
+                )
+                if type(remote_version) is not int or remote_version not in (1, 2):
+                    raise ServiceRuntimeError("INVALID_MARKET_CAPABILITY")
+                normalized_descriptors.append((capability, remote_version))
+            available = [
+                (capability, version)
+                for capability, version in normalized_descriptors
+                if capability["instance_id"] == binding["instance_id"]
+            ]
+            if not available:
+                raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
+            if len(available) != 1:
+                raise ServiceRuntimeError("INVALID_MARKET_CAPABILITY")
+            market_capability, remote_market_wire_version = available[0]
+            remote_operations = market_capability["operations"]
+            profile = self._config["communication"]["profiles"].get(
+                binding["transport_ref"]
+            )
+            options = profile.get("options") if isinstance(profile, Mapping) else None
+            local_market_wire_version = (
+                options.get("market_wire_version", 1) if isinstance(options, Mapping) else None
+            )
+            if (
+                type(local_market_wire_version) is not int
+                or local_market_wire_version not in (1, 2)
+                or local_market_wire_version != remote_market_wire_version
+            ):
+                raise ServiceRuntimeError("MARKET_WIRE_VERSION_MISMATCH")
+        else:
+            if len(available) != 1 or not isinstance(
+                available[0].get("operations"), (list, tuple)
+            ):
+                raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
+            remote_operations = available[0]["operations"]
+            if not all(isinstance(op, str) for op in remote_operations):
+                raise ServiceRuntimeError("INVALID_SERVICE_REPLY")
         operations = PORT_OPERATIONS[port].intersection(remote_operations)
         requested = self._requested_operations.get(binding["mount"])
         if requested is not None:

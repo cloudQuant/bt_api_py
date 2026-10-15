@@ -15,7 +15,7 @@ from collections import deque
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from bt_api_base.market_history_protocol import MarketHistoryPage, MarketHistoryRequest
 from bt_api_base.market_protocol import (
@@ -57,6 +57,24 @@ _MAX_QUEUE_CAPACITY = 100_000
 _MAX_QUEUE_BYTES = 64 * 1024 * 1024
 _MAX_READ_AFTER_LIMIT = 1_000
 _HISTORY_OPERATION = "market.history"
+MARKET_WIRE_VERSION_LEGACY = 1
+MARKET_WIRE_VERSION_TOPIC_FILTERED = 2
+_SUPPORTED_MARKET_WIRE_VERSIONS = frozenset(
+    {MARKET_WIRE_VERSION_LEGACY, MARKET_WIRE_VERSION_TOPIC_FILTERED}
+)
+
+
+@runtime_checkable
+class TopicV2SubscriberFactory(Protocol):
+    """Explicit factory extension for a negotiated topic-filtered stream."""
+
+    def create_topic_v2(
+        self,
+        binding: ServiceMarketBindingView,
+        stream_scope: WireScope,
+        subscription_key: MarketSubscriptionKey,
+    ) -> EventSubscriber:
+        """Create one subscriber bound to the exact market subscription key."""
 
 
 class ServiceMarketError(RuntimeError):
@@ -112,10 +130,49 @@ class ZmqMarketTransportFactory:
     def __call__(
         self, binding: ServiceMarketBindingView, stream_scope: WireScope
     ) -> EventSubscriber:
+        self._validate_binding_scope(binding, stream_scope)
+        if _market_wire_version(binding) != MARKET_WIRE_VERSION_LEGACY:
+            raise ServiceMarketError("TOPIC_V2_FACTORY_METHOD_REQUIRED")
+        return self._create_subscriber(
+            binding,
+            stream_scope,
+            wire_version=MARKET_WIRE_VERSION_LEGACY,
+            subscription_key=None,
+        )
+
+    def create_topic_v2(
+        self,
+        binding: ServiceMarketBindingView,
+        stream_scope: WireScope,
+        subscription_key: MarketSubscriptionKey,
+    ) -> EventSubscriber:
+        self._validate_binding_scope(binding, stream_scope)
+        if _market_wire_version(binding) != MARKET_WIRE_VERSION_TOPIC_FILTERED:
+            raise ServiceMarketError("TOPIC_V2_BINDING_REQUIRED")
+        if type(subscription_key) is not MarketSubscriptionKey:
+            raise ServiceMarketError("INVALID_MARKET_KEY")
+        return self._create_subscriber(
+            binding,
+            stream_scope,
+            wire_version=MARKET_WIRE_VERSION_TOPIC_FILTERED,
+            subscription_key=subscription_key,
+        )
+
+    @staticmethod
+    def _validate_binding_scope(binding: ServiceMarketBindingView, stream_scope: WireScope) -> None:
         if type(binding) is not ServiceMarketBindingView:
             raise ServiceMarketError("INVALID_BINDING_VIEW")
         if type(stream_scope) is not WireScope:
             raise ServiceMarketError("INVALID_STREAM_SCOPE")
+
+    def _create_subscriber(
+        self,
+        binding: ServiceMarketBindingView,
+        stream_scope: WireScope,
+        *,
+        wire_version: int,
+        subscription_key: MarketSubscriptionKey | None,
+    ) -> EventSubscriber:
         keys = self._profiles.get(binding.security_profile_ref)
         if type(keys) is not ClientCurveKeys:
             raise ServiceMarketError("SECURITY_PROFILE_UNAVAILABLE")
@@ -128,18 +185,28 @@ class ZmqMarketTransportFactory:
         )
 
         try:
+            transport_options = {
+                "credentials": CurveClientCredentials(
+                    keys.server_key, keys.public_key, keys.secret_key
+                ),
+                "high_water_mark": binding.high_water_mark,
+                "max_message_bytes": binding.max_message_bytes,
+            }
+            if wire_version == MARKET_WIRE_VERSION_TOPIC_FILTERED:
+                transport_options["wire_version"] = MARKET_WIRE_VERSION_TOPIC_FILTERED
+                transport_options["subscription_key"] = subscription_key
             return ZmqMarketSubscriber(
                 binding.market_endpoint,
                 binding.peer,
                 stream_scope,
-                credentials=CurveClientCredentials(
-                    keys.server_key, keys.public_key, keys.secret_key
-                ),
-                high_water_mark=binding.high_water_mark,
-                max_message_bytes=binding.max_message_bytes,
+                **transport_options,
             )
         except ServiceTransportStartupCleanupError as error:
             raise ServiceMarketStartupCleanupError(error.transport) from None
+        except TypeError:
+            if wire_version == MARKET_WIRE_VERSION_TOPIC_FILTERED:
+                raise ServiceMarketError("TOPIC_V2_TRANSPORT_UNSUPPORTED") from None
+            raise
 
 
 class ServiceMarketClient:
@@ -164,7 +231,9 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_MOUNT")
         if type(key) is not MarketSubscriptionKey:
             raise ServiceMarketError("INVALID_MARKET_KEY")
-        if not callable(subscriber_factory):
+        if not callable(subscriber_factory) and not callable(
+            getattr(subscriber_factory, "create_topic_v2", None)
+        ):
             raise ServiceMarketError("INVALID_SUBSCRIBER_FACTORY")
         if type(stream_scope) is not WireScope:
             raise ServiceMarketError("INVALID_STREAM_SCOPE")
@@ -1035,7 +1104,17 @@ class ServiceMarketClient:
 
     def _make_subscriber(self, binding: ServiceMarketBindingView) -> EventSubscriber:
         try:
-            subscriber = self._subscriber_factory(binding, self.stream_scope)
+            wire_version = _market_wire_version(binding)
+            if wire_version == MARKET_WIRE_VERSION_LEGACY:
+                factory = self._subscriber_factory
+                if not callable(factory):
+                    raise ServiceMarketError("LEGACY_SUBSCRIBER_FACTORY_UNSUPPORTED")
+                subscriber = factory(binding, self.stream_scope)
+            else:
+                create_topic_v2 = getattr(self._subscriber_factory, "create_topic_v2", None)
+                if not callable(create_topic_v2):
+                    raise ServiceMarketError("TOPIC_V2_SUBSCRIBER_FACTORY_UNSUPPORTED")
+                subscriber = create_topic_v2(binding, self.stream_scope, self.key)
         except ServiceMarketStartupCleanupError as error:
             self._subscriber = error.transport
             self._state = "close_failed"
@@ -1115,7 +1194,15 @@ def _same_binding(left: ServiceMarketBindingView, right: ServiceMarketBindingVie
         and left.service_epoch == right.service_epoch
         and left.transport_ref == right.transport_ref
         and left.peer == right.peer
+        and _market_wire_version(left) == _market_wire_version(right)
     )
+
+
+def _market_wire_version(binding: ServiceMarketBindingView) -> int:
+    version = getattr(binding, "market_wire_version", MARKET_WIRE_VERSION_LEGACY)
+    if type(version) is not int or version not in _SUPPORTED_MARKET_WIRE_VERSIONS:
+        raise ServiceMarketError("UNSUPPORTED_MARKET_WIRE_VERSION")
+    return version
 
 
 def _exact_fields(value: Mapping[str, Any], fields: set[str] | frozenset[str]) -> None:
@@ -1179,5 +1266,8 @@ __all__ = [
     "ServiceMarketClient",
     "ServiceMarketError",
     "ServiceMarketStartupCleanupError",
+    "TopicV2SubscriberFactory",
+    "MARKET_WIRE_VERSION_LEGACY",
+    "MARKET_WIRE_VERSION_TOPIC_FILTERED",
     "ZmqMarketTransportFactory",
 ]
