@@ -1,0 +1,66 @@
+{
+  "round": 102,
+  "parent": "edb72152616629fbc6238b993f472f5f997717b2",
+  "evidence_level": "PARTIAL_CFG04_INSTALLED_ACCOUNT_BOOKS_PROXY",
+  "formal_pass_count": 21,
+  "formal_total": 68,
+  "artifact_root": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1",
+  "files": {
+    "acceptance-result.json": {
+      "size": 5825,
+      "sha256": "e8d80e2ec992d19204a73c44f79d66024f63207b656fe135e4e7d06dbc6dd869",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\acceptance-result.json"
+    },
+    "test-executed.py": {
+      "size": 100851,
+      "sha256": "dd2db38a9775bd189810a28ef61d130d756f86089e794b28d8cd21520aeb715d",
+      "source": "D:\\bt_api_py\\tests\\unit\\test_iteration10_optional_install_matrix.py"
+    },
+    "source-pins.json": {
+      "size": 2349,
+      "sha256": "7466c01c30196850a17be9aa79c3079c4e5c6922d25c6fba0e6a16783f8e66f1",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\report-normalized-source-pins.json"
+    },
+    "pytest.log": {
+      "size": 6426,
+      "sha256": "4668fae7b1565eb610af5d83775dada3f540407a9e3485f5f0668ece78bc8c42",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final.log"
+    },
+    "server-stderr.txt": {
+      "size": 395,
+      "sha256": "3ee8d02ac421df82c01a303cd2f54566a08292a0bd5a29b13204b0d3e02c786a",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\pytest-tmp-account-books-query-final\\test_isolated_client_calls_acc0\\cfg04-books-server-stderr.txt"
+    },
+    "junit.xml": {
+      "size": 420,
+      "sha256": "7b5cca7547cf6dcfc44e458ca764afd255a7db9eaa6bbf3b6fe427fda4984ec9",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-junit.xml"
+    },
+    "command.txt": {
+      "size": 881,
+      "sha256": "d6d0fc132d9f5c7e1ff2be47571f0041d04c231d492da5d3a426d903f37ad06a",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-command.txt"
+    },
+    "exit-code.txt": {
+      "size": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-exit.txt"
+    },
+    "source-install-verification.json": {
+      "size": 75209,
+      "sha256": "c0abd4b3b93d1860170aaa4ce016ca62e8955d8aaa0560f5c111e3cfb5adca18",
+      "source": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-source-install-supplement.json"
+    },
+    ".gitattributes": {
+      "size": 8,
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+      "source": "Root delivery record"
+    },
+    "root-adjudication.md": {
+      "size": 2057,
+      "sha256": "87a9b9d470beaad6e9238b5cc7ed1365dced78cd05c63c84a0cb5bee829ff764",
+      "source": "Root delivery record"
+    }
+  },
+  "accepted_suite_repeated_for_delivery": false
+}

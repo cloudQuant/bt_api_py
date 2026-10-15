@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "purpose": "final source/install pin for the corrected focused CFG04 account-books proxy node",
+  "parent_sdk_head": "edb72152616629fbc6238b993f472f5f997717b2",
+  "test_checkout_sha256": "DD2DB38A9775BD189810A28EF61D130D756F86089E794B28D8CD21520AEB715D",
+  "test_copy_path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\report-normalized-test-only\\tests\\unit\\test_iteration10_optional_install_matrix.py",
+  "test_copy_sha256": "DD2DB38A9775BD189810A28EF61D130D756F86089E794B28D8CD21520AEB715D",
+  "corrections": [
+    "Fee rows normalize immutable mapping values before checking exact USDT 0.13 content.",
+    "Empty external order/fill collections require exact tuple type and empty contents.",
+    "Final diagnostic JSON converts immutable coverage and fill mappings to plain dicts."
+  ],
+  "attempt1": {
+    "junit_sha256": "8189B0C0C1877444F6572AE32633035879A3C191E63B1AE7C6FA6D6A2C6673ED",
+    "log_sha256": "DC16143724538A10EE711E0A8FB6A6A686F2463EE04EE2D8BF2BD76938D0CE39",
+    "exit": 1,
+    "reason": "list expected while returned SDK wire value was tuple of mappingproxy rows",
+    "source": "D4BB095041148A477B8BB693AFD1883658ABC3BCD99175CE89B4529DB15957B4"
+  },
+  "attempt2": {
+    "junit_sha256": "62B94F895138EDD4EA6E76CB314BD074839EFCCF7699A0F5C6E8A0CEAA6B1A2F",
+    "log_sha256": "69C7E031E052FC38050CA042956D7F9E0F15805E715C4440278C0BA65B6D919C",
+    "exit": 1,
+    "reason": "all book/content/normal-close assertions passed; final report json.dumps rejected mappingproxy coverage/fill values",
+    "source": "447F77A52CE39D5210382EC39DCF2DFE7353B55A6659F2617A25ACB99D24C27C"
+  },
+  "installed_source_verification": {
+    "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source-install-verification.json",
+    "sha256": "B8011AE49DC0DFFD61DDEE50F366B1B6855C801136D251875A3AE0DF701534B5"
+  },
+  "client_venv": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Scripts\\python.exe",
+  "server_venv": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Scripts\\python.exe",
+  "python": "3.11.5",
+  "system_site_packages": false,
+  "static_checks": {
+    "ruff": "All checks passed",
+    "py_compile_exit": 0,
+    "diff_check_exit": 0
+  },
+  "review": "awaiting exact-pin GO",
+  "run": "not run"
+}

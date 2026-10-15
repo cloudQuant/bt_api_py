@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "status": "PASS_CFG04_ACCOUNT_BOOKS_GENERIC_RUNTIME_PROXY_WITH_DOMAIN_ABSENT_CLIENT",
+  "scope": "one new CFG04 account-books proxy node; CFG04 remains partial and order_groups remains pending",
+  "parent_sdk_head": "edb72152616629fbc6238b993f472f5f997717b2",
+  "test_checkout": "D:\\bt_api_py\\tests\\unit\\test_iteration10_optional_install_matrix.py",
+  "test_sha256": "DD2DB38A9775BD189810A28EF61D130D756F86089E794B28D8CD21520AEB715D",
+  "static_review": {
+    "agent": "trn02_acceptance",
+    "review_scope": "static only",
+    "pin": "DD2DB38A9775BD189810A28EF61D130D756F86089E794B28D8CD21520AEB715D",
+    "result": "GO"
+  },
+  "runtime": {
+    "server_venv": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv",
+    "system_site_packages": false,
+    "client_wheels": "Base 0.15.8, SDK 0.15.5, Transport 0.1.0",
+    "source_install_verification": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source-install-verification.json",
+    "server_additional_wheels": "Execution 0.2.0, Gateway 0.1.0, Risk 0.1.0, Monitor 0.1.0",
+    "client_venv": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv",
+    "source_install_verification_sha256": "B8011AE49DC0DFFD61DDEE50F366B1B6855C801136D251875A3AE0DF701534B5",
+    "python": "3.11.5"
+  },
+  "command": {
+    "sha256": "D6D0FC132D9F5C7E1FF2BE47571F0041D04C231D492DA5D3A426D903F37AD06A",
+    "python": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Scripts\\python.exe",
+    "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-command.txt",
+    "cwd": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\report-normalized-test-only",
+    "pytest_args": "-m pytest --noconftest --import-mode=importlib -s --junitxml=<final JUnit> --basetemp=<final temp> <single node>",
+    "server_python": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Scripts\\python.exe"
+  },
+  "pytest": {
+    "exit_code": 0,
+    "duration_seconds": 1.938,
+    "errors": 0,
+    "passed": 1,
+    "failures": 0,
+    "exit_file": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-exit.txt",
+    "pytest_warnings": 0,
+    "exit_file_sha256": "13BF7B3039C63BF5A50491FA3CFD8EB4E699D1BA1436315AEF9CBE5711530354",
+    "skipped": 0,
+    "tests": 1
+  },
+  "outputs": {
+    "test_copy": {
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\report-normalized-test-only\\tests\\unit\\test_iteration10_optional_install_matrix.py",
+      "sha256": "DD2DB38A9775BD189810A28EF61D130D756F86089E794B28D8CD21520AEB715D"
+    },
+    "source_pins": {
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\report-normalized-source-pins.json",
+      "sha256": "7466C01C30196850A17BE9AA79C3079C4E5C6922D25C6FBA0E6A16783F8E66F1"
+    },
+    "log": {
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final.log",
+      "sha256": "4668FAE7B1565EB610AF5D83775DADA3F540407A9E3485F5F0668ECE78BC8C42"
+    },
+    "server_stderr": {
+      "warning": "PyZMQ Proactor event loop add_reader RuntimeWarning; selector support fallback",
+      "sha256": "3EE8D02AC421DF82C01A303CD2F54566A08292A0BD5A29B13204B0D3E02C786A",
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\pytest-tmp-account-books-query-final\\test_isolated_client_calls_acc0\\cfg04-books-server-stderr.txt",
+      "runtime_warnings": 1
+    },
+    "junit": {
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-junit.xml",
+      "sha256": "7B5CCA7547CF6DCFC44E458CA764AFD255A7DB9EAA6BBF3B6FE427FDA4984EC9"
+    }
+  },
+  "observations": {
+    "strategy_owner_book_position": "1.25",
+    "baseline_cursor": 0,
+    "server_pid": 78576,
+    "coverage_complete": true,
+    "current_cursor": 4,
+    "normal_host_close": true,
+    "output_reader_stopped": true,
+    "server_exit": 0,
+    "client_domain_distributions_and_specs_absent": true,
+    "unregister_uncertainties": 0,
+    "provider_order_state": "PARTIALLY_FILLED",
+    "filled_quantity": "1.25",
+    "fees_since_baseline": "0.13 USDT",
+    "commission": "0.13 USDT",
+    "journal_generation": "1fc6c926120144c1ba7b0eb5d8531c3b",
+    "client_and_server_origins": "installed site-packages, as asserted by passing node",
+    "server_host_components": [
+      "execution",
+      "gateway",
+      "monitor",
+      "risk"
+    ],
+    "normal_runtime_close": true,
+    "control_reader_stopped": true,
+    "public_operation": "execution.account_books.query via ServiceClientRuntime.call over CURVE",
+    "cleanup_failures": 0,
+    "forced_cleanup": []
+  },
+  "attempt_history": [
+    {
+      "reason": "test assertion compared a JSON-frozen tuple fee page to list; real query succeeded",
+      "exit": 1,
+      "log_sha256": "DC16143724538A10EE711E0A8FB6A6A686F2463EE04EE2D8BF2BD76938D0CE39",
+      "junit_sha256": "8189B0C0C1877444F6572AE32633035879A3C191E63B1AE7C6FA6D6A2C6673ED",
+      "test_sha256": "D4BB095041148A477B8BB693AFD1883658ABC3BCD99175CE89B4529DB15957B4"
+    },
+    {
+      "reason": "all semantic and explicit normal-close assertions passed; final diagnostic json.dumps failed on MappingProxy fields",
+      "exit": 1,
+      "log_sha256": "69C7E031E052FC38050CA042956D7F9E0F15805E715C4440278C0BA65B6D919C",
+      "junit_sha256": "62B94F895138EDD4EA6E76CB314BD074839EFCCF7699A0F5C6E8A0CEAA6B1A2F",
+      "test_sha256": "447F77A52CE39D5210382EC39DCF2DFE7353B55A6659F2617A25ACB99D24C27C"
+    }
+  ],
+  "evidence_limit": "Synthetic trusted account-books source and synthetic provider; this does not establish real account/provider behavior."
+}

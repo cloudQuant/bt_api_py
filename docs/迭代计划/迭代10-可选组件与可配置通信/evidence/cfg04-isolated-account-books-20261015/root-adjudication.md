@@ -1,0 +1,26 @@
+# CFG04 账户簿隔离调用（第102轮）
+
+接受级别：PARTIAL_CFG04_INSTALLED_ACCOUNT_BOOKS_PROXY。正式仍21/68。
+SDK dev父提交edb72152616629fbc6238b993f472f5f997717b2；本轮无生产或gitlink修改。
+
+精确DD2DB38A…AEB715D测试在既有独立client/server正常wheel安装环境运行一个新节点。
+原始日志1passed/2.28秒，JUnit节点时间1.938秒，Python退出0，无pytest warning。
+服务器stderr一条PyZMQ Proactor add_reader RuntimeWarning完整保留。
+真实ServiceClientRuntime.call经CURVE调用execution.account_books.query，查询Execution
+SQLite/outbox账户簿，策略持仓1.25、费用0.13 USDT，完整coverage游标0→4。provider及
+外部账户基线是合成数据。客户端前后四领域包distribution/spec/module均缺席。
+完整JSON业务与关闭报告存在pytest.log；runtime/host正常关闭、两个reader停止、
+子进程exit0、清理计数为零，无强制清理。测试含对应精确断言。
+
+固定运行组合继承第101轮：SDK28854c73、Execution84d97c9及其余已钉住wheel。
+不是当前SDK/Execution较新HEAD实现的运行证明。第101轮既有19项Git→wheel→installed
+来源核对在原归档保留；本轮新增来源核对另见source-install-verification.json。
+Root核对原始输出、精确测试、JUnit/exit与报告；独立iteration10_parallel_assessment
+静态GO。CFG02和R5用例本体未改，新增部分成交仅在显式account_book_query_mode=True
+分支。共享fixture的外部账户输入由None变为完整空ExternalActivitySnapshot；既有R5
+不调用账户簿查询，未重复已通过节点。该输入不是实际外部账户覆盖证明。
+
+原首次tuple/list断言失败和第二次最终报告MappingProxy JSON序列化失败保留于原artifact，
+本轮不改写失败记录。完整CFG04仍缺group代理；market引用第95轮，五代理引用第101轮。
+无真实账户、双机或负载验收。本提交只接受已执行子项，不增加正式case计数。
+实际提交SHA以本文件Git历史为准。

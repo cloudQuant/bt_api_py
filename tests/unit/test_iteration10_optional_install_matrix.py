@@ -971,14 +971,25 @@ class _Cfg04Admission:
 
 
 class _Cfg04ProviderDispatch:
-    def __init__(self) -> None:
+    def __init__(self, *, account_book_query_mode: bool = False) -> None:
         self.submitted: list[str] = []
         self.cancelled: list[str] = []
+        self.account_book_query_mode = account_book_query_mode
 
     def submit(self, intent):
-        from bt_api_execution import ProviderObservation
+        from bt_api_execution import ExecutionState, ProviderObservation
 
         self.submitted.append(intent.intent_id)
+        if self.account_book_query_mode:
+            return ProviderObservation(
+                intent.intent_id,
+                ExecutionState.PARTIALLY_FILLED,
+                provider_order_id="cfg04-books-provider-order-1",
+                filled_quantity=Decimal("1.25"),
+                average_price=Decimal("10"),
+                cumulative_commission=Decimal("0.13"),
+                cumulative_commission_currency="USDT",
+            )
         return ProviderObservation.accepted(intent.intent_id, "cfg04-provider-order-1")
 
     def cancel(self, intent):
@@ -1266,6 +1277,7 @@ def _run_cfg04_server() -> int:
         ExecutionOwnerScope,
         ExecutionScope,
         ExecutionScopeDirectory,
+        ExternalActivitySnapshot,
         SqliteExecutionStore,
     )
     from bt_api_gateway import GatewayCommandKind, GatewayEventJournal, GatewayPrincipal
@@ -1285,6 +1297,7 @@ def _run_cfg04_server() -> int:
         return 2
     payload = json.loads(first_line)
     service_config = parse_service_config(payload["service_config"])
+    account_book_query_mode = payload.get("account_book_query_mode") is True
     server_public = _decode_key(payload["server_public"])
     server_secret = _decode_key(payload["server_secret"])
     strategy_public = _decode_key(payload["strategy_public"])
@@ -1300,10 +1313,12 @@ def _run_cfg04_server() -> int:
     risk_scope = AccountScope("SYNTHETIC", "cfg04-risk-account", "paper")
 
     class Cfg04AccountBooksSource:
-        """Installed account-book resource with a complete, zero-position cut."""
+        """Installed account-book resource with a complete synthetic snapshot cut."""
 
         def __init__(self) -> None:
             self.baseline_as_of_ns = time.time_ns()
+            self.read_count = 0
+            self.last_cut: tuple[str, int] | None = None
 
         def authorize_account_view(self, *, principal_ref, identity, scope, account_key) -> bool:
             # This strategy-only grant does not authorize the aggregate account view.
@@ -1317,9 +1332,19 @@ def _run_cfg04_server() -> int:
         def read_inputs(self, *, account_key, journal_generation, execution_cursor):
             if account_key != order_scope.account_key or execution_cursor < 0:
                 raise AssertionError("account-book read crossed its trusted account cut")
+            self.read_count += 1
+            self.last_cut = (journal_generation, execution_cursor)
             as_of_ns = max(time.time_ns(), self.baseline_as_of_ns + 1)
             directory_revision = "cfg04-owner-directory-r1"
             provider_generation = "cfg04-provider-generation-r1"
+            if account_book_query_mode:
+                from bt_api_execution import CurrencyAmount, PositionFact
+
+                current_positions = (PositionFact("SYNTH-USD", Decimal("1.25")),)
+                current_fees = (CurrencyAmount("USDT", Decimal("0.13")),)
+            else:
+                current_positions = ()
+                current_fees = ()
             directory = ExecutionScopeDirectory(
                 account_key=order_scope.account_key,
                 source="trusted-cfg04-owner-registry",
@@ -1358,8 +1383,8 @@ def _run_cfg04_server() -> int:
                 as_of_ns=as_of_ns,
                 execution_cursor=execution_cursor,
                 position_mode="NET",
-                positions=(),
-                cumulative_fees=(),
+                positions=current_positions,
+                cumulative_fees=current_fees,
                 fee_coverage_start_ns=self.baseline_as_of_ns,
             )
             allocation_baseline = ExecutionAllocationBaseline(
@@ -1374,12 +1399,22 @@ def _run_cfg04_server() -> int:
                 execution_cursor=0,
                 positions=(),
             )
+            external_activity = ExternalActivitySnapshot(
+                account_key=order_scope.account_key,
+                source="cfg04-synthetic-account-activity",
+                source_ref="cfg04-empty-activity-window-r1",
+                generation=provider_generation,
+                coverage_start_ns=self.baseline_as_of_ns,
+                coverage_end_ns=as_of_ns,
+                fills=(),
+                orders=(),
+            )
             return ExecutionAccountBookReadInputsV1(
                 directory,
                 baseline,
                 current,
                 allocation_baseline,
-                None,
+                external_activity,
             )
 
     account_books_source = Cfg04AccountBooksSource()
@@ -1455,7 +1490,9 @@ def _run_cfg04_server() -> int:
     )
 
     account_provider = _Cfg04AccountProvider()
-    execution_provider = _Cfg04ProviderDispatch()
+    execution_provider = _Cfg04ProviderDispatch(
+        account_book_query_mode=account_book_query_mode
+    )
     admission = _Cfg04Admission()
     account_worker_holder: dict[str, object] = {}
     component_closes: list[str] = []
@@ -1616,6 +1653,8 @@ def _run_cfg04_server() -> int:
                         "submitted": tuple(execution_provider.submitted),
                         "cancelled": tuple(execution_provider.cancelled),
                         "admission_reserved": tuple(admission.reserved),
+                        "account_book_reads": account_books_source.read_count,
+                        "account_book_last_cut": account_books_source.last_cut,
                     }
                 )
             elif action in {"close", "stop"}:
@@ -2048,6 +2087,325 @@ def test_isolated_strategy_runs_implemented_proxies_without_domain_distributions
         "execution_cancel_state": cancelled.state,
         "risk_snapshot": dict(risk_snapshot),
         "telemetry_delivered": telemetry_result.delivered,
+        "normal_runtime_close": runtime.state == "closed",
+        "normal_host_close": server_closed_normally,
+        "server_control_reader_stopped": closed["control_reader_stopped"],
+        "server_output_reader_stopped": not output_reader.is_alive(),
+        "forced_cleanup": forced_cleanup,
+        "server_stderr_bytes": len(stderr_text.encode("utf-8")),
+        "server_stderr_classification": (
+            "not captured after close" if not stderr_text else "retained separately in test tempdir"
+        ),
+    }
+    print(json.dumps(report, sort_keys=True, separators=(",", ":")))
+
+
+def test_isolated_client_calls_account_books_over_public_runtime_without_domain_packages(
+    tmp_path: Path,
+) -> None:
+    """Use the installed generic SDK proxy for a complete owner-book read."""
+
+    assert sys.prefix != sys.base_prefix, "CFG04 client must use its isolated venv"
+    client_prefix = str(Path(sys.prefix).resolve())
+    client_distributions = _distribution_versions()
+    _assert_exact_wheel_versions(client_distributions, _EXPECTED_CLIENT_DISTRIBUTIONS)
+    client_presence_before = _domain_presence()
+    _assert_domain_absence(client_presence_before)
+    client_origins = {
+        module_name: _assert_installed_origin(module_name)
+        for module_name in (
+            "bt_api_py.service_execution",
+            "bt_api_py.service_runtime",
+            "bt_api_base.service_protocol",
+            "bt_api_transport_zmq.client",
+        )
+    }
+    client_direct_url = _read_direct_url()
+    assert not (client_direct_url or {}).get("dir_info", {}).get("editable", False)
+
+    rpc_endpoint = _free_endpoints()[0]
+    server_python_raw = os.environ.get("BT_API_ITERATION10_CFG04_SERVER_PYTHON")
+    assert server_python_raw, "Root must provide the separate installed-domain server venv"
+    server_python = Path(server_python_raw).resolve()
+    assert server_python.is_file()
+    server_public, server_secret = zmq.curve_keypair()
+    strategy_public, strategy_secret = zmq.curve_keypair()
+    payload = {
+        "service_config": _cfg04_service_config(rpc_endpoint),
+        "registry_path": str(tmp_path / "cfg04-books-registry.sqlite3"),
+        "account_journal_path": str(tmp_path / "cfg04-books-account-journal.sqlite3"),
+        "account_guard_directory": str(tmp_path / "cfg04-books-account-guard"),
+        "execution_store_path": str(tmp_path / "cfg04-books-execution.sqlite3"),
+        "risk_store_path": str(tmp_path / "cfg04-books-risk.sqlite3"),
+        "server_public": _encode_key(server_public),
+        "server_secret": _encode_key(server_secret),
+        "strategy_public": _encode_key(strategy_public),
+        "account_book_query_mode": True,
+    }
+    source_file = Path(__file__).resolve()
+    stderr_path = tmp_path / "cfg04-books-server-stderr.txt"
+    control_output: queue.Queue[object] = queue.Queue()
+    runtime: ServiceClientRuntime | None = None
+    forced_cleanup: list[str] = []
+    server_closed_normally = False
+    with stderr_path.open("w", encoding="utf-8", errors="backslashreplace") as stderr_file:
+        process = subprocess.Popen(
+            [str(server_python), str(source_file), "--cfg04-server"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=stderr_file,
+            text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
+            bufsize=1,
+            cwd=tmp_path,
+        )
+        assert process.stdin is not None and process.stdout is not None
+        output_reader = threading.Thread(
+            target=_stdout_json_reader,
+            args=(process.stdout, control_output),
+            name="cfg04-books-server-output-reader",
+            daemon=True,
+        )
+        output_reader.start()
+        try:
+            process.stdin.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+            process.stdin.flush()
+            ready = _receive_server(process, control_output)
+            assert ready.get("kind") == "ready", ready
+            assert ready["pid"] != os.getpid()
+            assert str(Path(ready["prefix"]).resolve()) != client_prefix
+            assert not (ready["direct_url"] or {}).get("dir_info", {}).get("editable", False)
+            expected_server_distributions = {
+                **_EXPECTED_CLIENT_DISTRIBUTIONS,
+                "bt_api_gateway": "0.1.0",
+                "bt_api_execution": "0.2.0",
+                "bt_api_risk": "0.1.0",
+                "bt_api_monitor": "0.1.0",
+            }
+            _assert_exact_wheel_versions(ready["distributions"], expected_server_distributions)
+            assert all(
+                row["distribution_installed"]
+                and row["import_spec_available"]
+                and row["module_loaded"]
+                for row in ready["domain_presence"].values()
+            ), ready["domain_presence"]
+            assert ready["summary"]["state"] == "started"
+            components = {row["component"]: row for row in ready["summary"]["components"]}
+            assert set(components) == {"gateway", "execution", "risk", "monitor"}
+            execution_capabilities = {
+                row["port"]: set(row["operations"])
+                for row in components["execution"]["capabilities"]
+            }
+            assert execution_capabilities["service.order_query"] == {
+                "orders.query",
+                "execution.account_books.query",
+            }
+            server_prefix = Path(ready["prefix"]).resolve()
+            assert all(
+                Path(origin).is_relative_to(server_prefix / "Lib" / "site-packages")
+                for origin in ready["origins"].values()
+            ), ready["origins"]
+
+            client_config = _cfg04_client_config(ready["endpoint"])
+            client_config["clients"] = {"execution": client_config["clients"]["execution"]}
+            strategy_block = client_config["clients"]["execution"]
+            strategy_block["settings"]["bindings"] = [
+                binding
+                for binding in strategy_block["settings"]["bindings"]
+                if binding["mount"] in {"broker.orders", "broker.order_query"}
+            ]
+            actual_config = parse_client_config(client_config)
+            strategy_identity = WireIdentity(
+                WireRole.STRATEGY_CLIENT,
+                _CFG04_STRATEGY_PRINCIPAL,
+                _CFG04_STRATEGY_REF,
+            )
+            service_identity = WireIdentity(
+                WireRole.SERVICE, _CFG04_SERVICE_PRINCIPAL, _CFG04_SERVICE_ID
+            )
+            runtime = ServiceClientRuntime(
+                actual_config,
+                identity=strategy_identity,
+                scope_resolver=lambda _scope_ref: _CFG04_WIRE_SCOPE,
+                peer_resolver=lambda _service_id: service_identity,
+                transport_factory=ZmqTransportFactory(
+                    {
+                        _CFG04_TRANSPORT_REF: ClientCurveKeys(
+                            server_public,
+                            strategy_public,
+                            strategy_secret,
+                        )
+                    }
+                ),
+                run_id="iteration10-cfg04-account-books-run-v1",
+                requested_operations={
+                    "broker.orders": frozenset({"orders.submit"}),
+                    "broker.order_query": frozenset(
+                        {"execution.account_books.query"}
+                    ),
+                },
+            )
+            registration = runtime.start()
+            assert registration.degraded_count == 0
+            registered = {row.mount: row.operations for row in registration.bindings}
+            assert registered == {
+                "broker.orders": frozenset({"orders.submit"}),
+                "broker.order_query": frozenset({"execution.account_books.query"}),
+            }
+
+            orders = ServiceExecutionClient(
+                runtime,
+                "broker.orders",
+                scope_ref=_CFG04_ORDER_SCOPE_REF,
+            )
+            submitted = orders.submit(
+                intent_id="iteration10-cfg04-books-intent-1",
+                signal_id="iteration10-cfg04-books-signal-1",
+                instrument="SYNTH-USD",
+                side="BUY",
+                position_effect="OPEN",
+                order_type="LIMIT",
+                quantity=Decimal("2"),
+                price=Decimal("10"),
+                metadata_version="iteration10-cfg04-metadata-v1",
+            )
+            assert submitted.state == "PARTIALLY_FILLED"
+            assert submitted.provider_order_id == "cfg04-books-provider-order-1"
+            assert submitted.filled_quantity == Decimal("1.25")
+            assert submitted.average_price == Decimal("10")
+            assert submitted.cumulative_commission == Decimal("0.13")
+
+            book_reply = runtime.call(
+                "broker.order_query",
+                "execution.account_books.query",
+                {},
+                scope_ref=_CFG04_QUERY_SCOPE_REF,
+            )
+            assert book_reply["ok"] is True and book_reply["code"] == "OK", book_reply
+            book_result = book_reply["result"]
+            assert book_result["view"] == "OWNER_BOOK"
+            assert book_result["owner_kind"] == "STRATEGY"
+            assert book_result["owner_ref"] == _CFG04_STRATEGY_REF
+            coverage = book_result["coverage"]
+            assert coverage["complete"] is True
+            assert coverage["scope_directory_revision"] == "cfg04-owner-directory-r1"
+            assert coverage["baseline_execution_cursor"] == 0
+            assert type(coverage["current_execution_cursor"]) is int
+            assert coverage["current_execution_cursor"] > 0
+            assert type(coverage["journal_generation"]) is str and coverage["journal_generation"]
+            assert len(book_result["books"]) == 1
+            book = book_result["books"][0]
+            assert (book["owner_kind"], book["owner_ref"]) == (
+                "STRATEGY",
+                _CFG04_STRATEGY_REF,
+            )
+            assert [
+                (item["instrument"], item["net_quantity"])
+                for item in book["current_positions"]
+            ] == [("SYNTH-USD", "1.25")]
+            assert [dict(item) for item in book["fees_since_baseline"]] == [
+                {"currency": "USDT", "amount": "0.13"}
+            ]
+            assert len(book_result["managed_orders"]) == 1
+            assert book_result["managed_orders"][0]["intent_id"] == submitted.intent_id
+            assert book_result["managed_orders"][0]["state"] == "PARTIALLY_FILLED"
+            assert len(book_result["managed_fills"]) == 1
+            managed_fill = book_result["managed_fills"][0]
+            assert managed_fill["intent_id"] == submitted.intent_id
+            assert managed_fill["fee_delta"] == "0.13"
+            assert type(book_result["external_orders"]) is tuple
+            assert not book_result["external_orders"]
+            assert type(book_result["external_fills"]) is tuple
+            assert not book_result["external_fills"]
+
+            after_query = _domain_presence()
+            _assert_domain_absence(after_query)
+            _send_server(process, {"action": "status"})
+            live = _receive_server(process, control_output)
+            assert live["kind"] == "status"
+            assert live["submitted"] == [submitted.intent_id]
+            assert live["account_book_reads"] == 1
+            assert live["account_book_last_cut"][0] == coverage["journal_generation"]
+            assert live["account_book_last_cut"][1] == coverage["current_execution_cursor"]
+            assert live["admission_reserved"] == [submitted.intent_id]
+
+            runtime.close()
+            assert runtime.state == "closed"
+            assert runtime.cleanup_failures == 0
+            assert runtime.unregister_uncertainties == 0
+            _send_server(process, {"action": "close"})
+            process.stdin.close()
+            closed = _receive_server(process, control_output)
+            assert closed.get("kind") == "closed", closed
+            assert closed["summary"]["state"] == "closed"
+            assert closed["account_close_calls"] == 1
+            assert set(closed["resource_closes"]) == {"execution", "gateway", "risk"}
+            assert closed["control_reader_stopped"] is True
+            process.wait(timeout=15)
+            assert process.returncode == 0
+            server_closed_normally = True
+        finally:
+            if runtime is not None and runtime.state != "closed":
+                with suppress(Exception):
+                    runtime.close()
+            if process.poll() is None:
+                try:
+                    _send_server(process, {"action": "close"})
+                    cleanup_reply = _receive_server(process, control_output, timeout=8.0)
+                    if cleanup_reply.get("kind") == "closed":
+                        process.wait(timeout=8)
+                        server_closed_normally = process.returncode == 0
+                except BaseException as error:
+                    forced_cleanup.append(f"cleanup_exception:{type(error).__name__}")
+            if process.stdin is not None and not process.stdin.closed:
+                process.stdin.close()
+            if process.poll() is None:
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    forced_cleanup.append("server_terminate")
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        forced_cleanup.append("server_kill")
+                        process.kill()
+                        process.wait(timeout=5)
+            output_reader.join(timeout=2)
+            if process.stdout is not None:
+                process.stdout.close()
+
+    stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace")
+    assert server_closed_normally
+    assert forced_cleanup == [], forced_cleanup
+    assert process.returncode == 0
+    assert not output_reader.is_alive(), "account-books server output reader remained after exit"
+    client_presence_after = _domain_presence()
+    _assert_domain_absence(client_presence_after)
+    report = {
+        "status": "PASS_CFG04_ACCOUNT_BOOKS_GENERIC_RUNTIME_PROXY_WITH_DOMAIN_ABSENT_CLIENT",
+        "account_books_operation": "execution.account_books.query",
+        "client_distributions": client_distributions,
+        "client_domain_presence_before": client_presence_before,
+        "client_domain_presence_after": client_presence_after,
+        "client_origins": client_origins,
+        "client_prefix": client_prefix,
+        "server_distributions": ready["distributions"],
+        "server_origins": ready["origins"],
+        "server_prefix": ready["prefix"],
+        "server_pid": ready["pid"],
+        "startup_components": ready["summary"]["components"],
+        "registered_operations": {
+            mount: sorted(operations) for mount, operations in registered.items()
+        },
+        "intent_state": submitted.state,
+        "filled_quantity": str(submitted.filled_quantity),
+        "commission": str(submitted.cumulative_commission),
+        "book_owner": (book["owner_kind"], book["owner_ref"]),
+        "book_position": book["current_positions"][0]["net_quantity"],
+        "coverage": dict(coverage),
+        "managed_fill": dict(managed_fill),
         "normal_runtime_close": runtime.state == "closed",
         "normal_host_close": server_closed_normally,
         "server_control_reader_stopped": closed["control_reader_stopped"],

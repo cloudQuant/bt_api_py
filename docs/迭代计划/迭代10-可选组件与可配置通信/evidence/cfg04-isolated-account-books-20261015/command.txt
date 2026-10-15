@@ -1,0 +1,5 @@
+Set-Location -LiteralPath 'D:\temp\iteration10-cfg04-account-books-query-20261015-r1\report-normalized-test-only'
+$env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
+$env:PYTHONPATH='D:\temp\iteration10-cfg04-account-books-query-20261015-r1\report-normalized-test-only'
+$env:BT_API_ITERATION10_CFG04_SERVER_PYTHON='D:\temp\iteration10-cfg04-proxy-matrix-20261015-r1\server-venv\Scripts\python.exe'
+& 'D:\temp\iteration10-cfg04-proxy-matrix-20261015-r1\client-venv\Scripts\python.exe' -m pytest --noconftest --import-mode=importlib -s --junitxml='D:\temp\iteration10-cfg04-account-books-query-20261015-r1\account-books-query-final-junit.xml' --basetemp='D:\temp\iteration10-cfg04-account-books-query-20261015-r1\pytest-tmp-account-books-query-final' 'tests/unit/test_iteration10_optional_install_matrix.py::test_isolated_client_calls_account_books_over_public_runtime_without_domain_packages'

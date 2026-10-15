@@ -1,0 +1,1712 @@
+{
+  "accepted_runtime_artifact_reference": {
+    "acceptance_result": {
+      "bytes": 5825,
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\acceptance-result.json",
+      "sha256": "e8d80e2ec992d19204a73c44f79d66024f63207b656fe135e4e7d06dbc6dd869"
+    },
+    "command": {
+      "bytes": 881,
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-command.txt",
+      "sha256": "d6d0fc132d9f5c7e1ff2be47571f0041d04c231d492da5d3a426d903f37ad06a"
+    },
+    "exit_file": {
+      "bytes": 3,
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-exit.txt",
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    "junit": {
+      "bytes": 420,
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final-junit.xml",
+      "sha256": "7b5cca7547cf6dcfc44e458ca764afd255a7db9eaa6bbf3b6fe427fda4984ec9"
+    },
+    "log": {
+      "bytes": 6426,
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\account-books-query-final.log",
+      "sha256": "4668fae7b1565eb610af5d83775dada3f540407a9e3485f5f0668ece78bc8c42"
+    },
+    "pytest_exit": 0,
+    "runtime_warning_count": 1,
+    "server_stderr": {
+      "bytes": 395,
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\pytest-tmp-account-books-query-final\\test_isolated_client_calls_acc0\\cfg04-books-server-stderr.txt",
+      "sha256": "3ee8d02ac421df82c01a303cd2f54566a08292a0bd5a29b13204b0d3e02c786a"
+    },
+    "test_copy": {
+      "bytes": 100851,
+      "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\report-normalized-test-only\\tests\\unit\\test_iteration10_optional_install_matrix.py",
+      "sha256": "dd2db38a9775bd189810a28ef61d130d756f86089e794b28d8cd21520aeb715d"
+    },
+    "test_sha256": "DD2DB38A9775BD189810A28EF61D130D756F86089E794B28D8CD21520AEB715D",
+    "tests_passed": 1
+  },
+  "artifact_pins": {
+    "execution_source_tar": {
+      "bytes": 2160640,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source\\execution-source.tar",
+      "sha256": "49eddd71242fe35c3bd660cdfdb7ce77ca7df2c582bbf97af736e0378ac97a42"
+    },
+    "execution_wheel": {
+      "bytes": 224571,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl",
+      "sha256": "67b0d9adcf2e83ac5c1fafa3fa89b00d0f1c9c5ed527fb379f2ba71841ee5b9f"
+    },
+    "sdk_wheel": {
+      "bytes": 1127431,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_py-0.15.5-py3-none-any.whl",
+      "sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88"
+    }
+  },
+  "client_server_installation_consistency": {
+    "all_checks_passed": true,
+    "checks": {
+      "client": {
+        "actual_distributions": [
+          "bt_api_base",
+          "bt_api_py",
+          "bt_api_transport_zmq"
+        ],
+        "distribution_set_matches": true,
+        "executable": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Scripts\\python.exe",
+        "expected_distributions": [
+          "bt_api_base",
+          "bt_api_py",
+          "bt_api_transport_zmq"
+        ],
+        "forbidden_domain_distributions_absent": true,
+        "forbidden_domain_specs_absent": true,
+        "packages": {
+          "bt_api_base": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl",
+            "expected_version": "0.15.8",
+            "installed_version": "0.15.8",
+            "old_report_wheel_sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+            "original_wheel_sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_py": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl",
+            "expected_version": "0.15.5",
+            "installed_version": "0.15.5",
+            "old_report_wheel_sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+            "original_wheel_sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_transport_zmq": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+            "expected_version": "0.1.0",
+            "installed_version": "0.1.0",
+            "old_report_wheel_sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+            "original_wheel_sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          }
+        },
+        "python_version": "3.11.5",
+        "python_version_matches": true
+      },
+      "server": {
+        "actual_distributions": [
+          "bt_api_base",
+          "bt_api_execution",
+          "bt_api_gateway",
+          "bt_api_monitor",
+          "bt_api_py",
+          "bt_api_risk",
+          "bt_api_transport_zmq"
+        ],
+        "distribution_set_matches": true,
+        "executable": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Scripts\\python.exe",
+        "expected_distributions": [
+          "bt_api_base",
+          "bt_api_execution",
+          "bt_api_gateway",
+          "bt_api_monitor",
+          "bt_api_py",
+          "bt_api_risk",
+          "bt_api_transport_zmq"
+        ],
+        "forbidden_domain_specs_absent": true,
+        "packages": {
+          "bt_api_base": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl",
+            "expected_version": "0.15.8",
+            "installed_version": "0.15.8",
+            "old_report_wheel_sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+            "original_wheel_sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_execution": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_execution-0.2.0-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "67b0d9adcf2e83ac5c1fafa3fa89b00d0f1c9c5ed527fb379f2ba71841ee5b9f",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_execution-0.2.0-py3-none-any.whl",
+            "expected_version": "0.2.0",
+            "installed_version": "0.2.0",
+            "old_report_wheel_sha256": "67b0d9adcf2e83ac5c1fafa3fa89b00d0f1c9c5ed527fb379f2ba71841ee5b9f",
+            "original_wheel_sha256": "67b0d9adcf2e83ac5c1fafa3fa89b00d0f1c9c5ed527fb379f2ba71841ee5b9f",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_gateway": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_gateway-0.1.0-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "de0f007607bf55ee78e8daa868a6d96a7bf79848020a98f97a7338265f52a06e",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_gateway-0.1.0-py3-none-any.whl",
+            "expected_version": "0.1.0",
+            "installed_version": "0.1.0",
+            "old_report_wheel_sha256": "de0f007607bf55ee78e8daa868a6d96a7bf79848020a98f97a7338265f52a06e",
+            "original_wheel_sha256": "de0f007607bf55ee78e8daa868a6d96a7bf79848020a98f97a7338265f52a06e",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_monitor": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_monitor-0.1.0-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "e2fc82d63fbfa7f6681d8440735847c7508ab1b4157c201d487c26acc73596cf",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_monitor-0.1.0-py3-none-any.whl",
+            "expected_version": "0.1.0",
+            "installed_version": "0.1.0",
+            "old_report_wheel_sha256": "e2fc82d63fbfa7f6681d8440735847c7508ab1b4157c201d487c26acc73596cf",
+            "original_wheel_sha256": "e2fc82d63fbfa7f6681d8440735847c7508ab1b4157c201d487c26acc73596cf",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_py": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl",
+            "expected_version": "0.15.5",
+            "installed_version": "0.15.5",
+            "old_report_wheel_sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+            "original_wheel_sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_risk": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_risk-0.1.0-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "0e79856fb69b030964dca77286792d8449ac72958b3f63a38849fe554bf5dff5",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_risk-0.1.0-py3-none-any.whl",
+            "expected_version": "0.1.0",
+            "installed_version": "0.1.0",
+            "old_report_wheel_sha256": "0e79856fb69b030964dca77286792d8449ac72958b3f63a38849fe554bf5dff5",
+            "original_wheel_sha256": "0e79856fb69b030964dca77286792d8449ac72958b3f63a38849fe554bf5dff5",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          },
+          "bt_api_transport_zmq": {
+            "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+            "direct_url_hash_matches_original_wheel": true,
+            "direct_url_matches_original_wheel": true,
+            "direct_url_sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+            "expected_direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+            "expected_version": "0.1.0",
+            "installed_version": "0.1.0",
+            "old_report_wheel_sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+            "original_wheel_sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+            "version_matches": true,
+            "wheel_sha_matches_old_report": true
+          }
+        },
+        "python_version": "3.11.5",
+        "python_version_matches": true
+      }
+    },
+    "environments": {
+      "client": {
+        "distributions": {
+          "bt_api_base": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+                "hashes": {
+                  "sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.15.8"
+          },
+          "bt_api_execution": {
+            "installed": false
+          },
+          "bt_api_gateway": {
+            "installed": false
+          },
+          "bt_api_monitor": {
+            "installed": false
+          },
+          "bt_api_py": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+                "hashes": {
+                  "sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.15.5"
+          },
+          "bt_api_risk": {
+            "installed": false
+          },
+          "bt_api_transport_zmq": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+                "hashes": {
+                  "sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.1.0"
+          },
+          "specs": {
+            "bt_api_execution": false,
+            "bt_api_gateway": false,
+            "bt_api_monitor": false,
+            "bt_api_py": true,
+            "bt_api_risk": false,
+            "bt_api_transport_zmq": true
+          }
+        },
+        "executable": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Scripts\\python.exe",
+        "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]"
+      },
+      "server": {
+        "distributions": {
+          "bt_api_base": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+                "hashes": {
+                  "sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.15.8"
+          },
+          "bt_api_execution": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=67b0d9adcf2e83ac5c1fafa3fa89b00d0f1c9c5ed527fb379f2ba71841ee5b9f",
+                "hashes": {
+                  "sha256": "67b0d9adcf2e83ac5c1fafa3fa89b00d0f1c9c5ed527fb379f2ba71841ee5b9f"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_execution-0.2.0-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.2.0"
+          },
+          "bt_api_gateway": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=de0f007607bf55ee78e8daa868a6d96a7bf79848020a98f97a7338265f52a06e",
+                "hashes": {
+                  "sha256": "de0f007607bf55ee78e8daa868a6d96a7bf79848020a98f97a7338265f52a06e"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_gateway-0.1.0-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.1.0"
+          },
+          "bt_api_monitor": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=e2fc82d63fbfa7f6681d8440735847c7508ab1b4157c201d487c26acc73596cf",
+                "hashes": {
+                  "sha256": "e2fc82d63fbfa7f6681d8440735847c7508ab1b4157c201d487c26acc73596cf"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_monitor-0.1.0-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.1.0"
+          },
+          "bt_api_py": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+                "hashes": {
+                  "sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.15.5"
+          },
+          "bt_api_risk": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=0e79856fb69b030964dca77286792d8449ac72958b3f63a38849fe554bf5dff5",
+                "hashes": {
+                  "sha256": "0e79856fb69b030964dca77286792d8449ac72958b3f63a38849fe554bf5dff5"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_risk-0.1.0-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.1.0"
+          },
+          "bt_api_transport_zmq": {
+            "direct_url": {
+              "archive_info": {
+                "hash": "sha256=6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+                "hashes": {
+                  "sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84"
+                }
+              },
+              "url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl"
+            },
+            "installed": true,
+            "version": "0.1.0"
+          },
+          "specs": {
+            "bt_api_execution": true,
+            "bt_api_gateway": true,
+            "bt_api_monitor": true,
+            "bt_api_py": true,
+            "bt_api_risk": true,
+            "bt_api_transport_zmq": true
+          }
+        },
+        "executable": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Scripts\\python.exe",
+        "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]"
+      }
+    },
+    "original_install_reports": {
+      "client": {
+        "bytes": 768655,
+        "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-install-report.json",
+        "pip_version": "23.2.1",
+        "python_full_version": "3.11.5",
+        "requested_local_wheels": [
+          "bt_api_base",
+          "bt_api_py",
+          "bt_api_transport_zmq"
+        ],
+        "sha256": "d08920ce9af435fd7d68b1f015aba6620519f04b1e74c970dd5dcbe327852764"
+      },
+      "server": {
+        "bytes": 925902,
+        "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-install-report.json",
+        "pip_version": "23.2.1",
+        "python_full_version": "3.11.5",
+        "requested_local_wheels": [
+          "bt_api_base",
+          "bt_api_execution",
+          "bt_api_gateway",
+          "bt_api_monitor",
+          "bt_api_py",
+          "bt_api_risk",
+          "bt_api_transport_zmq"
+        ],
+        "sha256": "b0dbe585dea17d38a1bd98361baa06dad5741249bb0299c34bee0fa9b0f48d96"
+      }
+    },
+    "venvs": {
+      "client": {
+        "configured_value": "false",
+        "include_system_site_packages": false,
+        "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\pyvenv.cfg",
+        "sha256": "66906f7216179302e801bbd20d93f3750135c0d43ed9736867fa7144a9341b47"
+      },
+      "server": {
+        "configured_value": "false",
+        "include_system_site_packages": false,
+        "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\pyvenv.cfg",
+        "sha256": "684538e7e0095056f2ff0b2b0939755f8e49cc2fed8622ba41a47d99dc397a45"
+      }
+    }
+  },
+  "created_utc": "2026-10-15T15:25:49.338492+00:00",
+  "evidence_limit": "This supplements source and installation byte provenance only. The accepted account-books test/run result is separately pinned in acceptance-result.json. The import probe is not a ServiceHost run and does not upgrade which module origins were individually asserted by that runtime test.",
+  "execution_tar_git_binding": {
+    "expected_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+    "matches": true,
+    "pax_comment": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00"
+  },
+  "fixed_source_commits": {
+    "bt_api_execution": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+    "bt_api_py": "28854c73a235645adcc0f6a6997053d6592504f1"
+  },
+  "new_account_books_runtime_binding_coverage": {
+    "already_covered_execution_module_names": [
+      "bt_api_execution.service_component"
+    ],
+    "modules_from_server_installed_adapter_import_probe": [
+      "bt_api_execution",
+      "bt_api_execution.account_reconciliation",
+      "bt_api_execution.admission",
+      "bt_api_execution.basic_admission",
+      "bt_api_execution.cancellation",
+      "bt_api_execution.contracts",
+      "bt_api_execution.ctp_callback_ledger_adapter",
+      "bt_api_execution.ctp_callback_session",
+      "bt_api_execution.ctp_callback_source_bridge",
+      "bt_api_execution.ctp_native_callbacks",
+      "bt_api_execution.errors",
+      "bt_api_execution.facade",
+      "bt_api_execution.group_contracts",
+      "bt_api_execution.group_coordinator",
+      "bt_api_execution.group_order_contracts",
+      "bt_api_execution.group_store",
+      "bt_api_execution.ports",
+      "bt_api_execution.service_component",
+      "bt_api_execution.service_order_entry",
+      "bt_api_execution.store"
+    ],
+    "newly_covered_modules": [
+      "bt_api_execution",
+      "bt_api_execution.account_reconciliation",
+      "bt_api_execution.admission",
+      "bt_api_execution.basic_admission",
+      "bt_api_execution.cancellation",
+      "bt_api_execution.contracts",
+      "bt_api_execution.ctp_callback_ledger_adapter",
+      "bt_api_execution.ctp_callback_session",
+      "bt_api_execution.ctp_callback_source_bridge",
+      "bt_api_execution.ctp_native_callbacks",
+      "bt_api_execution.errors",
+      "bt_api_execution.facade",
+      "bt_api_execution.group_contracts",
+      "bt_api_execution.group_coordinator",
+      "bt_api_execution.group_order_contracts",
+      "bt_api_execution.group_store",
+      "bt_api_execution.ports",
+      "bt_api_execution.service_order_entry",
+      "bt_api_execution.store"
+    ],
+    "previous_report_had_execution_service_component": true,
+    "previous_report_missing_execution_modules": 19,
+    "probe_invoked_server_installed_sdk_adapter": true,
+    "probe_path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\module-origin-probe.py",
+    "probe_stderr_class": "empty"
+  },
+  "newline_normalization_rule": "Only CRLF pairs are normalized to LF for Git/tar/wheel/installed source comparisons; lone CR and all other bytes are unchanged. Raw installed and wheel bytes are also compared.",
+  "previous_source_install_verification": {
+    "module_rows": 19,
+    "modules_checked": 19,
+    "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source-install-verification.json",
+    "sha256": "b8011ae49dc0dffd61ddee50f366b1b6855c801136d251875a3ae0df701534b5"
+  },
+  "purpose": "additive metadata-only source/install provenance for newly used account-books imports; no QA or ServiceHost rerun",
+  "schema_version": 1,
+  "sdk_account_books_adapter_rechecked": {
+    "archive_included": false,
+    "git_blob_oid": "1a776ea64d6cbe90a9ac5692d289da13e44b3bff",
+    "git_path": "bt_api_py/service_execution_account_books.py",
+    "git_repo": "D:\\bt_api_py",
+    "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_execution_account_books.py",
+    "module": "bt_api_py.service_execution_account_books",
+    "normalized_sources_all_equal": true,
+    "raw_installed_equals_wheel": true,
+    "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+    "sources": {
+      "git": {
+        "bytes": 21825,
+        "line_endings": {
+          "crlf_pairs": 0,
+          "lf_only": 564,
+          "lone_cr": 0
+        },
+        "newline_normalized_sha256": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+        "sha256": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61"
+      },
+      "installed": {
+        "bytes": 22389,
+        "line_endings": {
+          "crlf_pairs": 564,
+          "lf_only": 0,
+          "lone_cr": 0
+        },
+        "newline_normalized_sha256": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+        "sha256": "ae8a48e54e8d06433e24f1f443d917f9c47eab35b5d764c4a51ef0da8478c014"
+      },
+      "wheel": {
+        "bytes": 22389,
+        "line_endings": {
+          "crlf_pairs": 564,
+          "lf_only": 0,
+          "lone_cr": 0
+        },
+        "newline_normalized_sha256": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+        "sha256": "ae8a48e54e8d06433e24f1f443d917f9c47eab35b5d764c4a51ef0da8478c014"
+      }
+    },
+    "wheel_member": "bt_api_py/service_execution_account_books.py",
+    "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_py-0.15.5-py3-none-any.whl"
+  },
+  "server_execution_module_bindings": [
+    {
+      "archive_included": true,
+      "git_blob_oid": "59cb1c59af1c73f8755e91fece40300d7a3c3792",
+      "git_path": "src/bt_api_execution/__init__.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\__init__.py",
+      "module": "bt_api_execution",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 10096,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 353,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "33c10bf202be14f7c236e1115479a4df087574b6b2b9075709ee56e841a38489",
+          "sha256": "33c10bf202be14f7c236e1115479a4df087574b6b2b9075709ee56e841a38489"
+        },
+        "git_archive": {
+          "bytes": 10449,
+          "line_endings": {
+            "crlf_pairs": 353,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "33c10bf202be14f7c236e1115479a4df087574b6b2b9075709ee56e841a38489",
+          "sha256": "62a34d56c8492225c91046d381ed5c25e9f6a49c4b7ea4cb55953b05f83a9063"
+        },
+        "installed": {
+          "bytes": 10449,
+          "line_endings": {
+            "crlf_pairs": 353,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "33c10bf202be14f7c236e1115479a4df087574b6b2b9075709ee56e841a38489",
+          "sha256": "62a34d56c8492225c91046d381ed5c25e9f6a49c4b7ea4cb55953b05f83a9063"
+        },
+        "wheel": {
+          "bytes": 10449,
+          "line_endings": {
+            "crlf_pairs": 353,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "33c10bf202be14f7c236e1115479a4df087574b6b2b9075709ee56e841a38489",
+          "sha256": "62a34d56c8492225c91046d381ed5c25e9f6a49c4b7ea4cb55953b05f83a9063"
+        }
+      },
+      "wheel_member": "bt_api_execution/__init__.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "28b54e5384344047b197b33821100f80c302515c",
+      "git_path": "src/bt_api_execution/account_reconciliation.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\account_reconciliation.py",
+      "module": "bt_api_execution.account_reconciliation",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 61541,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 1410,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "f20350e7284d6d6e5a3d8a94965f442298d34c74c715dbfe2b3122d7857b6fb5",
+          "sha256": "f20350e7284d6d6e5a3d8a94965f442298d34c74c715dbfe2b3122d7857b6fb5"
+        },
+        "git_archive": {
+          "bytes": 62951,
+          "line_endings": {
+            "crlf_pairs": 1410,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "f20350e7284d6d6e5a3d8a94965f442298d34c74c715dbfe2b3122d7857b6fb5",
+          "sha256": "6a325700ee18654b4cc63c3ff855e86979b249fb372d9e527a9aef5cea9a70db"
+        },
+        "installed": {
+          "bytes": 62951,
+          "line_endings": {
+            "crlf_pairs": 1410,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "f20350e7284d6d6e5a3d8a94965f442298d34c74c715dbfe2b3122d7857b6fb5",
+          "sha256": "6a325700ee18654b4cc63c3ff855e86979b249fb372d9e527a9aef5cea9a70db"
+        },
+        "wheel": {
+          "bytes": 62951,
+          "line_endings": {
+            "crlf_pairs": 1410,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "f20350e7284d6d6e5a3d8a94965f442298d34c74c715dbfe2b3122d7857b6fb5",
+          "sha256": "6a325700ee18654b4cc63c3ff855e86979b249fb372d9e527a9aef5cea9a70db"
+        }
+      },
+      "wheel_member": "bt_api_execution/account_reconciliation.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "d1b7e30c9d29a8be3e7cf208c307d04b51960592",
+      "git_path": "src/bt_api_execution/admission.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\admission.py",
+      "module": "bt_api_execution.admission",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 6838,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 168,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "e348c69028cc37f949095aa078878268398c87b79962404da27b5dcbea0e8237",
+          "sha256": "e348c69028cc37f949095aa078878268398c87b79962404da27b5dcbea0e8237"
+        },
+        "git_archive": {
+          "bytes": 7006,
+          "line_endings": {
+            "crlf_pairs": 168,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "e348c69028cc37f949095aa078878268398c87b79962404da27b5dcbea0e8237",
+          "sha256": "386370f20c059e5908dc4004cee71d11a71d4b18da4816ffc75b60c8748516d8"
+        },
+        "installed": {
+          "bytes": 7006,
+          "line_endings": {
+            "crlf_pairs": 168,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "e348c69028cc37f949095aa078878268398c87b79962404da27b5dcbea0e8237",
+          "sha256": "386370f20c059e5908dc4004cee71d11a71d4b18da4816ffc75b60c8748516d8"
+        },
+        "wheel": {
+          "bytes": 7006,
+          "line_endings": {
+            "crlf_pairs": 168,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "e348c69028cc37f949095aa078878268398c87b79962404da27b5dcbea0e8237",
+          "sha256": "386370f20c059e5908dc4004cee71d11a71d4b18da4816ffc75b60c8748516d8"
+        }
+      },
+      "wheel_member": "bt_api_execution/admission.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "3e727048d988683adc8c9047d7548acb2d861a9f",
+      "git_path": "src/bt_api_execution/basic_admission.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\basic_admission.py",
+      "module": "bt_api_execution.basic_admission",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 29584,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 674,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "6ae74b5e5ccdc6314f6d6ac9662be12aef03527d988c15e51ce9d63ae9d940d3",
+          "sha256": "6ae74b5e5ccdc6314f6d6ac9662be12aef03527d988c15e51ce9d63ae9d940d3"
+        },
+        "git_archive": {
+          "bytes": 30258,
+          "line_endings": {
+            "crlf_pairs": 674,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "6ae74b5e5ccdc6314f6d6ac9662be12aef03527d988c15e51ce9d63ae9d940d3",
+          "sha256": "5e9da583397920e86c6147ef36f2009e88d32cfd9ee189e07a744116e6d96ba3"
+        },
+        "installed": {
+          "bytes": 30258,
+          "line_endings": {
+            "crlf_pairs": 674,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "6ae74b5e5ccdc6314f6d6ac9662be12aef03527d988c15e51ce9d63ae9d940d3",
+          "sha256": "5e9da583397920e86c6147ef36f2009e88d32cfd9ee189e07a744116e6d96ba3"
+        },
+        "wheel": {
+          "bytes": 30258,
+          "line_endings": {
+            "crlf_pairs": 674,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "6ae74b5e5ccdc6314f6d6ac9662be12aef03527d988c15e51ce9d63ae9d940d3",
+          "sha256": "5e9da583397920e86c6147ef36f2009e88d32cfd9ee189e07a744116e6d96ba3"
+        }
+      },
+      "wheel_member": "bt_api_execution/basic_admission.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "411baa5dcf13180a9a56429ffe2bd8e30f1f9ee3",
+      "git_path": "src/bt_api_execution/cancellation.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\cancellation.py",
+      "module": "bt_api_execution.cancellation",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 19657,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 520,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "68ffd8e790fca9309896075633193f9198e00ee8e8da545efa9ac011e083d4d5",
+          "sha256": "68ffd8e790fca9309896075633193f9198e00ee8e8da545efa9ac011e083d4d5"
+        },
+        "git_archive": {
+          "bytes": 20177,
+          "line_endings": {
+            "crlf_pairs": 520,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "68ffd8e790fca9309896075633193f9198e00ee8e8da545efa9ac011e083d4d5",
+          "sha256": "a38acbc96ed81ee71044393f8774449480547cae62d9479cad33488ff7e099cd"
+        },
+        "installed": {
+          "bytes": 20177,
+          "line_endings": {
+            "crlf_pairs": 520,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "68ffd8e790fca9309896075633193f9198e00ee8e8da545efa9ac011e083d4d5",
+          "sha256": "a38acbc96ed81ee71044393f8774449480547cae62d9479cad33488ff7e099cd"
+        },
+        "wheel": {
+          "bytes": 20177,
+          "line_endings": {
+            "crlf_pairs": 520,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "68ffd8e790fca9309896075633193f9198e00ee8e8da545efa9ac011e083d4d5",
+          "sha256": "a38acbc96ed81ee71044393f8774449480547cae62d9479cad33488ff7e099cd"
+        }
+      },
+      "wheel_member": "bt_api_execution/cancellation.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "7ea8f2490bdcef44186e38b42779f49d0225d9d9",
+      "git_path": "src/bt_api_execution/contracts.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\contracts.py",
+      "module": "bt_api_execution.contracts",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 59198,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 1455,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477",
+          "sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477"
+        },
+        "git_archive": {
+          "bytes": 60653,
+          "line_endings": {
+            "crlf_pairs": 1455,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477",
+          "sha256": "842a0bc6a6c2b6d1267fa8d875c14ac2f7a65dcffccf6a6ae742d719e8893394"
+        },
+        "installed": {
+          "bytes": 60653,
+          "line_endings": {
+            "crlf_pairs": 1455,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477",
+          "sha256": "842a0bc6a6c2b6d1267fa8d875c14ac2f7a65dcffccf6a6ae742d719e8893394"
+        },
+        "wheel": {
+          "bytes": 60653,
+          "line_endings": {
+            "crlf_pairs": 1455,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477",
+          "sha256": "842a0bc6a6c2b6d1267fa8d875c14ac2f7a65dcffccf6a6ae742d719e8893394"
+        }
+      },
+      "wheel_member": "bt_api_execution/contracts.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "b1480754bad79b439c7350e00c6d011aee6c8368",
+      "git_path": "src/bt_api_execution/ctp_callback_ledger_adapter.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\ctp_callback_ledger_adapter.py",
+      "module": "bt_api_execution.ctp_callback_ledger_adapter",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 11589,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 264,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "30e4a822103f296e64242be5285c36bdfab570e4e908d26480cb215f9ef25ee1",
+          "sha256": "30e4a822103f296e64242be5285c36bdfab570e4e908d26480cb215f9ef25ee1"
+        },
+        "git_archive": {
+          "bytes": 11853,
+          "line_endings": {
+            "crlf_pairs": 264,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "30e4a822103f296e64242be5285c36bdfab570e4e908d26480cb215f9ef25ee1",
+          "sha256": "d260453ce69617493205c0fad564a18cac436ccf4d70cb1fb3c5afa6a530916c"
+        },
+        "installed": {
+          "bytes": 11853,
+          "line_endings": {
+            "crlf_pairs": 264,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "30e4a822103f296e64242be5285c36bdfab570e4e908d26480cb215f9ef25ee1",
+          "sha256": "d260453ce69617493205c0fad564a18cac436ccf4d70cb1fb3c5afa6a530916c"
+        },
+        "wheel": {
+          "bytes": 11853,
+          "line_endings": {
+            "crlf_pairs": 264,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "30e4a822103f296e64242be5285c36bdfab570e4e908d26480cb215f9ef25ee1",
+          "sha256": "d260453ce69617493205c0fad564a18cac436ccf4d70cb1fb3c5afa6a530916c"
+        }
+      },
+      "wheel_member": "bt_api_execution/ctp_callback_ledger_adapter.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "22a7db9f774fb0328da5c21fff67be95e1a7239f",
+      "git_path": "src/bt_api_execution/ctp_callback_session.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\ctp_callback_session.py",
+      "module": "bt_api_execution.ctp_callback_session",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 18636,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 460,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "767301c60b5b1d16b028554ab438c0ce737f6a214f87b66098b5c13df7b9c94c",
+          "sha256": "767301c60b5b1d16b028554ab438c0ce737f6a214f87b66098b5c13df7b9c94c"
+        },
+        "git_archive": {
+          "bytes": 19096,
+          "line_endings": {
+            "crlf_pairs": 460,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "767301c60b5b1d16b028554ab438c0ce737f6a214f87b66098b5c13df7b9c94c",
+          "sha256": "cbdde6bb0d9e497d0544e20672ff6853454884eccd1c97138c0ee457fa97aac2"
+        },
+        "installed": {
+          "bytes": 19096,
+          "line_endings": {
+            "crlf_pairs": 460,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "767301c60b5b1d16b028554ab438c0ce737f6a214f87b66098b5c13df7b9c94c",
+          "sha256": "cbdde6bb0d9e497d0544e20672ff6853454884eccd1c97138c0ee457fa97aac2"
+        },
+        "wheel": {
+          "bytes": 19096,
+          "line_endings": {
+            "crlf_pairs": 460,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "767301c60b5b1d16b028554ab438c0ce737f6a214f87b66098b5c13df7b9c94c",
+          "sha256": "cbdde6bb0d9e497d0544e20672ff6853454884eccd1c97138c0ee457fa97aac2"
+        }
+      },
+      "wheel_member": "bt_api_execution/ctp_callback_session.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "32e9d073c9a213da77f29460d0075dc6263ead30",
+      "git_path": "src/bt_api_execution/ctp_callback_source_bridge.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\ctp_callback_source_bridge.py",
+      "module": "bt_api_execution.ctp_callback_source_bridge",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 34095,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 788,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d4298b54a8d066eab5d63319ebf0199eddc3fca609ccec548e68eca413985d6f",
+          "sha256": "d4298b54a8d066eab5d63319ebf0199eddc3fca609ccec548e68eca413985d6f"
+        },
+        "git_archive": {
+          "bytes": 34883,
+          "line_endings": {
+            "crlf_pairs": 788,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d4298b54a8d066eab5d63319ebf0199eddc3fca609ccec548e68eca413985d6f",
+          "sha256": "a916b0eb74bc8af6c8ecd98e5a23f9ac7f86c93f5fb4d712a2fcce9df52d1c51"
+        },
+        "installed": {
+          "bytes": 34883,
+          "line_endings": {
+            "crlf_pairs": 788,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d4298b54a8d066eab5d63319ebf0199eddc3fca609ccec548e68eca413985d6f",
+          "sha256": "a916b0eb74bc8af6c8ecd98e5a23f9ac7f86c93f5fb4d712a2fcce9df52d1c51"
+        },
+        "wheel": {
+          "bytes": 34883,
+          "line_endings": {
+            "crlf_pairs": 788,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d4298b54a8d066eab5d63319ebf0199eddc3fca609ccec548e68eca413985d6f",
+          "sha256": "a916b0eb74bc8af6c8ecd98e5a23f9ac7f86c93f5fb4d712a2fcce9df52d1c51"
+        }
+      },
+      "wheel_member": "bt_api_execution/ctp_callback_source_bridge.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "06d400fe78fd1457f1599bba83164567f1b28fb9",
+      "git_path": "src/bt_api_execution/ctp_native_callbacks.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\ctp_native_callbacks.py",
+      "module": "bt_api_execution.ctp_native_callbacks",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 40537,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 966,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "0d8bf4f20f5759f413e2f46a38dbc06a662fd6d93fe15341f0e7c44547366329",
+          "sha256": "0d8bf4f20f5759f413e2f46a38dbc06a662fd6d93fe15341f0e7c44547366329"
+        },
+        "git_archive": {
+          "bytes": 41503,
+          "line_endings": {
+            "crlf_pairs": 966,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "0d8bf4f20f5759f413e2f46a38dbc06a662fd6d93fe15341f0e7c44547366329",
+          "sha256": "a4852d568a90845faf946a5be773a13d514bc63156091d2caf0d548dfc2e75ae"
+        },
+        "installed": {
+          "bytes": 41503,
+          "line_endings": {
+            "crlf_pairs": 966,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "0d8bf4f20f5759f413e2f46a38dbc06a662fd6d93fe15341f0e7c44547366329",
+          "sha256": "a4852d568a90845faf946a5be773a13d514bc63156091d2caf0d548dfc2e75ae"
+        },
+        "wheel": {
+          "bytes": 41503,
+          "line_endings": {
+            "crlf_pairs": 966,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "0d8bf4f20f5759f413e2f46a38dbc06a662fd6d93fe15341f0e7c44547366329",
+          "sha256": "a4852d568a90845faf946a5be773a13d514bc63156091d2caf0d548dfc2e75ae"
+        }
+      },
+      "wheel_member": "bt_api_execution/ctp_native_callbacks.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "e85bd9255c0dbed5e3c16035679e08ccb186bcb7",
+      "git_path": "src/bt_api_execution/errors.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\errors.py",
+      "module": "bt_api_execution.errors",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 2311,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 77,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d1ea5a2a8bb596562f94cfa0acccf2229546e8d815aa84bd0ad52a0cfdbc6bab",
+          "sha256": "d1ea5a2a8bb596562f94cfa0acccf2229546e8d815aa84bd0ad52a0cfdbc6bab"
+        },
+        "git_archive": {
+          "bytes": 2388,
+          "line_endings": {
+            "crlf_pairs": 77,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d1ea5a2a8bb596562f94cfa0acccf2229546e8d815aa84bd0ad52a0cfdbc6bab",
+          "sha256": "0bfb6a07431911f699e051589c82890aa1957287bf7dc32f6f5995de6f60628b"
+        },
+        "installed": {
+          "bytes": 2388,
+          "line_endings": {
+            "crlf_pairs": 77,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d1ea5a2a8bb596562f94cfa0acccf2229546e8d815aa84bd0ad52a0cfdbc6bab",
+          "sha256": "0bfb6a07431911f699e051589c82890aa1957287bf7dc32f6f5995de6f60628b"
+        },
+        "wheel": {
+          "bytes": 2388,
+          "line_endings": {
+            "crlf_pairs": 77,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "d1ea5a2a8bb596562f94cfa0acccf2229546e8d815aa84bd0ad52a0cfdbc6bab",
+          "sha256": "0bfb6a07431911f699e051589c82890aa1957287bf7dc32f6f5995de6f60628b"
+        }
+      },
+      "wheel_member": "bt_api_execution/errors.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "4446e721ba797e1ea443d0d0a68a37ccb6680e36",
+      "git_path": "src/bt_api_execution/facade.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\facade.py",
+      "module": "bt_api_execution.facade",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 43568,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 1047,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "3c87de5c1b41430d8d99e6ac5be00c71365d2dbe3664f0ea7bd0c72608bd7a18",
+          "sha256": "3c87de5c1b41430d8d99e6ac5be00c71365d2dbe3664f0ea7bd0c72608bd7a18"
+        },
+        "git_archive": {
+          "bytes": 44615,
+          "line_endings": {
+            "crlf_pairs": 1047,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "3c87de5c1b41430d8d99e6ac5be00c71365d2dbe3664f0ea7bd0c72608bd7a18",
+          "sha256": "7d97d552e05ef65c9efd3c68719b2d623687bfac05bf6e91783e74d9f0a7c08e"
+        },
+        "installed": {
+          "bytes": 44615,
+          "line_endings": {
+            "crlf_pairs": 1047,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "3c87de5c1b41430d8d99e6ac5be00c71365d2dbe3664f0ea7bd0c72608bd7a18",
+          "sha256": "7d97d552e05ef65c9efd3c68719b2d623687bfac05bf6e91783e74d9f0a7c08e"
+        },
+        "wheel": {
+          "bytes": 44615,
+          "line_endings": {
+            "crlf_pairs": 1047,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "3c87de5c1b41430d8d99e6ac5be00c71365d2dbe3664f0ea7bd0c72608bd7a18",
+          "sha256": "7d97d552e05ef65c9efd3c68719b2d623687bfac05bf6e91783e74d9f0a7c08e"
+        }
+      },
+      "wheel_member": "bt_api_execution/facade.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "6b4cc8ff51633d579dc694e139181e430c41f501",
+      "git_path": "src/bt_api_execution/group_contracts.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\group_contracts.py",
+      "module": "bt_api_execution.group_contracts",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 14374,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 374,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "b5c57c730bf960f2f9a001583f60f2b4c4e79a6c5b293d7cfba2ec25ea048179",
+          "sha256": "b5c57c730bf960f2f9a001583f60f2b4c4e79a6c5b293d7cfba2ec25ea048179"
+        },
+        "git_archive": {
+          "bytes": 14748,
+          "line_endings": {
+            "crlf_pairs": 374,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "b5c57c730bf960f2f9a001583f60f2b4c4e79a6c5b293d7cfba2ec25ea048179",
+          "sha256": "dde10e5c088d25ebbe8f094db91de52e82ce26e696506ecaaf238c5c34174978"
+        },
+        "installed": {
+          "bytes": 14748,
+          "line_endings": {
+            "crlf_pairs": 374,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "b5c57c730bf960f2f9a001583f60f2b4c4e79a6c5b293d7cfba2ec25ea048179",
+          "sha256": "dde10e5c088d25ebbe8f094db91de52e82ce26e696506ecaaf238c5c34174978"
+        },
+        "wheel": {
+          "bytes": 14748,
+          "line_endings": {
+            "crlf_pairs": 374,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "b5c57c730bf960f2f9a001583f60f2b4c4e79a6c5b293d7cfba2ec25ea048179",
+          "sha256": "dde10e5c088d25ebbe8f094db91de52e82ce26e696506ecaaf238c5c34174978"
+        }
+      },
+      "wheel_member": "bt_api_execution/group_contracts.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "9de6716be71c492d99c9b8e25c2a298eabe01699",
+      "git_path": "src/bt_api_execution/group_coordinator.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\group_coordinator.py",
+      "module": "bt_api_execution.group_coordinator",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 59492,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 1322,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "ff4af7f506bb0998a4d78bb70628f83f1ae9258e9848a0fcd2e27c027b3d899c",
+          "sha256": "ff4af7f506bb0998a4d78bb70628f83f1ae9258e9848a0fcd2e27c027b3d899c"
+        },
+        "git_archive": {
+          "bytes": 60814,
+          "line_endings": {
+            "crlf_pairs": 1322,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "ff4af7f506bb0998a4d78bb70628f83f1ae9258e9848a0fcd2e27c027b3d899c",
+          "sha256": "a3fb4874f231657115edeab5d0f381bed295863e13814069b260ac9fe794b79d"
+        },
+        "installed": {
+          "bytes": 60814,
+          "line_endings": {
+            "crlf_pairs": 1322,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "ff4af7f506bb0998a4d78bb70628f83f1ae9258e9848a0fcd2e27c027b3d899c",
+          "sha256": "a3fb4874f231657115edeab5d0f381bed295863e13814069b260ac9fe794b79d"
+        },
+        "wheel": {
+          "bytes": 60814,
+          "line_endings": {
+            "crlf_pairs": 1322,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "ff4af7f506bb0998a4d78bb70628f83f1ae9258e9848a0fcd2e27c027b3d899c",
+          "sha256": "a3fb4874f231657115edeab5d0f381bed295863e13814069b260ac9fe794b79d"
+        }
+      },
+      "wheel_member": "bt_api_execution/group_coordinator.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "471db65a1d357da731b6be9be8a7d88ef5bc856a",
+      "git_path": "src/bt_api_execution/group_order_contracts.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\group_order_contracts.py",
+      "module": "bt_api_execution.group_order_contracts",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 45570,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 1084,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "380629ad863dc6b8c177149f829b910acda94a17d40a00332dab9e2005cc9ed1",
+          "sha256": "380629ad863dc6b8c177149f829b910acda94a17d40a00332dab9e2005cc9ed1"
+        },
+        "git_archive": {
+          "bytes": 46654,
+          "line_endings": {
+            "crlf_pairs": 1084,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "380629ad863dc6b8c177149f829b910acda94a17d40a00332dab9e2005cc9ed1",
+          "sha256": "e7dc09b7cff8b9d5a886dc62a7ba0c2b8d514dc29e9719abcc0cd5b924637a2d"
+        },
+        "installed": {
+          "bytes": 46654,
+          "line_endings": {
+            "crlf_pairs": 1084,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "380629ad863dc6b8c177149f829b910acda94a17d40a00332dab9e2005cc9ed1",
+          "sha256": "e7dc09b7cff8b9d5a886dc62a7ba0c2b8d514dc29e9719abcc0cd5b924637a2d"
+        },
+        "wheel": {
+          "bytes": 46654,
+          "line_endings": {
+            "crlf_pairs": 1084,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "380629ad863dc6b8c177149f829b910acda94a17d40a00332dab9e2005cc9ed1",
+          "sha256": "e7dc09b7cff8b9d5a886dc62a7ba0c2b8d514dc29e9719abcc0cd5b924637a2d"
+        }
+      },
+      "wheel_member": "bt_api_execution/group_order_contracts.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "46c31167bab45f2f02c46af6cba0ba55f8f36448",
+      "git_path": "src/bt_api_execution/group_store.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\group_store.py",
+      "module": "bt_api_execution.group_store",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 24656,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 574,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "525486b96003a7929a39feda13f3da87f6e1230ae3cfa8d36d427f3c2c9499f4",
+          "sha256": "525486b96003a7929a39feda13f3da87f6e1230ae3cfa8d36d427f3c2c9499f4"
+        },
+        "git_archive": {
+          "bytes": 25230,
+          "line_endings": {
+            "crlf_pairs": 574,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "525486b96003a7929a39feda13f3da87f6e1230ae3cfa8d36d427f3c2c9499f4",
+          "sha256": "6d7dab71f708c6843ba238e4f027131014e95bd52e14cde2ad72ae75902d8d04"
+        },
+        "installed": {
+          "bytes": 25230,
+          "line_endings": {
+            "crlf_pairs": 574,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "525486b96003a7929a39feda13f3da87f6e1230ae3cfa8d36d427f3c2c9499f4",
+          "sha256": "6d7dab71f708c6843ba238e4f027131014e95bd52e14cde2ad72ae75902d8d04"
+        },
+        "wheel": {
+          "bytes": 25230,
+          "line_endings": {
+            "crlf_pairs": 574,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "525486b96003a7929a39feda13f3da87f6e1230ae3cfa8d36d427f3c2c9499f4",
+          "sha256": "6d7dab71f708c6843ba238e4f027131014e95bd52e14cde2ad72ae75902d8d04"
+        }
+      },
+      "wheel_member": "bt_api_execution/group_store.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "3983e3b755e3b5a92e7bd93f980dffa6b523198f",
+      "git_path": "src/bt_api_execution/ports.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\ports.py",
+      "module": "bt_api_execution.ports",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 1445,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 43,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "9e6fe2df31d6daca74f1b176271ea34ef41e5c5bc2780fe078874f16d3860847",
+          "sha256": "9e6fe2df31d6daca74f1b176271ea34ef41e5c5bc2780fe078874f16d3860847"
+        },
+        "git_archive": {
+          "bytes": 1488,
+          "line_endings": {
+            "crlf_pairs": 43,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "9e6fe2df31d6daca74f1b176271ea34ef41e5c5bc2780fe078874f16d3860847",
+          "sha256": "bf84c0424e962fb6d0ad2a9fc2112fbaa72d281e2bac9d2fa58fc959c1ee40b9"
+        },
+        "installed": {
+          "bytes": 1488,
+          "line_endings": {
+            "crlf_pairs": 43,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "9e6fe2df31d6daca74f1b176271ea34ef41e5c5bc2780fe078874f16d3860847",
+          "sha256": "bf84c0424e962fb6d0ad2a9fc2112fbaa72d281e2bac9d2fa58fc959c1ee40b9"
+        },
+        "wheel": {
+          "bytes": 1488,
+          "line_endings": {
+            "crlf_pairs": 43,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "9e6fe2df31d6daca74f1b176271ea34ef41e5c5bc2780fe078874f16d3860847",
+          "sha256": "bf84c0424e962fb6d0ad2a9fc2112fbaa72d281e2bac9d2fa58fc959c1ee40b9"
+        }
+      },
+      "wheel_member": "bt_api_execution/ports.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "6659472e2d6f0ba9e77d8d6b530850eb928b8931",
+      "git_path": "src/bt_api_execution/service_component.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\service_component.py",
+      "module": "bt_api_execution.service_component",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 11190,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 283,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+          "sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302"
+        },
+        "git_archive": {
+          "bytes": 11473,
+          "line_endings": {
+            "crlf_pairs": 283,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+          "sha256": "34bd68d8d662326720915bbe340e46a501d3e35a22e010e95ecc6cedf4e85829"
+        },
+        "installed": {
+          "bytes": 11473,
+          "line_endings": {
+            "crlf_pairs": 283,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+          "sha256": "34bd68d8d662326720915bbe340e46a501d3e35a22e010e95ecc6cedf4e85829"
+        },
+        "wheel": {
+          "bytes": 11473,
+          "line_endings": {
+            "crlf_pairs": 283,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+          "sha256": "34bd68d8d662326720915bbe340e46a501d3e35a22e010e95ecc6cedf4e85829"
+        }
+      },
+      "wheel_member": "bt_api_execution/service_component.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "e14775f027ea73312bd3a6e13ad23fb7dc691e41",
+      "git_path": "src/bt_api_execution/service_order_entry.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\service_order_entry.py",
+      "module": "bt_api_execution.service_order_entry",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 26851,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 613,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "638de6dfd0f466862d19f68f0f5f8ea33a86650a5137ff5963cca6cb483bf83d",
+          "sha256": "638de6dfd0f466862d19f68f0f5f8ea33a86650a5137ff5963cca6cb483bf83d"
+        },
+        "git_archive": {
+          "bytes": 27464,
+          "line_endings": {
+            "crlf_pairs": 613,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "638de6dfd0f466862d19f68f0f5f8ea33a86650a5137ff5963cca6cb483bf83d",
+          "sha256": "d06c36b283d2da703635d78e631ba306791f21771779abdb440eb145d0b6634f"
+        },
+        "installed": {
+          "bytes": 27464,
+          "line_endings": {
+            "crlf_pairs": 613,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "638de6dfd0f466862d19f68f0f5f8ea33a86650a5137ff5963cca6cb483bf83d",
+          "sha256": "d06c36b283d2da703635d78e631ba306791f21771779abdb440eb145d0b6634f"
+        },
+        "wheel": {
+          "bytes": 27464,
+          "line_endings": {
+            "crlf_pairs": 613,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "638de6dfd0f466862d19f68f0f5f8ea33a86650a5137ff5963cca6cb483bf83d",
+          "sha256": "d06c36b283d2da703635d78e631ba306791f21771779abdb440eb145d0b6634f"
+        }
+      },
+      "wheel_member": "bt_api_execution/service_order_entry.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    },
+    {
+      "archive_included": true,
+      "git_blob_oid": "9ecd59a7a67d998b17e0ba06ef7389dced128fd9",
+      "git_path": "src/bt_api_execution/store.py",
+      "git_repo": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "installed_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\store.py",
+      "module": "bt_api_execution.store",
+      "normalized_sources_all_equal": true,
+      "raw_git_equals_archive": false,
+      "raw_installed_equals_wheel": true,
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "sources": {
+        "git": {
+          "bytes": 699787,
+          "line_endings": {
+            "crlf_pairs": 0,
+            "lf_only": 14695,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "812c3a18411f3df1bd105145971fc7f591e8bd9a139f5bb161f61426caa53d26",
+          "sha256": "812c3a18411f3df1bd105145971fc7f591e8bd9a139f5bb161f61426caa53d26"
+        },
+        "git_archive": {
+          "bytes": 714482,
+          "line_endings": {
+            "crlf_pairs": 14695,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "812c3a18411f3df1bd105145971fc7f591e8bd9a139f5bb161f61426caa53d26",
+          "sha256": "6c107068156e4807e29acad8689fe9d52651872bade257aa321ae2132ed3932f"
+        },
+        "installed": {
+          "bytes": 714482,
+          "line_endings": {
+            "crlf_pairs": 14695,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "812c3a18411f3df1bd105145971fc7f591e8bd9a139f5bb161f61426caa53d26",
+          "sha256": "6c107068156e4807e29acad8689fe9d52651872bade257aa321ae2132ed3932f"
+        },
+        "wheel": {
+          "bytes": 714482,
+          "line_endings": {
+            "crlf_pairs": 14695,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "newline_normalized_sha256": "812c3a18411f3df1bd105145971fc7f591e8bd9a139f5bb161f61426caa53d26",
+          "sha256": "6c107068156e4807e29acad8689fe9d52651872bade257aa321ae2132ed3932f"
+        }
+      },
+      "wheel_member": "bt_api_execution/store.py",
+      "wheel_path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl"
+    }
+  ],
+  "summary": {
+    "all_execution_source_checks_passed": true,
+    "client_server_environment_checks_passed": true,
+    "execution_modules_bound": 20,
+    "execution_modules_normalized_git_wheel_install_tar_matches": 20,
+    "execution_modules_raw_wheel_installed_equal": 20,
+    "sdk_adapter_normalized_git_wheel_server_match": true,
+    "verification_passed": true
+  },
+  "verification_script": {
+    "bytes": 18322,
+    "path": "D:\\temp\\iteration10-cfg04-account-books-query-20261015-r1\\source_install_supplement_verify.py",
+    "sha256": "a6dc7ec6f047763e31b8e73155ed14ed03932d6dec49a5458487c3938e1b82e0"
+  }
+}
