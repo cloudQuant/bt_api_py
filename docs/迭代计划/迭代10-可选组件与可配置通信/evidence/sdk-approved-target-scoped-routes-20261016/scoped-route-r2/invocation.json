@@ -1,0 +1,18 @@
+{
+  "executable": "C:\\anaconda3\\python.exe",
+  "argv": [
+    "-m",
+    "pytest",
+    "-c",
+    "pyproject.toml",
+    "-p",
+    "no:cacheprovider",
+    "--rootdir=D:\\bt_api_py",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r2\\pytest.junit.xml",
+    "tests/unit/test_service_config_scoped_execution_routes.py::test_runtime_still_requires_explicit_scope_route_for_same_account"
+  ],
+  "stdout": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r2\\pytest.stdout.txt",
+  "junit": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r2\\pytest.junit.xml",
+  "cwd": "D:\\bt_api_py",
+  "output_directory": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r2"
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.830" timestamp="2026-10-16T06:02:45.486170" hostname="yun"><testcase classname="tests.unit.test_service_config_scoped_execution_routes" name="test_runtime_still_requires_explicit_scope_route_for_same_account" time="0.059"><failure message="bt_api_py.service_runtime.ServiceRuntimeError: DUPLICATE_ACTIVE_RUN">tests\unit\test_service_config_scoped_execution_routes.py:254: in test_runtime_still_requires_explicit_scope_route_for_same_account
+    runtime.start()
+bt_api_py\service_runtime.py:565: in start
+    self._register(
+bt_api_py\service_runtime.py:1066: in _register
+    self._register_port(
+bt_api_py\service_runtime.py:1237: in _register_port
+    result, request_started = self._rpc(
+bt_api_py\service_runtime.py:1607: in _rpc
+    raise ServiceRuntimeError(
+E   bt_api_py.service_runtime.ServiceRuntimeError: DUPLICATE_ACTIVE_RUN</failure></testcase></testsuite></testsuites>

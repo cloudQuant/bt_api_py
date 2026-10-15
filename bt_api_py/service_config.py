@@ -790,11 +790,12 @@ def _validate_bindings_references(
 
 
 def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
-    account_slots: dict[tuple[str, str], tuple[str, str, str]] = {}
+    account_slot_owners: dict[tuple[str, str], tuple[str, str]] = {}
+    account_slot_routes: set[tuple[str, str, str]] = set()
     portfolio_slots: dict[tuple[str, str], tuple[str, str, str]] = {}
     scope_accounts: dict[tuple[str, str], str] = {}
     exact: set[tuple[str, str, str, str, str, str, str]] = set()
-    account_writers: dict[str, tuple[str, str]] = {}
+    account_writers: dict[str, tuple[str, str, str, str]] = {}
     for index, binding in enumerate(bindings):
         mount = binding["mount"]
         account_ref = binding.get("account_ref", "")
@@ -814,13 +815,15 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
         exact.add(identity)
         if mount in _ACCOUNT_MOUNTS:
             slot = (mount, account_ref)
-            previous = account_slots.get(slot)
-            current = (scope_ref, binding["service_id"], binding["instance_id"])
-            if previous is not None and previous != current:
-                _fail("SCOPE_CONFLICT", f"{path}[{index}]")
-            if previous is not None:
-                _fail("DUPLICATE_BINDING", f"{path}[{index}]")
-            account_slots[slot] = current
+            route = (mount, account_ref, scope_ref)
+            previous_owner = account_slot_owners.get(slot)
+            current_owner = (binding["service_id"], binding["instance_id"])
+            route_already_bound = route in account_slot_routes
+            if previous_owner is not None and previous_owner != current_owner:
+                if mount not in _WRITER_MOUNTS:
+                    _fail("SCOPE_CONFLICT", f"{path}[{index}]")
+            else:
+                account_slot_owners.setdefault(slot, current_owner)
             scope_key = (binding["service_id"], scope_ref)
             other_account = scope_accounts.get(scope_key)
             if other_account is not None and other_account != account_ref:
@@ -828,10 +831,21 @@ def _check_binding_conflicts(bindings: list[dict[str, Any]], path: str) -> None:
             scope_accounts[scope_key] = account_ref
             if mount in _WRITER_MOUNTS:
                 prior_writer = account_writers.get(account_ref)
-                current_writer = (mount, binding["service_id"])
-                if prior_writer is not None:
+                current_writer = (
+                    mount,
+                    binding["service_id"],
+                    binding["instance_id"],
+                    binding["transport_ref"],
+                )
+                if prior_writer is not None and prior_writer != current_writer:
                     _fail("WRITER_CONFLICT", f"{path}[{index}]")
-                account_writers[account_ref] = current_writer
+                if route_already_bound:
+                    _fail("DUPLICATE_BINDING", f"{path}[{index}]")
+                if prior_writer is None:
+                    account_writers[account_ref] = current_writer
+            elif route_already_bound:
+                _fail("DUPLICATE_BINDING", f"{path}[{index}]")
+            account_slot_routes.add(route)
         if mount in _PORTFOLIO_MOUNTS:
             slot = (mount, portfolio_ref)
             if slot in portfolio_slots:
@@ -938,13 +952,18 @@ def _validate_component_options(
         return result
     if component == "execution":
         if role == "account_owner":
-            fields = {"role", "provider_session_ref"}
+            fields = {"role", "provider_session_ref", "approved_target_required"}
             _check_keys(raw, fields, options_path)
             result = {"role": role}
             if "provider_session_ref" in raw:
                 result["provider_session_ref"] = _required_ref(
                     raw, "provider_session_ref", options_path
                 )
+            if "approved_target_required" in raw:
+                approved_target_required = raw["approved_target_required"]
+                if type(approved_target_required) is not bool:
+                    _fail("INVALID_VALUE", f"{options_path}.approved_target_required")
+                result["approved_target_required"] = approved_target_required
             return result
         if role == "group_account_owner":
             _check_keys(raw, {"role"}, options_path)

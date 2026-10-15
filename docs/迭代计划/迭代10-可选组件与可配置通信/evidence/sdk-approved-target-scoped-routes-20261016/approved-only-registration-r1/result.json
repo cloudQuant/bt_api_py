@@ -1,0 +1,68 @@
+{
+  "argv": [
+    "-m",
+    "pytest",
+    "-c",
+    "pyproject.toml",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "--rootdir=D:\\bt_api_py",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\approved-target-only-registration-nohost-20261016-r1\\pytest.junit.xml",
+    "tests/unit/test_service_execution.py::test_approved_target_client_can_register_without_ordinary_submit"
+  ],
+  "artifacts": {
+    "pytest.junit.xml": {
+      "bytes": 812,
+      "sha256": "1B0F06E97004C9BD1AFA5F26029A2638D33EF6D55710F5842D26025534DB5DA1"
+    },
+    "pytest.stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "pytest.stdout.txt": {
+      "bytes": 1584,
+      "sha256": "D2EC3FD62C7C98E33A6C18DB5F76A6F0ADDD50255441ACDB3A83718B0EA40CC3"
+    }
+  },
+  "cwd": "D:\\bt_api_py",
+  "executable": "C:\\anaconda3\\python.exe",
+  "exit_code": 1,
+  "finished_utc": "2026-10-15T22:18:22.460184+00:00",
+  "host_started": false,
+  "noconftest": true,
+  "node_id": "tests/unit/test_service_execution.py::test_approved_target_client_can_register_without_ordinary_submit",
+  "pytest_disable_plugin_autoload": true,
+  "pytest_exit_code": 1,
+  "source_post": {
+    "head": "93c2470cab47b2e7569359479a2f9700e8983189",
+    "sources": [
+      {
+        "bytes": 75850,
+        "path": "bt_api_py/service_runtime.py",
+        "sha256": "E5B8BA128D58A6730E8E5A019392062CD153BCA6772C1A04EC854BC0F7AC7640"
+      },
+      {
+        "bytes": 22612,
+        "path": "tests/unit/test_service_execution.py",
+        "sha256": "17769D0FE6FE2D6105AA86F00A0EFC11FEB8584A20AF01CB21B1BCD89F57074D"
+      }
+    ]
+  },
+  "source_pre": {
+    "head": "93c2470cab47b2e7569359479a2f9700e8983189",
+    "sources": [
+      {
+        "bytes": 75850,
+        "path": "bt_api_py/service_runtime.py",
+        "sha256": "E5B8BA128D58A6730E8E5A019392062CD153BCA6772C1A04EC854BC0F7AC7640"
+      },
+      {
+        "bytes": 22612,
+        "path": "tests/unit/test_service_execution.py",
+        "sha256": "17769D0FE6FE2D6105AA86F00A0EFC11FEB8584A20AF01CB21B1BCD89F57074D"
+      }
+    ]
+  },
+  "started_utc": "2026-10-15T22:18:20.847492+00:00"
+}

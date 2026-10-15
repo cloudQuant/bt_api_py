@@ -1,0 +1,39 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0
+rootdir: D:\bt_api_py
+configfile: pyproject.toml
+collected 1 item
+
+tests\unit\test_service_execution.py F                                   [100%]
+
+================================== FAILURES ===================================
+______ test_approved_target_client_can_register_without_ordinary_submit _______
+tests\unit\test_service_execution.py:401: in test_approved_target_client_can_register_without_ordinary_submit
+    _submit(client)
+tests\unit\test_service_execution.py:298: in _submit
+    return client.submit(**arguments)
+bt_api_py\service_execution.py:274: in submit
+    result = self._call(SUBMIT_OPERATION, arguments, identifier=intent_id)
+bt_api_py\service_execution.py:428: in _call
+    payload = self._request(
+bt_api_py\service_execution.py:455: in _request
+    raise ServiceExecutionError(getattr(error, "code", "REMOTE_REQUEST_REJECTED")) from None
+E   bt_api_py.service_execution.ServiceExecutionError: AMBIGUOUS_OR_MISSING_ROUTE
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_execution.py:400: in test_approved_target_client_can_register_without_ordinary_submit
+    with pytest.raises(ServiceExecutionError, match="CAPABILITY_UNAVAILABLE"):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'CAPABILITY_UNAVAILABLE'
+E    Input: 'AMBIGUOUS_OR_MISSING_ROUTE'
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\bt_api_py\.codex-tmp\approved-target-only-registration-nohost-20261016-r2\pytest.junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_execution.py::test_approved_target_client_can_register_without_ordinary_submit
+======================== 1 failed, 1 warning in 1.22s =========================

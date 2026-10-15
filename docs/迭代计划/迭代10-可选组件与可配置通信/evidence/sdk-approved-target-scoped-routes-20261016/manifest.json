@@ -1,0 +1,223 @@
+{
+  "round": "iteration10-approved-target-scoped-route-sdk-head-overlay-r3",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "base_head": "93c2470cab47b2e7569359479a2f9700e8983189",
+  "execution_gitlink_head": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+  "scope": {
+    "approved_target_wiring": true,
+    "approved_target_only_client_registration": true,
+    "approved_target_required_server_option": true,
+    "scoped_writer_route_validation": true,
+    "service_config_contains_both_risk_service_hunks": true,
+    "excluded": [
+      "Monitor formatting hunk in service_components.py",
+      "TrustedRiskPolicyBinding export in service_components.py",
+      "service_registry.py formatting-only hunk",
+      "tests/unit/test_service_order_entry_components.py unrelated formatting hunk",
+      "all other changed/untracked paths"
+    ]
+  },
+  "candidate_test_closure": {
+    "source_paths": [
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_config.py",
+      "bt_api_py/service_execution.py",
+      "bt_api_py/service_execution_account_books.py",
+      "bt_api_py/service_host.py",
+      "bt_api_py/service_runtime.py"
+    ],
+    "unit_test_paths": [
+      "tests/unit/test_service_config_scoped_execution_routes.py",
+      "tests/unit/test_service_execution.py",
+      "tests/unit/test_service_execution_approved_target_wiring.py"
+    ],
+    "integration_dependency_path": "tests/integration/test_arb02_group_budget_service.py",
+    "integration_dependency_scope": "SOURCE_DEPENDENCY_FOR_CLEANUP_HELPERS_ONLY; its full spawned Host test is unexecuted and unaccepted",
+    "total_paths_in_overlay": 10
+  },
+  "entries": [
+    {
+      "path": "bt_api_py/service_components.py",
+      "category": "source",
+      "base_path_absent": false,
+      "base_blob": "b204aff5bb45328fead9d336da94dbe17b4ca1db",
+      "base_bytes_lf_normalized": 90199,
+      "base_sha256_lf_normalized": "767767902B03A790080FF34C2B5FBF0B00946866BD4E5DAF6D3FA235DDA22854",
+      "overlay_bytes_lf": 92133,
+      "overlay_sha256_lf": "AF4138931F3CA35230203D317D77CF5379D289CEED6A50E37336A0E8CB2BF26E",
+      "checkout_bytes_raw": 94079,
+      "checkout_sha256_raw": "1C43261BE768549F06FFE8F8EA0E1E6A133E609164F26647A8E679F91C6972A6",
+      "checkout_bytes_lf_normalized": 92071,
+      "checkout_sha256_lf_normalized": "B2A1B287C19D34B456CE8C7BBD4C40906B0843B944B8958F2C38B0FF640A084C",
+      "checkout_equals_overlay_lf_normalized": false,
+      "checkout_vs_overlay_note": "Current checkout contains unrelated concurrent hunks; those are excluded from this overlay."
+    },
+    {
+      "path": "bt_api_py/service_config.py",
+      "category": "source",
+      "base_path_absent": false,
+      "base_blob": "1a058d1c1ba7cc12537f52473140b1222e0e66cf",
+      "base_bytes_lf_normalized": 45951,
+      "base_sha256_lf_normalized": "599AAB9BEB2F97AEF3E59C7F9AC4A4EA733BB1E0880B6F5ED37EF72C0CF8458C",
+      "overlay_bytes_lf": 47018,
+      "overlay_sha256_lf": "5023A98EBDFB0CA9285616B3CE0107904ED81640E3BDE49823217D773343D17C",
+      "checkout_bytes_raw": 48243,
+      "checkout_sha256_raw": "5D436D933E9B0367EDDD29C41D011E68338CE90762FE635865274195E7FA78AF",
+      "checkout_bytes_lf_normalized": 47018,
+      "checkout_sha256_lf_normalized": "5023A98EBDFB0CA9285616B3CE0107904ED81640E3BDE49823217D773343D17C",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    },
+    {
+      "path": "bt_api_py/service_execution.py",
+      "category": "source",
+      "base_path_absent": false,
+      "base_blob": "60c1eb6b7584fa925171f5d8f50d9b0a0c1c2b35",
+      "base_bytes_lf_normalized": 25059,
+      "base_sha256_lf_normalized": "DED42B52272286C9DD74EF95DA15EA1927A9454B18C7562EF7187F4ED83FBA1B",
+      "overlay_bytes_lf": 26650,
+      "overlay_sha256_lf": "0DDAE7987EBD87DBE181819F00FD6875C6D9CC2073474D93A72A141CCD970F15",
+      "checkout_bytes_raw": 26650,
+      "checkout_sha256_raw": "0DDAE7987EBD87DBE181819F00FD6875C6D9CC2073474D93A72A141CCD970F15",
+      "checkout_bytes_lf_normalized": 26650,
+      "checkout_sha256_lf_normalized": "0DDAE7987EBD87DBE181819F00FD6875C6D9CC2073474D93A72A141CCD970F15",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    },
+    {
+      "path": "bt_api_py/service_execution_account_books.py",
+      "category": "source",
+      "base_path_absent": false,
+      "base_blob": "275cb4f73df1cdfa5a61d83f94b1a11e90b656f7",
+      "base_bytes_lf_normalized": 57433,
+      "base_sha256_lf_normalized": "1FB0654F90C42A0D3747F301FB5021891CBB9E009DD314DCB77259FFACDF3504",
+      "overlay_bytes_lf": 57954,
+      "overlay_sha256_lf": "6AAA7B52E7CC229CE6407ED2DAC1C89075253D6C6A37ACEA15108B63648D3CB1",
+      "checkout_bytes_raw": 59362,
+      "checkout_sha256_raw": "94CC3343EBD2B71C433589D3483BFE228044B67943B9C09A61087E37C181A023",
+      "checkout_bytes_lf_normalized": 57954,
+      "checkout_sha256_lf_normalized": "6AAA7B52E7CC229CE6407ED2DAC1C89075253D6C6A37ACEA15108B63648D3CB1",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "category": "source",
+      "base_path_absent": false,
+      "base_blob": "f1582d5267807eb3b793694eb25bf3c4c4495264",
+      "base_bytes_lf_normalized": 63350,
+      "base_sha256_lf_normalized": "04B9BEBBDE3F21E7A7ADF2EB0DB6E94C8A77A32CE0368AF1D5F44AA341393FE2",
+      "overlay_bytes_lf": 64177,
+      "overlay_sha256_lf": "E83A124F6244C776AB999243FDFED952681DB3732160B109879BBD58397E9E26",
+      "checkout_bytes_raw": 65246,
+      "checkout_sha256_raw": "1C0F1CC5921BEC3BCC119F82CA1139B5EFD9EACCDE84208FC76FB7B5CA2CAC92",
+      "checkout_bytes_lf_normalized": 63847,
+      "checkout_sha256_lf_normalized": "2CE502F7AF3E3A016A5D2E96DBE0EF0F6C7C1F1FF4F27FB7328FFB2BDC7DB4E7",
+      "checkout_equals_overlay_lf_normalized": false,
+      "checkout_vs_overlay_note": "Current checkout contains unrelated concurrent hunks; those are excluded from this overlay."
+    },
+    {
+      "path": "bt_api_py/service_runtime.py",
+      "category": "source",
+      "base_path_absent": false,
+      "base_blob": "c874b8d793f82c509293855aca9027b1af8891f1",
+      "base_bytes_lf_normalized": 73555,
+      "base_sha256_lf_normalized": "2BFB185B231847CC930BA44A11B0A860924B8A9E1FAE87111CD6E7A39A9FA3B0",
+      "overlay_bytes_lf": 74067,
+      "overlay_sha256_lf": "DC72DE63C33D4C17EFAA76D5C0E1985F9769C0E879AA6F148C9E1EE7CAF34024",
+      "checkout_bytes_raw": 75850,
+      "checkout_sha256_raw": "E5B8BA128D58A6730E8E5A019392062CD153BCA6772C1A04EC854BC0F7AC7640",
+      "checkout_bytes_lf_normalized": 74067,
+      "checkout_sha256_lf_normalized": "DC72DE63C33D4C17EFAA76D5C0E1985F9769C0E879AA6F148C9E1EE7CAF34024",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    },
+    {
+      "path": "tests/unit/test_service_config_scoped_execution_routes.py",
+      "category": "unit_test",
+      "base_path_absent": true,
+      "base_blob": null,
+      "base_bytes_lf_normalized": 0,
+      "base_sha256_lf_normalized": null,
+      "overlay_bytes_lf": 22051,
+      "overlay_sha256_lf": "A110D471A92712EF8158A181267A2B0AFB7DE152AF47AFE2561EF8BE8359D9D4",
+      "checkout_bytes_raw": 22051,
+      "checkout_sha256_raw": "A110D471A92712EF8158A181267A2B0AFB7DE152AF47AFE2561EF8BE8359D9D4",
+      "checkout_bytes_lf_normalized": 22051,
+      "checkout_sha256_lf_normalized": "A110D471A92712EF8158A181267A2B0AFB7DE152AF47AFE2561EF8BE8359D9D4",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    },
+    {
+      "path": "tests/unit/test_service_execution.py",
+      "category": "unit_test",
+      "base_path_absent": false,
+      "base_blob": "bda8fbe168e89ba6c1b03b88b897d164d1cd321f",
+      "base_bytes_lf_normalized": 17675,
+      "base_sha256_lf_normalized": "6A06B61EB7637B9B8FA571EEF6935B852BAA62CEE3F30E8B214F17ED4A59B9F5",
+      "overlay_bytes_lf": 22673,
+      "overlay_sha256_lf": "7F062F4549E29948D257B9A2C938E01FD3AA0871D50670E654E4C124E240B99C",
+      "checkout_bytes_raw": 22673,
+      "checkout_sha256_raw": "7F062F4549E29948D257B9A2C938E01FD3AA0871D50670E654E4C124E240B99C",
+      "checkout_bytes_lf_normalized": 22673,
+      "checkout_sha256_lf_normalized": "7F062F4549E29948D257B9A2C938E01FD3AA0871D50670E654E4C124E240B99C",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    },
+    {
+      "path": "tests/unit/test_service_execution_approved_target_wiring.py",
+      "category": "unit_test",
+      "base_path_absent": true,
+      "base_blob": null,
+      "base_bytes_lf_normalized": 0,
+      "base_sha256_lf_normalized": null,
+      "overlay_bytes_lf": 11128,
+      "overlay_sha256_lf": "6BAF4485E08079DCCCCA1C1A0692B2B7BEBFEA6FED63674F0FDF0FC3F7FF5CEE",
+      "checkout_bytes_raw": 11128,
+      "checkout_sha256_raw": "6BAF4485E08079DCCCCA1C1A0692B2B7BEBFEA6FED63674F0FDF0FC3F7FF5CEE",
+      "checkout_bytes_lf_normalized": 11128,
+      "checkout_sha256_lf_normalized": "6BAF4485E08079DCCCCA1C1A0692B2B7BEBFEA6FED63674F0FDF0FC3F7FF5CEE",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    },
+    {
+      "path": "tests/integration/test_arb02_group_budget_service.py",
+      "category": "integration_dependency",
+      "base_path_absent": true,
+      "base_blob": null,
+      "base_bytes_lf_normalized": 0,
+      "base_sha256_lf_normalized": null,
+      "overlay_bytes_lf": 69632,
+      "overlay_sha256_lf": "39233D6875B754B0DE6178E4AD19EC3DE607BB238C21A9DFC32B75609D0B2970",
+      "checkout_bytes_raw": 69632,
+      "checkout_sha256_raw": "39233D6875B754B0DE6178E4AD19EC3DE607BB238C21A9DFC32B75609D0B2970",
+      "checkout_bytes_lf_normalized": 69632,
+      "checkout_sha256_lf_normalized": "39233D6875B754B0DE6178E4AD19EC3DE607BB238C21A9DFC32B75609D0B2970",
+      "checkout_equals_overlay_lf_normalized": true,
+      "checkout_vs_overlay_note": "LF-normalized checkout equals selected overlay."
+    }
+  ],
+  "r2_to_r3_delta": [
+    "bt_api_py/service_runtime.py: only exact approved-target-only singleton registration exception.",
+    "tests/unit/test_service_execution.py: only approved-target-only registration test."
+  ],
+  "patch": {
+    "path": "D:/bt_api_py/.codex-tmp/iteration10-approved-target-sdk-overlay-20261016-r3-final/approved-target-sdk.patch",
+    "bytes": 133089,
+    "sha256": "5C1A377CE1C542E8A61228CBDF28E826B8E8BE954726A5901360B1DD32681AB1"
+  },
+  "qa_index": {
+    "path": "D:/bt_api_py/.codex-tmp/iteration10-approved-target-sdk-overlay-20261016-r3-final/qa-index.json",
+    "bytes": 6230,
+    "sha256": "53BF8B463EBA18DF910A3A8250ED10110CBF5EB7F7F91A81C4C40562622ED288"
+  },
+  "reconstruction": {
+    "git_apply_check": "PASS",
+    "git_apply_apply_on_artifact_copy": "PASS",
+    "all_overlay_hashes_match_after_crlf_to_lf_normalization": true,
+    "canonical_head_unchanged": true,
+    "canonical_index_empty": true
+  },
+  "line_endings": "Overlay and patch are LF-normalized. On the Windows artifact copy, git apply materializes CRLF according to repository settings; after CRLF-to-LF normalization, all 10 reconstructed targets exactly match."
+}

@@ -1,0 +1,68 @@
+{
+  "argv": [
+    "-m",
+    "pytest",
+    "-c",
+    "pyproject.toml",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "--rootdir=D:\\bt_api_py",
+    "--junitxml=D:\\bt_api_py\\.codex-tmp\\approved-target-only-registration-nohost-20261016-r3\\pytest.junit.xml",
+    "tests/unit/test_service_execution.py::test_approved_target_client_can_register_without_ordinary_submit"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "executable": "C:\\anaconda3\\python.exe",
+  "started_utc": "2026-10-15T22:22:10.9116875Z",
+  "finished_utc": "2026-10-15T22:22:12.1126024Z",
+  "exit_code": 0,
+  "pytest_exit_code": 0,
+  "host_started": false,
+  "pytest_disable_plugin_autoload": true,
+  "noconftest": true,
+  "node_id": "tests/unit/test_service_execution.py::test_approved_target_client_can_register_without_ordinary_submit",
+  "source_pre": {
+    "head": "93c2470cab47b2e7569359479a2f9700e8983189",
+    "sources": [
+      {
+        "path": "bt_api_py/service_runtime.py",
+        "bytes": 75850,
+        "sha256": "E5B8BA128D58A6730E8E5A019392062CD153BCA6772C1A04EC854BC0F7AC7640"
+      },
+      {
+        "path": "tests/unit/test_service_execution.py",
+        "bytes": 22673,
+        "sha256": "7F062F4549E29948D257B9A2C938E01FD3AA0871D50670E654E4C124E240B99C"
+      }
+    ]
+  },
+  "source_post": {
+    "head": "93c2470cab47b2e7569359479a2f9700e8983189",
+    "sources": [
+      {
+        "path": "bt_api_py/service_runtime.py",
+        "bytes": 75850,
+        "sha256": "E5B8BA128D58A6730E8E5A019392062CD153BCA6772C1A04EC854BC0F7AC7640"
+      },
+      {
+        "path": "tests/unit/test_service_execution.py",
+        "bytes": 22673,
+        "sha256": "7F062F4549E29948D257B9A2C938E01FD3AA0871D50670E654E4C124E240B99C"
+      }
+    ]
+  },
+  "artifacts": {
+    "pytest.stdout.txt": {
+      "bytes": 935,
+      "sha256": "668E19ECBF6F828AEECA6671B0622F9C0E44CDDC9BB0B28A826803F41C38FC2E"
+    },
+    "pytest.stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "pytest.junit.xml": {
+      "bytes": 356,
+      "sha256": "FC43C75436A82A2FE14577B40B6590B5E025A64474E51948CB27CF02689A6195"
+    }
+  }
+}

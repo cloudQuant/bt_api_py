@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.872" timestamp="2026-10-16T06:18:21.157222" hostname="yun"><testcase classname="tests.unit.test_service_execution" name="test_approved_target_client_can_register_without_ordinary_submit" time="0.003"><failure message="AssertionError: assert ('orders.subm...oved_target',) == ['orders.subm...roved_target']&#10;  &#10;  Use -v to get more diff">tests\unit\test_service_execution.py:396: in test_approved_target_client_can_register_without_ordinary_submit
+    assert registration.payload["operations"] == [
+E   AssertionError: assert ('orders.subm...oved_target',) == ['orders.subm...roved_target']
+E     
+E     Use -v to get more diff</failure></testcase></testsuite></testsuites>

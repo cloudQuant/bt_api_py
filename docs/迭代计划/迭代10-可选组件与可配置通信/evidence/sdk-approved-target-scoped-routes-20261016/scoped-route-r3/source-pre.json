@@ -1,0 +1,17 @@
+[
+  {
+    "path": "bt_api_py/service_config.py",
+    "bytes": 48243,
+    "sha256": "5D436D933E9B0367EDDD29C41D011E68338CE90762FE635865274195E7FA78AF"
+  },
+  {
+    "path": "tests/unit/test_service_config_scoped_execution_routes.py",
+    "bytes": 22051,
+    "sha256": "A110D471A92712EF8158A181267A2B0AFB7DE152AF47AFE2561EF8BE8359D9D4"
+  },
+  {
+    "path": "tests/integration/test_arb02_group_budget_service.py",
+    "bytes": 69632,
+    "sha256": "39233D6875B754B0DE6178E4AD19EC3DE607BB238C21A9DFC32B75609D0B2970"
+  }
+]

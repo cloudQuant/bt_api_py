@@ -1,0 +1,42 @@
+{
+  "round": "iteration10-approved-target-scoped-route-sdk-head-overlay-r3",
+  "base_head": "93c2470cab47b2e7569359479a2f9700e8983189",
+  "execution_gitlink_head": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+  "paths": 10,
+  "path_list": [
+    "bt_api_py/service_components.py",
+    "bt_api_py/service_config.py",
+    "bt_api_py/service_execution.py",
+    "bt_api_py/service_execution_account_books.py",
+    "bt_api_py/service_host.py",
+    "bt_api_py/service_runtime.py",
+    "tests/unit/test_service_config_scoped_execution_routes.py",
+    "tests/unit/test_service_execution.py",
+    "tests/unit/test_service_execution_approved_target_wiring.py",
+    "tests/integration/test_arb02_group_budget_service.py"
+  ],
+  "patch_bytes": 133089,
+  "patch_sha256": "5C1A377CE1C542E8A61228CBDF28E826B8E8BE954726A5901360B1DD32681AB1",
+  "manifest_bytes": 11489,
+  "manifest_sha256": "6F4D2698726D4F54FBB835553345CF3B3C7F4C42BF6233848DA11663288A40D2",
+  "qa_index_bytes": 6230,
+  "qa_index_sha256": "53BF8B463EBA18DF910A3A8250ED10110CBF5EB7F7F91A81C4C40562622ED288",
+  "canonical_head_unchanged": true,
+  "canonical_index_empty": true,
+  "artifact_git_apply_check": "PASS",
+  "artifact_git_apply": "PASS",
+  "artifact_reconstruction": "PASS after CRLF-to-LF normalization",
+  "r2_immutable": true,
+  "delta_paths": [
+    "bt_api_py/service_runtime.py",
+    "tests/unit/test_service_execution.py"
+  ],
+  "new_node": "approved-only-registration-r3: 1 passed, exit 0, one warning, no Host",
+  "full_host_integration": "UNEXECUTED_AND_NOT_ACCEPTED",
+  "source_assessment": {
+    "path": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/execution-approved-target-dispatch-20261016/source-assessment.json",
+    "bytes": 6763,
+    "sha256": "A3602EB8CDB0C167758E4565F1DE964247130638DFC6077015D9414052AAB61A",
+    "notes": "Historical 27-pass package run was console-only, with no raw stdout/stderr/JUnit and no fixed-source Root run. Typed-consume and server-option focused raw artifacts are indexed in this JSON at the assessment path."
+  }
+}

@@ -29,6 +29,7 @@ from bt_api_py.service_runtime import (
 )
 
 SUBMIT_OPERATION = "orders.submit"
+APPROVED_TARGET_OPERATION = "orders.submit_approved_target"
 CANCEL_OPERATION = "orders.cancel"
 QUERY_OPERATION = "orders.query"
 
@@ -271,6 +272,46 @@ class ServiceExecutionClient:
             tags=tags,
         )
         result = self._call(SUBMIT_OPERATION, arguments, identifier=intent_id)
+        return _order_record(result, identifier=intent_id)
+
+    def submit_approved_target(
+        self,
+        *,
+        approval_ref: str,
+        approval_version: int,
+        target_sha256: str,
+        intent_id: str,
+    ) -> OrderRecordView:
+        """Submit one server-resolved, one-use approved target.
+
+        The client sends only the stable approval/intent references and the
+        frozen target digest. Order parameters and owner/scope binding remain
+        server-side authority facts.
+        """
+
+        self._assert_owner_thread()
+        if not _reference(approval_ref):
+            raise ServiceExecutionError("INVALID_APPROVAL_REF")
+        if type(approval_version) is not int or approval_version <= 0:
+            raise ServiceExecutionError("INVALID_APPROVAL_VERSION")
+        if (
+            type(target_sha256) is not str
+            or len(target_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in target_sha256)
+        ):
+            raise ServiceExecutionError("INVALID_APPROVED_TARGET_DIGEST")
+        if not _reference(intent_id):
+            raise ServiceExecutionError("INVALID_INTENT_ID")
+        result = self._call(
+            APPROVED_TARGET_OPERATION,
+            {
+                "approval_ref": approval_ref,
+                "approval_version": approval_version,
+                "target_sha256": target_sha256,
+                "intent_id": intent_id,
+            },
+            identifier=intent_id,
+        )
         return _order_record(result, identifier=intent_id)
 
     def cancel(
@@ -711,6 +752,7 @@ def _reference(value: object) -> bool:
 
 
 __all__ = [
+    "APPROVED_TARGET_OPERATION",
     "CANCEL_OPERATION",
     "CancelRecordView",
     "OrderRecordView",

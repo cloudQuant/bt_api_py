@@ -482,7 +482,13 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             resource_keys=frozenset({"store", "targets", "dispatch", "admission"}),
             public_ports=MappingProxyType(
                 {
-                    "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
+                    "service.order_entry": frozenset(
+                        {
+                            "orders.submit",
+                            "orders.cancel",
+                            "orders.submit_approved_target",
+                        }
+                    ),
                     "service.order_query": frozenset(
                         {"orders.query", "execution.account_books.query"}
                     ),
@@ -490,7 +496,15 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             internal_ports=frozenset({"service.owner_control"}),
             write_operations_by_port=MappingProxyType(
-                {"service.order_entry": frozenset({"orders.submit", "orders.cancel"})}
+                {
+                    "service.order_entry": frozenset(
+                        {
+                            "orders.submit",
+                            "orders.cancel",
+                            "orders.submit_approved_target",
+                        }
+                    )
+                }
             ),
             validator_module_name="bt_api_execution.service_component",
         ),
@@ -1194,6 +1208,23 @@ def build_component(
             if resources.values["paper_owner_domain"] is None:
                 raise ServiceComponentError("INVALID_PAPER_OWNER_DOMAIN_RESOURCE")
             expected_keys = expected_keys | {"paper_owner_domain"}
+        if (
+            spec.component == "execution"
+            and spec.options.get("role") == "account_owner"
+            and "service.order_entry" in public_ports
+            and spec.options.get("approved_target_required") is True
+            and "approved_target_authority" not in resources.values
+        ):
+            raise ServiceComponentError("APPROVED_TARGET_AUTHORITY_REQUIRED")
+        if (
+            spec.component == "execution"
+            and spec.options.get("role") == "account_owner"
+            and "service.order_entry" in public_ports
+            and "approved_target_authority" in resources.values
+        ):
+            if resources.values["approved_target_authority"] is None:
+                raise ServiceComponentError("INVALID_APPROVED_TARGET_AUTHORITY_RESOURCE")
+            expected_keys = expected_keys | {"approved_target_authority"}
         if set(resources.values) != set(expected_keys):
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
         account_risk_policy_bindings, account_risk_policy_required_ports = (
@@ -1498,6 +1529,10 @@ def build_component(
                 }
                 if "paper_owner_domain" in values:
                     constructor_args["paper_owner_domain"] = values["paper_owner_domain"]
+                if "approved_target_authority" in values:
+                    constructor_args["approved_target_authority"] = values[
+                        "approved_target_authority"
+                    ]
                 adapter = constructor(
                     values["store"],
                     values["targets"],
@@ -1573,6 +1608,8 @@ def build_component(
                 expected_operations = frozenset({"orders.submit", "orders.cancel", "orders.query"})
                 if "account_books" in resources.values:
                     expected_operations = expected_operations | {"execution.account_books.query"}
+                if "approved_target_authority" in resources.values:
+                    expected_operations = expected_operations | {"orders.submit_approved_target"}
                 if (
                     type(configured_operations) is not frozenset
                     or configured_operations != expected_operations
@@ -1620,6 +1657,12 @@ def build_component(
                 raise ServiceComponentError("DUPLICATE_COMPONENT_OPERATION")
             all_operations.update(operations)
             write_operations = prepared.write_operations_by_port[port]
+            if (
+                spec.component == "execution"
+                and spec.options.get("role") == "account_owner"
+                and port == "service.order_entry"
+            ):
+                write_operations = write_operations.intersection(operations)
             if not write_operations.issubset(operations):
                 raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
             capabilities.append(

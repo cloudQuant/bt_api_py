@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "output_directory": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3",
+  "invocation_path": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3\\invocation.json",
+  "environment_path": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3\\environment.json",
+  "stdout_path": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3\\pytest.stdout.txt",
+  "stderr_path": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3\\pytest.stderr.txt",
+  "junit_path": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3\\pytest.junit.xml",
+  "source_pre_path": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3\\source-pre.json",
+  "source_post_path": "D:\\bt_api_py\\.codex-tmp\\arb02-config-cleanup-nohost-20261016-r3\\source-post.json"
+}

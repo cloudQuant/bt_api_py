@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.891" timestamp="2026-10-16T06:18:55.291789" hostname="yun"><testcase classname="tests.unit.test_service_execution" name="test_approved_target_client_can_register_without_ordinary_submit" time="0.003"><failure message="AssertionError: Regex pattern did not match.&#10; Regex: 'CAPABILITY_UNAVAILABLE'&#10; Input: 'AMBIGUOUS_OR_MISSING_ROUTE'">tests\unit\test_service_execution.py:401: in test_approved_target_client_can_register_without_ordinary_submit
+    _submit(client)
+tests\unit\test_service_execution.py:298: in _submit
+    return client.submit(**arguments)
+bt_api_py\service_execution.py:274: in submit
+    result = self._call(SUBMIT_OPERATION, arguments, identifier=intent_id)
+bt_api_py\service_execution.py:428: in _call
+    payload = self._request(
+bt_api_py\service_execution.py:455: in _request
+    raise ServiceExecutionError(getattr(error, "code", "REMOTE_REQUEST_REJECTED")) from None
+E   bt_api_py.service_execution.ServiceExecutionError: AMBIGUOUS_OR_MISSING_ROUTE
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_execution.py:400: in test_approved_target_client_can_register_without_ordinary_submit
+    with pytest.raises(ServiceExecutionError, match="CAPABILITY_UNAVAILABLE"):
+E   AssertionError: Regex pattern did not match.
+E    Regex: 'CAPABILITY_UNAVAILABLE'
+E    Input: 'AMBIGUOUS_OR_MISSING_ROUTE'</failure></testcase></testsuite></testsuites>

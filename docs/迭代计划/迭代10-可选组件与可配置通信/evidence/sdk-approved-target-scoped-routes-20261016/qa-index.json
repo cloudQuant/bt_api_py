@@ -1,0 +1,129 @@
+{
+  "round": "iteration10-approved-target-scoped-route-sdk-overlay-r3",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "candidate_head": "93c2470cab47b2e7569359479a2f9700e8983189",
+  "execution_gitlink_head": "868dc1c602514a675bb1887ec8a3c975933d48c5",
+  "package_source_assessment": {
+    "path": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/execution-approved-target-dispatch-20261016/source-assessment.json",
+    "bytes": 6763,
+    "sha256": "A3602EB8CDB0C167758E4565F1DE964247130638DFC6077015D9414052AAB61A",
+    "notes": "Historical 27-pass package run was console-only, with no raw stdout/stderr/JUnit and no fixed-source Root run. Typed-consume and server-option focused raw artifacts are indexed in this JSON at the assessment path."
+  },
+  "runs": [
+    {
+      "id": "sdk-approved-target-20-r1",
+      "scope": "tests/unit/test_service_execution.py (20 nodes) on dirty candidate",
+      "result": "19 passed, 1 failed; exit 1; known pytest asyncio config warning",
+      "failure": "Fixture KeyError: request.payload['mount'] is not a public field.",
+      "directory": "D:/temp/iteration10-approved-target-sdk-wiring-20261016-r1",
+      "raw": [
+        "stdout.txt",
+        "stderr.txt",
+        "junit.xml",
+        "exit-code.txt"
+      ],
+      "raw_note": "No invocation file in this directory."
+    },
+    {
+      "id": "sdk-approved-target-20-r2",
+      "scope": "only the r1 failed fixture node",
+      "result": "1 passed; exit 0; known pytest asyncio config warning",
+      "directory": "D:/temp/iteration10-approved-target-sdk-wiring-20261016-r2",
+      "raw": [
+        "stdout.txt",
+        "stderr.txt",
+        "junit.xml",
+        "exit-code.txt"
+      ],
+      "raw_note": "No invocation file in this directory; 20-node evidence is 19+1 across runs, not one 20/20 run."
+    },
+    {
+      "id": "sdk-approved-target-required-r1",
+      "scope": "3 server option wiring nodes; no Host",
+      "result": "3 passed; exit 0; known pytest asyncio config warning",
+      "directory": "D:/temp/iteration10-approved-target-required-sdk-20261016-r1",
+      "raw": [
+        "stdout.txt",
+        "stderr.txt",
+        "junit.xml",
+        "exit-code.txt"
+      ],
+      "raw_note": "No invocation file in this directory."
+    },
+    {
+      "id": "scoped-route-r1",
+      "result": "77 passed, 1 failed; exit 1; bad fixture used WireIdentity.service_id instead of actor_ref.",
+      "directory": "D:/bt_api_py/.codex-tmp/arb02-config-cleanup-nohost-20261016-r1",
+      "raw": [
+        "invocation.json",
+        "pytest.stdout.txt",
+        "pytest.junit.xml",
+        "result.json"
+      ],
+      "host_started": false
+    },
+    {
+      "id": "scoped-route-r2",
+      "result": "focused node failed from duplicate active run in old unfaithful fixture; no source failure concluded.",
+      "directory": "D:/bt_api_py/.codex-tmp/arb02-config-cleanup-nohost-20261016-r2",
+      "raw": [
+        "invocation.json",
+        "pytest.stdout.txt",
+        "pytest.junit.xml",
+        "result.json"
+      ],
+      "host_started": false
+    },
+    {
+      "id": "scoped-route-r3",
+      "result": "1 passed; exit 0; one known pytest configuration warning; no Host.",
+      "directory": "D:/bt_api_py/.codex-tmp/arb02-config-cleanup-nohost-20261016-r3",
+      "node": "test_runtime_still_requires_explicit_scope_route_for_same_account",
+      "invocation_sha256": "A203FA54C107454DC5E3CC6CDAC278C11A0EA039C4305250F7D04D028FBCE4FD",
+      "stdout_sha256": "9DBE431A810027FAFEF93A544540E419B67F261EE486F1E3BA5B5A84AAE91BA7",
+      "stderr_sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "junit_sha256": "228E26B362F2D5F586E32DB5489C667558AC5A4538C71A44C39F0127E9B7A4D4",
+      "result_sha256": "554FFB749A945DAB8BF646C8003C03EC2404CEB3B261AC8B7579301711747CDA",
+      "host_started": false
+    },
+    {
+      "id": "approved-only-registration-r1",
+      "result": "failed; exit 1, fixture expected list but public WireEnvelope freezes arrays to tuple.",
+      "directory": "D:/bt_api_py/.codex-tmp/approved-target-only-registration-nohost-20261016-r1",
+      "host_started": false
+    },
+    {
+      "id": "approved-only-registration-r2",
+      "result": "failed; exit 1, fixture expected CAPABILITY_UNAVAILABLE but public runtime reports AMBIGUOUS_OR_MISSING_ROUTE.",
+      "directory": "D:/bt_api_py/.codex-tmp/approved-target-only-registration-nohost-20261016-r2",
+      "host_started": false
+    },
+    {
+      "id": "approved-only-registration-r3",
+      "result": "1 passed; exit 0; known pytest configuration warning; no Host.",
+      "directory": "D:/bt_api_py/.codex-tmp/approved-target-only-registration-nohost-20261016-r3",
+      "command": "C:/anaconda3/python.exe -m pytest -c pyproject.toml --noconftest -p no:cacheprovider --rootdir=D:/bt_api_py --junitxml=.codex-tmp/approved-target-only-registration-nohost-20261016-r3/pytest.junit.xml tests/unit/test_service_execution.py::test_approved_target_client_can_register_without_ordinary_submit",
+      "environment": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "artifacts": {
+        "result.json": "17157F1A8E7ACD5AB3CAA882EABA9C05DD5A5DF212A93972932D264D241A1E5E",
+        "stdout": "668E19ECBF6F828AEECA6671B0622F9C0E44CDDC9BB0B28A826803F41C38FC2E",
+        "stderr": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+        "junit": "FC43C75436A82A2FE14577B40B6590B5E025A64474E51948CB27CF02689A6195"
+      },
+      "source_pin": {
+        "service_runtime.py": "E5B8BA128D58A6730E8E5A019392062CD153BCA6772C1A04EC854BC0F7AC7640",
+        "test_service_execution.py": "7F062F4549E29948D257B9A2C938E01FD3AA0871D50670E654E4C124E240B99C"
+      },
+      "host_started": false
+    }
+  ],
+  "limitations": [
+    "SDK 20-node set is 19+1 across runs, not single 20/20.",
+    "Execution 27-pass historical run was console-only and no fixed-source Root verification.",
+    "Host cleanup integration source is included for shared helpers only; the full spawned Host test is unexecuted/unaccepted.",
+    "No production AFI authority bridge/current-state provider, Host integration acceptance, real provider/account action, or formal AFI07 pass."
+  ]
+}

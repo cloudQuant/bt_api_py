@@ -89,9 +89,12 @@ def _wrapped(result: Any) -> Any:
 class _RpcLeaf:
     """Fake the transport leaf while using the actual client runtime."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, approved_target: bool = False) -> None:
         self.requests = []
         self.arguments: list[dict[str, Any]] = []
+        self.operations: list[str] = []
+        self.approved_target = approved_target
+        self.approved_result: Any = None
         self.submit_result: Any = None
         self.cancel_result: Any = None
         self.query_result: Any = None
@@ -106,6 +109,9 @@ class _RpcLeaf:
         payload = request.payload
         control = operation.startswith("service.")
         if operation == "service.discover":
+            entry_operations = ["orders.submit", "orders.cancel"]
+            if self.approved_target:
+                entry_operations.append("orders.submit_approved_target")
             result = {
                 "protocol_version": 2,
                 "service_id": _SERVICE_ID,
@@ -114,7 +120,7 @@ class _RpcLeaf:
                     {
                         "instance_id": _INSTANCE_ID,
                         "port": "service.order_entry",
-                        "operations": ["orders.submit", "orders.cancel"],
+                        "operations": entry_operations,
                     },
                     {
                         "instance_id": _INSTANCE_ID,
@@ -139,26 +145,37 @@ class _RpcLeaf:
                 "service_epoch": payload["service_epoch"],
                 "policy_version": "policy-v1",
                 "requirements_version": "requirements-v1",
-                "operations": ["orders.submit", "orders.cancel", "orders.query"],
+                "operations": payload["operations"],
                 "expires_at": time.time() + 300,
                 "lease_remaining_seconds": 300.0,
             }
         elif operation == "service.unregister":
             result = {"unregistered": True, "registration_id": payload["registration_id"]}
-        elif operation in {"orders.submit", "orders.cancel", "orders.query"}:
+        elif operation in {
+            "orders.submit",
+            "orders.submit_approved_target",
+            "orders.cancel",
+            "orders.query",
+        }:
             arguments = dict(payload["arguments"])
             if self.raise_before is not None:
                 error, self.raise_before = self.raise_before, None
                 raise error
             self.arguments.append(arguments)
+            self.operations.append(operation)
             if self.raise_after is not None:
                 error, self.raise_after = self.raise_after, None
                 raise error
-            if operation == "orders.submit":
+            if operation in {"orders.submit", "orders.submit_approved_target"}:
+                configured_result = (
+                    self.approved_result
+                    if operation == "orders.submit_approved_target"
+                    else self.submit_result
+                )
                 result = (
                     {"found": True, "record": _order_record()}
-                    if self.submit_result is None
-                    else self.submit_result
+                    if configured_result is None
+                    else configured_result
                 )
             elif operation == "orders.cancel":
                 result = (
@@ -238,9 +255,14 @@ def _config(*, with_query: bool = True):
     )
 
 
-def _client(*, with_query: bool = True):
+def _client(
+    *,
+    with_query: bool = True,
+    requested_operations=None,
+    approved_target: bool = False,
+):
     leaves: list[_RpcLeaf] = []
-    leaf = _RpcLeaf()
+    leaf = _RpcLeaf(approved_target=approved_target)
     runtime = ServiceClientRuntime(
         _config(with_query=with_query),
         identity=_CLIENT,
@@ -248,6 +270,7 @@ def _client(*, with_query: bool = True):
         peer_resolver=lambda _service_id: _PEER,
         transport_factory=lambda *_: (leaves.append(leaf), leaf)[1],
         run_id="run-a",
+        requested_operations=requested_operations,
     )
     runtime.start()
     client = ServiceExecutionClient(
@@ -303,6 +326,131 @@ def test_submit_sends_the_exact_scopeless_intent_and_returns_a_detached_record()
             "tags": {"desk": "a"},
         }
         assert "scope" not in sent
+    finally:
+        runtime.close()
+
+
+@pytest.mark.unit
+def test_approved_target_operation_is_not_silently_registered_for_existing_clients():
+    runtime, leaf, _client_instance = _client(approved_target=True)
+    try:
+        registration = next(
+            request
+            for request in leaf.requests
+            if request.header.operation == "service.register"
+            and request.payload["port"] == "service.order_entry"
+        )
+        assert "orders.submit_approved_target" not in registration.payload["operations"]
+    finally:
+        runtime.close()
+
+
+@pytest.mark.unit
+def test_approved_target_client_uses_exact_four_field_request_when_opted_in():
+    runtime, leaf, client = _client(
+        requested_operations={
+            "broker.orders": frozenset(
+                {"orders.submit", "orders.submit_approved_target"}
+            )
+        },
+        approved_target=True,
+    )
+    try:
+        leaf.approved_result = {"found": True, "record": _order_record()}
+        record = client.submit_approved_target(
+            approval_ref="approval-a",
+            approval_version=7,
+            target_sha256="a" * 64,
+            intent_id="intent-1",
+        )
+        assert isinstance(record, OrderRecordView)
+        assert record.intent_id == "intent-1"
+        assert leaf.operations == ["orders.submit_approved_target"]
+        assert leaf.arguments == [
+            {
+                "approval_ref": "approval-a",
+                "approval_version": 7,
+                "target_sha256": "a" * 64,
+                "intent_id": "intent-1",
+            }
+        ]
+    finally:
+        runtime.close()
+
+
+@pytest.mark.unit
+def test_approved_target_client_can_register_without_ordinary_submit():
+    runtime, leaf, client = _client(
+        requested_operations={
+            "broker.orders": frozenset({"orders.submit_approved_target"})
+        },
+        approved_target=True,
+    )
+    try:
+        registration = next(
+            request
+            for request in leaf.requests
+            if request.header.operation == "service.register"
+            and request.payload["port"] == "service.order_entry"
+        )
+        assert registration.payload["operations"] == (
+            "orders.submit_approved_target",
+        )
+
+        with pytest.raises(
+            ServiceExecutionError, match="AMBIGUOUS_OR_MISSING_ROUTE"
+        ):
+            _submit(client)
+        assert leaf.operations == []
+        assert leaf.arguments == []
+
+        record = client.submit_approved_target(
+            approval_ref="approval-a",
+            approval_version=7,
+            target_sha256="a" * 64,
+            intent_id="intent-1",
+        )
+        assert isinstance(record, OrderRecordView)
+        assert record.intent_id == "intent-1"
+        assert leaf.operations == ["orders.submit_approved_target"]
+        assert leaf.arguments[0] == {
+            "approval_ref": "approval-a",
+            "approval_version": 7,
+            "target_sha256": "a" * 64,
+            "intent_id": "intent-1",
+        }
+    finally:
+        runtime.close()
+
+
+@pytest.mark.unit
+def test_approved_target_invalid_local_fields_never_reach_transport():
+    runtime, leaf, client = _client(
+        requested_operations={
+            "broker.orders": frozenset(
+                {"orders.submit", "orders.submit_approved_target"}
+            )
+        },
+        approved_target=True,
+    )
+    try:
+        for values, code in (
+            ({"approval_ref": " bad"}, "INVALID_APPROVAL_REF"),
+            ({"approval_version": True}, "INVALID_APPROVAL_VERSION"),
+            ({"target_sha256": "A" * 64}, "INVALID_APPROVED_TARGET_DIGEST"),
+            ({"intent_id": "bad id"}, "INVALID_INTENT_ID"),
+        ):
+            arguments = {
+                "approval_ref": "approval-a",
+                "approval_version": 7,
+                "target_sha256": "a" * 64,
+                "intent_id": "intent-1",
+            }
+            arguments.update(values)
+            with pytest.raises(ServiceExecutionError, match=code):
+                client.submit_approved_target(**arguments)
+        assert leaf.operations == []
+        assert leaf.arguments == []
     finally:
         runtime.close()
 

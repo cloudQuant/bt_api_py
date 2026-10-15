@@ -61,6 +61,7 @@ PORT_OPERATIONS = MappingProxyType(
         "service.order_entry": frozenset(
             {
                 "orders.submit",
+                "orders.submit_approved_target",
                 "orders.cancel",
                 "orders.submit_group_leg",
                 "orders.resolve_group_leg",
@@ -108,6 +109,7 @@ _DEFAULT_TELEMETRY_INGRESS_OPERATIONS = frozenset({"telemetry.append"})
 _GROUP_ORDER_ENTRY_OPERATIONS = frozenset(
     {"orders.submit_group_leg", "orders.resolve_group_leg"}
 )
+_APPROVED_ORDER_ENTRY_OPERATIONS = frozenset({"orders.submit_approved_target"})
 _REGISTRATION_POLICY_FIELDS = frozenset(
     {
         "access_policy_ref",
@@ -1203,7 +1205,9 @@ class ServiceClientRuntime:
             # Group-owner writes are available only to callers that explicitly
             # request them; adding a remote capability cannot expand ordinary
             # application or service registrations.
-            operations = operations.difference(_GROUP_ORDER_ENTRY_OPERATIONS)
+            operations = operations.difference(
+                _GROUP_ORDER_ENTRY_OPERATIONS | _APPROVED_ORDER_ENTRY_OPERATIONS
+            )
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients
             # keep the generic telemetry operation unless they explicitly opt
@@ -1220,7 +1224,13 @@ class ServiceClientRuntime:
                 == _GROUP_ORDER_ENTRY_OPERATIONS
                 and operations == _GROUP_ORDER_ENTRY_OPERATIONS
             )
-            if not explicit_group_owner:
+            explicit_approved_target_only = (
+                requested is not None
+                and requested.intersection(PORT_OPERATIONS[port])
+                == _APPROVED_ORDER_ENTRY_OPERATIONS
+                and operations == _APPROVED_ORDER_ENTRY_OPERATIONS
+            )
+            if not (explicit_group_owner or explicit_approved_target_only):
                 raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         digest = hashlib.sha256(
             json.dumps(dict(binding), sort_keys=True, separators=(",", ":")).encode()

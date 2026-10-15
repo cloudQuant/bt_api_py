@@ -1,0 +1,138 @@
+{
+  "independent_review": {
+    "result": "GO",
+    "reviewers": [
+      "execution_recovery_review",
+      "iteration10_parallel_assessment"
+    ],
+    "scope": "R2 ten-path closure plus R3 exact approved-only singleton registration/test delta; unit helper support only for the integration dependency."
+  },
+  "files": [
+    {
+      "path": "bt_api_py/service_components.py",
+      "sha256": "1c43261be768549f06ffe8f8ea0e1e6a133e609164f26647a8e679f91c6972a6",
+      "bytes": 94079,
+      "selected_sha256_lf": "af4138931f3ca35230203d317d77cf5379d289ceed6a50e37336a0e8cb2bf26e",
+      "partial_index": true
+    },
+    {
+      "path": "bt_api_py/service_config.py",
+      "sha256": "5d436d933e9b0367eddd29c41d011e68338ce90762fe635865274195e7fa78af",
+      "bytes": 48243,
+      "selected_sha256_lf": "5023a98ebdfb0ca9285616b3ce0107904ed81640e3bde49823217d773343d17c",
+      "partial_index": false
+    },
+    {
+      "path": "bt_api_py/service_execution.py",
+      "sha256": "0ddae7987ebd87dbe181819f00fd6875c6d9cc2073474d93a72a141ccd970f15",
+      "bytes": 26650,
+      "selected_sha256_lf": "0ddae7987ebd87dbe181819f00fd6875c6d9cc2073474d93a72a141ccd970f15",
+      "partial_index": false
+    },
+    {
+      "path": "bt_api_py/service_execution_account_books.py",
+      "sha256": "94cc3343ebd2b71c433589d3483bfe228044b67943b9c09a61087e37c181a023",
+      "bytes": 59362,
+      "selected_sha256_lf": "6aaa7b52e7cc229ce6407ed2dac1c89075253d6c6a37acea15108b63648d3cb1",
+      "partial_index": false
+    },
+    {
+      "path": "bt_api_py/service_host.py",
+      "sha256": "1c0f1cc5921bec3bcc119f82ca1139b5efd9eaccde84208fc76fb7b5ca2cac92",
+      "bytes": 65246,
+      "selected_sha256_lf": "e83a124f6244c776ab999243fdfed952681db3732160b109879bbd58397e9e26",
+      "partial_index": true
+    },
+    {
+      "path": "bt_api_py/service_runtime.py",
+      "sha256": "e5b8ba128d58a6730e8e5a019392062cd153bca6772c1a04ec854bc0f7ac7640",
+      "bytes": 75850,
+      "selected_sha256_lf": "dc72de63c33d4c17efaa76d5c0e1985f9769c0e879aa6f148c9e1ee7caf34024",
+      "partial_index": false
+    },
+    {
+      "path": "tests/unit/test_service_config_scoped_execution_routes.py",
+      "sha256": "a110d471a92712ef8158a181267a2b0afb7de152af47afe2561ef8be8359d9d4",
+      "bytes": 22051,
+      "selected_sha256_lf": "a110d471a92712ef8158a181267a2b0afb7de152af47afe2561ef8be8359d9d4",
+      "partial_index": false
+    },
+    {
+      "path": "tests/unit/test_service_execution.py",
+      "sha256": "7f062f4549e29948d257b9a2c938e01fd3aa0871d50670e654e4c124e240b99c",
+      "bytes": 22673,
+      "selected_sha256_lf": "7f062f4549e29948d257b9a2c938e01fd3aa0871d50670e654e4c124e240b99c",
+      "partial_index": false
+    },
+    {
+      "path": "tests/unit/test_service_execution_approved_target_wiring.py",
+      "sha256": "6baf4485e08079dcccca1c1a0692b2b7bebfea6fed63674f0fdf0fc3f7ff5cee",
+      "bytes": 11128,
+      "selected_sha256_lf": "6baf4485e08079dcccca1c1a0692b2b7bebfea6fed63674f0fdf0fc3f7ff5cee",
+      "partial_index": false
+    },
+    {
+      "path": "tests/integration/test_arb02_group_budget_service.py",
+      "sha256": "39233d6875b754b0de6178e4ad19ec3de607bb238c21a9dfc32b75609d0b2970",
+      "bytes": 69632,
+      "selected_sha256_lf": "39233d6875b754b0de6178e4ad19ec3de607bb238c21a9dfc32b75609d0b2970",
+      "partial_index": false
+    }
+  ],
+  "base_head": "93c2470cab47b2e7569359479a2f9700e8983189",
+  "raw_run_counts": [
+    {
+      "id": "sdk-approved-target-20-r1",
+      "tests": 20,
+      "failures": 1
+    },
+    {
+      "id": "sdk-approved-target-20-r2",
+      "tests": 1,
+      "failures": 0
+    },
+    {
+      "id": "sdk-approved-target-required-r1",
+      "tests": 3,
+      "failures": 0
+    },
+    {
+      "id": "scoped-route-r1",
+      "tests": 78,
+      "failures": 1
+    },
+    {
+      "id": "scoped-route-r2",
+      "tests": 1,
+      "failures": 1
+    },
+    {
+      "id": "scoped-route-r3",
+      "tests": 1,
+      "failures": 0
+    },
+    {
+      "id": "approved-only-registration-r1",
+      "tests": 1,
+      "failures": 1
+    },
+    {
+      "id": "approved-only-registration-r2",
+      "tests": 1,
+      "failures": 1
+    },
+    {
+      "id": "approved-only-registration-r3",
+      "tests": 1,
+      "failures": 0
+    }
+  ],
+  "acceptance_level": "AUTHOR_WORKTREE_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "limitations": [
+    "SDK 20-node set is 19+1 across runs, not single 20/20.",
+    "Execution 27-pass historical run was console-only and no fixed-source Root verification.",
+    "Host cleanup integration source is included for shared helpers only; the full spawned Host test is unexecuted/unaccepted.",
+    "No production AFI authority bridge/current-state provider, Host integration acceptance, real provider/account action, or formal AFI07 pass.",
+    "Prior QA ran on the candidate checkout, not the reconstructed HEAD overlay; no fixed-source Root suite is claimed."
+  ]
+}

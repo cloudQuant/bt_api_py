@@ -1,0 +1,15 @@
+{
+  "head": "93c2470cab47b2e7569359479a2f9700e8983189",
+  "sources": [
+    {
+      "bytes": 75850,
+      "path": "bt_api_py/service_runtime.py",
+      "sha256": "E5B8BA128D58A6730E8E5A019392062CD153BCA6772C1A04EC854BC0F7AC7640"
+    },
+    {
+      "bytes": 22613,
+      "path": "tests/unit/test_service_execution.py",
+      "sha256": "7BE0A2FDB428749C45D1C9CB394039AC156877BD78FD3C0A36109CCD617BDD3F"
+    }
+  ]
+}

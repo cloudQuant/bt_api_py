@@ -593,7 +593,16 @@ class ServiceHost:
             if any(
                 actual.instance_id != planned.instance_id
                 or actual.port != planned.port
-                or actual.write_operations != planned.write_operations
+                or (
+                    actual.write_operations != planned.write_operations
+                    and not (
+                        planned.port == "service.order_entry"
+                        and actual.operations
+                        == planned.operations - {"orders.submit_approved_target"}
+                        and actual.write_operations
+                        == planned.write_operations - {"orders.submit_approved_target"}
+                    )
+                )
                 or (
                     actual.operations != planned.operations
                     and not (
@@ -605,6 +614,13 @@ class ServiceHost:
                             planned.port == "service.order_query"
                             and actual.operations
                             == planned.operations - {"execution.account_books.query"}
+                        )
+                        or (
+                            planned.port == "service.order_entry"
+                            and actual.operations
+                            == planned.operations - {"orders.submit_approved_target"}
+                            and actual.write_operations
+                            == planned.write_operations - {"orders.submit_approved_target"}
                         )
                     )
                 )

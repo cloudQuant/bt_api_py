@@ -23,6 +23,7 @@ from bt_api_execution import (
     AccountBookReconciliation,
     AccountFinancialProjectionV1,
     AllocationOwnerKind,
+    ApprovedTargetAuthorityV1,
     ExecutionAccountBookService,
     ExecutionAccountSnapshot,
     ExecutionAllocationBaseline,
@@ -42,6 +43,7 @@ from bt_api_execution import (
 )
 from bt_api_execution.contracts import ExecutionEvent, OrderIntent
 from bt_api_execution.service_order_entry import (
+    APPROVED_TARGET_OPERATION,
     CANCEL_OPERATION,
     QUERY_OPERATION,
     SUBMIT_OPERATION,
@@ -57,7 +59,13 @@ from bt_api_execution.store import (
 
 ACCOUNT_BOOKS_QUERY_OPERATION = "execution.account_books.query"
 SUPPORTED_OPERATIONS = frozenset(
-    {SUBMIT_OPERATION, CANCEL_OPERATION, QUERY_OPERATION, ACCOUNT_BOOKS_QUERY_OPERATION}
+    {
+        SUBMIT_OPERATION,
+        CANCEL_OPERATION,
+        QUERY_OPERATION,
+        ACCOUNT_BOOKS_QUERY_OPERATION,
+        APPROVED_TARGET_OPERATION,
+    }
 )
 _ORDER_OPERATIONS = frozenset({SUBMIT_OPERATION, CANCEL_OPERATION, QUERY_OPERATION})
 _MAX_RESULT_BYTES = 48 * 1024
@@ -1128,6 +1136,7 @@ class ExecutionAccountOwnerService:
         lease_ttl_ns: int = 30_000_000_000,
         account_books_source: ExecutionAccountBookSource | None = None,
         paper_owner_domain: PaperOwnerDomainV1 | None = None,
+        approved_target_authority: ApprovedTargetAuthorityV1 | None = None,
     ) -> None:
         order_entry_args: dict[str, object] = {
             "admission_gate": admission_gate,
@@ -1139,15 +1148,20 @@ class ExecutionAccountOwnerService:
         }
         if paper_owner_domain is not None:
             order_entry_args["paper_owner_domain"] = paper_owner_domain
+        if approved_target_authority is not None:
+            order_entry_args["approved_target_authority"] = approved_target_authority
         self._orders = _ExecutionOrderEntryService(store, targets, dispatch, **order_entry_args)
         self._books = (
             None
             if account_books_source is None
             else ExecutionAccountBookReadAdapter(store, targets, account_books_source)
         )
-        self.supported_operations = (
-            _ORDER_OPERATIONS if self._books is None else SUPPORTED_OPERATIONS
-        )
+        operations = set(_ORDER_OPERATIONS)
+        if self._books is not None:
+            operations.add(ACCOUNT_BOOKS_QUERY_OPERATION)
+        if approved_target_authority is not None:
+            operations.add(APPROVED_TARGET_OPERATION)
+        self.supported_operations = frozenset(operations)
 
     def handle(
         self,

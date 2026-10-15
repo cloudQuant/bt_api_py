@@ -1,0 +1,78 @@
+{
+  "round": "AFI07 approved-target SDK wiring, unit/component slice",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "observed_head": "0c666233f8ec5507b57f968a34316809f2962bd7",
+  "commit_created": false,
+  "source_paths": [
+    {
+      "note": "File also contains concurrent/pre-existing Monitor and TrustedRiskPolicyBinding changes; this is a whole-file pin, not a hunk-only pin.",
+      "sha256": "40CB59A4DD724420C8E51A67F0E7BE0F839558629C1EA51CE3BF549E240236E9",
+      "path": "bt_api_py/service_components.py",
+      "bytes": 93676
+    },
+    {
+      "sha256": "0DDAE7987EBD87DBE181819F00FD6875C6D9CC2073474D93A72A141CCD970F15",
+      "path": "bt_api_py/service_execution.py",
+      "bytes": 26650
+    },
+    {
+      "sha256": "94CC3343EBD2B71C433589D3483BFE228044B67943B9C09A61087E37C181A023",
+      "path": "bt_api_py/service_execution_account_books.py",
+      "bytes": 59362
+    },
+    {
+      "sha256": "38DB0360C96D2B0887FC8627D6AD2D86BBCDCC5094098BB7F037C793ADEE6788",
+      "path": "bt_api_py/service_runtime.py",
+      "bytes": 75526
+    },
+    {
+      "sha256": "1C0F1CC5921BEC3BCC119F82CA1139B5EFD9EACCDE84208FC76FB7B5CA2CAC92",
+      "path": "bt_api_py/service_host.py",
+      "bytes": 65246
+    }
+  ],
+  "test_paths": [
+    {
+      "sha256": "21FC0DD59A44E1D5B847708D400FDE42F3450CD6404692EC138265D5D9CB4910",
+      "path": "tests/unit/test_service_execution.py",
+      "bytes": 21232
+    },
+    {
+      "sha256": "3410013C404E60C122853C3E855F4D7FD864C2434DDC596F3E2AA394F3CFD637",
+      "path": "tests/unit/test_service_execution_approved_target_wiring.py",
+      "bytes": 9547
+    }
+  ],
+  "behavior": [
+    "The ServiceExecutionClient submits only approval_ref, approval_version, target_sha256, intent_id; existing registrations omit the approved operation unless explicitly requested.",
+    "The account-owner wrapper passes the typed authority only when configured and advertises the operation only in that composition.",
+    "ServiceHost planning accepts an absent optional approved capability only when the authority resource is absent; None and misrouted resource keys fail closed.",
+    "A configured protected scope rejects ordinary orders.submit before Risk, authority, or provider calls."
+  ],
+  "qa": {
+    "lint_and_compile": "Ruff check and py_compile over five authorized source files and both SDK tests passed.",
+    "initial_attempt": {
+      "exit_code": 1,
+      "command": "C:/anaconda3/python.exe -m pytest --noconftest -p no:cacheprovider -q --junitxml=<artifact>/junit.xml tests/unit/test_service_execution.py tests/unit/test_service_execution_approved_target_wiring.py",
+      "artifact_dir": "D:/temp/iteration10-approved-target-sdk-wiring-20261016-r1",
+      "env": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "result": "19 passed, 1 failed, 1 PytestConfigWarning; failure was a test-fixture lookup for registration payload mount instead of public field port."
+    },
+    "unique_node_union": "20 distinct SDK client/component nodes have passing evidence: 19 passed in the first run and the sole failed node passed after the fixture-only correction; prior artifacts retained.",
+    "repaired_node": {
+      "exit_code": 0,
+      "command": "C:/anaconda3/python.exe -m pytest --noconftest -p no:cacheprovider -q --junitxml=<artifact>/junit.xml tests/unit/test_service_execution.py::test_approved_target_operation_is_not_silently_registered_for_existing_clients",
+      "artifact_dir": "D:/temp/iteration10-approved-target-sdk-wiring-20261016-r2",
+      "env": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "result": "1 passed, 1 existing PytestConfigWarning: asyncio_default_fixture_loop_scope is unknown in this interpreter."
+    },
+    "evidence_limit": "Unit/component synthetic only. No ServiceHost, AFI persistence adapter, AFI route, actual provider/account, or full approved-target end-to-end acceptance."
+  },
+  "static_review": "Requested from execution_recovery_review for only the approved-target hunks; whole service_components.py has concurrent changes outside this scope.",
+  "uncommitted_status": "No stage or commit; unrelated SDK and submodule changes preserved."
+}

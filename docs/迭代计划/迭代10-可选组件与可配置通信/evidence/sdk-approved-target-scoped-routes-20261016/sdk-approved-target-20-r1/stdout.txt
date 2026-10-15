@@ -1,0 +1,19 @@
+.F..................                                                     [100%]
+================================== FAILURES ===================================
+_ test_approved_target_operation_is_not_silently_registered_for_existing_clients _
+tests\unit\test_service_execution.py:337: in test_approved_target_operation_is_not_silently_registered_for_existing_clients
+    registration = next(
+tests\unit\test_service_execution.py:341: in <genexpr>
+    and request.payload["mount"] == "broker.orders"
+E   KeyError: 'mount'
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\iteration10-approved-target-sdk-wiring-20261016-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_execution.py::test_approved_target_operation_is_not_silently_registered_for_existing_clients
+1 failed, 19 passed, 1 warning in 1.44s

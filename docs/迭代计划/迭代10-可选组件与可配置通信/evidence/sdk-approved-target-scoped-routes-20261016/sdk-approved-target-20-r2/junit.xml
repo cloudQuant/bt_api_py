@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="0.591" timestamp="2026-10-16T05:44:33.905868" hostname="yun"><testcase classname="tests.unit.test_service_execution" name="test_approved_target_operation_is_not_silently_registered_for_existing_clients" time="0.002" /></testsuite></testsuites>
