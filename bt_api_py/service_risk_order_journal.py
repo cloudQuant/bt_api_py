@@ -27,23 +27,24 @@ from typing import Any
 from bt_api_risk import (
     AccountScope,
     DispatchClaimBinding,
+    DispatchEvidenceClass,
     DispatchExposureResolutionProof,
     DispatchExposureResolutionReceipt,
     DispatchExposureResolutionReceiptStatus,
-    DispatchEvidenceClass,
     DispatchRecoveryAttestation,
     DispatchResolutionReceipt,
     DispatchResolutionReceiptStatus,
     DispatchTrackedOrderProof,
     GrossExposureBaselineProof,
-    OrderExposureState,
+    InstrumentRiskFxRate,
     OrderExposureObservationProof,
+    OrderExposureState,
     OrderFillFact,
     VerifiedDispatchExposureResolution,
-    VerifiedGrossExposureBaseline,
-    VerifiedOrderExposureObservation,
     VerifiedDispatchRecoveryResolution,
     VerifiedDispatchResolution,
+    VerifiedGrossExposureBaseline,
+    VerifiedOrderExposureObservation,
 )
 
 _SCHEMA_VERSION = 1
@@ -4678,6 +4679,19 @@ def _terminal_exposure_source_matches(
         metadata = source_facts["instrument_metadata"]
         contract = source_facts["provider_contract"]
         facts = _fill_facts_from_event(fills)
+        quote_currency, fx_rate = _verified_provider_fx_fact(
+            source_facts, str(order.get("instrument"))
+        )
+        source_values = order["source_values"]
+        source_price = Decimal(
+            str(
+                next(
+                    source_values[name]
+                    for name in ("price", "limit_price", "order_price", "Price")
+                    if name in source_values
+                )
+            )
+        )
         expected_observation = order.get("provider_observation_sha256")
         expected_fill_history = fills.get("provider_observation_sha256")
         requested = Decimal(str(order["quantity"]))
@@ -4744,6 +4758,30 @@ def _terminal_exposure_source_matches(
             observation.writer_owner_id == fence.owner_id,
             observation.writer_fencing_token == fence.fencing_token,
             observation.writer_fence_sha256 == fence.fence_sha256,
+            _observation_fx_matches(observation, fx_rate),
+            observation.leaves_valuation_price
+            == (source_price if observation.leaves_quantity > 0 else None),
+            observation.filled_gross_notional
+            == sum(
+                (fact.quantity * fact.price for fact in facts),
+                Decimal(0),
+            )
+            * Decimal(str(metadata.get("contract_multiplier")))
+            * (Decimal(1) if fx_rate is None else fx_rate.rate),
+            observation.leaves_gross_notional
+            == observation.leaves_quantity
+            * source_price
+            * Decimal(str(metadata.get("contract_multiplier")))
+            * (Decimal(1) if fx_rate is None else fx_rate.rate),
+            observation.valuation_facts_sha256
+            == _valuation_facts_sha256(
+                metadata=metadata,
+                quote_currency=quote_currency,
+                valuation_unit=valuation_unit,
+                fill_facts=facts,
+                leaves_valuation_price=source_price,
+                fx_rate=fx_rate,
+            ),
         )
     )
 
@@ -4768,6 +4806,9 @@ def _order_observation_source_matches(
         metadata_facts = payload["metadata_facts"]
         metadata = metadata_facts["instrument_metadata"]
         contract = metadata_facts["provider_contract"]
+        quote_currency, fx_rate = _verified_provider_fx_fact(
+            metadata_facts, str(payload.get("instrument"))
+        )
         source_order_revision = order_part["normalization_provenance"]["source_values"][
             contract["order_revision_field"]
         ]
@@ -4834,8 +4875,157 @@ def _order_observation_source_matches(
             order_event.writer_fence_sha256 == tracked_order.writer_fence_sha256,
             fill_event.writer_fence_sha256 == tracked_order.writer_fence_sha256,
             metadata_facts.get("provider_contract_sha256") == contract.get("fingerprint"),
+            proof.quote_currency == quote_currency,
+            _observation_fx_matches(proof, fx_rate),
+            proof.filled_gross_notional
+            == sum((fact.quantity * fact.price for fact in facts), Decimal(0))
+            * proof.instrument_multiplier
+            * (Decimal(1) if fx_rate is None else fx_rate.rate),
+            proof.leaves_gross_notional
+            == proof.leaves_quantity
+            * source_price
+            * proof.instrument_multiplier
+            * (Decimal(1) if fx_rate is None else fx_rate.rate),
+            proof.valuation_facts_sha256
+            == _valuation_facts_sha256(
+                metadata=metadata,
+                quote_currency=quote_currency,
+                valuation_unit=str(metadata.get("valuation_unit")),
+                fill_facts=facts,
+                leaves_valuation_price=source_price,
+                fx_rate=fx_rate,
+            ),
         )
     )
+
+
+def _verified_provider_fx_fact(
+    metadata_facts: Mapping[str, Any], instrument: str
+) -> tuple[str, InstrumentRiskFxRate | None]:
+    """Validate the persisted provider/metadata binding for a cross-currency order."""
+
+    expected_keys = {
+        "provider_contract_sha256",
+        "provider_contract",
+        "instrument_metadata",
+    }
+    contract = metadata_facts.get("provider_contract")
+    metadata = metadata_facts.get("instrument_metadata")
+    if (
+        type(metadata_facts) is not dict
+        or type(contract) is not dict
+        or type(metadata) is not dict
+        or type(metadata_facts.get("provider_contract_sha256")) is not str
+        or contract.get("fingerprint") != metadata_facts.get("provider_contract_sha256")
+        or type(contract.get("quote_currency_by_instrument")) is not dict
+    ):
+        raise RiskOrderJournalError("PROVIDER_FX_SOURCE_INVALID")
+    quote = contract["quote_currency_by_instrument"].get(instrument)
+    valuation = metadata.get("valuation_unit")
+    metadata_quote = metadata.get("quote_currency") or valuation
+    if (
+        type(quote) is not str
+        or type(valuation) is not str
+        or metadata_quote != quote
+    ):
+        raise RiskOrderJournalError("PROVIDER_FX_SOURCE_INVALID")
+    if quote == valuation:
+        if set(metadata_facts) != expected_keys or metadata.get("fx_source_ref") is not None:
+            raise RiskOrderJournalError("PROVIDER_FX_SOURCE_INVALID")
+        return quote, None
+    fx_keys = {"instrument_fx_rate", "instrument_fx_rate_sha256"}
+    if set(metadata_facts) != expected_keys | fx_keys:
+        raise RiskOrderJournalError("PROVIDER_FX_SOURCE_INVALID")
+    raw = metadata_facts.get("instrument_fx_rate")
+    if (
+        type(raw) is not dict
+        or set(raw)
+        != {
+            "fx_pair",
+            "instrument",
+            "observed_at_ns",
+            "quote_currency",
+            "rate",
+            "schema",
+            "source_record_sha256",
+            "source_ref",
+            "source_revision",
+            "valid_until_ns",
+            "valuation_unit",
+        }
+        or type(raw.get("rate")) is not str
+        or type(raw.get("observed_at_ns")) is not int
+        or type(raw.get("valid_until_ns")) is not int
+        or type(raw.get("source_revision")) is not str
+        or raw.get("instrument") != instrument
+        or raw.get("quote_currency") != quote
+        or raw.get("valuation_unit") != valuation
+        or raw.get("fx_pair") != quote + "/" + valuation
+        or raw.get("source_ref") != metadata.get("fx_source_ref")
+        or type(metadata_facts.get("instrument_fx_rate_sha256")) is not str
+    ):
+        raise RiskOrderJournalError("PROVIDER_FX_SOURCE_INVALID")
+    try:
+        fx_rate = InstrumentRiskFxRate(
+            instrument=raw["instrument"],
+            quote_currency=raw["quote_currency"],
+            valuation_unit=raw["valuation_unit"],
+            rate=Decimal(raw["rate"]),
+            observed_at_ns=raw["observed_at_ns"],
+            valid_until_ns=raw["valid_until_ns"],
+            source_ref=raw["source_ref"],
+            source_revision=raw["source_revision"],
+            source_record_sha256=raw["source_record_sha256"],
+        )
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        raise RiskOrderJournalError("PROVIDER_FX_SOURCE_INVALID") from None
+    if (
+        raw != fx_rate.to_payload()
+        or metadata_facts.get("instrument_fx_rate_sha256") != fx_rate.digest
+    ):
+        raise RiskOrderJournalError("PROVIDER_FX_SOURCE_INVALID")
+    return quote, fx_rate
+
+
+def _observation_fx_matches(
+    observation: OrderExposureObservationProof,
+    fx_rate: InstrumentRiskFxRate | None,
+) -> bool:
+    return all(
+        (
+            observation.fx_pair == (None if fx_rate is None else fx_rate.fx_pair),
+            observation.fx_rate == (None if fx_rate is None else fx_rate.rate),
+            observation.fx_observed_at_ns
+            == (None if fx_rate is None else fx_rate.observed_at_ns),
+            observation.fx_valid_until_ns
+            == (None if fx_rate is None else fx_rate.valid_until_ns),
+        )
+    )
+
+
+def _valuation_facts_sha256(
+    *,
+    metadata: Mapping[str, Any],
+    quote_currency: str,
+    valuation_unit: str,
+    fill_facts: tuple[OrderFillFact, ...],
+    leaves_valuation_price: Decimal,
+    fx_rate: InstrumentRiskFxRate | None,
+) -> str:
+    payload: dict[str, Any] = {
+        "fill_fingerprints": [item.fingerprint for item in fill_facts],
+        "instrument_metadata_sha256": metadata.get("metadata_sha256"),
+        "instrument_multiplier": _decimal_text(
+            Decimal(str(metadata.get("contract_multiplier")))
+        ),
+        "leaves_valuation_price": _decimal_text(leaves_valuation_price),
+        "quote_currency": quote_currency,
+        "valuation_unit": valuation_unit,
+    }
+    if fx_rate is not None:
+        payload["fx_rate"] = fx_rate.to_payload()
+        payload["fx_rate_sha256"] = fx_rate.digest
+    return sha256_text(canonical_json(payload))
 
 
 def _fence_digest(scope: AccountScope, owner_id: str, fencing_token: int) -> str:

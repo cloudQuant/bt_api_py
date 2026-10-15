@@ -31,6 +31,7 @@ from bt_api_risk import (
     DispatchTrackedOrderProof,
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
+    InstrumentRiskFxRate,
     InstrumentRiskRegistry,
     OrderExposureObservationProof,
     OrderExposureState,
@@ -261,6 +262,7 @@ class RiskOrderTarget:
     exchange_name: str
     provider_account_id: str
     registry: InstrumentRiskRegistry
+    fx_rates_by_instrument: tuple[InstrumentRiskFxRate, ...] = ()
 
     def __post_init__(self) -> None:
         if type(self.account_scope) is not AccountScope:
@@ -275,6 +277,16 @@ class RiskOrderTarget:
             raise RiskOrderEntryError("TARGET_PROVIDER_ACCOUNT_REQUIRED")
         if type(self.registry) is not InstrumentRiskRegistry:
             raise RiskOrderEntryError("TARGET_METADATA_REGISTRY_REQUIRED")
+        if type(self.fx_rates_by_instrument) is not tuple:
+            raise RiskOrderEntryError("TARGET_FX_RATES_INVALID")
+        seen_fx_instruments: set[str] = set()
+        for fact in self.fx_rates_by_instrument:
+            if (
+                type(fact) is not InstrumentRiskFxRate
+                or fact.instrument in seen_fx_instruments
+            ):
+                raise RiskOrderEntryError("TARGET_FX_RATES_INVALID")
+            seen_fx_instruments.add(fact.instrument)
         if (
             self.account_scope.provider.casefold()
             != self.exchange_name.partition("___")[0].casefold()
@@ -530,29 +542,30 @@ class _AdmissionOrder:
     metadata_version: str
     tags: Mapping[str, str]
     payload_sha256: str
+    fx_rate: InstrumentRiskFxRate | None = None
 
     @property
     def fingerprint(self) -> str:
-        return sha256_text(
-            canonical_json(
-                {
-                    "intent_id": self.intent_id,
-                    "instrument": self.instrument,
-                    "metadata_version": self.metadata_version,
-                    "payload_sha256": self.payload_sha256,
-                    "position_effect": self.position_effect.value,
-                    "price": format(self.price, "f"),
-                    "quantity": format(self.quantity, "f"),
-                    "scope": {
-                        "account_ref": self.scope.account_ref,
-                        "environment": self.scope.environment,
-                        "provider": self.scope.provider,
-                        "strategy_id": self.scope.strategy_id,
-                    },
-                    "tags": dict(self.tags),
-                }
-            )
-        )
+        payload = {
+            "intent_id": self.intent_id,
+            "instrument": self.instrument,
+            "metadata_version": self.metadata_version,
+            "payload_sha256": self.payload_sha256,
+            "position_effect": self.position_effect.value,
+            "price": format(self.price, "f"),
+            "quantity": format(self.quantity, "f"),
+            "scope": {
+                "account_ref": self.scope.account_ref,
+                "environment": self.scope.environment,
+                "provider": self.scope.provider,
+                "strategy_id": self.scope.strategy_id,
+            },
+            "tags": dict(self.tags),
+        }
+        if self.fx_rate is not None:
+            payload["fx_rate"] = self.fx_rate.to_payload()
+            payload["fx_rate_sha256"] = self.fx_rate.digest
+        return sha256_text(canonical_json(payload))
 
 
 class RiskOrderEntryService:
@@ -608,6 +621,7 @@ class RiskOrderEntryService:
                 raise RiskOrderEntryError("PROVIDER_CONTRACT_SCOPE_MISMATCH")
             if not contract.risk_only_write_ready:
                 raise RiskOrderEntryError("PROVIDER_GTC_CAPABILITY_REQUIRED")
+            _validate_target_fx_contract(target, contract)
             contract_copy[scope] = contract
 
         self._bt_api = bt_api
@@ -739,6 +753,7 @@ class RiskOrderEntryService:
                         continue
                     if command.state in {
                         "PROVIDER_QUERY",
+                        "EXPOSURE_APPLIED",
                         "UNKNOWN",
                     } and self._has_resolved_ack_history(fence, command):
                         # An ACK already consumed Risk's dispatch proof. Later
@@ -918,13 +933,21 @@ class RiskOrderEntryService:
                 permit_id=command.permit_id,
                 allow_ack_to_unknown=True,
             )
-        if command.state in {"PROVIDER_QUERY", "UNKNOWN"} and self._has_resolved_ack_history(
-            fence, command
+        if command.state in {"PROVIDER_QUERY", "EXPOSURE_APPLIED", "UNKNOWN"} and (
+            self._has_resolved_ack_history(fence, command)
         ):
             # A durable ACK plus Risk's exact resolved receipt proves this is
             # the previously accepted command. A duplicate submit never
             # dispatches or re-runs immutable proof recovery.
             return command
+        if command.state == "EXPOSURE_APPLIED":
+            return self._mark_unknown(
+                fence,
+                command,
+                "DISPATCH_PROOF_RECOVERY_UNCERTAIN",
+                permit_id=command.permit_id,
+                allow_ack_to_unknown=True,
+            )
         try:
             has_proof_ready = self._journal.has_proof_ready_history(
                 fence,
@@ -2033,6 +2056,8 @@ class RiskOrderEntryService:
         payload_sha256 = command.payload_sha256
         if parsed is not None:
             payload_sha256 = command.payload_sha256
+        contract = self._provider_contract_for_target(target)
+        fx_rate = _target_fx_rate(target, contract, request.symbol)
         return _AdmissionOrder(
             intent_id=command.risk_intent_id,
             scope=_AdmissionScope(
@@ -2048,7 +2073,18 @@ class RiskOrderEntryService:
             metadata_version=str(command.canonical_payload["metadata_version"]),
             tags=MappingProxyType({INSTRUMENT_METADATA_DIGEST_TAG: metadata.digest}),
             payload_sha256=payload_sha256,
+            fx_rate=fx_rate,
         )
+
+    def _provider_contract_for_target(
+        self, target: RiskOrderTarget
+    ) -> RiskBtApiProviderContract:
+        for scope, configured in self._targets.items():
+            if configured is target:
+                contract = self._provider_contracts.get(scope)
+                if contract is not None:
+                    return contract
+        raise RiskOrderEntryError("PROVIDER_CONTRACT_SCOPE_MISMATCH")
 
     def _admission_for_scope(self, target: RiskOrderTarget) -> DurableRiskAdmissionAdapter:
         for scope, configured in self._targets.items():
@@ -2165,6 +2201,22 @@ def _has_exact_argument_fields(arguments: object, expected_fields: frozenset[str
 
 def _decimal_text(value: Decimal) -> str:
     return format(value, "f")
+
+
+def _valuation_facts_decimal_text(value: Decimal) -> str:
+    """Canonicalize only the decimal fields covered by the valuation digest.
+
+    The journal recomputes this digest with its canonical Decimal formatter.
+    Keep ordinary provider/request serialization scale-preserving; this helper
+    is only for the shared valuation-facts hash contract.
+    """
+
+    if value == 0:
+        return "0"
+    result = format(value, "f")
+    if "." in result:
+        result = result.rstrip("0").rstrip(".")
+    return result
 
 
 def _wire_scope_payload(scope: WireScope) -> dict[str, Any]:
@@ -3274,6 +3326,7 @@ def _provider_metadata_facts(
     metadata = target.registry.get(instrument)
     if metadata is None or metadata.valuation_unit is None:
         raise RiskOrderEntryError("INSTRUMENT_VALUATION_METADATA_UNAVAILABLE")
+    fx_rate = _target_fx_rate(target, contract, instrument)
     contract_payload = contract.to_payload()
     contract_payload["fingerprint"] = contract.fingerprint
     contract_payload["quote_currency_by_instrument"] = dict(
@@ -3281,11 +3334,76 @@ def _provider_metadata_facts(
     )
     metadata_payload = metadata.to_payload()
     metadata_payload["metadata_sha256"] = metadata.digest
-    return {
+    facts = {
         "provider_contract_sha256": contract.fingerprint,
         "provider_contract": contract_payload,
         "instrument_metadata": metadata_payload,
     }
+    if fx_rate is not None:
+        facts["instrument_fx_rate"] = fx_rate.to_payload()
+        facts["instrument_fx_rate_sha256"] = fx_rate.digest
+    return facts
+
+
+def _target_fx_rate(
+    target: RiskOrderTarget,
+    contract: RiskBtApiProviderContract,
+    instrument: str,
+) -> InstrumentRiskFxRate | None:
+    """Resolve the immutable FX fact from trusted target resources only."""
+
+    metadata = target.registry.get(instrument)
+    if metadata is None or metadata.valuation_unit is None:
+        raise RiskOrderEntryError("INSTRUMENT_VALUATION_METADATA_UNAVAILABLE")
+    quote_currency = contract.quote_currency(instrument)
+    configured = next(
+        (item for item in target.fx_rates_by_instrument if item.instrument == instrument),
+        None,
+    )
+    if quote_currency is None:
+        if configured is not None:
+            raise RiskOrderEntryError("PROVIDER_FX_CONTRACT_UNAVAILABLE")
+        return None
+    trusted_quote = metadata.quote_currency or metadata.valuation_unit
+    if trusted_quote != quote_currency:
+        raise RiskOrderEntryError("PROVIDER_METADATA_CURRENCY_MISMATCH")
+    if quote_currency == metadata.valuation_unit:
+        if configured is not None or metadata.fx_source_ref is not None:
+            raise RiskOrderEntryError("PROVIDER_FX_CONTRACT_INVALID")
+        return None
+    if (
+        not contract.exposure_ready
+        or type(configured) is not InstrumentRiskFxRate
+        or metadata.quote_currency != quote_currency
+        or metadata.fx_source_ref is None
+        or configured.instrument != instrument
+        or configured.quote_currency != quote_currency
+        or configured.valuation_unit != metadata.valuation_unit
+        or configured.source_ref != metadata.fx_source_ref
+        or configured.fx_pair != quote_currency + "/" + metadata.valuation_unit
+    ):
+        raise RiskOrderEntryError("PROVIDER_FX_CONTRACT_UNAVAILABLE")
+    return configured
+
+
+def _validate_target_fx_contract(
+    target: RiskOrderTarget,
+    contract: RiskBtApiProviderContract,
+) -> None:
+    """Bind every target FX fact to the V2 contract and trusted metadata."""
+
+    if target.fx_rates_by_instrument and not contract.exposure_ready:
+        raise RiskOrderEntryError("PROVIDER_FX_CONTRACT_UNAVAILABLE")
+    configured_instruments = {item.instrument for item in target.fx_rates_by_instrument}
+    contract_instruments = {
+        instrument for instrument, _quote in contract.quote_currency_by_instrument
+    }
+    if not configured_instruments.issubset(contract_instruments):
+        raise RiskOrderEntryError("PROVIDER_FX_CONTRACT_UNAVAILABLE")
+    for instrument, _quote in contract.quote_currency_by_instrument:
+        metadata = target.registry.get(instrument)
+        if metadata is not None:
+            _target_fx_rate(target, contract, instrument)
 
 
 def _source_alias_map_sha256() -> str:
@@ -3325,11 +3443,19 @@ def _order_exposure_proof(
         raise RiskOrderEntryError("PROVIDER_EXPOSURE_METADATA_BINDING_INVALID")
     quote_currency = contract.quote_currency(request.symbol)
     valuation_unit = metadata.valuation_unit
-    if quote_currency is None or quote_currency != valuation_unit:
-        raise RiskOrderEntryError("PROVIDER_EXPOSURE_FX_UNSUPPORTED")
+    fx_rate = _target_fx_rate(target, contract, request.symbol)
+    if quote_currency is None:
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_QUOTE_CURRENCY_UNAVAILABLE")
+    proof_observed_at_ns = time.time_ns()
     if (
-        metadata.expires_at_ns <= time.time_ns()
-        or metadata.as_of_ns > time.time_ns()
+        metadata.expires_at_ns <= proof_observed_at_ns
+        or metadata.as_of_ns > proof_observed_at_ns
+        or (
+            fx_rate is not None
+            and not fx_rate.observed_at_ns
+            <= proof_observed_at_ns
+            < fx_rate.valid_until_ns
+        )
         or type(facts.get("order_revision")) is not int
         or type(facts.get("fill_watermark_revision")) is not int
     ):
@@ -3338,27 +3464,36 @@ def _order_exposure_proof(
     filled_quantity = Decimal(facts["filled_quantity"])
     leaves_quantity = Decimal(facts["leaves_quantity"])
     valuation_price = Decimal(facts["valuation_price"])
+    conversion_rate = Decimal(1) if fx_rate is None else fx_rate.rate
     filled_gross = sum(
-        (item.quantity * item.price * multiplier for item in facts["fill_facts"]),
+        (item.quantity * item.price * multiplier * conversion_rate for item in facts["fill_facts"]),
         Decimal(0),
     )
-    leaves_gross = leaves_quantity * valuation_price * multiplier
-    observed_at_ns = time.time_ns()
-    valid_until_ns = min(metadata.expires_at_ns, observed_at_ns + 60_000_000_000)
+    leaves_gross = leaves_quantity * valuation_price * multiplier * conversion_rate
+    valuation_observed_at_ns = max(
+        metadata.as_of_ns,
+        metadata.as_of_ns if fx_rate is None else fx_rate.observed_at_ns,
+    )
+    valuation_valid_until_ns = min(
+        metadata.expires_at_ns,
+        metadata.expires_at_ns if fx_rate is None else fx_rate.valid_until_ns,
+    )
+    observed_at_ns = proof_observed_at_ns
+    valid_until_ns = min(valuation_valid_until_ns, observed_at_ns + 60_000_000_000)
     if valid_until_ns <= observed_at_ns:
         raise RiskOrderEntryError("PROVIDER_EXPOSURE_FACTS_STALE")
-    valuation_facts_sha256 = sha256_text(
-        canonical_json(
-            {
-                "fill_fingerprints": [item.fingerprint for item in facts["fill_facts"]],
-                "instrument_metadata_sha256": metadata.digest,
-                "instrument_multiplier": _decimal_text(multiplier),
-                "leaves_valuation_price": _decimal_text(valuation_price),
-                "quote_currency": quote_currency,
-                "valuation_unit": valuation_unit,
-            }
-        )
-    )
+    valuation_facts = {
+        "fill_fingerprints": [item.fingerprint for item in facts["fill_facts"]],
+        "instrument_metadata_sha256": metadata.digest,
+        "instrument_multiplier": _valuation_facts_decimal_text(multiplier),
+        "leaves_valuation_price": _valuation_facts_decimal_text(valuation_price),
+        "quote_currency": quote_currency,
+        "valuation_unit": valuation_unit,
+    }
+    if fx_rate is not None:
+        valuation_facts["fx_rate"] = fx_rate.to_payload()
+        valuation_facts["fx_rate_sha256"] = fx_rate.digest
+    valuation_facts_sha256 = sha256_text(canonical_json(valuation_facts))
     return OrderExposureObservationProof(
         scope=claim.scope,
         permit_id=claim.permit_id,
@@ -3405,12 +3540,12 @@ def _order_exposure_proof(
         instrument_metadata_observed_at_ns=metadata.as_of_ns,
         instrument_metadata_valid_until_ns=metadata.expires_at_ns,
         valuation_facts_sha256=valuation_facts_sha256,
-        valuation_observed_at_ns=metadata.as_of_ns,
-        valuation_valid_until_ns=metadata.expires_at_ns,
-        fx_pair=None,
-        fx_rate=None,
-        fx_observed_at_ns=None,
-        fx_valid_until_ns=None,
+        valuation_observed_at_ns=valuation_observed_at_ns,
+        valuation_valid_until_ns=valuation_valid_until_ns,
+        fx_pair=None if fx_rate is None else fx_rate.fx_pair,
+        fx_rate=None if fx_rate is None else fx_rate.rate,
+        fx_observed_at_ns=None if fx_rate is None else fx_rate.observed_at_ns,
+        fx_valid_until_ns=None if fx_rate is None else fx_rate.valid_until_ns,
         observed_at_ns=observed_at_ns,
         valid_until_ns=valid_until_ns,
         writer_owner_id=writer_owner_id,
