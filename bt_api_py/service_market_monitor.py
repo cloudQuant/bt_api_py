@@ -22,12 +22,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from bt_api_base.market_observation_protocol import (
+    GatewaySystemTelemetryProjector,
+    SystemTelemetryProjectionError,
+)
 from bt_api_base.market_protocol import MarketSubscriptionKey
 from bt_api_base.service_protocol import WireEnvelope, WireIdentity, WireRole, WireScope
-from bt_api_monitor.market_observation import (
-    MonitorMarketObservationError,
-    MonitorMarketObservationProjector,
-)
 
 from bt_api_py.service_market import (
     MarketBootstrap,
@@ -54,6 +54,8 @@ _MARKET_OPERATIONS = frozenset(
 )
 _TELEMETRY_MOUNT = "upstream.telemetry"
 _TELEMETRY_OPERATION = "events.append"
+_MONITOR_OBSERVATION_EVENT_TYPE = "gateway.market_observation"
+_MONITOR_OBSERVATION_SCHEMA = "bt_api.monitor.market_observation.v1"
 _MAX_PENDING_EVENTS = 100_000
 _MAX_PENDING_BYTES = 64 * 1024 * 1024
 _DEFAULT_PENDING_EVENTS = 128
@@ -187,13 +189,15 @@ class ServiceMarketMonitorRelay:
             raise ServiceMarketMonitorError("SYSTEM_MONITOR_SCOPE_REQUIRED")
 
         try:
-            projector = MonitorMarketObservationProjector(
+            projector = GatewaySystemTelemetryProjector(
                 market_binding.peer,
                 market_client.stream_scope,
                 system_ref=system_ref,
                 process_ref=process_ref,
+                event_type=_MONITOR_OBSERVATION_EVENT_TYPE,
+                observation_schema=_MONITOR_OBSERVATION_SCHEMA,
             )
-        except MonitorMarketObservationError as error:
+        except SystemTelemetryProjectionError as error:
             raise ServiceMarketMonitorError(
                 "INVALID_MARKET_OBSERVATION_BINDING", cause_code=error.code
             ) from None
@@ -312,7 +316,7 @@ class ServiceMarketMonitorRelay:
                 allow_nan=False,
             ).encode("ascii")
             source_event_id = projected["event_id"]
-        except MonitorMarketObservationError as error:
+        except SystemTelemetryProjectionError as error:
             self._lose("INVALID_MARKET_FRAME")
             self._last_delivery_error = error.code
             return
