@@ -1,0 +1,416 @@
+{
+  "audit_events": [
+    {
+      "event": "socket.__new__",
+      "phase": "imports",
+      "stack_nearest_first": [
+        {
+          "file": "C:\\anaconda3\\Lib\\socket.py",
+          "function": "__init__",
+          "line": 232,
+          "module": "socket"
+        },
+        {
+          "file": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\urllib3\\util\\connection.py",
+          "function": "_has_ipv6",
+          "line": 126,
+          "module": "urllib3.util.connection"
+        },
+        {
+          "file": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\urllib3\\util\\connection.py",
+          "function": "<module>",
+          "line": 137,
+          "module": "urllib3.util.connection"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_call_with_frames_removed",
+          "line": 241,
+          "module": "importlib._bootstrap"
+        },
+        {
+          "file": "<frozen importlib._bootstrap_external>",
+          "function": "exec_module",
+          "line": 940,
+          "module": "importlib._bootstrap_external"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_load_unlocked",
+          "line": 690,
+          "module": "importlib._bootstrap"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_find_and_load_unlocked",
+          "line": 1147,
+          "module": "importlib._bootstrap"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_find_and_load",
+          "line": 1176,
+          "module": "importlib._bootstrap"
+        },
+        {
+          "file": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\urllib3\\util\\__init__.py",
+          "function": "<module>",
+          "line": 4,
+          "module": "urllib3.util"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_call_with_frames_removed",
+          "line": 241,
+          "module": "importlib._bootstrap"
+        }
+      ]
+    },
+    {
+      "event": "subprocess.Popen",
+      "phase": "imports",
+      "stack_nearest_first": [
+        {
+          "file": "C:\\anaconda3\\Lib\\subprocess.py",
+          "function": "_execute_child",
+          "line": 1534,
+          "module": "subprocess"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\subprocess.py",
+          "function": "__init__",
+          "line": 1026,
+          "module": "subprocess"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\subprocess.py",
+          "function": "run",
+          "line": 548,
+          "module": "subprocess"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\subprocess.py",
+          "function": "check_output",
+          "line": 466,
+          "module": "subprocess"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\platform.py",
+          "function": "_syscmd_ver",
+          "line": 284,
+          "module": "platform"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\platform.py",
+          "function": "win32_ver",
+          "line": 371,
+          "module": "platform"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\platform.py",
+          "function": "uname",
+          "line": 861,
+          "module": "platform"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\platform.py",
+          "function": "machine",
+          "line": 963,
+          "module": "platform"
+        },
+        {
+          "file": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\pandas\\compat\\_constants.py",
+          "function": "<module>",
+          "line": 20,
+          "module": "pandas.compat._constants"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_call_with_frames_removed",
+          "line": 241,
+          "module": "importlib._bootstrap"
+        }
+      ]
+    },
+    {
+      "event": "subprocess.Popen",
+      "phase": "imports",
+      "stack_nearest_first": [
+        {
+          "file": "C:\\anaconda3\\Lib\\subprocess.py",
+          "function": "_execute_child",
+          "line": 1534,
+          "module": "subprocess"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\subprocess.py",
+          "function": "__init__",
+          "line": 1026,
+          "module": "subprocess"
+        },
+        {
+          "file": "C:\\anaconda3\\Lib\\subprocess.py",
+          "function": "run",
+          "line": 548,
+          "module": "subprocess"
+        },
+        {
+          "file": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\numpy\\testing\\_private\\utils.py",
+          "function": "check_support_sve",
+          "line": 1247,
+          "module": "numpy.testing._private.utils"
+        },
+        {
+          "file": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\numpy\\testing\\_private\\utils.py",
+          "function": "<module>",
+          "line": 1253,
+          "module": "numpy.testing._private.utils"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_call_with_frames_removed",
+          "line": 241,
+          "module": "importlib._bootstrap"
+        },
+        {
+          "file": "<frozen importlib._bootstrap_external>",
+          "function": "exec_module",
+          "line": 940,
+          "module": "importlib._bootstrap_external"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_load_unlocked",
+          "line": 690,
+          "module": "importlib._bootstrap"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_find_and_load_unlocked",
+          "line": 1147,
+          "module": "importlib._bootstrap"
+        },
+        {
+          "file": "<frozen importlib._bootstrap>",
+          "function": "_find_and_load",
+          "line": 1176,
+          "module": "importlib._bootstrap"
+        }
+      ]
+    }
+  ],
+  "build_manifest_path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\build-manifest.json",
+  "build_manifest_provenance": {
+    "archive_path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\bt_api_py-cdb1b81-packaging.tar",
+    "archive_sha256_recorded": "e84eacaf4d53f38e702bd39033adaf8db95675ca680152caed6fa711ade7943e",
+    "build_tool_version_recorded": null,
+    "sha256": "fd8fd3b9477b1080bddb681c531b11880a58b586e1a51d7c8de6950a541956af",
+    "source_revision": "cdb1b81e39b661afb145ff3d9e94695c97429d7e",
+    "source_tree": "6943f04da92133ab23ace7fc0c3ceefdc676eb50",
+    "wheel_path_recorded": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\wheelhouse-current\\bt_api_py-0.15.5-py3-none-any.whl",
+    "wheel_sha256_recorded": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+    "wheel_version_recorded": "0.15.5"
+  },
+  "checks": {
+    "both_configs_valid_empty_and_unactivated": true,
+    "build_manifest_archive_matches_actual_git_archive": true,
+    "build_manifest_binds_fixed_current_commit_and_tree": true,
+    "build_manifest_binds_wheel_to_current_commit": true,
+    "build_manifest_is_exactly_pinned": true,
+    "cerebro_processed_one_synthetic_bar": true,
+    "default_sdk_is_direct_and_closed": true,
+    "four_domain_packages_absent_and_unloaded": true,
+    "installed_sdk_direct_url_and_hash_match_expected_wheel": true,
+    "installed_sdk_version_matches_pinned_wheel_metadata": false,
+    "no_files_created_in_probe_working_directory": true,
+    "no_observed_runtime_optional_resource_events": true,
+    "no_service_modules_or_watched_import_attempts": true,
+    "no_servicehost_constructor_in_direct_or_backtest": true,
+    "observer_restoration_completed": true,
+    "optional_transport_and_spdlog_absent_and_unloaded": true
+  },
+  "execution_error": null,
+  "expected_build_manifest_sha256": "fd8fd3b9477b1080bddb681c531b11880a58b586e1a51d7c8de6950a541956af",
+  "expected_sdk_source_revision": "cdb1b81e39b661afb145ff3d9e94695c97429d7e",
+  "expected_sdk_source_tree": "6943f04da92133ab23ace7fc0c3ceefdc676eb50",
+  "expected_sdk_wheel": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\wheelhouse-current\\bt_api_py-0.15.5-py3-none-any.whl",
+  "expected_sdk_wheel_sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+  "failed_checks": [
+    "installed_sdk_version_matches_pinned_wheel_metadata"
+  ],
+  "filesystem_files_created_in_working_directory": [],
+  "full_run_active_thread_delta": 0,
+  "full_run_process_handle_delta": 438,
+  "installed_sdk": {
+    "build_archive_sha256_actual": "e84eacaf4d53f38e702bd39033adaf8db95675ca680152caed6fa711ade7943e",
+    "build_manifest_archive_sha256": "e84eacaf4d53f38e702bd39033adaf8db95675ca680152caed6fa711ade7943e",
+    "build_manifest_build_tool_version": null,
+    "build_manifest_sha256": "fd8fd3b9477b1080bddb681c531b11880a58b586e1a51d7c8de6950a541956af",
+    "build_manifest_source_revision": "cdb1b81e39b661afb145ff3d9e94695c97429d7e",
+    "build_manifest_source_tree": "6943f04da92133ab23ace7fc0c3ceefdc676eb50",
+    "build_manifest_wheel_sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+    "build_manifest_wheel_version": "0.15.5",
+    "direct_url": {
+      "archive_info": {
+        "hash": "sha256=f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+        "hashes": {
+          "sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b"
+        }
+      },
+      "url": "file:///D:/temp/iteration10_cfg01_cfg04_mig04_20261015_r2/cfg01-current-head-r1/wheelhouse-current/bt_api_py-0.15.5-py3-none-any.whl"
+    },
+    "direct_url_archive_hash": "sha256=f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+    "direct_url_matches_expected_sha256": true,
+    "version": "0.15.5",
+    "wheel_matches_expected_sha256": true,
+    "wheel_path_sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b"
+  },
+  "observer_restoration_errors": [],
+  "optional_and_domain_packages": {
+    "bt_api_execution": {
+      "distribution_version": null,
+      "module_loaded": false
+    },
+    "bt_api_gateway": {
+      "distribution_version": null,
+      "module_loaded": false
+    },
+    "bt_api_monitor": {
+      "distribution_version": null,
+      "module_loaded": false
+    },
+    "bt_api_risk": {
+      "distribution_version": null,
+      "module_loaded": false
+    },
+    "bt_api_transport_zmq": {
+      "distribution_version": null,
+      "module_loaded": false
+    },
+    "pyzmq": {
+      "distribution_version": null,
+      "module_loaded": false
+    },
+    "spdlog": {
+      "distribution_version": null,
+      "module_loaded": false
+    }
+  },
+  "phase_observations": {
+    "configs": [
+      {
+        "cli_exit_code": 0,
+        "cli_parse_error": null,
+        "cli_summary": {
+          "activated": false,
+          "client_count": 0,
+          "component_count": 0,
+          "fingerprint": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+          "process_role": null,
+          "status": "valid"
+        },
+        "client_count": 0,
+        "path": "D:\\bt_api_py\\examples\\services\\unconfigured-client.yaml",
+        "process_role": null,
+        "raw_config": {},
+        "raw_config_byte_length": 65,
+        "raw_config_bytes_match_expected": true,
+        "raw_config_sha256": "588fccd3c0b5ad7e0d42a296aa8359f7b541faeb39e949f2c897bc740b897592",
+        "variant": "no_new_block"
+      },
+      {
+        "cli_exit_code": 0,
+        "cli_parse_error": null,
+        "cli_summary": {
+          "activated": false,
+          "client_count": 0,
+          "component_count": 0,
+          "fingerprint": "bc83f4001aacf04e4f70f5edf216837a52ec95a1f63311e742e7ec32e6ce771d",
+          "process_role": null,
+          "status": "valid"
+        },
+        "client_count": 0,
+        "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\empty-clients.yaml",
+        "process_role": null,
+        "raw_config": {
+          "clients": {}
+        },
+        "raw_config_byte_length": 11,
+        "raw_config_bytes_match_expected": true,
+        "raw_config_sha256": "ba771c3741dafa8598a26a9ba607e3754d551cbeb3092d7ff8742ffe04e46730",
+        "variant": "empty_clients"
+      }
+    ],
+    "ordinary_sdk": {
+      "backend": "bt_api_py._direct_backend.DirectBackend",
+      "constructed_and_closed": true,
+      "transport_mode": "direct"
+    },
+    "synthetic_backtest": {
+      "bars_processed": 1,
+      "completed": true
+    }
+  },
+  "resource_counts_by_phase": {
+    "config": {},
+    "default_sdk_direct": {},
+    "imports": {
+      "socket.audit_new": 1,
+      "subprocess.audit_popen": 2
+    },
+    "synthetic_backtest": {}
+  },
+  "resource_snapshots": {
+    "after_cerebro": {
+      "active_python_threads": 1,
+      "process_handle_count": 582,
+      "resource_calls": {}
+    },
+    "after_config_variants": {
+      "active_python_threads": 1,
+      "process_handle_count": 568,
+      "resource_calls": {}
+    },
+    "after_default_sdk": {
+      "active_python_threads": 1,
+      "process_handle_count": 580,
+      "resource_calls": {}
+    },
+    "after_product_imports": {
+      "active_python_threads": 1,
+      "process_handle_count": 568,
+      "resource_calls": {
+        "socket.audit_new": 1,
+        "subprocess.audit_popen": 2
+      }
+    },
+    "before_product_imports": {
+      "active_python_threads": 1,
+      "process_handle_count": 144,
+      "resource_calls": {}
+    }
+  },
+  "runtime_phase_names": [
+    "config",
+    "default_sdk_direct",
+    "synthetic_backtest"
+  ],
+  "sdk_service_modules_loaded": {
+    "bt_api_py.service_components": false,
+    "bt_api_py.service_host": false,
+    "bt_api_py.service_runtime": false
+  },
+  "status": "ASSERTION_FAILED",
+  "watched_import_attempts": [],
+  "win32_resource_apis_instrumented": [
+    "CreateEventW",
+    "CreateIoCompletionPort",
+    "CreateJobObjectW",
+    "CreateMutexW",
+    "CreateNamedPipeW",
+    "CreateProcessW",
+    "CreateSemaphoreW",
+    "CreateThread"
+  ],
+  "working_directory": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\run-cwd"
+}

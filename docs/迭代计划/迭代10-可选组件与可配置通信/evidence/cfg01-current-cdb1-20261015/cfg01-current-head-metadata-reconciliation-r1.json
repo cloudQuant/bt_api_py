@@ -1,0 +1,192 @@
+{
+  "checks": {
+    "all_original_runtime_gates_are_true": true,
+    "build_tool_version_is_pinned_nested_manifest_value": true,
+    "config_checkout_matches_fixed_commit_blob_and_sha": true,
+    "empty_config_matches_its_manifest_bytes_and_hash": true,
+    "fixed_source_revision_and_tree_match": true,
+    "installed_direct_url_hash_matches_wheel": true,
+    "installed_direct_url_matches_original_probe": true,
+    "installed_metadata_matches_wheel_metadata": true,
+    "installed_version_matches_manifest_wheel_version": true,
+    "manifest_config_byte_count_matches_actual": false,
+    "manifest_hash_matches_original_probe_pin": true,
+    "original_false_version_assertion_is_explained_by_wrong_lookup": true,
+    "original_probe_status_and_exit_remain_failure": true,
+    "source_archive_hash_matches_pinned_manifest": true,
+    "wheel_hash_matches_pinned_manifest": true,
+    "wheel_metadata_version_matches_manifest": true
+  },
+  "inputs": {
+    "original_manifest": {
+      "bytes": 2698,
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\build-manifest.json",
+      "sha256": "fd8fd3b9477b1080bddb681c531b11880a58b586e1a51d7c8de6950a541956af"
+    },
+    "original_probe": {
+      "bytes": 20342,
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\cfg01_current_head_probe_r3.py",
+      "sha256": "46544793a81b6ffb372ec2136684e4ffa5d3661151bed9ec11ba3512a2ba52fc"
+    },
+    "original_result": {
+      "bytes": 15026,
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\cfg01-current-head-observation-r1.json",
+      "sha256": "73d65c107adcab0f21e507e505f0e90910093a1d89f64038a493380267d7c26b",
+      "status": "ASSERTION_FAILED"
+    },
+    "source_archive": {
+      "bytes": 17899520,
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\bt_api_py-cdb1b81-packaging.tar",
+      "sha256": "e84eacaf4d53f38e702bd39033adaf8db95675ca680152caed6fa711ade7943e"
+    },
+    "wheel": {
+      "bytes": 1066010,
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\wheelhouse-current\\bt_api_py-0.15.5-py3-none-any.whl",
+      "sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b"
+    }
+  },
+  "installed_direct_url": {
+    "installed_value": {
+      "archive_info": {
+        "hash": "sha256=f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+        "hashes": {
+          "sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b"
+        }
+      },
+      "url": "file:///D:/temp/iteration10_cfg01_cfg04_mig04_20261015_r2/cfg01-current-head-r1/wheelhouse-current/bt_api_py-0.15.5-py3-none-any.whl"
+    },
+    "metadata_file": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\bt_api_py-0.15.5.dist-info\\direct_url.json",
+    "original_probe_value": {
+      "archive_info": {
+        "hash": "sha256=f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+        "hashes": {
+          "sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b"
+        }
+      },
+      "url": "file:///D:/temp/iteration10_cfg01_cfg04_mig04_20261015_r2/cfg01-current-head-r1/wheelhouse-current/bt_api_py-0.15.5-py3-none-any.whl"
+    }
+  },
+  "manifest_config_size_discrepancy": {
+    "actual_checkout_and_git_blob_bytes": 65,
+    "delta_bytes": 3,
+    "interpretation": "metadata typo preserved; checkout/blob bytes and SHA-256 are identical; original manifest and probe result remain unchanged",
+    "recorded_bytes": 68
+  },
+  "metadata_reader": {
+    "isolated_flag": true,
+    "no_site_flag": true,
+    "python_executable": "C:\\anaconda3\\python.exe",
+    "sdk_modules_imported": false
+  },
+  "original_probe_runtime_gates": {
+    "all_runtime_gates_true": true,
+    "full_run_active_thread_delta_diagnostic_only": 0,
+    "full_run_process_handle_delta_diagnostic_only": 438,
+    "observed_import_phase_counts": {
+      "socket.audit_new": 1,
+      "subprocess.audit_popen": 2
+    },
+    "observed_runtime_phase_counts": {
+      "config": {},
+      "default_sdk_direct": {},
+      "synthetic_backtest": {}
+    },
+    "observer_restoration_errors": [],
+    "only_failed_check": true,
+    "optional_and_domain_packages": {
+      "bt_api_execution": {
+        "distribution_version": null,
+        "module_loaded": false
+      },
+      "bt_api_gateway": {
+        "distribution_version": null,
+        "module_loaded": false
+      },
+      "bt_api_monitor": {
+        "distribution_version": null,
+        "module_loaded": false
+      },
+      "bt_api_risk": {
+        "distribution_version": null,
+        "module_loaded": false
+      },
+      "bt_api_transport_zmq": {
+        "distribution_version": null,
+        "module_loaded": false
+      },
+      "pyzmq": {
+        "distribution_version": null,
+        "module_loaded": false
+      },
+      "spdlog": {
+        "distribution_version": null,
+        "module_loaded": false
+      }
+    },
+    "original_exit_code": 1,
+    "original_failed_checks": [
+      "installed_sdk_version_matches_pinned_wheel_metadata"
+    ],
+    "original_status": "ASSERTION_FAILED",
+    "runtime_gate_results": {
+      "both_configs_valid_empty_and_unactivated": true,
+      "cerebro_processed_one_synthetic_bar": true,
+      "default_sdk_is_direct_and_closed": true,
+      "four_domain_packages_absent_and_unloaded": true,
+      "no_files_created_in_probe_working_directory": true,
+      "no_observed_runtime_optional_resource_events": true,
+      "no_service_modules_or_watched_import_attempts": true,
+      "no_servicehost_constructor_in_direct_or_backtest": true,
+      "observer_restoration_completed": true,
+      "optional_transport_and_spdlog_absent_and_unloaded": true
+    },
+    "service_modules_loaded": {
+      "bt_api_py.service_components": false,
+      "bt_api_py.service_host": false,
+      "bt_api_py.service_runtime": false
+    },
+    "watched_import_attempts": []
+  },
+  "record_kind": "CFG01_CURRENT_HEAD_METADATA_ONLY_RECONCILIATION",
+  "runtime_interpretation": "Every captured CFG01 config, default direct SDK, one-bar Cerebro, optional package/import/resource and observer-restoration gate is true. The original probe process returned 1 because its build-tool-version lookup used the manifest top level; the actual pinned manifest stores it under build.build_tool_version. This reconciliation does not rewrite the original status or retroactively make the probe exit code zero.",
+  "scope": "metadata-only; no SDK modules or business probe re-executed",
+  "sdk_version_and_build_tool": {
+    "installed_dist_info": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\venv-client-current-cdb1\\Lib\\site-packages\\bt_api_py-0.15.5.dist-info",
+    "installed_metadata": {
+      "Name": "bt-api-py",
+      "Requires-Python": ">=3.11",
+      "Version": "0.15.5"
+    },
+    "manifest_build_tool_version_nested_at_build_build_tool_version": "1.6.1",
+    "manifest_wheel_version": "0.15.5",
+    "original_probe_installed_version": "0.15.5",
+    "original_probe_manifest_build_tool_lookup_was_top_level": true,
+    "original_probe_manifest_build_tool_version_recorded": null,
+    "original_probe_manifest_wheel_version": "0.15.5",
+    "wheel_metadata": {
+      "Name": "bt-api-py",
+      "Requires-Python": ">=3.11",
+      "Version": "0.15.5"
+    }
+  },
+  "source_config_identity": {
+    "checkout_bytes": 65,
+    "checkout_equals_fixed_git_blob": true,
+    "checkout_sha256": "588fccd3c0b5ad7e0d42a296aa8359f7b541faeb39e949f2c897bc740b897592",
+    "empty_clients": {
+      "bytes": 11,
+      "manifest_recorded_bytes": 11,
+      "manifest_recorded_sha256": "ba771c3741dafa8598a26a9ba607e3754d551cbeb3092d7ff8742ffe04e46730",
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\empty-clients.yaml",
+      "sha256": "ba771c3741dafa8598a26a9ba607e3754d551cbeb3092d7ff8742ffe04e46730"
+    },
+    "fixed_git_blob_bytes": 65,
+    "fixed_git_blob_object_id": "4c637df0174450c5ffb554b3beb4d83871a171b4",
+    "fixed_git_blob_sha256": "588fccd3c0b5ad7e0d42a296aa8359f7b541faeb39e949f2c897bc740b897592",
+    "manifest_recorded_bytes": 68,
+    "manifest_recorded_git_blob_object_id": "4c637df0174450c5ffb554b3beb4d83871a171b4",
+    "manifest_recorded_sha256": "588fccd3c0b5ad7e0d42a296aa8359f7b541faeb39e949f2c897bc740b897592",
+    "path": "D:\\bt_api_py\\examples\\services\\unconfigured-client.yaml"
+  },
+  "status": "RECONCILIATION_COMPLETE_WITH_MANIFEST_BYTE_COUNT_DISCREPANCY"
+}

@@ -1,0 +1,60 @@
+{
+  "record_kind": "SDK_CURRENT_COMMITTED_WHEEL_BUILD",
+  "source": {
+    "repository": "D:\\bt_api_py",
+    "revision": "cdb1b81e39b661afb145ff3d9e94695c97429d7e",
+    "tree": "6943f04da92133ab23ace7fc0c3ceefdc676eb50",
+    "current_head_at_recording": "cdb1b81e39b661afb145ff3d9e94695c97429d7e",
+    "archive": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\bt_api_py-cdb1b81-packaging.tar",
+    "archive_sha256": "e84eacaf4d53f38e702bd39033adaf8db95675ca680152caed6fa711ade7943e",
+    "archive_bytes": 17899520,
+    "archive_scope": [
+      "pyproject.toml",
+      "setup.py",
+      "MANIFEST.in",
+      "README.md",
+      "bt_api_py"
+    ],
+    "archive_members": 197,
+    "unsafe_archive_members": 0,
+    "symlink_members": 0,
+    "extraction_directory": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\source-cdb1b81-packaging"
+  },
+  "build": {
+    "command": "python -m build --wheel --no-isolation --outdir wheelhouse-current",
+    "builder_python": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\venvs\\builder\\Scripts\\python.exe",
+    "environment": {
+      "PYTHONUTF8": "1",
+      "PYTHONIOENCODING": "utf-8",
+      "PYTHONPATH": "unset"
+    },
+    "log": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\build-current-cdb1b81.log",
+    "log_sha256": "7193c5d5f137f02ad1a3db0daaaf507d04ef7728710371f5a4f406469699d6ae",
+    "success_marker": "Successfully built bt_api_py-0.15.5-py3-none-any.whl",
+    "build_tool_version": "1.6.1"
+  },
+  "wheel": {
+    "distribution": "bt_api_py",
+    "version": "0.15.5",
+    "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\wheelhouse-current\\bt_api_py-0.15.5-py3-none-any.whl",
+    "bytes": 1066010,
+    "sha256": "f529664e95b4b489cf418b4fc78e81d7a77b72f5ba80c37ed3f5c4ce03c9033b",
+    "requires_python": ">=3.11"
+  },
+  "config_inputs": {
+    "no_new_block": {
+      "path": "D:\\bt_api_py\\examples\\services\\unconfigured-client.yaml",
+      "fixed_commit": "cdb1b81e39b661afb145ff3d9e94695c97429d7e",
+      "git_blob": "4c637df0174450c5ffb554b3beb4d83871a171b4",
+      "bytes": 68,
+      "sha256": "588fccd3c0b5ad7e0d42a296aa8359f7b541faeb39e949f2c897bc740b897592",
+      "literal_text": "# Ordinary SDK/backtest use: no optional clients or services.\n{}\n"
+    },
+    "empty_clients": {
+      "path": "D:\\temp\\iteration10_cfg01_cfg04_mig04_20261015_r2\\cfg01-current-head-r1\\empty-clients.yaml",
+      "bytes": 11,
+      "sha256": "ba771c3741dafa8598a26a9ba607e3754d551cbeb3092d7ff8742ffe04e46730",
+      "literal_text": "clients: {}"
+    }
+  }
+}
