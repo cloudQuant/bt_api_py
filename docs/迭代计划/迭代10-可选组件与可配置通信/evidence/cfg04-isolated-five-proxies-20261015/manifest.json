@@ -1,0 +1,68 @@
+{
+  "round": 101,
+  "parent": "70938108460d15d79f8bb194687cce073990dae5",
+  "evidence_level": "PARTIAL_CFG04_INSTALLED_FIVE_PROXY_INTEGRATION",
+  "formal_pass_count": 21,
+  "formal_total": 68,
+  "artifact_root": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1",
+  "files": {
+    "pytest.log": {
+      "size": 692,
+      "sha256": "4b1b89c10b2b8f89b74d108da56bba75438998958ac3a9f8da2d2fb70a2a802e",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\cfg04-node-r5.log"
+    },
+    "junit.xml": {
+      "size": 427,
+      "sha256": "409b016614ee086eff2e34ae1562a549e975d3ad12bf729d09f85f19438d4398",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\cfg04-node-r5-junit.xml"
+    },
+    "exit-code.txt": {
+      "size": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\cfg04-node-r5-exit.txt"
+    },
+    "command.txt": {
+      "size": 529,
+      "sha256": "0734d0a797f26bd9726082274a0e7841f85784843e42b20440501dbd531b6561",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\cfg04-node-r5-command.txt"
+    },
+    "server-stderr.txt": {
+      "size": 395,
+      "sha256": "3ee8d02ac421df82c01a303cd2f54566a08292a0bd5a29b13204b0d3e02c786a",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\pytest-tmp-cfg04-r5\\test_isolated_strategy_runs_im0\\cfg04-service-stderr.txt"
+    },
+    "client-pip-check.txt": {
+      "size": 31,
+      "sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-pip-check.txt"
+    },
+    "server-pip-check.txt": {
+      "size": 31,
+      "sha256": "672aec65a45bed50e70229c70934a7eebf0462595c459b83023027645d57cccf",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-pip-check.txt"
+    },
+    "source-install-verification.json": {
+      "size": 50089,
+      "sha256": "b8011ae49dc0dffd61ddee50f366b1b6855c801136d251875a3ae0df701534b5",
+      "source": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source-install-verification.json"
+    },
+    "test-executed.py": {
+      "size": 83431,
+      "sha256": "d2901493f2b19529ead375c3b965907aae2bc2e8af40f7c619c7be9cb0c577bf",
+      "source": "D:\\bt_api_py\\tests\\unit\\test_iteration10_optional_install_matrix.py"
+    },
+    "root-adjudication.md": {
+      "size": 2718,
+      "sha256": "790edae189d952e4842cd0168c5e03e65efa41248be2a395064cb64025c216b0",
+      "source": "Root delivery record"
+    },
+    ".gitattributes": {
+      "size": 8,
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+      "source": "Root delivery record"
+    }
+  },
+  "test_checkout_sha256": "d2901493f2b19529ead375c3b965907aae2bc2e8af40f7c619c7be9cb0c577bf",
+  "test_git_normalized_sha256": "d2901493f2b19529ead375c3b965907aae2bc2e8af40f7c619c7be9cb0c577bf",
+  "accepted_suite_repeated": false
+}

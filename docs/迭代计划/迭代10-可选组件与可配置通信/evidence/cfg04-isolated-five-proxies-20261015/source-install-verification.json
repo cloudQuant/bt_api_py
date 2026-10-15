@@ -1,0 +1,1198 @@
+{
+  "accepted_node_artifacts": {
+    "exit": {
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\cfg04-node-r5-exit.txt",
+      "value": 0
+    },
+    "junit": {
+      "bytes": 427,
+      "errors": 0,
+      "failures": 0,
+      "passed": 1,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\cfg04-node-r5-junit.xml",
+      "sha256": "409b016614ee086eff2e34ae1562a549e975d3ad12bf729d09f85f19438d4398",
+      "skipped": 0,
+      "tests": 1
+    },
+    "log": {
+      "bytes": 692,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\cfg04-node-r5.log",
+      "pytest_warnings": 0,
+      "sha256": "4b1b89c10b2b8f89b74d108da56bba75438998958ac3a9f8da2d2fb70a2a802e"
+    },
+    "server_stderr": {
+      "bytes": 395,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\pytest-tmp-cfg04-r5\\test_isolated_strategy_runs_im0\\cfg04-service-stderr.txt",
+      "runtime_warning_count": 1,
+      "sha256": "3ee8d02ac421df82c01a303cd2f54566a08292a0bd5a29b13204b0d3e02c786a",
+      "warning_class": "PyZMQ Proactor add_reader RuntimeWarning"
+    },
+    "test_file": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\test-only-D290\\tests\\unit\\test_iteration10_optional_install_matrix.py",
+    "test_file_sha256": "d2901493f2b19529ead375c3b965907aae2bc2e8af40f7c619c7be9cb0c577bf"
+  },
+  "artifact_root": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1",
+  "created_utc": "2026-10-15T14:44:32.058105+00:00",
+  "install_reports": {
+    "client": {
+      "bytes": 768655,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-install-report.json",
+      "pip_version": "23.2.1",
+      "python_full_version": "3.11.5",
+      "requested_local_wheels": [
+        "bt_api_base",
+        "bt_api_py",
+        "bt_api_transport_zmq"
+      ],
+      "sha256": "d08920ce9af435fd7d68b1f015aba6620519f04b1e74c970dd5dcbe327852764"
+    },
+    "server": {
+      "bytes": 925902,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-install-report.json",
+      "pip_version": "23.2.1",
+      "python_full_version": "3.11.5",
+      "requested_local_wheels": [
+        "bt_api_base",
+        "bt_api_execution",
+        "bt_api_gateway",
+        "bt_api_monitor",
+        "bt_api_py",
+        "bt_api_risk",
+        "bt_api_transport_zmq"
+      ],
+      "sha256": "b0dbe585dea17d38a1bd98361baa06dad5741249bb0299c34bee0fa9b0f48d96"
+    }
+  },
+  "local_wheels": {
+    "bt_api_base": {
+      "bytes": 177472,
+      "install_bindings": {
+        "client": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        },
+        "server": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        }
+      },
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_base-0.15.8-py3-none-any.whl",
+      "sha256": "b36b4b81c517bbae288592b5c56a8d2c8dcfad175ad4917e58e450bebd5fc786",
+      "version": "0.15.8"
+    },
+    "bt_api_execution": {
+      "bytes": 224571,
+      "install_bindings": {
+        "server": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_execution-0.2.0-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        }
+      },
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_execution-0.2.0-py3-none-any.whl",
+      "sha256": "67b0d9adcf2e83ac5c1fafa3fa89b00d0f1c9c5ed527fb379f2ba71841ee5b9f",
+      "version": "0.2.0"
+    },
+    "bt_api_gateway": {
+      "bytes": 85584,
+      "install_bindings": {
+        "server": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_gateway-0.1.0-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        }
+      },
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_gateway-0.1.0-py3-none-any.whl",
+      "sha256": "de0f007607bf55ee78e8daa868a6d96a7bf79848020a98f97a7338265f52a06e",
+      "version": "0.1.0"
+    },
+    "bt_api_monitor": {
+      "bytes": 90461,
+      "install_bindings": {
+        "server": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_monitor-0.1.0-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        }
+      },
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_monitor-0.1.0-py3-none-any.whl",
+      "sha256": "e2fc82d63fbfa7f6681d8440735847c7508ab1b4157c201d487c26acc73596cf",
+      "version": "0.1.0"
+    },
+    "bt_api_py": {
+      "bytes": 1127431,
+      "install_bindings": {
+        "client": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        },
+        "server": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        }
+      },
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_py-0.15.5-py3-none-any.whl",
+      "sha256": "93c4582e8699df22189938a044641af9e133ce090e82ffd10510f774a5b1dd88",
+      "version": "0.15.5"
+    },
+    "bt_api_risk": {
+      "bytes": 156515,
+      "install_bindings": {
+        "server": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_risk-0.1.0-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        }
+      },
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_risk-0.1.0-py3-none-any.whl",
+      "sha256": "0e79856fb69b030964dca77286792d8449ac72958b3f63a38849fe554bf5dff5",
+      "version": "0.1.0"
+    },
+    "bt_api_transport_zmq": {
+      "bytes": 27729,
+      "install_bindings": {
+        "client": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        },
+        "server": {
+          "direct_url": "file:///D:/temp/iteration10-cfg04-proxy-matrix-20261015-r1/wheelhouse/bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+          "installed_direct_url_hash_matches": true,
+          "report_direct_requested": true,
+          "report_wheel_hash_matches": true
+        }
+      },
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\wheelhouse\\bt_api_transport_zmq-0.1.0-py3-none-any.whl",
+      "sha256": "6e6a8777af1a4b4545a650f1d810240537fed489ac843b2a608963faf0638d84",
+      "version": "0.1.0"
+    }
+  },
+  "module_byte_bindings": [
+    {
+      "git_blob_oid": "509b1a58d4585dc1b7b4de4db41a40897b9e8868",
+      "git_path": "bt_api_py/service_runtime.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_runtime.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_runtime.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 1649,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 1649,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 1649,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 1649,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_runtime",
+      "newline_normalized_sha256": {
+        "client": "b40478c3ad747981815b36a2193f2ac98fab255999e57b51f897c545432c8e8c",
+        "git": "b40478c3ad747981815b36a2193f2ac98fab255999e57b51f897c545432c8e8c",
+        "server": "b40478c3ad747981815b36a2193f2ac98fab255999e57b51f897c545432c8e8c",
+        "wheel": "b40478c3ad747981815b36a2193f2ac98fab255999e57b51f897c545432c8e8c"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "01a9db01913c9e22d6ee2b1c030ddc306f5fc9c6ff93d36ec0b65f39d4d27fb5",
+        "git": "b40478c3ad747981815b36a2193f2ac98fab255999e57b51f897c545432c8e8c",
+        "server": "01a9db01913c9e22d6ee2b1c030ddc306f5fc9c6ff93d36ec0b65f39d4d27fb5",
+        "wheel": "01a9db01913c9e22d6ee2b1c030ddc306f5fc9c6ff93d36ec0b65f39d4d27fb5"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "client"
+      ],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_runtime.py"
+    },
+    {
+      "git_blob_oid": "2b0b55652611a5a56fb34f4f868a18adc6165f2d",
+      "git_path": "bt_api_py/service_host.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_host.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_host.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 1189,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 1189,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 1189,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 1189,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_host",
+      "newline_normalized_sha256": {
+        "client": "862bbb7695436e60880fddebc2659fb295402d17bc32ff70082309f6d16ebb56",
+        "git": "862bbb7695436e60880fddebc2659fb295402d17bc32ff70082309f6d16ebb56",
+        "server": "862bbb7695436e60880fddebc2659fb295402d17bc32ff70082309f6d16ebb56",
+        "wheel": "862bbb7695436e60880fddebc2659fb295402d17bc32ff70082309f6d16ebb56"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "fad269aa043f39a7fc9ded0f0b4671c68e5c19c488358027e2060a14440472c4",
+        "git": "862bbb7695436e60880fddebc2659fb295402d17bc32ff70082309f6d16ebb56",
+        "server": "fad269aa043f39a7fc9ded0f0b4671c68e5c19c488358027e2060a14440472c4",
+        "wheel": "fad269aa043f39a7fc9ded0f0b4671c68e5c19c488358027e2060a14440472c4"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "server"
+      ],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_host.py"
+    },
+    {
+      "git_blob_oid": "056a260a2f84a9154a5357f1023a445ead36f7b4",
+      "git_path": "bt_api_py/service_components.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_components.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_components.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 1308,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 1308,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 1308,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 1308,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_components",
+      "newline_normalized_sha256": {
+        "client": "90f93eeddd8d270169062ca44ff691c5071ab1553fe8afcfeb5e5312c4b3c4d8",
+        "git": "90f93eeddd8d270169062ca44ff691c5071ab1553fe8afcfeb5e5312c4b3c4d8",
+        "server": "90f93eeddd8d270169062ca44ff691c5071ab1553fe8afcfeb5e5312c4b3c4d8",
+        "wheel": "90f93eeddd8d270169062ca44ff691c5071ab1553fe8afcfeb5e5312c4b3c4d8"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "a5c2dd423affdc027cc8d4cc702f1146d6d9f0c1129433db6d61f05c73a65e90",
+        "git": "90f93eeddd8d270169062ca44ff691c5071ab1553fe8afcfeb5e5312c4b3c4d8",
+        "server": "a5c2dd423affdc027cc8d4cc702f1146d6d9f0c1129433db6d61f05c73a65e90",
+        "wheel": "a5c2dd423affdc027cc8d4cc702f1146d6d9f0c1129433db6d61f05c73a65e90"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_components.py"
+    },
+    {
+      "git_blob_oid": "d2b0199b74fec6c7b3de999b9b1d3c95bf710d73",
+      "git_path": "bt_api_py/service_account.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_account.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_account.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 491,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 491,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 491,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 491,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_account",
+      "newline_normalized_sha256": {
+        "client": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+        "git": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+        "server": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+        "wheel": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "2cf2939b065f809ccf9242390d2b9ebd445961c14315878a647c67d4a247ffea",
+        "git": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+        "server": "2cf2939b065f809ccf9242390d2b9ebd445961c14315878a647c67d4a247ffea",
+        "wheel": "2cf2939b065f809ccf9242390d2b9ebd445961c14315878a647c67d4a247ffea"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "client"
+      ],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_account.py"
+    },
+    {
+      "git_blob_oid": "f769d4e4d8f2847535e13ff7501e2a1dfe803581",
+      "git_path": "bt_api_py/service_execution.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_execution.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_execution.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 634,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 634,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 634,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 634,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_execution",
+      "newline_normalized_sha256": {
+        "client": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e",
+        "git": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e",
+        "server": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e",
+        "wheel": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "97cdd95286993a01b277a55b6e7f450fd3593f9b25e1f7e2103fe0ddc929000c",
+        "git": "bb9af549000c4ac1f3d78c55c21a59faec768ea7bceee99ade2edf58957cf85e",
+        "server": "97cdd95286993a01b277a55b6e7f450fd3593f9b25e1f7e2103fe0ddc929000c",
+        "wheel": "97cdd95286993a01b277a55b6e7f450fd3593f9b25e1f7e2103fe0ddc929000c"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "client"
+      ],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_execution.py"
+    },
+    {
+      "git_blob_oid": "6c8137172549002a2cfd3159461d2c9390dd122f",
+      "git_path": "bt_api_py/service_telemetry.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_telemetry.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_telemetry.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 508,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 508,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 508,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 508,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_telemetry",
+      "newline_normalized_sha256": {
+        "client": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489",
+        "git": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489",
+        "server": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489",
+        "wheel": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "edade61cf73a7be3b0ec0a2f13184b6ad2feb3672ccf4614ad97138d3d9a5cb7",
+        "git": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489",
+        "server": "edade61cf73a7be3b0ec0a2f13184b6ad2feb3672ccf4614ad97138d3d9a5cb7",
+        "wheel": "edade61cf73a7be3b0ec0a2f13184b6ad2feb3672ccf4614ad97138d3d9a5cb7"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "client"
+      ],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_telemetry.py"
+    },
+    {
+      "git_blob_oid": "1a776ea64d6cbe90a9ac5692d289da13e44b3bff",
+      "git_path": "bt_api_py/service_execution_account_books.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_execution_account_books.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_execution_account_books.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 564,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 564,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 564,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 564,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_execution_account_books",
+      "newline_normalized_sha256": {
+        "client": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+        "git": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+        "server": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+        "wheel": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "ae8a48e54e8d06433e24f1f443d917f9c47eab35b5d764c4a51ef0da8478c014",
+        "git": "1e2dc0045c9630638a3ee2151e19dba5bcae7a8078b8ce4f2c3f5b5f95ffba61",
+        "server": "ae8a48e54e8d06433e24f1f443d917f9c47eab35b5d764c4a51ef0da8478c014",
+        "wheel": "ae8a48e54e8d06433e24f1f443d917f9c47eab35b5d764c4a51ef0da8478c014"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "server"
+      ],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_execution_account_books.py"
+    },
+    {
+      "git_blob_oid": "1e370c94a994dd0a07ea715c4db7ec3286160f75",
+      "git_path": "bt_api_py/service_config.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_config.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_config.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 1193,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 1193,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 1193,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 1193,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_config",
+      "newline_normalized_sha256": {
+        "client": "ca266c984b81ede5cb1361796a8aaa6eea3bc4b5ecdccb09a79a91fe65eeb470",
+        "git": "ca266c984b81ede5cb1361796a8aaa6eea3bc4b5ecdccb09a79a91fe65eeb470",
+        "server": "ca266c984b81ede5cb1361796a8aaa6eea3bc4b5ecdccb09a79a91fe65eeb470",
+        "wheel": "ca266c984b81ede5cb1361796a8aaa6eea3bc4b5ecdccb09a79a91fe65eeb470"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "ca5130bb485536cc8b05e4a237b125294ed887b21dd65bcae33874d3e41cbd33",
+        "git": "ca266c984b81ede5cb1361796a8aaa6eea3bc4b5ecdccb09a79a91fe65eeb470",
+        "server": "ca5130bb485536cc8b05e4a237b125294ed887b21dd65bcae33874d3e41cbd33",
+        "wheel": "ca5130bb485536cc8b05e4a237b125294ed887b21dd65bcae33874d3e41cbd33"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_config.py"
+    },
+    {
+      "git_blob_oid": "3b351e2bf1a8ceee6c8b85cd2f6a7a74e33744af",
+      "git_path": "bt_api_py/service_registry.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_py\\service_registry.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_py\\service_registry.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 1313,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 1313,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 1313,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 1313,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_py.service_registry",
+      "newline_normalized_sha256": {
+        "client": "cf9834f10723b46cc3b7bdc20c5764e2611f10bdb2bd8e301b931ac1ed288c0a",
+        "git": "cf9834f10723b46cc3b7bdc20c5764e2611f10bdb2bd8e301b931ac1ed288c0a",
+        "server": "cf9834f10723b46cc3b7bdc20c5764e2611f10bdb2bd8e301b931ac1ed288c0a",
+        "wheel": "cf9834f10723b46cc3b7bdc20c5764e2611f10bdb2bd8e301b931ac1ed288c0a"
+      },
+      "package": "bt_api_py",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "144e1c6a032ab7a4014534cacef3519fe3c51c90a0f3958173732e4a925920a1",
+        "git": "cf9834f10723b46cc3b7bdc20c5764e2611f10bdb2bd8e301b931ac1ed288c0a",
+        "server": "144e1c6a032ab7a4014534cacef3519fe3c51c90a0f3958173732e4a925920a1",
+        "wheel": "144e1c6a032ab7a4014534cacef3519fe3c51c90a0f3958173732e4a925920a1"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [],
+      "source_commit": "28854c73a235645adcc0f6a6997053d6592504f1",
+      "wheel_member": "bt_api_py/service_registry.py"
+    },
+    {
+      "git_blob_oid": "f51e46658b692736f58263439366991ab1c067dc",
+      "git_path": "src/bt_api_base/account_protocol.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_base\\account_protocol.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_base\\account_protocol.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 714,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 714,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 714,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 714,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_base.account_protocol",
+      "newline_normalized_sha256": {
+        "client": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c",
+        "git": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c",
+        "server": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c",
+        "wheel": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c"
+      },
+      "package": "bt_api_base",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "aaae92cc6a99a328398cefe670ccf223e6ec3ba4c4fef51afb0b1323c4021774",
+        "git": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c",
+        "server": "aaae92cc6a99a328398cefe670ccf223e6ec3ba4c4fef51afb0b1323c4021774",
+        "wheel": "aaae92cc6a99a328398cefe670ccf223e6ec3ba4c4fef51afb0b1323c4021774"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "client",
+        "server"
+      ],
+      "source_commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "wheel_member": "bt_api_base/account_protocol.py"
+    },
+    {
+      "git_blob_oid": "cf0fac23d3ae29cc482b12fba7ae44e2d529e24c",
+      "git_path": "src/bt_api_base/service_protocol.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_base\\service_protocol.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_base\\service_protocol.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 710,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 710,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 710,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 710,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_base.service_protocol",
+      "newline_normalized_sha256": {
+        "client": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+        "git": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+        "server": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+        "wheel": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+      },
+      "package": "bt_api_base",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "ef31a048e95785c5128f6cbc9e202b939955d2f845c5680ecf2d8a8e28421b87",
+        "git": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+        "server": "ef31a048e95785c5128f6cbc9e202b939955d2f845c5680ecf2d8a8e28421b87",
+        "wheel": "ef31a048e95785c5128f6cbc9e202b939955d2f845c5680ecf2d8a8e28421b87"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "client",
+        "server"
+      ],
+      "source_commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "wheel_member": "bt_api_base/service_protocol.py"
+    },
+    {
+      "git_blob_oid": "27a9cf148e96cb77c2e9563bc1bc4b29d7658ff5",
+      "git_path": "src/bt_api_gateway/service_component.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_gateway\\service_component.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 811,
+          "lone_cr": 0
+        },
+        "installed": {
+          "server": {
+            "crlf_pairs": 811,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 811,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_gateway.service_component",
+      "newline_normalized_sha256": {
+        "git": "d5e3d4e7814413885672484a11c666dd1603ebfeeb39e412916bab430821fc0c",
+        "server": "d5e3d4e7814413885672484a11c666dd1603ebfeeb39e412916bab430821fc0c",
+        "wheel": "d5e3d4e7814413885672484a11c666dd1603ebfeeb39e412916bab430821fc0c"
+      },
+      "package": "bt_api_gateway",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "git": "d5e3d4e7814413885672484a11c666dd1603ebfeeb39e412916bab430821fc0c",
+        "server": "380bb31bff5f440e3091b7c68c086ad8a423b062ac47c3b97f8d8fad751fa8b1",
+        "wheel": "380bb31bff5f440e3091b7c68c086ad8a423b062ac47c3b97f8d8fad751fa8b1"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "server"
+      ],
+      "source_commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "wheel_member": "bt_api_gateway/service_component.py"
+    },
+    {
+      "git_blob_oid": "9ad7307279a78638ab67e7a690c94d29fd0105f3",
+      "git_path": "src/bt_api_gateway/session_guard.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_gateway\\session_guard.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 574,
+          "lone_cr": 0
+        },
+        "installed": {
+          "server": {
+            "crlf_pairs": 574,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 574,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_gateway.session_guard",
+      "newline_normalized_sha256": {
+        "git": "8910462b67ace265577b8ab6fb2ac3c68d9d841e0c5499cf652f4c74f75ad682",
+        "server": "8910462b67ace265577b8ab6fb2ac3c68d9d841e0c5499cf652f4c74f75ad682",
+        "wheel": "8910462b67ace265577b8ab6fb2ac3c68d9d841e0c5499cf652f4c74f75ad682"
+      },
+      "package": "bt_api_gateway",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "git": "8910462b67ace265577b8ab6fb2ac3c68d9d841e0c5499cf652f4c74f75ad682",
+        "server": "57728487d4cfe10ccb95ed77998965940842bd5728589924aebfc58336ca9047",
+        "wheel": "57728487d4cfe10ccb95ed77998965940842bd5728589924aebfc58336ca9047"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [],
+      "source_commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "wheel_member": "bt_api_gateway/session_guard.py"
+    },
+    {
+      "git_blob_oid": "6659472e2d6f0ba9e77d8d6b530850eb928b8931",
+      "git_path": "src/bt_api_execution/service_component.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_execution\\service_component.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 283,
+          "lone_cr": 0
+        },
+        "installed": {
+          "server": {
+            "crlf_pairs": 283,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 283,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_execution.service_component",
+      "newline_normalized_sha256": {
+        "git": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+        "server": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+        "wheel": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302"
+      },
+      "package": "bt_api_execution",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "git": "2a71bc70a228465c4724c0d2453841f2c01430dcea8d0f679c1ceccc8edcb302",
+        "server": "34bd68d8d662326720915bbe340e46a501d3e35a22e010e95ecc6cedf4e85829",
+        "wheel": "34bd68d8d662326720915bbe340e46a501d3e35a22e010e95ecc6cedf4e85829"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "server"
+      ],
+      "source_commit": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "wheel_member": "bt_api_execution/service_component.py"
+    },
+    {
+      "git_blob_oid": "39b2c90b6f0bc19076c6fb6172c8411f2420fdf5",
+      "git_path": "src/bt_api_risk/service_component.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_risk\\service_component.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 389,
+          "lone_cr": 0
+        },
+        "installed": {
+          "server": {
+            "crlf_pairs": 389,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 389,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_risk.service_component",
+      "newline_normalized_sha256": {
+        "git": "dfee4aae3048bd4286a66cffa65ee501b4bb991389b452ddcf67c2e414e51f50",
+        "server": "dfee4aae3048bd4286a66cffa65ee501b4bb991389b452ddcf67c2e414e51f50",
+        "wheel": "dfee4aae3048bd4286a66cffa65ee501b4bb991389b452ddcf67c2e414e51f50"
+      },
+      "package": "bt_api_risk",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "git": "dfee4aae3048bd4286a66cffa65ee501b4bb991389b452ddcf67c2e414e51f50",
+        "server": "88d403e0b96e7b1d88b0a80db71b1b50ce6d6bcd8722255b5cc904ff3d9848cd",
+        "wheel": "88d403e0b96e7b1d88b0a80db71b1b50ce6d6bcd8722255b5cc904ff3d9848cd"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "server"
+      ],
+      "source_commit": "a099e367afd503cd38f3787e3cba578e2b244db4",
+      "wheel_member": "bt_api_risk/service_component.py"
+    },
+    {
+      "git_blob_oid": "3949071845f5552ba8099d287598147d22cc4720",
+      "git_path": "src/bt_api_monitor/service_component.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_monitor\\service_component.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 319,
+          "lone_cr": 0
+        },
+        "installed": {
+          "server": {
+            "crlf_pairs": 319,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 319,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_monitor.service_component",
+      "newline_normalized_sha256": {
+        "git": "f21a5256c60e759f24e305a1f78a360df332544bab36551fbd95d7a81a696247",
+        "server": "f21a5256c60e759f24e305a1f78a360df332544bab36551fbd95d7a81a696247",
+        "wheel": "f21a5256c60e759f24e305a1f78a360df332544bab36551fbd95d7a81a696247"
+      },
+      "package": "bt_api_monitor",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "git": "f21a5256c60e759f24e305a1f78a360df332544bab36551fbd95d7a81a696247",
+        "server": "c5b71a49d8aedbe02c84aa4696bf91684df635a9a54dc1bbfe37d3cbd91c0566",
+        "wheel": "c5b71a49d8aedbe02c84aa4696bf91684df635a9a54dc1bbfe37d3cbd91c0566"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [],
+      "source_commit": "536a4f04747182749fabdac5e28624f80465bc53",
+      "wheel_member": "bt_api_monitor/service_component.py"
+    },
+    {
+      "git_blob_oid": "60b721240fe3aecc5800dd3d2ef52415fad98c30",
+      "git_path": "src/bt_api_monitor/service_telemetry.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_monitor\\service_telemetry.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 510,
+          "lone_cr": 0
+        },
+        "installed": {
+          "server": {
+            "crlf_pairs": 510,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 510,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_monitor.service_telemetry",
+      "newline_normalized_sha256": {
+        "git": "e5d9063f7f1eba84d48e500bfb273869ab7039e56f31981bd3083ea039463c2b",
+        "server": "e5d9063f7f1eba84d48e500bfb273869ab7039e56f31981bd3083ea039463c2b",
+        "wheel": "e5d9063f7f1eba84d48e500bfb273869ab7039e56f31981bd3083ea039463c2b"
+      },
+      "package": "bt_api_monitor",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "git": "e5d9063f7f1eba84d48e500bfb273869ab7039e56f31981bd3083ea039463c2b",
+        "server": "5963339250ac0e79b4295a74c57695a61e76fbb2883b5caa6f26d5f52e618b89",
+        "wheel": "5963339250ac0e79b4295a74c57695a61e76fbb2883b5caa6f26d5f52e618b89"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "server"
+      ],
+      "source_commit": "536a4f04747182749fabdac5e28624f80465bc53",
+      "wheel_member": "bt_api_monitor/service_telemetry.py"
+    },
+    {
+      "git_blob_oid": "61cf25afb6379a96dc10801ef1cf0ec5ce0b73ef",
+      "git_path": "src/bt_api_transport_zmq/client.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_transport_zmq\\client.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_transport_zmq\\client.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 100,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 100,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 100,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 100,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_transport_zmq.client",
+      "newline_normalized_sha256": {
+        "client": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354",
+        "git": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354",
+        "server": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354",
+        "wheel": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354"
+      },
+      "package": "bt_api_transport_zmq",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "2208c3953f7b1327ad4555c0defc9c6ce8fa61e00bf3bab825439ff599a88cee",
+        "git": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354",
+        "server": "2208c3953f7b1327ad4555c0defc9c6ce8fa61e00bf3bab825439ff599a88cee",
+        "wheel": "2208c3953f7b1327ad4555c0defc9c6ce8fa61e00bf3bab825439ff599a88cee"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "client"
+      ],
+      "source_commit": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "wheel_member": "bt_api_transport_zmq/client.py"
+    },
+    {
+      "git_blob_oid": "41e0d58b061ded11fa3a8bc68315aed54808fb27",
+      "git_path": "src/bt_api_transport_zmq/server.py",
+      "git_wheel_installed_newline_normalized_match": true,
+      "installed_paths": {
+        "client": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Lib\\site-packages\\bt_api_transport_zmq\\server.py",
+        "server": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Lib\\site-packages\\bt_api_transport_zmq\\server.py"
+      },
+      "line_endings": {
+        "git_blob": {
+          "crlf_pairs": 0,
+          "lf_only": 422,
+          "lone_cr": 0
+        },
+        "installed": {
+          "client": {
+            "crlf_pairs": 422,
+            "lf_only": 0,
+            "lone_cr": 0
+          },
+          "server": {
+            "crlf_pairs": 422,
+            "lf_only": 0,
+            "lone_cr": 0
+          }
+        },
+        "wheel_member": {
+          "crlf_pairs": 422,
+          "lf_only": 0,
+          "lone_cr": 0
+        }
+      },
+      "module": "bt_api_transport_zmq.server",
+      "newline_normalized_sha256": {
+        "client": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df",
+        "git": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df",
+        "server": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df",
+        "wheel": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df"
+      },
+      "package": "bt_api_transport_zmq",
+      "raw_bytes_identical_across_all": false,
+      "raw_sha256": {
+        "client": "717c551079cc6f56e55cc845f7b05276987fba172d3caf812275511d46fb35b1",
+        "git": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df",
+        "server": "717c551079cc6f56e55cc845f7b05276987fba172d3caf812275511d46fb35b1",
+        "wheel": "717c551079cc6f56e55cc845f7b05276987fba172d3caf812275511d46fb35b1"
+      },
+      "runtime_origin_asserted_by_passed_node_in": [
+        "server"
+      ],
+      "source_commit": "29ab21e714292a363538491e4ff8461d336d1dfc",
+      "wheel_member": "bt_api_transport_zmq/server.py"
+    }
+  ],
+  "module_comparison_summary": {
+    "line_ending_profiles_validated": true,
+    "modules_checked": 19,
+    "normalized_matches": 19,
+    "raw_differences_due_to_crlf": 19
+  },
+  "newline_normalization_rule": "For the Git-blob \u2194 wheel-member \u2194 installed-file comparisons only, each CRLF pair is normalized to LF; no other byte transformations are applied. All 19 checked Git blobs are LF-only; wheel members and installed copies are CRLF-only with the same line count.",
+  "pinned_source_commits": {
+    "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api_execution": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+    "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+    "bt_api_py": "28854c73a235645adcc0f6a6997053d6592504f1",
+    "bt_api_risk": "a099e367afd503cd38f3787e3cba578e2b244db4",
+    "bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc"
+  },
+  "purpose": "metadata-only source/install provenance for the partial CFG04 node; no wheel build or pytest rerun in this verification step",
+  "python_environments": {
+    "client": {
+      "executable": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\client-venv\\Scripts\\python.exe",
+      "include_system_site_packages": false,
+      "version": "3.11.5"
+    },
+    "server": {
+      "executable": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\server-venv\\Scripts\\python.exe",
+      "include_system_site_packages": false,
+      "version": "3.11.5"
+    }
+  },
+  "schema_version": 1,
+  "scope_limits": [
+    "Five strategy proxy mounts were exercised: store.account, broker.orders submit/cancel, broker.order_query, risk.read_model, runtime.telemetry.",
+    "broker.order_groups was parse-only; execution.account_books.query was advertised/granted during composition but not called.",
+    "Provider and policy adapters are synthetic. The passed node explicitly asserts origins only for modules listed per process; other modules here are byte-bound but not individually listed in that origin assertion.",
+    "Base, Gateway, and Transport source commits are bound through immutable Git objects and Git-to-wheel comparison; only Execution, Risk, and Monitor have retained source tar archives with Git PAX comments in this artifact."
+  ],
+  "source_tar_git_pax": {
+    "bt_api_execution": {
+      "all_members_match_package_commit": true,
+      "bytes": 2160640,
+      "git_pax_comment": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+      "member_count": 61,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source\\execution-source.tar",
+      "sha256": "49eddd71242fe35c3bd660cdfdb7ce77ca7df2c582bbf97af736e0378ac97a42"
+    },
+    "bt_api_monitor": {
+      "all_members_match_package_commit": true,
+      "bytes": 655360,
+      "git_pax_comment": "536a4f04747182749fabdac5e28624f80465bc53",
+      "member_count": 53,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source\\monitor-source.tar",
+      "sha256": "11526e5e83626df4038705474a38d0bed5c1fa1db542b32f6a08be7efeb02015"
+    },
+    "bt_api_risk": {
+      "all_members_match_package_commit": true,
+      "bytes": 1228800,
+      "git_pax_comment": "a099e367afd503cd38f3787e3cba578e2b244db4",
+      "member_count": 56,
+      "path": "D:\\temp\\iteration10-cfg04-proxy-matrix-20261015-r1\\source\\risk-source.tar",
+      "sha256": "92ccb7fe4a4ceb8178ccf3fc0de662685cd98391b37d644e391f611a3c9e0bdf"
+    }
+  }
+}

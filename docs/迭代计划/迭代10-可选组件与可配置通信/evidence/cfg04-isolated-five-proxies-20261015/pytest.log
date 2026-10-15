@@ -1,0 +1,10 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-9.1.1, pluggy-1.7.0 -- D:\temp\iteration10-cfg04-proxy-matrix-20261015-r1\client-venv\Scripts\python.exe
+rootdir: D:\temp\iteration10-cfg04-proxy-matrix-20261015-r1
+plugins: anyio-4.15.1
+collecting ... collected 1 item
+
+test-only-D290/tests/unit/test_iteration10_optional_install_matrix.py::test_isolated_strategy_runs_implemented_proxies_without_domain_distributions PASSED [100%]
+
+- generated xml file: D:\temp\iteration10-cfg04-proxy-matrix-20261015-r1\cfg04-node-r5-junit.xml -
+============================== 1 passed in 2.60s ==============================
