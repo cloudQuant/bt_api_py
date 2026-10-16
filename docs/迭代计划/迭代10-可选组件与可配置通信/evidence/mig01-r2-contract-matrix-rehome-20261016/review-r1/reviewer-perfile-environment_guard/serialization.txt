@@ -1,0 +1,7 @@
+ps check at 12:58:21
+   128016       0       0      62480  ?              0   Oct 13 D:\source_code\ai-for-investor\src\backend\.venv\Scripts\python.exe
+   132224       0       0      66688  ?              0   Oct 13 C:\Users\yunji\AppData\Local\Programs\Python\Python312\python.exe
+     6580    6568    6568      57652  ?         197610 12:57:34 /c/anaconda3/python
+   140744       0       0      75208  ?              0 12:57:35 C:\anaconda3\python.exe
+     6590    6587    6587      80212  ?         197610 12:57:37 /c/anaconda3/python
+   110232       0       0      44696  ?              0 12:58:20 C:\anaconda3\python.exe

@@ -1,0 +1,163 @@
+{
+  "wheels": [
+    {
+      "path": "dist/bt_api_py-0.15.4-py3-none-any.whl",
+      "total_entries": 145,
+      "legacy_entries": [
+        "bt_api_py/brokers/gateway_bridge.py",
+        "bt_api_py/forwarding/__init__.py",
+        "bt_api_py/forwarding/btapi_adapter.py",
+        "bt_api_py/forwarding/btapi_backend.py",
+        "bt_api_py/forwarding/btapi_bridge.py",
+        "bt_api_py/forwarding/client.py",
+        "bt_api_py/forwarding/hub.py",
+        "bt_api_py/forwarding/memory.py",
+        "bt_api_py/forwarding/private_event_pump.py",
+        "bt_api_py/forwarding/router.py",
+        "bt_api_py/forwarding/schema.py",
+        "bt_api_py/forwarding/service.py",
+        "bt_api_py/forwarding/source_supervisor.py",
+        "bt_api_py/forwarding/state.py",
+        "bt_api_py/forwarding/transport.py",
+        "bt_api_py/gateway/__init__.py",
+        "bt_api_py/gateway/client.py",
+        "bt_api_py/gateway/config.py",
+        "bt_api_py/gateway/safety.py"
+      ],
+      "legacy_entry_count": 19
+    }
+  ],
+  "egg_info": [
+    {
+      "path": "bt_api_py.egg-info/SOURCES.txt",
+      "legacy_lines": [
+        "bt_api_py/brokers/gateway_bridge.py",
+        "bt_api_py/forwarding/__init__.py",
+        "bt_api_py/forwarding/btapi_adapter.py",
+        "bt_api_py/forwarding/btapi_backend.py",
+        "bt_api_py/forwarding/btapi_bridge.py",
+        "bt_api_py/forwarding/client.py",
+        "bt_api_py/forwarding/hub.py",
+        "bt_api_py/forwarding/memory.py",
+        "bt_api_py/forwarding/private_event_pump.py",
+        "bt_api_py/forwarding/router.py",
+        "bt_api_py/forwarding/schema.py",
+        "bt_api_py/forwarding/service.py",
+        "bt_api_py/forwarding/source_supervisor.py",
+        "bt_api_py/forwarding/state.py",
+        "bt_api_py/forwarding/transport.py",
+        "bt_api_py/gateway/__init__.py",
+        "bt_api_py/gateway/client.py",
+        "bt_api_py/gateway/config.py",
+        "bt_api_py/gateway/safety.py",
+        "bt_api_py/runtime_plugins/gateway_dispatch.py",
+        "configs/examples/gateway.local.yaml.example",
+        "docs/architecture/market-trade-forwarding-plan.md",
+        "docs/plans/2026-06-17-bmad-backtrader-forwarding-event-cache-size-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-backtrader-forwarding-stats-proxy-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-backtrader-forwarding-timeout-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-account-state-observability-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-awaitable-handler-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-btapi-adapter-max-items-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-client-disconnect-cache-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-client-event-cache-bound-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-client-event-cache-observability-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-client-stats-refresh-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-client-symbol-key-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-hardening-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-hub-payload-precedence-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-hub-publish-bar-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-hub-symbol-normalization-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-message-size-api-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-query-timeout-cache-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-readme-behavior-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-replay-validation-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-schema-deserialize-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-schema-serialize-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-schema-size-guard-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-shared-symbol-normalizer-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-state-close-idempotency-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-state-context-manager-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-state-like-prefix-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-state-limit-boundary-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-state-path-init-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-sync-timeout-quality-iteration-plan.md",
+        "docs/plans/2026-06-17-bmad-forwarding-timeout-validation-quality-iteration-plan.md",
+        "docs/plans/2026-08-17-unified-api-zmq-gateway-acceptance-iteration-plan.md",
+        "scripts/login_ibkr_gateway.py",
+        "tests/bt_api_contract/test_gateway_runtime_integration.py",
+        "tests/bt_api_contract/test_gateway_runtime_unknown_execution.py",
+        "tests/forwarding/test_btapi_backend_command_paths.py",
+        "tests/forwarding/test_command_reconciliation.py",
+        "tests/forwarding/test_market_snapshot_contract.py",
+        "tests/forwarding/test_private_snapshot_cache_contract.py",
+        "tests/forwarding/test_server_write_scope_binding.py",
+        "tests/test_btapi_forwarding_bridge.py",
+        "tests/test_forwarding_bus_router_client.py",
+        "tests/test_forwarding_schema.py",
+        "tests/test_forwarding_zmq_transport.py",
+        "tests/test_gateway_client_and_certification.py",
+        "tests/test_gateway_safety.py",
+        "tests/test_runtime_gateway_dispatch_binding.py"
+      ],
+      "legacy_line_count": 68
+    },
+    {
+      "path": "bt_api/bt_api_base/src/bt_api_base.egg-info/SOURCES.txt",
+      "legacy_lines": [
+        "docs/api/gateway.md",
+        "src/bt_api_base/gateway/__init__.py",
+        "src/bt_api_base/gateway/adapters/__init__.py",
+        "src/bt_api_base/gateway/adapters/base.py",
+        "src/bt_api_base/gateway/adapters/plugin_adapter.py",
+        "src/bt_api_base/gateway/config.py",
+        "src/bt_api_base/gateway/health.py",
+        "src/bt_api_base/gateway/models.py",
+        "src/bt_api_base/gateway/order_identity_map.py",
+        "src/bt_api_base/gateway/order_ref_allocator.py",
+        "src/bt_api_base/gateway/protocol.py",
+        "src/bt_api_base/gateway/registrar.py",
+        "src/bt_api_base/gateway/runtime.py",
+        "src/bt_api_base/gateway/runtime_remote.py",
+        "src/bt_api_base/gateway/storage/__init__.py",
+        "src/bt_api_base/gateway/storage/tick_writer.py",
+        "src/bt_api_base/gateway/subscription_manager.py",
+        "tests/gateway/test_protocol.py",
+        "tests/gateway/test_registrar.py",
+        "tests/gateway/test_runtime.py",
+        "tests/gateway/test_runtime_order_map.py",
+        "tests/gateway/test_runtime_write_gate.py"
+      ],
+      "legacy_line_count": 22
+    }
+  ],
+  "setup_py": {
+    "find_packages_lines": [
+      "from setuptools import find_packages, setup",
+      "packages=find_packages(include=[\"bt_api_py\", \"bt_api_py.*\"], exclude=[\"tests\"]),"
+    ]
+  },
+  "ci_workflows": [
+    {
+      "path": ".github/workflows/optimized-tests.yml",
+      "lines": [
+        27,
+        28
+      ]
+    },
+    {
+      "path": ".github/workflows/reusable-compat-matrix.yml",
+      "lines": [
+        9,
+        10
+      ]
+    },
+    {
+      "path": ".github/workflows/tests.yml",
+      "lines": [
+        24,
+        25
+      ]
+    }
+  ]
+}

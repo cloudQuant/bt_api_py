@@ -1,0 +1,9 @@
+{
+  "returncode": 0,
+  "stdout": "{\"export\": {\"error\": \"LegacyForwardingRetiredError\", \"target\": \"ForwardingClient\"}, \"zmq\": {\"error\": \"LegacyForwardingRetiredError\", \"target\": \"transport_mode=ZMQ\"}, \"threads_stable\": true, \"forwarding_loaded\": false, \"gateway_shim_loaded\": false, \"zmq_loaded\": false, \"direct_mode\": \"direct\"}",
+  "stderr_tail": [
+    "[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT",
+    "[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT",
+    "[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT"
+  ]
+}

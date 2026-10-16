@@ -1,0 +1,32 @@
+{
+  "reviewer": "it10mig01-r2 adversarial review",
+  "review_dir": "D:/temp/it10mig01-r2-review-20261016-r1",
+  "runs": [
+    {
+      "id": "reviewer-r1",
+      "argv": ["C:/anaconda3/python.exe", "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "--noconftest", "--import-mode=importlib", "--junitxml=<dir>/junit.xml", "--basetemp=<dir>/pytest-tmp", "tests/bt_api_contract/test_operation_dispatch.py", "tests/bt_api_contract/test_environment_guard.py"],
+      "cwd": "D:/bt_api_py",
+      "env": {"PYTHONPATH": "D:/bt_api_py;D:/bt_api_py/bt_api/bt_api_base/src", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"},
+      "result": "exit 0, 64 passed, 1 skipped, 2 warnings"
+    },
+    {
+      "id": "reviewer-red",
+      "argv": ["same options", "tests/bt_api_contract/test_operation_dispatch.py", "tests/bt_api_contract/test_environment_guard.py", "tests/bt_api_contract/test_execution_session.py", "tests/bt_api_contract/test_gateway_runtime_unknown_execution.py"],
+      "result": "exit 1, 3 failed, 245 passed, 3 skipped, 14 errors; red set == 17 expected nodes (3F session roundtrip param; 14E gateway runtime file)"
+    },
+    {
+      "id": "reviewer-perfile-operation_dispatch",
+      "result": "exit 0, 17 passed, 1 skipped"
+    },
+    {
+      "id": "reviewer-perfile-environment_guard",
+      "result": "exit 0, 47 passed"
+    }
+  ],
+  "serialization": {
+    "foreign_runner_observed": "PID 76928 pytest dim09/service_execution_group suite start 12:54:45 + multiprocessing worker burst till ~12:56:20",
+    "bounded_wait_s": 100,
+    "kills": 0,
+    "gates_clear_at_all_runs": true
+  }
+}

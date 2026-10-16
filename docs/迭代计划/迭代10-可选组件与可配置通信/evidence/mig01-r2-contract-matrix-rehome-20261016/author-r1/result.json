@@ -1,0 +1,302 @@
+{
+  "artifact_id": "it10mig01-r2-20261016-r1",
+  "pytest_runs": [
+    {
+      "id": "rehomed-r1",
+      "mode": "run",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py"
+      ],
+      "exit": 0,
+      "started_utc": "2026-10-16T04:47:54.111694+00:00",
+      "finished_utc": "2026-10-16T04:47:57.972109+00:00",
+      "stdout_sha256": "d8973745443f7c28bcccf0e681d6acf1691d52580a26fd554a0a5a444c96b54e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit": {
+        "tests": 65,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1,
+        "failing": [],
+        "passed": 64
+      }
+    },
+    {
+      "id": "rehomed-r2",
+      "mode": "run",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py"
+      ],
+      "exit": 0,
+      "started_utc": "2026-10-16T04:47:58.148460+00:00",
+      "finished_utc": "2026-10-16T04:48:01.953569+00:00",
+      "stdout_sha256": "e89187ee65f0e73077812b535e7f73d8f3909e33c290f572f0a73a18e4ba5895",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit": {
+        "tests": 65,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1,
+        "failing": [],
+        "passed": 64
+      }
+    },
+    {
+      "id": "rehomed-collect",
+      "mode": "collect-only",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py"
+      ],
+      "exit": 0,
+      "started_utc": "2026-10-16T04:48:02.185686+00:00",
+      "finished_utc": "2026-10-16T04:48:03.698185+00:00",
+      "stdout_sha256": "2e949b3fbfb028ca0db81e43d59aa92bd81425c73f752eacce72ba301fce3d81",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit": {
+        "tests": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "failing": [],
+        "passed": 0
+      }
+    },
+    {
+      "id": "targets-and-regression",
+      "mode": "run",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py",
+        "tests/bt_api_contract/test_execution_session.py",
+        "tests/bt_api_contract/test_gateway_runtime_unknown_execution.py",
+        "tests/forwarding",
+        "tests/test_forwarding_bus_router_client.py",
+        "tests/test_forwarding_schema.py",
+        "tests/test_forwarding_zmq_transport.py",
+        "tests/test_light_import.py",
+        "tests/test_type_hint_introspection.py",
+        "tests/bt_api_contract/test_readonly_futures_metadata.py",
+        "tests/bt_api_contract/test_position_mode_mutation.py",
+        "tests/bt_api_contract/test_gateway_runtime_integration.py",
+        "tests/bt_api_contract/test_demo_futures_contract.py",
+        "tests/bt_api_contract/test_ctp_orderref_consume.py"
+      ],
+      "exit": 1,
+      "started_utc": "2026-10-16T04:48:03.898081+00:00",
+      "finished_utc": "2026-10-16T04:48:26.320861+00:00",
+      "stdout_sha256": "9a61424752cbf59232d639b02614ab2bab8b6cf306ab75d4ced9186731bcff21",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit": {
+        "tests": 690,
+        "failures": 3,
+        "errors": 14,
+        "skipped": 20,
+        "failing": [
+          {
+            "id": "tests.bt_api_contract.test_execution_session::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result0-True]",
+            "outcome": "failure",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_execution_session::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result1-False]",
+            "outcome": "failure",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_execution_session::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result2-False]",
+            "outcome": "failure",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[RuntimeError-cancel_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[RuntimeError-place_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[TimeoutError-cancel_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[TimeoutError-place_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[ValueError-cancel_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[ValueError-place_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[error-cancel_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[error-place_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[rejected-cancel_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[rejected-place_order]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_unknown_takes_precedence_over_adapter_error",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_logging_failure_cannot_replace_unknown_result",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_normal_adapter_outcome_stays_normal[cancel_order-canceled]",
+            "outcome": "error",
+            "file": null
+          },
+          {
+            "id": "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_normal_adapter_outcome_stays_normal[place_order-accepted]",
+            "outcome": "error",
+            "file": null
+          }
+        ],
+        "passed": 653
+      }
+    }
+  ],
+  "adjudication": {
+    "expected_failures": {
+      "tests/bt_api_contract/test_execution_session.py": 3,
+      "tests/bt_api_contract/test_gateway_runtime_unknown_execution.py": 14
+    },
+    "gap_counts": {
+      "tests/bt_api_contract/test_execution_session.py": {
+        "expected": 3,
+        "actual": 3,
+        "ids": [
+          "tests.bt_api_contract.test_execution_session::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result0-True]",
+          "tests.bt_api_contract.test_execution_session::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result1-False]",
+          "tests.bt_api_contract.test_execution_session::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result2-False]"
+        ]
+      },
+      "tests/bt_api_contract/test_gateway_runtime_unknown_execution.py": {
+        "expected": 14,
+        "actual": 14,
+        "ids": [
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[RuntimeError-cancel_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[RuntimeError-place_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[TimeoutError-cancel_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[TimeoutError-place_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[ValueError-cancel_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_adapter_exception_after_dispatch_is_unknown[ValueError-place_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[error-cancel_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[error-place_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[rejected-cancel_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_adapter_rejection_remains_definite[rejected-place_order]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_explicit_unknown_takes_precedence_over_adapter_error",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_logging_failure_cannot_replace_unknown_result",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_normal_adapter_outcome_stays_normal[cancel_order-canceled]",
+          "tests.bt_api_contract.test_gateway_runtime_unknown_execution::test_normal_adapter_outcome_stays_normal[place_order-accepted]"
+        ]
+      }
+    },
+    "unexpected_failures": [],
+    "ok": true
+  },
+  "determinism": {
+    "pair": [
+      "rehomed-r1",
+      "rehomed-r2"
+    ],
+    "deterministic": true,
+    "fingerprint_r1": [
+      65,
+      0,
+      0,
+      1
+    ],
+    "fingerprint_r2": [
+      65,
+      0,
+      0,
+      1
+    ],
+    "collect_exit": 0
+  },
+  "serialization_gates": [
+    {
+      "run": "rehomed-r1",
+      "clear": true,
+      "observations": [
+        {
+          "utc": "2026-10-16T04:47:54.111694+00:00",
+          "foreign": []
+        }
+      ]
+    },
+    {
+      "run": "rehomed-r2",
+      "clear": true,
+      "observations": [
+        {
+          "utc": "2026-10-16T04:47:58.147452+00:00",
+          "foreign": []
+        }
+      ]
+    },
+    {
+      "run": "rehomed-collect",
+      "clear": true,
+      "observations": [
+        {
+          "utc": "2026-10-16T04:48:02.184676+00:00",
+          "foreign": []
+        }
+      ]
+    },
+    {
+      "run": "targets-and-regression",
+      "clear": true,
+      "observations": [
+        {
+          "utc": "2026-10-16T04:48:03.897573+00:00",
+          "foreign": []
+        }
+      ]
+    }
+  ],
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "f30cb45924c3a462a0d6566a176770c6f0c6ce2c",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "f30cb45924c3a462a0d6566a176770c6f0c6ce2c",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "evidence_level": "MIG01_R2_REHOMED_SDK_TESTS_FIXED_SOURCE_NO_HOST",
+  "finished_utc": "2026-10-16T04:48:26.357677+00:00",
+  "qa_ok": true
+}

@@ -1,4 +1,21 @@
-"""Public ``BtApi`` synchronous operation dispatch contract."""
+"""Public ``BtApi`` synchronous operation dispatch contract.
+
+MIG01-R2 re-home: this module previously built the retired ZMQ factory
+(``BtApi(transport_mode=TransportMode.ZMQ, forwarding_config=...)``) as its
+harness for the backend-routing assertions.  That entry point now fails closed
+(``LegacyForwardingRetiredError``, MIG01-R1 / commit 46697739), so the harness
+now constructs the direct transport and replaces ``api._backend`` with an
+``OperationBackend``-shaped test double.  The routing assertions are unchanged
+(public methods must cross exactly one backend boundary and must not touch
+local feeds).
+
+Two nodes asserted behavior of the forwarding protocol itself
+(``get_trades`` capability failure and the forwarding async surface /
+reconciliation).  That protocol no longer exists on any reachable transport,
+so those nodes now assert the explicit retirement plus the absence of a silent
+fallback, mirroring the in-surface pattern accepted for MIG01-R1
+(``test_direct_zmq_bt_api_contract.py`` / ``test_normalized_public_api.py``).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +24,10 @@ from typing import Any
 
 import pytest
 
-from bt_api_py._contracts.errors import CapabilityNotSupportedError
+from bt_api_py._contracts.errors import (
+    CapabilityNotSupportedError,
+    LegacyForwardingRetiredError,
+)
 from bt_api_py._contracts.models import (
     CancelAllRequest,
     CancelOrderRequest,
@@ -88,11 +108,18 @@ class RecordingBackend:
 
 class ExplodingFeed:
     def __getattr__(self, name: str) -> Any:
-        raise AssertionError(f"ZMQ operation unexpectedly accessed a local feed: {name}")
+        raise AssertionError(f"public operation unexpectedly accessed a local feed: {name}")
 
 
-def _zmq_api() -> BtApi:
+def _direct_api() -> BtApi:
+    """Direct-transport api; callers replace ``_backend`` with a test double."""
+    return BtApi(debug=False)
+
+
+def _retired_zmq_api() -> BtApi:
+    """The retired ZMQ factory entry point, kept verbatim for the rejection tests."""
     return BtApi(
+        {"SIM___SPOT": {}},
         debug=False,
         transport_mode=TransportMode.ZMQ,
         forwarding_config=ForwardingConfig(
@@ -161,10 +188,10 @@ def _zmq_api() -> BtApi:
         ),
     ],
 )
-def test_zmq_v1_operations_route_only_to_backend(
+def test_v1_operations_route_only_to_backend(
     operation: str, invoke: Any, request_type: type[Any] | None
 ) -> None:
-    api = _zmq_api()
+    api = _direct_api()
     backend = RecordingBackend()
     api._backend = backend
     api.exchange_feeds["SIM___SPOT"] = ExplodingFeed()
@@ -193,8 +220,8 @@ def test_direct_operations_route_to_backend_without_losing_legacy_options() -> N
     assert kwargs["limit"] == 1
 
 
-def test_zmq_legacy_cancel_is_converted_to_a_typed_request() -> None:
-    api = _zmq_api()
+def test_legacy_cancel_is_converted_to_a_typed_request() -> None:
+    api = _direct_api()
     backend = RecordingBackend()
     api._backend = backend
 
@@ -206,12 +233,24 @@ def test_zmq_legacy_cancel_is_converted_to_a_typed_request() -> None:
     assert request.account_id == "legacy"
 
 
-def test_zmq_get_trades_is_an_explicit_capability_failure() -> None:
-    api = _zmq_api()
-    api.exchange_feeds["SIM___SPOT"] = ExplodingFeed()
+def test_get_trades_is_an_explicit_capability_failure(monkeypatch) -> None:
+    """``get_trades`` has no forwarding protocol; the retired transport fails closed.
 
-    with pytest.raises(CapabilityNotSupportedError, match=r"get_trades.*transport=zmq"):
-        api.get_trades("SIM___SPOT")
+    MIG01-R2 re-home: the ZMQ-era assertion ``CapabilityNotSupportedError`` /
+    ``transport=zmq`` / no-feed-fallback is expressed against the only reachable
+    truth left after the MIG01-R1 retirement: the operation surface exposes no
+    forwarding ``get_trades`` member, and using the retired transport raises
+    before any local feed could be constructed (no silent direct fallback).
+    """
+    assert not hasattr(OperationBackend, "get_trades")
+
+    def unexpected_feed(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("retired ZMQ transport must not construct a local feed")
+
+    monkeypatch.setattr("bt_api_py.bt_api.ExchangeRegistry.create_feed", unexpected_feed)
+
+    with pytest.raises(LegacyForwardingRetiredError, match=r"transport_mode=ZMQ"):
+        _retired_zmq_api()
 
 
 def test_operation_backend_protocol_exposes_the_public_transport_surface() -> None:
@@ -234,46 +273,25 @@ def test_operation_backend_protocol_exposes_the_public_transport_surface() -> No
     assert all(callable(getattr(OperationBackend, name)) for name in required_operations)
 
 
-@pytest.mark.asyncio
-async def test_zmq_async_surface_and_reconciliation_stay_on_the_backend() -> None:
-    api = _zmq_api()
+def test_forwarding_async_surface_and_reconciliation_fail_closed() -> None:
+    """The forwarding async surface / reconciliation stays retired fail-closed.
+
+    MIG01-R2 re-home: this node previously asserted that, on the ZMQ transport,
+    async reads and reconciliation stayed on the backend, async writes required
+    typed requests, and legacy feed options were rejected.  That transport is
+    retired (MIG01-R1), so the surviving contract is the explicit rejection at
+    construction (before any socket/thread/feed) plus the direct transport's
+    explicit refusal to fabricate a forwarding command receipt.
+    """
+    with pytest.raises(LegacyForwardingRetiredError, match=r"transport_mode=ZMQ"):
+        _retired_zmq_api()
+
+    api = _direct_api()
     backend = RecordingBackend()
     api._backend = backend
-
-    assert await api.async_get_tick("SIM___SPOT", "BTC-USDT") == {"operation": "get_tick"}
-    assert await api.async_get_depth("SIM___SPOT", "BTC-USDT", 3) == {"operation": "get_depth"}
-    assert await api.async_get_kline("SIM___SPOT", "BTC-USDT", "1m", 3) == {
-        "operation": "get_kline"
-    }
-    assert await api.async_get_open_orders("SIM___SPOT", consistency="cache_ok") == {
-        "operation": "get_open_orders"
-    }
-    assert await api.async_get_balance("SIM___SPOT", consistency="cache_ok") == {
-        "operation": "get_balance"
-    }
-    assert await api.async_get_account("SIM___SPOT", consistency="cache_ok") == {
-        "operation": "get_account"
-    }
-    assert await api.async_get_position("SIM___SPOT", consistency="cache_ok") == {
-        "operation": "get_position"
-    }
-
-    for operation in (
-        api.async_make_order,
-        api.async_cancel_order,
-        api.async_cancel_all,
-        api.async_query_order,
-    ):
-        with pytest.raises(CapabilityNotSupportedError):
-            await operation("SIM___SPOT")
-
-    report = api.get_capabilities("SIM___SPOT")
-    assert report.status == "experimental"
-    assert report.operations == {"get_tick": True, "get_trades": False}
-    assert api.get_command_status("SIM___SPOT", "command-1").status == "succeeded"
-
-    with pytest.raises(CapabilityNotSupportedError, match="extra_data"):
-        api.get_tick("SIM___SPOT", "BTC-USDT", extra_data={"legacy": True})
+    with pytest.raises(CapabilityNotSupportedError, match=r"get_command_status"):
+        api.get_command_status("SIM___SPOT", "command-1")
+    assert backend.calls == []
 
 
 @pytest.mark.asyncio

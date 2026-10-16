@@ -1,0 +1,35 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider",
+    "--noconftest",
+    "--import-mode=importlib",
+    "--junitxml=D:\\temp\\it10mig01-r2-20261016-r1\\scan\\junit.xml",
+    "--basetemp=D:\\temp\\it10mig01-r2-20261016-r1\\scan\\pytest-tmp",
+    "tests/bt_api_contract/test_operation_dispatch.py",
+    "tests/bt_api_contract/test_environment_guard.py"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T04:49:14.427581+00:00"
+}

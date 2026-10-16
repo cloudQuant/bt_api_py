@@ -1,0 +1,98 @@
+{
+  "schema": "iteration10-focused-qa-spec-v1",
+  "artifact_id": "it10mig01-r2-20261016-r1",
+  "python": "C:\\anaconda3\\python.exe",
+  "cwd": "D:\\bt_api_py",
+  "runs": [
+    {
+      "id": "rehomed-r1",
+      "mode": "run",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py"
+      ]
+    },
+    {
+      "id": "rehomed-r2",
+      "mode": "run",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py"
+      ]
+    },
+    {
+      "id": "rehomed-collect",
+      "mode": "collect-only",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py"
+      ]
+    },
+    {
+      "id": "targets-and-regression",
+      "mode": "run",
+      "nodes": [
+        "tests/bt_api_contract/test_operation_dispatch.py",
+        "tests/bt_api_contract/test_environment_guard.py",
+        "tests/bt_api_contract/test_execution_session.py",
+        "tests/bt_api_contract/test_gateway_runtime_unknown_execution.py",
+        "tests/forwarding",
+        "tests/test_forwarding_bus_router_client.py",
+        "tests/test_forwarding_schema.py",
+        "tests/test_forwarding_zmq_transport.py",
+        "tests/test_light_import.py",
+        "tests/test_type_hint_introspection.py",
+        "tests/bt_api_contract/test_readonly_futures_metadata.py",
+        "tests/bt_api_contract/test_position_mode_mutation.py",
+        "tests/bt_api_contract/test_gateway_runtime_integration.py",
+        "tests/bt_api_contract/test_demo_futures_contract.py",
+        "tests/bt_api_contract/test_ctp_orderref_consume.py"
+      ]
+    }
+  ],
+  "expected_targets_failures": {
+    "tests/bt_api_contract/test_execution_session.py": 3,
+    "tests/bt_api_contract/test_gateway_runtime_unknown_execution.py": 14
+  },
+  "pytest_options": [
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider",
+    "--noconftest",
+    "--import-mode=importlib"
+  ],
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "repositories": {
+    "D:\\bt_api_py": "f30cb45924c3a462a0d6566a176770c6f0c6ce2c",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "source_resolution_policy": "Live parent worktree pinned by SHA-256 source pins + git HEAD guards; PYTHONPATH pinned to worktree SDK and base src (bt_api_execution/risk/transport_zmq resolve through editable installs into the same worktree; bt_api_ctp and zmq from anaconda site-packages).",
+  "output": "D:/temp/it10mig01-r2-20261016-r1",
+  "evidence_level": "MIG01_R2_REHOMED_SDK_TESTS_FIXED_SOURCE_NO_HOST",
+  "source_sha256": {
+    "D:\\bt_api_py\\tests\\bt_api_contract\\test_operation_dispatch.py": "e9b670bbf6aa6a436c95e258fc11557479d71769da7e30d2c5a184054fd4c03a",
+    "D:\\bt_api_py\\tests\\bt_api_contract\\test_environment_guard.py": "3beb5c45ba1e2506eec88f07acc56cf910247181518b1f03631231ca1c6b938c",
+    "D:\\bt_api_py\\tests\\bt_api_contract\\test_execution_session.py": "6496100809f750ee88cb0c9d9055ae0c8a0878688711c8eb3879644d5deb99af",
+    "D:\\bt_api_py\\tests\\bt_api_contract\\test_gateway_runtime_unknown_execution.py": "27f30fd7908a38a4c4cea1a5e5f8f280907618385fa610dc290685c3dfd4b892",
+    "D:\\bt_api_py\\bt_api_py\\bt_api.py": "abceffc22168442aa6325b43391f14c0f5c0540202ddedeeaad6041fdd5e33f0",
+    "D:\\bt_api_py\\bt_api_py\\__init__.py": "6ee02d42704adf1a64462ffec9133f2ed23ac9c69fabf14772e88db0066f9afd",
+    "D:\\bt_api_py\\bt_api_py\\_contracts\\errors.py": "7bf21144930e4f940b8c6bb34371ab690d8e932036357deb91d8fb4cf106a9f1"
+  },
+  "author_evidence": "MIG01-R2 fixed-source QA: re-homed test_operation_dispatch.py and test_environment_guard.py off the retired ZMQ factory onto the direct backend + test doubles (assertions preserved; 2 ZMQ-protocol-only nodes re-expressed as explicit-retirement + no-fallback per the R1-accepted pattern). Runs: 2 clean rehomed runs + 1 collect-only + targets-and-regression (4 previously-RED modules + legacy forwarding regression spot-run). Execution-session and gateway-runtime wire modules remain RED by design (3 + 14 nodes, gap report in .codex-tmp/mig01-r2-status.md): the new bt_api_gateway surface has no SDK client write bridge / native-intent wire schema / compatible ack-unknown policy / normalized-write outcome bridge. Retirement code pins unchanged vs R1. NOT a MIG01 acceptance claim."
+}

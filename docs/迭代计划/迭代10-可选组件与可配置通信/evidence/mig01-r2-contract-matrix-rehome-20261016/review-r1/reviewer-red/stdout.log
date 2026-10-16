@@ -1,0 +1,179 @@
+.................s...................................................... [ 27%]
+........................................................................ [ 54%]
+..............................ss........................................ [ 81%]
+................................FFFEEEEEEEEEEEEEE                        [100%]
+=================================== ERRORS ====================================
+_ ERROR at setup of test_adapter_exception_after_dispatch_is_unknown[TimeoutError-place_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_adapter_exception_after_dispatch_is_unknown[TimeoutError-cancel_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_adapter_exception_after_dispatch_is_unknown[ValueError-place_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_adapter_exception_after_dispatch_is_unknown[ValueError-cancel_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_adapter_exception_after_dispatch_is_unknown[RuntimeError-place_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_adapter_exception_after_dispatch_is_unknown[RuntimeError-cancel_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_explicit_adapter_rejection_remains_definite[rejected-place_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_explicit_adapter_rejection_remains_definite[rejected-cancel_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_explicit_adapter_rejection_remains_definite[error-place_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_explicit_adapter_rejection_remains_definite[error-cancel_order] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_explicit_unknown_takes_precedence_over_adapter_error _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_normal_adapter_outcome_stays_normal[place_order-accepted] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ ERROR at setup of test_normal_adapter_outcome_stays_normal[cancel_order-canceled] _
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+____ ERROR at setup of test_logging_failure_cannot_replace_unknown_result _____
+tests\bt_api_contract\test_gateway_runtime_unknown_execution.py:34: in pipeline
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+================================== FAILURES ===================================
+_ test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result0-True] _
+tests\bt_api_contract\test_execution_session.py:3711: in test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result1-False] _
+tests\bt_api_contract\test_execution_session.py:3711: in test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result2-False] _
+tests\bt_api_contract\test_execution_session.py:3711: in test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ！ the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/bt_api_contract/test_operation_dispatch.py::test_direct_legacy_async_reads_reject_plain_def_returning_none
+  C:\anaconda3\Lib\site-packages\_pytest\python.py:182: PytestUnhandledCoroutineWarning: async def functions are not natively supported and have been skipped.
+  You need to install a suitable plugin for your async framework, for example:
+    - anyio
+    - pytest-asyncio
+    - pytest-tornasync
+    - pytest-trio
+    - pytest-twisted
+    warnings.warn(PytestUnhandledCoroutineWarning(msg.format(nodeid)))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\it10mig01-r2-review-20261016-r1\reviewer-red\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result0-True]
+FAILED tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result1-False]
+FAILED tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result2-False]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_adapter_exception_after_dispatch_is_unknown[TimeoutError-place_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_adapter_exception_after_dispatch_is_unknown[TimeoutError-cancel_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_adapter_exception_after_dispatch_is_unknown[ValueError-place_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_adapter_exception_after_dispatch_is_unknown[ValueError-cancel_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_adapter_exception_after_dispatch_is_unknown[RuntimeError-place_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_adapter_exception_after_dispatch_is_unknown[RuntimeError-cancel_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_explicit_adapter_rejection_remains_definite[rejected-place_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_explicit_adapter_rejection_remains_definite[rejected-cancel_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_explicit_adapter_rejection_remains_definite[error-place_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_explicit_adapter_rejection_remains_definite[error-cancel_order]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_explicit_unknown_takes_precedence_over_adapter_error
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_normal_adapter_outcome_stays_normal[place_order-accepted]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_normal_adapter_outcome_stays_normal[cancel_order-canceled]
+ERROR tests/bt_api_contract/test_gateway_runtime_unknown_execution.py::test_logging_failure_cannot_replace_unknown_result
+3 failed, 245 passed, 3 skipped, 2 warnings, 14 errors in 18.05s

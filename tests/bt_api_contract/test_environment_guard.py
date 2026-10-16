@@ -12,7 +12,6 @@ import pytest
 from bt_api_py import (
     BtApi,
     CancelOrderRequest,
-    ForwardingConfig,
     NormalizedApiError,
     OrderRequest,
     OrderType,
@@ -661,68 +660,65 @@ def test_dynamic_crypto_configuration_without_credentials_fails_closed(direct_fa
     assert excinfo.value.definite_reject is True
 
 
-def forwarding_config():
-    return ForwardingConfig(
-        command_endpoint="inproc://environment-command",
-        market_endpoint="inproc://environment-market",
-        private_endpoint="inproc://environment-private",
-        account_id="demo",
-        strategy_id="environment-guard",
+def test_environment_without_verifiable_proof_is_explicitly_unverified(direct_factory):
+    """A configured environment that cannot be proven stays explicitly unverified.
+
+    MIG01-R2 re-home of ``test_zmq_environment_is_explicitly_unverified``: the
+    ZMQ transport could never prove a gateway-side environment and had to
+    report an explicit unverified/unknown value.  The direct path keeps the
+    same fail-closed guard: a configured ``environment`` value without a valid
+    feed proof must not be echoed back as verified (and no secret leaks into
+    the report).
+    """
+    make, feeds = direct_factory
+    api = make(
+        {OKX: {"resolved_environment": "demo", "resolved_simulated": True}},
+        required={OKX: "demo"},
     )
+    feeds[OKX].get_environment_info = Mock(return_value=None)
+
+    assert api.get_environment_info(OKX) == {
+        "exchange_name": OKX,
+        "environment": "unknown",
+        "api_region": None,
+        "simulated": None,
+        "transport_mode": "direct",
+        "verified": False,
+    }
 
 
-def test_zmq_environment_is_explicitly_unverified(monkeypatch):
-    monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    api = BtApi(
-        {OKX: {"environment": "demo", "api_key": "not-returned"}},
-        debug=False,
-        transport_mode="zmq",
-        forwarding_config=forwarding_config(),
-    )
-    try:
-        assert api.get_environment_info(OKX) == {
-            "exchange_name": OKX,
-            "environment": "unknown",
-            "api_region": None,
-            "simulated": None,
-            "transport_mode": "zmq",
-            "verified": False,
-        }
-    finally:
-        api.close()
+def test_required_environment_fails_closed_when_unverifiable(direct_factory):
+    """A required environment that cannot be verified fails closed at construction.
 
-
-def test_zmq_required_environment_fails_closed(monkeypatch):
-    monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
+    MIG01-R2 re-home of ``test_zmq_required_environment_fails_closed``: under
+    the retired ZMQ transport no environment could ever be verified, so a
+    required environment had to fail closed.  The direct path keeps the same
+    guard: an unprovable feed environment (here an unsupported ``paper`` value)
+    raises ``required_environment_unverified`` with ``definite_reject``.
+    """
+    make, _ = direct_factory
 
     with pytest.raises(NormalizedApiError) as excinfo:
-        BtApi(
-            {OKX: {"environment": "demo"}},
-            debug=False,
-            transport_mode="zmq",
-            forwarding_config=forwarding_config(),
-            execution_config={
-                "require_order_journal": False,
-                "required_environments": {OKX: "demo"},
-                "account_ids": {OKX: "demo"},
-            },
-        )
+        make({OKX: {"environment": "paper"}}, required={OKX: "demo"}, journal=False)
 
     assert excinfo.value.code == "required_environment_unverified"
     assert excinfo.value.definite_reject is True
 
 
-def test_market_data_only_zmq_remains_available_for_reads(monkeypatch):
-    monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    api = BtApi(
-        {OKX: {"environment": "demo"}},
-        debug=False,
-        transport_mode="zmq",
-        forwarding_config=forwarding_config(),
-        execution_config={
-            "market_data_only": True,
-            "required_environments": {OKX: "demo"},
-        },
+def test_market_data_only_remains_available_for_reads(direct_factory):
+    """Market-data-only sessions keep reads available and writes fail closed.
+
+    MIG01-R2 re-home of ``test_market_data_only_zmq_remains_available_for_reads``:
+    market-data-only remains constructible even when a required environment is
+    unprovable (the write guard, not construction, is the gate), reads stay
+    available, and any normalized write is rejected with ``market_data_only``.
+    """
+    make, _ = direct_factory
+    api = make(
+        {OKX: {"environment": "paper"}},
+        required={OKX: "demo"},
+        journal=False,
+        market_data_only=True,
     )
     try:
         assert api.get_environment_info(OKX)["verified"] is False

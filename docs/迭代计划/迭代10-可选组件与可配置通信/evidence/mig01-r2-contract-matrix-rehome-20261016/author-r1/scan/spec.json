@@ -1,0 +1,85 @@
+{
+  "schema": "iteration10-focused-qa-spec-v1",
+  "artifact_id": "it10mig01-r2-scan-20261016-r1",
+  "python": "C:\\anaconda3\\python.exe",
+  "cwd": "D:\\bt_api_py",
+  "nodes": [
+    "tests/bt_api_contract/test_operation_dispatch.py",
+    "tests/bt_api_contract/test_environment_guard.py"
+  ],
+  "pytest_options": [
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider",
+    "--noconftest",
+    "--import-mode=importlib"
+  ],
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "repositories": {
+    "D:\\bt_api_py": "f30cb45924c3a462a0d6566a176770c6f0c6ce2c",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "scan": {
+    "trees": [
+      {
+        "root": "D:\\bt_api_py\\bt_api_py",
+        "excluded_paths": [
+          "D:\\bt_api_py\\bt_api_py\\forwarding",
+          "D:\\bt_api_py\\bt_api_py\\gateway"
+        ]
+      },
+      {
+        "root": "D:\\bt_api_py\\tests",
+        "excluded_paths": []
+      },
+      {
+        "root": "D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+        "excluded_paths": [
+          "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway"
+        ]
+      }
+    ],
+    "patterns": {
+      "bt_api_py.forwarding": "bt_api_py[./]forwarding",
+      "bt_api_py.gateway": "bt_api_py[./]gateway",
+      "bt_api_base.gateway": "bt_api_base[./]gateway",
+      "GatewayRuntimeRegistrar": "GatewayRuntimeRegistrar",
+      "ZmqBtApiBackend": "ZmqBtApiBackend",
+      "zmq_transport_mode": "transport_mode\\s*[:=]\\s*[\\\"']?zmq[\\\"']?|TransportMode\\.ZMQ"
+    },
+    "legacy_dirs": [
+      "D:\\bt_api_py\\bt_api_py\\forwarding",
+      "D:\\bt_api_py\\bt_api_py\\gateway",
+      "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\gateway"
+    ]
+  },
+  "source_resolution_policy": "Live parent worktree pinned by SHA-256 source pins + git HEAD guards; PYTHONPATH pinned to worktree SDK and base src.",
+  "output": "D:/temp/it10mig01-r2-20261016-r1/scan",
+  "evidence_level": "MIG01_R2_RESIDUAL_SCAN_FIXED_SOURCE_NO_HOST",
+  "source_sha256": {
+    "D:\\bt_api_py\\bt_api_py\\__init__.py": "6ee02d42704adf1a64462ffec9133f2ed23ac9c69fabf14772e88db0066f9afd",
+    "D:\\bt_api_py\\bt_api_py\\bt_api.py": "abceffc22168442aa6325b43391f14c0f5c0540202ddedeeaad6041fdd5e33f0",
+    "D:\\bt_api_py\\bt_api_py\\_contracts\\errors.py": "7bf21144930e4f940b8c6bb34371ab690d8e932036357deb91d8fb4cf106a9f1",
+    "D:\\bt_api_py\\bt_api_py\\_contracts\\__init__.py": "d8c2dd9514dcaade49243d97fcb3b208ab6252a3c69d03fd0a6105617aa1e038",
+    "D:\\bt_api_py\\tests\\test_bt_api_quality.py": "867badc155c5e669477a581a5faae187a3b14faba285481a06cc526040a048b0",
+    "D:\\bt_api_py\\tests\\bt_api_contract\\test_direct_zmq_bt_api_contract.py": "63007d5d63605c43a72b4c005ac22291af76d339cfb186ddd032ce318bbd0a54",
+    "D:\\bt_api_py\\tests\\bt_api_contract\\test_normalized_public_api.py": "5559612d972daac35c12137d4157196cca68df65f7d8ba8b22991f9a86f3135a"
+  },
+  "author_evidence": "MIG01-R2 residual-scan re-run (same scan script and pattern set as the MIG01-R1 r3 scan) after the R2 re-home: 2 test modules moved off the retired BtApi ZMQ factory. Expectation: tests-tree references to the retired surface shrink; legacy dirs / wheel / egg-info entries unchanged. This run's pytest phase is the re-homed module pair (3rd clean determinism data point). NOT a MIG01 acceptance claim."
+}
