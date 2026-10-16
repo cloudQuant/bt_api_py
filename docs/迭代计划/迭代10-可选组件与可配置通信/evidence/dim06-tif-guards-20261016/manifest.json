@@ -1,0 +1,151 @@
+{
+  "schema": "iteration10-dim06-tif-guards-evidence-manifest-v2",
+  "artifact_id": "iteration10-dim06-tif-guards-r209-root-accepted",
+  "date": "2026-10-16",
+  "disposition": "ACCEPTED_LOCAL_TIF_CONTRACT_INCREMENT_FORMAL_DIM06_REMAINS_PARTIAL",
+  "actual_run": {
+    "output_directory": "D:\\temp\\iteration10-dim06-tif-guards-root-20261016-r1",
+    "pytest_exit": 0,
+    "stdout_summary": "21 passed in 1.36s",
+    "warnings": 0,
+    "stderr_bytes": 0,
+    "source_count": 221,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "provider_boundary": "Canonical adapter and mapper path to synthetic terminal request spies; no provider, account, credentials, or network."
+  },
+  "preparation_metadata": {
+    "spec_evidence_level": "DIM06_LOCAL_TIF_GUARDS_SYNTHETIC_PROVIDER_BOUNDARY_NO_ACCOUNT_UNEXECUTED",
+    "result_evidence_level": "DIM06_LOCAL_TIF_GUARDS_SYNTHETIC_PROVIDER_BOUNDARY_NO_ACCOUNT_UNEXECUTED",
+    "interpretation": "Both frozen strings are retained as preparation-time evidence labels, not run status. The actual execution result is pytest_exit=0 and the raw exit/JUnit/stdout/stderr files.",
+    "spec_sha256": "a29ec6f6e7a4f06f3193320768a1e6a211abe1e889c52ea9a3535018b43329e4"
+  },
+  "repositories_at_run": [
+    {
+      "name": "SDK parent",
+      "head": "d400f0f98724554c0aed3f41ebfaffcff4d9e774"
+    },
+    {
+      "name": "bt_api_base",
+      "head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+    },
+    {
+      "name": "bt_api_binance",
+      "head": "b438a277c92a22851a16be0be1a8c8ee9f852b79"
+    },
+    {
+      "name": "bt_api_okx",
+      "head": "8c0019db377141664513908b8ff4071643369fd5"
+    }
+  ],
+  "child_commits": [
+    {
+      "repo": "bt_api/bt_api_binance",
+      "branch": "dev",
+      "head": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+      "parent": "b438a277c92a22851a16be0be1a8c8ee9f852b79",
+      "scope_paths": [
+        "src/bt_api_binance/feeds/rest_trade.py",
+        "docs/development/iteration10-dim06-tif-guards-r1.md"
+      ],
+      "receipt": {
+        "path": ".codex-tmp/iteration10-r209-bt_api_binance-postcommit.json",
+        "sha256": "213eeeaad0286a8a8fc685e79d2fe58b9089ec5c2bc841118c39a3e92ad96c76"
+      }
+    },
+    {
+      "repo": "bt_api/bt_api_okx",
+      "branch": "dev",
+      "head": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f",
+      "parent": "8c0019db377141664513908b8ff4071643369fd5",
+      "scope_paths": [
+        "src/bt_api_okx/feeds/live_okx/mixins/trade_mixin.py",
+        "docs/development/iteration10-dim06-tif-guards-r1.md"
+      ],
+      "receipt": {
+        "path": ".codex-tmp/iteration10-r209-bt_api_okx-postcommit.json",
+        "sha256": "3908ca019efe3d8672900794faabbed14dcba29f71eb595781d37a603a37755"
+      }
+    }
+  ],
+  "test_source": {
+    "path": "tests/bt_api_contract/test_dim06_venue_tif_incompatibility_guards.py",
+    "bytes": 8571,
+    "sha256": "71a7c6dda9e13b48a1d1c3f2f1bb40b64207d3b8e725eade328e6ead41aa8489",
+    "nodes": 21
+  },
+  "raw_archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 35744,
+    "sha256": "c3b5ef3c2aec8c1fa59a2b5f68015a372c64bd0c9ab3aba803bc072eb3ad2615",
+    "entries": [
+      {
+        "path": "command.json",
+        "bytes": 1178,
+        "sha256": "fcc5bd7e8af9d7ca0491ef423fe2408644b1c12c0b2207b67a25b0e481205d82"
+      },
+      {
+        "path": "exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "junit.xml",
+        "bytes": 2632,
+        "sha256": "49bcb4362e06769c4c6d548e9b4454341afb5c1df014e8cbce57c025d197340f"
+      },
+      {
+        "path": "result.json",
+        "bytes": 1145,
+        "sha256": "1440ed492d03bd08261c194f5c2959bd4be7290dcb8f2408514f07776affbd6c"
+      },
+      {
+        "path": "runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "running.json",
+        "bytes": 76,
+        "sha256": "43e09852a8046da0ea158510d21dbf4a9095e7a4575fe766dd18db16fe5964b3"
+      },
+      {
+        "path": "source-before.json",
+        "bytes": 34095,
+        "sha256": "dee840956e832e0a9243975ed3021c09826cede44a147934bde6dd8ae445b7d3"
+      },
+      {
+        "path": "source-after.json",
+        "bytes": 34095,
+        "sha256": "dee840956e832e0a9243975ed3021c09826cede44a147934bde6dd8ae445b7d3"
+      },
+      {
+        "path": "spec.json",
+        "bytes": 39365,
+        "sha256": "a29ec6f6e7a4f06f3193320768a1e6a211abe1e889c52ea9a3535018b43329e4"
+      },
+      {
+        "path": "stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "stdout.log",
+        "bytes": 190,
+        "sha256": "1ca65f402c9271e919d49e5e1cdc046d0b9d8122e8d21fae60cb02edb8b1fdb9"
+      }
+    ]
+  },
+  "root_acceptance_record": {
+    "path": "root-adjudication.md",
+    "bytes": 3895,
+    "sha256": "f25f5b261ed41fc38101cac2dcb4798f9404cb79ba3532e4f787dfe45c221013"
+  },
+  "formal_boundary": {
+    "dim06": "PARTIAL",
+    "formal_pass_total": "37/68",
+    "new_formal_pass": 0,
+    "reason": "This acceptance is limited to the local TIF compatibility contract; full DIM06 obligations and the R163/R191 open attribution/session items remain."
+  },
+  "manifest_self_hash": "Not included; Root should bind the manifest bytes in the parent delivery spec."
+}
