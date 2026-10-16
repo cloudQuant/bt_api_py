@@ -939,6 +939,24 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             execution_config: Optional durable execution session. None preserves
                 legacy behavior; configured writes require typed normalized calls.
         """
+        requested_transport_mode = TransportMode(transport_mode)
+        if requested_transport_mode is TransportMode.ZMQ and gateway_wire_config is None:
+            # Keep the established ZMQ retirement diagnostic while rejecting
+            # before logger, event-bus, plugin, feed, socket, or thread setup.
+            raise LegacyForwardingRetiredError(
+                "transport_mode=ZMQ",
+                detail="the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT",
+            )
+        if forwarding_config is not None:
+            raise LegacyForwardingRetiredError(
+                "forwarding_config",
+                detail=(
+                    "legacy forwarding configuration is not accepted with any transport; "
+                    "remove it for ordinary direct/backtest use. Managed service operations "
+                    "must use SDK ServiceClientRuntime bindings or "
+                    "Backtrader ServiceExecutionSession."
+                ),
+            )
         self.exchange_kwargs = {}
         self.debug = debug
         self.data_queues = {}
@@ -983,10 +1001,8 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         )
         self._private_reconcile_generations: set[tuple[str, int]] = set()
         self.event_bus.on("ws.connected", self._on_websocket_connected)
-        self.transport_mode = TransportMode(transport_mode)
+        self.transport_mode = requested_transport_mode
         settings = deepcopy(exchange_kwargs or {})
-        if isinstance(forwarding_config, dict):
-            forwarding_config = ForwardingConfig(**forwarding_config)
         if isinstance(gateway_wire_config, dict):
             gateway_wire_config = GatewayWireConfig(**gateway_wire_config)
         self._backend = self._build_backend(
@@ -3662,6 +3678,16 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             raise LegacyForwardingRetiredError(
                 "transport_mode=ZMQ",
                 detail="the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT",
+            )
+        if forwarding_config is not None:
+            raise LegacyForwardingRetiredError(
+                "forwarding_config",
+                detail=(
+                    "legacy forwarding configuration is not accepted with any transport; "
+                    "remove it for ordinary direct/backtest use. Managed service operations "
+                    "must use SDK ServiceClientRuntime bindings or "
+                    "Backtrader ServiceExecutionSession."
+                ),
             )
         from ._direct_backend import DirectBackend
 

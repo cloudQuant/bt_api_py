@@ -67,3 +67,94 @@ def test_gateway_import_and_construction_never_load_forwarding_runtime() -> None
     assert payload["error"]["type"] == "LegacyForwardingRetiredError"
     assert payload["error"]["target"] == "bt_api_py.gateway.client.GatewayClient"
     assert "ServiceClientRuntime" in payload["error"]["detail"]
+
+
+def test_direct_btapi_rejects_legacy_forwarding_config_before_plugin_or_feed_setup(
+    monkeypatch,
+) -> None:
+    from importlib import import_module
+
+    import pytest
+
+    from bt_api_py._contracts.errors import LegacyForwardingRetiredError
+    from bt_api_py._contracts.models import ForwardingConfig
+
+    bt_api_module = import_module("bt_api_py.bt_api")
+    setup_calls: list[str] = []
+    original_init_logger = bt_api_module.BtApi.init_logger
+    original_event_bus = bt_api_module.EventBus
+
+    def init_logger(self):
+        setup_calls.append("logger")
+        return original_init_logger(self)
+
+    def event_bus():
+        setup_calls.append("event_bus")
+        return original_event_bus()
+
+    monkeypatch.setattr(
+        bt_api_module,
+        "_ensure_plugins_loaded",
+        lambda: setup_calls.append("plugins"),
+    )
+    monkeypatch.setattr(bt_api_module.BtApi, "init_logger", init_logger)
+    monkeypatch.setattr(bt_api_module, "EventBus", event_bus)
+    monkeypatch.setattr(
+        bt_api_module.BtApi,
+        "init_exchange",
+        lambda self, settings: setup_calls.append("feeds"),
+    )
+
+    legacy_config = ForwardingConfig(
+        command_endpoint="tcp://127.0.0.1:5999",
+        market_endpoint="tcp://127.0.0.1:5998",
+        private_endpoint="tcp://127.0.0.1:5997",
+        account_id="paper",
+        strategy_id="legacy-strategy",
+    )
+    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
+        bt_api_module.BtApi(
+            {"SIM___SPOT": {}},
+            debug=False,
+            transport_mode="direct",
+            forwarding_config=legacy_config,
+        )
+
+    assert excinfo.value.target == "forwarding_config"
+    assert "ordinary direct/backtest use" in excinfo.value.detail
+    assert "ServiceClientRuntime" in excinfo.value.detail
+    assert setup_calls == []
+
+
+def test_direct_btapi_without_legacy_config_keeps_normal_direct_backend(monkeypatch) -> None:
+    from importlib import import_module
+    import sys
+
+    from bt_api_py import BtApi, TransportMode
+    from bt_api_py._direct_backend import DirectBackend
+
+    bt_api_module = import_module("bt_api_py.bt_api")
+    plugin_initializations: list[str] = []
+    monkeypatch.setattr(bt_api_module, "_plugins_loaded", False)
+    monkeypatch.setattr(
+        bt_api_module,
+        "_initialize_plugin_and_legacy_registrations",
+        lambda: plugin_initializations.append("initialized"),
+    )
+    forwarding_before = {
+        name for name in sys.modules if name.startswith("bt_api_py.forwarding")
+    }
+    api = BtApi(debug=False)
+    try:
+        assert api.transport_mode is TransportMode.DIRECT
+        assert type(api._backend) is DirectBackend
+        assert api.exchange_feeds == {}
+        assert api.get_request_api("UNKNOWN___SPOT") is None
+    finally:
+        api.close()
+    assert plugin_initializations == ["initialized"]
+
+    forwarding_after = {
+        name for name in sys.modules if name.startswith("bt_api_py.forwarding")
+    }
+    assert forwarding_after == forwarding_before
