@@ -21,6 +21,7 @@ from bt_api_gateway.event_journal import GatewayEventJournal
 from bt_api_gateway.quota_admission import (
     GatewayQuotaAdmission,
     GatewayQuotaAdmissionError,
+    GatewayQuotaDispatchAdmission,
     GatewayQuotaOperation,
     GatewayQuotaProviderSession,
     GatewayQuotaSubject,
@@ -517,3 +518,60 @@ def test_operator_host_applies_quota_to_account_login_and_reads(tmp_path: Path) 
             with suppress(BaseException):
                 deployment.close()
     assert provider.calls == ["connect", "read_account", "read_account_configuration", "close"]
+
+
+@pytest.mark.integration
+def test_account_binding_exposes_one_explicit_dispatch_callback(tmp_path: Path) -> None:
+    account_key = AccountKey("synthetic", "loopback", "paper", "quota-dispatch-account")
+    journal = GatewayEventJournal(tmp_path / "dispatch-binding-journal.sqlite3")
+    account_scope = GatewayServiceAccountScope(
+        _ACCOUNT_REF,
+        _DOMAIN_REF,
+        "journal:dispatch-account",
+        strategy_scope_map={_STRATEGY_REF: "state:dispatch-strategy"},
+        account_read_strategy_scope="state:dispatch-account",
+    )
+    principal = GatewayPrincipal(
+        _PRINCIPAL_REF,
+        frozenset({"journal:dispatch-account"}),
+        frozenset({"state:dispatch-account", "state:dispatch-strategy"}),
+        frozenset({GatewayCommandKind.READ}),
+    )
+    guard_directory = tmp_path / "dispatch-binding-guard"
+    guard_directory.mkdir()
+    limiter = _quota(
+        tmp_path / "dispatch-binding-quota.sqlite3",
+        capacity=4,
+        window_seconds=60.0,
+        reserved_capacity=1,
+    )
+    binding = GatewayAccountSessionBinding(
+        account_session_ref="session:dispatch-binding-v1",
+        journal=journal,
+        account_key=account_key,
+        account_scope=account_scope,
+        state_scope="state:dispatch-account",
+        guard=LocalAccountSessionGuard(
+            guard_directory, account_key.account_key_id, "quota-dispatch-binding-test"
+        ),
+        required_coverage=(AccountResourceKey("SWAP", "cross"),),
+        principals={_PRINCIPAL_REF: principal},
+        quota_admission=limiter,
+    )
+
+    callback = binding.dispatch_quota_admission
+    assert type(callback) is GatewayQuotaDispatchAdmission
+    assert callback is binding.dispatch_quota_admission
+    assert callback._admission is limiter
+    assert (
+        callback(
+            _ACCOUNT_REF,
+            _STRATEGY_REF,
+            "run:dispatch-binding",
+            "BTC-PERP",
+            "CLOSE",
+            time.monotonic_ns() + 5_000_000_000,
+        )
+        is None
+    )
+    assert limiter.status()["grants_in_window"] == 1

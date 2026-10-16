@@ -100,6 +100,11 @@ class GatewayAccountSessionBinding:
     max_staleness_seconds: float = 5.0
     request_timeout_seconds: float = 2.0
     quota_admission: object | None = field(default=None, repr=False, compare=False)
+    _dispatch_quota_admission: Callable[
+        [str, Optional[str], Optional[str], Optional[str], str, int], None
+    ] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if not _valid_ref(self.account_session_ref) or not _valid_ref(self.state_scope):
@@ -111,7 +116,10 @@ class GatewayAccountSessionBinding:
                 validate_policy_set,
             )
             from bt_api_gateway.event_journal import GatewayEventJournal
-            from bt_api_gateway.quota_admission import GatewayQuotaAdmission
+            from bt_api_gateway.quota_admission import (
+                GatewayQuotaAdmission,
+                GatewayQuotaDispatchAdmission,
+            )
             from bt_api_gateway.router import GatewayPrincipal
             from bt_api_gateway.service_component import GatewayServiceAccountScope
             from bt_api_gateway.session_guard import LocalAccountSessionGuard
@@ -180,10 +188,30 @@ class GatewayAccountSessionBinding:
                 raise ValueError
             object.__setattr__(self, "principals", MappingProxyType(copied_principals))
             object.__setattr__(self, "view_policies", policies)
+            object.__setattr__(
+                self,
+                "_dispatch_quota_admission",
+                None
+                if self.quota_admission is None
+                else GatewayQuotaDispatchAdmission(self.quota_admission),
+            )
         except GatewayOperatorDeploymentError:
             raise
         except BaseException:
             raise GatewayOperatorDeploymentError("INVALID_ACCOUNT_BINDING") from None
+
+    @property
+    def dispatch_quota_admission(
+        self,
+    ) -> Optional[Callable[[str, Optional[str], Optional[str], Optional[str], str, int], None]]:
+        """Return the stable provider-neutral callback for trusted owner wiring.
+
+        The callback uses the same local quota owner as the account provider
+        session. Resource providers may explicitly inject it into Risk and
+        Execution owners; GatewayOperator does not propagate it implicitly.
+        """
+
+        return self._dispatch_quota_admission
 
 
 @dataclass(frozen=True, slots=True)
