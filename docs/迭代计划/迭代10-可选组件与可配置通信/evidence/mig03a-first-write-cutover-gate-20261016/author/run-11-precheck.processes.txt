@@ -1,0 +1,5 @@
+   128016       0       0      62480  ?              0   Oct 13 D:\source_code\ai-for-investor\src\backend\.venv\Scripts\python.exe
+   132224       0       0      66688  ?              0   Oct 13 C:\Users\yunji\AppData\Local\Programs\Python\Python312\python.exe
+     2769    2767    2767      19000  ?         197610 12:33:36 /c/anaconda3/python
+   128656       0       0      63120  ?              0 12:33:38 C:\anaconda3\python.exe
+   134224       0       0      68688  ?              0 12:33:39 C:\anaconda3\python.exe

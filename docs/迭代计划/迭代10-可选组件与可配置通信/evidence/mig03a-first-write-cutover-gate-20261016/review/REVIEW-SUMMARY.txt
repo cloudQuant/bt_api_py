@@ -1,0 +1,76 @@
+# MIG03A adversarial review — FINAL SUMMARY (r1, 2026-10-16)
+Reviewer: independent review agent (read-only on repo). Evidence: this dir.
+
+## VERDICT: GO (with disclosures)
+
+## Hash verification (step 1)
+- service_migration_gate.py  70700cd6...f0cc39d  16721 B  MATCH expected + author sha256.txt
+- service_host.py            07e95f92...f9d0be1  66489 B  MATCH
+- test_service_migration_gate.py afaca97a...8eb263cb 17406 B MATCH
+- git diff vs author's service_host.wiring.diff.txt: byte-identical (diff-vs-author.txt, exit 0)
+- git numstat service_host.py: 24 insertions, 0 deletions; both new files untracked = pure additions
+
+## Reproductions (fresh basetemps, PYTHONPATH convention, PYTEST_DISABLE_PLUGIN_AUTOLOAD=1, --noconftest --import-mode=importlib)
+- run-r01 gate suite        12 passed  EXIT 0   (author claim "12 items" confirmed)
+- run-r02 test_service_host.py 32 passed EXIT 0  (author claim "32 tests" confirmed)
+- run-r03 host integration   1 passed  EXIT 0
+- run-r04 registry          21 passed  EXIT 0
+- run-r05 REG03 durable      1 passed  EXIT 0
+- run-r06 execution integration 1 passed EXIT 0
+- run-r07 ruff check (3 files) All checks passed, EXIT 0
+
+## Adversarial probes (probes/, real file IO, no mocks)
+- probe_a (78 checks, EXIT 0): 11 corruption modes x 7 ops all fail-closed CUTOVER_MARKER_UNREADABLE
+  (empty, truncated, non-dict JSON, null, wrong schema, unknown status, SEALED-without-first-write,
+  COMMITTED-with-first-write, accepted_reverse==destination, marker-is-directory, truncation-after-seal);
+  valid sealed control still refuses old epoch.
+- probe_b (EXIT 0): seal one-way (first=True, second=False, first fact preserved); old/None/unknown start
+  refused REVERSE_MIGRATION_REFUSED; destination passes; post-seal rollback refused (old/None/unknown);
+  sealed marker byte-identical after refusals; state untouched; pre-seal rollback True + marker removed.
+- probe_c v2 (EXIT 0): acceptance durable across fresh interpreters; scoped (unknown still refused,
+  destination allowed); rollback by accepted epoch True in fresh process; afterwards fully disarmed;
+  model check: v1 "failure" was a probe artifact (deref marker=None), rerun proved clean (v1 kept).
+- probe_d (EXIT 0; part1 invariants): same-pair concurrent arm 40/40 both ok, single COMMITTED, no tmp
+  leftovers, final marker readable. FINDING: conflicting-pair concurrent arm -> both succeeded 30/40,
+  conflict refusal fired only 10/40 (last-writer-wins check-then-write TOCTOU); same-pair racer-returned
+  migration_id mismatched the durable file in 18/40.
+- probe_e (EXIT 0): host-level; no marker+default -> pre-existing UNSUPPORTED_PUBLIC_PORT, no marker
+  created; sealed+old -> ServiceHostError code REVERSE_MIGRATION_REFUSED, calls==[], state intact;
+  sealed+destination and sealed+accepted-reverse pass gate; corrupt -> CUTOVER_MARKER_UNREADABLE;
+  empty-string epoch -> INVALID_DEPLOYMENT_EPOCH at ctor.
+
+## Findings
+F1 (moderate, single-process assumption): arm conflict semantics are not atomic. service_migration_gate.py
+  L145-153 read-check then L160 write; concurrent conflicting arms can both "succeed" (empirical 30/40).
+  Final file is always one valid COMMITTED doc (no torn file). Seal/accept/rollback share the same
+  read-modify-write shape (L182-195, L247-258, L276-287) -> concurrent first writes may both return True
+  (last fact wins). Enforcement uses epochs only, so gate decisions are unaffected; bounded to
+  multi-operator/multi-writer races. Single-operator drill (incr-B) unaffected.
+F2 (disclosure, author-disclosed): a genuinely old binary without the gate code cannot be refused by
+  cooperative code; the gate refuses old/undeclared epochs presented by gated code.
+F3 (disclosure, author-stated scope): no production code arms/seals/accepts yet (only tests call those
+  APIs); consumer is enforce_migration_start via ServiceHost only. Gate is inert until incr-B.
+F4 (nit): _marker_from_document schema_version check uses != 1, so JSON true/1.0 passes (True==1);
+  harmless - all other fields are strictly validated; foreign docs are rejected elsewhere.
+F5 (design note, not a defect): post-seal rollback with deployment_epoch=None after acceptance removes
+  the marker without naming an epoch (L253-257, "optionally named"); rollback is not wired into
+  ServiceHost, so no production path triggers it unattended.
+
+## Unproven / deferred claims
+- None of the author's status-note claims were falsified. Line refs "L865/L867" are of the iteration
+  plan quoted inside mig03-recon.md (which itself is 107 lines); plan L865 quote verified verbatim in
+  docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md:865.
+- Deferred: real-old-binary enforcement boundary (author open question 1); successor-epoch re-adoption
+  (open question 2); concurrent mutation semantics (F1) - no test added by author.
+
+## Interaction with dirty worktree
+- git-status-before/after: other agents modified bt_api_py/service_execution_group.py,
+  service_execution_group_client.py, service_group_reservations.py and created/modified contract tests
+  DURING the review window; none touched by me; all my runs' suites passed regardless.
+- git-status-final == after (stable). No repo writes by this review. Odd pre-existing untracked entries
+  ("0", "%SystemDrive%/") predate my runs.
+- Resident PIDs 128016/132224 only in every precheck; no competing pytest runners; zero waits needed.
+
+## Resume instructions (if truncated)
+Rerun: see run-*.cmd.txt in this dir; probes under probes/*.cmd.txt. Status file:
+D:/bt_api_py/.codex-tmp/mig03a-review-status.md. All review steps 1-7 complete.

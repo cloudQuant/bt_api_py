@@ -41,6 +41,7 @@ from .service_components import (
 )
 from .service_config import ServiceConfig, ServiceConfigError
 from .service_deployment import validate_deployment
+from .service_migration_gate import MigrationGateError, enforce_migration_start
 from .service_registry import (
     ActiveRegistrationContext,
     PrincipalGrant,
@@ -221,6 +222,7 @@ class ServiceHost:
         *,
         service_directory: Mapping[str, ServiceConfig] | None = None,
         trusted_clients: TrustedServiceClients | None = None,
+        migration_deployment_epoch: str | None = None,
     ) -> None:
         if type(config) is not ServiceConfig:
             raise ServiceHostError("PARSED_SERVICE_CONFIG_REQUIRED")
@@ -238,6 +240,10 @@ class ServiceHost:
             raise ServiceHostError("INVALID_SERVICE_DIRECTORY")
         if trusted_clients is not None and type(trusted_clients) is not TrustedServiceClients:
             raise ServiceHostError("INVALID_TRUSTED_CLIENTS")
+        if migration_deployment_epoch is not None and (
+            type(migration_deployment_epoch) is not str or not migration_deployment_epoch
+        ):
+            raise ServiceHostError("INVALID_DEPLOYMENT_EPOCH")
 
         self._config = config
         self._authority = authority
@@ -247,6 +253,7 @@ class ServiceHost:
             None if service_directory is None else MappingProxyType(dict(service_directory))
         )
         self._trusted_clients = trusted_clients
+        self._migration_deployment_epoch = migration_deployment_epoch
         try:
             self._specs = component_specs(config.components)
         except ServiceComponentError as exc:
@@ -331,6 +338,12 @@ class ServiceHost:
             raise ServiceHostError("INVALID_HOST_STATE")
         self._owner_thread = threading.get_ident()
         try:
+            # Iteration-10 MIG03 / plan section 11.3 step 6: a sealed cutover
+            # marker refuses the old deployment/epoch before any start side
+            # effect (the registry open itself would write a new service
+            # epoch, drop prior sessions, and release write claims).  Without
+            # an armed marker this check is a pure no-op.
+            self._enforce_migration_gate()
             self._validate_authority_references()
             self._validate_outbound_bindings()
 
@@ -765,6 +778,17 @@ class ServiceHost:
         self._state = "close_failed" if cleanup_failures else "closed"
         if cleanup_failures:
             raise ServiceHostError("CLOSE_FAILED")
+
+    def _enforce_migration_gate(self) -> None:
+        """Refuse a sealed cutover state before any start side effect."""
+
+        try:
+            enforce_migration_start(
+                self._registry_path,
+                deployment_epoch=self._migration_deployment_epoch,
+            )
+        except MigrationGateError as exc:
+            raise ServiceHostError(exc.code) from None
 
     def _validate_authority_references(self) -> None:
         authority = self._authority

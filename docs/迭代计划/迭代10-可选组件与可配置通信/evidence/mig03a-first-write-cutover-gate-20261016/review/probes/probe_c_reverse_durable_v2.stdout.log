@@ -1,0 +1,9 @@
+{
+ "checks": [
+  "pre-acceptance old refused REVERSE_MIGRATION_REFUSED",
+  "accept recorded on sealed marker",
+  "fresh interpreter: durable acceptance, scoped refusal, rollback True + marker gone",
+  "after rollback: no marker, all epochs allowed, no-op writes (fully disarmed)"
+ ],
+ "failures": []
+}

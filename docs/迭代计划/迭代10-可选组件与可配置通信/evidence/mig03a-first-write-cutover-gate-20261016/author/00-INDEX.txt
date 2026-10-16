@@ -1,0 +1,26 @@
+# MIG03 increment-A evidence index (D:/temp/it10mig03a-20261016-r1)
+# generated: 2026-10-16T04:35:26Z
+# host: win32, interpreter C:/anaconda3/python.exe (py3.11.5)
+# convention: run-NN-<name>.cmd.txt = exact command; .stdout.txt/.stderr.txt captured; .exit.txt = exit code
+# pytest needs '-p no:asyncio -p no:cacheprovider' in this env (pytest-asyncio 0.23 + importlib import-mode collection conflict; pytest-timeout not installed)
+
+run-01-compile  EXIT=EXIT:0
+run-02-newtests-1  EXIT=4
+run-03-newtests-1  EXIT=2
+run-04-newtests-1  EXIT=0
+run-05-newtests-2  EXIT=0
+run-06-collectonly  EXIT=0
+run-07-reg-host  EXIT=0
+run-08-reg-registry  EXIT=0
+run-09-reg-host-integration  EXIT=0
+run-10-reg-reg03-durable  EXIT=0
+run-11-reg-execution-integration  EXIT=0
+run-12-ruff  EXIT=1
+run-13-ruff-2  EXIT=0
+run-14-newtests-1-final  EXIT=0
+run-15-newtests-2-final  EXIT=0
+run-16-reg-host-final  EXIT=0
+run-17-newtests-1-v2  EXIT=0
+run-18-newtests-2-v2  EXIT=0
+run-19-ruff-3  EXIT=0
+run-20-collectonly-final  EXIT=0

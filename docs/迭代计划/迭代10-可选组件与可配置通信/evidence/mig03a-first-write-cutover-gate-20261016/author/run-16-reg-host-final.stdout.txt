@@ -1,0 +1,13 @@
+................................                                         [100%]
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/unit/test_service_host.py: 13 warnings
+  C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+    self._get_loop()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+32 passed, 14 warnings in 3.15s

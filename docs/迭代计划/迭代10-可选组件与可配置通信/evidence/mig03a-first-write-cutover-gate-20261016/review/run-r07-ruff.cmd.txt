@@ -1,0 +1,1 @@
+C:/anaconda3/python.exe -m ruff check bt_api_py/service_migration_gate.py bt_api_py/service_host.py tests/unit/test_service_migration_gate.py

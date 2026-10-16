@@ -1,0 +1,44 @@
+SIM105 Use `contextlib.suppress(FileNotFoundError)` instead of `try`-`except`-`pass`
+   --> bt_api_py\service_migration_gate.py:441:9
+    |
+439 |                   os.close(directory_fd)
+440 |       finally:
+441 | /         try:
+442 | |             temporary.unlink()
+443 | |         except FileNotFoundError:
+444 | |             pass
+    | |________________^
+help: Replace `try`-`except`-`pass` with `with contextlib.suppress(FileNotFoundError): ...`
+
+SIM300 [*] Yoda condition detected
+   --> tests\unit\test_service_migration_gate.py:130:12
+    |
+128 |       armed = arm_migration_cutover(state, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH)
+129 |
+130 |       assert BUSINESS_WRITE_FACT_KINDS == {
+    |  ____________^
+131 | |         "dispatch",
+132 | |         "order",
+133 | |         "ownership",
+134 | |         "reservation",
+135 | |         "idempotency",
+136 | |         "cursor",
+137 | |     }
+    | |_____^
+138 |       assert (
+139 |           record_migration_first_write(
+    |
+    |
+129 |
+    -     assert BUSINESS_WRITE_FACT_KINDS == {
+130 +     assert {
+131 |         "dispatch",
+--------------------------------------------------------------------------------
+136 |         "cursor",
+    -     }
+137 +     } == BUSINESS_WRITE_FACT_KINDS
+138 |     assert (
+    |
+
+Found 2 errors.
+[*] 1 fixable with the `--fix` option (1 hidden fix can be enabled with the `--unsafe-fixes` option).

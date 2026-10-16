@@ -1,0 +1,11 @@
+{
+ "checks": [
+  "pre-acceptance old refused REVERSE_MIGRATION_REFUSED",
+  "accept recorded on sealed marker",
+  "accepted old epoch passes (parent)",
+  "fresh interpreter: durable acceptance, scoped refusal, rollback True + marker gone"
+ ],
+ "failures": [
+  "third interpreter rc=1"
+ ]
+}

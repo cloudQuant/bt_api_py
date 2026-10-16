@@ -1,0 +1,2 @@
+cd D:/bt_api_py && C:/anaconda3/python.exe -c "import py_compile,sys; py_compile.compile(r'bt_api_py/service_migration_gate.py', doraise=True); py_compile.compile(r'bt_api_py/service_host.py', doraise=True); import bt_api_py.service_migration_gate as m; import bt_api_py.service_host as h; print('COMPILE-OK', m.MIGRATION_MARKER_SCHEMA_VERSION, m.REFUSAL_REVERSE_MIGRATION_REFUSED)"
+EXIT: 0 (see run-01-compile.exit.txt)

@@ -1,0 +1,11 @@
+{
+ "checks": [
+  "1 no marker + default kwarg: pre-existing failure, no marker created",
+  "2 sealed + old epoch: REVERSE_MIGRATION_REFUSED, no side effects, state intact",
+  "3 sealed + destination epoch: gate passthrough to pre-existing failure",
+  "4 sealed + accepted reverse + old epoch: gate passthrough allowed",
+  "5 corrupt marker: CUTOVER_MARKER_UNREADABLE surfaced via ServiceHostError, no side effects",
+  "6 empty-string epoch rejected INVALID_DEPLOYMENT_EPOCH"
+ ],
+ "failures": []
+}

@@ -1,0 +1,1 @@
+cd D:/bt_api_py && C:/anaconda3/python.exe -m pytest tests/unit/test_service_migration_gate.py -v

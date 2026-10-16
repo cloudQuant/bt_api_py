@@ -1,0 +1,1 @@
+cd D:/bt_api_py && C:/anaconda3/python.exe -m pytest -p no:asyncio -p no:cacheprovider tests/unit/test_service_host.py -q

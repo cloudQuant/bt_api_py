@@ -1,0 +1,17 @@
+{
+ "checks": [
+  "pre-seal rollback True + marker removed",
+  "seal first=True, second=False (one-way)",
+  "first fact preserved = dispatch",
+  "sealed start old refused REVERSE_MIGRATION_REFUSED",
+  "sealed start undeclared-None refused REVERSE_MIGRATION_REFUSED",
+  "sealed start unknown refused REVERSE_MIGRATION_REFUSED",
+  "destination epoch passes",
+  "post-seal rollback old refused REVERSE_MIGRATION_REFUSED",
+  "post-seal rollback None refused REVERSE_MIGRATION_REFUSED",
+  "post-seal rollback unknown refused REVERSE_MIGRATION_REFUSED",
+  "sealed marker byte-identical after refusals",
+  "protected state untouched"
+ ],
+ "failures": []
+}
