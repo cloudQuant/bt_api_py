@@ -1,0 +1,9 @@
+# Risk FX预算组件父仓交付
+
+Risk dev `6d51dc8ec28364cb79688caeb0073e0d3615beff` 在已接受AFI04 worker提交40850032之后，精确提交budget_admission、service_component及新增FX测试三路径。两条不相关portfolio_ref工作区变更未提交；DIM03/04其他变更未纳入。
+
+R4两个节点曾失败在源金额文本10的解析：源金额和FX比率错误复用了18位金额单位/int64转换。R5仅修复_decimal_text对应解析路径（实际函数为_budget_decimal），保留规范字符串、精确Decimal、38位系数/18位小数/指数边界；持久预算金额仍按pool scale保留int64限制。目录在proposal/approve/publish/confirm及解析时重查可信FX来源与新鲜度，按精确Fraction守恒，不能将异步汇总当全局原子准入。
+
+原作者R5仅重跑此前失败的两个节点，2 passed / 3.97s、exit0、stderr空、148 source pins和两个HEAD前后不变。独立review_bt_v3_cpf对R4→R5窄变化与排除portfolio_ref的overlay给GO_STATIC；Root核对原输出、源码包pin和精确提交范围，未重跑QA。不宣称一次完整大套件通过。测试固定导入AFI compiler pin fd1245c39fb8ad03110e97d5b1245f9190b1627077d9a22281b0ebab397ad03c，尚不代表AFI政策API/UI链验收。
+
+本次随AFI04父仓交付更新Risk gitlink到6d51dc8，包含两个分别已验收并提交的子仓小轮；AFI04正式裁定只依赖40850032及既有分析证据，FX组件不新增AFI05/AFI06正式PASS。归档如实保留历史spec/运行来源，当前HEAD不冒充历史QA来源。

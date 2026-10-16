@@ -1,0 +1,58 @@
+{
+  "risk_commit": "6d51dc8ec28364cb79688caeb0073e0d3615beff",
+  "parent": "40850032f65d66c91b4b4299e28f27408df2add0",
+  "test_execution": "AUTHOR_R5_ONLY_TWO_PREVIOUSLY_FAILED_FX_NODES",
+  "formal_afi05_afi06": false,
+  "qa_members": {
+    "qa/exit.txt": {
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    "qa/stdout.log": {
+      "bytes": 100,
+      "sha256": "2fa215afa139c091c1f86dd8f63681efd54a5cf6a124dfb1be5e10f785bc79e1"
+    },
+    "qa/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "qa/junit.xml": {
+      "bytes": 542,
+      "sha256": "cbbce8c4ccd25fcc0d62dc69b29c8951355113219f643a25e6be9198fa04366a"
+    },
+    "qa/result.json": {
+      "bytes": 807,
+      "sha256": "b72d95e2382276c4de9a9c05646e56b743f0343da8381ed14792c00225585789"
+    },
+    "qa/source-before.json": {
+      "bytes": 28571,
+      "sha256": "3ead5b8a3c869f88a7b258f52f358e24be308fd4672b882ca5031b40353e53d9"
+    },
+    "qa/source-after.json": {
+      "bytes": 28571,
+      "sha256": "3ead5b8a3c869f88a7b258f52f358e24be308fd4672b882ca5031b40353e53d9"
+    },
+    "qa/spec.json": {
+      "bytes": 32027,
+      "sha256": "c1938869cd39f94834721beac37e6d7161b952e603bfa26ebe91e1a8014208ce"
+    },
+    "source/source-export-manifest.json": {
+      "bytes": 77976,
+      "sha256": "67e682420351154b48f728f25a26a301c6de16fc11cfd08ae62ac2be369961e9"
+    },
+    "source/service-component-fx-overlay.patch": {
+      "bytes": 29849,
+      "sha256": "11f3a1a048e5c1c3e6926a6c9afc1a833ee5667d25a6314ebfc06de4d0699755"
+    },
+    "source/budget-admission-fx-overlay.patch": {
+      "bytes": 5464,
+      "sha256": "90a4fa3e76b56c6a796d1c726afb49d0f3c7a08f723b01a973e923e8504c743b"
+    }
+  },
+  "archive_sha256": "90b307d22aefef437e65da3b718bf6d86be0d461618c187607ba4b7a2d44b8f7",
+  "commit_blobs": {
+    "src/bt_api_risk/budget_admission.py": "04737d88b9bdc80058430e1dbad681284580dccbb0d228ee47e604c0f84e07ae",
+    "src/bt_api_risk/service_component.py": "0e3c841e17ad9b04d96c94c94cf0a9a4491a72d73dabe9fe602b5314bfe7e350",
+    "tests/test_policy_catalog_budget_fx.py": "73413595425af6575a05f9ddc1a0655fcc4832fda7250140790dbeb88d8566ee"
+  }
+}

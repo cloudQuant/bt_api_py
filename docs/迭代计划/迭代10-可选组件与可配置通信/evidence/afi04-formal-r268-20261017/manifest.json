@@ -1,0 +1,291 @@
+{
+  "schema_version": 1,
+  "round": "R268",
+  "case_id": "AFI04",
+  "record_status": "ROOT_ADJUDICATION_DRAFT",
+  "created_utc": "2026-10-16T17:07:47Z",
+  "official_plan_path": "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md",
+  "official_plan_row": "估值/现金流/收益、敞口/回撤、VaR/ES、压力测试按版本和相同输入可复现；报告不授予交易权 | 数值基准与时间对齐/符号/单位反例；真实独立分析进程，任务限额/取消/超时；离线输入零账户登录",
+  "formal_progress_mutated": false,
+  "source_commits": {
+    "afi_v2_http_sdk_owner_ui": "ad9c8dcc7ba6bef1d2cbd915551fe95932e92ee1",
+    "afi_v1_persisted_offline_datasets_http_and_migration": "056d40f5df7702a1d6d8a14cf0238d3303ce2f6d",
+    "risk_snapshot_analytics_task_service": "131175a4070c930f1dd5186ea707d6bc9bbb4310",
+    "risk_v1_numeric_metrics": "6c81653e2a586f47c17cba5f898f23a247b1905d",
+    "risk_v2_task_and_report_integration": "dc30c1c118cf587538150fc5016c8956e30c60a9",
+    "risk_bounded_worker_lifecycle": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+    "risk_v1_spawned_worker": "40850032f65d66c91b4b4299e28f27408df2add0",
+    "risk_current_tip_context_only": "6d51dc8ec28364cb79688caeb0073e0d3615beff"
+  },
+  "current_tips_context_only": {
+    "afi": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+    "sdk": "1ad3a0b5623d56d5182dd5f0835ab0c37b9e17e8",
+    "risk": "6d51dc8ec28364cb79688caeb0073e0d3615beff",
+    "base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+    "transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+    "interpretation": "Metadata only. The raw QA source guards record the actual execution snapshots; these current tip hashes are not a whole-HEAD QA claim. Risk 6d51 is the later FX-policy descendant and was not part of the AFI04 R4/R7 runtime source snapshot."
+  },
+  "evidence_runs": [
+    {
+      "id": "afi_v1_http_r7",
+      "title": "Authenticated V1 HTTP to SDK owner to independent Risk Host",
+      "source_output_directory": "D:\\temp\\iteration10-afi04-v1-http-process-author-20261017-r7-output",
+      "selected_node": "tests/test_service_read_portfolio_analytics_process.py::test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_risk_host",
+      "evidence_level": "OFFLINE_SYNTHETIC_V1_AUTHENTICATED_AFI_HTTP_TO_SDK_OWNER_TO_INDEPENDENT_RISK_HOST_SPAWNED_WORKER_ONLY",
+      "pytest_exit": 0,
+      "junit": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "time_seconds": "10.936",
+        "testcases": [
+          {
+            "name": "test_authenticated_http_v1_persists_offline_dataset_and_uses_spawned_risk_host",
+            "time": "10.600"
+          }
+        ]
+      },
+      "source_guard": {
+        "source_count": 2858,
+        "sources_unchanged": true,
+        "heads_unchanged": true,
+        "heads_before": {
+          "D:\\source_code\\ai-for-investor": "fe4c83c5a3425283e2ca3a3eae7c6cf035b6d0bc",
+          "D:\\bt_api_py": "4f5ae610b21ac635cc97099209690f8e16995d6c",
+          "D:\\bt_api_py\\bt_api\\bt_api_base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+          "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+          "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+        },
+        "heads_after": {
+          "D:\\source_code\\ai-for-investor": "fe4c83c5a3425283e2ca3a3eae7c6cf035b6d0bc",
+          "D:\\bt_api_py": "4f5ae610b21ac635cc97099209690f8e16995d6c",
+          "D:\\bt_api_py\\bt_api\\bt_api_base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+          "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+          "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+        }
+      },
+      "raw_bundle": {
+        "path": "raw/afi-v1-http-r7-raw.zip",
+        "bytes": 264806,
+        "sha256": "dac69acf86a056a6ef54c0795a0a50e2387aab9d9cefc36d0a4718d99112ac6a",
+        "members": [
+          {
+            "name": "exit.txt",
+            "bytes": 3,
+            "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+          },
+          {
+            "name": "junit.xml",
+            "bytes": 410,
+            "sha256": "b003b40fc459bb550de8b4403efb811c8118a8cc029313e681d9ea4815cedb9c"
+          },
+          {
+            "name": "result.json",
+            "bytes": 1359,
+            "sha256": "ced6edb5dc995363f3877692f281612be9c2656cf68f532ce86ab4184a484f16"
+          },
+          {
+            "name": "source-before.json",
+            "bytes": 519455,
+            "sha256": "72b64f2c0701070bc0c81ddc537e444f0ed495d58fd4afe8f7be1218ef366803"
+          },
+          {
+            "name": "source-after.json",
+            "bytes": 519455,
+            "sha256": "72b64f2c0701070bc0c81ddc537e444f0ed495d58fd4afe8f7be1218ef366803"
+          },
+          {
+            "name": "stdout.log",
+            "bytes": 713,
+            "sha256": "b9512057fa53d14479f8ea2f30a4d0ec6e85275eb1432f2101451e5e3ec34a3d"
+          },
+          {
+            "name": "stderr.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        ]
+      }
+    },
+    {
+      "id": "afi_v1_migration_r1",
+      "title": "Merged Alembic head and existing data preservation",
+      "source_output_directory": "D:\\temp\\iteration10-afi04-v1-migration-author-20261017-r1-output",
+      "selected_node": "test_portfolio_analytics_migration.py::test_upgrade_to_merged_head_preserves_existing_portfolio_composition; test_portfolio_analytics_migration.py::test_fresh_database_upgrades_to_the_single_merged_head",
+      "evidence_level": "SYNTHETIC_ALEMBIC_FULL_HEAD_AND_EXISTING_DATA_PRESERVATION_ONLY",
+      "pytest_exit": 0,
+      "junit": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "time_seconds": "14.514",
+        "testcases": [
+          {
+            "name": "test_upgrade_to_merged_head_preserves_existing_portfolio_composition",
+            "time": "7.899"
+          },
+          {
+            "name": "test_fresh_database_upgrades_to_the_single_merged_head",
+            "time": "5.175"
+          }
+        ]
+      },
+      "source_guard": {
+        "source_count": 1916,
+        "sources_unchanged": true,
+        "heads_unchanged": true,
+        "heads_before": {
+          "D:\\source_code\\ai-for-investor": "fe4c83c5a3425283e2ca3a3eae7c6cf035b6d0bc"
+        },
+        "heads_after": {
+          "D:\\source_code\\ai-for-investor": "fe4c83c5a3425283e2ca3a3eae7c6cf035b6d0bc"
+        }
+      },
+      "raw_bundle": {
+        "path": "raw/afi-v1-migration-r1-raw.zip",
+        "bytes": 176842,
+        "sha256": "57006672af60db77206b9bf2d2000960cd645be6b23548e0f4d47b6a975004b0",
+        "members": [
+          {
+            "name": "exit.txt",
+            "bytes": 3,
+            "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+          },
+          {
+            "name": "junit.xml",
+            "bytes": 522,
+            "sha256": "9e7bb1b127e293c55f0d08b8d0228893575ce0b1db2678fdc9cdab8f9b0e3cac"
+          },
+          {
+            "name": "result.json",
+            "bytes": 649,
+            "sha256": "0eafcc902a335205cf718173dc001c018e54ee4c3546270751b12da6500e3ace"
+          },
+          {
+            "name": "source-before.json",
+            "bytes": 340678,
+            "sha256": "0a4ebf5f10387fe97f3bf7e342ba0c6e49c6540d1f841be803cf051537321beb"
+          },
+          {
+            "name": "source-after.json",
+            "bytes": 340678,
+            "sha256": "0a4ebf5f10387fe97f3bf7e342ba0c6e49c6540d1f841be803cf051537321beb"
+          },
+          {
+            "name": "stdout.log",
+            "bytes": 802,
+            "sha256": "c9d6bbabdb4605f14781857169c1859d6154f2aadcd426e32974e0e7a3c86a38"
+          },
+          {
+            "name": "stderr.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        ]
+      }
+    },
+    {
+      "id": "risk_v1_worker_r4",
+      "title": "Risk V1 analytics spawned worker",
+      "source_output_directory": "D:\\temp\\iteration10-risk-v1-worker-author-20261016-r4-output",
+      "selected_node": "test_service_analytics_v1_worker.py::test_v1_task_returns_traceable_modified_dietz_from_spawned_worker; test_service_analytics_v1_worker.py::test_v1_incomplete_flow_coverage_is_unavailable_in_spawned_worker",
+      "evidence_level": "OFFLINE_SYNTHETIC_V1_RISK_TASK_SERVICE_SPAWNED_WORKER_ONLY",
+      "pytest_exit": 0,
+      "junit": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "time_seconds": "1.407",
+        "testcases": [
+          {
+            "name": "test_v1_task_returns_traceable_modified_dietz_from_spawned_worker",
+            "time": "0.565"
+          },
+          {
+            "name": "test_v1_incomplete_flow_coverage_is_unavailable_in_spawned_worker",
+            "time": "0.542"
+          }
+        ]
+      },
+      "source_guard": {
+        "source_count": 10,
+        "sources_unchanged": true,
+        "heads_unchanged": true,
+        "heads_before": {
+          "D:\\bt_api_py": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+          "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf"
+        },
+        "heads_after": {
+          "D:\\bt_api_py": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+          "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf"
+        }
+      },
+      "raw_bundle": {
+        "path": "raw/risk-v1-worker-r4-raw.zip",
+        "bytes": 2766,
+        "sha256": "a14aa61f5c731658765423f181de98d0c5226ab3f87e5887f6f78360670d14d4",
+        "members": [
+          {
+            "name": "exit.txt",
+            "bytes": 3,
+            "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+          },
+          {
+            "name": "junit.xml",
+            "bytes": 549,
+            "sha256": "19435687081188ed9527fa90555be692c090ad19f93156fbcbb9e9950a8f2e4a"
+          },
+          {
+            "name": "result.json",
+            "bytes": 952,
+            "sha256": "905b628ab94b7aa78f4434171106c8f3f317147981cf3614a195498822e5aaee"
+          },
+          {
+            "name": "source-before.json",
+            "bytes": 1460,
+            "sha256": "875b4e129d1742b208347d16169f1f6e36d5efe208d448d75eba303d803c6811"
+          },
+          {
+            "name": "source-after.json",
+            "bytes": 1460,
+            "sha256": "875b4e129d1742b208347d16169f1f6e36d5efe208d448d75eba303d803c6811"
+          },
+          {
+            "name": "stdout.log",
+            "bytes": 196,
+            "sha256": "448a72d38f0d3b164a827c9edee0fd2abaff880a18f36454b55653192cf72857"
+          },
+          {
+            "name": "stderr.log",
+            "bytes": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        ]
+      }
+    }
+  ],
+  "retained_prior_evidence": {
+    "afi_v2_http": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-analytics-http-risk-r236-20261016/round-record.md; raw-evidence.zip SHA-256 ceb22c1ea2005363df2a9b64880216f380183d67d35c3a15ec735ccc865de0c6",
+    "risk_v2_and_compat": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-portfolio-analytics-v2-20261016/round-record.md",
+    "risk_worker_lifecycle": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-worker-lifecycle-20261016/round-record.md",
+    "risk_v1_metrics": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/risk-portfolio-metrics-20261016/root-adjudication.md"
+  },
+  "exclusions": [
+    "command.json",
+    "spec.json",
+    "runner.py",
+    "running.json",
+    "pytest-tmp databases and child logs not required by these raw result assertions"
+  ],
+  "adjudication_boundary": "This packet consolidates source commits and raw synthetic evidence for Root review. It does not itself change the official tracker or declare AFI04 PASS. No real account, broker login, provider data, or trading permission is claimed.",
+  "packet_record": {
+    "path": "round-record.md",
+    "bytes": 8710,
+    "sha256": "04f929b9293ee0d62de7c512eb6616860cd1d71fbfc7715927b4cd82e2dd1ced"
+  }
+}
