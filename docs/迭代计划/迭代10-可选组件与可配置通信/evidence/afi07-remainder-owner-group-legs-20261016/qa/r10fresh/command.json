@@ -1,0 +1,42 @@
+{
+  "argv": [
+    "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-approved-target-http-pytest-r3.ini",
+    "--rootdir",
+    "D:\\source_code\\ai-for-investor\\src\\backend",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\afi_iter10_approved_target_http_root_20261016_r10fresh\\junit.xml",
+    "--basetemp=D:\\temp\\afi_iter10_approved_target_http_root_20261016_r10fresh\\pytest-tmp",
+    "tests/test_service_read_authorized_http_integration.py::test_approved_target_http_reaches_real_execution_host_and_replays_journal",
+    "tests/test_service_read_authorized_http_integration.py::test_approved_target_operation_is_durable_across_concurrent_processes_and_restart",
+    "tests/test_service_read_authorized_http_integration.py::test_afi07_strategy_and_http_orders_share_one_owner_with_exactly_once_dispatch",
+    "tests/test_service_read_authorized_http_integration.py::test_afi07_ordinary_operations_do_not_modify_group_legs",
+    "tests/test_service_read_authorized_http_integration.py::test_afi07_accepted_group_revocation_disposition_is_durable"
+  ],
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\root;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\execution\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\base\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\transport\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\monitor\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\gateway\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS",
+    "AFI_DUAL_LIVE_PREFLIGHT_ONLY",
+    "PYTEST_PLUGINS",
+    "PYTEST_CURRENT_TEST",
+    "PYTHONHOME",
+    "PYTHONUSERBASE",
+    "PYTHONSTARTUP",
+    "PYTHONINSPECT"
+  ],
+  "started_utc": "2026-10-16T02:44:39.969304+00:00"
+}
