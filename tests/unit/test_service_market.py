@@ -13,6 +13,7 @@ from bt_api_base.market_protocol import (
     MARKET_EVENT_SCHEMA,
     MARKET_EVENT_SCHEMA_VERSION,
     MarketInstrumentKey,
+    MarketSourceDescriptor,
     MarketSubscriptionKey,
 )
 from bt_api_base.service_protocol import (
@@ -101,6 +102,8 @@ class FakeMarketService:
         self.registrations: dict[str, set[str]] = {}
         self.starts: dict[str, int] = {}
         self.stops: dict[str, int] = {}
+        self.subscribe_arguments: list[dict[str, object]] = []
+        self.source_descriptor: MarketSourceDescriptor | None = None
 
     def handle(self, context, arguments, operation: str):
         key = MarketSubscriptionKey.from_dict(arguments["key"])
@@ -109,17 +112,21 @@ class FakeMarketService:
         events = self.events.setdefault(stream_id, [])
         registrations = self.registrations.setdefault(stream_id, set())
         if operation == "market.subscribe":
+            self.subscribe_arguments.append(dict(arguments))
             already_subscribed = context.registration_id in registrations
             if not registrations:
                 self.starts[stream_id] = self.starts.get(stream_id, 0) + 1
             registrations.add(context.registration_id)
-            return {
+            reply = {
                 "stream_id": stream_id,
                 "epoch": epoch,
                 "head": events[-1].header.sequence if events else 0,
                 "oldest_sequence": events[0].header.sequence if events else 1,
                 "already_subscribed": already_subscribed,
             }
+            if arguments.get("require_source_descriptor") is True and self.source_descriptor is not None:
+                reply["source_descriptor"] = self.source_descriptor.to_dict()
+            return reply
         if operation == "market.unsubscribe":
             registrations.discard(context.registration_id)
             if not registrations:
@@ -292,6 +299,7 @@ def _make_client(
     key: MarketSubscriptionKey = _KEY,
     queue_capacity=16,
     queue_max_bytes=1_048_576,
+    require_source_descriptor=False,
 ):
     capability = ServiceCapability("market-instance", "service.market_source", _OPERATIONS)
     grant = ResourceGrant(
@@ -384,6 +392,7 @@ def _make_client(
         queue_max_bytes=queue_max_bytes,
         head_check_interval_seconds=10.0,
         monotonic_clock=clock,
+        require_source_descriptor=require_source_descriptor,
     )
     return client, runtime, registry, market, transport, subscribers
 
@@ -609,3 +618,98 @@ def test_failed_local_close_retains_subscriber_for_explicit_retry(tmp_path):
     assert client._subscriber is None
     runtime.close()
     registry.close()
+
+
+def _test_source_descriptor(epoch: str = "market-epoch-one") -> MarketSourceDescriptor:
+    return MarketSourceDescriptor(
+        key=_KEY,
+        stream_id=_KEY.stream_id,
+        epoch=epoch,
+        provider=_KEY.instrument.provider,
+        source="synthetic.native.market",
+        connection_generation=7,
+        clock_domain_id="synthetic-clock-domain",
+        clock_source_session_id="synthetic-clock-session",
+        clock_source="synthetic.monotonic",
+    )
+
+
+def test_source_descriptor_requires_explicit_opt_in_and_preserves_legacy_request_shape(
+    tmp_path,
+):
+    client, runtime, registry, market, _transport, _subscribers = _make_client(tmp_path)
+    try:
+        bootstrap = client.start()
+        assert market.subscribe_arguments == [{"key": _KEY.to_dict()}]
+        assert bootstrap.source_descriptor is None
+        assert client.source_descriptor is None
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_required_source_descriptor_is_typed_and_bound_to_subscribe_epoch(tmp_path):
+    client, runtime, registry, market, _transport, _subscribers = _make_client(
+        tmp_path, require_source_descriptor=True
+    )
+    descriptor = _test_source_descriptor()
+    market.source_descriptor = descriptor
+    try:
+        bootstrap = client.start()
+        assert market.subscribe_arguments == [
+            {"key": _KEY.to_dict(), "require_source_descriptor": True}
+        ]
+        assert type(bootstrap.source_descriptor) is MarketSourceDescriptor
+        assert bootstrap.source_descriptor == descriptor
+        assert client.source_descriptor == descriptor
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_required_source_descriptor_missing_from_legacy_reply_fails_closed(tmp_path):
+    client, runtime, registry, market, _transport, _subscribers = _make_client(
+        tmp_path, require_source_descriptor=True
+    )
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            client.start()
+        assert error.value.code == "SOURCE_DESCRIPTOR_UNAVAILABLE"
+        assert client.source_descriptor is None
+        assert market.registrations.get(_KEY.stream_id, set()) == set()
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_unrequested_source_descriptor_is_rejected_to_preserve_legacy_reply_shape(tmp_path):
+    client, runtime, registry, _market, _transport, _subscribers = _make_client(tmp_path)
+    descriptor = _test_source_descriptor()
+    reply = {
+        "stream_id": _KEY.stream_id,
+        "epoch": descriptor.epoch,
+        "head": 0,
+        "oldest_sequence": 1,
+        "already_subscribed": False,
+        "source_descriptor": descriptor.to_dict(),
+    }
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            client._validate_subscription_reply(reply)
+        assert error.value.code == "INVALID_SUBSCRIBE_REPLY"
+    finally:
+        _close_all(client, runtime, registry)
+
+
+def test_source_descriptor_is_cleared_before_failed_recovery_resubscribe(tmp_path):
+    client, runtime, registry, market, _transport, _subscribers = _make_client(
+        tmp_path, require_source_descriptor=True
+    )
+    market.source_descriptor = _test_source_descriptor()
+    client.start()
+    assert client.source_descriptor == market.source_descriptor
+    market.source_descriptor = None
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            client.recover()
+        assert error.value.code == "SOURCE_DESCRIPTOR_UNAVAILABLE"
+        assert client.source_descriptor is None
+    finally:
+        _close_all(client, runtime, registry)

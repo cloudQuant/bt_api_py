@@ -23,6 +23,7 @@ from bt_api_base.market_protocol import (
     MARKET_EVENT_OPERATION,
     MARKET_EVENT_SCHEMA,
     MARKET_EVENT_SCHEMA_VERSION,
+    MarketSourceDescriptor,
     MarketSubscriptionKey,
 )
 from bt_api_base.service_protocol import (
@@ -114,6 +115,7 @@ class MarketBootstrap:
     cursor_epoch: str | None
     cursor_sequence: int
     resync_required: bool
+    source_descriptor: MarketSourceDescriptor | None = None
 
 
 class ZmqMarketTransportFactory:
@@ -242,6 +244,7 @@ class ServiceMarketClient:
         queue_max_bytes: int = 4 * 1024 * 1024,
         head_check_interval_seconds: float = 1.0,
         monotonic_clock: Any = time.monotonic,
+        require_source_descriptor: bool = False,
     ) -> None:
         if type(runtime) is not ServiceClientRuntime:
             raise ServiceMarketError("INVALID_RUNTIME")
@@ -249,6 +252,8 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_MOUNT")
         if type(key) is not MarketSubscriptionKey:
             raise ServiceMarketError("INVALID_MARKET_KEY")
+        if type(require_source_descriptor) is not bool:
+            raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR_REQUIREMENT")
         if subscriber_factory is None and key.channel != "bar":
             raise ServiceMarketError("INVALID_SUBSCRIBER_FACTORY")
         if (
@@ -288,6 +293,8 @@ class ServiceMarketClient:
         self.mount = mount
         self.key = key
         self._subscriber_factory = subscriber_factory
+        self._require_source_descriptor = require_source_descriptor
+        self._source_descriptor: MarketSourceDescriptor | None = None
         self.stream_scope = stream_scope
         self._queue_capacity = queue_capacity
         self._queue_max_bytes = queue_max_bytes
@@ -347,6 +354,27 @@ class ServiceMarketClient:
     def last_bootstrap(self) -> MarketBootstrap | None:
         return self._last_bootstrap
 
+    @property
+    def source_descriptor(self) -> MarketSourceDescriptor | None:
+        """Typed active source identity supplied by the authenticated subscribe reply.
+
+        The descriptor is read-only to callers and is replaced only after a
+        subsequent subscribe reply has passed exact validation. It is cleared
+        before every subscribe attempt so callers cannot accidentally reuse a
+        prior stream epoch after recovery.
+        """
+
+        if (
+            self._state != "started"
+            or self._recovery_required
+            or self._resync_required
+            or self._source_descriptor is None
+            or self._source_descriptor.stream_id != self.key.stream_id
+            or self._source_descriptor.epoch != self._cursor_epoch
+        ):
+            return None
+        return self._source_descriptor
+
     def start(self) -> MarketBootstrap:
         self._assert_owner()
         if self.key.channel == "bar" and self._subscriber_factory is None:
@@ -365,9 +393,10 @@ class ServiceMarketClient:
             self._binding = binding
             self._subscriber = self._make_subscriber(binding)
             self._state = "starting"
-            subscribed = self._rpc("market.subscribe", {"key": self.key.to_dict()})
+            self._source_descriptor = None
+            subscribed = self._rpc("market.subscribe", self._subscribe_arguments())
             self._remote_unknown = True
-            self._validate_subscription_reply(subscribed)
+            self._source_descriptor = self._validate_subscription_reply(subscribed)
             self._remote_active = True
             self._remote_unknown = False
             if self._uncertain_registration_id == binding.registration_id:
@@ -401,6 +430,7 @@ class ServiceMarketClient:
             return self._last_bootstrap
         except BaseException as error:
             self._cleanup_failed_start()
+            self._source_descriptor = None
             if isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit)):
                 raise
             if isinstance(error, ServiceMarketError):
@@ -571,9 +601,10 @@ class ServiceMarketClient:
             self._binding = binding
             self._subscriber = self._make_subscriber(binding)
             self._state = "starting"
-            subscribed = self._rpc("market.subscribe", {"key": self.key.to_dict()})
+            self._source_descriptor = None
+            subscribed = self._rpc("market.subscribe", self._subscribe_arguments())
             self._remote_unknown = True
-            self._validate_subscription_reply(subscribed)
+            self._source_descriptor = self._validate_subscription_reply(subscribed)
             self._remote_active = True
             self._remote_unknown = False
             if self._uncertain_registration_id == binding.registration_id:
@@ -625,6 +656,7 @@ class ServiceMarketClient:
             )
             return self._last_bootstrap
         except BaseException as error:
+            self._source_descriptor = None
             if self._state != "close_failed":
                 self._state = "failed"
             if isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit)):
@@ -677,6 +709,7 @@ class ServiceMarketClient:
         self._assert_owner()
         if self._state == "closed":
             return
+        self._source_descriptor = None
         binding = None
         with suppress(ServiceMarketError):
             binding = self._get_binding()
@@ -860,6 +893,13 @@ class ServiceMarketClient:
     def _get_snapshot(self) -> MarketBootstrap:
         reply = self._rpc("market.snapshot", {"key": self.key.to_dict()})
         self._validate_snapshot_reply(reply)
+        descriptor = self._source_descriptor
+        if descriptor is not None and (
+            descriptor.stream_id != reply["stream_id"]
+            or descriptor.epoch != reply["epoch"]
+        ):
+            self._source_descriptor = None
+            descriptor = None
         event = None if reply["event"] is None else _decode_envelope_mapping(reply["event"])
         if event is not None:
             self._validate_event(event, expected_epoch=reply["epoch"])
@@ -883,6 +923,7 @@ class ServiceMarketClient:
             cursor_epoch=cursor_epoch,
             cursor_sequence=cursor_sequence,
             resync_required=False,
+            source_descriptor=descriptor,
         )
 
     def _mark_resync(self, snapshot: MarketBootstrap) -> None:
@@ -899,6 +940,7 @@ class ServiceMarketClient:
             cursor_epoch=self._cursor_epoch,
             cursor_sequence=self._cursor_sequence,
             resync_required=True,
+            source_descriptor=snapshot.source_descriptor,
         )
         self._last_bootstrap = self._pending_resync
 
@@ -910,6 +952,11 @@ class ServiceMarketClient:
         *,
         resync_required: bool,
     ) -> MarketBootstrap:
+        descriptor = self._source_descriptor
+        if descriptor is not None and (
+            descriptor.stream_id != self.key.stream_id or descriptor.epoch != snapshot_epoch
+        ):
+            descriptor = None
         return MarketBootstrap(
             snapshot=snapshot,
             snapshot_kind="latest_event",
@@ -921,6 +968,7 @@ class ServiceMarketClient:
             cursor_epoch=self._cursor_epoch,
             cursor_sequence=self._cursor_sequence,
             resync_required=resync_required,
+            source_descriptor=descriptor,
         )
 
     def _validate_event(
@@ -962,14 +1010,89 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_MARKET_EVENT")
         return True
 
-    def _validate_subscription_reply(self, reply: Mapping[str, Any]) -> None:
-        _exact_fields(
-            reply,
-            {"stream_id", "epoch", "head", "oldest_sequence", "already_subscribed"},
-        )
+    def _subscribe_arguments(self) -> dict[str, Any]:
+        arguments: dict[str, Any] = {"key": self.key.to_dict()}
+        if self._require_source_descriptor:
+            arguments["require_source_descriptor"] = True
+        return arguments
+
+    def _validate_subscription_reply(
+        self, reply: Mapping[str, Any]
+    ) -> MarketSourceDescriptor | None:
+        required_fields = {
+            "stream_id",
+            "epoch",
+            "head",
+            "oldest_sequence",
+            "already_subscribed",
+        }
+        if not isinstance(reply, Mapping):
+            raise ServiceMarketError("INVALID_SUBSCRIBE_REPLY")
+        fields = set(reply)
+        if fields == required_fields:
+            if self._require_source_descriptor:
+                raise ServiceMarketError("SOURCE_DESCRIPTOR_UNAVAILABLE")
+            descriptor = None
+        elif fields == required_fields | {"source_descriptor"}:
+            if not self._require_source_descriptor:
+                raise ServiceMarketError("INVALID_SUBSCRIBE_REPLY")
+            descriptor = self._parse_source_descriptor(reply["source_descriptor"])
+        else:
+            raise ServiceMarketError("INVALID_SUBSCRIBE_REPLY")
         _validate_stream_metadata(reply, key=self.key, oldest_required=True)
         if type(reply["already_subscribed"]) is not bool:
             raise ServiceMarketError("INVALID_SUBSCRIBE_REPLY")
+        if descriptor is not None and (
+            descriptor.stream_id != reply["stream_id"]
+            or descriptor.epoch != reply["epoch"]
+        ):
+            raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR")
+        return descriptor
+
+    def _parse_source_descriptor(self, value: object) -> MarketSourceDescriptor:
+        fields = {
+            "key",
+            "stream_id",
+            "epoch",
+            "provider",
+            "source",
+            "connection_generation",
+            "clock_domain_id",
+            "clock_source_session_id",
+            "clock_source",
+        }
+        if not isinstance(value, Mapping) or set(value) != fields:
+            raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR")
+        try:
+            descriptor = MarketSourceDescriptor.from_dict(value)
+        except Exception:
+            raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR") from None
+        if (
+            type(descriptor) is not MarketSourceDescriptor
+            or descriptor.key != self.key
+            or descriptor.stream_id != self.key.stream_id
+            or descriptor.provider != self.key.instrument.provider
+            or descriptor.stream_id != value["stream_id"]
+            or descriptor.epoch != value["epoch"]
+            or type(descriptor.connection_generation) is not int
+            or descriptor.connection_generation <= 0
+            or any(
+                type(getattr(descriptor, name)) is not str
+                or not getattr(descriptor, name)
+                or getattr(descriptor, name) != getattr(descriptor, name).strip()
+                for name in (
+                    "stream_id",
+                    "epoch",
+                    "provider",
+                    "source",
+                    "clock_domain_id",
+                    "clock_source_session_id",
+                    "clock_source",
+                )
+            )
+        ):
+            raise ServiceMarketError("INVALID_SOURCE_DESCRIPTOR")
+        return descriptor
 
     def _validate_head_reply(self, reply: Mapping[str, Any]) -> None:
         _exact_fields(
