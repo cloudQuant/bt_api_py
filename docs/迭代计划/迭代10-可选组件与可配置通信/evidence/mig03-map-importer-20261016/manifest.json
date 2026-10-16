@@ -1,0 +1,380 @@
+{
+  "_schema": "bt_api_py-dev-commit-spec-v1",
+  "_status": "DRAFT_FOR_ROOT_REVIEW; NOT_STAGED; NOT_COMMITTED",
+  "_round": null,
+  "_round_note": "Root assigns the sequence after R209/R210 scheduling; this folder deliberately has no guessed round number.",
+  "_repository": "D:/bt_api_py",
+  "_branch": "dev",
+  "_qa_head": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+  "_delivery_parent_observed": "0302917dd50184a74cfa8d66c5e597cec904984c",
+  "_accepted_evidence_level": "ROOT_FOCUSED_SOURCE_QA_MAP_ONLY_IMPORT_COMPONENT_NOT_FORMAL_MIG03_PASS",
+  "_commit_scope_paths": [
+    "bt_api_py/service_migration_import.py",
+    "tests/unit/test_service_migration_import.py",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-importer-20261016/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-importer-20261016/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-importer-20261016/round-record.md"
+  ],
+  "_excluded_parallel_paths": [
+    "bt_api/bt_api_monitor",
+    "bt_api/bt_api_risk",
+    "bt_api_py/gateway/__init__.py",
+    "bt_api_py/gateway/client.py",
+    "bt_api_py/service_execution_group.py",
+    "bt_api_py/service_execution_group_authority.py",
+    "bt_api_py/service_execution_group_proofs.py",
+    "tests/test_gateway_client_and_certification.py",
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_load01_rpc_telemetry_contract.py",
+    "%SystemDrive%/",
+    ".codex-tmp/",
+    "0",
+    "tests/integration/test_service_execution_group_owner_recovery.py",
+    "tests/integration/test_service_portfolio_analytics_v2_process.py",
+    "tests/test_mig01_gateway_entrypoints_retired.py"
+  ],
+  "_qa": {
+    "R1": {
+      "raw_run_directory": "D:/temp/iteration10-mig03-map-importer-root-20261016-r1",
+      "command_argv": [
+        "C:/Anaconda3/python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--noconftest",
+        "-c",
+        "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+        "-p",
+        "no:cacheprovider",
+        "--junitxml=D:\\temp\\iteration10-mig03-map-importer-root-20261016-r1\\junit.xml",
+        "--basetemp=D:\\temp\\iteration10-mig03-map-importer-root-20261016-r1\\pytest-tmp",
+        "tests/unit/test_service_migration_import.py"
+      ],
+      "cwd": "D:\\bt_api_py",
+      "started_utc": "2026-10-16T09:18:43.117146+00:00",
+      "finished_utc": "2026-10-16T09:18:50.537255+00:00",
+      "pytest_exit": 1,
+      "summary": "17 failed; fixture lacked a writer lease required by the current production store API",
+      "stderr_bytes": 0,
+      "stdout_sha256": "44d13bb33ff5555db7fae4ddd6ea7b4a423d1c32debc98318853b3e10917291d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_pin_count": 90,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e"
+      },
+      "focused_node_ids": [
+        "tests/unit/test_service_migration_import.py"
+      ],
+      "raw_members": {
+        "command.json": {
+          "bytes": 1149,
+          "sha256": "9a91e185da70b3c4c942d087cacd93285db093579356e15ed5ca12646d033901"
+        },
+        "exit.txt": {
+          "bytes": 3,
+          "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+        },
+        "junit.xml": {
+          "bytes": 43893,
+          "sha256": "40445c57e20eb8983ed3fd6a8778641e773d9c0238b2387c5c9cd8a3e3de4dff"
+        },
+        "result.json": {
+          "bytes": 974,
+          "sha256": "f636d49213d37c0af0705fbd050bf0c3728f2024d9ed7dfd8d4f160c3ea41558"
+        },
+        "runner.py": {
+          "bytes": 3204,
+          "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+        },
+        "running.json": {
+          "bytes": 76,
+          "sha256": "87315793c76c2354727e3400193723e7d46d8ceb47c9d56dfaaccf92db580e3c"
+        },
+        "source-after.json": {
+          "bytes": 11929,
+          "sha256": "839c424e09b6f1908fef6380a2c236fa76c98e9bbbe1d76ca7b2e56de71e653c"
+        },
+        "source-before.json": {
+          "bytes": 11929,
+          "sha256": "839c424e09b6f1908fef6380a2c236fa76c98e9bbbe1d76ca7b2e56de71e653c"
+        },
+        "spec.json": {
+          "bytes": 13569,
+          "sha256": "b5927fedec3e7efca8c5b76fef25b80fc9d736c2a6a03e5d5eee7b52a02ae866"
+        },
+        "stderr.log": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.log": {
+          "bytes": 42704,
+          "sha256": "44d13bb33ff5555db7fae4ddd6ea7b4a423d1c32debc98318853b3e10917291d"
+        }
+      }
+    },
+    "R2": {
+      "raw_run_directory": "D:/temp/iteration10-mig03-map-importer-root-20261016-r2",
+      "command_argv": [
+        "C:/Anaconda3/python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "--noconftest",
+        "-c",
+        "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+        "-p",
+        "no:cacheprovider",
+        "--junitxml=D:\\temp\\iteration10-mig03-map-importer-root-20261016-r2\\junit.xml",
+        "--basetemp=D:\\temp\\iteration10-mig03-map-importer-root-20261016-r2\\pytest-tmp",
+        "tests/unit/test_service_migration_import.py::test_map_only_import_reads_v23_and_atomically_registers_all_five_kinds",
+        "tests/unit/test_service_migration_import.py::test_execution_record_count_is_rejected_before_registering_a_batch",
+        "tests/unit/test_service_migration_import.py::test_selected_event_count_is_rejected_before_registering_a_batch",
+        "tests/unit/test_service_migration_import.py::test_execution_record_payload_byte_limit_fails_before_parsing_or_batch_write",
+        "tests/unit/test_service_migration_import.py::test_execution_event_payload_byte_limit_fails_before_parsing_or_batch_write",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[missing-observation-field]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[provider-id-mismatch]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[unbounded-decimal-exponent]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[state-mismatch]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[scope-mismatch]",
+        "tests/unit/test_service_migration_import.py::test_unknown_without_provider_id_stays_unallocated_and_cannot_be_resolved",
+        "tests/unit/test_service_migration_import.py::test_unknown_with_reported_id_can_only_be_retained_unallocated",
+        "tests/unit/test_service_migration_import.py::test_bare_symbol_context_ambiguity_is_rejected_before_the_batch",
+        "tests/unit/test_service_migration_import.py::test_provenance_cut_and_config_drift_fail_before_any_map_write",
+        "tests/unit/test_service_migration_import.py::test_store_batch_conflict_is_atomic_for_the_imported_five_kind_batch",
+        "tests/unit/test_service_migration_import.py::test_typed_target_key_field_omission_fails_before_registration",
+        "tests/unit/test_service_migration_import.py::test_live_execution_record_drift_fails_before_registration"
+      ],
+      "cwd": "D:\\bt_api_py",
+      "started_utc": "2026-10-16T09:23:01.299890+00:00",
+      "finished_utc": "2026-10-16T09:23:05.655271+00:00",
+      "pytest_exit": 0,
+      "summary": "17 passed in 3.71s",
+      "stderr_bytes": 0,
+      "stdout_sha256": "959aef7c0d2d362d5336754b4cb9efe6b1a09bb75d581ef024ba2566fe0a02ab",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_pin_count": 90,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e"
+      },
+      "focused_node_ids": [
+        "tests/unit/test_service_migration_import.py::test_map_only_import_reads_v23_and_atomically_registers_all_five_kinds",
+        "tests/unit/test_service_migration_import.py::test_execution_record_count_is_rejected_before_registering_a_batch",
+        "tests/unit/test_service_migration_import.py::test_selected_event_count_is_rejected_before_registering_a_batch",
+        "tests/unit/test_service_migration_import.py::test_execution_record_payload_byte_limit_fails_before_parsing_or_batch_write",
+        "tests/unit/test_service_migration_import.py::test_execution_event_payload_byte_limit_fails_before_parsing_or_batch_write",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[missing-observation-field]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[provider-id-mismatch]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[unbounded-decimal-exponent]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[state-mismatch]",
+        "tests/unit/test_service_migration_import.py::test_order_crosswalk_requires_current_source_producer_evidence[scope-mismatch]",
+        "tests/unit/test_service_migration_import.py::test_unknown_without_provider_id_stays_unallocated_and_cannot_be_resolved",
+        "tests/unit/test_service_migration_import.py::test_unknown_with_reported_id_can_only_be_retained_unallocated",
+        "tests/unit/test_service_migration_import.py::test_bare_symbol_context_ambiguity_is_rejected_before_the_batch",
+        "tests/unit/test_service_migration_import.py::test_provenance_cut_and_config_drift_fail_before_any_map_write",
+        "tests/unit/test_service_migration_import.py::test_store_batch_conflict_is_atomic_for_the_imported_five_kind_batch",
+        "tests/unit/test_service_migration_import.py::test_typed_target_key_field_omission_fails_before_registration",
+        "tests/unit/test_service_migration_import.py::test_live_execution_record_drift_fails_before_registration"
+      ],
+      "raw_members": {
+        "command.json": {
+          "bytes": 3233,
+          "sha256": "4b3fbf07473388b11a8459598e72e96f53836e9f3049a1c81a8d382aae9d1aff"
+        },
+        "exit.txt": {
+          "bytes": 3,
+          "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+        },
+        "junit.xml": {
+          "bytes": 2214,
+          "sha256": "59e49a647af0638b70a53590bd74b0e4824b3b381f076b5f9b1af312daefb977"
+        },
+        "result.json": {
+          "bytes": 974,
+          "sha256": "eef7ab8cd3447a017a7db29e214814870009a09673b0b0f5aa8ee1308b7b9c7b"
+        },
+        "runner.py": {
+          "bytes": 3204,
+          "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+        },
+        "running.json": {
+          "bytes": 76,
+          "sha256": "767a9447eaeab8b6c4b36ded844493bece48d09f3992eab235d39d4f775b517c"
+        },
+        "source-after.json": {
+          "bytes": 11929,
+          "sha256": "95597ee622c83dea01abaff8fcd66f8e61d58f30c85fbebc407519eb9f189c21"
+        },
+        "source-before.json": {
+          "bytes": 11929,
+          "sha256": "95597ee622c83dea01abaff8fcd66f8e61d58f30c85fbebc407519eb9f189c21"
+        },
+        "spec.json": {
+          "bytes": 15662,
+          "sha256": "cf54ed7ffc491dd7f585875ebf81db74b7992f6535d78bf079d3a23a59bb2c79"
+        },
+        "stderr.log": {
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.log": {
+          "bytes": 192,
+          "sha256": "959aef7c0d2d362d5336754b4cb9efe6b1a09bb75d581ef024ba2566fe0a02ab"
+        }
+      }
+    }
+  },
+  "_review_metadata": {
+    "record_type": "independent_review_metadata_summary",
+    "source": "collaboration message received by Root; original review was not stored as a raw disk artifact",
+    "reviewer": "/root/resume_pass_audit_reg_risk_cfg",
+    "conclusion": "GO_STATIC",
+    "reviewed_importer_sha256": "d4ec88d69e65e7012e20077cf4a4e5123d3e96f70606c0709ddbb2861073bb71",
+    "reviewed_test_sha256": "1a59f1e14799004d230363a3f04805a0d14a3c1242dbc41db0b5d569f710c48c",
+    "reviewed_test_pin_matches_R2": false,
+    "review_scope_disclosure": "The independent static review predates the writer-lease fixture correction. It did not review the final test fixture bytes e2e85e1850aeb58c16d945225a080452609d94b5782a75bb7b1a6da3945e542f; Root focused QA R2 exercised those final bytes and passed all 17 nodes.",
+    "review_findings_closed_before_R2": [
+      "bounded record/event counts and payload reads",
+      "provider observation validation against the current v23 producer shape, event type, provider id, state and scope"
+    ],
+    "review_limitations": [
+      "fence_receipt_ref is an opaque caller-supplied reference, not proof that an external write fence was established",
+      "the source execution database read and destination identity-map transaction are not cross-database atomic",
+      "map registration does not itself confer runtime authorization or dispatch permission"
+    ],
+    "fixture_history": {
+      "R1_test_sha256": "1a59f1e14799004d230363a3f04805a0d14a3c1242dbc41db0b5d569f710c48c",
+      "R1_fixture_source_bytes_in_raw_output": false,
+      "note": "R1 source-before.json retains the hash, but no byte-for-byte source copy was present in the 11-file R1 output; no reconstructed fixture is represented as original evidence."
+    }
+  },
+  "_limitations": [
+    "This accepted round establishes only a map-only offline importer component using bounded reads of a synthetic v23 SQLite store and the persistent identity-map batch API; no private or live deployment database was read.",
+    "The importer does not copy or rewrite legacy journals, submit provider operations, dispatch orders, or automatically rekey old rows.",
+    "fence_receipt_ref is preserved as a caller reference only; the receipt digest/reference does not prove that an external fence exists or was honored.",
+    "Execution-store reading and identity-map writing span separate databases; no cross-database atomicity is claimed.",
+    "Map entries are not runtime authorization or proof that the caller-supplied target relation is independently trusted.",
+    "MIG03 remains partial and no formal acceptance tracker count changes in this package."
+  ],
+  "source_files": {
+    "bt_api_py/service_migration_import.py": {
+      "bytes": 69848,
+      "sha256": "d4ec88d69e65e7012e20077cf4a4e5123d3e96f70606c0709ddbb2861073bb71"
+    },
+    "tests/unit/test_service_migration_import.py": {
+      "bytes": 40527,
+      "sha256": "e2e85e1850aeb58c16d945225a080452609d94b5782a75bb7b1a6da3945e542f"
+    }
+  },
+  "raw_archive_members": {
+    "R1/command.json": {
+      "bytes": 1149,
+      "sha256": "9a91e185da70b3c4c942d087cacd93285db093579356e15ed5ca12646d033901"
+    },
+    "R1/exit.txt": {
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    "R1/junit.xml": {
+      "bytes": 43893,
+      "sha256": "40445c57e20eb8983ed3fd6a8778641e773d9c0238b2387c5c9cd8a3e3de4dff"
+    },
+    "R1/result.json": {
+      "bytes": 974,
+      "sha256": "f636d49213d37c0af0705fbd050bf0c3728f2024d9ed7dfd8d4f160c3ea41558"
+    },
+    "R1/runner.py": {
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "R1/running.json": {
+      "bytes": 76,
+      "sha256": "87315793c76c2354727e3400193723e7d46d8ceb47c9d56dfaaccf92db580e3c"
+    },
+    "R1/source-after.json": {
+      "bytes": 11929,
+      "sha256": "839c424e09b6f1908fef6380a2c236fa76c98e9bbbe1d76ca7b2e56de71e653c"
+    },
+    "R1/source-before.json": {
+      "bytes": 11929,
+      "sha256": "839c424e09b6f1908fef6380a2c236fa76c98e9bbbe1d76ca7b2e56de71e653c"
+    },
+    "R1/spec.json": {
+      "bytes": 13569,
+      "sha256": "b5927fedec3e7efca8c5b76fef25b80fc9d736c2a6a03e5d5eee7b52a02ae866"
+    },
+    "R1/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "R1/stdout.log": {
+      "bytes": 42704,
+      "sha256": "44d13bb33ff5555db7fae4ddd6ea7b4a423d1c32debc98318853b3e10917291d"
+    },
+    "R2/command.json": {
+      "bytes": 3233,
+      "sha256": "4b3fbf07473388b11a8459598e72e96f53836e9f3049a1c81a8d382aae9d1aff"
+    },
+    "R2/exit.txt": {
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    "R2/junit.xml": {
+      "bytes": 2214,
+      "sha256": "59e49a647af0638b70a53590bd74b0e4824b3b381f076b5f9b1af312daefb977"
+    },
+    "R2/result.json": {
+      "bytes": 974,
+      "sha256": "eef7ab8cd3447a017a7db29e214814870009a09673b0b0f5aa8ee1308b7b9c7b"
+    },
+    "R2/runner.py": {
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "R2/running.json": {
+      "bytes": 76,
+      "sha256": "767a9447eaeab8b6c4b36ded844493bece48d09f3992eab235d39d4f775b517c"
+    },
+    "R2/source-after.json": {
+      "bytes": 11929,
+      "sha256": "95597ee622c83dea01abaff8fcd66f8e61d58f30c85fbebc407519eb9f189c21"
+    },
+    "R2/source-before.json": {
+      "bytes": 11929,
+      "sha256": "95597ee622c83dea01abaff8fcd66f8e61d58f30c85fbebc407519eb9f189c21"
+    },
+    "R2/spec.json": {
+      "bytes": 15662,
+      "sha256": "cf54ed7ffc491dd7f585875ebf81db74b7992f6535d78bf079d3a23a59bb2c79"
+    },
+    "R2/stderr.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "R2/stdout.log": {
+      "bytes": 192,
+      "sha256": "959aef7c0d2d362d5336754b4cb9efe6b1a09bb75d581ef024ba2566fe0a02ab"
+    },
+    "review/review-summary.json": {
+      "bytes": 1706,
+      "sha256": "5f9df054ca3249495a4f9040f11db7fa87d2590060dc3341cd3fa8f9b17d5762"
+    }
+  },
+  "archive_sha256": "57932c9454b29aff0169b959ada8174ca0b1ad91a9ca993eb1e2651347c9e283",
+  "archive_bytes": 43373
+}
