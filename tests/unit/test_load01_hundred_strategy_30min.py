@@ -75,19 +75,20 @@ from tests.unit.test_service_gateway_hundred_strategy_integration import (
     _start_process,
 )
 
-_FIXED_PARENT = "436e55751fdf71fd46a145738d1bde4c498e8e6f"
+_FIXED_PARENT = "e08da3c58cb3b3b040f7799642de38523bbd3229"
 _FIXED_PACKAGE_GITLINKS = {
     "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
-    "bt_api/bt_api_execution": "84d97c9f4f85828cb649ed69c147e2ad4cf77c00",
+    "bt_api/bt_api_execution": "f5c030644dea06ce91afbaacf94e11e353538186",
     "bt_api/bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
     "bt_api/bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
-    "bt_api/bt_api_risk": "72d955e6ff1ddc35aabaf67ef88dc48a765f38df",
-    "bt_api/bt_api_transport_zmq": "29ab21e714292a363538491e4ff8461d336d1dfc",
+    "bt_api/bt_api_risk": "adb6ec58308149faa93c02920b72f98ac3796056",
+    "bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
 }
 _DOMAIN = "paper:load01-synthetic"
 _STRATEGIES = 100
 _ACCOUNTS = 10
 _PER_ACCOUNT = 10
+_STARTUP_STRATEGY_SLOTS = 10
 _TOPICS = 20
 _MARKET_HZ = 200
 _LIFECYCLES_PER_ACCOUNT_HZ = 2
@@ -186,6 +187,10 @@ class _Load01StartupLeaseError(RuntimeError):
     """A required client lease expired while the initial registrations ran."""
 
     code = "INITIAL_REGISTRATION_LEASE_EXPIRED"
+
+
+class _Load01StartupWaveAborted(RuntimeError):
+    """A focused startup-wave worker was asked to stop during parent teardown."""
 
 
 class _RoundRobinMarketPollScheduler:
@@ -984,6 +989,20 @@ def _market_keys() -> tuple[MarketSubscriptionKey, ...]:
     )
 
 
+def _strategy_startup_waves() -> tuple[tuple[int, ...], ...]:
+    """Release one strategy per account in each bounded startup wave."""
+
+    if _STRATEGIES != _ACCOUNTS * _PER_ACCOUNT or _STARTUP_STRATEGY_SLOTS != _ACCOUNTS:
+        raise AssertionError("LOAD01 startup wave shape no longer matches the pinned topology")
+    waves = tuple(
+        tuple(account_index * _PER_ACCOUNT + wave_index for account_index in range(_ACCOUNTS))
+        for wave_index in range(_PER_ACCOUNT)
+    )
+    if any(len(wave) != _STARTUP_STRATEGY_SLOTS for wave in waves):
+        raise AssertionError("LOAD01 startup wave exceeded its fixed registration slots")
+    return waves
+
+
 def _market_service_config(rpc_endpoint: str, market_endpoint: str) -> dict[str, Any]:
     return {
         "service_config_schema_version": 1,
@@ -1395,6 +1414,58 @@ def _strategy_config(
     }
 
 
+def _market_wave_strategy_config(
+    index: int, market_rpc: str, market_pub: str
+) -> dict[str, Any]:
+    """One required market binding for the real ten-client startup wave check."""
+
+    return {
+        "client_config_schema_version": 1,
+        "process_role": "strategy_client",
+        "registration": {"strategy_ref": _strategy_ref(index)},
+        "clients": {
+            "gateway": {
+                "config_schema_version": 1,
+                "settings": {
+                    "bindings": [
+                        {
+                            "mount": "store.market",
+                            "service_id": _MARKET_ID,
+                            "instance_id": _MARKET_INSTANCE,
+                            "scope_ref": _MARKET_SCOPE_REF,
+                            "transport_ref": _MARKET_CLIENT_REF,
+                        }
+                    ],
+                    "options": {
+                        "request_timeout_ms": _RPC_TIMEOUT_MS,
+                        "heartbeat_interval_seconds": _HEARTBEAT_SECONDS,
+                    },
+                },
+            }
+        },
+        "communication": {
+            "config_schema_version": 1,
+            "profiles": {
+                _MARKET_CLIENT_REF: {
+                    "backend": "zmq",
+                    "config_schema_version": 1,
+                    "endpoints": {
+                        "rpc_connect": market_rpc,
+                        "market_connect": market_pub,
+                    },
+                    "security_profile_ref": _MARKET_SECURITY_REF,
+                    "options": {
+                        "request_timeout_ms": _RPC_TIMEOUT_MS,
+                        "high_water_mark": _MARKET_HWM,
+                        "max_message_bytes": _MAX_RPC_BYTES,
+                        "market_wire_version": _MARKET_WIRE_VERSION,
+                    },
+                }
+            },
+        },
+    }
+
+
 def _market_authority_audience(strategy_keys: dict[int, tuple[bytes, bytes]]):
     return tuple(
         (
@@ -1607,8 +1678,19 @@ def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
     return checked
 
 
-def _verify_fixed_archives(root: Path, pin_path: Path) -> dict[str, Any]:
+def _verify_fixed_archives(
+    root: Path,
+    pin_path: Path,
+    *,
+    allowed_overlays: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
     pins = json.loads(pin_path.read_text(encoding="utf-8"))
+    overlays = dict(allowed_overlays or {})
+    if any(
+        not isinstance(path, str) or not isinstance(digest, str)
+        for path, digest in overlays.items()
+    ):
+        raise AssertionError("LOAD01 archive overlays must be exact path-to-digest pins")
     archives = [("parent.zip", root, pins["parent_archive_sha256"], pins["parent_archive_bytes"])]
     for package in pins["package_gitlinks"]:
         archive_name = Path(package["path"]).name + ".zip"
@@ -1617,6 +1699,7 @@ def _verify_fixed_archives(root: Path, pin_path: Path) -> dict[str, Any]:
             (archive_name, package_root, package["archive_sha256"], package["archive_bytes"])
         )
     checked_py_files = 0
+    checked_overlays: set[str] = set()
     for name, source_root, expected_digest, expected_bytes in archives:
         archive_path = pin_path.parent / name
         if (
@@ -1633,17 +1716,38 @@ def _verify_fixed_archives(root: Path, pin_path: Path) -> dict[str, Any]:
                 if not extracted.is_file():
                     raise AssertionError(f"LOAD01 committed source file missing: {member.filename}")
                 archived_bytes = archive.read(member)
-                if _sha256(extracted) != hashlib.sha256(archived_bytes).hexdigest():
+                archived_sha256 = hashlib.sha256(archived_bytes).hexdigest()
+                extracted_sha256 = _sha256(extracted)
+                if extracted_sha256 != archived_sha256:
+                    overlay_sha256 = overlays.get(member.filename)
+                    if overlay_sha256 is None or extracted_sha256 != overlay_sha256:
+                        raise AssertionError(
+                            f"LOAD01 extracted committed source changed: {member.filename}"
+                        )
+                    checked_overlays.add(member.filename)
+                elif member.filename in overlays:
                     raise AssertionError(
-                        f"LOAD01 extracted committed source changed: {member.filename}"
+                        f"LOAD01 expected overlay did not differ from archive: {member.filename}"
                     )
                 checked_py_files += 1
-    return {"archive_count": len(archives), "python_file_count": checked_py_files}
+    if checked_overlays != set(overlays):
+        missing = sorted(set(overlays) - checked_overlays)
+        raise AssertionError(f"LOAD01 source overlay was not an archive member: {missing}")
+    return {
+        "archive_count": len(archives),
+        "python_file_count": checked_py_files,
+        "overlay_paths": sorted(checked_overlays),
+    }
 
 
-def _write_source_run_manifest(root: Path, work_dir: Path) -> Path:
+def _write_source_run_manifest(
+    root: Path,
+    work_dir: Path,
+    *,
+    allowed_overlays: Mapping[str, str] | None = None,
+) -> Path:
     source_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
-    _verify_fixed_archives(root, source_pin_path)
+    _verify_fixed_archives(root, source_pin_path, allowed_overlays=allowed_overlays)
     export_pins = json.loads(source_pin_path.read_text(encoding="utf-8"))
     expected_gitlinks = _FIXED_PACKAGE_GITLINKS
     actual_gitlinks = {item["path"]: item["commit"] for item in export_pins["package_gitlinks"]}
@@ -3229,8 +3333,31 @@ def _strategy_process(
             )
         )
 
+        # A completed startup wave keeps renewing its required leases while
+        # later waves register; load_event remains the one common start barrier.
         while not load_event.is_set():
             runtime_probe._maintain_if_due("common-load-barrier")
+            if control.poll(0):
+                command = control.recv()
+                if (
+                    isinstance(command, tuple)
+                    and len(command) == 2
+                    and command[0] == "startup-barrier-snapshot"
+                ):
+                    control.send(
+                        (
+                            "startup-barrier-snapshot",
+                            index,
+                            os.getpid(),
+                            command[1],
+                            _runtime_lease_snapshot(runtime),
+                            runtime_probe.snapshot(),
+                        )
+                    )
+                else:
+                    raise AssertionError(
+                        "LOAD01 strategy received an unexpected common-barrier command"
+                    )
             load_event.wait(0.05)
             if abort_event.is_set():
                 control.send(("aborted", index, os.getpid()))
@@ -3582,6 +3709,199 @@ def _strategy_process(
                     os.getpid(),
                     _safe_diagnostic_code(exc),
                     child_diagnostic,
+                )
+            )
+        raise
+    finally:
+        control.close()
+
+
+def _load01_market_wave_strategy_process(
+    control,
+    index,
+    raw_config,
+    market_keys,
+    security_material,
+    start_event,
+    abort_event,
+):
+    """Exercise one real strategy runtime's 20 market subscriptions and close path."""
+
+    _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
+    account_index = index // _PER_ACCOUNT
+    strategy_ref = _strategy_ref(index)
+    principal_ref = _principal_ref(index)
+    runtime = None
+    runtime_probe = None
+    markets: dict[str, ServiceMarketClient] = {}
+    pending_markets: dict[str, ServiceMarketClient] = {}
+    try:
+        config = parse_client_config(raw_config)
+        identity = WireIdentity(WireRole.STRATEGY_CLIENT, principal_ref, strategy_ref)
+        service_identity = WireIdentity(WireRole.SERVICE, _MARKET_PRINCIPAL, _MARKET_ID)
+        security = ClientCurveKeys(*security_material)
+        runtime = ServiceClientRuntime(
+            config,
+            identity=identity,
+            scope_resolver=lambda _scope_ref: WireScope(
+                _DOMAIN,
+                account_ref=_ACCOUNT_REFS[account_index],
+                strategy_ref=strategy_ref,
+            ),
+            peer_resolver=lambda _service_id: service_identity,
+            transport_factory=ZmqTransportFactory({_MARKET_SECURITY_REF: security}),
+            requested_operations={"store.market": _MARKET_OPS},
+        )
+        runtime_probe = _StartupRuntimeMaintenanceProbe(runtime)
+        control.send(("loaded", index, os.getpid()))
+        while not start_event.wait(0.05):
+            if abort_event.is_set():
+                raise _Load01StartupWaveAborted()
+        if abort_event.is_set():
+            raise _Load01StartupWaveAborted()
+        startup = runtime.start()
+        if startup.degraded_count or len(runtime.bindings) != 1 or not runtime.healthy:
+            raise _Load01StartupLeaseError()
+
+        subscriber_factory = ZmqMarketTransportFactory({_MARKET_SECURITY_REF: security})
+        for key in market_keys:
+            if abort_event.is_set():
+                raise _Load01StartupWaveAborted()
+            client = ServiceMarketClient(
+                runtime,
+                "store.market",
+                key,
+                subscriber_factory=subscriber_factory,
+                stream_scope=WireScope(_DOMAIN),
+                queue_capacity=256,
+                queue_max_bytes=512 * 1024,
+                head_check_interval_seconds=1.0,
+            )
+            pending_markets[key.stream_id] = client
+            client.start()
+            runtime_probe._maintain_if_due("market-wave-start-boundary")
+            if abort_event.is_set():
+                raise _Load01StartupWaveAborted()
+            if not runtime.healthy:
+                raise _Load01StartupLeaseError()
+            markets[key.stream_id] = client
+            pending_markets.pop(key.stream_id, None)
+
+        lease_snapshot = _runtime_lease_snapshot(runtime)
+        if (
+            len(markets) != _TOPICS
+            or not lease_snapshot["healthy"]
+            or lease_snapshot["required_min_lease_remaining_ms"]
+            <= _RPC_LEASE_HEADROOM_SECONDS * 1000
+        ):
+            raise _Load01StartupLeaseError()
+        control.send(
+            (
+                "ready",
+                index,
+                os.getpid(),
+                strategy_ref,
+                _ACCOUNT_REFS[account_index],
+                len(runtime.bindings),
+                tuple(sorted(markets)),
+                lease_snapshot,
+                runtime_probe.snapshot(),
+            )
+        )
+
+        # As in the production strategy child, a ready wave renews its runtime
+        # while later waves register and subscribe before the common load barrier.
+        while True:
+            runtime_probe._maintain_if_due("market-wave-ready-barrier")
+            if abort_event.is_set():
+                break
+            if not control.poll(0.05):
+                continue
+            command = control.recv()
+            if command == ("close",):
+                break
+            raise AssertionError("LOAD01 market-wave worker received unknown control")
+
+        closed_streams = []
+        for stream_id, client in markets.items():
+            client.close()
+            closed_streams.append(stream_id)
+        for stream_id, client in pending_markets.items():
+            client.close()
+            closed_streams.append(stream_id)
+        pending_markets.clear()
+        barrier_maintenance = runtime_probe.snapshot()
+        runtime.close()
+        close_facts = {
+            "expected_rpc_timeout_ms": _RPC_TIMEOUT_MS,
+            "lease_seconds": _LEASE_SECONDS,
+            "market_clients_started": len(markets),
+            "market_clients_closed": len(closed_streams),
+            "closed_streams": tuple(sorted(closed_streams)),
+            "ready_barrier_maintenance": barrier_maintenance[
+                "maintenance_calls_by_reason"
+            ].get("market-wave-ready-barrier", 0),
+            "maintenance": barrier_maintenance,
+            "runtime_state": runtime.state,
+            "runtime_cleanup_failures": runtime.cleanup_failures,
+            "runtime_unregister_uncertainties": runtime.unregister_uncertainties,
+            "runtime_unknown_registration_count": runtime.unknown_registration_count,
+        }
+        if (
+            len(closed_streams) != _TOPICS
+            or runtime.state != "closed"
+            or runtime.cleanup_failures
+            or runtime.unregister_uncertainties
+            or runtime.unknown_registration_count
+        ):
+            raise AssertionError("LOAD01 market-wave runtime did not close cleanly")
+        control.send(("closed", index, os.getpid(), close_facts))
+    except BaseException as exc:
+        cleanup_errors = []
+        clients = {
+            id(client): client for client in (*markets.values(), *pending_markets.values())
+        }
+        for client in clients.values():
+            try:
+                client.close()
+            except BaseException as cleanup_exc:
+                cleanup_errors.append(_safe_diagnostic_code(cleanup_exc))
+        if runtime is not None and runtime.state != "closed":
+            try:
+                runtime.close()
+            except BaseException as cleanup_exc:
+                cleanup_errors.append(_safe_diagnostic_code(cleanup_exc))
+        runtime_clean = runtime is None or (
+            runtime.state == "closed"
+            and not runtime.cleanup_failures
+            and not runtime.unregister_uncertainties
+            and not runtime.unknown_registration_count
+        )
+        if isinstance(exc, _Load01StartupWaveAborted) and not cleanup_errors and runtime_clean:
+            with suppress(Exception):
+                control.send(("aborted", index, os.getpid(), runtime.state if runtime else None))
+            return
+        with suppress(Exception):
+            control.send(
+                (
+                    "error",
+                    index,
+                    os.getpid(),
+                    _safe_diagnostic_code(exc),
+                    {
+                        "phase": "market-wave-start-or-close",
+                        "cleanup_error_codes": tuple(cleanup_errors),
+                        "runtime_state": runtime.state if runtime is not None else None,
+                        "runtime_cleanup_failures": (
+                            runtime.cleanup_failures if runtime is not None else None
+                        ),
+                        "runtime_unregister_uncertainties": (
+                            runtime.unregister_uncertainties if runtime is not None else None
+                        ),
+                        "maintenance": (
+                            runtime_probe.snapshot() if runtime_probe is not None else None
+                        ),
+                    },
                 )
             )
         raise
@@ -4579,7 +4899,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 for local_index in range(_PER_ACCOUNT)
             ),
         )
-        registration_event = context.Event()
+        registration_events = [context.Event() for _ in range(_STARTUP_STRATEGY_SLOTS)]
         load_event = context.Event()
         stop_event = context.Event()
         abort_event = context.Event()
@@ -4792,7 +5112,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     service_records,
                     security_material,
                     market_keys,
-                    registration_event,
+                    registration_events[index % _STARTUP_STRATEGY_SLOTS],
                     load_event,
                     load_start_value,
                     stop_event,
@@ -4819,30 +5139,134 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 "LOAD01 all-strategy barrier could not retain 2 GiB free: "
                 f"available={barrier_memory}"
             )
-        registration_event.set()
-        strategy_ready = _collect_expected(
-            strategy_records, "ready", 300.0, "strategy registration and subscriptions", progress
-        )
-        for index, record in strategy_records.items():
-            message = strategy_ready[index]
-            if (
-                message[1] != index
-                or message[2] != record["pid"]
-                or message[3] != _strategy_ref(index)
-                or message[4] != _ACCOUNT_REFS[index // _PER_ACCOUNT]
-                or message[7] != 5
-                or message[8] != 0
-                or message[9] != _ACCOUNT_KEYS[index // _PER_ACCOUNT].to_dict()
-                or len(message[10]) != _TOPICS
-                or any(sequence != 0 for _stream, sequence in message[10])
-            ):
-                raise AssertionError(
-                    f"LOAD01 strategy did not pass its registration barrier: {index}"
+        startup_waves = _strategy_startup_waves()
+        startup_deadline = time.monotonic() + 300.0
+        strategy_ready: dict[int, tuple[Any, ...]] = {}
+        startup_wave_receipts = []
+        for wave_number, wave_indices in enumerate(startup_waves, start=1):
+            phase = f"load-strategy-startup-wave-{wave_number:02d}"
+            wave_started = time.monotonic()
+            remaining = startup_deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("LOAD01 300-second total registration barrier expired")
+            registration_events[wave_number - 1].set()
+            remaining = startup_deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("LOAD01 300-second total registration barrier expired")
+            wave_records = {index: strategy_records[index] for index in wave_indices}
+            wave_ready = _collect_expected(
+                wave_records,
+                "ready",
+                remaining,
+                f"strategy startup wave {wave_number:02d}",
+                progress,
+            )
+            for index, record in wave_records.items():
+                message = wave_ready[index]
+                if (
+                    message[1] != index
+                    or message[2] != record["pid"]
+                    or message[3] != _strategy_ref(index)
+                    or message[4] != _ACCOUNT_REFS[index // _PER_ACCOUNT]
+                    or message[7] != 5
+                    or message[8] != 0
+                    or message[9] != _ACCOUNT_KEYS[index // _PER_ACCOUNT].to_dict()
+                    or len(message[10]) != _TOPICS
+                    or any(sequence != 0 for _stream, sequence in message[10])
+                ):
+                    raise AssertionError(
+                        f"LOAD01 strategy did not pass its registration barrier: {index}"
+                    )
+                record["ready"] = True
+                record["account_index"] = index // _PER_ACCOUNT
+                record["startup_ms"] = message[6]
+                record["startup_diagnostic"] = message[11]
+            wave_receipt = {
+                "wave": wave_number,
+                "slot_limit": _STARTUP_STRATEGY_SLOTS,
+                "strategy_indices": list(wave_indices),
+                "ready_count": len(wave_ready),
+            }
+            if strategy_ready:
+                remaining = startup_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        "LOAD01 300-second total registration barrier expired"
+                    )
+                prior_records = {
+                    index: strategy_records[index] for index in sorted(strategy_ready)
+                }
+                for index, record in prior_records.items():
+                    record["pipe"].send(("startup-barrier-snapshot", wave_number))
+                remaining = startup_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        "LOAD01 300-second total registration barrier expired"
+                    )
+                prior_snapshots = _collect_expected(
+                    prior_records,
+                    "startup-barrier-snapshot",
+                    remaining,
+                    f"earlier startup-wave maintenance after wave {wave_number:02d}",
+                    progress,
                 )
-            record["ready"] = True
-            record["account_index"] = index // _PER_ACCOUNT
-            record["startup_ms"] = message[6]
-            record["startup_diagnostic"] = message[11]
+                prior_barrier_maintenance_calls = 0
+                prior_barrier_iterations = 0
+                prior_min_lease_ms = None
+                for index, snapshot_message in prior_snapshots.items():
+                    if (
+                        snapshot_message[1] != index
+                        or snapshot_message[2] != prior_records[index]["pid"]
+                        or snapshot_message[3] != wave_number
+                    ):
+                        raise AssertionError(
+                            "LOAD01 startup-barrier snapshot identity did not match its child"
+                        )
+                    lease_snapshot, maintenance_snapshot = snapshot_message[4:6]
+                    ready_maintenance = prior_records[index]["startup_diagnostic"][
+                        "maintenance"
+                    ]
+                    if (
+                        not lease_snapshot["healthy"]
+                        or lease_snapshot["required_min_lease_remaining_ms"]
+                        <= _RPC_LEASE_HEADROOM_SECONDS * 1000
+                        or maintenance_snapshot["maintenance_delay_checks"]
+                        <= ready_maintenance["maintenance_delay_checks"]
+                    ):
+                        raise _Load01StartupLeaseError()
+                    prior_barrier_iterations += 1
+                    prior_barrier_maintenance_calls += maintenance_snapshot[
+                        "maintenance_calls_by_reason"
+                    ].get("common-load-barrier", 0) - ready_maintenance[
+                        "maintenance_calls_by_reason"
+                    ].get("common-load-barrier", 0)
+                    lease_ms = lease_snapshot["required_min_lease_remaining_ms"]
+                    prior_min_lease_ms = (
+                        lease_ms
+                        if prior_min_lease_ms is None
+                        else min(prior_min_lease_ms, lease_ms)
+                    )
+                wave_receipt.update(
+                    {
+                        "earlier_ready_strategy_count": len(prior_snapshots),
+                        "earlier_barrier_iterations_observed": prior_barrier_iterations,
+                        "earlier_barrier_maintenance_calls": prior_barrier_maintenance_calls,
+                        "earlier_min_lease_remaining_ms": prior_min_lease_ms,
+                    }
+                )
+            strategy_ready.update(wave_ready)
+            wave_receipt["elapsed_seconds"] = round(time.monotonic() - wave_started, 6)
+            startup_wave_receipts.append(wave_receipt)
+            if not all(record["process"].is_alive() for record in strategy_records.values()):
+                raise AssertionError(
+                    f"LOAD01 a strategy exited while startup wave {wave_number:02d} ran"
+                )
+            barrier_memory = psutil.virtual_memory().available
+            if barrier_memory < _MIN_FREE_BYTES:
+                raise RuntimeError(
+                    f"LOAD01 startup wave {wave_number:02d} crossed the 2 GiB reserve: "
+                    f"available={barrier_memory}"
+                )
         ready_pids = {message[2] for message in strategy_ready.values()}
         all_pids = [record["pid"] for record in child_records.values()]
         if len(child_records) != 112 or len(set(all_pids)) != 112 or len(ready_pids) != 100:
@@ -4870,6 +5294,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         report["barrier"] = {
             "loaded_strategies": len(loaded),
             "ready_strategies": len(strategy_ready),
+            "startup_slot_limit": _STARTUP_STRATEGY_SLOTS,
+            "startup_wave_count": len(startup_wave_receipts),
+            "startup_waves": startup_wave_receipts,
             "loaded_strategy_pids": sorted(message[2] for message in loaded.values()),
             "ready_strategy_pids": sorted(ready_pids),
             "distinct_child_pids": len(set(all_pids)),
@@ -6669,6 +7096,333 @@ def test_load01_market_host_and_client_profiles_request_negotiated_v2() -> None:
         == _MARKET_WIRE_VERSION
         == 2
     )
+
+
+def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Run one real ten-strategy market wave through startup, lease wait and normal close."""
+
+    if os.name != "nt":
+        pytest.skip("LOAD01 focused startup-wave check uses the Windows spawn baseline")
+
+    assert _RPC_TIMEOUT_MS == 5_000
+    assert _LEASE_SECONDS == 30
+    assert _STARTUP_STRATEGY_SLOTS == _ACCOUNTS == 10
+    assert _TOPICS == 20
+    source_root = _fixed_source_root()
+    source_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
+    load_runner = Path(__file__).resolve()
+    runner_relative = load_runner.relative_to(source_root).as_posix()
+    runner_overlay_sha256 = os.environ["BT_API_LOAD01_RUNNER_OVERLAY_SHA256"]
+    assert _sha256(load_runner) == runner_overlay_sha256
+    monkeypatch.setenv("BT_API_LOAD01_SOURCE_ROOT", str(source_root))
+    manifest_work = tmp_path / "load01-market-wave-manifest"
+    manifest_work.mkdir()
+    manifest_path = _write_source_run_manifest(
+        source_root,
+        manifest_work,
+        allowed_overlays={runner_relative: runner_overlay_sha256},
+    )
+    monkeypatch.setenv("BT_API_LOAD01_SOURCE_MANIFEST", str(manifest_path))
+    checked_sources = _check_fixed_source_manifest(manifest_path)
+    assert checked_sources["load_runner"]["sha256"] == runner_overlay_sha256
+    fixed_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert fixed_manifest["parent_commit"] == _FIXED_PARENT
+    assert fixed_manifest["package_gitlinks"] == json.loads(
+        source_pin_path.read_text(encoding="utf-8")
+    )["package_gitlinks"]
+
+    context = multiprocessing.get_context("spawn")
+    market_rpc, market_pub = _free_endpoints(2)
+    market_keys = _market_keys()
+    startup_waves = _strategy_startup_waves()
+    assert len(startup_waves) == _PER_ACCOUNT
+    assert sorted(index for wave in startup_waves for index in wave) == list(
+        range(_STRATEGIES)
+    )
+    assert all(
+        tuple(index // _PER_ACCOUNT for index in wave) == tuple(range(_ACCOUNTS))
+        for wave in startup_waves
+    )
+    strategy_indices = startup_waves[0]
+    assert tuple(index // _PER_ACCOUNT for index in strategy_indices) == tuple(range(_ACCOUNTS))
+    market_server_keys = zmq.curve_keypair()
+    strategy_keys = {index: zmq.curve_keypair() for index in strategy_indices}
+    audience = tuple(
+        (
+            strategy_keys[index][0],
+            _principal_ref(index),
+            _strategy_ref(index),
+            _ACCOUNT_REFS[index // _PER_ACCOUNT],
+        )
+        for index in strategy_indices
+    )
+    work_root = tmp_path / "load01-market-wave"
+    work_root.mkdir()
+    registry_path = work_root / "market-registry.sqlite3"
+    market_config = _market_service_config(market_rpc, market_pub)
+    load_start_event = context.Event()
+    load_start_value = context.Value("d", 0.0)
+    stop_event = context.Event()
+    wave_start_event = context.Event()
+    abort_event = context.Event()
+    progress: dict[str, Any] = {"strategy": {}, "market": {}}
+    host_record = None
+    strategy_records: dict[int, dict[str, Any]] = {}
+    all_records: dict[str, dict[str, Any]] = {}
+
+    try:
+        host_record = _start_process(
+            context,
+            _market_host_process,
+            (
+                market_config,
+                str(registry_path),
+                market_server_keys,
+                audience,
+                market_keys,
+                load_start_event,
+                load_start_value,
+                stop_event,
+            ),
+            "load01-market-wave-host",
+        )
+        host_record.update(
+            {
+                "pid": host_record["process"].pid,
+                "kind": "market",
+                "ready": False,
+            }
+        )
+        all_records["market-hub"] = host_record
+        host_ready = _collect_expected(
+            {0: host_record}, "ready", 60.0, "startup-wave market Host", progress
+        )[0]
+        assert host_ready[1] == "market"
+        assert host_ready[2] == host_record["pid"]
+        assert host_ready[3] == market_rpc
+        assert host_ready[4] == market_pub
+        host_record["ready"] = True
+
+        for index in strategy_indices:
+            client_public, client_secret = strategy_keys[index]
+            security_material = (market_server_keys[0], client_public, client_secret)
+            raw_config = _market_wave_strategy_config(index, market_rpc, market_pub)
+            record = _start_process(
+                context,
+                _load01_market_wave_strategy_process,
+                (
+                    index,
+                    raw_config,
+                    market_keys,
+                    security_material,
+                    wave_start_event,
+                    abort_event,
+                ),
+                f"load01-wave-strategy-{index:03d}",
+            )
+            record.update(
+                {
+                    "pid": record["process"].pid,
+                    "kind": "strategy",
+                    "ready": False,
+                }
+            )
+            strategy_records[index] = record
+            all_records[record["name"]] = record
+
+        loaded = _collect_expected(
+            strategy_records, "loaded", 90.0, "single startup-wave process import", progress
+        )
+        assert len({message[2] for message in loaded.values()}) == _STARTUP_STRATEGY_SLOTS
+        assert all(
+            message[1] == index
+            and message[2] == strategy_records[index]["pid"]
+            and strategy_records[index]["process"].is_alive()
+            for index, message in loaded.items()
+        )
+        wave_start_event.set()
+        strategy_ready = _collect_expected(
+            strategy_records,
+            "ready",
+            300.0,
+            "single ten-strategy startup wave",
+            progress,
+        )
+        assert len({message[2] for message in strategy_ready.values()}) == _STARTUP_STRATEGY_SLOTS
+        for index, record in strategy_records.items():
+            message = strategy_ready[index]
+            assert message[1:6] == (
+                index,
+                record["pid"],
+                _strategy_ref(index),
+                _ACCOUNT_REFS[index // _PER_ACCOUNT],
+                1,
+            )
+            assert message[6] == tuple(sorted(key.stream_id for key in market_keys))
+            assert message[7]["healthy"] is True
+            assert message[7]["required_min_lease_remaining_ms"] > (
+                _RPC_LEASE_HEADROOM_SECONDS * 1000
+            )
+            assert record["process"].is_alive()
+            record["ready"] = True
+
+        # Keep this wave in the real common-start waiting state long enough to
+        # cross a 30-second lease's one-third renewal point before closing it.
+        time.sleep(11.0)
+        host_record["pipe"].send(("status",))
+        active_status = _collect_expected(
+            {0: host_record}, "status", 15.0, "startup-wave market status", progress
+        )[0][1]
+        assert active_status["hub_readiness"]["active_registrations"] == (
+            _STARTUP_STRATEGY_SLOTS * _TOPICS
+        )
+        assert active_status["hub_readiness"]["active_upstreams"] == _TOPICS
+        assert active_status["provider_starts"] == {
+            key.stream_id: 1 for key in market_keys
+        }
+        assert active_status["provider_stops"] == {}
+
+        for record in strategy_records.values():
+            record["pipe"].send(("close",))
+        strategy_closed = _collect_expected(
+            strategy_records,
+            "closed",
+            60.0,
+            "single ten-strategy normal unsubscribe",
+            progress,
+        )
+        for index, message in strategy_closed.items():
+            assert type(message) is tuple and len(message) == 4
+            assert message[0] == "closed"
+            assert message[1:3] == (index, strategy_records[index]["pid"])
+            close_facts = message[3]
+            assert type(close_facts) is dict
+            assert close_facts["expected_rpc_timeout_ms"] == _RPC_TIMEOUT_MS
+            assert close_facts["lease_seconds"] == _LEASE_SECONDS
+            assert close_facts["market_clients_started"] == _TOPICS
+            assert close_facts["market_clients_closed"] == _TOPICS
+            assert close_facts["closed_streams"] == tuple(
+                sorted(key.stream_id for key in market_keys)
+            )
+            assert close_facts["ready_barrier_maintenance"] >= 1
+            assert close_facts["runtime_state"] == "closed"
+            assert close_facts["runtime_cleanup_failures"] == 0
+            assert close_facts["runtime_unregister_uncertainties"] == 0
+            assert close_facts["runtime_unknown_registration_count"] == 0
+
+        host_record["pipe"].send(("close",))
+        host_closed = _collect_expected(
+            {0: host_record}, "closed", 60.0, "startup-wave market Host close", progress
+        )[0]
+        assert type(host_closed) is tuple and len(host_closed) == 5
+        assert host_closed[0] == "closed"
+        assert host_closed[1:3] == (host_record["pid"], "closed")
+        assert type(host_closed[3]) is tuple and host_closed[3] == ()
+        final_status = host_closed[4]
+        assert type(final_status) is dict
+        assert set(final_status) == {
+            "provider_starts",
+            "provider_stops",
+            "active_provider_keys",
+            "source_sequences",
+            "source_payload_bytes",
+            "first_publish_ns",
+            "last_publish_ns",
+            "hub_readiness",
+        }
+        assert final_status["provider_starts"] == {
+            key.stream_id: 1 for key in market_keys
+        }
+        assert final_status["provider_stops"] == {
+            key.stream_id: 1 for key in market_keys
+        }
+        assert final_status["active_provider_keys"] == ()
+        assert final_status["source_sequences"] == {}
+        assert final_status["source_payload_bytes"] == 0
+        assert final_status["first_publish_ns"] is None
+        assert final_status["last_publish_ns"] is None
+        assert final_status["hub_readiness"]["active_registrations"] == 0
+        assert final_status["hub_readiness"]["active_upstreams"] == 0
+
+        close_messages = {"market-hub": host_closed}
+        close_messages.update(
+            {
+                strategy_records[index]["name"]: message
+                for index, message in strategy_closed.items()
+            }
+        )
+        _normal_close_records(all_records, close_messages)
+        assert _registered_session_inventory({"market": registry_path}) == {"market": 0}
+        assert all(record["normal_exit"] and record["exit_code"] == 0 for record in all_records.values())
+    finally:
+        abort_event.set()
+        cleanup_failures = []
+        for record in strategy_records.values():
+            if record.get("closed") or not record["process"].is_alive():
+                continue
+            with suppress(EOFError, OSError, ValueError):
+                record["pipe"].send(("close",))
+        strategy_cleanup_deadline = time.monotonic() + 20.0
+        for record in strategy_records.values():
+            process = record["process"]
+            if record.get("closed"):
+                continue
+            if process.is_alive():
+                process.join(max(0.0, strategy_cleanup_deadline - time.monotonic()))
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
+            if process.is_alive():
+                cleanup_failures.append(
+                    {"name": record["name"], "pid": record["pid"], "state": "alive_after_terminate"}
+                )
+            elif process.exitcode is not None:
+                with suppress(AssertionError, OSError, ValueError):
+                    record["pipe"].close()
+                    process.close()
+                    record["closed"] = True
+            else:
+                cleanup_failures.append(
+                    {"name": record["name"], "pid": record["pid"], "state": "missing_exitcode"}
+                )
+        if host_record is not None:
+            process = host_record["process"]
+            if not host_record.get("closed"):
+                if process.is_alive():
+                    with suppress(EOFError, OSError, ValueError):
+                        host_record["pipe"].send(("close",))
+                    process.join(20)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(5)
+                if process.is_alive():
+                    cleanup_failures.append(
+                        {
+                            "name": host_record["name"],
+                            "pid": host_record["pid"],
+                            "state": "alive_after_terminate",
+                        }
+                    )
+                elif process.exitcode is not None:
+                    with suppress(AssertionError, OSError, ValueError):
+                        host_record["pipe"].close()
+                        process.close()
+                        host_record["closed"] = True
+                else:
+                    cleanup_failures.append(
+                        {
+                            "name": host_record["name"],
+                            "pid": host_record["pid"],
+                            "state": "missing_exitcode",
+                        }
+                    )
+        if cleanup_failures:
+            raise AssertionError(
+                "LOAD01 focused startup-wave cleanup did not reap all owned children: "
+                f"{cleanup_failures}"
+            )
 
 
 def test_load01_market_poll_failure_survives_parent_progress_drain() -> None:

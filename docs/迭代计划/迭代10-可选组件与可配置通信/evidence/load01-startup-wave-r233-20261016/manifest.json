@@ -1,0 +1,260 @@
+{
+  "schema": "iteration10-load01-r233-evidence-v1",
+  "round": "R233",
+  "date": "2026-10-16",
+  "status": "READY_FOR_ROOT_SCOPED_COMMIT",
+  "repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "parent_before_commit": "9e4ab501158cbd87730faa964ae487e6136ffc4a",
+    "formal_pass_count_unchanged": "39/68"
+  },
+  "evidence_level": "SOURCE_FAKE_REAL_MARKET_HOST_RUNTIME_ONE_STARTUP_WAVE_ONLY_NOT_LOAD01_PASS",
+  "claim_boundary": "Only one real local ServiceHost/market/runtime startup wave with 10 strategy children and 20 topics passed. This is not the 100-strategy 120-second pilot, the 1800-second full profile, real-account acceptance, or LOAD01 PASS.",
+  "root_qa": {
+    "output": "D:\\temp\\iteration10-load01-startup-wave-focused-qa-root-20261016-r4",
+    "pytest_exit": 0,
+    "stdout_summary": "1 passed, 1 warning in 28.48s",
+    "warning": "Existing PytestConfigWarning: Unknown config option asyncio_default_fixture_loop_scope.",
+    "junit": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "suite_seconds": "27.643",
+      "testcase_seconds": "25.123"
+    },
+    "stderr_bytes": 0,
+    "source_count": 3717,
+    "source_snapshots_equal": true,
+    "source_snapshot_sha256": "71c5f5692f65110066619dc5e92ce7b9422150f79ad4ac313f93137d58bb2830",
+    "source_after_sha256": "71c5f5692f65110066619dc5e92ce7b9422150f79ad4ac313f93137d58bb2830",
+    "repositories": {},
+    "pytest_pid": 65436,
+    "child_pid_boundary": "The 11 Host/strategy child PIDs were not serialized in this output. The passing node exercised its normal close/exit assertions; this packet does not claim a separate per-PID OS absence scan."
+  },
+  "candidate": {
+    "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+    "bytes": 319548,
+    "sha256": "507191ed6a4a678dd12f7a4089e4620bc9227487c2d5fff93367548acafa5b68",
+    "working_source_matches_r4_snapshots": true,
+    "parent_git_blob": "ec437d11f50396b072ecb00117c9a5f1fac9bc50",
+    "source_kind": "working-tree candidate overlay; not represented as commit-derived by the fixed-source manifest",
+    "scope": "Bounded startup waves for the 100-strategy path plus the focused one-wave Host/runtime test; R4 executed only the one-wave node. Static review found no weakened LOAD01 threshold."
+  },
+  "frozen_source_provenance": {
+    "source_manifest_path": ".codex-tmp/iteration10-load01-startup-wave-source-manifest-r3.json",
+    "source_manifest_pin": {
+      "bytes": 57152,
+      "sha256": "ae274c0761e14a332a9edf347b91701b8def6d9262454263eeb54d4f8f091ec3"
+    },
+    "fixed_source_root": "D:\\temp\\iteration10-load01-startup-wave-focused-source-20261016-r3\\source",
+    "parent_commit": "e08da3c58cb3b3b040f7799642de38523bbd3229",
+    "package_gitlinks": [
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 310519,
+        "archive_member_count": 261,
+        "archive_sha256": "cc6053eb2b8d0186c6b1d98ded521454bb374f39183a4d27176326847daaae60",
+        "commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "path": "bt_api/bt_api_base",
+        "prior_review_round": "r1+r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 54830,
+        "archive_member_count": 23,
+        "archive_sha256": "07f8cd6b0c8308e22555fcfc196efc14b85a332c2ba5b679a3bfa6fad25f8c41",
+        "commit": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "path": "bt_api/bt_api_transport_zmq",
+        "prior_review_round": "r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 154707,
+        "archive_member_count": 41,
+        "archive_sha256": "03ba4df4643054c275dc8df1e074050a125ca4e806af648d32d324d815ddd686",
+        "commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "path": "bt_api/bt_api_gateway",
+        "prior_review_round": "r1+r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 145856,
+        "archive_member_count": 53,
+        "archive_sha256": "041d3908de1f8039268ee72d58695149bc1da2deba50fdb170839980f1d2896d",
+        "commit": "536a4f04747182749fabdac5e28624f80465bc53",
+        "path": "bt_api/bt_api_monitor",
+        "prior_review_round": "r1+r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": false,
+        "archive_bytes": 501701,
+        "archive_member_count": 76,
+        "archive_sha256": "14efac09b8bf8073826e85a8c37c9750689f3b12c20a9764b4614a8d0bd961aa",
+        "commit": "f5c030644dea06ce91afbaacf94e11e353538186",
+        "path": "bt_api/bt_api_execution",
+        "prior_review_round": null
+      },
+      {
+        "archive_byte_identical_to_prior_review": false,
+        "archive_bytes": 310232,
+        "archive_member_count": 65,
+        "archive_sha256": "5ad071e3a8fc20034e3003c15999cf7afeaeb5bacf9a81ac2f7ae23ebad4bf7e",
+        "commit": "adb6ec58308149faa93c02920b72f98ac3796056",
+        "path": "bt_api/bt_api_risk",
+        "prior_review_round": null
+      }
+    ],
+    "seven_archives": [
+      {
+        "bytes": 14994406,
+        "extracted_files": 3284,
+        "member_count_including_directories": 3877,
+        "name": "parent.zip",
+        "non_directory_members": 3284,
+        "sha256": "3e32218bd459810130d33559aebbd51524f275deb9e834fe3025bfe89d103bb7",
+        "source_path": "."
+      },
+      {
+        "bytes": 310519,
+        "extracted_files": 204,
+        "member_count_including_directories": 261,
+        "name": "bt_api_base.zip",
+        "non_directory_members": 204,
+        "sha256": "cc6053eb2b8d0186c6b1d98ded521454bb374f39183a4d27176326847daaae60",
+        "source_path": "bt_api/bt_api_base"
+      },
+      {
+        "bytes": 54830,
+        "extracted_files": 18,
+        "member_count_including_directories": 23,
+        "name": "bt_api_transport_zmq.zip",
+        "non_directory_members": 18,
+        "sha256": "07f8cd6b0c8308e22555fcfc196efc14b85a332c2ba5b679a3bfa6fad25f8c41",
+        "source_path": "bt_api/bt_api_transport_zmq"
+      },
+      {
+        "bytes": 154707,
+        "extracted_files": 36,
+        "member_count_including_directories": 41,
+        "name": "bt_api_gateway.zip",
+        "non_directory_members": 36,
+        "sha256": "03ba4df4643054c275dc8df1e074050a125ca4e806af648d32d324d815ddd686",
+        "source_path": "bt_api/bt_api_gateway"
+      },
+      {
+        "bytes": 145856,
+        "extracted_files": 45,
+        "member_count_including_directories": 53,
+        "name": "bt_api_monitor.zip",
+        "non_directory_members": 45,
+        "sha256": "041d3908de1f8039268ee72d58695149bc1da2deba50fdb170839980f1d2896d",
+        "source_path": "bt_api/bt_api_monitor"
+      },
+      {
+        "bytes": 501701,
+        "extracted_files": 70,
+        "member_count_including_directories": 76,
+        "name": "bt_api_execution.zip",
+        "non_directory_members": 70,
+        "sha256": "14efac09b8bf8073826e85a8c37c9750689f3b12c20a9764b4614a8d0bd961aa",
+        "source_path": "bt_api/bt_api_execution"
+      },
+      {
+        "bytes": 310232,
+        "extracted_files": 56,
+        "member_count_including_directories": 65,
+        "name": "bt_api_risk.zip",
+        "non_directory_members": 56,
+        "sha256": "5ad071e3a8fc20034e3003c15999cf7afeaeb5bacf9a81ac2f7ae23ebad4bf7e",
+        "source_path": "bt_api/bt_api_risk"
+      }
+    ],
+    "archive_file_member_total": 3713,
+    "parent_export_pins": {
+      "path": "D:\\temp\\it10load01-20261016-r8-resume\\source-export-pins.json",
+      "bytes": 11089,
+      "sha256": "f0b4c4d3c2985b4d0ca64e469995f8388bd7e4775efce094b66892df65f0159d"
+    },
+    "candidate_overlay": {
+      "base_archive_member_sha256": "8291666106e7fc3aff97b3661e88705fa88b96090751ae5548ce2705014157bf",
+      "change_scope": "Correct normal-close assertions to pinned public tuple schemas: strategy closed tuple length/tag/type; Host closed tuple length/tag/pid/state/empty cleanup_failures tuple and status dict fields. Process exitcode remains separately asserted by _normal_close_records; provider stop, registrations, upstreams and registry-zero assertions remain in place.",
+      "current_overlay_sha256": "507191ed6a4a678dd12f7a4089e4620bc9227487c2d5fff93367548acafa5b68",
+      "overlay_is_commit_derived": false,
+      "prior_r2_overlay_sha256": "fefd5d942e5acccffc089a39658ad1672eb7e534520b2ce3fa284f68d0a95065",
+      "relative_path": "tests/unit/test_load01_hundred_strategy_30min.py"
+    },
+    "source_policy": "Seven frozen R5 ZIP source archives, directly extracted; not a Git worktree. Only the exact runner member is overlaid and externally pinned; other archive members remain fixed."
+  },
+  "raw_evidence_archive": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/load01-startup-wave-r233-20261016/raw-evidence.zip",
+    "bytes": 476321,
+    "sha256": "8d492926a71b4e57b3d732fedf0b59f9d50dc4482cbb35dc0171118117523929",
+    "members": [
+      {
+        "path": "r4-root-qa/command.json",
+        "bytes": 2246,
+        "sha256": "8bd9aa5731e5a138e53e3690195d7bd42c615f4bccffe366cda47f9665c10978"
+      },
+      {
+        "path": "r4-root-qa/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "r4-root-qa/junit.xml",
+        "bytes": 381,
+        "sha256": "5990df8db79350767b9162e5c7d0275353e4c6371c29b3d3836d73ea97deed6f"
+      },
+      {
+        "path": "r4-root-qa/result.json",
+        "bytes": 484,
+        "sha256": "5c01af2ae0a27b57d2825350bfd5bb8ee87a0113e51dbcca76438642dac88b92"
+      },
+      {
+        "path": "r4-root-qa/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "r4-root-qa/running.json",
+        "bytes": 76,
+        "sha256": "2c723b10d3cb122315a1f0a024faad612eb42fb93d148630208f3c562c978c20"
+      },
+      {
+        "path": "r4-root-qa/source-after.json",
+        "bytes": 957101,
+        "sha256": "71c5f5692f65110066619dc5e92ce7b9422150f79ad4ac313f93137d58bb2830"
+      },
+      {
+        "path": "r4-root-qa/source-before.json",
+        "bytes": 957101,
+        "sha256": "71c5f5692f65110066619dc5e92ce7b9422150f79ad4ac313f93137d58bb2830"
+      },
+      {
+        "path": "r4-root-qa/spec.json",
+        "bytes": 968210,
+        "sha256": "60b73b61e62343fe3bcc493a3715ac18372e6c585ccc8efbd28582771a2a12a9"
+      },
+      {
+        "path": "r4-root-qa/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r4-root-qa/stdout.log",
+        "bytes": 654,
+        "sha256": "0522b40771d241ce36efb4eb988f2d78c6d95aaf7c2595b7542e87d5b5d91aa9"
+      }
+    ]
+  },
+  "next_action": "After scoped R233 commit, make only the authorized sustained-load invocation-site overlay binding repair while keeping the archive verifier strict and the unique runner overlay externally pinned. Run a fixed-source preflight with no Host; then Root may take a fresh resource sample and serially run one 120-second pilot. Preserve 100 strategies, 10 accounts, 20 topics, 200Hz, 2 orders/account/s, 5-second RPC timeout, 30-second leases, resource reserves, and the 1800-second full profile.",
+  "not_run_by_delivery_preparer": [
+    "pytest",
+    "Host",
+    "pilot",
+    "commit",
+    "process termination"
+  ]
+}
