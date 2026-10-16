@@ -1,0 +1,151 @@
+{
+  "round": "SDK R208 Risk portfolio metrics evidence delivery",
+  "sdk_repo": "D:\\bt_api_py",
+  "sdk_branch": "dev",
+  "sdk_parent_before_delivery": "ce1b678389456ed8e2b13a1bc710abeacb22605a",
+  "risk_repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "risk_commit": "6c81653e2a586f47c17cba5f898f23a247b1905d",
+  "risk_parent": "adb6ec58308149faa93c02920b72f98ac3796056",
+  "formal_progress": "37/68",
+  "evidence_level": "OFFLINE_SUPPLIED_FACTS_NUMERIC_METRICS_ONLY",
+  "qa": {
+    "output": "D:\\temp\\iteration10-risk-portfolio-metrics-root-20261016-r1",
+    "raw_files": [
+      "command.json",
+      "exit.txt",
+      "junit.xml",
+      "result.json",
+      "runner.py",
+      "running.json",
+      "source-after.json",
+      "source-before.json",
+      "spec.json",
+      "stderr.log",
+      "stdout.log"
+    ],
+    "pytest_exit": 0,
+    "passed": 16,
+    "duration_seconds": 0.52,
+    "stderr_bytes": 0,
+    "warnings": 0,
+    "source_pins": 137,
+    "risk_and_base_heads_unchanged": true
+  },
+  "review": {
+    "original_review": {
+      "path": ".codex-tmp/risk-portfolio-metrics-v1-static-review-20261016.md",
+      "bytes": 3170,
+      "sha256": "72992985de8d858b337e3edbe683d9f392ea8ffec9588dc4d0d5f6fffdca1fe3",
+      "status_for_current_source": "historical; its source/test pins are stale",
+      "source_sha256": "51e23273a18f92bcf98d2f9ff6968d8246fd4a594b205819e3fdea468fb28aa1",
+      "test_sha256": "17952f127954414f037fd415f2c02c3f24c7493afbb672dadd0086d22b417ef8"
+    },
+    "incremental_review": {
+      "provenance": "Root-forwarded independent static reviewer result; metadata transcribed in ZIP",
+      "decision": "GO_STATIC",
+      "scope": "exact current metric and test pins; price -100% boundary, report cut, and two-row mixed-currency reconciliation",
+      "qa_or_host_run": false
+    }
+  },
+  "archive": {
+    "file": "raw-evidence.zip",
+    "bytes": 38758,
+    "sha256": "4ccf69e09316f0d82ba971413aecebda6876a599c2dd698d4559ccd764126da6",
+    "members": {
+      "qa/command.json": {
+        "bytes": 1049,
+        "sha256": "2f782cf7a16749cf927de31d2a86a4f62e2ec82a920f04c380cb746d4a32ed95"
+      },
+      "qa/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "qa/junit.xml": {
+        "bytes": 2437,
+        "sha256": "8b402eb27fe8781e4b70c18bc8157f5f1c4356145ee88e718919c3c803ebdc36"
+      },
+      "qa/result.json": {
+        "bytes": 806,
+        "sha256": "3ed7d25670c18fa29abeacfe2aa01876e3530cc92f4039a03a5fd558768492a7"
+      },
+      "qa/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "qa/running.json": {
+        "bytes": 76,
+        "sha256": "f4947c46f1f66a38554e2e2fea9ee3b5ae358da784d284182bfa698d96a3e2c7"
+      },
+      "qa/source-after.json": {
+        "bytes": 20912,
+        "sha256": "10084b60ea82d5740d57e3d1be919d45c074469dc4c148908ef77bccf81f582f"
+      },
+      "qa/source-before.json": {
+        "bytes": 20912,
+        "sha256": "10084b60ea82d5740d57e3d1be919d45c074469dc4c148908ef77bccf81f582f"
+      },
+      "qa/spec.json": {
+        "bytes": 22375,
+        "sha256": "6399e02e344c3c7726b6f04829d561f78f0f58f31e41cc9fe6a56eddf2aec64e"
+      },
+      "qa/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "qa/stdout.log": {
+        "bytes": 196,
+        "sha256": "ec85282f5508459d4eb01e36282b51f0c215f3a3982c21596c0dbdd2c445ba60"
+      },
+      "independent-review/original-static-review.md": {
+        "bytes": 3170,
+        "sha256": "72992985de8d858b337e3edbe683d9f392ea8ffec9588dc4d0d5f6fffdca1fe3"
+      },
+      "independent-review/incremental-review-metadata.md": {
+        "bytes": 1232,
+        "sha256": "7b1130d61570d595966d31cba2827a80b5b8088b9669a4d2e3c7f99376d2f378"
+      },
+      "accepted-package/src/bt_api_risk/portfolio_metrics_v1.py": {
+        "bytes": 20497,
+        "sha256": "55a56d84fd314966f6e61fa6098bb7b5ae5cea27fac6df0ae01b562c3d4da23f"
+      },
+      "accepted-package/tests/test_portfolio_metrics_v1.py": {
+        "bytes": 12431,
+        "sha256": "57517b596527b8831cbe4fd76aec28bdfc64a5e069042e2f9e7d4f4684d992ad"
+      },
+      "accepted-package/docs/iteration10-portfolio-metrics-20261016.md": {
+        "bytes": 2469,
+        "sha256": "ac327174e5fb04680c6482c8cb4bdc49fc871b46b9d32d6c6c48c125e6e245c2"
+      },
+      "accepted-package/postcommit.json": {
+        "bytes": 728,
+        "sha256": "a2d39be918c8915761b145aeec6d237769e06dfeeaf3f1500e3dc9b9747d9caf"
+      }
+    }
+  },
+  "root_adjudication": {
+    "file": "root-adjudication.md",
+    "bytes": 2547,
+    "sha256": "eb8689d402badbb76c9f29125ba34599608b2414101175266ffccbe2492ef741"
+  },
+  "parent_delivery_intended_scope": [
+    "bt_api/bt_api_risk",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/risk-portfolio-metrics-20261016/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/risk-portfolio-metrics-20261016/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/risk-portfolio-metrics-20261016/root-adjudication.md",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md"
+  ],
+  "parent_file_pins": {
+    "raw-evidence.zip": {
+      "bytes": 38758,
+      "sha256": "4ccf69e09316f0d82ba971413aecebda6876a599c2dd698d4559ccd764126da6"
+    },
+    "root-adjudication.md": {
+      "bytes": 2547,
+      "sha256": "eb8689d402badbb76c9f29125ba34599608b2414101175266ffccbe2492ef741"
+    },
+    "progress.md": {
+      "bytes": 491761,
+      "sha256": "ba0e5295da149cd7f3cdc882e8733f8fafd5cd9a91a9dc0f413c787d7e662cf6"
+    }
+  }
+}
