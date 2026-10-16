@@ -505,3 +505,135 @@ def test_provider_boundary_rechecks_owner_and_domain_after_admission_wait(
             with sqlite3.connect(database_path, timeout=1.0) as connection:
                 connection.execute("UPDATE quota_domains SET capacity = capacity - 1")
         guard.release()
+
+
+class _SharedDomainMetadataProvider:
+    def __init__(self) -> None:
+        self.metadata_reads = 0
+
+    def connect(self, **_kwargs: Any) -> None:
+        return None
+
+    def read_account(self, **_kwargs: Any) -> object:
+        return object()
+
+    def read_instrument_metadata(
+        self,
+        *,
+        instrument_id: str,
+        exchange_id: str,
+        generation: str,
+        timeout: float,
+    ) -> dict[str, str]:
+        if not instrument_id or not exchange_id or not generation or timeout <= 0.0:
+            raise AssertionError("provider metadata query facts are incomplete")
+        self.metadata_reads += 1
+        return {"instrument_id": instrument_id, "exchange_id": exchange_id}
+
+    def close(self) -> bool:
+        return True
+
+
+def _shared_domain_ctp_query_process(
+    account_ref: str,
+    database_path: str,
+    ready: Any,
+    release: Any,
+    results: Any,
+) -> None:
+    domain = GatewayQuotaDomainBinding(
+        GatewayQuotaDomainConfig(
+            database_path=Path(database_path),
+            quota_domain_ref="synthetic:shared-api-key-ip-ctp-v1",
+            capacity_per_window=1,
+            window_seconds=60.0,
+            reserved_capacity=0,
+            max_queue=4,
+            max_queue_per_subject=2,
+            max_backoff_seconds=1.0,
+            max_queue_wait_seconds=1.0,
+            poll_interval_seconds=0.005,
+        )
+    )
+    provider = _SharedDomainMetadataProvider()
+    session = GatewayQuotaProviderSession(
+        provider,
+        domain.admission,
+        GatewayQuotaSubject(account_ref=f"account:{account_ref}"),
+        assert_domain_current=domain.assert_current,
+    )
+    ready.put(account_ref)
+    if not release.wait(timeout=10.0):
+        results.put((account_ref, "RELEASE_SIGNAL_TIMEOUT", provider.metadata_reads))
+        return
+    try:
+        metadata = session.read_instrument_metadata(
+            instrument_id="cu2611",
+            exchange_id="SHFE",
+            generation=f"generation:{account_ref}",
+            timeout=0.5,
+        )
+        results.put((account_ref, "GRANTED", provider.metadata_reads, metadata))
+    except GatewayQuotaAdmissionError as exc:
+        results.put((account_ref, exc.code, provider.metadata_reads))
+
+
+@pytest.mark.integration
+def test_two_account_scopes_share_one_api_key_ip_ctp_quota(tmp_path: Path) -> None:
+    """Distinct account subjects consume one explicitly shared provider domain."""
+
+    database_path = tmp_path / "shared-api-key-ip-ctp-quota.sqlite3"
+    context = multiprocessing.get_context("spawn")
+    ready = context.Queue()
+    results = context.Queue()
+    release = context.Event()
+    account_refs = ("account-alpha", "account-beta")
+    children = [
+        context.Process(
+            target=_shared_domain_ctp_query_process,
+            args=(account_ref, str(database_path), ready, release, results),
+        )
+        for account_ref in account_refs
+    ]
+    try:
+        for child in children:
+            child.start()
+        assert {ready.get(timeout=15.0) for _ in children} == set(account_refs)
+        release.set()
+        outcomes = [results.get(timeout=5.0) for _ in children]
+        assert {item[0] for item in outcomes} == set(account_refs), outcomes
+        granted = [item for item in outcomes if item[1] == "GRANTED"]
+        denied = [item for item in outcomes if item[1] == "DEADLINE_EXCEEDED"]
+        assert len(granted) == 1, outcomes
+        assert len(denied) == 1, outcomes
+        assert granted[0][3] == {"instrument_id": "cu2611", "exchange_id": "SHFE"}
+        assert granted[0][2] == 1
+        assert denied[0][2] == 0
+        for child in children:
+            child.join(5.0)
+            assert child.exitcode == 0
+
+        with sqlite3.connect(database_path) as connection:
+            grants = connection.execute(
+                "SELECT operation, COUNT(*), COUNT(DISTINCT subject_digest) "
+                "FROM grants GROUP BY operation"
+            ).fetchall()
+            pending_waiters = connection.execute(
+                "SELECT COUNT(*) FROM waiters WHERE deadline_ns > ?",
+                (time.monotonic_ns(),),
+            ).fetchone()[0]
+        assert grants == [("ctp_query", 1, 1)]
+        assert pending_waiters == 0
+    finally:
+        release.set()
+        for child in children:
+            if child.pid is not None:
+                if child.is_alive():
+                    child.terminate()
+                child.join(5.0)
+                if child.exitcode is not None:
+                    child.close()
+        ready.close()
+        results.close()
+        ready.join_thread()
+        results.join_thread()
