@@ -1,0 +1,10 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0
+rootdir: D:\bt_api_py\bt_api\bt_api_execution
+configfile: pyproject.toml
+collected 13 items
+
+bt_api\bt_api_execution\tests\test_group_coordinator_three_leg.py ...... [ 46%]
+.......                                                                  [100%]
+
+============================= 13 passed in 2.12s ==============================

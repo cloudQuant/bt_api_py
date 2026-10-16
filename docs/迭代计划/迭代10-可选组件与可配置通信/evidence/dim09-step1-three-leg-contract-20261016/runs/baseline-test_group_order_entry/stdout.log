@@ -1,0 +1,210 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0
+rootdir: D:\bt_api_py\bt_api\bt_api_execution
+configfile: pyproject.toml
+collected 22 items
+
+bt_api\bt_api_execution\tests\test_group_order_entry.py FFFFFFFFFFFFFFFF [ 72%]
+FFFFFF                                                                   [100%]
+
+================================== FAILURES ===================================
+_____ test_group_leg_uses_existing_permit_and_exposes_authorized_binding ______
+bt_api\bt_api_execution\tests\test_group_order_entry.py:424: in test_group_leg_uses_existing_permit_and_exposes_authorized_binding
+    values = _make_service(str(tmp_path / "execution.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+__ test_group_leg_target_resolution_preserves_portfolio_with_same_run_scope ___
+bt_api\bt_api_execution\tests\test_group_order_entry.py:470: in test_group_leg_target_resolution_preserves_portfolio_with_same_run_scope
+    values = _make_service(str(tmp_path / "portfolio-scope.sqlite"), run_id="run-a")
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+______ test_after_group_claim_hook_receives_exact_claim_before_provider _______
+bt_api\bt_api_execution\tests\test_group_order_entry.py:533: in test_after_group_claim_hook_receives_exact_claim_before_provider
+    values = _make_service(str(tmp_path / "after-claim.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+_ test_evidence_dispatcher_result_callback_runs_after_durable_terminal_record _
+bt_api\bt_api_execution\tests\test_group_order_entry.py:590: in test_evidence_dispatcher_result_callback_runs_after_durable_terminal_record
+    values = _make_service(str(tmp_path / "group-result.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+_ test_after_group_result_failure_preserves_terminal_record_and_authority_hold _
+bt_api\bt_api_execution\tests\test_group_order_entry.py:677: in test_after_group_result_failure_preserves_terminal_record_and_authority_hold
+    values = _make_service(str(tmp_path / "group-result-failure.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+____ test_acknowledged_group_result_is_not_treated_as_terminal_resolution _____
+bt_api\bt_api_execution\tests\test_group_order_entry.py:720: in test_acknowledged_group_result_is_not_treated_as_terminal_resolution
+    values = _make_service(str(tmp_path / "group-result-acked.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+____ test_provider_rejection_with_no_order_id_reaches_resolution_callback _____
+bt_api\bt_api_execution\tests\test_group_order_entry.py:755: in test_provider_rejection_with_no_order_id_reaches_resolution_callback
+    values = _make_service(str(tmp_path / "group-result-rejected.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+_________ test_evidence_override_requires_all_three_call_local_hooks __________
+bt_api\bt_api_execution\tests\test_group_order_entry.py:792: in test_evidence_override_requires_all_three_call_local_hooks
+    values = _make_service(str(tmp_path / "group-result-incomplete-hooks.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+____ test_unknown_evidence_dispatch_retains_hold_and_skips_result_callback ____
+bt_api\bt_api_execution\tests\test_group_order_entry.py:816: in test_unknown_evidence_dispatch_retains_hold_and_skips_result_callback
+    values = _make_service(str(tmp_path / "group-result-unknown.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+_________ test_evidence_dispatchers_are_call_local_across_group_legs __________
+bt_api\bt_api_execution\tests\test_group_order_entry.py:853: in test_evidence_dispatchers_are_call_local_across_group_legs
+    values = _make_service(str(tmp_path / "group-result-two-calls.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+___ test_after_group_claim_hook_exception_latches_unknown_without_provider ____
+bt_api\bt_api_execution\tests\test_group_order_entry.py:950: in test_after_group_claim_hook_exception_latches_unknown_without_provider
+    values = _make_service(str(tmp_path / "after-claim-failed.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+_____ test_after_group_claim_hook_is_followed_by_final_writer_fence_check _____
+bt_api\bt_api_execution\tests\test_group_order_entry.py:974: in test_after_group_claim_hook_is_followed_by_final_writer_fence_check
+    values = _make_service(str(tmp_path / "after-claim-fence.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+__ test_after_group_claim_hook_rejects_changed_durable_authority_generation ___
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1009: in test_after_group_claim_hook_rejects_changed_durable_authority_generation
+    values = _make_service(str(tmp_path / "after-claim-authority-fence.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+___ test_after_group_claim_hook_cannot_extend_group_authorization_deadline ____
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1038: in test_after_group_claim_hook_cannot_extend_group_authorization_deadline
+    values = _make_service(str(tmp_path / "after-claim-expired.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+___ test_group_entry_rejects_unscoped_risk_adapter_before_claim_or_dispatch ___
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1064: in test_group_entry_rejects_unscoped_risk_adapter_before_claim_or_dispatch
+    values = _make_service(str(tmp_path / "unscoped.sqlite"), bind_account_scope=False)
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+__________ test_unknown_group_claim_never_retries_or_releases_permit __________
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1084: in test_unknown_group_claim_never_retries_or_releases_permit
+    values = _make_service(str(tmp_path / "unknown.sqlite"), claim_error=True)
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+__________ test_fresh_fence_resumes_only_unclaimed_pending_group_leg __________
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1126: in test_fresh_fence_resumes_only_unclaimed_pending_group_leg
+    values = _make_service(str(tmp_path / "pending.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+______ test_revoked_group_authority_fails_before_risk_claim_or_provider _______
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1196: in test_revoked_group_authority_fails_before_risk_claim_or_provider
+    values = _make_service(str(tmp_path / "revoked.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+______ test_authority_guard_blocks_epoch_rotation_at_claim_and_provider _______
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1227: in test_authority_guard_blocks_epoch_rotation_at_claim_and_provider
+    values = _make_service(str(tmp_path / "guard-race.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+___________ test_group_claim_receipt_must_match_trusted_risk_scope ____________
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1263: in test_group_claim_receipt_must_match_trusted_risk_scope
+    values = _make_service(str(tmp_path / "wrong-risk-scope.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+____________ test_regular_submit_and_cancel_reject_group_namespace ____________
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1303: in test_regular_submit_and_cancel_reject_group_namespace
+    values = _make_service(str(tmp_path / "ordinary.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+_________________ test_query_returns_group_auth_attempt_audit _________________
+bt_api\bt_api_execution\tests\test_group_order_entry.py:1347: in test_query_returns_group_auth_attempt_audit
+    values = _make_service(str(tmp_path / "query.sqlite"))
+bt_api\bt_api_execution\tests\test_group_order_entry.py:398: in _make_service
+    service = ExecutionOrderEntryService(
+bt_api\bt_api_execution\src\bt_api_execution\service_order_entry.py:249: in __init__
+    raise ContractValidationError("paper execution requires an explicit owner domain")
+E   bt_api_execution.errors.ContractValidationError: paper execution requires an explicit owner domain
+=========================== short test summary info ===========================
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_group_leg_uses_existing_permit_and_exposes_authorized_binding
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_group_leg_target_resolution_preserves_portfolio_with_same_run_scope
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_after_group_claim_hook_receives_exact_claim_before_provider
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_evidence_dispatcher_result_callback_runs_after_durable_terminal_record
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_after_group_result_failure_preserves_terminal_record_and_authority_hold
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_acknowledged_group_result_is_not_treated_as_terminal_resolution
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_provider_rejection_with_no_order_id_reaches_resolution_callback
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_evidence_override_requires_all_three_call_local_hooks
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_unknown_evidence_dispatch_retains_hold_and_skips_result_callback
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_evidence_dispatchers_are_call_local_across_group_legs
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_after_group_claim_hook_exception_latches_unknown_without_provider
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_after_group_claim_hook_is_followed_by_final_writer_fence_check
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_after_group_claim_hook_rejects_changed_durable_authority_generation
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_after_group_claim_hook_cannot_extend_group_authorization_deadline
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_group_entry_rejects_unscoped_risk_adapter_before_claim_or_dispatch
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_unknown_group_claim_never_retries_or_releases_permit
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_fresh_fence_resumes_only_unclaimed_pending_group_leg
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_revoked_group_authority_fails_before_risk_claim_or_provider
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_authority_guard_blocks_epoch_rotation_at_claim_and_provider
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_group_claim_receipt_must_match_trusted_risk_scope
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_regular_submit_and_cancel_reject_group_namespace
+FAILED bt_api\bt_api_execution\tests\test_group_order_entry.py::test_query_returns_group_auth_attempt_audit
+============================= 22 failed in 2.14s ==============================

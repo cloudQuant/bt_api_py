@@ -1,0 +1,704 @@
+diff --git a/src/bt_api_execution/group_coordinator.py b/src/bt_api_execution/group_coordinator.py
+index 9d892b6..0e8aa74 100644
+--- a/src/bt_api_execution/group_coordinator.py
++++ b/src/bt_api_execution/group_coordinator.py
+@@ -172,7 +172,7 @@ class GroupOrderCoordinator:
+             if existing.request.unquoted_fingerprint != request.unquoted_fingerprint:
+                 raise IntentConflictError()
+             return existing
+-        if request.version != 1 or request.budget_quote is not None:
++        if request.version not in {1, 3} or request.budget_quote is not None:
+             raise ContractValidationError("new group budget quotes are built by the trusted owner")
+         policy = self._budget_policies.get(request.portfolio_ref)
+         if policy is None or self._budget_quote_builder is None:
+@@ -183,7 +183,11 @@ class GroupOrderCoordinator:
+         quote = self._budget_quote_builder(request, policy, now_ns=now)
+         if type(quote) is not GroupBudgetQuote or quote.policy_fingerprint != policy.fingerprint:
+             raise ContractValidationError("trusted quote builder returned an unbound group quote")
+-        accepted_request = replace(request, version=2, budget_quote=quote)
++        accepted_request = replace(
++            request,
++            version=2 if request.version == 1 else 3,
++            budget_quote=quote,
++        )
+         snapshot = self._store.create_or_get(
+             accepted_request,
+             budget_policy=policy,
+@@ -254,14 +258,14 @@ class GroupOrderCoordinator:
+                     now_ns=self._now(),
+                 )
+ 
+-            # A single owner-thread tick may complete both legs when the
++            # A single owner-thread tick may complete every leg when the
+             # account order service returns terminal evidence synchronously.
+-            for _ in range(4):
++            for _ in range(2 * len(snapshot.request.legs) + 2):
+                 snapshot = self._required(portfolio_ref, group_id)
+                 if snapshot.state is GroupOrderState.FIRST_PENDING or (
+                     snapshot.state is GroupOrderState.RECOVERY_REQUIRED
+                     and self._first_leg(snapshot).submitted_intent is not None
+-                    and self._second_leg(snapshot).submitted_intent is None
++                    and self._only_first_leg_submitted(snapshot)
+                 ):
+                     snapshot, ready = self._advance_first_leg(snapshot)
+                     if not ready:
+@@ -275,9 +279,17 @@ class GroupOrderCoordinator:
+                     continue
+                 if snapshot.state is GroupOrderState.HEDGE_PENDING or (
+                     snapshot.state is GroupOrderState.RECOVERY_REQUIRED
+-                    and self._second_leg(snapshot).submitted_intent is not None
++                    and any(
++                        progress.submitted_intent is not None
++                        for progress in snapshot.legs[1:]
++                    )
+                 ):
+-                    snapshot, done = self._advance_hedge_leg(snapshot)
++                    advance = (
++                        self._advance_chain
++                        if snapshot.request.version == 3
++                        else self._advance_hedge_leg
++                    )
++                    snapshot, done = advance(snapshot)
+                     if done or snapshot.state is GroupOrderState.RECOVERY_REQUIRED:
+                         return snapshot
+                     continue
+@@ -460,7 +472,7 @@ class GroupOrderCoordinator:
+         return self._required(request.portfolio_ref, request.group_id)
+ 
+     def _advance_first_leg(self, snapshot: GroupOrderSnapshot) -> tuple[GroupOrderSnapshot, bool]:
+-        first_plan, _ = snapshot.request.ordered_legs
++        first_plan = snapshot.request.ordered_legs[0]
+         progress = self._leg(snapshot, first_plan.leg_id)
+         if progress.submitted_intent is None:
+             intent = first_plan.maximum_intent
+@@ -685,7 +697,11 @@ class GroupOrderCoordinator:
+                 return self._close_no_fill(snapshot, plan.leg_id), False
+             if claim is None:
+                 return self._mark_recovery(snapshot, "FIRST_LEG_CLAIM_MISSING"), False
++            if snapshot.request.version == 3:
++                return self._size_chain(snapshot), True
+             return self._size_hedge(snapshot, plan, status.filled_quantity), True
++        if snapshot.request.version == 3:
++            return self._chain_terminal_leg(snapshot, plan, status, claim)
+         if status.filled_quantity > 0 and claim is None:
+             return self._mark_recovery(snapshot, "HEDGE_LEG_CLAIM_MISSING"), False
+         return self._finish_hedge(snapshot)
+@@ -798,6 +814,242 @@ class GroupOrderCoordinator:
+         )
+         return snapshot, True
+ 
++    def _chain_terminal_leg(
++        self,
++        snapshot: GroupOrderSnapshot,
++        plan: Any,
++        status: GroupChildOrderStatus,
++        claim: GroupLegClaimReceipt | None,
++    ) -> tuple[GroupOrderSnapshot, bool]:
++        """Apply one terminal v3 mid-chain outcome; later legs never dispatch."""
++
++        if status.filled_quantity == 0:
++            # A rejected/cancelled zero-fill leg 2/3 fails the chain closed:
++            # no later leg is ever submitted, and the residual vector keeps
++            # the prior legs' unhedged exposure for compensation decisions.
++            vector, scalar = self._chain_residual(snapshot)
++            return (
++                self._mark_recovery(
++                    snapshot,
++                    "CHAIN_INTERRUPTED_ZERO_FILL",
++                    residual_base_units=scalar,
++                    residual_vector=vector,
++                ),
++                True,
++            )
++        if claim is None:
++            return self._mark_recovery(snapshot, "HEDGE_LEG_CLAIM_MISSING"), False
++        if any(
++            self._leg(snapshot, item.leg_id).submitted_intent is None
++            for item in snapshot.request.ordered_legs[1:]
++        ):
++            return self._size_chain(snapshot), False
++        return self._finish_chain(snapshot)
++
++    def _size_chain(self, snapshot: GroupOrderSnapshot) -> GroupOrderSnapshot:
++        """Size the next unsubmitted v3 leg with whole-group step reduction."""
++
++        ordered = snapshot.request.ordered_legs
++        first_plan = ordered[0]
++        first_status = self._leg(snapshot, first_plan.leg_id).child_status
++        if (
++            first_status is None
++            or first_status.state not in TERMINAL_STATES
++            or first_status.filled_quantity <= 0
++        ):
++            return self._mark_recovery(snapshot, "FIRST_LEG_NOT_TERMINAL_FILLED")
++        first_base = Fraction(first_status.filled_quantity) * Fraction(
++            first_plan.base_units_per_order_unit
++        )
++        remaining = tuple(
++            item
++            for item in ordered[1:]
++            if self._leg(snapshot, item.leg_id).submitted_intent is None
++        )
++        if not remaining:
++            return snapshot
++        quantities = {
++            item.leg_id: self._chain_express(item, first_base) for item in remaining
++        }
++        if any(quantity <= 0 for quantity in quantities.values()):
++            return self._chain_shortfall(snapshot)
++        # Whole-group reduction: one common fillable base B* keeps every
++        # remaining leg's ratio semantics after decimal-step flooring. The
++        # reduction only ever shrinks not-yet-submitted legs.
++        base = self._common_chain_base(remaining, quantities)
++        for _ in range(64):
++            reduced = {
++                item.leg_id: self._chain_express(item, base) for item in remaining
++            }
++            if any(quantity <= 0 for quantity in reduced.values()):
++                return self._chain_shortfall(snapshot)
++            next_base = self._common_chain_base(remaining, reduced)
++            quantities = reduced
++            if next_base == base:
++                break
++            base = next_base
++        else:
++            return self._mark_recovery(snapshot, "CHAIN_REDUCTION_NOT_CONVERGED")
++        next_plan = remaining[0]
++        quantity = quantities[next_plan.leg_id]
++        intent = replace(next_plan.maximum_intent, quantity=quantity)
++        progress = replace(
++            self._leg(snapshot, next_plan.leg_id),
++            phase=GroupLegPhase.READY,
++            submitted_intent=intent,
++            child_status=None,
++        )
++        preview = replace(
++            snapshot,
++            legs=tuple(
++                progress if item.leg_id == progress.leg_id else item
++                for item in snapshot.legs
++            ),
++        )
++        vector, scalar = self._chain_residual(preview)
++        return self._replace_leg(
++            snapshot,
++            progress,
++            event_type="HEDGE_LEG_SIZED",
++            payload={
++                "leg_id": next_plan.leg_id,
++                "intent_id": intent.intent_id,
++                "quantity": format(quantity, "f"),
++                "first_filled_quantity": format(first_status.filled_quantity, "f"),
++            },
++            state=GroupOrderState.HEDGE_PENDING,
++            residual_base_units=scalar,
++            residual_vector=vector,
++        )
++
++    def _advance_chain(self, snapshot: GroupOrderSnapshot) -> tuple[GroupOrderSnapshot, bool]:
++        """Drive the staged v3 chain against the original leg identities."""
++
++        ordered = snapshot.request.ordered_legs
++        active_index = None
++        for index, item in enumerate(ordered):
++            if self._leg(snapshot, item.leg_id).submitted_intent is not None:
++                active_index = index
++        if active_index is None:
++            return self._mark_recovery(snapshot, "CHAIN_STATE_INCONSISTENT"), True
++        if active_index == 0:
++            return self._advance_first_leg(snapshot)
++        for index in range(active_index):
++            status = self._leg(snapshot, ordered[index].leg_id).child_status
++            if (
++                status is None
++                or status.state not in TERMINAL_STATES
++                or status.filled_quantity <= 0
++            ):
++                code = (
++                    "FIRST_LEG_NOT_TERMINAL_FILLED"
++                    if index == 0
++                    else "CHAIN_PRIOR_LEG_NOT_TERMINAL_FILLED"
++                )
++                return self._mark_recovery(snapshot, code), True
++        active_plan = ordered[active_index]
++        progress = self._leg(snapshot, active_plan.leg_id)
++        intent = progress.submitted_intent
++        if progress.phase is GroupLegPhase.UNKNOWN:
++            try:
++                order_receipt = self._orders[active_plan.account_ref].query(intent.intent_id)
++            except Exception:
++                return self._mark_recovery(snapshot, "HEDGE_LEG_QUERY_UNKNOWN"), True
++            if order_receipt is None:
++                return self._mark_recovery(snapshot, "HEDGE_LEG_STILL_UNKNOWN"), True
++            return self._record_child_status(snapshot, active_plan, order_receipt, first=False)
++        try:
++            order_receipt = self._orders[active_plan.account_ref].query(intent.intent_id)
++        except Exception:
++            return self._mark_recovery(snapshot, "HEDGE_LEG_QUERY_UNKNOWN"), True
++        if order_receipt is None:
++            if progress.phase is not GroupLegPhase.READY:
++                return self._mark_recovery(snapshot, "HEDGE_LEG_RECORD_MISSING"), True
++            return self._submit_leg(snapshot, active_plan, intent, first=False)
++        return self._record_child_status(snapshot, active_plan, order_receipt, first=False)
++
++    def _finish_chain(self, snapshot: GroupOrderSnapshot) -> tuple[GroupOrderSnapshot, bool]:
++        ordered = snapshot.request.ordered_legs
++        statuses = tuple(self._leg(snapshot, item.leg_id).child_status for item in ordered)
++        if any(status is None for status in statuses):
++            return self._mark_recovery(snapshot, "GROUP_CHILD_STATUS_MISSING"), True
++        if any(status.state not in TERMINAL_STATES for status in statuses):
++            return snapshot, False
++        vector, scalar = self._chain_residual(snapshot)
++        balanced = all(item == 0 for item in vector)
++        snapshot = self._store.update(
++            snapshot,
++            event_type="GROUP_PAIRED" if balanced else "GROUP_RECOVERY_REQUIRED",
++            event_payload={
++                "leg_ids": [item.leg_id for item in ordered],
++                "filled_quantities": [
++                    format(status.filled_quantity, "f") for status in statuses
++                ],
++                "residual_vector": [format(item, "f") for item in vector],
++                "residual_base_units": format(scalar, "f"),
++            },
++            state=GroupOrderState.PAIRED if balanced else GroupOrderState.RECOVERY_REQUIRED,
++            residual_base_units=scalar,
++            residual_vector=vector,
++            error_code=None if balanced else "chain_residual_unresolved",
++            now_ns=self._now(),
++        )
++        return snapshot, True
++
++    def _chain_residual(
++        self, snapshot: GroupOrderSnapshot
++    ) -> tuple[tuple[Decimal, ...], Decimal]:
++        """Per-leg base-unit deviation from the ratio target of the first leg."""
++
++        ordered = snapshot.request.ordered_legs
++        first_status = self._leg(snapshot, ordered[0].leg_id).child_status
++        first_base = (
++            Fraction(0)
++            if first_status is None
++            else Fraction(first_status.filled_quantity)
++            * Fraction(ordered[0].base_units_per_order_unit)
++        )
++        components: list[Fraction] = []
++        for item in ordered:
++            status = self._leg(snapshot, item.leg_id).child_status
++            filled = (
++                Fraction(0)
++                if status is None
++                else Fraction(status.filled_quantity) * Fraction(item.base_units_per_order_unit)
++            )
++            components.append(Fraction(item.ratio) * first_base - filled)
++        vector = tuple(_fraction_to_decimal(item) for item in components)
++        scalar = _fraction_to_decimal(sum((abs(item) for item in components), Fraction(0)))
++        return vector, scalar
++
++    @staticmethod
++    def _chain_express(plan: Any, base: Fraction) -> Decimal:
++        """Floor one leg's quantity for a target first-leg base (exact math)."""
++
++        raw = Fraction(plan.ratio) * base / Fraction(plan.base_units_per_order_unit)
++        step = Fraction(plan.quantity_step)
++        steps = raw // step
++        quantity = _fraction_to_decimal(steps * step)
++        quantity = min(quantity, plan.maximum_intent.quantity)
++        quantity = quantity - (quantity % plan.quantity_step)
++        return quantity
++
++    @staticmethod
++    def _common_chain_base(
++        remaining: tuple[Any, ...], quantities: Mapping[str, Decimal]
++    ) -> Fraction:
++        return min(
++            Fraction(quantities[item.leg_id])
++            * Fraction(item.base_units_per_order_unit)
++            / Fraction(item.ratio)
++            for item in remaining
++        )
++
++    def _chain_shortfall(self, snapshot: GroupOrderSnapshot) -> GroupOrderSnapshot:
++        if any(progress.submitted_intent is not None for progress in snapshot.legs):
++            return self._mark_recovery(snapshot, "CHAIN_QUANTITY_ROUNDS_TO_ZERO")
++        return self._reject_before_dispatch(snapshot, "CHAIN_STEP_SHORTFALL")
++
+     def _close_no_fill(self, snapshot: GroupOrderSnapshot, first_leg_id: str) -> GroupOrderSnapshot:
+         first_plan = snapshot.request.leg(first_leg_id)
+         if not self._release_after_no_fill(snapshot, first_plan):
+@@ -1258,6 +1510,7 @@ class GroupOrderCoordinator:
+         payload: Mapping[str, Any],
+         state: GroupOrderState | None = None,
+         residual_base_units: Decimal | None | object = ...,
++        residual_vector: tuple[Decimal, ...] | None | object = ...,
+     ) -> GroupOrderSnapshot:
+         entries = tuple(leg if item.leg_id == leg.leg_id else item for item in snapshot.legs)
+         return self._store.update(
+@@ -1267,6 +1520,7 @@ class GroupOrderCoordinator:
+             state=state,
+             legs=entries,
+             residual_base_units=residual_base_units,
++            residual_vector=residual_vector,
+             error_code=None
+             if state in {GroupOrderState.FIRST_PENDING, GroupOrderState.HEDGE_PENDING}
+             else ...,
+@@ -1302,18 +1556,33 @@ class GroupOrderCoordinator:
+         )
+         return snapshot, False
+ 
+-    def _mark_recovery(self, snapshot: GroupOrderSnapshot, code: str) -> GroupOrderSnapshot:
++    def _mark_recovery(
++        self,
++        snapshot: GroupOrderSnapshot,
++        code: str,
++        *,
++        residual_base_units: Decimal | None | object = ...,
++        residual_vector: tuple[Decimal, ...] | None | object = ...,
++    ) -> GroupOrderSnapshot:
++        if (
++            snapshot.state is GroupOrderState.RECOVERY_REQUIRED
++            and snapshot.error_code == code.lower()
++            and (residual_vector is ... or snapshot.residual_vector == residual_vector)
++            and (
++                residual_base_units is ...
++                or snapshot.residual_base_units == residual_base_units
++            )
++        ):
++            return snapshot
+         if snapshot.state is GroupOrderState.RECOVERY_REQUIRED:
+-            return (
+-                snapshot
+-                if snapshot.error_code == code.lower()
+-                else self._store.update(
+-                    snapshot,
+-                    event_type="GROUP_RECOVERY_REQUIRED",
+-                    event_payload={"code": code},
+-                    error_code=code.lower(),
+-                    now_ns=self._now(),
+-                )
++            return self._store.update(
++                snapshot,
++                event_type="GROUP_RECOVERY_REQUIRED",
++                event_payload={"code": code},
++                error_code=code.lower(),
++                residual_base_units=residual_base_units,
++                residual_vector=residual_vector,
++                now_ns=self._now(),
+             )
+         return self._store.update(
+             snapshot,
+@@ -1321,6 +1590,8 @@ class GroupOrderCoordinator:
+             event_payload={"code": code},
+             state=GroupOrderState.RECOVERY_REQUIRED,
+             error_code=code.lower(),
++            residual_base_units=residual_base_units,
++            residual_vector=residual_vector,
+             now_ns=self._now(),
+         )
+ 
+@@ -1341,13 +1612,8 @@ class GroupOrderCoordinator:
+     def _first_leg(self, snapshot: GroupOrderSnapshot) -> GroupLegProgress:
+         return self._leg(snapshot, snapshot.request.first_leg_id)
+ 
+-    def _second_leg(self, snapshot: GroupOrderSnapshot) -> GroupLegProgress:
+-        leg_id = next(
+-            item.leg_id
+-            for item in snapshot.request.legs
+-            if item.leg_id != snapshot.request.first_leg_id
+-        )
+-        return self._leg(snapshot, leg_id)
++    def _only_first_leg_submitted(self, snapshot: GroupOrderSnapshot) -> bool:
++        return all(progress.submitted_intent is None for progress in snapshot.legs[1:])
+ 
+     def _now(self) -> int:
+         value = self._clock_ns()
+diff --git a/src/bt_api_execution/group_order_contracts.py b/src/bt_api_execution/group_order_contracts.py
+index ed23963..0eb3f5b 100644
+--- a/src/bt_api_execution/group_order_contracts.py
++++ b/src/bt_api_execution/group_order_contracts.py
+@@ -274,11 +274,11 @@ class GroupBudgetQuote:
+         )
+         if (
+             type(self.legs) is not tuple
+-            or len(self.legs) != 2
++            or len(self.legs) not in {2, 3}
+             or any(type(item) is not GroupBudgetLegQuote for item in self.legs)
+         ):
+-            raise ContractValidationError("P5A group quote requires exactly two leg facts")
+-        if len({item.leg_id for item in self.legs}) != 2 or any(
++            raise ContractValidationError("P5A group quote requires two or three leg facts")
++        if len({item.leg_id for item in self.legs}) != len(self.legs) or any(
+             item.valuation_unit != self.valuation_unit for item in self.legs
+         ):
+             raise ContractValidationError("group quote legs do not share one valuation unit")
+@@ -398,6 +398,7 @@ class GroupOrderLegPlan:
+     base_units_per_order_unit: Decimal
+     quantity_step: Decimal
+     metadata_valid_until_ns: int
++    ratio: Decimal | None = None
+ 
+     def __post_init__(self) -> None:
+         object.__setattr__(self, "leg_id", _reference(self.leg_id, "leg_id"))
+@@ -416,9 +417,11 @@ class GroupOrderLegPlan:
+             raise ContractValidationError("maximum quantity is not aligned to its step")
+         if type(self.metadata_valid_until_ns) is not int or self.metadata_valid_until_ns <= 0:
+             raise ContractValidationError("invalid metadata_valid_until_ns")
++        if self.ratio is not None:
++            object.__setattr__(self, "ratio", _positive_decimal(self.ratio, "ratio"))
+ 
+     def to_payload(self) -> dict[str, Any]:
+-        return {
++        payload = {
+             "leg_id": self.leg_id,
+             "account_ref": self.account_ref,
+             "maximum_intent": self.maximum_intent.to_payload(),
+@@ -426,16 +429,23 @@ class GroupOrderLegPlan:
+             "quantity_step": format(self.quantity_step, "f"),
+             "metadata_valid_until_ns": self.metadata_valid_until_ns,
+         }
++        if self.ratio is not None:
++            payload["ratio"] = format(self.ratio, "f")
++        return payload
+ 
+     @classmethod
+     def from_payload(cls, value: object) -> GroupOrderLegPlan:
+-        if not isinstance(value, Mapping) or set(value) != {
++        legacy_keys = {
+             "leg_id",
+             "account_ref",
+             "maximum_intent",
+             "base_units_per_order_unit",
+             "quantity_step",
+             "metadata_valid_until_ns",
++        }
++        if not isinstance(value, Mapping) or frozenset(value) not in {
++            frozenset(legacy_keys),
++            frozenset(legacy_keys | {"ratio"}),
+         }:
+             raise ContractValidationError("invalid group leg plan payload")
+         return cls(
+@@ -447,6 +457,7 @@ class GroupOrderLegPlan:
+             ),
+             quantity_step=_parse_decimal(value["quantity_step"], "quantity_step"),
+             metadata_valid_until_ns=value["metadata_valid_until_ns"],
++            ratio=None if "ratio" not in value else _parse_decimal(value["ratio"], "ratio"),
+         )
+ 
+ 
+@@ -482,15 +493,34 @@ class GroupOrderIntent:
+             raise ContractValidationError("invalid received_at_ns")
+         if type(self.deadline_ns) is not int or self.deadline_ns <= self.received_at_ns:
+             raise ContractValidationError("invalid absolute group deadline")
+-        if type(self.version) is not int or self.version not in {1, 2}:
++        if type(self.version) is not int or self.version not in {1, 2, 3}:
+             raise ContractValidationError("unsupported group order contract version")
+-        if not isinstance(self.legs, tuple) or len(self.legs) != 2:
+-            raise ContractValidationError("P5A requires exactly two legs")
++        expected_legs = 3 if self.version == 3 else 2
++        if not isinstance(self.legs, tuple) or len(self.legs) != expected_legs:
++            raise ContractValidationError(
++                "v3 group intent requires exactly three legs"
++                if self.version == 3
++                else "P5A requires exactly two legs"
++            )
+         if any(type(leg) is not GroupOrderLegPlan for leg in self.legs):
+             raise ContractValidationError("invalid group leg plan")
+         ids = tuple(leg.leg_id for leg in self.legs)
+-        if len(set(ids)) != 2 or self.first_leg_id not in ids:
++        if len(set(ids)) != len(self.legs) or self.first_leg_id not in ids:
+             raise ContractValidationError("invalid ordered group legs")
++        if self.version == 3:
++            # P5B: one same-account Call/Put/Future chain executed strictly in
++            # legs tuple order, with exact per-leg ratio semantics.
++            if self.legs[0].leg_id != self.first_leg_id:
++                raise ContractValidationError("v3 group legs must start at the first leg")
++            if len({leg.account_ref for leg in self.legs}) != 1:
++                raise ContractValidationError("v3 group legs must share one account")
++            if self.legs[0].ratio != Decimal(1):
++                raise ContractValidationError("v3 first-leg ratio must equal one")
++            for leg in self.legs[1:]:
++                if leg.ratio is None or leg.ratio <= 0:
++                    raise ContractValidationError("v3 non-first legs require a positive ratio")
++        elif any(leg.ratio is not None for leg in self.legs):
++            raise ContractValidationError("legacy group legs cannot carry a ratio")
+         for leg in self.legs:
+             intent = leg.maximum_intent
+             if (
+@@ -505,11 +535,14 @@ class GroupOrderIntent:
+                 or leg.metadata_valid_until_ns < self.deadline_ns
+             ):
+                 raise ContractValidationError("group leg violates the normalized P5A policy")
++        quote = self.budget_quote
+         if self.version == 1:
+-            if self.budget_quote is not None:
++            if quote is not None:
+                 raise ContractValidationError("legacy group intent cannot carry a budget quote")
+-        else:
+-            quote = self.budget_quote
++        elif quote is not None or self.version == 2:
++            # Version 2 always requires the trusted quote. A version-3 strategy
++            # request may arrive unquoted (the coordinator's trusted builder
++            # quotes it); any quote that is present must bind exactly.
+             if type(quote) is not GroupBudgetQuote:
+                 raise ContractValidationError("new group intent requires a trusted budget quote")
+             plans = {plan.leg_id: plan for plan in self.legs}
+@@ -526,8 +559,25 @@ class GroupOrderIntent:
+                     or item.valid_until_ns < self.deadline_ns
+                 ):
+                     raise ContractValidationError("group budget quote is not bound to its leg")
+-        first, second = self.ordered_legs
+-        if first.maximum_intent.side is second.maximum_intent.side:
++        ordered = self.ordered_legs
++        if self.version == 3:
++            if len({leg.maximum_intent.side for leg in self.legs}) < 2:
++                raise ContractValidationError("v3 group legs cannot all use one side")
++            first_plan = ordered[0]
++            first_base = Fraction(first_plan.base_units_per_order_unit) * Fraction(
++                first_plan.maximum_intent.quantity
++            )
++            for plan in ordered[1:]:
++                reachable = Fraction(plan.ratio) * first_base / Fraction(
++                    plan.base_units_per_order_unit
++                )
++                if reachable < Fraction(plan.quantity_step):
++                    raise ContractValidationError(
++                        "v3 leg ratio cannot be expressed in its step"
++                    )
++        elif (
++            ordered[0].maximum_intent.side is ordered[1].maximum_intent.side
++        ):
+             raise ContractValidationError("P5A legs must have opposing sides")
+ 
+     @property
+@@ -544,10 +594,10 @@ class GroupOrderIntent:
+         return payload_sha256(payload)
+ 
+     @property
+-    def ordered_legs(self) -> tuple[GroupOrderLegPlan, GroupOrderLegPlan]:
++    def ordered_legs(self) -> tuple[GroupOrderLegPlan, ...]:
+         first = self.leg(self.first_leg_id)
+-        second = next(leg for leg in self.legs if leg.leg_id != self.first_leg_id)
+-        return first, second
++        rest = tuple(leg for leg in self.legs if leg.leg_id != self.first_leg_id)
++        return (first, *rest)
+ 
+     def leg(self, leg_id: str) -> GroupOrderLegPlan:
+         for leg in self.legs:
+@@ -575,8 +625,7 @@ class GroupOrderIntent:
+             "legs": [leg.to_payload() for leg in self.legs],
+             "recovery_policy": self.recovery_policy,
+         }
+-        if self.version == 2:
+-            assert self.budget_quote is not None
++        if self.version != 1 and self.budget_quote is not None:
+             payload["budget_quote"] = self.budget_quote.to_payload()
+         return payload
+ 
+@@ -1315,6 +1364,7 @@ class GroupOrderSnapshot:
+     created_at_ns: int
+     updated_at_ns: int
+     budget_reservation: GroupBudgetReservation | None = None
++    residual_vector: tuple[Decimal, ...] | None = None
+ 
+     def __post_init__(self) -> None:
+         if type(self.request) is not GroupOrderIntent:
+@@ -1342,6 +1392,20 @@ class GroupOrderSnapshot:
+             or not self.residual_base_units.is_finite()
+         ):
+             raise ContractValidationError("invalid group residual")
++        if self.residual_vector is not None:
++            if (
++                type(self.residual_vector) is not tuple
++                or len(self.residual_vector) != len(self.request.legs)
++                or any(
++                    type(item) is not Decimal or not item.is_finite()
++                    for item in self.residual_vector
++                )
++            ):
++                raise ContractValidationError("invalid group residual vector")
++            if self.request.version != 3:
++                raise ContractValidationError(
++                    "only a version-3 group can carry a residual vector"
++                )
+         if self.error_code is not None:
+             object.__setattr__(self, "error_code", _reference(self.error_code, "error_code"))
+         for name in ("created_at_ns", "updated_at_ns"):
+@@ -1404,9 +1468,15 @@ class GroupOrderSnapshot:
+             "created_at_ns": self.created_at_ns,
+             "updated_at_ns": self.updated_at_ns,
+         }
+-        if self.request.version == 2:
++        if self.request.version != 1:
+             assert self.budget_reservation is not None
+             payload["budget_reservation"] = self.budget_reservation.to_payload()
++        if self.request.version == 3:
++            payload["residual_vector"] = (
++                None
++                if self.residual_vector is None
++                else [format(item, "f") for item in self.residual_vector]
++            )
+         return payload
+ 
+     @classmethod
+@@ -1423,13 +1493,18 @@ class GroupOrderSnapshot:
+             "updated_at_ns",
+         }
+         current_keys = legacy_keys | {"budget_reservation"}
++        vector_keys = current_keys | {"residual_vector"}
+         if not isinstance(value, Mapping) or frozenset(value) not in {
+             frozenset(legacy_keys),
+             frozenset(current_keys),
++            frozenset(vector_keys),
+         }:
+             raise ContractValidationError("invalid group snapshot payload")
+         if not isinstance(value["reservations"], list) or not isinstance(value["legs"], list):
+             raise ContractValidationError("invalid group snapshot collections")
++        residual_vector = value.get("residual_vector")
++        if residual_vector is not None and not isinstance(residual_vector, list):
++            raise ContractValidationError("invalid group residual vector payload")
+         return cls(
+             request=GroupOrderIntent.from_payload(value["request"]),
+             state=GroupOrderState(value["state"]),
+@@ -1447,6 +1522,11 @@ class GroupOrderSnapshot:
+             budget_reservation=None
+             if "budget_reservation" not in value
+             else GroupBudgetReservation.from_payload(value["budget_reservation"]),
++            residual_vector=None
++            if residual_vector is None
++            else tuple(
++                _parse_decimal(item, "residual_vector") for item in residual_vector
++            ),
+         )
+ 
+ 
+diff --git a/src/bt_api_execution/group_store.py b/src/bt_api_execution/group_store.py
+index f7a0b97..04c140b 100644
+--- a/src/bt_api_execution/group_store.py
++++ b/src/bt_api_execution/group_store.py
+@@ -257,7 +257,7 @@ class SqliteOrderGroupStore:
+                     raise IntentConflictError()
+                 return existing
+ 
+-            if request.version == 2:
++            if request.version in {2, 3}:
+                 if type(budget_policy) is not PortfolioGroupBudgetPolicy:
+                     raise ContractValidationError(
+                         "trusted portfolio group budget policy is required"
+@@ -508,6 +508,7 @@ class SqliteOrderGroupStore:
+         reservations: tuple[GroupAccountReservationSnapshot, ...] | None = None,
+         legs: tuple[GroupLegProgress, ...] | None = None,
+         residual_base_units: Any = ...,
++        residual_vector: Any = ...,
+         error_code: str | None | Any = ...,
+         now_ns: int | None = None,
+     ) -> GroupOrderSnapshot:
+@@ -532,6 +533,9 @@ class SqliteOrderGroupStore:
+             residual_base_units=(
+                 snapshot.residual_base_units if residual_base_units is ... else residual_base_units
+             ),
++            residual_vector=(
++                snapshot.residual_vector if residual_vector is ... else residual_vector
++            ),
+             error_code=snapshot.error_code if error_code is ... else error_code,
+             updated_at_ns=occurred_at_ns,
+         )

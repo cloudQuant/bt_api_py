@@ -1,0 +1,27 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0
+rootdir: D:\bt_api_py\bt_api\bt_api_execution
+configfile: pyproject.toml
+collected 13 items
+
+bt_api\bt_api_execution\tests\test_group_coordinator_three_leg.py .F.... [ 46%]
+.F.....                                                                  [100%]
+
+================================== FAILURES ===================================
+___________ test_v3_partial_first_fill_sizes_staged_chain_and_pairs ___________
+bt_api\bt_api_execution\tests\test_group_coordinator_three_leg.py:563: in test_v3_partial_first_fill_sizes_staged_chain_and_pairs
+    assert orders["account-a"].query_ids == [futures, calls]
+E   AssertionError: assert ['group:group...leg:leg-call'] == ['group:group...leg:leg-call']
+E     
+E     At index 0 diff: 'group:group-cpf:leg:leg-put' != 'group:group-cpf:leg:leg-future'
+E     Left contains one more item: 'group:group-cpf:leg:leg-call'
+E     Use -v to get more diff
+____ test_v3_lost_final_leg_reply_restarts_by_original_id_without_resubmit ____
+bt_api\bt_api_execution\tests\test_group_coordinator_three_leg.py:764: in test_v3_lost_final_leg_reply_restarts_by_original_id_without_resubmit
+    assert interrupted.error_code == "order_submit_outcome_unknown"
+E   AssertionError: assert None == 'order_submit_outcome_unknown'
+E    +  where None = GroupOrderSnapshot(request=GroupOrderIntent(group_id='group-cpf', portfolio_ref='portfolio-cpf', strategy_id='strategy...000000, state=<GroupBudgetReservationState.HELD: 'HELD'>), residual_vector=(Decimal('0'), Decimal('0'), Decimal('15'))).error_code
+=========================== short test summary info ===========================
+FAILED bt_api\bt_api_execution\tests\test_group_coordinator_three_leg.py::test_v3_partial_first_fill_sizes_staged_chain_and_pairs
+FAILED bt_api\bt_api_execution\tests\test_group_coordinator_three_leg.py::test_v3_lost_final_leg_reply_restarts_by_original_id_without_resubmit
+======================== 2 failed, 11 passed in 2.22s =========================
