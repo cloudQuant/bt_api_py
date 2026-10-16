@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from bt_api_base.account_protocol import (
@@ -24,7 +27,10 @@ from bt_api_py.service_runtime import (
 )
 
 _ACCOUNT_SNAPSHOT_OPERATION = "account.snapshot"
+_ACCOUNT_INSTRUMENT_METADATA_OPERATION = "account.instrument_metadata"
 _ACCOUNT_READ_PORT = "service.account_read"
+_INSTRUMENT_METADATA_SCHEMA_ID = "ctp.instrument_metadata"
+_INSTRUMENT_METADATA_SCHEMA_VERSION = 1
 _REPLY_FIELDS = frozenset(
     {
         "requested_cursor",
@@ -51,6 +57,40 @@ _STATUS_FIELDS = frozenset({"session_generation", "ready", "fresh_for_seconds"})
 _STATE_PAYLOAD_FIELDS = frozenset(
     {"schema_id", "schema_version", "session_generation", "observation"}
 )
+_INSTRUMENT_METADATA_FIELDS = frozenset(
+    {
+        "schema_id",
+        "schema_version",
+        "instrument_id",
+        "exchange_id",
+        "product_class",
+        "asset_type",
+        "price_tick",
+        "volume_multiple",
+        "lower_limit_price",
+        "upper_limit_price",
+        "price_limits_available",
+        "price_limits_source",
+        "account_session_generation",
+        "account_fingerprint",
+        "trading_day",
+        "source_connection_generation",
+        "source_request_id",
+        "source_records_sha256",
+        "source_revision",
+        "source",
+        "query_started_at_utc",
+        "observed_at_utc",
+        "query_clock_domain_id",
+        "query_elapsed_seconds",
+        "quote_stream_generation",
+        "quote_source",
+        "clock_domain_id",
+        "clock_source_session_id",
+        "clock_source",
+    }
+)
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ServiceAccountError(RuntimeError):
@@ -75,6 +115,44 @@ class AccountStateView:
     session_generation: str
     received_at_monotonic: float
     fresh_until_monotonic: float
+
+
+@dataclass(frozen=True)
+class ServiceAccountInstrumentMetadata:
+    """One exact, current CTP instrument metadata row from the service host.
+
+    This DTO is read-only evidence for strategy admission. It is not an
+    account snapshot and does not establish price-limit availability when the
+    native instrument query did not supply limits.
+    """
+
+    instrument_id: str
+    exchange_id: str
+    product_class: str
+    asset_type: str
+    price_tick: str
+    volume_multiple: int
+    lower_limit_price: str | None
+    upper_limit_price: str | None
+    price_limits_available: bool
+    price_limits_source: str
+    account_session_generation: str
+    account_fingerprint: str
+    trading_day: str
+    source_connection_generation: int
+    source_request_id: int
+    source_records_sha256: str
+    source_revision: str
+    source: str
+    query_started_at_utc: str
+    observed_at_utc: str
+    query_clock_domain_id: str
+    query_elapsed_seconds: float
+    quote_stream_generation: int
+    quote_source: str
+    clock_domain_id: str
+    clock_source_session_id: str
+    clock_source: str
 
 
 class ServiceAccountClient:
@@ -303,6 +381,70 @@ class ServiceAccountClient:
         assert self._current_view is not None
         return self._current_view
 
+    def instrument_metadata(
+        self,
+        instrument_id: str,
+        exchange_id: str,
+    ) -> ServiceAccountInstrumentMetadata:
+        """Read one fresh typed CTP instrument row for this trusted account.
+
+        The caller must first have a healthy account snapshot. The RPC is an
+        explicit opt-in capability and is tied to the same mount, account,
+        scope, service epoch, and account-session generation as that snapshot.
+        """
+
+        self._assert_open_owner()
+        _validate_metadata_identifier(instrument_id, "INVALID_INSTRUMENT_ID")
+        _validate_metadata_identifier(exchange_id, "INVALID_EXCHANGE_ID")
+        view = self.snapshot()
+        required = frozenset(
+            {_ACCOUNT_SNAPSHOT_OPERATION, _ACCOUNT_INSTRUMENT_METADATA_OPERATION}
+        )
+        try:
+            self._runtime.maintain()
+            binding = self._get_binding(required_operations=required)
+        except ServiceRuntimeError:
+            raise ServiceAccountError("INSTRUMENT_METADATA_UNAVAILABLE") from None
+        binding_signature = self._binding_signature(binding)
+        if binding_signature != self._current_binding_signature:
+            self._invalidate_current()
+            raise ServiceAccountError("ACCOUNT_BINDING_CHANGED")
+
+        try:
+            reply = self._runtime.call(
+                self.mount,
+                _ACCOUNT_INSTRUMENT_METADATA_OPERATION,
+                {"instrument_id": instrument_id, "exchange_id": exchange_id},
+                account_ref=self.account_ref,
+                scope_ref=binding.scope_ref,
+            )
+        except ServiceRuntimeError:
+            raise ServiceAccountError("INSTRUMENT_METADATA_READ_FAILED") from None
+        except Exception:
+            raise ServiceAccountError("INSTRUMENT_METADATA_READ_FAILED") from None
+
+        try:
+            current_binding = self._get_binding(required_operations=required)
+        except ServiceRuntimeError:
+            self._invalidate_current()
+            raise ServiceAccountError("ACCOUNT_BINDING_CHANGED") from None
+        if self._binding_signature(current_binding) != binding_signature:
+            self._invalidate_current()
+            raise ServiceAccountError("ACCOUNT_BINDING_CHANGED")
+        try:
+            current_view = self.snapshot()
+        except ServiceAccountError:
+            raise ServiceAccountError("STALE_ACCOUNT_STATE") from None
+        if current_view is not view:
+            raise ServiceAccountError("ACCOUNT_BINDING_CHANGED")
+        return _parse_instrument_metadata_reply(
+            reply,
+            instrument_id=instrument_id,
+            exchange_id=exchange_id,
+            account_session_generation=view.session_generation,
+            max_elapsed_seconds=binding.timeout,
+        )
+
     def close(self) -> None:
         """Clear the facade's local cache without closing the shared runtime."""
 
@@ -427,11 +569,15 @@ class ServiceAccountClient:
             self._reject("ACCOUNT_OBSERVATION_INCOMPLETE")
         return observation, cursor, snapshot_id, generation, fresh_for
 
-    def _get_binding(self) -> ServiceAccountBindingView:
+    def _get_binding(
+        self,
+        *,
+        required_operations: frozenset[str] = frozenset({_ACCOUNT_SNAPSHOT_OPERATION}),
+    ) -> ServiceAccountBindingView:
         binding = self._runtime.account_binding_view(
             self.mount,
             self.account_ref,
-            required_operations=frozenset({_ACCOUNT_SNAPSHOT_OPERATION}),
+            required_operations=required_operations,
         )
         if self._expected_scope_ref is not None and binding.scope_ref != self._expected_scope_ref:
             raise ServiceAccountError("SCOPE_DENIED")
@@ -476,7 +622,12 @@ class ServiceAccountClient:
             raise ServiceAccountError("CLIENT_CLOSED")
 
 
-__all__ = ["AccountStateView", "ServiceAccountClient", "ServiceAccountError"]
+__all__ = [
+    "AccountStateView",
+    "ServiceAccountClient",
+    "ServiceAccountError",
+    "ServiceAccountInstrumentMetadata",
+]
 
 
 def _canonical_observation_bytes(observation: AccountObservation) -> bytes:
@@ -489,3 +640,217 @@ def _canonical_observation_bytes(observation: AccountObservation) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def _validate_metadata_identifier(value: object, code: str) -> None:
+    if type(value) is not str or not value or value != value.strip():
+        raise ServiceAccountError(code)
+    try:
+        if len(value.encode("utf-8", errors="strict")) > 128:
+            raise ServiceAccountError(code)
+    except UnicodeEncodeError:
+        raise ServiceAccountError(code) from None
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ServiceAccountError(code)
+
+
+def _parse_instrument_metadata_reply(
+    reply: object,
+    *,
+    instrument_id: str,
+    exchange_id: str,
+    account_session_generation: str,
+    max_elapsed_seconds: float,
+) -> ServiceAccountInstrumentMetadata:
+    if not isinstance(reply, Mapping) or set(reply) != {"metadata"}:
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA_REPLY")
+    value = reply.get("metadata")
+    if not isinstance(value, Mapping) or set(value) != _INSTRUMENT_METADATA_FIELDS:
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA_REPLY")
+    if (
+        value.get("schema_id") != _INSTRUMENT_METADATA_SCHEMA_ID
+        or type(value.get("schema_version")) is not int
+        or value.get("schema_version") != _INSTRUMENT_METADATA_SCHEMA_VERSION
+    ):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA_SCHEMA")
+
+    product_class = value.get("product_class")
+    asset_type = value.get("asset_type")
+    product_to_asset = {
+        "1": "future",
+        "2": "option",
+        "3": "combination",
+        "4": "spot",
+        "5": "efp",
+        "6": "spot_option",
+        "7": "tas",
+        "I": "mi",
+    }
+    if (
+        type(value.get("instrument_id")) is not str
+        or value["instrument_id"] != instrument_id
+        or type(value.get("exchange_id")) is not str
+        or value["exchange_id"] != exchange_id
+        or type(product_class) is not str
+        or product_class not in product_to_asset
+        or asset_type != product_to_asset[product_class]
+    ):
+        raise ServiceAccountError("INSTRUMENT_METADATA_IDENTITY_MISMATCH")
+
+    price_tick = value.get("price_tick")
+    _validate_positive_decimal_text(price_tick, "INVALID_INSTRUMENT_METADATA")
+    volume_multiple = value.get("volume_multiple")
+    if type(volume_multiple) is not int or volume_multiple <= 0:
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+
+    limits_available = value.get("price_limits_available")
+    lower = value.get("lower_limit_price")
+    upper = value.get("upper_limit_price")
+    limits_source = value.get("price_limits_source")
+    if type(limits_available) is not bool or type(limits_source) is not str:
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    if limits_available:
+        if limits_source != "ctp.native.instruments":
+            raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+        _validate_positive_decimal_text(lower, "INVALID_INSTRUMENT_METADATA")
+        _validate_positive_decimal_text(upper, "INVALID_INSTRUMENT_METADATA")
+        if Decimal(lower) >= Decimal(upper):
+            raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    elif (
+        lower is not None
+        or upper is not None
+        or limits_source != "unavailable_in_instrument_query"
+    ):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+
+    generation = value.get("account_session_generation")
+    account_fingerprint = value.get("account_fingerprint")
+    trading_day = value.get("trading_day")
+    if (
+        type(trading_day) is str
+        and len(trading_day) == 8
+        and trading_day.isascii()
+        and trading_day.isdigit()
+    ):
+        try:
+            valid_trading_day = (
+                datetime.strptime(trading_day, "%Y%m%d").strftime("%Y%m%d")
+                == trading_day
+            )
+        except ValueError:
+            valid_trading_day = False
+    else:
+        valid_trading_day = False
+    if (
+        type(generation) is not str
+        or generation != account_session_generation
+        or type(account_fingerprint) is not str
+        or not _SHA256_PATTERN.fullmatch(account_fingerprint)
+        or not valid_trading_day
+    ):
+        raise ServiceAccountError("ACCOUNT_GENERATION_MISMATCH")
+
+    source_connection_generation = value.get("source_connection_generation")
+    source_request_id = value.get("source_request_id")
+    quote_stream_generation = value.get("quote_stream_generation")
+    if any(
+        type(item) is not int or item <= 0
+        for item in (source_connection_generation, source_request_id, quote_stream_generation)
+    ):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    source_digest = value.get("source_records_sha256")
+    if type(source_digest) is not str or not _SHA256_PATTERN.fullmatch(source_digest):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    if (
+        value.get("source_revision") != "ctp.native.instrument-query.v1"
+        or value.get("source") != "ctp.native.instruments"
+    ):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+
+    query_started = _parse_utc_timestamp(value.get("query_started_at_utc"))
+    observed = _parse_utc_timestamp(value.get("observed_at_utc"))
+    if observed < query_started:
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    elapsed = value.get("query_elapsed_seconds")
+    if (
+        type(elapsed) not in (int, float)
+        or isinstance(elapsed, bool)
+        or not math.isfinite(elapsed)
+        or elapsed < 0
+        or elapsed > max_elapsed_seconds
+    ):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    query_domain = value.get("query_clock_domain_id")
+    quote_source = value.get("quote_source")
+    clock_domain = value.get("clock_domain_id")
+    clock_session = value.get("clock_source_session_id")
+    clock_source = value.get("clock_source")
+    domain_match = (
+        re.fullmatch(r"ctp-md-process:[1-9][0-9]*:monotonic:([0-9a-f]{32})", clock_domain)
+        if type(clock_domain) is str
+        else None
+    )
+    if any(
+        type(item) is not str or not item or item != item.strip()
+        for item in (query_domain, quote_source, clock_domain, clock_session, clock_source)
+    ) or (
+        len(clock_source) > 128
+        or query_domain != "python.time.monotonic"
+        or quote_source != "ctp.native.md"
+        or domain_match is None
+        or domain_match.group(1) != clock_session
+    ):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+
+    return ServiceAccountInstrumentMetadata(
+        instrument_id=instrument_id,
+        exchange_id=exchange_id,
+        product_class=product_class,
+        asset_type=asset_type,
+        price_tick=price_tick,
+        volume_multiple=volume_multiple,
+        lower_limit_price=lower,
+        upper_limit_price=upper,
+        price_limits_available=limits_available,
+        price_limits_source=limits_source,
+        account_session_generation=generation,
+        account_fingerprint=account_fingerprint,
+        trading_day=trading_day,
+        source_connection_generation=source_connection_generation,
+        source_request_id=source_request_id,
+        source_records_sha256=source_digest,
+        source_revision="ctp.native.instrument-query.v1",
+        source="ctp.native.instruments",
+        query_started_at_utc=value["query_started_at_utc"],
+        observed_at_utc=value["observed_at_utc"],
+        query_clock_domain_id=query_domain,
+        query_elapsed_seconds=float(elapsed),
+        quote_stream_generation=quote_stream_generation,
+        quote_source=quote_source,
+        clock_domain_id=clock_domain,
+        clock_source_session_id=clock_session,
+        clock_source=value["clock_source"],
+    )
+
+
+def _validate_positive_decimal_text(value: object, code: str) -> None:
+    if type(value) is not str:
+        raise ServiceAccountError(code)
+    try:
+        decimal_value = Decimal(value)
+    except (InvalidOperation, ValueError):
+        raise ServiceAccountError(code) from None
+    if not decimal_value.is_finite() or decimal_value <= 0:
+        raise ServiceAccountError(code)
+
+
+def _parse_utc_timestamp(value: object) -> datetime:
+    if type(value) is not str:
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA") from None
+    if parsed.tzinfo is None or parsed.utcoffset() != timezone.utc.utcoffset(parsed):
+        raise ServiceAccountError("INVALID_INSTRUMENT_METADATA")
+    return parsed

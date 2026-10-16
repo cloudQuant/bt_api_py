@@ -452,6 +452,7 @@ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
                             "account.progress",
                             "account.configuration",
                             "account.server_time_probe",
+                            "account.instrument_metadata",
                         }
                     )
                 }
@@ -2033,6 +2034,17 @@ def build_component(
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()
         for port, operations in prepared.operations_by_port.items():
+            if spec.component == "gateway" and spec.options.get("role") == "account_session_worker":
+                configured_operations = getattr(adapter, "supported_operations", None)
+                expected_operations = frozenset(prepared.module.SUPPORTED_OPERATIONS)
+                if account_worker is None or not account_worker.instrument_metadata_available:
+                    expected_operations = expected_operations - {"account.instrument_metadata"}
+                if (
+                    type(configured_operations) is not frozenset
+                    or configured_operations != expected_operations
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured_operations)
             if spec.component == "execution" and spec.options.get("role") == "account_owner":
                 configured_operations = getattr(adapter, "supported_operations", None)
                 expected_operations = frozenset({"orders.submit", "orders.cancel", "orders.query"})
