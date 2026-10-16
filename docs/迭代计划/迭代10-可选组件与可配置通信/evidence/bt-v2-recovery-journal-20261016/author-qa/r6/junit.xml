@@ -1,0 +1,464 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="1" failures="7" skipped="0" tests="238" time="41.510" timestamp="2026-10-16T09:44:32.649964" hostname="yun"><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_protocol_can_be_pinned_before_first_authenticated_baseline" time="0.035" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_adapter_preserves_v1_request_shape_and_explicitly_requests_v2[1]" time="0.040" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_adapter_preserves_v1_request_shape_and_explicitly_requests_v2[2]" time="0.035" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_adapter_v2_submits_market_fok_and_rejects_limit_before_manifest" time="0.074" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_adapter_without_recovery_keeps_market_gtc_behavior" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_fill_page_persists_validated_feed_context_before_cursor_advance" time="0.086" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_fill_without_context_mapper_is_durable_but_explicitly_unavailable" time="0.089" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_fill_with_unsupported_fee_model_is_not_trade_projectable" time="0.091" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_context_mismatch_rolls_back_page_and_pending_callback" time="0.084" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_paper_match_before_captured_quote_time_rolls_back_page" time="0.082" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_intent_requires_ledger_empty_genesis_before_manifest" time="0.078" /><testcase classname="tests.unit.stores.test_service_execution_recovery_v2" name="test_v2_existing_intent_reuses_immutable_context_and_rejects_mutation" time="0.123" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_first_baseline_is_atomic_immutable_and_cannot_rebase_existing_intents" time="0.173" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_ordered_history_reconciles_unmatched_facts_but_only_projects_bound_intents" time="0.088" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_broker_restores_snapshot_order_scalars_without_booking_owner_state" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_pending_pre_cut_receipt_precedes_restored_snapshot_notification" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_receipts_at_refreshed_order_cut_are_clone_only_before_snapshot" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_deferred_snapshot_notifications_follow_their_per_order_cuts" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_blocked_recovery_receipt_and_snapshot_keep_uncertainty_flag" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_status_only_receipt_uses_only_as_of_event_facts[True-1.0-10.0-0.01]" time="0.002" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_status_only_receipt_uses_only_as_of_event_facts[False-0.0-0.0-0.0]" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_restore_only_strategy_notification_does_not_rebuild_trade_state" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_strategy_acknowledges_only_after_notification_delivery_returns" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_incomplete_execution_time_cut_rejects_owner_mutations[OPEN-baseline_positions0-current_positions0-RECOVERY_OPEN_OWNER_POSITION_ATTRIBUTION_UNAVAILABLE]" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_incomplete_execution_time_cut_rejects_owner_mutations[CLOSE-baseline_positions1-current_positions1-RECOVERY_CLOSE_BASELINE_INCOMPLETE]" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose[CLOSE]" time="0.095" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose[CLOSE_TODAY]" time="0.091" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose[CLOSE_YESTERDAY]" time="0.089" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_manifest_is_durable_immutable_and_logical_run_scoped" time="0.088" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_is_restore_only_and_filters_to_the_current_manifest" time="0.075" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_preserves_negative_cumulative_commission_rebate" time="0.074" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_recovery_views_require_strategy_owner_kind_not_legacy_view_name" time="0.076" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_recovery_views_reject_unknown_top_level_fields_and_boolean_version" time="0.079" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_requires_its_pinned_source_and_freshness_claim" time="0.074" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_states_not_allowed_for_the_event_type[dispatch_claimed-FILLED]" time="0.079" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_states_not_allowed_for_the_event_type[provider_observation-UNKNOWN]" time="0.102" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_states_not_allowed_for_the_event_type[cancelled_by_cancel_intent-REJECTED]" time="0.095" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_observation_source_that_disagrees_with_type[provider_observation-reconcile]" time="0.074" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_observation_source_that_disagrees_with_type[reconciled_observation-provider]" time="0.075" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_unsanitized_reason_code_before_commit" time="0.070" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_currency_without_commission_before_commit" time="0.075" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_preserves_negative_cumulative_commission_rebate" time="0.088"><failure message="backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-989/test_event_page_preserves_nega0')
+
+    def test_event_page_preserves_negative_cumulative_commission_rebate(tmp_path) -&gt; None:
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        event = _event(_INTENT, fingerprint, 11)
+        event["details"]["cumulative_commission"] = "-0.01"
+    
+&gt;       assert journal.apply_events_page(namespace, _page(10, 11, 11, [event], has_more=False)) is True
+
+tests\unit\stores\test_service_execution_recovery.py:453: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:1050: in apply_events_page
+    self._apply_one_event(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x0000026FD438F210&gt;
+cursor = &lt;sqlite3.Cursor object at 0x0000026FD43907C0&gt;
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'details': {'average_price': '20.25', 'cumulative_commission': '-0.01', 'cumulative_commission_currency': 'USD', 'fil...sha256': '99237ce70f26f9ad70bbe54bc9c26a188ba6a7b0bb5999819c541531d8f9d1da', 'event_type': 'provider_observation', ...}
+now_ns = 1792115081110409300
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+        *,
+        event_version: int,
+        event_context_resolver: Optional[Callable[..., Any]],
+    ) -&gt; None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled &lt; previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+&gt;                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:2789: ServiceExecutionRecoveryError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_noncanonical_decimal_before_commit" time="0.108" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_requires_a_real_generation_and_consistent_order_sequences" time="0.068" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_requires_hex_source_event_identity" time="0.072" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_receipt_projection_cursor_and_callback_pending_commit_together" time="0.074"><failure message="backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-989/test_event_receipt_projection_0')
+
+    def test_event_receipt_projection_cursor_and_callback_pending_commit_together(tmp_path) -&gt; None:
+        path = tmp_path / "recovery.sqlite3"
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(path)
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        own_event = _event(_INTENT, fingerprint, 11)
+        old_run_event = _event("older-run-intent", _digest("older-payload"), 12)
+        page_one = _page(10, 11, 12, [own_event], has_more=True)
+        page_two = _page(11, 12, 12, [old_run_event], has_more=False)
+    
+&gt;       assert journal.apply_events_page(namespace, page_one) is True
+
+tests\unit\stores\test_service_execution_recovery.py:536: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:1050: in apply_events_page
+    self._apply_one_event(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x0000026FD47C5FD0&gt;
+cursor = &lt;sqlite3.Cursor object at 0x0000026FD436B6C0&gt;
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'details': {'average_price': '20.25', 'cumulative_commission': '0.01', 'cumulative_commission_currency': 'USD', 'fill...sha256': '99237ce70f26f9ad70bbe54bc9c26a188ba6a7b0bb5999819c541531d8f9d1da', 'event_type': 'provider_observation', ...}
+now_ns = 1792115082104921400
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+        *,
+        event_version: int,
+        event_context_resolver: Optional[Callable[..., Any]],
+    ) -&gt; None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled &lt; previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+&gt;                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:2789: ServiceExecutionRecoveryError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_unknown_or_wrong_cut_page_does_not_advance_durable_cursor" time="0.078" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_quiet_event_poll_at_the_same_global_cut_is_repeatable" time="0.074" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks" time="0.072"><failure message="backtrader.stores.service_execution_adapter.ServiceExecutionReadError: Managed service read failed (recovery_recovery_trade_binding_missing)">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-989/test_adapter_pulls_snapshot_pa0')
+
+    def test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks(tmp_path) -&gt; None:
+        from backtrader.stores.service_execution_adapter import ServiceExecutionAdapter
+    
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        snapshot = _snapshot([_snapshot_order(_INTENT, fingerprint)])
+        own_event = _event(_INTENT, fingerprint, 11)
+        next_event = _event(_INTENT, fingerprint, 12, event_type="reconciled_observation")
+        pages = [
+            _page(10, 11, 12, [own_event], has_more=True),
+            _page(11, 12, 12, [next_event], has_more=False),
+            _page(12, 12, 12, [], has_more=False),
+        ]
+        calls = []
+    
+        class _RecoveryClient:
+            def submit(self, **_kwargs):
+                raise AssertionError("the recovery pull must not submit an intent")
+    
+            def cancel(self, **_kwargs):
+                raise AssertionError("the recovery pull must not cancel an intent")
+    
+            def query(self, *_args, **_kwargs):
+                raise AssertionError("the recovery pull must not query per-order records")
+    
+            def query_recovery_snapshot(self):
+                return snapshot
+    
+            def query_recovery_events_after(self, **kwargs):
+                calls.append(kwargs)
+                return pages.pop(0)
+    
+        adapter = ServiceExecutionAdapter(_RecoveryClient(), recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+    
+&gt;       initialized = adapter.initialize_recovery(page_limit=2)
+
+tests\unit\stores\test_service_execution_recovery.py:658: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_adapter.py:303: in initialize_recovery
+    pages_applied = self._consume_recovery_pages(page_limit=page_limit, max_pages=max_pages)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;backtrader.stores.service_execution_adapter.ServiceExecutionAdapter object at 0x0000026FEC5D0DD0&gt;
+
+    def _consume_recovery_pages(self, *, page_limit: int, max_pages: int) -&gt; int:
+        if type(page_limit) is not int or not 1 &lt;= page_limit &lt;= 128:
+            raise ServiceExecutionAdapterError("invalid recovery page limit")
+        if type(max_pages) is not int or not 1 &lt;= max_pages &lt;= 1024:
+            raise ServiceExecutionAdapterError("invalid recovery page budget")
+        journal, namespace = self._require_recovery()
+        page_reader = getattr(self._client, "query_recovery_events_after", None)
+        if not callable(page_reader):
+            raise ServiceExecutionReadError("recovery_events_api_unavailable")
+        pages_applied = 0
+        for _ in range(max_pages):
+            cursor = journal.cursor(namespace)
+            generation = cursor["journal_generation"]
+            directory_revision = cursor["scope_directory_revision"]
+            after_sequence = cursor["event_cursor"]
+            if (
+                type(generation) is not str
+                or not generation
+                or type(directory_revision) is not str
+                or not directory_revision
+                or type(after_sequence) is not int
+            ):
+                raise ServiceExecutionReadError("recovery_snapshot_required")
+            try:
+                request = {
+                    "after_sequence": after_sequence,
+                    "expected_journal_generation": generation,
+                    "expected_directory_revision": directory_revision,
+                    "limit": page_limit,
+                }
+                if self._recovery_event_version == 2:
+                    request["version"] = 2
+                page = page_reader(
+                    **request,
+                )
+                page_changed = journal.apply_events_page(
+                    namespace,
+                    page,
+                    event_context_resolver=self._recovery_event_context_resolver,
+                    owner_token=self._recovery_consumer_token,
+                )
+            except ServiceExecutionRecoveryError as error:
+&gt;               raise ServiceExecutionReadError(f"recovery_{error.code.lower()}") from None
+E               backtrader.stores.service_execution_adapter.ServiceExecutionReadError: Managed service read failed (recovery_recovery_trade_binding_missing)
+
+backtrader\stores\service_execution_adapter.py:571: ServiceExecutionReadError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_private_or_unrecognized_details_before_commit" time="0.074" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_requires_hex_event_identity_before_commit" time="0.073" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_adapter_requires_a_submit_and_cancel_capable_client" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_accepted_intent_projects_the_provider_identity" time="0.001"><failure message="AssertionError: assert [{'deadline_n...ata-v1', ...}] == [{'instrument...'LIMIT', ...}]&#10;  &#10;  At index 0 diff: {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': Decimal('2'), 'price': Decimal('101.0'), 'time_in_force': 'GTC', 'reduce_only': False, 'metadata_version': 'metadata-v1', 'deadline_ns': None, 'tags': {}} != {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': 2, 'price': 101.0, 'reduce_only': False, 'metadata_version': 'metadata-v1', 'tags': {}}&#10;  Use -v to get more diff">def test_accepted_intent_projects_the_provider_identity() -&gt; None:
+        client = _FakeClient(submit_view=_view())
+        adapter = ServiceExecutionAdapter(client)
+    
+        response = adapter.submit_order(_limit_order(), _legacy_dispatch)
+    
+        assert response["status"] == "accepted"
+        assert response["external_order_id"] == "provider-order-1"
+        assert response["managed_intent_id"] == "intent-1"
+        assert response["service_execution_state"] == "ACKED"
+        assert response["data_name"] == "BTC-USDT"
+&gt;       assert client.submitted == [
+            {
+                "intent_id": "intent-1",
+                "signal_id": "signal-1",
+                "instrument": "BTC-USDT",
+                "side": "BUY",
+                "position_effect": "OPEN",
+                "order_type": "LIMIT",
+                "quantity": 2,
+                "price": 101.0,
+                "reduce_only": False,
+                "metadata_version": "metadata-v1",
+                # A per-object framework reference is not published by default:
+                # it would break intent idempotency on a resubmit.
+                "tags": {},
+            }
+        ]
+E       AssertionError: assert [{'deadline_n...ata-v1', ...}] == [{'instrument...'LIMIT', ...}]
+E         
+E         At index 0 diff: {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': Decimal('2'), 'price': Decimal('101.0'), 'time_in_force': 'GTC', 'reduce_only': False, 'metadata_version': 'metadata-v1', 'deadline_ns': None, 'tags': {}} != {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': 2, 'price': 101.0, 'reduce_only': False, 'metadata_version': 'metadata-v1', 'tags': {}}
+E         Use -v to get more diff
+
+tests\unit\stores\test_service_execution_adapter.py:139: AssertionError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_market_order_is_projected_without_a_price" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unsupported_execution_type_is_rejected_without_a_service_call" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_missing_managed_metadata_is_rejected_without_a_service_call" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_close_position_effect_forces_reduce_only" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_sell_order_reports_the_sell_side_and_absolute_quantity" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unknown_durable_state_stays_nonterminal" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_rejected_durable_state_rejects_the_framework_order" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unknown_service_outcome_is_not_turned_into_a_local_failure" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_transport_unknown_is_not_retried_and_stays_visible" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_definitive_service_failure_rejects_with_the_service_code" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unexpected_error_is_reported_as_an_unknown_outcome" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_acknowledgement_stays_nonterminal" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_confirmed_cancellation_is_terminal" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_without_provider_identity_is_rejected_without_a_service_call" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_without_managed_identity_is_rejected_without_a_service_call" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_unknown_outcome_stays_reconcilable" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_projects_an_accepted_service_intent_without_a_legacy_write" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_keeps_an_unknown_service_outcome_nonterminal" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_identity_follows_the_framework_convention_when_absent" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_cancel_routes_through_the_service_adapter" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_cancel_unknown_outcome_stays_reconcilable" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_deployment_supplied_stable_reference_is_published_as_a_tag" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_an_unstable_or_malformed_reference_is_never_published" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_partial_and_complete_fills_are_projected_with_exact_figures" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_fill_without_exact_figures_is_never_booked_as_one" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_applies_a_completed_service_record_once" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_applies_a_partial_fill_from_the_service_record" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_projects_the_current_durable_state" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refreshing_an_unchanged_record_is_a_replay" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_new_revision_is_projected_even_after_an_earlier_refresh" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_reports_a_cancelled_record_as_terminal" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_keeps_an_unknown_record_reconcilable" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_reports_a_missing_record_as_unknown_not_as_success" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_raises_a_typed_error_for_any_failed_durable_read" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_previously_known_record_missing_from_a_successful_read_is_an_error" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_requires_a_reference_identifier" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_refresh_never_dispatches_and_never_touches_the_legacy_route" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_refresh_applies_a_new_durable_revision_once" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_refresh_skips_orders_without_a_managed_intent" time="0.003" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_refresh_backoff_preserves_order_and_recovers_same_revision" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_successful_unknown_record_stays_business_unknown_without_backoff" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_same_partial_revision_recovers_read_failure_without_rebooking_fill" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_partial_applied_refs_survive_a_later_read_failure" time="0.006" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_successful_cumulative_partial_snapshots_keep_average_fill_price" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_requires_a_managed_adapter_and_a_valid_limit" time="0.003" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_does_not_run_without_an_explicit_call" time="0.003" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_the_refresh_loop_drives_a_real_broker_pass" time="0.003" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_repeated_refresh_projection_does_not_notify_twice" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection" time="0.065"><failure message="assert None is not None">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-989/test_recovery_submit_persists_0')
+
+    def test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection(tmp_path) -&gt; None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+    
+        projection = adapter.submit_order(order, _legacy_dispatch)
+    
+        manifest = client.manifest_seen_before_submit
+&gt;       assert manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1448: AssertionError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal" time="0.064"><failure message="assert None is not None">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-989/test_recovery_cancel_binds_tar0')
+
+    def test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal(tmp_path) -&gt; None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+        adapter.submit_order(order, _legacy_dispatch)
+        # In the real flow this provider identity comes from a prior authenticated
+        # durable snapshot; this unit checks that it is bound before cancel RPC.
+        order.info["external_order_id"] = "provider-order-1"
+    
+        projection = adapter.cancel_order(order, "BTC-USDT", _legacy_dispatch)
+    
+        cancel_manifest = client.cancel_manifest_seen_before_rpc
+&gt;       assert cancel_manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1493: AssertionError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_submit_rejects_a_strategy_with_the_wrong_scope_before_rpc" time="0.099" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_cancel_rejects_a_strategy_with_the_wrong_scope_before_rpc" time="0.092" /><testcase classname="tests.unit.stores.test_service_execution_adapter_local_process" name="test_backtrader_orders_route_through_a_real_execution_service" time="10.784" /><testcase classname="tests.unit.stores.test_service_execution_adapter_local_process" name="test_decimal_quantity_is_accepted_by_the_adapter" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_run_configured_cerebro_builds_session_from_supported_sdk_routes" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_run_configured_cerebro_preserves_direct_path_when_config_is_absent" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_run_configured_cerebro_rejects_optional_query_without_runtime_creation" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_plain_broker_lifecycle_does_not_create_or_attach_a_session" time="0.002" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_session_poll_maintains_runtime_during_refresh_idle_and_backoff" time="0.066" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_maintenance_failure_stops_broker_tick_and_triggers_cleanup" time="0.061" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_preflight_rejections_do_not_start_runtime_or_store" time="0.168" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_wrong_thread_and_reused_session_fail_before_resource_acquisition" time="0.040" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_registered_route_scope_error_precedes_store_connection" time="0.049" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_broker_stop_hook_rejects_wrong_thread_before_store_shutdown" time="0.053" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_nonpass_stop_result_is_reported_from_this_stop_call[status-INCOMPLETE-BROKER_STOP_NOT_PASS]" time="0.051" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_nonpass_stop_result_is_reported_from_this_stop_call[shutdown_state-FAIL-STORE_SHUTDOWN_NOT_PASS]" time="0.051" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_primary_run_error_survives_failed_stop_without_repeating_winddown" time="0.051" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_fallback_stop_nonpass_result_is_merged_into_cleanup_report" time="0.051" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_unstarted_broker_none_stop_result_does_not_use_default_summary" time="0.049" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_broker_cannot_reconnect_after_its_session_has_ended" time="0.052" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_unregister_uncertainty_remains_visible_after_session_close[None-closed_with_uncertainty]" time="0.055" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_unregister_uncertainty_remains_visible_after_session_close[INCOMPLETE-close_failed]" time="0.088" /><testcase classname="tests.unit.stores.test_service_execution_session_local_process" name="test_session_drives_cerebro_refresh_and_renews_due_runtime_leases" time="4.955" /><testcase classname="tests.unit.stores.test_service_execution_session_local_process" name="test_session_closes_runtime_store_and_host_when_strategy_start_raises" time="4.770" /><testcase classname="tests.unit.stores.test_service_execution_session_local_process" name="test_public_configured_example_runs_cerebro_in_a_subprocess" time="8.974" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_explicit_strategy_view_returns_auditable_net_quantity_without_cost_basis" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_strategy_view_projects_owner_cash_cost_basis_and_cumulative_fees" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_strategy_cash_requires_explicit_currency_and_reads_only_owner_book" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_financial_projection_unavailable_keeps_net_position_without_cost_price" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_incomplete_cost_basis_does_not_create_an_average_price" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_financial_cut_mismatch_is_unavailable_without_changing_legacy_quantity" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_financial_account_mismatch_is_unavailable_for_same_strategy_and_cursor" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_missing_legacy_account_key_disables_only_the_financial_projection" time="0.001"><failure message="backtrader.stores.service_strategy_account_book.ServiceStrategyAccountBookError: INVALID_COVERAGE">def test_missing_legacy_account_key_disables_only_the_financial_projection():
+        reply = _reply(financial=_financial_projection())
+        del reply["result"]["coverage"]["account_key"]
+        view, _runtime = _view(reply)
+    
+&gt;       snapshot = view.snapshot()
+
+tests\unit\stores\test_service_strategy_account_book.py:292: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_strategy_account_book.py:179: in snapshot
+    return _snapshot_from_reply(
+backtrader\stores\service_strategy_account_book.py:248: in _snapshot_from_reply
+    legacy_account_key = _required_text(coverage.get("account_key"), "INVALID_COVERAGE")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+value = None, error_code = 'INVALID_COVERAGE'
+
+    def _required_text(value: object, error_code: str) -&gt; str:
+        if type(value) is not str or not value or value != value.strip():
+&gt;           raise ServiceStrategyAccountBookError(error_code)
+E           backtrader.stores.service_strategy_account_book.ServiceStrategyAccountBookError: INVALID_COVERAGE
+
+backtrader\stores\service_strategy_account_book.py:534: ServiceStrategyAccountBookError</failure></testcase><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_incomplete_owner_cost_rows_downgrade_cost_completeness_but_keep_cash[unknown-cost-basis]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_incomplete_owner_cost_rows_downgrade_cost_completeness_but_keep_cash[missing-owner-cost-row]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_position_cost_quantity_must_match_the_legacy_owner_projection" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_owner_book_must_share_its_own_exact_financial_cut" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_complete_owner_view_treats_an_omitted_instrument_as_flat" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply0-STRATEGY_BOOK_COVERAGE_INCOMPLETE]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply1-OWNER_BINDING_MISMATCH]" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply2-OWNER_BINDING_MISMATCH]" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply3-OWNER_BOOK_AMBIGUOUS]" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_strategy_cash_and_value_are_explicitly_unavailable_without_rpc" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_tick_datetime_prefers_epoch_timestamp_over_provider_datetime" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_tick_datetime_converts_aware_values_to_utc_naive_without_timestamp" time="0.000" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_tick_timestamp_treats_naive_datetime_as_utc" time="0.000" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_loads_history_then_live" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_emits_live_notification_only_once" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_subscribes_and_reports_live_data" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_succeeds_without_api_subscribe_method" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_falls_back_to_bound_store_attribute_when_store_param_is_missing" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_continues_to_subscribe_when_initial_backfill_fails" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_with_bound_store_fallback_continues_to_subscribe_when_initial_backfill_fails" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_not_live_without_any_live_capability" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_islive_returns_false_when_capability_probes_raise_errors" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_store_has_preseeded_live_bars" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_client_declares_streaming_capability_before_subscription" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_store_preseeded_live_bars_are_drained_from_haslivedata" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_orderbook_source_is_available" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_for_attribute_only_live_orderbooks" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_tick_source_is_available" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_for_attribute_only_live_ticks" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_with_api_cls_even_before_any_live_data_is_available" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_for_attribute_only_api_live_bars" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_store_exists_without_api_instance" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_live_detection_falls_back_to_bound_store_attribute_when_store_param_is_missing" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_bound_store_pending_orderbook_when_store_param_is_missing" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_bound_store_pending_tick_when_store_param_is_missing" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_explicit_store_pending_helpers[has_pending_tick]" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_explicit_store_pending_helpers[has_pending_orderbook]" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_without_store_is_silent_and_preserves_local_live_queue" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_without_store_is_silent_and_preserves_local_history_queue" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_stop_without_store_is_silent_and_preserves_local_queues" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_without_store_can_stream_injected_live_bars" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_without_store_can_replay_injected_historical_bars" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_repeated_start_does_not_duplicate_subscription_within_session_but_resubscribes_after_restart" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_repeated_start_does_not_refetch_backfill_history" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_skips_history_backfill_when_disabled" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_skips_history_backfill_when_history_is_preseeded" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_logs_backfill_failure_and_continues" time="0.000"><error message="failed on setup with &quot;file D:\source_code\backtrader\tests\unit\feeds\test_btapifeed.py, line 774&#10;  def test_feed_start_logs_backfill_failure_and_continues(bt_caplog):&#10;E       fixture 'bt_caplog' not found&#10;&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, feed_stack, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory&#10;&gt;       use 'pytest --fixtures [testpath]' for help on them.&#10;&#10;D:\source_code\backtrader\tests\unit\feeds\test_btapifeed.py:774&quot;">file D:\source_code\backtrader\tests\unit\feeds\test_btapifeed.py, line 774
+  def test_feed_start_logs_backfill_failure_and_continues(bt_caplog):
+E       fixture 'bt_caplog' not found
+&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, feed_stack, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+&gt;       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\tests\unit\feeds\test_btapifeed.py:774</error></testcase><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_drains_live_ticks_into_channel_events" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_can_disable_raw_tick_channel_dispatch_while_building_bars" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_waits_qcheck_when_realtime_ticks_do_not_complete_a_bar" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_tick_timeframe_turns_live_ticks_into_immediate_bars" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_tick_timeframe_loads_bar_datetime_from_epoch_timestamp" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_drains_live_orderbooks_into_channel_events" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_marks_live_when_realtime_events_arrive_before_a_completed_bar[client_kwargs0]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_marks_live_when_realtime_events_arrive_before_a_completed_bar[client_kwargs1]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_tick_prepares_actual_feed_before_native_callback_and_matching" time="0.008" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_tick_does_not_dispatch_from_check_before_allocating_lines" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_tick_rejects_bar_timeframe" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_feed_restart_emits_a_fresh_live_transition" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_remote_ioc_notification_is_delivered_during_market_data_gap[False]" time="0.018" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_remote_ioc_notification_is_delivered_during_market_data_gap[True]" time="0.017" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_only_idle_loop_polls_live_broker_without_spinning" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_normalized_sdk_ctp_book_uses_native_feed_broker_and_strategy" time="0.007" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_declared_delta_is_consumed_once_even_when_cumulative_volume_is_present" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_tick_timeframe_keeps_multiple_ordered_ctp_ticks_in_one_minute_eligible" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_declared_cumulative_without_sdk_delta_is_not_differenced_by_feed" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_quote_only_snapshot_never_fabricates_trade_ohlc" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_minute_bucket_closes_at_end_plus_500ms_and_carries_causal_identity" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_late_trade_after_watermark_cannot_mutate_delivered_bar" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_crossed_or_off_grid_book_is_dispatched_but_not_bar_eligible" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_store_rejects_a_second_destructive_tick_consumer_for_same_symbol" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_feed_releases_new_tick_claim_when_subscription_fails" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_missing_required_clock_field_is_fail_closed[event_time_utc]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_missing_required_clock_field_is_fail_closed[recv_time_utc]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_missing_required_clock_field_is_fail_closed[recv_monotonic_ns]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_cannot_be_promoted_after_parent_marks_it_execution_ineligible" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_rejects_unverified_parent_time_evidence[source_clock_quality-unknown-SOURCE_CLOCK_UNVERIFIED]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_rejects_unverified_parent_time_evidence[receive_clock_quality-unknown-RECEIVE_CLOCK_UNVERIFIED]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_rejects_unverified_parent_time_evidence[freshness_verified-False-FRESHNESS_UNVERIFIED]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[raw_flags1]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[1]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[None]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[raw_flags4]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[raw_flags5]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_stale_or_recovery_pending_tick_is_not_execution_eligible[True-recovery_pending_validation]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_stale_or_recovery_pending_tick_is_not_execution_eligible[False-recovery_pending_validation]" time="0.128" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_decision_time_is_replaced_only_by_an_explicit_same_domain_provider" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_raw_decision_time_is_cleared_without_a_provider" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_conflicting_timestamp_cannot_select_the_bar_bucket" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_bad_volume_snapshot_invalidates_an_existing_bucket_before_rejection" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_incomplete_positive_delta_invalidates_the_existing_minute_bucket" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_replay_clock_monotonic_now_drives_watermark_without_host_clock" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_finite_tick_source_pairs_each_bar_callback_with_the_next_line_turn" time="0.006" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_override_only_invalid_buckets_are_pruned_by_the_watermark" time="0.062" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_generation_change_invalidates_the_entire_shared_minute_bucket" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_subscription_epoch_change_invalidates_the_entire_shared_minute_bucket" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_retired_ctp_scope_cannot_reopen_after_a_new_generation" time="0.003" /><testcase classname="tests.unit.core.test_strategy" name="test_strategy_basic" time="0.044" /><testcase classname="tests.unit.core.test_strategy" name="test_strategy_multiple_datas" time="0.049" /><testcase classname="tests.unit.core.test_strategy" name="test_strategy_optimization" time="0.092" /><testcase classname="tests.unit.core.test_trade" name="test_run" time="0.002" /></testsuite></testsuites>

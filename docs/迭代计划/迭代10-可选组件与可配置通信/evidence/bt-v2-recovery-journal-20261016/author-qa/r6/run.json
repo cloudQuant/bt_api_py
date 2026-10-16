@@ -1,0 +1,81 @@
+{
+  "cwd": "D:\\source_code\\backtrader",
+  "python": "C:/anaconda3/python.exe",
+  "python_version": "3.11",
+  "command": [
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-q",
+    "--junitxml=D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6\\junit.xml",
+    "tests/unit/stores/test_service_execution_recovery_v2.py",
+    "tests/unit/stores/test_service_execution_broker_recovery.py",
+    "tests/unit/stores/test_service_execution_recovery.py",
+    "tests/unit/stores/test_service_execution_adapter.py",
+    "tests/unit/stores/test_service_execution_adapter_local_process.py",
+    "tests/unit/stores/test_service_execution_session.py",
+    "tests/unit/stores/test_service_execution_session_local_process.py",
+    "tests/unit/stores/test_service_strategy_account_book.py",
+    "tests/unit/feeds/test_btapifeed.py",
+    "tests/unit/feeds/test_btapifeed_arbitrage.py",
+    "tests/unit/feeds/test_btapifeed_iteration22.py",
+    "tests/unit/core/test_strategy.py",
+    "tests/unit/core/test_trade.py"
+  ],
+  "env": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "source_before": [
+    {
+      "path": "backtrader/brokers/btapibroker.py",
+      "bytes": 461833,
+      "sha256": "364D5CE6F36FE3017C2EE523A7B7B83562A595F280F43601E0A496C76E344A95"
+    },
+    {
+      "path": "backtrader/feeds/btapifeed.py",
+      "bytes": 77300,
+      "sha256": "960E023CC1C3B7F6671B8AF3B50A775B1DD7DE5E9213509D207A15070001A0E2"
+    },
+    {
+      "path": "backtrader/feeds/service_recovery_quotes.py",
+      "bytes": 9213,
+      "sha256": "95562FB1C19B26C68CB4377BE219E952CF3FB65ADBE9633021A7D1606B07952D"
+    },
+    {
+      "path": "backtrader/stores/service_execution_adapter.py",
+      "bytes": 70612,
+      "sha256": "B3C415A1F70671162A171902E83D95C391D2B8BD559EFCD312C07B5FCB79098E"
+    },
+    {
+      "path": "backtrader/stores/service_execution_recovery.py",
+      "bytes": 171714,
+      "sha256": "193E6DC0F7FCF64F01E87963448678612ADB1396D27C2EC100766C53D4702856"
+    },
+    {
+      "path": "backtrader/stores/service_execution_session.py",
+      "bytes": 49981,
+      "sha256": "CD78E89AF63B3F86AFEE3334E1C46990CD23AF3C752908D4B9D71655314EE922"
+    },
+    {
+      "path": "backtrader/stores/service_strategy_account_book.py",
+      "bytes": 24201,
+      "sha256": "23341F4F2F5583B411934EC6432354B46F3D737141246FF02FBF8F8F2B0E6CBB"
+    },
+    {
+      "path": "backtrader/strategy.py",
+      "bytes": 193154,
+      "sha256": "DC1B519D7301988B85806A4B1F50C605D10A483F4D011A08509416A2AB7F0DB5"
+    },
+    {
+      "path": "backtrader/trade.py",
+      "bytes": 19121,
+      "sha256": "38DEC048B2E9884ACBFE196173C009B1C8340A9870BE24ED9C4D9C050D45A9B4"
+    },
+    {
+      "path": "tests/unit/stores/test_service_execution_recovery_v2.py",
+      "bytes": 22401,
+      "sha256": "8659B5A6FF98DC92FA380DAB4141810DEF92589DBE830F1D4138AC2AC79229F1"
+    }
+  ]
+}

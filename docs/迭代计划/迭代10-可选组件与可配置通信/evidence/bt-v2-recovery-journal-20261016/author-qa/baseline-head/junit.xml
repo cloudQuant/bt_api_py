@@ -1,0 +1,868 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="4" failures="14" skipped="0" tests="608" time="59.557" timestamp="2026-10-16T09:53:12.674605" hostname="yun"><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_first_baseline_is_atomic_immutable_and_cannot_rebase_existing_intents" time="0.190" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_ordered_history_reconciles_unmatched_facts_but_only_projects_bound_intents" time="0.086" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_broker_restores_snapshot_order_scalars_without_booking_owner_state" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_pending_pre_cut_receipt_precedes_restored_snapshot_notification" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_receipts_at_refreshed_order_cut_are_clone_only_before_snapshot" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_deferred_snapshot_notifications_follow_their_per_order_cuts" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_blocked_recovery_receipt_and_snapshot_keep_uncertainty_flag" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_status_only_receipt_uses_only_as_of_event_facts[True-1.0-10.0-0.01]" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_status_only_receipt_uses_only_as_of_event_facts[False-0.0-0.0-0.0]" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_restore_only_strategy_notification_does_not_rebuild_trade_state" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_strategy_acknowledges_only_after_notification_delivery_returns" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_incomplete_execution_time_cut_rejects_owner_mutations[OPEN-baseline_positions0-current_positions0-RECOVERY_OPEN_OWNER_POSITION_ATTRIBUTION_UNAVAILABLE]" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_incomplete_execution_time_cut_rejects_owner_mutations[CLOSE-baseline_positions1-current_positions1-RECOVERY_CLOSE_BASELINE_INCOMPLETE]" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose[CLOSE]" time="0.084" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose[CLOSE_TODAY]" time="0.084" /><testcase classname="tests.unit.stores.test_service_execution_broker_recovery" name="test_multiple_intent_facts_reconcile_tradeid_quantity_and_reject_overclose[CLOSE_YESTERDAY]" time="0.093" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_manifest_is_durable_immutable_and_logical_run_scoped" time="0.088" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_is_restore_only_and_filters_to_the_current_manifest" time="0.074" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_preserves_negative_cumulative_commission_rebate" time="0.065" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_recovery_views_require_strategy_owner_kind_not_legacy_view_name" time="0.068" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_recovery_views_reject_unknown_top_level_fields_and_boolean_version" time="0.068" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_requires_its_pinned_source_and_freshness_claim" time="0.064" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_states_not_allowed_for_the_event_type[dispatch_claimed-FILLED]" time="0.067" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_states_not_allowed_for_the_event_type[provider_observation-UNKNOWN]" time="0.069" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_states_not_allowed_for_the_event_type[cancelled_by_cancel_intent-REJECTED]" time="0.067" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_observation_source_that_disagrees_with_type[provider_observation-reconcile]" time="0.068" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_observation_source_that_disagrees_with_type[reconciled_observation-provider]" time="0.066" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_unsanitized_reason_code_before_commit" time="0.066" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_currency_without_commission_before_commit" time="0.051" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_preserves_negative_cumulative_commission_rebate" time="0.046"><failure message="backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_event_page_preserves_nega0')
+
+    def test_event_page_preserves_negative_cumulative_commission_rebate(tmp_path) -&gt; None:
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        event = _event(_INTENT, fingerprint, 11)
+        event["details"]["cumulative_commission"] = "-0.01"
+    
+&gt;       assert journal.apply_events_page(namespace, _page(10, 11, 11, [event], has_more=False)) is True
+
+tests\unit\stores\test_service_execution_recovery.py:453: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:733: in apply_events_page
+    self._apply_one_event(cursor, namespace, event, now_ns)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x000001B2119217D0&gt;
+cursor = &lt;sqlite3.Cursor object at 0x000001B2103D49C0&gt;
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'details': {'average_price': '20.25', 'cumulative_commission': '-0.01', 'cumulative_commission_currency': 'USD', 'fil...sha256': '99237ce70f26f9ad70bbe54bc9c26a188ba6a7b0bb5999819c541531d8f9d1da', 'event_type': 'provider_observation', ...}
+now_ns = 1792115601194908000
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+    ) -&gt; None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled &lt; previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+&gt;                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:1967: ServiceExecutionRecoveryError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_noncanonical_decimal_before_commit" time="0.064" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_requires_a_real_generation_and_consistent_order_sequences" time="0.066" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_snapshot_requires_hex_source_event_identity" time="0.062" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_receipt_projection_cursor_and_callback_pending_commit_together" time="0.060"><failure message="backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_event_receipt_projection_0')
+
+    def test_event_receipt_projection_cursor_and_callback_pending_commit_together(tmp_path) -&gt; None:
+        path = tmp_path / "recovery.sqlite3"
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(path)
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        own_event = _event(_INTENT, fingerprint, 11)
+        old_run_event = _event("older-run-intent", _digest("older-payload"), 12)
+        page_one = _page(10, 11, 12, [own_event], has_more=True)
+        page_two = _page(11, 12, 12, [old_run_event], has_more=False)
+    
+&gt;       assert journal.apply_events_page(namespace, page_one) is True
+
+tests\unit\stores\test_service_execution_recovery.py:536: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:733: in apply_events_page
+    self._apply_one_event(cursor, namespace, event, now_ns)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x000001B211A63E90&gt;
+cursor = &lt;sqlite3.Cursor object at 0x000001B20FCC7AC0&gt;
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'details': {'average_price': '20.25', 'cumulative_commission': '0.01', 'cumulative_commission_currency': 'USD', 'fill...sha256': '99237ce70f26f9ad70bbe54bc9c26a188ba6a7b0bb5999819c541531d8f9d1da', 'event_type': 'provider_observation', ...}
+now_ns = 1792115601980888100
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+    ) -&gt; None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled &lt; previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+&gt;                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:1967: ServiceExecutionRecoveryError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_unknown_or_wrong_cut_page_does_not_advance_durable_cursor" time="0.063" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_quiet_event_poll_at_the_same_global_cut_is_repeatable" time="0.060" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks" time="0.063"><failure message="backtrader.stores.service_execution_adapter.ServiceExecutionReadError: Managed service read failed (recovery_recovery_trade_binding_missing)">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_adapter_pulls_snapshot_pa0')
+
+    def test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks(tmp_path) -&gt; None:
+        from backtrader.stores.service_execution_adapter import ServiceExecutionAdapter
+    
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        snapshot = _snapshot([_snapshot_order(_INTENT, fingerprint)])
+        own_event = _event(_INTENT, fingerprint, 11)
+        next_event = _event(_INTENT, fingerprint, 12, event_type="reconciled_observation")
+        pages = [
+            _page(10, 11, 12, [own_event], has_more=True),
+            _page(11, 12, 12, [next_event], has_more=False),
+            _page(12, 12, 12, [], has_more=False),
+        ]
+        calls = []
+    
+        class _RecoveryClient:
+            def submit(self, **_kwargs):
+                raise AssertionError("the recovery pull must not submit an intent")
+    
+            def cancel(self, **_kwargs):
+                raise AssertionError("the recovery pull must not cancel an intent")
+    
+            def query(self, *_args, **_kwargs):
+                raise AssertionError("the recovery pull must not query per-order records")
+    
+            def query_recovery_snapshot(self):
+                return snapshot
+    
+            def query_recovery_events_after(self, **kwargs):
+                calls.append(kwargs)
+                return pages.pop(0)
+    
+        adapter = ServiceExecutionAdapter(_RecoveryClient(), recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+    
+&gt;       initialized = adapter.initialize_recovery(page_limit=2)
+
+tests\unit\stores\test_service_execution_recovery.py:658: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_adapter.py:209: in initialize_recovery
+    pages_applied = self._consume_recovery_pages(page_limit=page_limit, max_pages=max_pages)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;backtrader.stores.service_execution_adapter.ServiceExecutionAdapter object at 0x000001B2102BCC50&gt;
+
+    def _consume_recovery_pages(self, *, page_limit: int, max_pages: int) -&gt; int:
+        if type(page_limit) is not int or not 1 &lt;= page_limit &lt;= 128:
+            raise ServiceExecutionAdapterError("invalid recovery page limit")
+        if type(max_pages) is not int or not 1 &lt;= max_pages &lt;= 1024:
+            raise ServiceExecutionAdapterError("invalid recovery page budget")
+        journal, namespace = self._require_recovery()
+        page_reader = getattr(self._client, "query_recovery_events_after", None)
+        if not callable(page_reader):
+            raise ServiceExecutionReadError("recovery_events_api_unavailable")
+        pages_applied = 0
+        for _ in range(max_pages):
+            cursor = journal.cursor(namespace)
+            generation = cursor["journal_generation"]
+            directory_revision = cursor["scope_directory_revision"]
+            after_sequence = cursor["event_cursor"]
+            if (
+                type(generation) is not str
+                or not generation
+                or type(directory_revision) is not str
+                or not directory_revision
+                or type(after_sequence) is not int
+            ):
+                raise ServiceExecutionReadError("recovery_snapshot_required")
+            try:
+                page = page_reader(
+                    after_sequence=after_sequence,
+                    expected_journal_generation=generation,
+                    expected_directory_revision=directory_revision,
+                    limit=page_limit,
+                )
+                page_changed = journal.apply_events_page(namespace, page)
+            except ServiceExecutionRecoveryError as error:
+&gt;               raise ServiceExecutionReadError(f"recovery_{error.code.lower()}") from None
+E               backtrader.stores.service_execution_adapter.ServiceExecutionReadError: Managed service read failed (recovery_recovery_trade_binding_missing)
+
+backtrader\stores\service_execution_adapter.py:421: ServiceExecutionReadError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_rejects_private_or_unrecognized_details_before_commit" time="0.064" /><testcase classname="tests.unit.stores.test_service_execution_recovery" name="test_event_page_requires_hex_event_identity_before_commit" time="0.063" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_adapter_requires_a_submit_and_cancel_capable_client" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_accepted_intent_projects_the_provider_identity" time="0.001"><failure message="AssertionError: assert [{'deadline_n...ata-v1', ...}] == [{'instrument...'LIMIT', ...}]&#10;  &#10;  At index 0 diff: {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': Decimal('2'), 'price': Decimal('101.0'), 'time_in_force': 'GTC', 'reduce_only': False, 'metadata_version': 'metadata-v1', 'deadline_ns': None, 'tags': {}} != {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': 2, 'price': 101.0, 'reduce_only': False, 'metadata_version': 'metadata-v1', 'tags': {}}&#10;  Use -v to get more diff">def test_accepted_intent_projects_the_provider_identity() -&gt; None:
+        client = _FakeClient(submit_view=_view())
+        adapter = ServiceExecutionAdapter(client)
+    
+        response = adapter.submit_order(_limit_order(), _legacy_dispatch)
+    
+        assert response["status"] == "accepted"
+        assert response["external_order_id"] == "provider-order-1"
+        assert response["managed_intent_id"] == "intent-1"
+        assert response["service_execution_state"] == "ACKED"
+        assert response["data_name"] == "BTC-USDT"
+&gt;       assert client.submitted == [
+            {
+                "intent_id": "intent-1",
+                "signal_id": "signal-1",
+                "instrument": "BTC-USDT",
+                "side": "BUY",
+                "position_effect": "OPEN",
+                "order_type": "LIMIT",
+                "quantity": 2,
+                "price": 101.0,
+                "reduce_only": False,
+                "metadata_version": "metadata-v1",
+                # A per-object framework reference is not published by default:
+                # it would break intent idempotency on a resubmit.
+                "tags": {},
+            }
+        ]
+E       AssertionError: assert [{'deadline_n...ata-v1', ...}] == [{'instrument...'LIMIT', ...}]
+E         
+E         At index 0 diff: {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': Decimal('2'), 'price': Decimal('101.0'), 'time_in_force': 'GTC', 'reduce_only': False, 'metadata_version': 'metadata-v1', 'deadline_ns': None, 'tags': {}} != {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': 2, 'price': 101.0, 'reduce_only': False, 'metadata_version': 'metadata-v1', 'tags': {}}
+E         Use -v to get more diff
+
+tests\unit\stores\test_service_execution_adapter.py:139: AssertionError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_market_order_is_projected_without_a_price" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unsupported_execution_type_is_rejected_without_a_service_call" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_missing_managed_metadata_is_rejected_without_a_service_call" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_close_position_effect_forces_reduce_only" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_sell_order_reports_the_sell_side_and_absolute_quantity" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unknown_durable_state_stays_nonterminal" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_rejected_durable_state_rejects_the_framework_order" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unknown_service_outcome_is_not_turned_into_a_local_failure" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_transport_unknown_is_not_retried_and_stays_visible" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_definitive_service_failure_rejects_with_the_service_code" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_unexpected_error_is_reported_as_an_unknown_outcome" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_acknowledgement_stays_nonterminal" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_confirmed_cancellation_is_terminal" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_without_provider_identity_is_rejected_without_a_service_call" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_without_managed_identity_is_rejected_without_a_service_call" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_unknown_outcome_stays_reconcilable" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_projects_an_accepted_service_intent_without_a_legacy_write" time="0.006" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_keeps_an_unknown_service_outcome_nonterminal" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_cancel_identity_follows_the_framework_convention_when_absent" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_cancel_routes_through_the_service_adapter" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_cancel_unknown_outcome_stays_reconcilable" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_deployment_supplied_stable_reference_is_published_as_a_tag" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_an_unstable_or_malformed_reference_is_never_published" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_partial_and_complete_fills_are_projected_with_exact_figures" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_fill_without_exact_figures_is_never_booked_as_one" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_applies_a_completed_service_record_once" time="0.007" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_applies_a_partial_fill_from_the_service_record" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_projects_the_current_durable_state" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refreshing_an_unchanged_record_is_a_replay" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_new_revision_is_projected_even_after_an_earlier_refresh" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_reports_a_cancelled_record_as_terminal" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_keeps_an_unknown_record_reconcilable" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_reports_a_missing_record_as_unknown_not_as_success" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_raises_a_typed_error_for_any_failed_durable_read" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_previously_known_record_missing_from_a_successful_read_is_an_error" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_requires_a_reference_identifier" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_refresh_never_dispatches_and_never_touches_the_legacy_route" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_refresh_applies_a_new_durable_revision_once" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_refresh_skips_orders_without_a_managed_intent" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_broker_refresh_backoff_preserves_order_and_recovers_same_revision" time="0.010" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_successful_unknown_record_stays_business_unknown_without_backoff" time="0.004" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_same_partial_revision_recovers_read_failure_without_rebooking_fill" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_partial_applied_refs_survive_a_later_read_failure" time="0.007" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_successful_cumulative_partial_snapshots_keep_average_fill_price" time="0.006" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_requires_a_managed_adapter_and_a_valid_limit" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_refresh_does_not_run_without_an_explicit_call" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_the_refresh_loop_drives_a_real_broker_pass" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_a_repeated_refresh_projection_does_not_notify_twice" time="0.005" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection" time="0.059"><failure message="assert None is not None">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_recovery_submit_persists_0')
+
+    def test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection(tmp_path) -&gt; None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+    
+        projection = adapter.submit_order(order, _legacy_dispatch)
+    
+        manifest = client.manifest_seen_before_submit
+&gt;       assert manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1448: AssertionError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal" time="0.050"><failure message="assert None is not None">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_recovery_cancel_binds_tar0')
+
+    def test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal(tmp_path) -&gt; None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+        adapter.submit_order(order, _legacy_dispatch)
+        # In the real flow this provider identity comes from a prior authenticated
+        # durable snapshot; this unit checks that it is bound before cancel RPC.
+        order.info["external_order_id"] = "provider-order-1"
+    
+        projection = adapter.cancel_order(order, "BTC-USDT", _legacy_dispatch)
+    
+        cancel_manifest = client.cancel_manifest_seen_before_rpc
+&gt;       assert cancel_manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1493: AssertionError</failure></testcase><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_submit_rejects_a_strategy_with_the_wrong_scope_before_rpc" time="0.091" /><testcase classname="tests.unit.stores.test_service_execution_adapter" name="test_recovery_cancel_rejects_a_strategy_with_the_wrong_scope_before_rpc" time="0.088" /><testcase classname="tests.unit.stores.test_service_execution_adapter_local_process" name="test_backtrader_orders_route_through_a_real_execution_service" time="11.973" /><testcase classname="tests.unit.stores.test_service_execution_adapter_local_process" name="test_decimal_quantity_is_accepted_by_the_adapter" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_run_configured_cerebro_builds_session_from_supported_sdk_routes" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_run_configured_cerebro_preserves_direct_path_when_config_is_absent" time="0.000" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_run_configured_cerebro_rejects_optional_query_without_runtime_creation" time="0.001" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_plain_broker_lifecycle_does_not_create_or_attach_a_session" time="0.002" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_session_poll_maintains_runtime_during_refresh_idle_and_backoff" time="0.066" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_maintenance_failure_stops_broker_tick_and_triggers_cleanup" time="0.064" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_preflight_rejections_do_not_start_runtime_or_store" time="0.173" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_wrong_thread_and_reused_session_fail_before_resource_acquisition" time="0.041" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_registered_route_scope_error_precedes_store_connection" time="0.051" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_broker_stop_hook_rejects_wrong_thread_before_store_shutdown" time="0.056" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_nonpass_stop_result_is_reported_from_this_stop_call[status-INCOMPLETE-BROKER_STOP_NOT_PASS]" time="0.055" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_nonpass_stop_result_is_reported_from_this_stop_call[shutdown_state-FAIL-STORE_SHUTDOWN_NOT_PASS]" time="0.076" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_primary_run_error_survives_failed_stop_without_repeating_winddown" time="0.053" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_fallback_stop_nonpass_result_is_merged_into_cleanup_report" time="0.056" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_unstarted_broker_none_stop_result_does_not_use_default_summary" time="0.050" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_broker_cannot_reconnect_after_its_session_has_ended" time="0.056" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_unregister_uncertainty_remains_visible_after_session_close[None-closed_with_uncertainty]" time="0.056" /><testcase classname="tests.unit.stores.test_service_execution_session" name="test_unregister_uncertainty_remains_visible_after_session_close[INCOMPLETE-close_failed]" time="0.067" /><testcase classname="tests.unit.stores.test_service_execution_session_local_process" name="test_session_drives_cerebro_refresh_and_renews_due_runtime_leases" time="5.904" /><testcase classname="tests.unit.stores.test_service_execution_session_local_process" name="test_session_closes_runtime_store_and_host_when_strategy_start_raises" time="5.939" /><testcase classname="tests.unit.stores.test_service_execution_session_local_process" name="test_public_configured_example_runs_cerebro_in_a_subprocess" time="10.984" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_explicit_strategy_view_returns_auditable_net_quantity_without_cost_basis" time="0.003" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_strategy_view_projects_owner_cash_cost_basis_and_cumulative_fees" time="0.002" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_strategy_cash_requires_explicit_currency_and_reads_only_owner_book" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_financial_projection_unavailable_keeps_net_position_without_cost_price" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_incomplete_cost_basis_does_not_create_an_average_price" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_financial_cut_mismatch_is_unavailable_without_changing_legacy_quantity" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_financial_account_mismatch_is_unavailable_for_same_strategy_and_cursor" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_missing_legacy_account_key_disables_only_the_financial_projection" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_incomplete_owner_cost_rows_downgrade_cost_completeness_but_keep_cash[unknown-cost-basis]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_incomplete_owner_cost_rows_downgrade_cost_completeness_but_keep_cash[missing-owner-cost-row]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_position_cost_quantity_must_match_the_legacy_owner_projection" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_owner_book_must_share_its_own_exact_financial_cut" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_complete_owner_view_treats_an_omitted_instrument_as_flat" time="0.000" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply0-STRATEGY_BOOK_COVERAGE_INCOMPLETE]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply1-OWNER_BINDING_MISMATCH]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply2-OWNER_BINDING_MISMATCH]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_non_owner_or_incomplete_service_projection_is_rejected[reply3-OWNER_BOOK_AMBIGUOUS]" time="0.001" /><testcase classname="tests.unit.stores.test_service_strategy_account_book" name="test_strategy_cash_and_value_are_explicitly_unavailable_without_rpc" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_tick_datetime_prefers_epoch_timestamp_over_provider_datetime" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_tick_datetime_converts_aware_values_to_utc_naive_without_timestamp" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_tick_timestamp_treats_naive_datetime_as_utc" time="0.000" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_loads_history_then_live" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_emits_live_notification_only_once" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_subscribes_and_reports_live_data" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_succeeds_without_api_subscribe_method" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_falls_back_to_bound_store_attribute_when_store_param_is_missing" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_continues_to_subscribe_when_initial_backfill_fails" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_with_bound_store_fallback_continues_to_subscribe_when_initial_backfill_fails" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_not_live_without_any_live_capability" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_islive_returns_false_when_capability_probes_raise_errors" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_store_has_preseeded_live_bars" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_client_declares_streaming_capability_before_subscription" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_store_preseeded_live_bars_are_drained_from_haslivedata" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_orderbook_source_is_available" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_for_attribute_only_live_orderbooks" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_tick_source_is_available" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_for_attribute_only_live_ticks" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_with_api_cls_even_before_any_live_data_is_available" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_for_attribute_only_api_live_bars" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_reports_live_when_store_exists_without_api_instance" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_live_detection_falls_back_to_bound_store_attribute_when_store_param_is_missing" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_bound_store_pending_orderbook_when_store_param_is_missing" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_bound_store_pending_tick_when_store_param_is_missing" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_explicit_store_pending_helpers[has_pending_tick]" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_haslivedata_ignores_explicit_store_pending_helpers[has_pending_orderbook]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_without_store_is_silent_and_preserves_local_live_queue" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_without_store_is_silent_and_preserves_local_history_queue" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_stop_without_store_is_silent_and_preserves_local_queues" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_without_store_can_stream_injected_live_bars" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_without_store_can_replay_injected_historical_bars" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_repeated_start_does_not_duplicate_subscription_within_session_but_resubscribes_after_restart" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_repeated_start_does_not_refetch_backfill_history" time="0.005" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_skips_history_backfill_when_disabled" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_skips_history_backfill_when_history_is_preseeded" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_start_logs_backfill_failure_and_continues" time="0.000"><error message="failed on setup with &quot;file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\feeds\test_btapifeed.py, line 774&#10;  def test_feed_start_logs_backfill_failure_and_continues(bt_caplog):&#10;E       fixture 'bt_caplog' not found&#10;&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, feed_stack, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory&#10;&gt;       use 'pytest --fixtures [testpath]' for help on them.&#10;&#10;D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\feeds\test_btapifeed.py:774&quot;">file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\feeds\test_btapifeed.py, line 774
+  def test_feed_start_logs_backfill_failure_and_continues(bt_caplog):
+E       fixture 'bt_caplog' not found
+&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, feed_stack, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+&gt;       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\feeds\test_btapifeed.py:774</error></testcase><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_drains_live_ticks_into_channel_events" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_can_disable_raw_tick_channel_dispatch_while_building_bars" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_waits_qcheck_when_realtime_ticks_do_not_complete_a_bar" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_tick_timeframe_turns_live_ticks_into_immediate_bars" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_tick_timeframe_loads_bar_datetime_from_epoch_timestamp" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_drains_live_orderbooks_into_channel_events" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_marks_live_when_realtime_events_arrive_before_a_completed_bar[client_kwargs0]" time="0.002" /><testcase classname="tests.unit.feeds.test_btapifeed" name="test_feed_marks_live_when_realtime_events_arrive_before_a_completed_bar[client_kwargs1]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_tick_prepares_actual_feed_before_native_callback_and_matching" time="0.007" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_tick_does_not_dispatch_from_check_before_allocating_lines" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_tick_rejects_bar_timeframe" time="0.001" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_feed_restart_emits_a_fresh_live_transition" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_remote_ioc_notification_is_delivered_during_market_data_gap[False]" time="0.019" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_remote_ioc_notification_is_delivered_during_market_data_gap[True]" time="0.018" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_orderbook_only_idle_loop_polls_live_broker_without_spinning" time="0.005" /><testcase classname="tests.unit.feeds.test_btapifeed_arbitrage" name="test_normalized_sdk_ctp_book_uses_native_feed_broker_and_strategy" time="0.010" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_declared_delta_is_consumed_once_even_when_cumulative_volume_is_present" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_tick_timeframe_keeps_multiple_ordered_ctp_ticks_in_one_minute_eligible" time="0.005" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_declared_cumulative_without_sdk_delta_is_not_differenced_by_feed" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_quote_only_snapshot_never_fabricates_trade_ohlc" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_minute_bucket_closes_at_end_plus_500ms_and_carries_causal_identity" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_late_trade_after_watermark_cannot_mutate_delivered_bar" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_crossed_or_off_grid_book_is_dispatched_but_not_bar_eligible" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_store_rejects_a_second_destructive_tick_consumer_for_same_symbol" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_feed_releases_new_tick_claim_when_subscription_fails" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_missing_required_clock_field_is_fail_closed[event_time_utc]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_missing_required_clock_field_is_fail_closed[recv_time_utc]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_missing_required_clock_field_is_fail_closed[recv_monotonic_ns]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_cannot_be_promoted_after_parent_marks_it_execution_ineligible" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_rejects_unverified_parent_time_evidence[source_clock_quality-unknown-SOURCE_CLOCK_UNVERIFIED]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_rejects_unverified_parent_time_evidence[receive_clock_quality-unknown-RECEIVE_CLOCK_UNVERIFIED]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_rejects_unverified_parent_time_evidence[freshness_verified-False-FRESHNESS_UNVERIFIED]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[raw_flags1]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[1]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[None]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[raw_flags4]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_malformed_quality_flags_cannot_be_normalized_into_clean_evidence[raw_flags5]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_stale_or_recovery_pending_tick_is_not_execution_eligible[True-recovery_pending_validation]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_stale_or_recovery_pending_tick_is_not_execution_eligible[False-recovery_pending_validation]" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_decision_time_is_replaced_only_by_an_explicit_same_domain_provider" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_raw_decision_time_is_cleared_without_a_provider" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_ctp_v2_conflicting_timestamp_cannot_select_the_bar_bucket" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_bad_volume_snapshot_invalidates_an_existing_bucket_before_rejection" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_incomplete_positive_delta_invalidates_the_existing_minute_bucket" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_replay_clock_monotonic_now_drives_watermark_without_host_clock" time="0.003" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_finite_tick_source_pairs_each_bar_callback_with_the_next_line_turn" time="0.008" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_override_only_invalid_buckets_are_pruned_by_the_watermark" time="0.080" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_generation_change_invalidates_the_entire_shared_minute_bucket" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_subscription_epoch_change_invalidates_the_entire_shared_minute_bucket" time="0.004" /><testcase classname="tests.unit.feeds.test_btapifeed_iteration22" name="test_retired_ctp_scope_cannot_reopen_after_a_new_generation" time="0.003" /><testcase classname="tests.unit.core.test_strategy" name="test_strategy_basic" time="0.045" /><testcase classname="tests.unit.core.test_strategy" name="test_strategy_multiple_datas" time="0.051" /><testcase classname="tests.unit.core.test_strategy" name="test_strategy_optimization" time="0.093" /><testcase classname="tests.unit.core.test_trade" name="test_run" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_buy_and_cancel_order_roundtrip" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sell_submits_sell_side_payload" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sell_accepts_close_today_offset_and_passes_it_to_store" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_ctp_net_sell_against_long_infers_close_offset" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_ctp_broker_submit_and_store_cancel_remain_fail_closed" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_ctp_net_reversal_without_explicit_split_is_rejected" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_buy_uses_store_create_order_alias_when_submit_order_is_unavailable" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_ctp_style_submit_only_attaches_order_ref_until_server_id_arrives" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_buy_is_rejected_locally_when_trading_is_disabled" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_buy_is_rejected_locally_when_strategy_is_paused" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_buy_submission_resumes_after_strategy_resume" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_buy_raises_clear_error_when_broker_has_no_store" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_buy_raises_when_store_client_has_no_submit_api_and_marks_order_rejected" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[response0-market closed]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[response1-Invalid filling mode]" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[response2-broker rejected]" time="0.021" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[False-invalid remote submit response]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[None-empty remote submit response]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[response5-empty remote submit response]" time="0.017" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[response6-invalid remote submit response]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_error_response_marks_order_rejected[response7-invalid remote submit response]" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_raises_when_store_client_has_no_cancel_api_and_leaves_order_alive" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_none_returns_none_without_remote_call" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_raises_clear_error_when_broker_has_no_store" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_skips_non_alive_orders_without_duplicate_remote_call" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_preserves_local_order_state_when_remote_cancel_fails" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_preserves_local_order_state_when_remote_cancel_returns_failure_payload[False-invalid remote cancel response]" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_preserves_local_order_state_when_remote_cancel_returns_failure_payload[response1-empty remote cancel response]" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_preserves_local_order_state_when_remote_cancel_returns_failure_payload[response2-already filled]" time="0.018" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_preserves_local_order_state_when_remote_cancel_returns_failure_payload[response3-invalid remote cancel response]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_keeps_order_alive_until_remote_cancel_confirmation" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_applies_confirmed_terminal_response_immediately[response0-5-0.0]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_applies_confirmed_terminal_response_immediately[response1-4-1.0]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_applies_confirmed_terminal_response_immediately[response2-6-0.0]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_applies_confirmed_terminal_response_immediately[response3-8-0.0]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_keeps_waiting_for_unconfirmed_or_nonterminal_response[response0]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_keeps_waiting_for_unconfirmed_or_nonterminal_response[response1]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_keeps_waiting_for_unconfirmed_or_nonterminal_response[response2]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_keeps_waiting_for_unconfirmed_or_nonterminal_response[response3]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sdk_mode_forces_remote_cancel_confirmation_with_default_broker_setting" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_unknown_cancel_exception_keeps_sdk_order_live_and_blocks_blind_retry" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cancel_wait_remote_allows_retry_after_remote_cancel_rejection" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_late_trade_update_after_local_cancel_recovers_completed_order" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_getposition_reads_positions_from_store" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sync_positions_filters_account_positions_to_registered_data" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sync_positions_accepts_raw_okx_position_aliases" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sync_positions_accepts_raw_bybit_position_idx_in_net_mode" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sync_positions_accepts_raw_bybit_position_idx_in_dual_side_mode" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_sync_positions_accepts_float_string_ctp_position_direction_codes" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_getposition_returns_clone_by_default_and_cached_position_when_requested" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_getposition_returns_empty_position_for_untracked_data" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_get_orders_open_returns_empty_lists_when_no_local_orders_exist" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_get_orders_open_safe_returns_clones" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_orderstatus_supports_order_instance_and_reference_lookup" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_proxies_remote_open_order_queries" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_open_order_queries_do_not_expose_mutable_snapshot" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_order_cancel_updates_clear_cached_identifier_mappings" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_error_updates_reject_matching_live_orders" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_order_status_partial_with_fill_details_updates_position" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_trade_event_after_order_status_fill_is_not_counted_twice" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_order_status_completed_with_fill_details_completes_order" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_order_status_done_with_fill_details_completes_order" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_order_status_with_exchange_order_id_alias_updates_local_order" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_terminal_update_clears_all_cached_order_identifier_aliases" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_matches_binance_client_order_id_alias" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_order_status_cancelled_variant_cancels_order" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_order_status_partial_canceled_applies_fill_then_cancels" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_order_status_exchange_partial_cancel_alias_applies_fill_then_cancels" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_cerebro_run_uses_broker_startingcash_for_writer_output" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_next_throttles_live_account_queries" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_force_refresh_queries_can_be_disabled_for_hot_read_paths" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_next_throttles_remote_open_order_sync_and_seeds_snapshot_on_start" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_next_ignores_transient_refresh_failures" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_next_falls_back_to_cached_remote_open_orders_on_sync_failure" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_restart_rehydrates_account_positions_and_remote_open_orders" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_start_tolerates_initial_open_order_sync_failure" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_start_is_idempotent_while_store_remains_connected" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_start_raises_clear_error_when_store_is_missing" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_queries_return_seeded_values_before_start" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_getposition_returns_seeded_position_before_start" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_auto_materializes_futures_comminfo" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_start_warms_comminfo_for_seeded_positions_from_store_metadata_alias" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_auto_materializes_maker_taker_rates" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_auto_materializes_inverse_comminfo" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_auto_materializes_fixed_per_lot_comminfo" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_auto_materializes_mixed_futures_comminfo" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_normalizes_ctp_percent_10k_commission_rate" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_uses_max_leverage_for_margin_rate" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_store_contract_metadata_falls_back_to_exchange_info_payload" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_normalizes_okx_raw_fee_signs_without_touching_plain_rates" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_contract_metadata_auto_materializes_fixed_margin_amount" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_getposition_returns_empty_position_for_untracked_data_before_start" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_open_order_queries_return_cached_snapshot_before_start" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_open_order_queries_return_empty_list_before_start_when_snapshot_is_empty" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_stop_is_silent_noop_when_store_is_missing" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_stop_is_silent_noop_when_store_is_already_disconnected" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_stop_does_not_disconnect_shared_live_store" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_runtime_helpers_update_local_state_without_store" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_get_notification_returns_none_when_queue_is_empty" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_get_notification_returns_queued_order_clone_and_drains_queue" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_queued_notification_snapshots_info_without_copying_user_values" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_broker_stop_is_idempotent_and_does_not_duplicate_store_disconnect_events" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_validation_rejects_invalid_tick_size" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_validation_rejects_order_below_min_size" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_validation_rejects_order_size_step_mismatch" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_validation_reads_raw_okx_min_size_and_lot_step_aliases" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_validation_uses_market_specific_max_size_alias" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_validation_rejects_opening_order_when_margin_exceeds_cash" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_opening_order_rejects_when_pretrade_account_refresh_fails" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_opening_order_cash_validation_uses_margin_adjusted_account_cash" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_store_get_balance_unwraps_bybit_v5_result_list" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_store_get_balance_unwraps_okx_account_data" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_store_get_balance_reads_balance_container" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_ctp_offset_inference_rejects_when_pretrade_position_refresh_fails" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_cash_validation_allows_flattening_existing_position" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_local_cash_validation_rejects_opening_order_without_risk_price" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_ctp_explicit_close_order_rejects_when_size_exceeds_position" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_ctp_live_broker_rejects_unsupported_order_type_locally" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_trading_controls_batch_cancel_and_force_logout" time="0.015" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_batch_cancel_returns_empty_summary_when_no_orders_are_open" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_batch_cancel_cancels_remote_open_orders_after_restart" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_batch_cancel_deduplicates_local_and_remote_open_order_ids" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_batch_cancel_skips_non_alive_orders_without_remote_cancel" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_force_logout_followed_by_stop_does_not_duplicate_store_disconnect_events" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_force_logout_is_noop_for_disconnected_store_but_still_emits_runtime_event" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_updates_complete_orders_and_positions" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_accepts_volume_and_fill_price_aliases" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_accepts_raw_okx_trade_aliases_and_fee" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_accepts_raw_okx_orders_envelope_rows" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_accepts_raw_bybit_v5_execution_aliases_and_fee" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_accepts_raw_bybit_v5_execution_envelope_rows" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_without_price_is_ignored_not_zero_filled" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_response_with_immediate_fill_updates_order_and_position" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_submit_response_with_okx_data_list_maps_order_id_for_later_fill" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_position_update_does_not_fill_open_order" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_uses_exchange_reported_commission" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_okx_positive_fee_is_treated_as_rebate" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_uses_fill_role_commission_when_fee_missing" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_unmatched_trade_update_is_retried_after_order_identifier_arrives" time="0.018" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_duplicate_trade_update_without_trade_id_does_not_overfill_completed_order" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_oversized_trade_update_is_clipped_to_order_remaining" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_updates_split_commission_when_a_fill_reverses_position" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_updates_split_exchange_commission_when_a_fill_reverses_position" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_net_futures_pnl_uses_contract_multiplier" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_net_inverse_futures_uses_contract_value" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_uses_close_today_commission_rate" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_uses_close_yesterday_commission_rate" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_remote_trade_update_uses_mixed_close_today_commission_when_missing_remote_fee" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker" name="test_size_and_tick_validation_survive_degenerate_ctp_metadata" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_ctp_durable_projection_stays_nonterminal_until_provider_facts[PENDING]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_ctp_durable_projection_stays_nonterminal_until_provider_facts[UNKNOWN]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_local_rejected_cancel_projection_keeps_order_live_without_retry" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_managed_submit_handoff_failure_never_projects_provider_acceptance[LOCAL_REJECTED-8-False]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_managed_submit_handoff_failure_never_projects_provider_acceptance[UNKNOWN-1-True]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_managed_cancel_handoff_unknown_stays_live_without_duplicate_dispatch" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_first_managed_provider_result_projects_only_confirmed_fill_facts[provider_response0-2-0.0-0.0-False]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_first_managed_provider_result_projects_only_confirmed_fill_facts[provider_response1-3-1.0-0.25-False]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_first_managed_provider_result_projects_only_confirmed_fill_facts[provider_response2-4-2.0-0.5-False]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_first_managed_provider_result_projects_only_confirmed_fill_facts[provider_response3-8-0.0-0.0-False]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_first_managed_provider_result_projects_only_confirmed_fill_facts[provider_response4-2-0.0-0.0-True]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_first_managed_provider_result_projects_only_confirmed_fill_facts[provider_response5-2-0.0-0.0-True]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_managed_fill_reads_cash_only_from_a_following_provider_account_snapshot" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_managed_cancel_ack_keeps_mapping_for_a_late_authoritative_fill" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_managed_unknown_cancel_keeps_original_order_and_freeze_markers" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_only_terminal_managed_cancel_clears_the_original_order_mapping" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_cancel_projection_marks_nonterminal_records_for_broker_preservation" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_replayed_managed_fill_is_rejected_before_a_second_framework_projection[response0-3-1.0-0.25]" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_replayed_managed_fill_is_rejected_before_a_second_framework_projection[response1-4-2.0-0.5]" time="0.011" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_replayed_managed_unknown_is_rejected_without_a_second_provider_attempt" time="0.011" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_trade_logger_records_first_managed_fill_once_without_external_io" time="0.016" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_durable_outbox_projects_cumulative_deltas_once_and_preserves_cash" time="0.060" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_binary64_rounding_projects_cumulative_average_and_signed_fee[1-0.1-0.01-3-0.2-0.03-0.25-0.02]" time="0.068" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_binary64_rounding_projects_cumulative_average_and_signed_fee[1-100-0.1-2-100--0.3-100.0--0.4]" time="0.067" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_binary64_rounding_projects_cumulative_average_and_signed_fee[1-100-1-2-100-1.01-100.0-0.01]" time="0.090" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_binary64_rounding_projects_cumulative_average_and_signed_fee[1-100-100-2-100-100.01-100.0-0.01]" time="0.101" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_fractional_cumulative_quantity_and_nonterminating_average_allow_same_qty_cancel" time="0.066" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_large_cumulative_quantity_projects_exact_decimal_notional_delta" time="0.058" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_large_cumulative_commission_projects_exact_small_fee_delta" time="0.062" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_quantity_delta_below_broker_resolution_fences_before_booking" time="0.074" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_tiny_fee_delta_stays_in_incremental_execution_bit" time="0.058" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_substantial_post_apply_fee_mismatch_fences_booked_fill" time="0.055" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_substantial_post_apply_quantity_mismatch_fences_booked_fill" time="0.050" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_source_quantity_regression_fences_without_broker_mutation" time="0.064" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_same_quantity_commission_rebate_is_applied_as_signed_cumulative_delta" time="0.056" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_missing_fee_stays_unknown_until_later_same_quantity_fee_event" time="0.051" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_changed_fee_after_quantity_was_booked_fences_without_adjustment" time="0.059" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_source_event_committed_before_claim_replays_from_outbox_after_restart" time="0.068" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_outbox_recovery_rejects_unrecognized_journal_epoch" time="0.047" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_outbox_read_failure_marks_pending_managed_order_unknown" time="0.043" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_post_apply_source_receipt_failure_fences_without_retrying_same_session" time="0.056" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_active_outbox_event_id_payload_collision_fences_without_second_fill" time="0.054" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_fresh_broker_rebuilds_ordered_events_instead_of_latest_record_values" time="0.084" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_unmaterialized_earlier_intent_holds_scope_cursor_and_later_fill" time="0.079" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_outbox_recovery_consumes_lifecycle_rows_then_recovers_after_raw_queue_loss" time="0.082" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_no_fill_admission_and_dispatch_events_advance_before_next_fill" time="0.076" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_no_fill_lifecycle_event_with_economic_payload_fails_closed" time="0.047" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event" time="0.160"><failure message="backtrader_runtime.managed_execution.ManagedExecutionBindingError: source lifecycle event has unexpected payload facts">tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_real_facade_pre_dispatch_0')
+
+    def test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event(tmp_path) -&gt; None:
+        execution = pytest.importorskip("bt_api_execution")
+        scope = execution.ExecutionScope(
+            "fixture", "offline", "account.facade-guard", "strategy.facade-guard", "20260926"
+        )
+        execution_store = execution.SqliteExecutionStore(tmp_path / "execution.sqlite3")
+        provider = _ResponseProvider([])
+    
+        def guard(_intent) -&gt; None:
+            raise RuntimeError("fixture pre-dispatch guard deny")
+    
+        facade = execution.ManagedExecutionFacade(
+            execution_store,
+            scope,
+            writer_id="fixture.pre-dispatch-guard",
+            allow_unprotected=True,
+            pre_dispatch_guard=guard,
+        )
+        runtime = SimpleNamespace(
+            execution=execution,
+            scope=scope,
+            state_directory=tmp_path,
+            framework_projection_session_id=uuid.uuid4().hex,
+            execution_store=execution_store,
+            facade=facade,
+            submit=lambda intent, dispatcher: facade.submit(intent, dispatcher),
+        )
+        bridge = ManagedExecutionBridge(
+            runtime,
+            provider_observation_from_update=_cumulative_provider_observation,
+        )
+        _store, data, broker = _make_started_stack(runtime, provider, managed_execution_adapter=bridge)
+        try:
+            order = _submit(broker, data, "intent.facade-guard")
+    
+            assert order.status == bt.Order.Rejected
+            assert order.executed.size == pytest.approx(0.0)
+            assert provider.submitted_orders == []
+            record = execution_store.get("intent.facade-guard", scope=scope)
+            assert record.state is execution.ExecutionState.BLOCKED
+    
+            events = execution_store.read_outbox(scope=scope)
+            blocked = [event for event in events if event.event_type == "dispatch_blocked"]
+            assert len(blocked) == 1
+            assert blocked[0].state is execution.ExecutionState.BLOCKED
+            assert blocked[0].payload == {"reason_code": "pre_dispatch_guard_failed"}
+    
+            # The real source rows are consumed as an exact no-fill lifecycle
+            # prefix, leaving the scoped source cursor ready for later events.
+&gt;           assert bridge.poll_managed_provider_outbox_update() is None
+
+tests\unit\brokers\test_btapibroker_managed_execution_projection.py:2181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader_runtime\managed_execution.py:1513: in poll_managed_provider_outbox_update
+    self._validate_no_fill_lifecycle_event(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+event = ExecutionEvent(sequence=1, event_id='28f7db6afddb464a8d0a1b1e280f3577', intent_id='intent.facade-guard', scope_key='sc...f0beb4a6f55455198c335f'}, created_at_ns=1792115642212785200, journal_incarnation_id='aa26a65ff886484aa33c2ec7733ef156')
+
+    @staticmethod
+    def _validate_no_fill_lifecycle_event(event: Any) -&gt; None:
+        """Accept only exact execution-store lifecycle events with no fill facts."""
+    
+        event_type = getattr(event, "event_type", None)
+        state = getattr(getattr(event, "state", None), "value", getattr(event, "state", None))
+        payload = getattr(event, "payload", None)
+        expected = {
+            "intent_recorded": ("PENDING_ADMISSION", {"payload_sha256"}),
+            "intent_admitted": ("PENDING_DISPATCH", {"permit_reference"}),
+            "dispatch_claimed": ("DISPATCHING", {"dispatch_attempt"}),
+            # The execution store only emits these states before any provider
+            # dispatch. Exact reason-only payloads make their no-fill meaning
+            # explicit; added economic fields must go through projection.
+            "intent_rejected": ("REJECTED", {"reason_code"}),
+            "intent_blocked": ("BLOCKED", {"reason_code"}),
+            # A dispatch guard can block only before the facade invokes its
+            # dispatcher port. The distinct event is terminal no-fill evidence.
+            "dispatch_blocked": ("BLOCKED", {"reason_code"}),
+        }
+        rule = expected.get(event_type)
+        if rule is None or state != rule[0] or not isinstance(payload, Mapping):
+            raise ManagedExecutionBindingError("source lifecycle event is not a known no-fill fact")
+        if set(payload) != rule[1]:
+&gt;           raise ManagedExecutionBindingError(
+                "source lifecycle event has unexpected payload facts"
+            )
+E           backtrader_runtime.managed_execution.ManagedExecutionBindingError: source lifecycle event has unexpected payload facts
+
+backtrader_runtime\managed_execution.py:2215: ManagedExecutionBindingError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_cancel_snapshot_replays_before_next_intent_event" time="0.067" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_missing_fee_growth_and_cancel_wait_for_event_time_fee_evidence" time="0.064" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_mutated_prepared_economic_update_is_rejected_before_booking[avg_price-999]" time="0.050" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_mutated_prepared_economic_update_is_rejected_before_booking[price-999.0]" time="0.050" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_mutated_prepared_economic_update_is_rejected_before_booking[commission-9.0]" time="0.061" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_mutated_prepared_economic_update_is_rejected_before_booking[managed_source_average_price-999]" time="0.050" /><testcase classname="tests.unit.brokers.test_btapibroker_managed_execution_projection" name="test_silent_broker_apply_noop_fails_actual_execution_receipt_check" time="0.048" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_allows_only_proven_prestart_missing_unmatched_count[stack0]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_allows_only_proven_prestart_missing_unmatched_count[stack1]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_allows_only_proven_prestart_missing_unmatched_count[stack2]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_accepts_a_complete_known_trade_after_two_rounds[stack0]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_accepts_a_complete_known_trade_after_two_rounds[stack1]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_accepts_a_complete_known_trade_after_two_rounds[stack2]" time="0.030" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_derives_missing_unmatched_count_only_from_bound_trade[stack0]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_derives_missing_unmatched_count_only_from_bound_trade[stack1]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_derives_missing_unmatched_count_only_from_bound_trade[stack2]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_foreign_or_generation_mismatched_trade[stack0-row0-foreign_trade_row]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_foreign_or_generation_mismatched_trade[stack0-row1-trade_row_generation_mismatch]" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_foreign_or_generation_mismatched_trade[stack1-row0-foreign_trade_row]" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_foreign_or_generation_mismatched_trade[stack1-row1-trade_row_generation_mismatch]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_foreign_or_generation_mismatched_trade[stack2-row0-foreign_trade_row]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_foreign_or_generation_mismatched_trade[stack2-row1-trade_row_generation_mismatch]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_ambiguous_trade_binding[stack0]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_ambiguous_trade_binding[stack1]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_ambiguous_trade_binding[stack2]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_missing_local_expected_trade[stack0]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_missing_local_expected_trade[stack1]" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_ctp_reconciliation_blocks_missing_local_expected_trade[stack2]" time="0.003" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_native_ctp_identity_is_cached_only_from_complete_update_values[stack0]" time="0.015" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_native_ctp_identity_is_cached_only_from_complete_update_values[stack1]" time="0.014" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_native_ctp_identity_is_cached_only_from_complete_update_values[stack2]" time="0.019" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_normalized_trade_rebate_keeps_signed_cost_in_execution_accounting[stack0]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_normalized_trade_rebate_keeps_signed_cost_in_execution_accounting[stack1]" time="0.014" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_normalized_trade_rebate_keeps_signed_cost_in_execution_accounting[stack2]" time="0.011" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_cumulative_commission_adjustment_keeps_negative_increment[stack0--0.05]" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_cumulative_commission_adjustment_keeps_negative_increment[stack0-0.04]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_cumulative_commission_adjustment_keeps_negative_increment[stack1--0.05]" time="0.024" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_cumulative_commission_adjustment_keeps_negative_increment[stack1-0.04]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_cumulative_commission_adjustment_keeps_negative_increment[stack2--0.05]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_cumulative_commission_adjustment_keeps_negative_increment[stack2-0.04]" time="0.014" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack0-partial]" time="0.028" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack0-canceled]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack0-expired]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack1-partial]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack1-canceled]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack1-expired]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack2-partial]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack2-canceled]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_aggregate_checkpoint_covers_late_individual_trades_without_price_matching[stack2-expired]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_same_price_new_cumulative_increment_is_not_a_duplicate_trade[stack0]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_same_price_new_cumulative_increment_is_not_a_duplicate_trade[stack1]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_same_price_new_cumulative_increment_is_not_a_duplicate_trade[stack2]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_first_checkpoint_books_only_unaccounted_quantity_and_new_average[stack0]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_first_checkpoint_books_only_unaccounted_quantity_and_new_average[stack1]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_first_checkpoint_books_only_unaccounted_quantity_and_new_average[stack2]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_only_source_accepts_distinct_trades_until_priced_checkpoint_arrives[stack0]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_only_source_accepts_distinct_trades_until_priced_checkpoint_arrives[stack1]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_only_source_accepts_distinct_trades_until_priced_checkpoint_arrives[stack2]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_stale_checkpoint_does_not_displace_newer_trade_accounting[stack0]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_stale_checkpoint_does_not_displace_newer_trade_accounting[stack1]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_stale_checkpoint_does_not_displace_newer_trade_accounting[stack2]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_unpriced_remote_terminal_status_keeps_late_true_trade_fills_terminal[stack0-canceled]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_unpriced_remote_terminal_status_keeps_late_true_trade_fills_terminal[stack0-expired]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_unpriced_remote_terminal_status_keeps_late_true_trade_fills_terminal[stack1-canceled]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_unpriced_remote_terminal_status_keeps_late_true_trade_fills_terminal[stack1-expired]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_unpriced_remote_terminal_status_keeps_late_true_trade_fills_terminal[stack2-canceled]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_unpriced_remote_terminal_status_keeps_late_true_trade_fills_terminal[stack2-expired]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack0-completed]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack0-canceled]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack0-expired]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack1-completed]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack1-canceled]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack1-expired]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack2-completed]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack2-canceled]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_terminal_report_waits_until_all_reported_deals_are_accounted[stack2-expired]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_explicit_trade_source_never_promotes_an_order_price_to_a_fill[stack0]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_explicit_trade_source_never_promotes_an_order_price_to_a_fill[stack1]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_explicit_trade_source_never_promotes_an_order_price_to_a_fill[stack2]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_zero_fill_terminal_does_not_wait_for_nonexistent_deals[stack0-canceled]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_zero_fill_terminal_does_not_wait_for_nonexistent_deals[stack0-expired]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_zero_fill_terminal_does_not_wait_for_nonexistent_deals[stack1-canceled]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_zero_fill_terminal_does_not_wait_for_nonexistent_deals[stack1-expired]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_zero_fill_terminal_does_not_wait_for_nonexistent_deals[stack2-canceled]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_zero_fill_terminal_does_not_wait_for_nonexistent_deals[stack2-expired]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_partial_deal_before_terminal_waits_only_for_missing_quantity[stack0]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_partial_deal_before_terminal_waits_only_for_missing_quantity[stack1]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_trade_source_partial_deal_before_terminal_waits_only_for_missing_quantity[stack2]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_normalized_ctp_store_and_native_feed_keep_order_alive_until_deals_arrive[completed]" time="0.148" /><testcase classname="tests.unit.brokers.test_btapibroker_source_reconciliation" name="test_normalized_ctp_store_and_native_feed_keep_order_alive_until_deals_arrive[canceled]" time="0.021" /><testcase classname="tests.unit.brokers.test_btapibroker_normalized_validation" name="test_normalized_native_lot_and_tick_rules_before_submission[0.11-80017.51-None-net]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_normalized_validation" name="test_normalized_native_lot_and_tick_rules_before_submission[0.11-80017.51-None-dual_side]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_normalized_validation" name="test_normalized_native_lot_and_tick_rules_before_submission[0.115-80017.51-invalid_order_size_step-net]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_normalized_validation" name="test_normalized_native_lot_and_tick_rules_before_submission[0.115-80017.51-invalid_order_size_step-dual_side]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_normalized_validation" name="test_normalized_native_lot_and_tick_rules_before_submission[0.11-80017.515-invalid_price_tick-net]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_normalized_validation" name="test_normalized_native_lot_and_tick_rules_before_submission[0.11-80017.515-invalid_price_tick-dual_side]" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_net_snapshot_aggregates_multiple_same_side_rows_with_weighted_price" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_net_snapshot_rejects_opposing_rows_as_account_mode_mismatch" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[cumulative-False-net-long]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[cumulative-False-dual_side-long]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[cumulative-False-dual_side-short]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[cumulative-True-net-long]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[cumulative-True-dual_side-long]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[cumulative-True-dual_side-short]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[trades-False-net-long]" time="0.009" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[trades-False-dual_side-long]" time="0.010" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[trades-False-dual_side-short]" time="0.010" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[trades-True-net-long]" time="0.010" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[trades-True-dual_side-long]" time="0.010" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_snapshot_never_double_counts_or_erases_open_and_close_fills[trades-True-dual_side-short]" time="0.010" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_hydrates_registered_feed_before_it_starts_and_never_reimports_on_restart" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_periodic_policy_preserves_existing_forced_remote_refresh" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_sdk_startup_reconcile_uses_position_audit_interval_only" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_unknown_position_sync_policy_is_rejected" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_audit_reports_remote_drift_without_replacing_local_ledger" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_startup_audit_skips_when_orders_are_in_flight" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_position_audit_mismatch_blocks_opening_until_a_matching_audit_recovers" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_position_sync" name="test_position_audit_query_failure_blocks_opening_but_allows_bounded_close" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestZeroPriceHandling" name="test_validate_order_price_zero_passes_tick_check" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestZeroPriceHandling" name="test_order_runtime_details_preserves_zero_price" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestZeroPriceHandling" name="test_order_runtime_details_none_price_uses_created" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestRefreshAccountLogging" name="test_refresh_account_logs_on_failure" time="0.000"><error message="failed on setup with &quot;file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 119&#10;      def test_refresh_account_logs_on_failure(self, bt_caplog):&#10;E       fixture 'bt_caplog' not found&#10;&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory&#10;&gt;       use 'pytest --fixtures [testpath]' for help on them.&#10;&#10;D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:119&quot;">file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 119
+      def test_refresh_account_logs_on_failure(self, bt_caplog):
+E       fixture 'bt_caplog' not found
+&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+&gt;       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:119</error></testcase><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestRefreshAccountLogging" name="test_sync_positions_logs_on_failure" time="0.000"><error message="failed on setup with &quot;file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 152&#10;      def test_sync_positions_logs_on_failure(self, bt_caplog):&#10;E       fixture 'bt_caplog' not found&#10;&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory&#10;&gt;       use 'pytest --fixtures [testpath]' for help on them.&#10;&#10;D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:152&quot;">file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 152
+      def test_sync_positions_logs_on_failure(self, bt_caplog):
+E       fixture 'bt_caplog' not found
+&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+&gt;       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:152</error></testcase><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestRefreshAccountLogging" name="test_sync_remote_open_orders_logs_on_failure" time="0.000"><error message="failed on setup with &quot;file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 183&#10;      def test_sync_remote_open_orders_logs_on_failure(self, bt_caplog):&#10;E       fixture 'bt_caplog' not found&#10;&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory&#10;&gt;       use 'pytest --fixtures [testpath]' for help on them.&#10;&#10;D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:183&quot;">file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 183
+      def test_sync_remote_open_orders_logs_on_failure(self, bt_caplog):
+E       fixture 'bt_caplog' not found
+&gt;       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+&gt;       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:183</error></testcase><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_datetime_object_passthrough" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_time_only_string" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_full_datetime_string" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_compact_datetime_string" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_none_timestamp_returns_utcnow" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_empty_string_returns_utcnow" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_unparseable_string_returns_utcnow" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestExecutionDatetime" name="test_missing_key_returns_utcnow" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestPositionKey" name="test_data_with_name" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestPositionKey" name="test_data_with_dataname" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestPositionKey" name="test_data_with_p_dataname" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestPositionKey" name="test_fallback_to_repr" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestShouldRefresh" name="test_zero_interval_always_refreshes" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestShouldRefresh" name="test_uninitialized_refresh_timestamp_always_refreshes" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestShouldRefresh" name="test_recent_refresh_is_throttled" time="0.000" /><testcase classname="tests.unit.brokers.test_btapibroker_edge_cases.TestShouldRefresh" name="test_old_refresh_triggers" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_order_defaults_to_explicit_gfd_and_routes_it" time="0.004"><failure message="backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled">def test_ctp_order_defaults_to_explicit_gfd_and_routes_it():
+        """The frozen first-version CTP order contract is explicit GFD."""
+        client, store, data, broker = _started_ctp_stack()
+        try:
+&gt;           order = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:262: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = &lt;backtrader.order.BuyOrder object at 0x000001B2115EB950&gt;
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+&gt;               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_ioc_is_rejected_before_remote_submission" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_unknown_order_blocks_reopen_but_allows_risk_reduction" time="0.005"><failure message="backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled">def test_ctp_unknown_order_blocks_reopen_but_allows_risk_reduction():
+        """An unresolved order identity blocks new exposure on the synchronous CTP route."""
+        positions = [
+            {
+                "instrument": SYMBOL,
+                "direction": "long",
+                "volume": 1,
+                "price": 1500.0,
+            }
+        ]
+        client, store, data, broker = _started_ctp_stack(positions=positions)
+        try:
+&gt;           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:311: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = &lt;backtrader.order.BuyOrder object at 0x000001B210E5A410&gt;
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+&gt;               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_incomplete_typed_ctp_query_blocks_opening_even_when_records_are_empty" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_unknown_ctp_order_requires_two_complete_identical_reconciliation_rounds" time="0.008"><failure message="backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled">def test_unknown_ctp_order_requires_two_complete_identical_reconciliation_rounds():
+        client, store, data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL)["evidence_complete"] is True
+            client.timeout_submit = True
+&gt;           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:376: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = &lt;backtrader.order.BuyOrder object at 0x000001B21133DB90&gt;
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+&gt;               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_broker_update_between_ctp_snapshots_restarts_two_round_barrier" time="0.025"><failure message="backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled">def test_broker_update_between_ctp_snapshots_restarts_two_round_barrier():
+        client, store, data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL)["evidence_complete"] is True
+            client.timeout_submit = True
+&gt;           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:424: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = &lt;backtrader.order.BuyOrder object at 0x000001B210EC3750&gt;
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+&gt;               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_late_trade_after_complete_ctp_reconciliation_relatches_barrier" time="0.012" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_late_reconcile_completion_with_exposure_relatches_barrier" time="0.010" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_replaying_the_same_complete_snapshot_cannot_unlock_reconciliation" time="0.007"><failure message="backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled">def test_replaying_the_same_complete_snapshot_cannot_unlock_reconciliation():
+        client, store, data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL)["evidence_complete"] is True
+            client.timeout_submit = True
+&gt;           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:524: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = &lt;backtrader.order.BuyOrder object at 0x000001B2113755D0&gt;
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+&gt;               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_reconciliation_never_unlocks_without_zero_execution_counts[unknown_intent_count-None-execution_summary_incomplete]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_reconciliation_never_unlocks_without_zero_execution_counts[unmatched_trade_count-None-execution_summary_incomplete]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_reconciliation_never_unlocks_without_zero_execution_counts[unknown_intent_count-1-execution_summary_not_clear]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_reconciliation_never_unlocks_without_zero_execution_counts[unmatched_trade_count-1-execution_summary_not_clear]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_strict_ctp_broker_blocks_when_typed_query_capability_is_absent" time="0.004" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_market_order_is_rejected_before_remote_submission" time="0.005" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_strict_ctp_broker_rejects_preflight_from_an_old_session" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_strict_ctp_broker_rejects_non_tradable_instrument_evidence" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_strict_ctp_broker_blocks_unresolved_execution_summary[unknown_ids0-0-ctp_execution_summary_not_clear]" time="0.008" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_strict_ctp_broker_blocks_unresolved_execution_summary[unknown_ids1-1-ctp_execution_summary_not_clear]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_strict_ctp_broker_blocks_unresolved_execution_summary[unknown_ids2-None-ctp_execution_summary_incomplete]" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_async_ctp_reconciliation_queries_off_thread_and_callbacks_on_broker_next" time="0.028" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[1.0-sell-1498.0]" time="0.007"><failure message="backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled">position_size = 1.0, expected_side = 'sell', expected_price = 1498.0
+
+    @pytest.mark.parametrize(
+        ("position_size", "expected_side", "expected_price"),
+        [(1.0, "sell", 1498.0), (-1.0, "buy", 1502.0)],
+    )
+    def test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection(
+        position_size, expected_side, expected_price
+    ):
+        client, store, _data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL, timeout=0)["evidence_complete"] is True
+            client.positions = [
+                {
+                    "instrument": SYMBOL,
+                    "direction": "long" if position_size &gt; 0 else "short",
+                    "volume": abs(position_size),
+                    "price": 1500.0,
+                }
+            ]
+            broker._sync_positions(force=True, raise_errors=True)
+            client.live_ticks[SYMBOL] = collections.deque([_fresh_ctp_quote()])
+            assert store.poll_tick(SYMBOL) is not None
+    
+&gt;           orders, missing = broker._submit_known_position_closes()
+
+tests\unit\brokers\test_btapibroker_iteration22.py:783: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:1801: in _submit_known_position_closes
+    submit_leg(key, None, size, size &lt; 0)
+backtrader\brokers\btapibroker.py:1781: in submit_leg
+    method(
+backtrader\brokers\btapibroker.py:4436: in sell
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = &lt;backtrader.order.SellOrder object at 0x000001B2119A8BD0&gt;
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+&gt;               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[-1.0-buy-1502.0]" time="0.007"><failure message="backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled">position_size = -1.0, expected_side = 'buy', expected_price = 1502.0
+
+    @pytest.mark.parametrize(
+        ("position_size", "expected_side", "expected_price"),
+        [(1.0, "sell", 1498.0), (-1.0, "buy", 1502.0)],
+    )
+    def test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection(
+        position_size, expected_side, expected_price
+    ):
+        client, store, _data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL, timeout=0)["evidence_complete"] is True
+            client.positions = [
+                {
+                    "instrument": SYMBOL,
+                    "direction": "long" if position_size &gt; 0 else "short",
+                    "volume": abs(position_size),
+                    "price": 1500.0,
+                }
+            ]
+            broker._sync_positions(force=True, raise_errors=True)
+            client.live_ticks[SYMBOL] = collections.deque([_fresh_ctp_quote()])
+            assert store.poll_tick(SYMBOL) is not None
+    
+&gt;           orders, missing = broker._submit_known_position_closes()
+
+tests\unit\brokers\test_btapibroker_iteration22.py:783: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:1801: in _submit_known_position_closes
+    submit_leg(key, None, size, size &lt; 0)
+backtrader\brokers\btapibroker.py:1781: in submit_leg
+    method(
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = &lt;backtrader.order.BuyOrder object at 0x000001B227957F90&gt;
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+&gt;               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError</failure></testcase><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_shutdown_sends_nothing_when_opponent_quote_is_stale" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_shutdown_sends_nothing_when_quote_quality_is_unproven[quote0]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_shutdown_sends_nothing_when_quote_quality_is_unproven[quote1]" time="0.006" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_ctp_shutdown_rejects_ctp_extreme_price_tick_sentinel" time="0.007" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_broker_routes_only_the_exact_sdk_recovery_close_identity" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_broker_recovery_completion_is_delivered_on_broker_drain" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_concurrent_broker_recovery_completion_queues_once_and_notifies_all" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_recovery_exit_generic_cancel_aborts_without_native_cancel_dispatch" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_broker_stop_aborts_recovery_without_cancel_or_flatten_dispatch" time="0.753" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_broker_stop_cannot_pass_before_sdk_recovery_completion" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_broker_stop_retries_the_final_reconcile_until_flat" time="0.251" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_broker_stop_bounds_the_reconcile_retries_without_a_clean_proof" time="0.752" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_hydrates_external_state_and_never_mutates_account[False]" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_hydrates_external_state_and_never_mutates_account[True]" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_store_audit_covers_every_bound_broker" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_shutdown_captures_terminal_ctp_session_before_store_stop" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_rejects_execution_recovery_before_store_start" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_batch_cancel_does_not_refresh_or_cancel_remote_only_order" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_shutdown_uses_startup_account_state_without_writes[startup_account_state0-valid-True-OBSERVATION_ONLY_NONFLAT-market_data_only_startup_account_state_nonflat]" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_shutdown_uses_startup_account_state_without_writes[startup_account_state1-unknown-True-OBSERVATION_ONLY_NONFLAT-market_data_only_startup_account_state_unproven]" time="0.001" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_shutdown_uses_startup_account_state_without_writes[startup_account_state2-malformed-True-OBSERVATION_ONLY_NONFLAT-market_data_only_startup_account_state_unproven]" time="0.002" /><testcase classname="tests.unit.brokers.test_btapibroker_iteration22" name="test_market_data_only_shutdown_uses_startup_account_state_without_writes[startup_account_state3-valid-False-OBSERVATION_ONLY-market_data_only_no_order_mutation]" time="0.003" /></testsuite></testsuites>

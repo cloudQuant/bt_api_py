@@ -1,0 +1,956 @@
+.............................F...F..F...F............................... [ 11%]
+.................FF..................................................... [ 23%]
+..........................E............................................. [ 35%]
+........................................................................ [ 47%]
+........................................................................ [ 59%]
+..............................................................F......... [ 71%]
+........................................................................ [ 82%]
+........................................EEE................F.F.FF..F.... [ 94%]
+........FF......................                                         [100%]
+=================================== ERRORS ====================================
+____ ERROR at setup of test_feed_start_logs_backfill_failure_and_continues ____
+file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\feeds\test_btapifeed.py, line 774
+  def test_feed_start_logs_backfill_failure_and_continues(bt_caplog):
+E       fixture 'bt_caplog' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, feed_stack, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\feeds\test_btapifeed.py:774
+_ ERROR at setup of TestRefreshAccountLogging.test_refresh_account_logs_on_failure _
+file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 119
+      def test_refresh_account_logs_on_failure(self, bt_caplog):
+E       fixture 'bt_caplog' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:119
+_ ERROR at setup of TestRefreshAccountLogging.test_sync_positions_logs_on_failure _
+file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 152
+      def test_sync_positions_logs_on_failure(self, bt_caplog):
+E       fixture 'bt_caplog' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:152
+_ ERROR at setup of TestRefreshAccountLogging.test_sync_remote_open_orders_logs_on_failure _
+file D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py, line 183
+      def test_sync_remote_open_orders_logs_on_failure(self, bt_caplog):
+E       fixture 'bt_caplog' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, doctest_namespace, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+D:\source_code\backtrader\.codex-tmp\baseline-head-48bde5d76\tests\unit\brokers\test_btapibroker_edge_cases.py:183
+================================== FAILURES ===================================
+_______ test_event_page_preserves_negative_cumulative_commission_rebate _______
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_event_page_preserves_nega0')
+
+    def test_event_page_preserves_negative_cumulative_commission_rebate(tmp_path) -> None:
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        event = _event(_INTENT, fingerprint, 11)
+        event["details"]["cumulative_commission"] = "-0.01"
+    
+>       assert journal.apply_events_page(namespace, _page(10, 11, 11, [event], has_more=False)) is True
+
+tests\unit\stores\test_service_execution_recovery.py:453: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:733: in apply_events_page
+    self._apply_one_event(cursor, namespace, event, now_ns)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x000001B2119217D0>
+cursor = <sqlite3.Cursor object at 0x000001B2103D49C0>
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'details': {'average_price': '20.25', 'cumulative_commission': '-0.01', 'cumulative_commission_currency': 'USD', 'fil...sha256': '99237ce70f26f9ad70bbe54bc9c26a188ba6a7b0bb5999819c541531d8f9d1da', 'event_type': 'provider_observation', ...}
+now_ns = 1792115601194908000
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+    ) -> None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled < previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+>                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:1967: ServiceExecutionRecoveryError
+__ test_event_receipt_projection_cursor_and_callback_pending_commit_together __
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_event_receipt_projection_0')
+
+    def test_event_receipt_projection_cursor_and_callback_pending_commit_together(tmp_path) -> None:
+        path = tmp_path / "recovery.sqlite3"
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(path)
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        own_event = _event(_INTENT, fingerprint, 11)
+        old_run_event = _event("older-run-intent", _digest("older-payload"), 12)
+        page_one = _page(10, 11, 12, [own_event], has_more=True)
+        page_two = _page(11, 12, 12, [old_run_event], has_more=False)
+    
+>       assert journal.apply_events_page(namespace, page_one) is True
+
+tests\unit\stores\test_service_execution_recovery.py:536: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:733: in apply_events_page
+    self._apply_one_event(cursor, namespace, event, now_ns)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x000001B211A63E90>
+cursor = <sqlite3.Cursor object at 0x000001B20FCC7AC0>
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'details': {'average_price': '20.25', 'cumulative_commission': '0.01', 'cumulative_commission_currency': 'USD', 'fill...sha256': '99237ce70f26f9ad70bbe54bc9c26a188ba6a7b0bb5999819c541531d8f9d1da', 'event_type': 'provider_observation', ...}
+now_ns = 1792115601980888100
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+    ) -> None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled < previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+>                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:1967: ServiceExecutionRecoveryError
+___ test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks ___
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_adapter_pulls_snapshot_pa0')
+
+    def test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks(tmp_path) -> None:
+        from backtrader.stores.service_execution_adapter import ServiceExecutionAdapter
+    
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        snapshot = _snapshot([_snapshot_order(_INTENT, fingerprint)])
+        own_event = _event(_INTENT, fingerprint, 11)
+        next_event = _event(_INTENT, fingerprint, 12, event_type="reconciled_observation")
+        pages = [
+            _page(10, 11, 12, [own_event], has_more=True),
+            _page(11, 12, 12, [next_event], has_more=False),
+            _page(12, 12, 12, [], has_more=False),
+        ]
+        calls = []
+    
+        class _RecoveryClient:
+            def submit(self, **_kwargs):
+                raise AssertionError("the recovery pull must not submit an intent")
+    
+            def cancel(self, **_kwargs):
+                raise AssertionError("the recovery pull must not cancel an intent")
+    
+            def query(self, *_args, **_kwargs):
+                raise AssertionError("the recovery pull must not query per-order records")
+    
+            def query_recovery_snapshot(self):
+                return snapshot
+    
+            def query_recovery_events_after(self, **kwargs):
+                calls.append(kwargs)
+                return pages.pop(0)
+    
+        adapter = ServiceExecutionAdapter(_RecoveryClient(), recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+    
+>       initialized = adapter.initialize_recovery(page_limit=2)
+
+tests\unit\stores\test_service_execution_recovery.py:658: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_adapter.py:209: in initialize_recovery
+    pages_applied = self._consume_recovery_pages(page_limit=page_limit, max_pages=max_pages)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtrader.stores.service_execution_adapter.ServiceExecutionAdapter object at 0x000001B2102BCC50>
+
+    def _consume_recovery_pages(self, *, page_limit: int, max_pages: int) -> int:
+        if type(page_limit) is not int or not 1 <= page_limit <= 128:
+            raise ServiceExecutionAdapterError("invalid recovery page limit")
+        if type(max_pages) is not int or not 1 <= max_pages <= 1024:
+            raise ServiceExecutionAdapterError("invalid recovery page budget")
+        journal, namespace = self._require_recovery()
+        page_reader = getattr(self._client, "query_recovery_events_after", None)
+        if not callable(page_reader):
+            raise ServiceExecutionReadError("recovery_events_api_unavailable")
+        pages_applied = 0
+        for _ in range(max_pages):
+            cursor = journal.cursor(namespace)
+            generation = cursor["journal_generation"]
+            directory_revision = cursor["scope_directory_revision"]
+            after_sequence = cursor["event_cursor"]
+            if (
+                type(generation) is not str
+                or not generation
+                or type(directory_revision) is not str
+                or not directory_revision
+                or type(after_sequence) is not int
+            ):
+                raise ServiceExecutionReadError("recovery_snapshot_required")
+            try:
+                page = page_reader(
+                    after_sequence=after_sequence,
+                    expected_journal_generation=generation,
+                    expected_directory_revision=directory_revision,
+                    limit=page_limit,
+                )
+                page_changed = journal.apply_events_page(namespace, page)
+            except ServiceExecutionRecoveryError as error:
+>               raise ServiceExecutionReadError(f"recovery_{error.code.lower()}") from None
+E               backtrader.stores.service_execution_adapter.ServiceExecutionReadError: Managed service read failed (recovery_recovery_trade_binding_missing)
+
+backtrader\stores\service_execution_adapter.py:421: ServiceExecutionReadError
+_____________ test_accepted_intent_projects_the_provider_identity _____________
+
+    def test_accepted_intent_projects_the_provider_identity() -> None:
+        client = _FakeClient(submit_view=_view())
+        adapter = ServiceExecutionAdapter(client)
+    
+        response = adapter.submit_order(_limit_order(), _legacy_dispatch)
+    
+        assert response["status"] == "accepted"
+        assert response["external_order_id"] == "provider-order-1"
+        assert response["managed_intent_id"] == "intent-1"
+        assert response["service_execution_state"] == "ACKED"
+        assert response["data_name"] == "BTC-USDT"
+>       assert client.submitted == [
+            {
+                "intent_id": "intent-1",
+                "signal_id": "signal-1",
+                "instrument": "BTC-USDT",
+                "side": "BUY",
+                "position_effect": "OPEN",
+                "order_type": "LIMIT",
+                "quantity": 2,
+                "price": 101.0,
+                "reduce_only": False,
+                "metadata_version": "metadata-v1",
+                # A per-object framework reference is not published by default:
+                # it would break intent idempotency on a resubmit.
+                "tags": {},
+            }
+        ]
+E       AssertionError: assert [{'deadline_n...ata-v1', ...}] == [{'instrument...'LIMIT', ...}]
+E         
+E         At index 0 diff: {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': Decimal('2'), 'price': Decimal('101.0'), 'time_in_force': 'GTC', 'reduce_only': False, 'metadata_version': 'metadata-v1', 'deadline_ns': None, 'tags': {}} != {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': 2, 'price': 101.0, 'reduce_only': False, 'metadata_version': 'metadata-v1', 'tags': {}}
+E         Use -v to get more diff
+
+tests\unit\stores\test_service_execution_adapter.py:139: AssertionError
+_ test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection __
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_recovery_submit_persists_0')
+
+    def test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection(tmp_path) -> None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+    
+        projection = adapter.submit_order(order, _legacy_dispatch)
+    
+        manifest = client.manifest_seen_before_submit
+>       assert manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1448: AssertionError
+_____ test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal ______
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_recovery_cancel_binds_tar0')
+
+    def test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal(tmp_path) -> None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+        adapter.submit_order(order, _legacy_dispatch)
+        # In the real flow this provider identity comes from a prior authenticated
+        # durable snapshot; this unit checks that it is bound before cancel RPC.
+        order.info["external_order_id"] = "provider-order-1"
+    
+        projection = adapter.cancel_order(order, "BTC-USDT", _legacy_dispatch)
+    
+        cancel_manifest = client.cancel_manifest_seen_before_rpc
+>       assert cancel_manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1493: AssertionError
+_______ test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event _______
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-996/test_real_facade_pre_dispatch_0')
+
+    def test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event(tmp_path) -> None:
+        execution = pytest.importorskip("bt_api_execution")
+        scope = execution.ExecutionScope(
+            "fixture", "offline", "account.facade-guard", "strategy.facade-guard", "20260926"
+        )
+        execution_store = execution.SqliteExecutionStore(tmp_path / "execution.sqlite3")
+        provider = _ResponseProvider([])
+    
+        def guard(_intent) -> None:
+            raise RuntimeError("fixture pre-dispatch guard deny")
+    
+        facade = execution.ManagedExecutionFacade(
+            execution_store,
+            scope,
+            writer_id="fixture.pre-dispatch-guard",
+            allow_unprotected=True,
+            pre_dispatch_guard=guard,
+        )
+        runtime = SimpleNamespace(
+            execution=execution,
+            scope=scope,
+            state_directory=tmp_path,
+            framework_projection_session_id=uuid.uuid4().hex,
+            execution_store=execution_store,
+            facade=facade,
+            submit=lambda intent, dispatcher: facade.submit(intent, dispatcher),
+        )
+        bridge = ManagedExecutionBridge(
+            runtime,
+            provider_observation_from_update=_cumulative_provider_observation,
+        )
+        _store, data, broker = _make_started_stack(runtime, provider, managed_execution_adapter=bridge)
+        try:
+            order = _submit(broker, data, "intent.facade-guard")
+    
+            assert order.status == bt.Order.Rejected
+            assert order.executed.size == pytest.approx(0.0)
+            assert provider.submitted_orders == []
+            record = execution_store.get("intent.facade-guard", scope=scope)
+            assert record.state is execution.ExecutionState.BLOCKED
+    
+            events = execution_store.read_outbox(scope=scope)
+            blocked = [event for event in events if event.event_type == "dispatch_blocked"]
+            assert len(blocked) == 1
+            assert blocked[0].state is execution.ExecutionState.BLOCKED
+            assert blocked[0].payload == {"reason_code": "pre_dispatch_guard_failed"}
+    
+            # The real source rows are consumed as an exact no-fill lifecycle
+            # prefix, leaving the scoped source cursor ready for later events.
+>           assert bridge.poll_managed_provider_outbox_update() is None
+
+tests\unit\brokers\test_btapibroker_managed_execution_projection.py:2181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader_runtime\managed_execution.py:1513: in poll_managed_provider_outbox_update
+    self._validate_no_fill_lifecycle_event(event)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+event = ExecutionEvent(sequence=1, event_id='28f7db6afddb464a8d0a1b1e280f3577', intent_id='intent.facade-guard', scope_key='sc...f0beb4a6f55455198c335f'}, created_at_ns=1792115642212785200, journal_incarnation_id='aa26a65ff886484aa33c2ec7733ef156')
+
+    @staticmethod
+    def _validate_no_fill_lifecycle_event(event: Any) -> None:
+        """Accept only exact execution-store lifecycle events with no fill facts."""
+    
+        event_type = getattr(event, "event_type", None)
+        state = getattr(getattr(event, "state", None), "value", getattr(event, "state", None))
+        payload = getattr(event, "payload", None)
+        expected = {
+            "intent_recorded": ("PENDING_ADMISSION", {"payload_sha256"}),
+            "intent_admitted": ("PENDING_DISPATCH", {"permit_reference"}),
+            "dispatch_claimed": ("DISPATCHING", {"dispatch_attempt"}),
+            # The execution store only emits these states before any provider
+            # dispatch. Exact reason-only payloads make their no-fill meaning
+            # explicit; added economic fields must go through projection.
+            "intent_rejected": ("REJECTED", {"reason_code"}),
+            "intent_blocked": ("BLOCKED", {"reason_code"}),
+            # A dispatch guard can block only before the facade invokes its
+            # dispatcher port. The distinct event is terminal no-fill evidence.
+            "dispatch_blocked": ("BLOCKED", {"reason_code"}),
+        }
+        rule = expected.get(event_type)
+        if rule is None or state != rule[0] or not isinstance(payload, Mapping):
+            raise ManagedExecutionBindingError("source lifecycle event is not a known no-fill fact")
+        if set(payload) != rule[1]:
+>           raise ManagedExecutionBindingError(
+                "source lifecycle event has unexpected payload facts"
+            )
+E           backtrader_runtime.managed_execution.ManagedExecutionBindingError: source lifecycle event has unexpected payload facts
+
+backtrader_runtime\managed_execution.py:2215: ManagedExecutionBindingError
+____________ test_ctp_order_defaults_to_explicit_gfd_and_routes_it ____________
+
+    def test_ctp_order_defaults_to_explicit_gfd_and_routes_it():
+        """The frozen first-version CTP order contract is explicit GFD."""
+        client, store, data, broker = _started_ctp_stack()
+        try:
+>           order = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:262: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = <backtrader.order.BuyOrder object at 0x000001B2115EB950>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+>               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError
+_______ test_ctp_unknown_order_blocks_reopen_but_allows_risk_reduction ________
+
+    def test_ctp_unknown_order_blocks_reopen_but_allows_risk_reduction():
+        """An unresolved order identity blocks new exposure on the synchronous CTP route."""
+        positions = [
+            {
+                "instrument": SYMBOL,
+                "direction": "long",
+                "volume": 1,
+                "price": 1500.0,
+            }
+        ]
+        client, store, data, broker = _started_ctp_stack(positions=positions)
+        try:
+>           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:311: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = <backtrader.order.BuyOrder object at 0x000001B210E5A410>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+>               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError
+_ test_unknown_ctp_order_requires_two_complete_identical_reconciliation_rounds _
+
+    def test_unknown_ctp_order_requires_two_complete_identical_reconciliation_rounds():
+        client, store, data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL)["evidence_complete"] is True
+            client.timeout_submit = True
+>           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:376: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = <backtrader.order.BuyOrder object at 0x000001B21133DB90>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+>               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError
+_____ test_broker_update_between_ctp_snapshots_restarts_two_round_barrier _____
+
+    def test_broker_update_between_ctp_snapshots_restarts_two_round_barrier():
+        client, store, data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL)["evidence_complete"] is True
+            client.timeout_submit = True
+>           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:424: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = <backtrader.order.BuyOrder object at 0x000001B210EC3750>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+>               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError
+___ test_replaying_the_same_complete_snapshot_cannot_unlock_reconciliation ____
+
+    def test_replaying_the_same_complete_snapshot_cannot_unlock_reconciliation():
+        client, store, data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL)["evidence_complete"] is True
+            client.timeout_submit = True
+>           unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=1,
+                price=1500.0,
+                exectype=bt.Order.Limit,
+            )
+
+tests\unit\brokers\test_btapibroker_iteration22.py:524: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = <backtrader.order.BuyOrder object at 0x000001B2113755D0>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+>               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError
+_ test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[1.0-sell-1498.0] _
+
+position_size = 1.0, expected_side = 'sell', expected_price = 1498.0
+
+    @pytest.mark.parametrize(
+        ("position_size", "expected_side", "expected_price"),
+        [(1.0, "sell", 1498.0), (-1.0, "buy", 1502.0)],
+    )
+    def test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection(
+        position_size, expected_side, expected_price
+    ):
+        client, store, _data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL, timeout=0)["evidence_complete"] is True
+            client.positions = [
+                {
+                    "instrument": SYMBOL,
+                    "direction": "long" if position_size > 0 else "short",
+                    "volume": abs(position_size),
+                    "price": 1500.0,
+                }
+            ]
+            broker._sync_positions(force=True, raise_errors=True)
+            client.live_ticks[SYMBOL] = collections.deque([_fresh_ctp_quote()])
+            assert store.poll_tick(SYMBOL) is not None
+    
+>           orders, missing = broker._submit_known_position_closes()
+
+tests\unit\brokers\test_btapibroker_iteration22.py:783: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:1801: in _submit_known_position_closes
+    submit_leg(key, None, size, size < 0)
+backtrader\brokers\btapibroker.py:1781: in submit_leg
+    method(
+backtrader\brokers\btapibroker.py:4436: in sell
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = <backtrader.order.SellOrder object at 0x000001B2119A8BD0>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+>               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError
+_ test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[-1.0-buy-1502.0] _
+
+position_size = -1.0, expected_side = 'buy', expected_price = 1502.0
+
+    @pytest.mark.parametrize(
+        ("position_size", "expected_side", "expected_price"),
+        [(1.0, "sell", 1498.0), (-1.0, "buy", 1502.0)],
+    )
+    def test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection(
+        position_size, expected_side, expected_price
+    ):
+        client, store, _data, broker = _started_typed_ctp_stack()
+        try:
+            assert store.get_ctp_preflight_snapshot(SYMBOL, timeout=0)["evidence_complete"] is True
+            client.positions = [
+                {
+                    "instrument": SYMBOL,
+                    "direction": "long" if position_size > 0 else "short",
+                    "volume": abs(position_size),
+                    "price": 1500.0,
+                }
+            ]
+            broker._sync_positions(force=True, raise_errors=True)
+            client.live_ticks[SYMBOL] = collections.deque([_fresh_ctp_quote()])
+            assert store.poll_tick(SYMBOL) is not None
+    
+>           orders, missing = broker._submit_known_position_closes()
+
+tests\unit\brokers\test_btapibroker_iteration22.py:783: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\brokers\btapibroker.py:1801: in _submit_known_position_closes
+    submit_leg(key, None, size, size < 0)
+backtrader\brokers\btapibroker.py:1781: in submit_leg
+    method(
+backtrader\brokers\btapibroker.py:4391: in buy
+    return self.submit(order)
+backtrader\brokers\btapibroker.py:3051: in submit
+    response = self.store.submit_order(order)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = BtApiStore(provider='ctp_gateway', backend='gateway', connected=False, started=False, account='')
+order = <backtrader.order.BuyOrder object at 0x000001B227957F90>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+        if self._service_read_only:
+            raise BtApiStoreError("read-only service proxy cannot submit orders")
+        self._assert_write_route_identity()
+        adapter = self._managed_execution_adapter
+        if adapter is None:
+            if self._is_ctp_write_provider():
+>               raise BtApiStoreError("direct CTP Store order writes are disabled")
+E               backtrader.stores.btapistore.BtApiStoreError: direct CTP Store order writes are disabled
+
+backtrader\stores\btapistore.py:7986: BtApiStoreError
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\source_code\backtrader\.codex-tmp\assessment-r4\baseline\baseline-head-junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/unit/stores/test_service_execution_recovery.py::test_event_page_preserves_negative_cumulative_commission_rebate
+FAILED tests/unit/stores/test_service_execution_recovery.py::test_event_receipt_projection_cursor_and_callback_pending_commit_together
+FAILED tests/unit/stores/test_service_execution_recovery.py::test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks
+FAILED tests/unit/stores/test_service_execution_adapter.py::test_accepted_intent_projects_the_provider_identity
+FAILED tests/unit/stores/test_service_execution_adapter.py::test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection
+FAILED tests/unit/stores/test_service_execution_adapter.py::test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal
+FAILED tests/unit/brokers/test_btapibroker_managed_execution_projection.py::test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event
+FAILED tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_order_defaults_to_explicit_gfd_and_routes_it
+FAILED tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_unknown_order_blocks_reopen_but_allows_risk_reduction
+FAILED tests/unit/brokers/test_btapibroker_iteration22.py::test_unknown_ctp_order_requires_two_complete_identical_reconciliation_rounds
+FAILED tests/unit/brokers/test_btapibroker_iteration22.py::test_broker_update_between_ctp_snapshots_restarts_two_round_barrier
+FAILED tests/unit/brokers/test_btapibroker_iteration22.py::test_replaying_the_same_complete_snapshot_cannot_unlock_reconciliation
+FAILED tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[1.0-sell-1498.0]
+FAILED tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[-1.0-buy-1502.0]
+ERROR tests/unit/feeds/test_btapifeed.py::test_feed_start_logs_backfill_failure_and_continues
+ERROR tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_refresh_account_logs_on_failure
+ERROR tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_sync_positions_logs_on_failure
+ERROR tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_sync_remote_open_orders_logs_on_failure
+14 failed, 590 passed, 1 warning, 4 errors in 59.57s

@@ -1,0 +1,594 @@
+{
+  "schema": "iteration10-bt-recovery-scoped-delivery-assessment-v2",
+  "repository": "D:\\source_code\\backtrader",
+  "branch": "dev",
+  "parent": "48bde5d76bd666ce876763a613f27b92e9c62074",
+  "evidence_level": "LOCAL_SQLITE_BROKER_COMPONENT_ONLY",
+  "scope_summary": "Restart-safe recovery quote journal (feed-level trusted quote-to-bar binding), session/trade/broker callback-ACK projection, recovery-journal schema v3; 10 committed paths (8 modified, 2 new).",
+  "independent_static_review": {
+    "r3_scope_go": true,
+    "r3_review_reference": "iteration10-bt-recovery-delivery-r3-assessment-20261016.json independent_static_review (GO by /root/backtrader_entry_review) covered only the five r3 pins.",
+    "r4_extension": {
+      "status": "NOT_YET_REVIEWED",
+      "reason": "The r4 delta (btapifeed, service_execution_session, service_strategy_account_book, trade, feeds/service_recovery_quotes and further edits to adapter/recovery/broker/strategy) extends the scope from 5 to 10 pins and has NOT been independently reviewed; flagged."
+    }
+  },
+  "candidate_paths": {
+    "backtrader/brokers/btapibroker.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 461833,
+      "working_tree_sha256": "364D5CE6F36FE3017C2EE523A7B7B83562A595F280F43601E0A496C76E344A95",
+      "head_blob_oid": "ee9e755a243023efe485dcbef5e3abd86f6dedc0",
+      "path_diff_sha256": "8BB2A6467F164E2A862702B80B79FF88C44028CD57167BF4074B5078DF2A04F3",
+      "hunk_scope": "V2 recovery fill application from pinned journal pages with position_override, fail-closed fence on unresolved V2 intents, trade-checkpoint and callback-ACK projection on the broker side.",
+      "unrelated_hunks": []
+    },
+    "backtrader/feeds/btapifeed.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 77300,
+      "working_tree_sha256": "960E023CC1C3B7F6671B8AF3B50A775B1DD7DE5E9213509D207A15070001A0E2",
+      "head_blob_oid": "b6b4d1506ec8185a54c90ec925213cf7d4d4d39a",
+      "path_diff_sha256": "BE3C10A9CAA936C2398B23F8A8CF42D3ECA0E7BEF08B0E134B607B45FCAA5E6A",
+      "hunk_scope": "Recovery quote feed wiring: ServiceRecoveryQuoteBindingMixin integration so every delivered bar carries a frozen, trusted quote binding.",
+      "unrelated_hunks": []
+    },
+    "backtrader/feeds/service_recovery_quotes.py": {
+      "status": "??",
+      "class": "new_untracked_source",
+      "working_tree_bytes": 9213,
+      "working_tree_sha256": "95562FB1C19B26C68CB4377BE219E952CF3FB65ADBE9633021A7D1606B07952D",
+      "head_blob_oid": null,
+      "path_diff_sha256": null,
+      "hunk_scope": "New feed-level quote-to-bar binding mixin: note/try_note per incoming quote, frozen per delivered bar, fail-closed ServiceRecoveryQuoteBindingError on bar/quote mismatch.",
+      "unrelated_hunks": []
+    },
+    "backtrader/stores/service_execution_adapter.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 70612,
+      "working_tree_sha256": "B3C415A1F70671162A171902E83D95C391D2B8BD559EFCD312C07B5FCB79098E",
+      "head_blob_oid": "6f5f7139f75c26951bcb7b73ffbcf5d20bff718e",
+      "path_diff_sha256": "ABBFA6922FAEEAAC5769C4EBC920E8E96928741ED807BEE2D4DA46C12004B11D",
+      "hunk_scope": "V2 delta beyond r3: immutable intent execution context (feed/decision/comminfo/quote binding) persisted before submit, MARKET/FOK-only intent validation, fill-page projection with validated context, genesis and owner-cut enforcement.",
+      "unrelated_hunks": []
+    },
+    "backtrader/stores/service_execution_recovery.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 171714,
+      "working_tree_sha256": "193E6DC0F7FCF64F01E87963448678612ADB1396D27C2EC100766C53D4702856",
+      "head_blob_oid": "141030c4fdd2d9372eb8fd0fd964741cbff83933",
+      "path_diff_sha256": "8ACF756978BED2FB5CC3B2E2A9B808AEF3EC8C260E9125275EA907D34044FE9D",
+      "hunk_scope": "V2 delta beyond r3: schema v3 tables (event_versions, strategy_genesis, intent_contexts, fill_projections, trade_checkpoints, consumer_leases) with owner-token leases and event-version pinning.",
+      "unrelated_hunks": []
+    },
+    "backtrader/stores/service_execution_session.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 49981,
+      "working_tree_sha256": "CD78E89AF63B3F86AFEE3334E1C46990CD23AF3C752908D4B9D71655314EE922",
+      "head_blob_oid": "56a043aaecbe852da1a5b8661e14bd4d27b41899",
+      "path_diff_sha256": "BA92C3EAE6DB8EBF67CE59FD9744E2763F38DD45E25265BFE15DC9EE673342FC",
+      "hunk_scope": "Session-side V2 projection: event-version pinned reads and callback-ACK only after user callback delivery.",
+      "unrelated_hunks": []
+    },
+    "backtrader/stores/service_strategy_account_book.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 24521,
+      "working_tree_sha256": "2FDDAEC2357E5BCAD2D83B301519F0172F7B734705B7F5952493BD4C35256FFA",
+      "head_blob_oid": "cbc319ca05eee90c9cc93972336bdc28954b3b26",
+      "path_diff_sha256": "4639C2069098000E48D5C831C5C1F47F1EC22476D9A634B0BE982F77BDC0C0D1",
+      "hunk_scope": "account_key dataclass field and owner-book payload population; legacy per-strategy key stays optional at this layer (financial projection unavailable when the server omits it); missing or different keys still fail closed only in the V2 owner-cut comparison.",
+      "unrelated_hunks": []
+    },
+    "backtrader/strategy.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 193154,
+      "working_tree_sha256": "DC1B519D7301988B85806A4B1F50C605D10A483F4D011A08509416A2AB7F0DB5",
+      "head_blob_oid": "2c3cfb24f348a896b1baa44fd6d6ca5a0b25c570",
+      "path_diff_sha256": "428EAEB5759DA5152194953B88E38F8A7E64B85BFA2D5E5DDEAAC56114A9C0AF",
+      "hunk_scope": "V2 delta beyond r3: trade ledger hydration/checkpoint projection from the recovery journal, genesis requires an empty Trade ledger, immutable context reuse/mutation rejection.",
+      "unrelated_hunks": []
+    },
+    "backtrader/trade.py": {
+      "status": " M",
+      "class": "modified_tracked_source",
+      "working_tree_bytes": 19121,
+      "working_tree_sha256": "38DEC048B2E9884ACBFE196173C009B1C8340A9870BE24ED9C4D9C050D45A9B4",
+      "head_blob_oid": "5017d5363f7fc61f6003dc2b7f2168f7d9ef8f47",
+      "path_diff_sha256": "B606CF7201D86FBE6100B4C16391467B8D3B938DA8C757F211A183322B5AFD17",
+      "hunk_scope": "V2 trade state projection helpers used by strategy/broker recovery hydration.",
+      "unrelated_hunks": []
+    },
+    "tests/unit/stores/test_service_execution_recovery_v2.py": {
+      "status": "??",
+      "class": "new_untracked_source",
+      "working_tree_bytes": 22401,
+      "working_tree_sha256": "8659B5A6FF98DC92FA380DAB4141810DEF92589DBE830F1D4138AC2AC79229F1",
+      "head_blob_oid": null,
+      "path_diff_sha256": null,
+      "hunk_scope": "12 focused V2 tests: protocol pinning, adapter v1/v2 request shapes, MARKET/FOK submit plus LIMIT rejection, GTC without recovery, fill page with validated context (READY_TO_PROJECT), missing mapper (REPLAY_UNAVAILABLE), unsupported fee model, context mismatch rollback, quote-time rollback, genesis required, immutable context reuse/mutation rejection.",
+      "unrelated_hunks": []
+    }
+  },
+  "source_diff": {
+    "tracked_candidate_paths": [
+      "backtrader/brokers/btapibroker.py",
+      "backtrader/feeds/btapifeed.py",
+      "backtrader/stores/service_execution_adapter.py",
+      "backtrader/stores/service_execution_recovery.py",
+      "backtrader/stores/service_execution_session.py",
+      "backtrader/stores/service_strategy_account_book.py",
+      "backtrader/strategy.py",
+      "backtrader/trade.py"
+    ],
+    "combined_tracked_patch_sha256": "4944C64D803D0FD797FFD4A8B103661F7849058D9A48B2D56EE4122CAC501156",
+    "candidate_scope": "All tracked-file hunks are within the V2 recovery journal / callback projection round (delta on top of the committed r3 state); the two new paths are the only untracked candidate sources.",
+    "unrelated_hunks": [],
+    "overlay_required": false
+  },
+  "unrelated_tracked_at_assessment": {
+    "0": " D",
+    "backtrader_runtime/ctp_configured_front_check.py": " M",
+    "backtrader_runtime/ctp_simnow_operator.py": " M",
+    "tests/unit/runtime/test_ctp_simnow_config_operator_route.py": " M"
+  },
+  "unrelated_untracked_sha256": {
+    ".codex-tmp/bt-recovery-callback-20261016-r1/junit.xml": "089F7FE7024B5E5A5EA458DA88851CEB33ACDC3AF6C15CBAFAB5A84F1A881550",
+    ".codex-tmp/bt-recovery-callback-20261016-r1/run.json": "B26EE5460FD2F44E462A84A3AA9243A6D40EA25EC7AE17FCBDF430925DD3FB59",
+    ".codex-tmp/bt-recovery-callback-20261016-r2/junit.xml": "A176C4249410809D4F1ED75540E270677763BA122123B45770FC371B43B70F0D",
+    ".codex-tmp/bt-recovery-callback-20261016-r2/run.json": "A862E0A39B2F311A4DB22E6C1024735483DC873712A39ECEC81FEAA3A13A67C1",
+    ".codex-tmp/iteration10-bt-recovery-delivery-note-20261016.json": "280ABDD0D704E5EBC51F8652DA4FB043F1A8AF125270921C37A45FB6296DE0F8",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r1_20261016/command.txt": "9B6DB613BEDEA0214AC749C55909468DF718EB6AA1B55A2EE58D266F2A02554B",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r1_20261016/junit.xml": "17F275C2AB05BBF8E52DB01D92D3C3FDAA0A2569E4C82FA29588F82FC564FFD8",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r1_20261016/result.json": "B6105EF51D9BAB57C58E0745AE467F6A255A9D1C77359DF04B08F6BFAD8ED30A",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r2_20261016/command.txt": "1253D0861C813B470F8260BF00AA2AB9ED3A1F1A1FB8C66A696D4401C63F7F5F",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r2_20261016/junit.xml": "912D6B74180BA52AFC2BF924D8AAD448ACB84C16FC79129DFEAF9E93509DE4BF",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r2_20261016/result.json": "C0FF5162538A46B3A703BE934228D7B1D0C16159C80F8135696504FB6CBF414F",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r3_20261016/command.txt": "4749959B3FC9943F1AFD1189BECDB913465F7D2F44CD6FE99A52EC823F34F555",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r3_20261016/junit.xml": "F2DA66A1A118A6DD04770AAE784E4CE03E35AEB13FD1F114DC7D88EA6D6217F6",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r3_20261016/result.json": "5703B65A98AAA074D7FE23B7EE168EE0D26F387F0E6AE3E3BB67A03B1B777D57",
+    ".codex-tmp/iteration10_cfg05_bt_store_provider_gateway_r3_20261016/round-summary.json": "054DFAD6CC740B29477C8432100956A1CDC820C56E78FD19D3318ACB4505BBA3",
+    "docs/_internal/opts/requirements/迭代1-穿透式认证/evidence/iteration41-zmq-combined-import-r5-terminal-independent-review-r1-2026-10-06/README.md": "9F33974AFC78FA672D9FF50C2D6C0BE39DB5BE57BEFA7D78C87A1A28818D90CC",
+    "docs/_internal/opts/requirements/迭代1-穿透式认证/evidence/iteration41-zmq-combined-import-r5-terminal-independent-review-r1-2026-10-06/review-bundle.zip": "5A67A60DE1D553F24A5A373A6389647DF16D77B83D147675E383EF1E7B8B119F",
+    "docs/_internal/opts/requirements/迭代1-穿透式认证/evidence/iteration41-zmq-combined-import-r5-terminal-independent-review-r1-2026-10-06/review-checkpoint.json": "1BAA133A30E16F7377D51B7ABF8EC52619AEE9CFCE4DF4D40A2CA94DA8647B58",
+    "docs/_internal/opts/requirements/迭代1-穿透式认证/evidence/iteration41-zmq-combined-import-r5-terminal-independent-review-r1-2026-10-06/review-index.json": "0E5793F981846C908E278F2C7C42F53F2E0912BCC1CF31973A7EBDE46E767B25",
+    "docs/_internal/opts/requirements/迭代1-穿透式认证/evidence/iteration41-zmq-combined-import-r5-terminal-independent-review-r1-2026-10-06/review.json": "74B7217653BACC0FAB361EBA5117F11F287BE1B0C3BD074D0E9C8D895DC835D8",
+    ".codex-tmp/assessment-r4/baseline/baseline-head-junit.xml": "F2FA594C5AAEE1B801C37BFD2C43CB16C91424C0718AFE41C55655C54C91109E",
+    ".codex-tmp/assessment-r4/baseline/baseline-head-stdout.txt": "BD05DE6E8B4F5A9405738268864D431A3188B5033597549232F14707D70C1600",
+    ".codex-tmp/assessment-r4/baseline/baseline-head-stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    ".codex-tmp/run_v2_journal.py": "643EC4D4E05A9F6B3EABF2F03A6A26E7479CC1BF73793F4BB7E8283395293DE2",
+    ".codex-tmp/iteration10-bt-recovery-delivery-r3-assessment-20261016.json": "988B0B4EDD48756372E11C20CF17E542A0F0E8F8E60DA6F55CA0A5B1FAF7651F",
+    ".codex-tmp/iteration10-bt-recovery-dev-postcommit-r3-20261016.json": "82FE32CFAE4AB06CCF02AF41C14022D25DC9817A06A75B5099526A631733F58C",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r5/junit.xml": "AF2682C499CBF387CDED6437374E2EBC9AF8EA1F2B0AC4CC7EB5568994C43AAF",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r5/run.json": "D0812AF006A193E4856651E6D2C299501CA05E83F485EBFBA64B392DD7E6F8D4",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r5/result.json": "BE863AA6E8C4D27E809B0415168DBB77516FCC284CEC639A8520F511EA14E979",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r5/stdout.txt": "9716F9B8F211987212F88FE64CE17ADD949C51A988289961D44BD0DFDF27EC0D",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r5/stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r6/junit.xml": "13D753AA2B46ADD3683E0A9C4CCE4215D9044425A522908B2EB7D4ABF32F6BA8",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r6/run.json": "7DCAA233D7E6565B736A2FD42698A5BFD0BA3665782F3AFF4A555DF4898FDD2F",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r6/result.json": "F032E0C6D428B38B525F8B6CC1223EFAD1081FDC39711B054AFC36EC1B8AF90B",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r6/stdout.txt": "7BCBC52621A98FA441A0942BE985D0419C8710005D650EF02367E1B1E7CF8468",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r6/stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r7/junit.xml": "C508D152B68F11A11E25C20B5D2BA7A4E163B9E3DC52359D5D66FD77DB29F1A7",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r7/run.json": "AEC22FE5B9F66990C15127DAEDB8EC64E498A396BB105B1BB8A586B6F0519314",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r7/result.json": "897DA1F5590B42C64686B19631B6BD6A86AB4045DDED6E7CAE21F0A1FF4EB407",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r7/stdout.txt": "A99B4BCCC8DEEC5C024E563CBC45AA925782E210991625D412F3FD8690D697C6",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r7/stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r8/junit.xml": "39DA9FD451A8BD8254475E1B155D4BFB4CFCB37301C2B25ABB015D7027A78392",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r8/run.json": "D48FDC73E28330137279C6D9AA52D909D0C465A38F1B6385979F20699ADF9ABA",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r8/result.json": "0780E8A3B4B36B469ACE6DC80C7C82D9C6D96F5CFC4970DC55A7B5CBCC9B6A90",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r8/stdout.txt": "E0EC148E7DBB780873F3515C740A822A425D2003D7A56BF608051F308BDFEC79",
+    ".codex-tmp/bt-recovery-v2-journal-20261016-r8/stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+  },
+  "unrelated_untracked_missing_at_r4": [],
+  "index_empty": true,
+  "qa_runs": [
+    {
+      "id": "r5",
+      "artifact_directory": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r5",
+      "command": [
+        "-m",
+        "pytest",
+        "--noconftest",
+        "--import-mode=importlib",
+        "-q",
+        "--junitxml=D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r5\\junit.xml",
+        "tests/unit/stores/test_service_execution_recovery_v2.py"
+      ],
+      "cwd": "D:\\source_code\\backtrader",
+      "conftest_enabled": false,
+      "environment_override": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "exit_code": 0,
+      "counts": {
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "source_pin_record": "run.json source_before equals result.json source_after (all 10 scope files): stable",
+      "artifacts": {
+        "junit.xml": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r5\\junit.xml",
+          "bytes": 2177,
+          "sha256": "AF2682C499CBF387CDED6437374E2EBC9AF8EA1F2B0AC4CC7EB5568994C43AAF"
+        },
+        "run.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r5\\run.json",
+          "bytes": 2286,
+          "sha256": "D0812AF006A193E4856651E6D2C299501CA05E83F485EBFBA64B392DD7E6F8D4"
+        },
+        "result.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r5\\result.json",
+          "bytes": 1922,
+          "sha256": "BE863AA6E8C4D27E809B0415168DBB77516FCC284CEC639A8520F511EA14E979"
+        },
+        "stdout.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r5\\stdout.txt",
+          "bytes": 648,
+          "sha256": "9716F9B8F211987212F88FE64CE17ADD949C51A988289961D44BD0DFDF27EC0D"
+        },
+        "stderr.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r5\\stderr.txt",
+          "bytes": 0,
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        }
+      }
+    },
+    {
+      "id": "r6",
+      "artifact_directory": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6",
+      "command": [
+        "-m",
+        "pytest",
+        "--noconftest",
+        "--import-mode=importlib",
+        "-q",
+        "--junitxml=D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6\\junit.xml",
+        "tests/unit/stores/test_service_execution_recovery_v2.py",
+        "tests/unit/stores/test_service_execution_broker_recovery.py",
+        "tests/unit/stores/test_service_execution_recovery.py",
+        "tests/unit/stores/test_service_execution_adapter.py",
+        "tests/unit/stores/test_service_execution_adapter_local_process.py",
+        "tests/unit/stores/test_service_execution_session.py",
+        "tests/unit/stores/test_service_execution_session_local_process.py",
+        "tests/unit/stores/test_service_strategy_account_book.py",
+        "tests/unit/feeds/test_btapifeed.py",
+        "tests/unit/feeds/test_btapifeed_arbitrage.py",
+        "tests/unit/feeds/test_btapifeed_iteration22.py",
+        "tests/unit/core/test_strategy.py",
+        "tests/unit/core/test_trade.py"
+      ],
+      "cwd": "D:\\source_code\\backtrader",
+      "conftest_enabled": false,
+      "environment_override": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "exit_code": 1,
+      "counts": {
+        "tests": 238,
+        "failures": 7,
+        "errors": 1,
+        "skipped": 0
+      },
+      "source_pin_record": "run.json source_before equals result.json source_after (all 10 scope files): stable",
+      "artifacts": {
+        "junit.xml": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6\\junit.xml",
+          "bytes": 64913,
+          "sha256": "13D753AA2B46ADD3683E0A9C4CCE4215D9044425A522908B2EB7D4ABF32F6BA8"
+        },
+        "run.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6\\run.json",
+          "bytes": 2977,
+          "sha256": "7DCAA233D7E6565B736A2FD42698A5BFD0BA3665782F3AFF4A555DF4898FDD2F"
+        },
+        "result.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6\\result.json",
+          "bytes": 1925,
+          "sha256": "F032E0C6D428B38B525F8B6CC1223EFAD1081FDC39711B054AFC36EC1B8AF90B"
+        },
+        "stdout.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6\\stdout.txt",
+          "bytes": 27163,
+          "sha256": "7BCBC52621A98FA441A0942BE985D0419C8710005D650EF02367E1B1E7CF8468"
+        },
+        "stderr.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r6\\stderr.txt",
+          "bytes": 0,
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        }
+      }
+    },
+    {
+      "id": "r7",
+      "artifact_directory": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r7",
+      "command": [
+        "-m",
+        "pytest",
+        "--noconftest",
+        "--import-mode=importlib",
+        "-q",
+        "--junitxml=D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r7\\junit.xml",
+        "tests/unit/stores/test_service_execution_recovery_v2.py",
+        "tests/unit/stores/test_service_execution_broker_recovery.py",
+        "tests/unit/stores/test_service_execution_recovery.py",
+        "tests/unit/stores/test_service_execution_adapter.py",
+        "tests/unit/stores/test_service_execution_adapter_local_process.py",
+        "tests/unit/stores/test_service_execution_session.py",
+        "tests/unit/stores/test_service_execution_session_local_process.py",
+        "tests/unit/stores/test_service_strategy_account_book.py",
+        "tests/unit/feeds/test_btapifeed.py",
+        "tests/unit/feeds/test_btapifeed_arbitrage.py",
+        "tests/unit/feeds/test_btapifeed_iteration22.py",
+        "tests/unit/core/test_strategy.py",
+        "tests/unit/core/test_trade.py",
+        "tests/unit/brokers/test_btapibroker.py",
+        "tests/unit/brokers/test_btapibroker_managed_execution_projection.py",
+        "tests/unit/brokers/test_btapibroker_source_reconciliation.py",
+        "tests/unit/brokers/test_btapibroker_normalized_validation.py",
+        "tests/unit/brokers/test_btapibroker_position_sync.py",
+        "tests/unit/brokers/test_btapibroker_edge_cases.py",
+        "tests/unit/brokers/test_btapibroker_iteration22.py",
+        "--deselect",
+        "tests/unit/stores/test_service_execution_recovery.py::test_event_page_preserves_negative_cumulative_commission_rebate",
+        "--deselect",
+        "tests/unit/stores/test_service_execution_recovery.py::test_event_receipt_projection_cursor_and_callback_pending_commit_together",
+        "--deselect",
+        "tests/unit/stores/test_service_execution_recovery.py::test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks",
+        "--deselect",
+        "tests/unit/stores/test_service_execution_adapter.py::test_accepted_intent_projects_the_provider_identity",
+        "--deselect",
+        "tests/unit/stores/test_service_execution_adapter.py::test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection",
+        "--deselect",
+        "tests/unit/stores/test_service_execution_adapter.py::test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_managed_execution_projection.py::test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_order_defaults_to_explicit_gfd_and_routes_it",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_unknown_order_blocks_reopen_but_allows_risk_reduction",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_iteration22.py::test_unknown_ctp_order_requires_two_complete_identical_reconciliation_rounds",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_iteration22.py::test_broker_update_between_ctp_snapshots_restarts_two_round_barrier",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_iteration22.py::test_replaying_the_same_complete_snapshot_cannot_unlock_reconciliation",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[1.0-sell-1498.0]",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_iteration22.py::test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[-1.0-buy-1502.0]",
+        "--deselect",
+        "tests/unit/feeds/test_btapifeed.py::test_feed_start_logs_backfill_failure_and_continues",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_refresh_account_logs_on_failure",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_sync_positions_logs_on_failure",
+        "--deselect",
+        "tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_sync_remote_open_orders_logs_on_failure"
+      ],
+      "cwd": "D:\\source_code\\backtrader",
+      "conftest_enabled": false,
+      "environment_override": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "exit_code": 0,
+      "counts": {
+        "tests": 602,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "source_pin_record": "run.json source_before equals result.json source_after (all 10 scope files): stable",
+      "artifacts": {
+        "junit.xml": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r7\\junit.xml",
+          "bytes": 99012,
+          "sha256": "C508D152B68F11A11E25C20B5D2BA7A4E163B9E3DC52359D5D66FD77DB29F1A7"
+        },
+        "run.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r7\\run.json",
+          "bytes": 6091,
+          "sha256": "AEC22FE5B9F66990C15127DAEDB8EC64E498A396BB105B1BB8A586B6F0519314"
+        },
+        "result.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r7\\result.json",
+          "bytes": 1924,
+          "sha256": "897DA1F5590B42C64686B19631B6BD6A86AB4045DDED6E7CAE21F0A1FF4EB407"
+        },
+        "stdout.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r7\\stdout.txt",
+          "bytes": 1305,
+          "sha256": "A99B4BCCC8DEEC5C024E563CBC45AA925782E210991625D412F3FD8690D697C6"
+        },
+        "stderr.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r7\\stderr.txt",
+          "bytes": 0,
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        }
+      }
+    },
+    {
+      "id": "r8",
+      "artifact_directory": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r8",
+      "command": [
+        "-m",
+        "pytest",
+        "--import-mode=importlib",
+        "-q",
+        "--junitxml=D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r8\\junit.xml",
+        "tests/unit/feeds/test_btapifeed.py::test_feed_start_logs_backfill_failure_and_continues",
+        "tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_refresh_account_logs_on_failure",
+        "tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_sync_positions_logs_on_failure",
+        "tests/unit/brokers/test_btapibroker_edge_cases.py::TestRefreshAccountLogging::test_sync_remote_open_orders_logs_on_failure"
+      ],
+      "cwd": "D:\\source_code\\backtrader",
+      "conftest_enabled": true,
+      "environment_override": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+      },
+      "exit_code": 0,
+      "counts": {
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "source_pin_record": "run.json source_before equals result.json source_after (all 10 scope files): stable",
+      "artifacts": {
+        "junit.xml": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r8\\junit.xml",
+          "bytes": 810,
+          "sha256": "39DA9FD451A8BD8254475E1B155D4BFB4CFCB37301C2B25ABB015D7027A78392"
+        },
+        "run.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r8\\run.json",
+          "bytes": 2694,
+          "sha256": "D48FDC73E28330137279C6D9AA52D909D0C465A38F1B6385979F20699ADF9ABA"
+        },
+        "result.json": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r8\\result.json",
+          "bytes": 1921,
+          "sha256": "0780E8A3B4B36B469ACE6DC80C7C82D9C6D96F5CFC4970DC55A7B5CBCC9B6A90"
+        },
+        "stdout.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r8\\stdout.txt",
+          "bytes": 647,
+          "sha256": "E0EC148E7DBB780873F3515C740A822A425D2003D7A56BF608051F308BDFEC79"
+        },
+        "stderr.txt": {
+          "path": "D:\\source_code\\backtrader\\.codex-tmp\\bt-recovery-v2-journal-20261016-r8\\stderr.txt",
+          "bytes": 0,
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        }
+      }
+    }
+  ],
+  "baseline_attribution": {
+    "worktree": "D:\\source_code\\backtrader\\.codex-tmp\\baseline-head-48bde5d76",
+    "revision": "48bde5d76bd666ce876763a613f27b92e9c62074",
+    "command_summary": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1, --noconftest, --import-mode=importlib, 19 files (the r7 selection minus the new V2 test file), no deselects.",
+    "exit_code": 1,
+    "counts": {
+      "tests": 608,
+      "failures": 14,
+      "errors": 4,
+      "skipped": 0,
+      "passed": 590
+    },
+    "nodes": [
+      {
+        "kind": "error",
+        "node": "tests/unit/brokers/test_btapibroker_edge_cases/TestRefreshAccountLogging::test_refresh_account_logs_on_failure"
+      },
+      {
+        "kind": "error",
+        "node": "tests/unit/brokers/test_btapibroker_edge_cases/TestRefreshAccountLogging::test_sync_positions_logs_on_failure"
+      },
+      {
+        "kind": "error",
+        "node": "tests/unit/brokers/test_btapibroker_edge_cases/TestRefreshAccountLogging::test_sync_remote_open_orders_logs_on_failure"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_iteration22::test_broker_update_between_ctp_snapshots_restarts_two_round_barrier"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_iteration22::test_ctp_order_defaults_to_explicit_gfd_and_routes_it"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_iteration22::test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[-1.0-buy-1502.0]"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_iteration22::test_ctp_shutdown_uses_fresh_opponent_limit_with_one_tick_protection[1.0-sell-1498.0]"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_iteration22::test_ctp_unknown_order_blocks_reopen_but_allows_risk_reduction"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_iteration22::test_replaying_the_same_complete_snapshot_cannot_unlock_reconciliation"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_iteration22::test_unknown_ctp_order_requires_two_complete_identical_reconciliation_rounds"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/brokers/test_btapibroker_managed_execution_projection::test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event"
+      },
+      {
+        "kind": "error",
+        "node": "tests/unit/feeds/test_btapifeed::test_feed_start_logs_backfill_failure_and_continues"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/stores/test_service_execution_adapter::test_accepted_intent_projects_the_provider_identity"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/stores/test_service_execution_adapter::test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/stores/test_service_execution_adapter::test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/stores/test_service_execution_recovery::test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/stores/test_service_execution_recovery::test_event_page_preserves_negative_cumulative_commission_rebate"
+      },
+      {
+        "kind": "failure",
+        "node": "tests/unit/stores/test_service_execution_recovery::test_event_receipt_projection_cursor_and_callback_pending_commit_together"
+      }
+    ],
+    "group_attribution": {
+      "introduced_by_r3_commit": [
+        "3x test_service_execution_recovery.py and 2x test_service_execution_adapter.py recovery nodes pass at r3 parent 4c316d342 and fail at HEAD 48bde5d76."
+      ],
+      "pre_existing_before_r3": [
+        "test_service_execution_adapter.py::test_accepted_intent_projects_the_provider_identity fails at 4c316d342 as well (stale legacy payload shape)."
+      ],
+      "pre_existing_ctp_at_head": [
+        "7x test_btapibroker_iteration22.py CTP/reconciliation nodes verified failing at HEAD."
+      ],
+      "pre_existing_other_at_head": [
+        "test_btapibroker_managed_execution_projection.py::test_real_facade_pre_dispatch_guard_emits_blocked_no_fill_event verified failing at HEAD."
+      ],
+      "noconftest_fixture_artifact": [
+        "3x TestRefreshAccountLogging and test_btapifeed.py::test_feed_start_logs_backfill_failure_and_continues error only under --noconftest (bt_caplog) and pass with conftest enabled (r8, 4 passed)."
+      ]
+    },
+    "note": "The 18 baseline non-passing nodes are exactly the 18 nodes deselected in r7; the WIP neither caused nor fixed them."
+  },
+  "wip_regression_trimmed": {
+    "found_by": "r6 extended run (238 tests)",
+    "test": "tests/unit/stores/test_service_strategy_account_book.py::test_missing_legacy_account_key_disables_only_the_financial_projection",
+    "before_trim": "strict _required_text(account_key) made the legacy-optional key mandatory; the test failed only with the WIP and passes at HEAD.",
+    "fix": "account_key remained an optional dataclass field populated into owner-book payloads; the legacy key stays optional at this layer; missing/different keys still fail closed only in the V2 owner-cut comparison (_require_matching_owner_cut).",
+    "after": "All tests of the file pass in r7; account_book sha256 moved from the r5 pin to the r4 final pin.",
+    "account_book_r5_pin": "23341F4F2F5583B411934EC6432354B46F3D737141246FF02FBF8F8F2B0E6CBB",
+    "account_book_r4_pin": "2FDDAEC2357E5BCAD2D83B301519F0172F7B734705B7F5952493BD4C35256FFA"
+  },
+  "limitations": [
+    "No independent static review of the r4 delta exists; r3's GO covered only the five r3 pins. The delta is flagged NOT_YET_REVIEWED.",
+    "18 non-passing nodes at the parent commit are excluded from r7 via explicit deselects; attribution is recorded under baseline_attribution.",
+    "r6 is retained unchanged as honest evidence of the pre-trim failure state (exit 1).",
+    "r5 was a focused 12-test run of the new V2 test file only.",
+    "Local SQLite/Broker component QA only; no ServiceHost, real provider/account, fresh-process recovery or full formal acceptance is established."
+  ]
+}
