@@ -1,0 +1,412 @@
+{
+  "schema": "iteration10-mig01-okx-market-provider-r262-v1",
+  "round": "R262",
+  "created_utc": "2026-10-17T00:08:01.654695+08:00",
+  "sdk_repository": "D:\\bt_api_py",
+  "sdk_branch": "dev",
+  "sdk_head_at_packet_freeze": "c61d6bcfc34e1781c6930f523195c9cbec5bc1e3",
+  "sdk_gitlinks_at_packet_freeze": {
+    "bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+    "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "bt_api_okx": "848b7fb77a496fe4f3f88707bfd4332983e084b6"
+  },
+  "source_scope_count": 9,
+  "source_scope": {
+    "package_commits": {
+      "bt_api_base": {
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+        "branch": "dev",
+        "head_before_scoped_commit": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+        "parent_gitlink_at_current_sdk_head": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+        "r261_parent_commit_incorporated": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+        "commit_message_proposal": "feat(mig01): drain OKX ticker events through market hub",
+        "commit_scope": [
+          {
+            "path": "src/bt_api_base/market_protocol.py",
+            "change_type": "modified",
+            "old_head_blob": {
+              "git_blob_oid": "888cdd800d2d16d25ed596fa302b76f6d513fcc4",
+              "size_bytes": 5880,
+              "sha256": "9ad1a16842dfee03587a815ecf4a9915559287c9ce995f6cff8df15c00309108"
+            },
+            "candidate": {
+              "size_bytes": 6811,
+              "sha256": "e054a93f55c88ac5a26bbb45cdf7abbb120241867b53ffb7c17e37d512260222"
+            }
+          },
+          {
+            "path": "tests/test_market_protocol.py",
+            "change_type": "modified",
+            "old_head_blob": {
+              "git_blob_oid": "5f376705e0a1142baead2fc2022db2381ff7b98f",
+              "size_bytes": 8485,
+              "sha256": "fb53f6a338e99b5d4df2b8ea7069e4b80fed084dd3fb4ee9528f77152a336607"
+            },
+            "candidate": {
+              "size_bytes": 9355,
+              "sha256": "a95ac2a9bf698addeb58c79663e87a4ccbc93c7ce97eaa881d72916517b2d169"
+            }
+          }
+        ],
+        "author_stage_or_commit": true,
+        "status": "COMMITTED_EXACT_SCOPE",
+        "parent_gitlink_at_packet_freeze": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "commit_parent": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+        "committed_head": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+        "index_empty_after_commit": true
+      },
+      "bt_api_gateway": {
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+        "branch": "dev",
+        "head_before_scoped_commit": "6d26789d9a03ad486c07153af1590be855b090a2",
+        "parent_gitlink_at_current_sdk_head": "6d26789d9a03ad486c07153af1590be855b090a2",
+        "r261_parent_commit_incorporated": "6d26789d9a03ad486c07153af1590be855b090a2",
+        "commit_message_proposal": "feat(mig01): drain OKX ticker events through market hub",
+        "commit_scope": [
+          {
+            "path": "README.md",
+            "change_type": "modified",
+            "old_head_blob": {
+              "git_blob_oid": "4315546db4ac45c64465c61cece773033e24c183",
+              "size_bytes": 12834,
+              "sha256": "46d701e725096f4faf8bb68efac741f8f2a5f655a4a5c2d12a0bb02a7bef343a"
+            },
+            "candidate": {
+              "size_bytes": 13931,
+              "sha256": "079046f1bbddd6903e8ad849ea56b81e8e4abdb1d4586c8bd5c9c572fac9aa7e"
+            }
+          },
+          {
+            "path": "src/bt_api_gateway/market_hub.py",
+            "change_type": "modified",
+            "old_head_blob": {
+              "git_blob_oid": "3ed85eee04cacea948d40af0fddf9c22725103b5",
+              "size_bytes": 53018,
+              "sha256": "68066602191877afc24c72623eb8f81d4defe7f093fbdb53d104cc68153675d3"
+            },
+            "candidate": {
+              "size_bytes": 58278,
+              "sha256": "e8c43699112b4e78d4f00d3214325bc448b0ff60aa00dd5642fcf40085b2c2c5"
+            }
+          },
+          {
+            "path": "tests/test_market_history_service.py",
+            "change_type": "modified",
+            "old_head_blob": {
+              "git_blob_oid": "7d5bd3e986dcf44d9c0223eef554d1bf91c9d15c",
+              "size_bytes": 12342,
+              "sha256": "cf0a9957145beae93ea42e7a43f8ec91aed504c3177e612efc8ecb84f0217ef1"
+            },
+            "candidate": {
+              "size_bytes": 12457,
+              "sha256": "62c48ed7df690c4c73c54cdf2da194f3a3909cb41e97c6bcc71746357eb65d8d"
+            }
+          },
+          {
+            "path": "tests/test_market_hub.py",
+            "change_type": "modified",
+            "old_head_blob": {
+              "git_blob_oid": "cf0e78d84f321ad472c8246c4dd576fa230f4b9e",
+              "size_bytes": 18724,
+              "sha256": "4cd397629746205433ad019e0a0f2ae0b9dff774c5517f94e2c58aa3a3d8d684"
+            },
+            "candidate": {
+              "size_bytes": 24658,
+              "sha256": "900f7e99c48970ae26c4fdbfce613a8ada0eaff32c8af5650d42aa93ae287805"
+            }
+          }
+        ],
+        "author_stage_or_commit": true,
+        "status": "COMMITTED_EXACT_SCOPE",
+        "parent_gitlink_at_packet_freeze": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "commit_parent": "6d26789d9a03ad486c07153af1590be855b090a2",
+        "committed_head": "147ef365706bebab383ec12c628be243b8e0b381",
+        "index_empty_after_commit": true
+      },
+      "bt_api_okx": {
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_okx",
+        "branch": "dev",
+        "head_before_scoped_commit": "848b7fb77a496fe4f3f88707bfd4332983e084b6",
+        "parent_gitlink_at_current_sdk_head": "848b7fb77a496fe4f3f88707bfd4332983e084b6",
+        "r261_parent_commit_incorporated": null,
+        "commit_message_proposal": "feat(mig01): drain OKX ticker events through market hub",
+        "commit_scope": [
+          {
+            "path": "src/bt_api_okx/market_provider.py",
+            "change_type": "added",
+            "old_head_blob": null,
+            "candidate": {
+              "size_bytes": 9759,
+              "sha256": "e98a3e1ec1691fb2710a72b6a045ba26dfd441e00b38c7c6edcafcb81731ebcc"
+            }
+          },
+          {
+            "path": "tests/test_market_provider.py",
+            "change_type": "added",
+            "old_head_blob": null,
+            "candidate": {
+              "size_bytes": 5077,
+              "sha256": "85120e51e89b55cbb500024b28c75e54a6d3e051134658683c7fdf3a444e6cd9"
+            }
+          }
+        ],
+        "author_stage_or_commit": true,
+        "status": "COMMITTED_EXACT_SCOPE",
+        "parent_gitlink_at_packet_freeze": "848b7fb77a496fe4f3f88707bfd4332983e084b6",
+        "commit_parent": "848b7fb77a496fe4f3f88707bfd4332983e084b6",
+        "committed_head": "7691ab439438e827da104de501aea380f70e4d9c",
+        "index_empty_after_commit": true
+      }
+    },
+    "root_source": {
+      "repository": "D:\\bt_api_py",
+      "path": "tests/integration/test_okx_ticker_market_provider_hub.py",
+      "change_type": "added",
+      "candidate": {
+        "size_bytes": 3973,
+        "sha256": "a5522808bd44bd60e4c7c4eb352eb63d30ce5782d0b3726eb579129171fe4a1e"
+      }
+    }
+  },
+  "post_r261_old_blob_reuse_checks": [
+    {
+      "package": "bt_api_base",
+      "path": "src/bt_api_base/market_protocol.py",
+      "r5_head_blob": {
+        "git_blob_oid": "888cdd800d2d16d25ed596fa302b76f6d513fcc4",
+        "size_bytes": 5880,
+        "sha256": "9ad1a16842dfee03587a815ecf4a9915559287c9ce995f6cff8df15c00309108"
+      },
+      "post_r261_head_blob": {
+        "git_blob_oid": "888cdd800d2d16d25ed596fa302b76f6d513fcc4",
+        "size_bytes": 5880,
+        "sha256": "9ad1a16842dfee03587a815ecf4a9915559287c9ce995f6cff8df15c00309108"
+      },
+      "same_old_blob_after_r261": true
+    },
+    {
+      "package": "bt_api_base",
+      "path": "tests/test_market_protocol.py",
+      "r5_head_blob": {
+        "git_blob_oid": "5f376705e0a1142baead2fc2022db2381ff7b98f",
+        "size_bytes": 8485,
+        "sha256": "fb53f6a338e99b5d4df2b8ea7069e4b80fed084dd3fb4ee9528f77152a336607"
+      },
+      "post_r261_head_blob": {
+        "git_blob_oid": "5f376705e0a1142baead2fc2022db2381ff7b98f",
+        "size_bytes": 8485,
+        "sha256": "fb53f6a338e99b5d4df2b8ea7069e4b80fed084dd3fb4ee9528f77152a336607"
+      },
+      "same_old_blob_after_r261": true
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "README.md",
+      "r5_head_blob": {
+        "git_blob_oid": "4315546db4ac45c64465c61cece773033e24c183",
+        "size_bytes": 12834,
+        "sha256": "46d701e725096f4faf8bb68efac741f8f2a5f655a4a5c2d12a0bb02a7bef343a"
+      },
+      "post_r261_head_blob": {
+        "git_blob_oid": "4315546db4ac45c64465c61cece773033e24c183",
+        "size_bytes": 12834,
+        "sha256": "46d701e725096f4faf8bb68efac741f8f2a5f655a4a5c2d12a0bb02a7bef343a"
+      },
+      "same_old_blob_after_r261": true
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "src/bt_api_gateway/market_hub.py",
+      "r5_head_blob": {
+        "git_blob_oid": "3ed85eee04cacea948d40af0fddf9c22725103b5",
+        "size_bytes": 53018,
+        "sha256": "68066602191877afc24c72623eb8f81d4defe7f093fbdb53d104cc68153675d3"
+      },
+      "post_r261_head_blob": {
+        "git_blob_oid": "3ed85eee04cacea948d40af0fddf9c22725103b5",
+        "size_bytes": 53018,
+        "sha256": "68066602191877afc24c72623eb8f81d4defe7f093fbdb53d104cc68153675d3"
+      },
+      "same_old_blob_after_r261": true
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "tests/test_market_history_service.py",
+      "r5_head_blob": {
+        "git_blob_oid": "7d5bd3e986dcf44d9c0223eef554d1bf91c9d15c",
+        "size_bytes": 12342,
+        "sha256": "cf0a9957145beae93ea42e7a43f8ec91aed504c3177e612efc8ecb84f0217ef1"
+      },
+      "post_r261_head_blob": {
+        "git_blob_oid": "7d5bd3e986dcf44d9c0223eef554d1bf91c9d15c",
+        "size_bytes": 12342,
+        "sha256": "cf0a9957145beae93ea42e7a43f8ec91aed504c3177e612efc8ecb84f0217ef1"
+      },
+      "same_old_blob_after_r261": true
+    },
+    {
+      "package": "bt_api_gateway",
+      "path": "tests/test_market_hub.py",
+      "r5_head_blob": {
+        "git_blob_oid": "cf0e78d84f321ad472c8246c4dd576fa230f4b9e",
+        "size_bytes": 18724,
+        "sha256": "4cd397629746205433ad019e0a0f2ae0b9dff774c5517f94e2c58aa3a3d8d684"
+      },
+      "post_r261_head_blob": {
+        "git_blob_oid": "cf0e78d84f321ad472c8246c4dd576fa230f4b9e",
+        "size_bytes": 18724,
+        "sha256": "4cd397629746205433ad019e0a0f2ae0b9dff774c5517f94e2c58aa3a3d8d684"
+      },
+      "same_old_blob_after_r261": true
+    },
+    {
+      "package": "bt_api_okx",
+      "path": "src/bt_api_okx/market_provider.py",
+      "r5_head_blob": null,
+      "post_r261_head_blob": null,
+      "same_old_blob_after_r261": false
+    },
+    {
+      "package": "bt_api_okx",
+      "path": "tests/test_market_provider.py",
+      "r5_head_blob": null,
+      "post_r261_head_blob": null,
+      "same_old_blob_after_r261": false
+    }
+  ],
+  "excluded_concurrent_gateway_paths": [
+    "src/bt_api_gateway/session_owner.py",
+    "tests/test_session_owner.py"
+  ],
+  "r5_author_qa": {
+    "classification": "AUTHOR_QA",
+    "executed_by": "author",
+    "original_execution_spec": "D:\\bt_api_py\\.codex-tmp\\iteration10-mig01-okx-market-provider-root-spec-r5-optional-poll.json",
+    "frozen_spec_sha256": "ce961cd600a256103344bad4a763892981f5b1c23e8e4a01843dc2c290c022bf",
+    "raw_output_directory": "D:\\temp\\iteration10-mig01-okx-market-provider-root-20261016-r5-optional-poll",
+    "source_count": 12,
+    "pytest_exit": 0,
+    "selectors": [
+      "bt_api/bt_api_gateway/tests/test_market_hub.py::test_manual_publish_provider_without_poll_remains_supported",
+      "bt_api/bt_api_gateway/tests/test_market_hub.py::test_maintain_publishes_provider_events_on_owner_thread_with_existing_wire_shape",
+      "bt_api/bt_api_gateway/tests/test_market_hub.py::test_maintain_uses_a_finite_round_robin_provider_poll_budget",
+      "bt_api/bt_api_gateway/tests/test_market_hub.py::test_maintain_drops_stale_generation_events_before_replay_or_publication",
+      "tests/integration/test_okx_ticker_market_provider_hub.py::test_okx_ticker_queue_publishes_through_the_service_market_event_contract"
+    ],
+    "actual_tests": 5,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "warnings": 1,
+    "warning": "existing PytestUnknownMarkWarning for pytest.mark.integration",
+    "stderr_bytes": 0,
+    "evidence_level": "SOURCE_FAKE_OKX_TICKER_TO_SERVICE_V2_HUB_ONLY",
+    "root_head_at_execution": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+    "root_head_after_r253_review": "74894b450bef19fe8f7bf20302b6ed2cd41718fb",
+    "root_head_at_packet_freeze": "c61d6bcfc34e1781c6930f523195c9cbec5bc1e3",
+    "head_drift_disposition": "accepted historical run; no metadata rebind or retest per Root",
+    "source_inputs": [
+      {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-focused-qa.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+        "size_bytes": 10,
+        "sha256": "578fc1cd12d8d642df8eff41d71d5119626e9f88f21fafadba6b1092ac840a93"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\market_protocol.py",
+        "size_bytes": 6811,
+        "sha256": "e054a93f55c88ac5a26bbb45cdf7abbb120241867b53ffb7c17e37d512260222"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_base\\tests\\test_market_protocol.py",
+        "size_bytes": 9355,
+        "sha256": "a95ac2a9bf698addeb58c79663e87a4ccbc93c7ce97eaa881d72916517b2d169"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\README.md",
+        "size_bytes": 13931,
+        "sha256": "079046f1bbddd6903e8ad849ea56b81e8e4abdb1d4586c8bd5c9c572fac9aa7e"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\market_hub.py",
+        "size_bytes": 58278,
+        "sha256": "e8c43699112b4e78d4f00d3214325bc448b0ff60aa00dd5642fcf40085b2c2c5"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\tests\\test_market_history_service.py",
+        "size_bytes": 12457,
+        "sha256": "62c48ed7df690c4c73c54cdf2da194f3a3909cb41e97c6bcc71746357eb65d8d"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\tests\\test_market_hub.py",
+        "size_bytes": 24658,
+        "sha256": "900f7e99c48970ae26c4fdbfce613a8ada0eaff32c8af5650d42aa93ae287805"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_market_observation.py",
+        "size_bytes": 10213,
+        "sha256": "a387e40b98d35a4d7cc5046c32ded64e4ec7e93535cc664779233e7d396e858e"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_okx\\src\\bt_api_okx\\market_provider.py",
+        "size_bytes": 9759,
+        "sha256": "e98a3e1ec1691fb2710a72b6a045ba26dfd441e00b38c7c6edcafcb81731ebcc"
+      },
+      {
+        "path": "D:\\bt_api_py\\bt_api\\bt_api_okx\\tests\\test_market_provider.py",
+        "size_bytes": 5077,
+        "sha256": "85120e51e89b55cbb500024b28c75e54a6d3e051134658683c7fdf3a444e6cd9"
+      },
+      {
+        "path": "D:\\bt_api_py\\tests\\integration\\test_okx_ticker_market_provider_hub.py",
+        "size_bytes": 3973,
+        "sha256": "a5522808bd44bd60e4c7c4eb352eb63d30ce5782d0b3726eb579129171fe4a1e"
+      }
+    ]
+  },
+  "independent_static_review": {
+    "reviewer": "/root/resume_mig03_gap/mig03_integration_static_review",
+    "result": "GO_STATIC",
+    "tests_run_by_reviewer": false,
+    "summary": "Independent static review: GO_STATIC. The twelve source pins match the R5 spec. GatewayMarketHub accepts manual providers with subscribe/unsubscribe only; polling is optional and used only when callable. Without poll, maintain creates no synthetic events and explicit owner-thread publish remains supported. Finite budgets, round-robin polling, stale-generation rejection, and the OKX adapter/integration path remain intact. Review performed read-only; no QA or Host run. The R5 root-HEAD guard was from the execution baseline; subsequent R253/R254 commits were evidence-only and do not change the R5 source result. Root explicitly accepted the historical R5 run without metadata rebind or retest."
+  },
+  "raw_archive": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-okx-market-provider-r262-20261017/raw-evidence.zip",
+    "size_bytes": 9644,
+    "sha256": "9bba726a7d1c58de5bf534cc18459999611e576919b3f8fe5bd132cb81624e37",
+    "member_count": 13
+  },
+  "delivery_limits": [
+    "This author QA uses synthetic provider/queue events and a local Service v2 Hub projection only.",
+    "No production ServiceHost bootstrap, provider factory, websocket, account, or external exchange is exercised.",
+    "This round does not claim formal MIG01 completion or production OKX deployment readiness.",
+    "R3/R4 failed or intermediate runs remain preserved in their original output directories; R262 uses the accepted R5 five-node author run only."
+  ],
+  "round_record": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-okx-market-provider-r262-20261017/round-record.md",
+    "size_bytes": 4241,
+    "sha256": "1997b293bd7422d8fd2e07998b34c55cde01b494ba6809346e680c0fe815df88"
+  },
+  "sdk_head_after_r261_parent_commit": "116e83ea4b44fad03dd4d7dd5abba50da64f09f2",
+  "sdk_gitlinks_after_r261_parent_commit": {
+    "bt_api_base": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+    "bt_api_gateway": "6d26789d9a03ad486c07153af1590be855b090a2",
+    "bt_api_okx": "848b7fb77a496fe4f3f88707bfd4332983e084b6"
+  },
+  "delivery_package_commits": {
+    "bt_api_base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+    "bt_api_gateway": "147ef365706bebab383ec12c628be243b8e0b381",
+    "bt_api_okx": "7691ab439438e827da104de501aea380f70e4d9c"
+  },
+  "delivery_package_parents": {
+    "bt_api_base": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+    "bt_api_gateway": "6d26789d9a03ad486c07153af1590be855b090a2",
+    "bt_api_okx": "848b7fb77a496fe4f3f88707bfd4332983e084b6"
+  },
+  "delivery_sdk_head_before_parent_commit": "116e83ea4b44fad03dd4d7dd5abba50da64f09f2",
+  "delivery_sdk_index_before_parent_commit_empty": true
+}
