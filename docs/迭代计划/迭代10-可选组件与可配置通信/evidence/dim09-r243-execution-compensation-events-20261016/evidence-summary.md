@@ -1,0 +1,9 @@
+# Iteration 10 R243: Execution group compensation event phases
+
+Execution package `dev` commit `cb32499eee02ab6cadaa62f4c86c14ed9126e992` (parent `cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e`) contains exactly two accepted paths: `src/bt_api_execution/group_store.py` and `tests/test_group_store_compensation_events.py`. Root's postcommit receipt verifies those exact checkout hashes and an empty Execution index. The SDK working tree currently reflects the accepted Execution gitlink; this evidence packet adds three SDK evidence files and does not include the progress tracker.
+
+The focused author run passed 5 tests in 0.69 seconds with exit code 0 and no warnings. It used Python 3.14.2 with Execution and `bt_api_base` source directories on `PYTHONPATH`, and ran only `tests/test_group_store_compensation_events.py`; no Host, provider, network, or account operations ran. Two preceding collection-only invocations lacked source paths and are recorded as excluded setup diagnostics.
+
+The author receipt and stdout in this archive were assembled after the run from the original `functions.exec` tool result and are marked as after-captured transcriptions. No original raw stdout file was retained. Root's exact scoped commit spec and postcommit receipt are included with the accepted source snapshots.
+
+The store persists four compensation phase event types, permits only compensation plan/status observations to move `RECOVERY_REQUIRED` to `UNWINDING`, and constrains each phase to its valid group-state pairings. Its integrity check uses per-event SHA-256 digests on reads; this round does not claim predecessor-linked cryptographic hash chaining. This is an Execution storage component result and adds no formal DIM09 pass by itself.

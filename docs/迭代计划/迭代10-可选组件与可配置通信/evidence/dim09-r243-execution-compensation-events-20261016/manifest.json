@@ -1,0 +1,24 @@
+{
+  "schema": "iteration10-sdk-evidence-packet-v1",
+  "round": "R243",
+  "evidence_level": "EXECUTION_STORE_AUTHOR_FOCUSED_QA",
+  "execution_commit": "cb32499eee02ab6cadaa62f4c86c14ed9126e992",
+  "execution_parent": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+  "author_output_capture": "AFTER_CAPTURED_TRANSCRIPTION_NOT_RAW_FILE",
+  "files": {
+    "raw-evidence.zip": {
+      "bytes": 14636,
+      "sha256": "728c518e63e49c6593b0f427cbfc3fb9523c09cc771439378e1bca10e99be18d"
+    },
+    "evidence-summary.md": {
+      "bytes": 1736,
+      "sha256": "f07cf9bfcbad14223e4b46c986404a35c857a85b03d290a681353bffcc68f0c7"
+    }
+  },
+  "sdk_commit_scope": [
+    "bt_api/bt_api_execution (gitlink to cb32499eee02ab6cadaa62f4c86c14ed9126e992)",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-r243-execution-compensation-events-20261016/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-r243-execution-compensation-events-20261016/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-r243-execution-compensation-events-20261016/evidence-summary.md"
+  ]
+}
