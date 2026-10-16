@@ -32,6 +32,7 @@ _STRATEGY_MOUNTS: Final[frozenset[str]] = frozenset(
         "broker.orders",
         "broker.order_query",
         "broker.order_groups",
+        "broker.group_monitor",
         "risk.read_model",
         "runtime.telemetry",
     }
@@ -89,6 +90,7 @@ _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
 _PORTFOLIO_MOUNTS: Final[frozenset[str]] = frozenset(
     {
         "broker.order_groups",
+        "broker.group_monitor",
         "application.order_groups",
         "application.risk_analysis",
     }
@@ -157,7 +159,14 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
             "upstream.owner_control",
         }
     ),
-    "monitor": frozenset({"runtime.telemetry", "application.monitor", "upstream.telemetry"}),
+    "monitor": frozenset(
+        {
+            "runtime.telemetry",
+            "broker.group_monitor",
+            "application.monitor",
+            "upstream.telemetry",
+        }
+    ),
 }
 
 _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {

@@ -1,0 +1,269 @@
+{
+  "schema": "iteration10-sdk-component-delivery-manifest-v1",
+  "round_id": "R221",
+  "artifact": "SDK strategy group read-only monitor mount",
+  "repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "head": "719a2fe26cc32defc495ea138bce3f11f72ee934",
+    "parent": "b9e70f24d28d9f95fc9242b36a98d9351a9069b7",
+    "base_protocol_repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+    "base_protocol_commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "scope": "Strategy-only broker.group_monitor mount, portfolio-scoped through normal parse_client_config -> validate_deployment -> ServiceClientRuntime -> ServiceRegistry. Read-only monitor.read_after only; existing application.monitor role/query/control mapping remains unchanged.",
+  "source_files": [
+    {
+      "bytes": 48413,
+      "sha256": "7e41500937a333d9a5b7627ab4cb2be1a959aa31d70f3539fa63d05c789854cb",
+      "path": "bt_api_py/service_config.py"
+    },
+    {
+      "bytes": 22476,
+      "sha256": "dacae8d98580968546587230013a0ed5c851f1d31ffc4d7efb8dfb5c58f5b153",
+      "path": "bt_api_py/service_deployment.py"
+    },
+    {
+      "bytes": 79884,
+      "sha256": "9fb534fff4366113242ec8456b09a7e6588db8d4487d70887c72334cde4f4aa7",
+      "path": "bt_api_py/service_runtime.py"
+    },
+    {
+      "bytes": 12344,
+      "sha256": "1ae6e96d81eeb17c250dc6033eb8ee81be96c3e75469701e7e42c52b2797251a",
+      "path": "tests/unit/test_service_strategy_group_monitor_mount.py"
+    }
+  ],
+  "evidence_level": "FIXED_SOURCE_SDK_STRATEGY_GROUP_MONITOR_READONLY_REGISTRY_AUTHORIZATION_SYNTHETIC_TRANSPORT_NO_HOST",
+  "acceptance": {
+    "distinct_contract_nodes": 4,
+    "pass_count": 4,
+    "formal_bt_case_increment": 0,
+    "normal_cerebro_host_acceptance": false,
+    "provider_or_account": false,
+    "host": false,
+    "qa_repeated": false,
+    "source_review": "GO_STATIC",
+    "source_review_scope": "R2 test delta and actual frozen WireEnvelope reply shape; no QA, collection, or Host"
+  },
+  "runs": [
+    {
+      "id": "R1",
+      "spec": "D:\\bt_api_py\\.codex-tmp\\strategy-group-monitor-focused-qa-root-r1-20261016.json",
+      "spec_sha256": "668a946bd5df7192087a807df9e799e75f70176b1a401be436f24a5d81b560c5",
+      "source_manifest": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\source-manifest.json",
+      "source_manifest_sha256": "fc470c84ddc5af2b838c9e852a06e3ef20cdde863427efcbb4a70c1464241382",
+      "output": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output",
+      "pytest_exit": 1,
+      "tests": 4,
+      "passed": 3,
+      "failed": 1,
+      "skipped": 0,
+      "junit_suite_seconds": 1.017,
+      "stdout_total_seconds": 1.34,
+      "failure": "Positive runtime reply comparison expected mutable dict/list; actual WireEnvelope reply is immutable mapping/tuple. Preserved as consumed history; not rewritten.",
+      "source_count": 301,
+      "sources_unchanged": true,
+      "head": "719a2fe26cc32defc495ea138bce3f11f72ee934"
+    },
+    {
+      "id": "R2",
+      "spec": "D:\\bt_api_py\\.codex-tmp\\strategy-group-monitor-focused-qa-root-r2-20261016.json",
+      "spec_sha256": "e189cf96eeecf3479b84acc7ae28a1801e122f70c45d1e38b5896c384c0ac7be",
+      "source_manifest": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\source-manifest.json",
+      "source_manifest_sha256": "ca7490d97006d9b18b050ac33fa8cbf89aea4084b710d85e40f5b49d5275b0b7",
+      "output": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2",
+      "pytest_exit": 0,
+      "tests": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "junit_suite_seconds": 0.787,
+      "testcase_seconds": 0.053,
+      "stdout_total_seconds": 1.13,
+      "source_count": 301,
+      "sources_unchanged": true,
+      "head": "719a2fe26cc32defc495ea138bce3f11f72ee934"
+    }
+  ],
+  "raw_evidence": {
+    "path": "raw-evidence.zip",
+    "bytes": 95963,
+    "sha256": "32d1ef8a1303b3c615efce07a1e0d0a5a42b4e8b29930b79151efe419a858c6d",
+    "member_count": 22,
+    "verified_member_count": 22,
+    "members": [
+      {
+        "run": "R1",
+        "zip_member": "R1/command.json",
+        "bytes": 1454,
+        "sha256": "a61ed14a4ca5d0a7dafbc1160470ef37ad11eae9de32c2345e3b9eff1309e10a",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\command.json"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\exit.txt"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/junit.xml",
+        "bytes": 1372,
+        "sha256": "b0b68a58199593b042b8acca8edc1fd19353014b23ba6dc2912d02a6fd64247d",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\junit.xml"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/result.json",
+        "bytes": 646,
+        "sha256": "931e075668667b4524f45b8435b63aa0fb6be39d5cef97b4f147e4969e324d27",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\result.json"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\runner.py"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/running.json",
+        "bytes": 76,
+        "sha256": "eb3b2468cbd146c644c0613a531ac662eea3bae88ed049a1de8991e84cc99057",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\running.json"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/source-after.json",
+        "bytes": 60211,
+        "sha256": "a0f79214da1476631b9983cfec4bf8f17b0b204b0b6f84194f007b1f6494d9b4",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\source-after.json"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/source-before.json",
+        "bytes": 60211,
+        "sha256": "a0f79214da1476631b9983cfec4bf8f17b0b204b0b6f84194f007b1f6494d9b4",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\source-before.json"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/spec.json",
+        "bytes": 63907,
+        "sha256": "668a946bd5df7192087a807df9e799e75f70176b1a401be436f24a5d81b560c5",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\spec.json"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\stderr.log"
+      },
+      {
+        "run": "R1",
+        "zip_member": "R1/stdout.log",
+        "bytes": 910,
+        "sha256": "11dd0cac916de71432c0a5cdf26cdae652b49f2d58b92753fe5a410acb2d28bf",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r1\\root-qa-output\\stdout.log"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/command.json",
+        "bytes": 1534,
+        "sha256": "62cd256702b08dfaf1400aaf47a2177ee55986d3f556dc89ac8e7098318d391c",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\command.json"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\exit.txt"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/junit.xml",
+        "bytes": 383,
+        "sha256": "a74bfc66caae8e0591b3401c54231297186a06c6a56eed40a44e6d2584eb4c76",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\junit.xml"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/result.json",
+        "bytes": 646,
+        "sha256": "c00e0998037a1a903d2cac7a427cbea15630b2a11aeb75626c2ac630b0d620aa",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\result.json"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\runner.py"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/running.json",
+        "bytes": 76,
+        "sha256": "20681ebe5acc5482d6feb6fff2cc6dff9a351fa1658129327e790d6361377734",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\running.json"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/source-after.json",
+        "bytes": 60211,
+        "sha256": "9ccc65827a4204440ea250c1ba2d25ed08961f7629474efeef906360d9cceb40",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\source-after.json"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/source-before.json",
+        "bytes": 60211,
+        "sha256": "9ccc65827a4204440ea250c1ba2d25ed08961f7629474efeef906360d9cceb40",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\source-before.json"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/spec.json",
+        "bytes": 63983,
+        "sha256": "e189cf96eeecf3479b84acc7ae28a1801e122f70c45d1e38b5896c384c0ac7be",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\spec.json"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\stderr.log"
+      },
+      {
+        "run": "R2",
+        "zip_member": "R2/stdout.log",
+        "bytes": 219,
+        "sha256": "e2149178a5b23dcfdbc2071dd0fe6794a6646ed8c4a69e8415c6b6671ad8d745",
+        "source_path": "D:\\temp\\iteration10-strategy-group-monitor-sdk-source-20261016-r2\\root-qa-output-r2\\stdout.log"
+      }
+    ]
+  },
+  "round_record": "round-record.md",
+  "root_verification": {
+    "accepted_nodes": [
+      "test_strategy_group_monitor_requires_portfolio_and_keeps_role_and_alias_fences",
+      "test_strategy_group_monitor_rejects_non_read_after_requests[monitor.query]",
+      "test_strategy_group_monitor_rejects_non_read_after_requests[telemetry.snapshot]",
+      "test_strategy_group_monitor_runs_through_deployment_runtime_and_registry"
+    ],
+    "r1_passing_test_functions_unchanged": [
+      "test_strategy_group_monitor_requires_portfolio_and_keeps_role_and_alias_fences",
+      "test_strategy_group_monitor_rejects_non_read_after_requests[monitor.query]",
+      "test_strategy_group_monitor_rejects_non_read_after_requests[telemetry.snapshot]"
+    ],
+    "raw_archive_members_verified": 22,
+    "accepted_tests_not_repeated_for_delivery": true,
+    "formal_pass_count": 39,
+    "delivery_parent": "719a2fe26cc32defc495ea138bce3f11f72ee934"
+  }
+}

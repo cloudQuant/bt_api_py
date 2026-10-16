@@ -106,6 +106,7 @@ _DEFAULT_ACCOUNT_READ_OPERATIONS = frozenset(
     {"account.read_after", "account.snapshot", "account.head"}
 )
 _DEFAULT_TELEMETRY_INGRESS_OPERATIONS = frozenset({"telemetry.append"})
+_GROUP_MONITOR_OPERATIONS = frozenset({"monitor.read_after"})
 _GROUP_ORDER_ENTRY_OPERATIONS = frozenset(
     {"orders.submit_group_leg", "orders.resolve_group_leg"}
 )
@@ -349,6 +350,8 @@ class ServiceClientRuntime:
         self._requested_operations = dict(requested_operations or {})
         for mount, operations in self._requested_operations.items():
             if mount not in MOUNT_PORTS or type(operations) is not frozenset or not operations:
+                raise ServiceRuntimeError("INVALID_ACTION_REQUEST")
+            if mount == "broker.group_monitor" and not operations <= _GROUP_MONITOR_OPERATIONS:
                 raise ServiceRuntimeError("INVALID_ACTION_REQUEST")
             ports = MOUNT_PORTS[mount] + OPTIONAL_MOUNT_PORTS.get(mount, ())
             allowed = frozenset().union(*(PORT_OPERATIONS[p] for p in ports))
@@ -1232,6 +1235,10 @@ class ServiceClientRuntime:
             # keep the generic telemetry operation unless they explicitly opt
             # in to events.append through requested_operations.
             operations = operations.intersection(_DEFAULT_TELEMETRY_INGRESS_OPERATIONS)
+        elif binding["mount"] == "broker.group_monitor":
+            # Strategy group monitoring is an explicitly read-only projection.
+            # Do not inherit the broader application monitor query surface.
+            operations = operations.intersection(_GROUP_MONITOR_OPERATIONS)
         if not operations:
             raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         # Risk-only owners may expose submit without a cancel implementation.
