@@ -1,0 +1,219 @@
+{
+  "_schema": "bt_api_py-dev-commit-spec-v1",
+  "_status": "DRAFT_FOR_ROOT_REVIEW; NOT_STAGED; NOT_COMMITTED",
+  "_round": 220,
+  "_repository": "D:/bt_api_py",
+  "_branch": "dev",
+  "_delivery_parent_head": "b9e70f24d28d9f95fc9242b36a98d9351a9069b7",
+  "_accepted_evidence_level": "ROOT_FOCUSED_SYNTHETIC_MIG03_HANDOFF_INTEGRATION_WITH_TWO_WRITE_BARRIER_CASES; NOT_FORMAL_MIG03_PASS",
+  "_commit_scope_paths": [
+    "bt_api_py/service_registry.py",
+    "tests/unit/test_service_migration_integration.py",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-handoff-query-barriers-20261016/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-handoff-query-barriers-20261016/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-handoff-query-barriers-20261016/round-record.md"
+  ],
+  "_candidate_files": {
+    "bt_api_py/service_registry.py": {
+      "sha256": "6872674be06f2c143b6116549b7d92257f420ce03952c18473725a0a7ddd1375",
+      "bytes": 104956
+    },
+    "tests/unit/test_service_migration_integration.py": {
+      "sha256": "0e7ba53e067cdee90c175c51436525e37d14a4a0bd19e76f6374963826047178",
+      "bytes": 60808
+    }
+  },
+  "_tracked_barrier_test": {
+    "path": "tests/unit/test_service_migration_write_barrier.py",
+    "current_worktree_status": "clean; not modified in R220",
+    "current_sha256": "643fa007a9bce80a9e291c9e1515ab718e07cc9c62a1236938f6bf769a2f33d2",
+    "note": "The R2 barrier cases are nodes in test_service_migration_integration.py. This separate tracked file is not modified or included in R220 scope."
+  },
+  "_qa": {
+    "r2": {
+      "output": "D:/temp/iteration10-mig03-handoff-query-barriers-root-20261016-r2",
+      "pytest_exit": 1,
+      "junit_tests": 3,
+      "junit_failures": 1,
+      "junit_skipped": 0,
+      "barrier_passed_nodes": [
+        "test_tracked_account_read_seals_only_for_exact_true_delivery_flag",
+        "test_risk_snapshot_seals_before_persistent_reservation_expiry_query"
+      ],
+      "integration_fixture_failure": "test_offline_import_handoff_preserves_state_and_rebuilds_expired_cursor failed in the child source-origin assertion because the drill origin checker expected canonical Risk while the fixed accepted Risk export was loaded. This was a test-source-origin binding failure; do not classify as a production migration failure or a suite pass.",
+      "stdout_sha256": "53917da9e2cef707a678567eb76d64d17a5160c2867541362a9ac6bcc4802f1a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_pin_count": 121,
+      "sources_unchanged": true,
+      "heads_before_after": {
+        "D:\\bt_api_py": "f29db99b3bcee887b75603c5f3f1bce3692023e8",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "dc30c1c118cf587538150fc5016c8956e30c60a9"
+      }
+    },
+    "r7": {
+      "output": "D:/temp/iteration10-mig03-handoff-query-barriers-root-20261016-r7",
+      "pytest_exit": 0,
+      "junit_tests": 1,
+      "junit_failures": 0,
+      "junit_skipped": 0,
+      "summary": "1 passed in 11.26s",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_pin_count": 372,
+      "sources_unchanged": true,
+      "heads_before_after": {
+        "D:\\bt_api_py": "a6f220b9b5bdeae313f7324a86ee7a2c53cd10ee",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc"
+      },
+      "passed_node": "test_offline_import_handoff_preserves_state_and_rebuilds_expired_cursor"
+    }
+  },
+  "_historical_failed_attempts_preserved": [
+    "D:/temp/iteration10-mig03-handoff-query-barriers-root-20261016-r3",
+    "D:/temp/iteration10-mig03-handoff-query-barriers-root-20261016-r4",
+    "D:/temp/iteration10-mig03-handoff-query-barriers-root-20261016-r5",
+    "D:/temp/iteration10-mig03-handoff-query-barriers-root-20261016-r6"
+  ],
+  "_limitations": [
+    "Two R2 barrier test nodes passed; R2 as a whole exited 1 due to the integration source-origin fixture failure described above.",
+    "R7 ran only the integration node. No second barrier-node execution is claimed in R7.",
+    "Evidence is synthetic local SQLite and process integration only. It does not establish a real deployment/provider/account migration or formal MIG03 acceptance.",
+    "The fixed source-origin wrapper checks the expected source file paths for the thirteen symbols used by the test; the test result does not prove all migration boundaries, consumers, journals, or state categories are inventoried.",
+    "R3-R6 failed attempt output directories are retained in place and are not overwritten or included as successful evidence."
+  ],
+  "_raw_archive_members": {
+    "qa/r2/command.json": {
+      "sha256": "9cf1ce7dbf177415be9c6318c8c1b0721d7b88f4407b2f7daea727cc61d84d3d",
+      "bytes": 1628
+    },
+    "qa/r2/exit.txt": {
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04",
+      "bytes": 3
+    },
+    "qa/r2/junit.xml": {
+      "sha256": "9a49c623614a1a2bdff2fd19554620c279b724f99ef0e6e702da7e193c06ff77",
+      "bytes": 4740
+    },
+    "qa/r2/result.json": {
+      "sha256": "09b03bba7b9ae17b9a5915b0ad3352674ed7a4fb84ac497d42860c850527a53d",
+      "bytes": 1355
+    },
+    "qa/r2/runner.py": {
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "bytes": 3204
+    },
+    "qa/r2/running.json": {
+      "sha256": "08cb9c916b8658264f387ba1bba199002e485aae89b079bed42693b338c2fa7a",
+      "bytes": 76
+    },
+    "qa/r2/source-after.json": {
+      "sha256": "2e75a70a05c911153ebbdb9d9ce93ebfee362d9fbcb6f01b81aa947c6edec5e6",
+      "bytes": 16432
+    },
+    "qa/r2/source-before.json": {
+      "sha256": "2e75a70a05c911153ebbdb9d9ce93ebfee362d9fbcb6f01b81aa947c6edec5e6",
+      "bytes": 16432
+    },
+    "qa/r2/spec.json": {
+      "sha256": "9af31babca1847ace182f7b2dd39db67748d2b19ac2c0c29cbf41d27bc6c266b",
+      "bytes": 22733
+    },
+    "qa/r2/stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "qa/r2/stdout.log": {
+      "sha256": "53917da9e2cef707a678567eb76d64d17a5160c2867541362a9ac6bcc4802f1a",
+      "bytes": 5202
+    },
+    "qa/r7/command.json": {
+      "sha256": "1494a0b77aa357dc4c0d815e4367cbf963dc4596b1fecd5f61a6c89b602a2520",
+      "bytes": 2096
+    },
+    "qa/r7/exit.txt": {
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "bytes": 3
+    },
+    "qa/r7/junit.xml": {
+      "sha256": "9e568bc5c17ad92780427f2330cd78139a106c1c236880b76cf3d78c377e17a8",
+      "bytes": 331
+    },
+    "qa/r7/result.json": {
+      "sha256": "ea4ddc78e0e4b037c85857cc3f263b44e4efe6a9142595708edea8906993fe14",
+      "bytes": 1329
+    },
+    "qa/r7/runner.py": {
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "bytes": 3204
+    },
+    "qa/r7/running.json": {
+      "sha256": "bcd4b4d48ed7c7f810f37088fd08d98ce53623a292d79643b6724c0aab31be0b",
+      "bytes": 76
+    },
+    "qa/r7/source-after.json": {
+      "sha256": "d88c1bfbd428000c2e169b382ad91d7940efb8e5197adc01d6047548e009c57c",
+      "bytes": 67145
+    },
+    "qa/r7/source-before.json": {
+      "sha256": "d88c1bfbd428000c2e169b382ad91d7940efb8e5197adc01d6047548e009c57c",
+      "bytes": 67145
+    },
+    "qa/r7/spec.json": {
+      "sha256": "a248264641707474f90e6edebf0cbdfa45be138ebb8e1172ecdc37e1b29fcd33",
+      "bytes": 191008
+    },
+    "qa/r7/stderr.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "qa/r7/stdout.log": {
+      "sha256": "64335e2a7a53e4ae0bc0b006f78d69c6b7e796cb4e9105ee6241849cbf24c521",
+      "bytes": 202
+    },
+    "source/bt_api_py/service_registry.py": {
+      "sha256": "6872674be06f2c143b6116549b7d92257f420ce03952c18473725a0a7ddd1375",
+      "bytes": 104956
+    },
+    "source/tests/unit/test_service_migration_integration.py": {
+      "sha256": "0e7ba53e067cdee90c175c51436525e37d14a4a0bd19e76f6374963826047178",
+      "bytes": 60808
+    },
+    "source-context/r2-executed/tests/unit/test_service_migration_integration.py": {
+      "sha256": "0ef4bf71921df97677a3ea6434b2215598bf319fc660747824a0beede168d0bb",
+      "bytes": 52944
+    }
+  },
+  "_archive_sha256": "8f0719aaeb25334f22e72df980270f63c3e168fed0fd5991e72867a9ddf4f395",
+  "_archive_bytes": 157375,
+  "_delivery_packet_file_pins": {
+    "raw-evidence.zip": {
+      "sha256": "8f0719aaeb25334f22e72df980270f63c3e168fed0fd5991e72867a9ddf4f395",
+      "bytes": 157375
+    },
+    "round-record.md": {
+      "sha256": "063199ae8ef50dbbf56f430a5bfd123c0ddec43d8a2e54c81c3513e6608102ec",
+      "bytes": 2639
+    }
+  },
+  "_r2_executed_integration_source": {
+    "path": "tests/unit/test_service_migration_integration.py",
+    "sha256": "0ef4bf71921df97677a3ea6434b2215598bf319fc660747824a0beede168d0bb",
+    "bytes": 52944,
+    "source_archive_member": "source-context/r2-executed/tests/unit/test_service_migration_integration.py"
+  },
+  "_root_delivery_verification": {
+    "r2_barrier_test_function_asts_equal_current": [
+      "test_tracked_account_read_seals_only_for_exact_true_delivery_flag",
+      "test_risk_snapshot_seals_before_persistent_reservation_expiry_query"
+    ],
+    "r7_integration_passed": true,
+    "qa_not_repeated_for_delivery": true,
+    "formal_count": 39,
+    "full_mig03_pass": false
+  }
+}

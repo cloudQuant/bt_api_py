@@ -2230,15 +2230,23 @@ class ServiceRegistry:
                 result_fits,
             )
             arguments = MappingProxyType(dict(payload["arguments"]))
-        write_fact_kind = (
-            "dispatch"
-            if operation in write_ops
-            else (
-                "cursor"
-                if capability.port == "service.account_read" and operation == "account.ack"
-                else None
+        write_fact_kind = None
+        if operation in write_ops:
+            write_fact_kind = "dispatch"
+        elif capability.port == "service.account_read" and (
+            operation == "account.ack"
+            or (
+                operation == "account.read_after"
+                and arguments.get("track_delivery", False) is True
             )
-        )
+        ):
+            # Tracked reads durably advance offered_cursor just like an ACK is
+            # a durable cursor transition. Fence both before entering Gateway.
+            write_fact_kind = "cursor"
+        elif capability.port == "service.risk_query" and operation == "risk.snapshot":
+            # The public Risk snapshot runs policy initialization and expiry
+            # updates in its SQLite transaction, despite being a query route.
+            write_fact_kind = "reservation"
         if write_fact_kind is not None:
             try:
                 self._record_migration_write_attempt(fact_kind=write_fact_kind)

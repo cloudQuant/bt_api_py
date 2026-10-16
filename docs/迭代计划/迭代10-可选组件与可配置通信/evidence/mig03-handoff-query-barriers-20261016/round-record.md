@@ -1,0 +1,13 @@
+# MIG03 handoff integration and write-barrier delivery proposal
+
+R220 is prepared for Root review on D:/bt_api_py branch dev, delivery parent b9e70f24d28d9f95fc9242b36a98d9351a9069b7. This packet is not staged or committed.
+
+The only candidate source paths are bt_api_py/service_registry.py and the new tests/unit/test_service_migration_integration.py. The registry diff conservatively seals account.read_after(track_delivery=True) and risk.snapshot before their handlers, alongside the existing dispatch and account cursor barriers. It records a write-attempt barrier before handler entry; it does not claim downstream storage commit. The separate tracked tests/unit/test_service_migration_write_barrier.py is clean in the worktree and outside R220 scope.
+
+Root R2 ran three tests from the integration file then present. The tracked-read barrier test and risk-snapshot reservation barrier test passed. The migration integration test failed at a child source-origin assertion because the checker expected canonical Risk source while the run loaded the pinned Risk export. The complete failed run is retained as R2 history. Its exact executed integration source is archived under source-context/r2-executed and matches the R2 pre-run source pin. Root R7 changed only the fixed Base package export environment binding from the old r1 path to the current r2 source export, plus its output directory; production and test source pins were unchanged from R6. R7 ran only the integration node and passed one test in 11.26 seconds, with 372 pinned sources unchanged, five repository HEADs stable, zero warnings and empty stderr. The R2 and R7 raw runner/spec/result/stdout/stderr/JUnit and before/after pin records, both candidate files, and the exact R2 test-source copy are in raw-evidence.zip.
+
+The R3–R6 failed attempt folders remain at their original D:/temp/iteration10-mig03-handoff-query-barriers-root-20261016-r3 through -r6 paths; this packet does not replace or reinterpret them.
+
+This synthetic integration exercises one controlled same-path migration and consumer/query behavior. MIG03 remains partial. It does not establish the required complete production boundary and consumer inventory or state conservation for all migration-associated categories. Same-path state reuse in this drill is not represented as complete migration coverage; Root must review the formal inventory gap as a separate next scope. No production account, external provider, or private deployment database was touched.
+
+Exact candidate hashes, raw archive members, source pins, QA results, excluded history, and commit scope are recorded in manifest.json.
