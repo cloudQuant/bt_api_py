@@ -1,0 +1,397 @@
+{
+  "schema": "iteration10-r253-bt-p5a-group-envelope-evidence/v1",
+  "round": "R253",
+  "date": "2026-10-16",
+  "status": "READY_FOR_ROOT_SCOPED_DELIVERY",
+  "formal_case_pass_delta": 0,
+  "evidence_level": "BT_ADAPTER_GROUP_ENVELOPE_SOURCE_FAKE_AND_CEREBRO_LOCAL_SERVICEHOST_CURVE_SYNTHETIC_PROVIDER_AUTHOR_RUN",
+  "claim_boundary": "Author focused unit and local authenticated ServiceHost/Cerebro integration only. Synthetic SQLite provider leaf; no external venue/provider/account, credentials, remote host, monitor.read_after RPC, formal DIM09 PASS, or nine-directory SCN02 closure.",
+  "parent_packet": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\bt-p5a-group-cerebro-r249-20261016",
+    "manifest_sha256": "53c8d2d59703ec2ee58693b815f9e312c3a722af5fffdaa6d2fbe1c0d818e48c",
+    "round_record_sha256": "c6f6c411732ed0f938aaf936a2033977ff1b6f0e807a5a98502b5abac31ea446",
+    "raw_evidence_zip_sha256": "1388b6289f5d7728561e454cd14e8cbdccbc50ffe5863ac46bfd149340a3b1e1",
+    "note": "R249 is included unchanged inside raw-evidence.zip under history/r249."
+  },
+  "candidate": {
+    "repository": "D:\\source_code\\backtrader",
+    "branch": "dev",
+    "head_during_author_runs": "5a30a44ae02fcc6339c4039ff473a6932ceea6e3",
+    "scope_count": 2,
+    "files": [
+      {
+        "path": "backtrader/stores/service_execution_group.py",
+        "bytes": 36647,
+        "sha256": "96d925e9235891c4d181ea9817f2a0988bd5849661ae619733a9602c937de181",
+        "status": "candidate-only; no stage/commit"
+      },
+      {
+        "path": "tests/integration/test_btapi_execution_group_cerebro_v3_host.py",
+        "bytes": 70743,
+        "sha256": "760b7b68518c3c25f98f68ee99644e0b15287af496f1fee2495982c257cf3c92",
+        "status": "candidate-only; no stage/commit"
+      }
+    ],
+    "sdk_source_changed": false,
+    "unrelated_worktree_changes": "excluded and preserved"
+  },
+  "fixed_runtime": {
+    "sdk_runtime_archive_commit": "77b86e2139708455722a3f11955cce18b14647fe",
+    "sdk_export_manifest_sha256": "a3611596f1cb554ce82082ce4df40a2c32dff9a7e0417ce61e95c0fb23618864",
+    "export_source_count": 1440,
+    "current_repository_head_guards": {
+      "D:\\bt_api_py": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb32499eee02ab6cadaa62f4c86c14ed9126e992",
+      "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "D:\\source_code\\backtrader": "5a30a44ae02fcc6339c4039ff473a6932ceea6e3"
+    },
+    "source_pins_unchanged": true,
+    "repository_heads_unchanged": true,
+    "note": "Accepted immutable SDK runtime archives were used; current checkout HEADs are guards only. Dirty SDK checkout bytes were not exported."
+  },
+  "author_runs": [
+    {
+      "kind": "focused unit",
+      "output": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r249b-unit",
+      "result": {
+        "bytes": 1666,
+        "sha256": "ad2af15c99ea310b4450d81171c7e851e94c514a9e37f42e7117e281dbf7ec31"
+      },
+      "junit": {
+        "bytes": 455,
+        "sha256": "156aed64d9526eb9ce86e45fd5d0f8575d496a44084726cc2031ec52a7bcc470",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "pytest_seconds": 9.597
+      },
+      "stdout_sha256": "977e98ee4ca7368f9aed4cfcc5df539985bbf2bea84e540a49c0f71b335df64b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "warnings": "One existing Quandl DeprecationWarning; stderr empty.",
+      "nodes": [
+        "test_submit_business_error_envelopes_preserve_unknown_and_definite_rejection",
+        "test_adapter_binds_wire_plan_accepts_v1_and_rejects_tampered_plan_metadata"
+      ],
+      "source_count": 1440,
+      "heads_unchanged": true
+    },
+    {
+      "kind": "Cerebro local ServiceHost/CURVE integration",
+      "output": "D:\\temp\\iteration10-bt-p5a-group-cerebro-author-20261016-r249b-host",
+      "result": {
+        "bytes": 1673,
+        "sha256": "6d240391799d33517fabddb09a9eb29313b00a12e911f330c82e9ac17e82a1ab"
+      },
+      "junit": {
+        "bytes": 324,
+        "sha256": "c1b174720d35aad639f60e5e49e4babae127ffe009f0202bd71dcfe3fc9eac65",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "pytest_seconds": 36.259,
+        "testcase_seconds": 26.989
+      },
+      "stdout_sha256": "f0d964282cf67f3c9ea4f535f86c1b3d344721779fb156b842e9fb4f8f22b3e6",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "warnings": "One existing Quandl DeprecationWarning; stderr empty.",
+      "exit_code": 0,
+      "node": "test_v3_cerebro_paired_three_leg_snapshot_over_real_curve_hosts",
+      "source_count": 1440,
+      "heads_unchanged": true,
+      "normal_cleanup": "The passing test asserts bounded SDK stop handshakes for account, coordinator, and monitor Hosts; each close reply reports closed states; all three processes are no longer alive after join and exitcode is zero; session/runtime/store cleanup assertions pass. The focused-runner PID recorded in running.json is no longer present."
+    }
+  ],
+  "static_review": {
+    "reviewer": "/root/review_bt_v3_cpf",
+    "verdict": "GO_STATIC",
+    "summary_member": "review/static-review-summary.md",
+    "review_scope": "Submit error-code source audit, unknown/same-ID recovery semantics, final-source plan-binding and selected local Host node; no QA or Host."
+  },
+  "preflight_history": "The earlier pre-rebind spec stopped at runner preflight before a test node and had no output copy; it is not represented as a test result. The successful current specs and captured output specs are byte-identical.",
+  "artifacts": [
+    "raw-evidence.zip",
+    "manifest.json",
+    "round-record.md"
+  ],
+  "raw_evidence": {
+    "path": "raw-evidence.zip",
+    "bytes": 5862919,
+    "sha256": "a60ecda79f8b7b5961878bf714c1399030b7f3bba2e3cb86196eb80f58b850c0",
+    "member_count": 54,
+    "members": [
+      {
+        "path": "candidate/backtrader/stores/service_execution_group.py",
+        "bytes": 36647,
+        "sha256": "96d925e9235891c4d181ea9817f2a0988bd5849661ae619733a9602c937de181"
+      },
+      {
+        "path": "candidate/source-manifest.json",
+        "bytes": 537898,
+        "sha256": "a3611596f1cb554ce82082ce4df40a2c32dff9a7e0417ce61e95c0fb23618864"
+      },
+      {
+        "path": "candidate/specs/host-spec.json",
+        "bytes": 288704,
+        "sha256": "120084b408b1833dab20a02170ffb59451cba9cce2f47fdb9c684244a50b4810"
+      },
+      {
+        "path": "candidate/specs/unit-spec.json",
+        "bytes": 288837,
+        "sha256": "0f6edf2845e14f5e12cdefd1f3cf65cef2a300aa759903d66e9055a17b6547ac"
+      },
+      {
+        "path": "candidate/tests/integration/test_btapi_execution_group_cerebro_v3_host.py",
+        "bytes": 70743,
+        "sha256": "760b7b68518c3c25f98f68ee99644e0b15287af496f1fee2495982c257cf3c92"
+      },
+      {
+        "path": "history/r249/manifest.json",
+        "bytes": 91676,
+        "sha256": "53c8d2d59703ec2ee58693b815f9e312c3a722af5fffdaa6d2fbe1c0d818e48c"
+      },
+      {
+        "path": "history/r249/raw-evidence.zip",
+        "bytes": 5083735,
+        "sha256": "1388b6289f5d7728561e454cd14e8cbdccbc50ffe5863ac46bfd149340a3b1e1"
+      },
+      {
+        "path": "history/r249/round-record.md",
+        "bytes": 4546,
+        "sha256": "c6f6c411732ed0f938aaf936a2033977ff1b6f0e807a5a98502b5abac31ea446"
+      },
+      {
+        "path": "review/static-review-summary.md",
+        "bytes": 1262,
+        "sha256": "5eef84c5a632073c159ac336bc6005c7f69a3a2233fbe88621c1c618d02995f4"
+      },
+      {
+        "path": "runs/author-r249b-host/command.json",
+        "bytes": 3068,
+        "sha256": "f3754274549e49cec436fd60de2e61f236c41907eaeb5e04e18a004df928fbd6"
+      },
+      {
+        "path": "runs/author-r249b-host/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "runs/author-r249b-host/junit.xml",
+        "bytes": 324,
+        "sha256": "c1b174720d35aad639f60e5e49e4babae127ffe009f0202bd71dcfe3fc9eac65"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-accepted.sqlite3",
+        "bytes": 24576,
+        "sha256": "26a85f1f0eec205f328c1e22882e62d4f28f66d1e5fb626ce3cecb50de61f77d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3",
+        "bytes": 536576,
+        "sha256": "b5b56bf15e42b46b10d03b11d01e8907395269c3905381de55e4b9fdf472cb6a"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-group_authority.sqlite3",
+        "bytes": 40960,
+        "sha256": "44b32507ced51f969d86a62d467fa411bce92afd6eb775b21697fee97f017fb2"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3",
+        "bytes": 4096,
+        "sha256": "31b0f6669e49303bea772658c76cd8557d01840c6b7b51f2eed54c4c0a44d4ff"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "5ddfe5faf54eb8a02f052fb595719fdc03043c819a3687389679ddac317f50d8"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-proof.sqlite3-wal",
+        "bytes": 267832,
+        "sha256": "32f4ddf8c4948f88b279f0ec777b9960f2e6736d3e7e4e7139effe0af00604cd"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-provider.sqlite3",
+        "bytes": 36864,
+        "sha256": "cbdfa5e40accab0c89d31d15b14e031a00201c566ed9950d8c6fc1ff01237e55"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "efe0c19492405653fc928d09094596c62fdc3c0cd560cb636c191d837f669973"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_gate.sqlite3",
+        "bytes": 335872,
+        "sha256": "aa2a9898607e548e257968baf8137d567a03a902a62ff952c5a989f3c94a20e3"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3",
+        "bytes": 77824,
+        "sha256": "9d00293bbb7a1b008ba3db9d16084764a640d6ad5867a871763c7ed99a0e91ad"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-groups.sqlite3",
+        "bytes": 90112,
+        "sha256": "4cae700b4a02297ae40a15cf3bc115ffb44a56e857fcf3ac00a3d81267d51121"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "b398e8b6f4c35a279a0572a448f97830cea867bdcc6338cea251a7e9e7474679"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/coordinator-run-bindings.sqlite3",
+        "bytes": 12288,
+        "sha256": "b3c8b5434526fd67105edd4c6e714c099fc4be7fd4c98d9024b8a6137c337d2d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "caed4f9ab4fd92abbc9216f90f62cc0de025ff222def73108a58c6a57ab8e09b"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/monitor-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "02494c29bc8af8741e374582f3c14f43e8784cdd47eb62f89014340ffa86f841"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/p5a-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "runs/author-r249b-host/pytest-tmp/test_v3_cerebro_paired_three_l0/primary-monitor-outbox.sqlite3",
+        "bytes": 28672,
+        "sha256": "99886ff56a53c574529da3d66cc97039b5f8b603d5288404430d9d5ec5d1b673"
+      },
+      {
+        "path": "runs/author-r249b-host/result.json",
+        "bytes": 1673,
+        "sha256": "6d240391799d33517fabddb09a9eb29313b00a12e911f330c82e9ac17e82a1ab"
+      },
+      {
+        "path": "runs/author-r249b-host/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "runs/author-r249b-host/running.json",
+        "bytes": 76,
+        "sha256": "7c3e34b1d6d734b098447f2585404a65f0dea24dd3f4b101ec13570013c8cad9"
+      },
+      {
+        "path": "runs/author-r249b-host/source-after.json",
+        "bytes": 270124,
+        "sha256": "a7fda7c3860b791efa20527ebde515a2f0b96e870635bea1e401ed6840c1fa58"
+      },
+      {
+        "path": "runs/author-r249b-host/source-before.json",
+        "bytes": 270124,
+        "sha256": "a7fda7c3860b791efa20527ebde515a2f0b96e870635bea1e401ed6840c1fa58"
+      },
+      {
+        "path": "runs/author-r249b-host/spec.json",
+        "bytes": 288704,
+        "sha256": "120084b408b1833dab20a02170ffb59451cba9cce2f47fdb9c684244a50b4810"
+      },
+      {
+        "path": "runs/author-r249b-host/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r249b-host/stdout.log",
+        "bytes": 667,
+        "sha256": "f0d964282cf67f3c9ea4f535f86c1b3d344721779fb156b842e9fb4f8f22b3e6"
+      },
+      {
+        "path": "runs/author-r249b-unit/command.json",
+        "bytes": 3229,
+        "sha256": "9aeaea06f6687d7b61710f3d088dac33de32473a28f186956e72a92c31a600ec"
+      },
+      {
+        "path": "runs/author-r249b-unit/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "runs/author-r249b-unit/junit.xml",
+        "bytes": 455,
+        "sha256": "156aed64d9526eb9ce86e45fd5d0f8575d496a44084726cc2031ec52a7bcc470"
+      },
+      {
+        "path": "runs/author-r249b-unit/result.json",
+        "bytes": 1666,
+        "sha256": "ad2af15c99ea310b4450d81171c7e851e94c514a9e37f42e7117e281dbf7ec31"
+      },
+      {
+        "path": "runs/author-r249b-unit/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "runs/author-r249b-unit/running.json",
+        "bytes": 76,
+        "sha256": "2d2fa3370352eeaff4cca1c62ad62c03cfab40b648af33705680dc070d409248"
+      },
+      {
+        "path": "runs/author-r249b-unit/source-after.json",
+        "bytes": 270124,
+        "sha256": "a7fda7c3860b791efa20527ebde515a2f0b96e870635bea1e401ed6840c1fa58"
+      },
+      {
+        "path": "runs/author-r249b-unit/source-before.json",
+        "bytes": 270124,
+        "sha256": "a7fda7c3860b791efa20527ebde515a2f0b96e870635bea1e401ed6840c1fa58"
+      },
+      {
+        "path": "runs/author-r249b-unit/spec.json",
+        "bytes": 288837,
+        "sha256": "0f6edf2845e14f5e12cdefd1f3cf65cef2a300aa759903d66e9055a17b6547ac"
+      },
+      {
+        "path": "runs/author-r249b-unit/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "runs/author-r249b-unit/stdout.log",
+        "bytes": 666,
+        "sha256": "977e98ee4ca7368f9aed4cfcc5df539985bbf2bea84e540a49c0f71b335df64b"
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+# R253 — BT P5A submit error classification and local Cerebro integration
+
+Date: 2026-10-16. This successor packet leaves the R249 packet unchanged. It contains only two Backtrader candidate paths plus raw evidence and the independent static review summary. No SDK checkout source changed.
+
+The adapter now treats only the SDK's GROUP_ACCEPTANCE_REJECTED as a definitive pre-dispatch submit rejection. In the pinned accepted SDK handler, that response is returned when coordinator acceptance raises, before advance_group; GROUP_ORDER_OUTCOME_UNPROVEN comes from post-submit provider/proof/authority uncertainty, and GROUP_ORDER_UNAVAILABLE is a broad advancement failure. Both therefore remain REQUEST_OUTCOME_UNKNOWN, with the original group ID available for query. Malformed submit envelopes are also unknown. The new focused node verifies those classifications, same-ID query without a second submit, and the one definitive rejection. The adjacent final-source plan-binding node verifies v3 field binding, three tamper cases, and v1-wire/v2-server normalization.
+
+Author QA passed the two selected unit nodes (JUnit 2/2, 9.597 seconds) and the R28 C/P/F Cerebro node (JUnit 1/1, 36.259 seconds; testcase 26.989 seconds). Both runs report 1,440 unchanged source pins and seven unchanged repository HEAD guards. Each emitted one existing Quandl deprecation warning; both stderr files are empty. The Host integration's successful assertions include normal bounded close handshakes for account, coordinator, and monitor ServiceHosts, closed replies, joined non-live child processes with exit code zero, and normal SDK session/runtime/store cleanup. Its evidence is local authenticated ZMQ/CURVE ServiceHosts with a SQLite synthetic provider leaf only.
+
+Independent static review returned GO_STATIC. The old pre-rebind metadata spec is not retained: its attempted invocation stopped during runner preflight and created no output. Current successful specs are preserved in the output folders and match the pinned source manifest. No Root QA or review execution is claimed.
+
+No external provider, exchange, credential, account, remote Host, monitor.read_after RPC, formal DIM09 PASS, or nine-directory SCN02 closure is claimed. Formal case-pass delta is zero. No Backtrader file was staged or committed by this packet preparation; unrelated checkout changes are excluded and preserved.
+
+The exact per-file content hashes and source/SDK HEAD guards are in manifest.json; raw-evidence.zip carries the exact two candidate files, both current specs, source manifest, full unit/Host outputs, reviewer summary, and the unchanged R249 packet for lineage.
