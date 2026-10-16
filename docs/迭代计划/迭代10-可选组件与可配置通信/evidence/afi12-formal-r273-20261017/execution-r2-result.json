@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T17:20:51.010549+00:00",
+  "source_count": 144,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:/bt_api_py/bt_api/bt_api_execution": "5c531c68ed303dea9d48d019c005c721cdb97763",
+    "D:/bt_api_py/bt_api/bt_api_base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a"
+  },
+  "heads_after": {
+    "D:/bt_api_py/bt_api/bt_api_execution": "5c531c68ed303dea9d48d019c005c721cdb97763",
+    "D:/bt_api_py/bt_api/bt_api_base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "2ae4f3dd62f99e4b07734f26eafa94b6e096de142178ac71d49aa109ef84f286",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FOCUSED_EXECUTION_LEGACY_IMPORT_RESIDUAL_AND_PNL_ONLY"
+}

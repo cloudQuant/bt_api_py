@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "C:/anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "-q",
+    "-o",
+    "addopts=",
+    "--tb=short",
+    "--junitxml=D:\\temp\\iteration10-afi12-execution-residual-root-r2-20261017\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-afi12-execution-residual-root-r2-20261017\\pytest-tmp",
+    "tests/test_paper_legacy_import.py::test_import_reconciles_profit_loss_and_handles_zero_initial_cash",
+    "tests/test_paper_legacy_import.py::test_nonzero_equity_residual_stays_prepared_and_never_creates_active_owner",
+    "tests/test_service_paper_legacy_import.py::test_service_uses_fixed_target_and_real_store_handoff_without_execution_facts",
+    "tests/test_service_paper_legacy_import.py::test_service_refuses_nonzero_residual_and_keeps_source_handoff_prepared"
+  ],
+  "cwd": "D:/bt_api_py/bt_api/bt_api_execution",
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONPATH": "D:/bt_api_py;D:/bt_api_py/bt_api/bt_api_base/src;D:/bt_api_py/bt_api/bt_api_execution/src;D:/bt_api_py/bt_api/bt_api_risk/src;D:/bt_api_py/bt_api/bt_api_transport_zmq/src",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-16T17:20:49.495204+00:00"
+}
