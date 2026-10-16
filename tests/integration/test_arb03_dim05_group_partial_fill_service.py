@@ -49,6 +49,7 @@ from bt_api_execution import (
     group_leg_intent_id,
     risk_account_scope_fingerprint,
 )
+from bt_api_execution import GroupReservationPhase  # R3 additive import for zero/full/hedge-partial nodes
 from bt_api_risk import (
     INSTRUMENT_METADATA_DIGEST_TAG,
     AccountScope,
@@ -131,6 +132,10 @@ _REQUEST_TIMEOUT_MS = 5_000
 _SERVER_OPTIONS = {"high_water_mark": 32, "max_message_bytes": _MAX_MESSAGE_BYTES}
 _GROUP_ARB03 = "group-arb03-partial-cancel-01"
 _GROUP_DIM05 = "group-dim05-dual-contract-02"
+# R3 additive scenario IDs (first-leg zero/full fill, hedge-leg partial cancel).
+_GROUP_ARB03_NO_FILL = "group-arb03-first-leg-no-fill-03"
+_GROUP_ARB03_FULL_FILL = "group-arb03-first-leg-full-fill-04"
+_GROUP_ARB03_HEDGE_PARTIAL = "group-arb03-hedge-partial-cancel-05"
 
 
 def _endpoint() -> str:
@@ -1858,3 +1863,495 @@ def test_dim05_single_account_dual_contract_partial_fill_hedge_paired(tmp_path: 
     )
     _assert_holds_resolved(cluster.account_paths, "account-a", _GROUP_DIM05)
     _assert_provider_writes(Path(cluster.account_paths["account-a"]["provider"]), 2)
+
+
+def test_arb03_first_leg_zero_fill_closes_group_without_hedge(tmp_path: Path) -> None:
+    """First-leg zero fill (REJECTED) closes the group with no hedge dispatch.
+
+    The provider rejects the IOC first leg with zero fill. The group must
+    terminate as CLOSED / GROUP_CLOSED_NO_EXPOSURE: the unclaimed hedge
+    reservation is released, the second leg is never submitted (no intent, no
+    provider write), and the residual base is exactly zero. A zero-fill
+    CANCELLED first leg would be UNKNOWN by the source gate, so the accepted
+    zero-fill form under test is REJECTED (REJECTED_NO_FILL proof kind).
+    """
+
+    with _GroupCluster(
+        tmp_path,
+        accounts=_ARB03_ACCOUNTS,
+        instruments={account: (_V2_INSTRUMENT,) for account in _ARB03_ACCOUNTS},
+        initial_states={"account-a": ("rejected",), "account-b": ()},
+        expected_orders={
+            "account-a": ((_V2_INSTRUMENT, "2", "100", "buy-limit"),),
+            "account-b": (),
+        },
+        rule_specs={
+            "account-a": {_V2_INSTRUMENT: "2"},
+            "account-b": {_V2_INSTRUMENT: "1"},
+        },
+    ) as cluster:
+        snapshot = cluster.submit_group(
+            _group_request(
+                _GROUP_ARB03_NO_FILL,
+                cluster.metadata_reference_ns,
+                (
+                    ("leg-a", "account-a", Side.BUY, Decimal("2"), _V2_INSTRUMENT),
+                    ("leg-b", "account-b", Side.SELL, Decimal("4"), _V2_INSTRUMENT),
+                ),
+            )
+        )
+        assert snapshot.state is GroupOrderState.CLOSED
+        assert snapshot.error_code is None
+        assert snapshot.residual_base_units == Decimal("0")
+        assert len(snapshot.legs) == 2
+        assert len(snapshot.reservations) == 2
+        assert tuple(item.account_ref for item in snapshot.reservations) == ("account-a", "account-b")
+
+        leg_a = next(leg for leg in snapshot.legs if leg.leg_id == "leg-a")
+        leg_b = next(leg for leg in snapshot.legs if leg.leg_id == "leg-b")
+
+        assert leg_a.submitted_intent is not None
+        assert leg_a.submitted_intent.instrument == _V2_INSTRUMENT
+        assert leg_a.submitted_intent.quantity == Decimal("2")
+        first = leg_a.child_status
+        assert first is not None
+        assert first.state is ExecutionState.REJECTED
+        assert first.filled_quantity == Decimal("0")
+        assert first.average_price is None
+        assert first.cumulative_commission is None
+        assert first.trade_count == 0
+        assert first.reason_code == "provider_rejected"
+        assert first.provider_order_id is not None
+        assert leg_a.claim_receipt is not None
+        assert leg_a.resolution_receipt is not None
+        resolution_a = leg_a.resolution_receipt
+        assert resolution_a.resolution_kind == "TERMINAL_NO_FILL_RESOLVED"
+        assert resolution_a.final_state is ExecutionState.REJECTED
+        assert resolution_a.requested_quantity == Decimal("2")
+        assert resolution_a.filled_quantity == Decimal("0")
+        assert resolution_a.trade_count == 0
+        assert resolution_a.dispatch_latch_active is False
+
+        # The hedge leg is never submitted: no intent, claim, status or receipt.
+        assert leg_b.submitted_intent is None
+        assert leg_b.child_status is None
+        assert leg_b.claim_receipt is None
+        assert leg_b.resolution_receipt is None
+
+        # Budget/lease conservation: every account reservation is released.
+        by_account = {item.account_ref: item for item in snapshot.reservations}
+        assert by_account["account-a"].phase is GroupReservationPhase.RELEASED
+        assert by_account["account-b"].phase is GroupReservationPhase.RELEASED
+        assert tuple(
+            (leg.leg_id, leg.claimed, leg.resolved) for leg in by_account["account-a"].legs
+        ) == (("leg-a", True, True),)
+        assert tuple(
+            (leg.leg_id, leg.claimed, leg.resolved) for leg in by_account["account-b"].legs
+        ) == (("leg-b", False, False),)
+
+        for account_ref in _ARB03_ACCOUNTS:
+            status = cluster.status(account_ref)
+            assert status[4] == (), f"unconsumed provider expectations on {account_ref}"
+
+    persisted_groups = SqliteOrderGroupStore(cluster.coordinator_paths["groups"])
+    try:
+        persisted = persisted_groups.get(_PORTFOLIO, _GROUP_ARB03_NO_FILL)
+        assert persisted == snapshot
+        events = persisted_groups.events(_PORTFOLIO, _GROUP_ARB03_NO_FILL)
+    finally:
+        persisted_groups.close()
+    closed = tuple(event for event in events if event.event_type == "GROUP_CLOSED_NO_EXPOSURE")
+    assert len(closed) == 1
+    assert closed[0].payload["first_leg_id"] == "leg-a"
+    assert closed[0].payload["reason"] == "terminal_no_fill"
+    assert not any(event.event_type == "HEDGE_LEG_SIZED" for event in events)
+    assert not any(event.event_type == "GROUP_PAIRED" for event in events)
+    assert not any(event.event_type == "GROUP_RECOVERY_REQUIRED" for event in events)
+    resolved_events = tuple(
+        event
+        for event in events
+        if event.event_type == "GROUP_DISPATCH_RESOLUTION_RECORDED"
+        and event.payload.get("leg_id") == "leg-a"
+    )
+    assert len(resolved_events) == 1
+    assert resolved_events[0].payload["resolution_kind"] == "TERMINAL_NO_FILL_RESOLVED"
+    released = tuple(event for event in events if event.event_type == "RESERVATION_RELEASED")
+    assert len(released) == 2
+    assert {event.payload["account_ref"] for event in released} == set(_ARB03_ACCOUNTS)
+
+    execution_scope_a = _execution_scope("account-a")
+    intent_a = group_leg_intent_id(_GROUP_ARB03_NO_FILL, "leg-a")
+    store_a = SqliteExecutionStore(cluster.account_paths["account-a"]["execution"])
+    try:
+        record_a = store_a.get(intent_a, scope=execution_scope_a)
+        assert record_a is not None
+        assert record_a.state is ExecutionState.REJECTED
+        assert record_a.filled_quantity == Decimal("0")
+        assert record_a.average_price is None
+        assert record_a.cumulative_commission is None
+        assert record_a.provider_order_id is not None
+        assert record_a.dispatch_attempts == 1
+        assert record_a.unknown_reason is None
+        assert record_a.review_required is False
+        events_a = _leg_outbox(store_a, execution_scope_a, intent_a)
+        assert tuple(event.event_type for event in events_a) == (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+        )
+        assert events_a[3].state is ExecutionState.REJECTED
+        assert events_a[3].payload.get("reason_code") == "provider_rejected"
+    finally:
+        store_a.close()
+
+    assert _risk_legs(cluster.account_paths, "account-a", _GROUP_ARB03_NO_FILL) == (
+        ("leg-a", True, True),
+    )
+    assert _risk_legs(cluster.account_paths, "account-b", _GROUP_ARB03_NO_FILL) == (
+        ("leg-b", False, False),
+    )
+    for account_ref in _ARB03_ACCOUNTS:
+        _assert_holds_resolved(cluster.account_paths, account_ref, _GROUP_ARB03_NO_FILL)
+    _assert_provider_writes(Path(cluster.account_paths["account-a"]["provider"]), 1)
+    _assert_provider_writes(Path(cluster.account_paths["account-b"]["provider"]), 0)
+
+
+def test_arb03_first_leg_full_fill_sizes_hedge_exactly_once(tmp_path: Path) -> None:
+    """First-leg full fill sizes the hedge to the filled base and pairs.
+
+    The first leg fills its complete requested quantity (base 4 = 2 x 2). The
+    requested hedge of 6 must be resized down to exactly base 4 (step 0.001),
+    dispatched exactly once, and fully filled so the group closes PAIRED with
+    residual base 0 and no recovery event.
+    """
+
+    with _GroupCluster(
+        tmp_path,
+        accounts=_ARB03_ACCOUNTS,
+        instruments={account: (_V2_INSTRUMENT,) for account in _ARB03_ACCOUNTS},
+        initial_states={"account-a": ("filled",), "account-b": ("filled",)},
+        expected_orders={
+            "account-a": ((_V2_INSTRUMENT, "2", "100", "buy-limit"),),
+            "account-b": ((_V2_INSTRUMENT, "4", "100", "sell-limit"),),
+        },
+        rule_specs={
+            "account-a": {_V2_INSTRUMENT: "2"},
+            "account-b": {_V2_INSTRUMENT: "1"},
+        },
+    ) as cluster:
+        snapshot = cluster.submit_group(
+            _group_request(
+                _GROUP_ARB03_FULL_FILL,
+                cluster.metadata_reference_ns,
+                (
+                    ("leg-a", "account-a", Side.BUY, Decimal("2"), _V2_INSTRUMENT),
+                    ("leg-b", "account-b", Side.SELL, Decimal("6"), _V2_INSTRUMENT),
+                ),
+            )
+        )
+        assert snapshot.state is GroupOrderState.PAIRED
+        assert snapshot.error_code is None
+        assert snapshot.residual_base_units == Decimal("0")
+        assert len(snapshot.legs) == 2
+        assert len(snapshot.reservations) == 2
+        assert tuple(item.account_ref for item in snapshot.reservations) == ("account-a", "account-b")
+
+        leg_a = next(leg for leg in snapshot.legs if leg.leg_id == "leg-a")
+        leg_b = next(leg for leg in snapshot.legs if leg.leg_id == "leg-b")
+
+        assert leg_a.submitted_intent is not None
+        assert leg_a.submitted_intent.instrument == _V2_INSTRUMENT
+        assert leg_a.submitted_intent.quantity == Decimal("2")
+        first = leg_a.child_status
+        assert first is not None
+        assert first.state is ExecutionState.FILLED
+        assert first.filled_quantity == Decimal("2")
+        assert first.average_price == Decimal("100")
+        assert first.cumulative_commission == Decimal("-0.05")
+        assert first.cumulative_commission_currency == "USD"
+        assert first.trade_count == 1
+        assert first.order_revision == 1
+        assert first.provider_order_id is not None
+        assert leg_a.resolution_receipt is not None
+        resolution_a = leg_a.resolution_receipt
+        assert resolution_a.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED"
+        assert resolution_a.final_state is ExecutionState.FILLED
+        assert resolution_a.requested_quantity == Decimal("2")
+        assert resolution_a.filled_quantity == Decimal("2")
+        assert resolution_a.trade_count == 1
+        assert resolution_a.dispatch_latch_active is False
+
+        # The hedge is resized from the requested 6 down to base 4 (= 2 x 2).
+        assert leg_b.submitted_intent is not None
+        assert leg_b.submitted_intent.instrument == _V2_INSTRUMENT
+        assert leg_b.submitted_intent.quantity == Decimal("4.000")
+        assert leg_b.submitted_intent.quantity != Decimal("6")
+        second = leg_b.child_status
+        assert second is not None
+        assert second.state is ExecutionState.FILLED
+        assert second.filled_quantity == Decimal("4")
+        assert second.average_price == Decimal("100")
+        assert second.cumulative_commission == Decimal("-0.05")
+        assert second.trade_count == 1
+        assert leg_b.resolution_receipt is not None
+        resolution_b = leg_b.resolution_receipt
+        assert resolution_b.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED"
+        assert resolution_b.final_state is ExecutionState.FILLED
+        assert resolution_b.requested_quantity == Decimal("4")
+        assert resolution_b.filled_quantity == Decimal("4")
+        assert resolution_b.trade_count == 1
+        assert resolution_b.dispatch_latch_active is False
+
+        for account_ref in _ARB03_ACCOUNTS:
+            status = cluster.status(account_ref)
+            assert status[4] == (), f"unconsumed provider expectations on {account_ref}"
+
+    persisted_groups = SqliteOrderGroupStore(cluster.coordinator_paths["groups"])
+    try:
+        persisted = persisted_groups.get(_PORTFOLIO, _GROUP_ARB03_FULL_FILL)
+        assert persisted == snapshot
+        events = persisted_groups.events(_PORTFOLIO, _GROUP_ARB03_FULL_FILL)
+    finally:
+        persisted_groups.close()
+    assert sum(event.event_type == "GROUP_PAIRED" for event in events) == 1
+    assert not any(event.event_type == "GROUP_RECOVERY_REQUIRED" for event in events)
+    sized = tuple(event for event in events if event.event_type == "HEDGE_LEG_SIZED")
+    assert len(sized) == 1
+    assert sized[0].payload["quantity"] == "4.000"
+    assert sized[0].payload["first_filled_quantity"] == "2"
+    paired = next(event for event in events if event.event_type == "GROUP_PAIRED")
+    assert paired.payload["first_filled_quantity"] == "2"
+    assert paired.payload["second_filled_quantity"] == "4.000"
+    assert paired.payload["residual_base_units"] == "0"
+
+    execution_scope_a = _execution_scope("account-a")
+    execution_scope_b = _execution_scope("account-b")
+    intent_a = group_leg_intent_id(_GROUP_ARB03_FULL_FILL, "leg-a")
+    intent_b = group_leg_intent_id(_GROUP_ARB03_FULL_FILL, "leg-b")
+    store_a = SqliteExecutionStore(cluster.account_paths["account-a"]["execution"])
+    try:
+        record_a = store_a.get(intent_a, scope=execution_scope_a)
+        assert record_a is not None
+        assert record_a.state is ExecutionState.FILLED
+        assert record_a.filled_quantity == Decimal("2")
+        assert record_a.average_price == Decimal("100")
+        assert record_a.cumulative_commission == Decimal("-0.05")
+        assert record_a.provider_order_id is not None
+        assert record_a.dispatch_attempts == 1
+        assert record_a.unknown_reason is None
+        assert record_a.review_required is False
+        events_a = _leg_outbox(store_a, execution_scope_a, intent_a)
+        assert tuple(event.event_type for event in events_a) == (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+        )
+        assert events_a[3].state is ExecutionState.FILLED
+        assert events_a[3].payload["filled_quantity"] == "2"
+    finally:
+        store_a.close()
+
+    store_b = SqliteExecutionStore(cluster.account_paths["account-b"]["execution"])
+    try:
+        record_b = store_b.get(intent_b, scope=execution_scope_b)
+        assert record_b is not None
+        assert record_b.state is ExecutionState.FILLED
+        assert record_b.filled_quantity == Decimal("4")
+        assert record_b.average_price == Decimal("100")
+        assert record_b.cumulative_commission == Decimal("-0.05")
+        assert record_b.provider_order_id is not None
+        assert record_b.dispatch_attempts == 1
+        assert record_b.unknown_reason is None
+        assert record_b.review_required is False
+        events_b = _leg_outbox(store_b, execution_scope_b, intent_b)
+        assert tuple(event.event_type for event in events_b) == (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+        )
+        assert events_b[3].state is ExecutionState.FILLED
+        assert events_b[3].payload["filled_quantity"] == "4.000"
+    finally:
+        store_b.close()
+
+    assert _risk_legs(cluster.account_paths, "account-a", _GROUP_ARB03_FULL_FILL) == (
+        ("leg-a", True, True),
+    )
+    assert _risk_legs(cluster.account_paths, "account-b", _GROUP_ARB03_FULL_FILL) == (
+        ("leg-b", True, True),
+    )
+    for account_ref in _ARB03_ACCOUNTS:
+        _assert_holds_resolved(cluster.account_paths, account_ref, _GROUP_ARB03_FULL_FILL)
+        _assert_provider_writes(Path(cluster.account_paths[account_ref]["provider"]), 1)
+
+
+def test_arb03_hedge_leg_partial_cancel_requires_recovery(tmp_path: Path) -> None:
+    """Hedge-leg IOC partial cancel leaves residual base and requires recovery.
+
+    The first leg cancels with 1.5/2 filled (base 3); the hedge is sized to 3
+    and cancels after a 2-unit partial fill (base 2). The 1-base shortfall must
+    surface as RECOVERY_REQUIRED / hedge_residual_unresolved with both leg
+    resolutions recorded and no oversell of the first-leg exposure.
+    """
+
+    with _GroupCluster(
+        tmp_path,
+        accounts=_ARB03_ACCOUNTS,
+        instruments={account: (_V2_INSTRUMENT,) for account in _ARB03_ACCOUNTS},
+        initial_states={"account-a": ("cancelled:1.5",), "account-b": ("cancelled:2",)},
+        expected_orders={
+            "account-a": ((_V2_INSTRUMENT, "2", "100", "buy-limit"),),
+            "account-b": ((_V2_INSTRUMENT, "3", "100", "sell-limit"),),
+        },
+        rule_specs={
+            "account-a": {_V2_INSTRUMENT: "2"},
+            "account-b": {_V2_INSTRUMENT: "1"},
+        },
+    ) as cluster:
+        snapshot = cluster.submit_group(
+            _group_request(
+                _GROUP_ARB03_HEDGE_PARTIAL,
+                cluster.metadata_reference_ns,
+                (
+                    ("leg-a", "account-a", Side.BUY, Decimal("2"), _V2_INSTRUMENT),
+                    ("leg-b", "account-b", Side.SELL, Decimal("4"), _V2_INSTRUMENT),
+                ),
+            )
+        )
+        assert snapshot.state is GroupOrderState.RECOVERY_REQUIRED
+        assert snapshot.error_code == "hedge_residual_unresolved"
+        assert snapshot.residual_base_units == Decimal("1")
+        assert len(snapshot.legs) == 2
+        assert len(snapshot.reservations) == 2
+        assert tuple(item.account_ref for item in snapshot.reservations) == ("account-a", "account-b")
+
+        leg_a = next(leg for leg in snapshot.legs if leg.leg_id == "leg-a")
+        leg_b = next(leg for leg in snapshot.legs if leg.leg_id == "leg-b")
+
+        assert leg_a.submitted_intent is not None
+        assert leg_a.submitted_intent.quantity == Decimal("2")
+        first = leg_a.child_status
+        assert first is not None
+        assert first.state is ExecutionState.CANCELLED
+        assert first.filled_quantity == Decimal("1.5")
+        assert first.trade_count == 1
+        resolution_a = leg_a.resolution_receipt
+        assert resolution_a is not None
+        assert resolution_a.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED"
+        assert resolution_a.final_state is ExecutionState.CANCELLED
+        assert resolution_a.filled_quantity == Decimal("1.5")
+
+        # The hedge was sized to base 3 (1.5 x 2) from the requested 4.
+        assert leg_b.submitted_intent is not None
+        assert leg_b.submitted_intent.quantity == Decimal("3.000")
+        second = leg_b.child_status
+        assert second is not None
+        assert second.state is ExecutionState.CANCELLED
+        assert second.filled_quantity == Decimal("2")
+        assert second.average_price == Decimal("100")
+        assert second.cumulative_commission == Decimal("-0.05")
+        assert second.trade_count == 1
+        assert second.order_revision == 1
+        assert second.reason_code is None
+        assert second.provider_order_id is not None
+        assert leg_b.resolution_receipt is not None
+        resolution_b = leg_b.resolution_receipt
+        assert resolution_b.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED"
+        assert resolution_b.final_state is ExecutionState.CANCELLED
+        assert resolution_b.requested_quantity == Decimal("3")
+        assert resolution_b.filled_quantity == Decimal("2")
+        assert resolution_b.trade_count == 1
+        assert resolution_b.dispatch_latch_active is False
+
+        for account_ref in _ARB03_ACCOUNTS:
+            status = cluster.status(account_ref)
+            assert status[4] == (), f"unconsumed provider expectations on {account_ref}"
+
+    persisted_groups = SqliteOrderGroupStore(cluster.coordinator_paths["groups"])
+    try:
+        persisted = persisted_groups.get(_PORTFOLIO, _GROUP_ARB03_HEDGE_PARTIAL)
+        assert persisted == snapshot
+        events = persisted_groups.events(_PORTFOLIO, _GROUP_ARB03_HEDGE_PARTIAL)
+    finally:
+        persisted_groups.close()
+    assert any(event.event_type == "GROUP_RECOVERY_REQUIRED" for event in events)
+    assert not any(event.event_type == "GROUP_PAIRED" for event in events)
+    sized = tuple(event for event in events if event.event_type == "HEDGE_LEG_SIZED")
+    assert len(sized) == 1
+    assert sized[0].payload["quantity"] == "3.000"
+    resolved_b_events = tuple(
+        event
+        for event in events
+        if event.event_type == "GROUP_DISPATCH_RESOLUTION_RECORDED"
+        and event.payload.get("leg_id") == "leg-b"
+    )
+    assert len(resolved_b_events) == 1
+    assert resolved_b_events[0].payload["resolution_kind"] == "TERMINAL_EXPOSURE_RESOLVED"
+
+    execution_scope_a = _execution_scope("account-a")
+    execution_scope_b = _execution_scope("account-b")
+    intent_a = group_leg_intent_id(_GROUP_ARB03_HEDGE_PARTIAL, "leg-a")
+    intent_b = group_leg_intent_id(_GROUP_ARB03_HEDGE_PARTIAL, "leg-b")
+    store_a = SqliteExecutionStore(cluster.account_paths["account-a"]["execution"])
+    try:
+        record_a = store_a.get(intent_a, scope=execution_scope_a)
+        assert record_a is not None
+        assert record_a.state is ExecutionState.CANCELLED
+        assert record_a.filled_quantity == Decimal("1.5")
+        assert record_a.dispatch_attempts == 1
+        assert record_a.unknown_reason is None
+        assert record_a.review_required is False
+        events_a = _leg_outbox(store_a, execution_scope_a, intent_a)
+        assert tuple(event.event_type for event in events_a) == (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+            "provider_observation",
+        )
+        assert events_a[3].state is ExecutionState.PARTIALLY_FILLED
+        assert events_a[4].state is ExecutionState.CANCELLED
+        assert events_a[3].payload["filled_quantity"] == "1.5"
+        assert events_a[3].payload == events_a[4].payload
+    finally:
+        store_a.close()
+
+    store_b = SqliteExecutionStore(cluster.account_paths["account-b"]["execution"])
+    try:
+        record_b = store_b.get(intent_b, scope=execution_scope_b)
+        assert record_b is not None
+        assert record_b.state is ExecutionState.CANCELLED
+        assert record_b.filled_quantity == Decimal("2")
+        assert record_b.average_price == Decimal("100")
+        assert record_b.cumulative_commission == Decimal("-0.05")
+        assert record_b.provider_order_id is not None
+        assert record_b.dispatch_attempts == 1
+        assert record_b.unknown_reason is None
+        assert record_b.review_required is False
+        events_b = _leg_outbox(store_b, execution_scope_b, intent_b)
+        assert tuple(event.event_type for event in events_b) == (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+            "provider_observation",
+        )
+        assert events_b[3].state is ExecutionState.PARTIALLY_FILLED
+        assert events_b[4].state is ExecutionState.CANCELLED
+        assert events_b[3].payload["filled_quantity"] == "2"
+        assert events_b[3].payload == events_b[4].payload
+    finally:
+        store_b.close()
+
+    assert _risk_legs(cluster.account_paths, "account-a", _GROUP_ARB03_HEDGE_PARTIAL) == (
+        ("leg-a", True, True),
+    )
+    assert _risk_legs(cluster.account_paths, "account-b", _GROUP_ARB03_HEDGE_PARTIAL) == (
+        ("leg-b", True, True),
+    )
+    for account_ref in _ARB03_ACCOUNTS:
+        _assert_holds_resolved(cluster.account_paths, account_ref, _GROUP_ARB03_HEDGE_PARTIAL)
+        _assert_provider_writes(Path(cluster.account_paths[account_ref]["provider"]), 1)

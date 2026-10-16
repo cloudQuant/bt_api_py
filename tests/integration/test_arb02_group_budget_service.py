@@ -35,6 +35,7 @@ from bt_api_execution import (
     GroupBudgetReservationState,
     GroupOrderSnapshot,
     GroupOrderState,
+    GroupReservationPhase,
     OrderIntent,
     OrderType,
     PortfolioGroupBudgetPolicy,
@@ -142,6 +143,7 @@ _GROUP_ACCEPTED = "arb02-last-budget-accepted"
 _GROUP_DENIED = "arb02-last-budget-denied"
 _GROUP_EXPIRED_UNCLAIMED = "arb02-expired-unclaimed-crash"
 _GROUP_UNKNOWN_AFTER_TTL = "arb02-unknown-after-ttl"
+_GROUP_CRASH_BEFORE_FIRST_LEG = "arb02-crash-before-first-leg"
 
 
 def _attempt_cleanup(actions: tuple[Callable[[], object], ...]) -> BaseException | None:
@@ -2634,3 +2636,489 @@ def test_expired_unclaimed_release_and_dispatched_unknown_hold_across_coordinato
                 )
         finally:
             execution.close()
+
+
+@pytest.mark.integration
+def test_all_reservations_submitted_crash_before_first_leg_no_oversell(
+    tmp_path: Path,
+) -> None:
+    """Crash after both account Risk vectors commit, before any dispatch, no TTL.
+
+    Both account reservation vectors are fully committed while the group
+    deadline remains strictly in the future, then only the coordinator process
+    is crashed before the first leg is dispatched. Reopening the same durable
+    stores must show one unspent budget hold, both unclaimed vectors, and zero
+    provider effect; the exact replay then continues the group exactly once -
+    one dispatch attempt per leg, one HELD budget transition, no duplicate
+    hold and no lost or duplicated capacity.
+    """
+
+    metadata_reference_ns = time.time_ns()
+    account_paths = {
+        account: {
+            name: str(tmp_path / f"{account}-{name}.sqlite3")
+            for name in (
+                "registry",
+                "provider",
+                "execution",
+                "risk_order_journal",
+                "proof",
+                "risk_gate",
+                "accepted",
+                "group_authority",
+            )
+        }
+        for account in _ACCOUNTS
+    }
+    coordinator_paths = {
+        "registry": str(tmp_path / "coordinator-registry.sqlite3"),
+        "groups": str(tmp_path / "coordinator-groups.sqlite3"),
+        "run_bindings": str(tmp_path / "coordinator-run-bindings.sqlite3"),
+    }
+    account_endpoints = {account: _endpoint() for account in _ACCOUNTS}
+    account_keys = {account: zmq.curve_keypair() for account in _ACCOUNTS}
+    coordinator_keys = zmq.curve_keypair()
+    coordinator_client_keys = zmq.curve_keypair()
+    strategy_keys = {strategy: zmq.curve_keypair() for strategy in _STRATEGIES}
+    account_configs = {
+        account: _account_service_config(
+            account, account_endpoints[account], f"arb02-account-server-{account}"
+        )
+        for account in _ACCOUNTS
+    }
+    context = multiprocessing.get_context("spawn")
+    provider_entered = context.Event()
+    provider_release = context.Event()
+    reservation_committed = {account: context.Event() for account in _ACCOUNTS}
+    reservation_reply_entered = context.Event()
+    reservation_reply_release = context.Event()
+    reservation_events = context.Queue()
+    account_processes: dict[str, Any] = {}
+    account_controls: dict[str, Any] = {}
+    coordinator_process = None
+    coordinator_control = None
+    client_threads: dict[str, threading.Thread] = {}
+    client_commands: dict[str, queue.Queue] = {}
+    client_results: dict[str, queue.Queue] = {}
+    pre_dispatch_snapshot: GroupOrderSnapshot | None = None
+    recovered_snapshot: GroupOrderSnapshot | None = None
+    recovered_query_snapshot: GroupOrderSnapshot | None = None
+    cleanup_interrupted_calls: list[tuple[str, tuple[Any, ...]]] = []
+    cleanup_pending_completions: list[tuple[str, tuple[Any, ...]]] = []
+
+    try:
+        # Both initial states are "filled", so when recovery continues the
+        # group each leg dispatches exactly once and both legs fill. Account
+        # A's feed also blocks on the shared write barrier, which lets the
+        # test observe that the recovered replay really reached a provider.
+        for account_ref in _ACCOUNTS:
+            parent_control, child_control = context.Pipe(duplex=True)
+            process = None
+            process_started = False
+            try:
+                process = context.Process(
+                    name=f"arb02-account-host-{account_ref}",
+                    target=_account_host_process,
+                    args=(
+                        child_control,
+                        account_configs[account_ref],
+                        account_paths[account_ref]["registry"],
+                        account_paths[account_ref],
+                        account_ref,
+                        account_keys[account_ref][0],
+                        account_keys[account_ref][1],
+                        coordinator_client_keys[0],
+                        metadata_reference_ns,
+                        ("filled",),
+                        provider_entered,
+                        provider_release,
+                        _GROUP_CRASH_BEFORE_FIRST_LEG,
+                        reservation_committed[account_ref],
+                        reservation_reply_entered if account_ref == "account-b" else None,
+                        reservation_reply_release if account_ref == "account-b" else None,
+                        reservation_events,
+                    ),
+                )
+                process.start()
+                process_started = True
+                child_control.close()
+                ready = _receive(parent_control)
+                assert ready == ("ready", account_endpoints[account_ref])
+            except BaseException as startup_error:
+                cleanup_error = _cleanup_failed_host_start(
+                    process,
+                    parent_control,
+                    child_control,
+                    process_started=process_started,
+                )
+                if cleanup_error is not None:
+                    add_note = getattr(startup_error, "add_note", None)
+                    if callable(add_note):
+                        add_note(
+                            "account Host startup cleanup also failed: "
+                            f"{type(cleanup_error).__name__}"
+                        )
+                raise
+            assert process is not None
+            account_processes[account_ref] = process
+            account_controls[account_ref] = parent_control
+
+        (
+            coordinator_process,
+            coordinator_control,
+            coordinator_endpoint,
+            upstream_bindings,
+        ) = _start_coordinator(
+            context,
+            account_configs,
+            coordinator_paths,
+            account_endpoints,
+            {account: account_keys[account][0] for account in _ACCOUNTS},
+            coordinator_keys,
+            coordinator_client_keys,
+            strategy_keys,
+            metadata_reference_ns,
+        )
+        _activate_owner_routes(account_controls, upstream_bindings)
+        client_threads, client_commands, client_results = _new_client_threads(
+            coordinator_endpoint,
+            coordinator_keys[0],
+            strategy_keys,
+        )
+
+        # The 120s lifetime is created only after every Host, route and client
+        # runtime is ready; no short deadline is ever crossed in this test.
+        request = _group_request(
+            _GROUP_CRASH_BEFORE_FIRST_LEG,
+            _STRATEGIES[0],
+            metadata_reference_ns,
+            lifetime_ns=120_000_000_000,
+        )
+        client_commands[_STRATEGIES[0]].put(("submit", _GROUP_CRASH_BEFORE_FIRST_LEG, request))
+        started = _next_client_message(client_results[_STRATEGIES[0]], "started")
+        assert started[1:3] == ("submit", _GROUP_CRASH_BEFORE_FIRST_LEG)
+        assert reservation_committed["account-a"].wait(5)
+        assert reservation_committed["account-b"].wait(5)
+        assert reservation_reply_entered.wait(5), (
+            "account B did not reach the post-commit/pre-reply crash barrier"
+        )
+        # Both durable Risk vectors are now committed on their account owners
+        # and the budget is booked once; the coordinator is still blocked in
+        # B's reservation reply, strictly before any first-leg dispatch.
+        assert not provider_entered.is_set(), "an undispatched group reached a provider"
+        assert request["deadline_ns"] > time.time_ns(), (
+            "the immutable group deadline elapsed before crash injection"
+        )
+
+        # Crash only the coordinator process; no TTL participates. The never
+        # answered reservation RPC reply from B is released only afterwards.
+        crashed_coordinator_exit = _terminate_test_coordinator(
+            coordinator_process, coordinator_control
+        )
+        coordinator_process = None
+        coordinator_control = None
+        assert crashed_coordinator_exit != 0
+        reservation_reply_release.set()
+        for account_ref in _ACCOUNTS:
+            account_controls[account_ref].send(("status",))
+            status = _receive(account_controls[account_ref])
+            assert status == (
+                "status",
+                (),
+                {"order_queries": 0, "fill_queries": 0},
+            )
+
+        lost_reply = _next_client_call_outcome(client_results[_STRATEGIES[0]])
+        assert lost_reply == (
+            "call_error",
+            "submit",
+            _GROUP_CRASH_BEFORE_FIRST_LEG,
+            "RequestOutcomeUnknownError",
+            None,
+        )
+        _close_client_threads(client_threads, client_commands, client_results)
+        client_threads = {}
+        client_commands = {}
+        client_results = {}
+
+        # Reopen the same group/run-binding stores. The pure query must show
+        # the exact pre-dispatch picture: one RESERVED portfolio hold, both
+        # vectors committed and unclaimed, zero dispatch and no rejection.
+        (
+            coordinator_process,
+            coordinator_control,
+            coordinator_endpoint,
+            upstream_bindings,
+        ) = _start_coordinator(
+            context,
+            account_configs,
+            coordinator_paths,
+            account_endpoints,
+            {account: account_keys[account][0] for account in _ACCOUNTS},
+            coordinator_keys,
+            coordinator_client_keys,
+            strategy_keys,
+            metadata_reference_ns,
+        )
+        _activate_owner_routes(account_controls, upstream_bindings)
+        client_threads, client_commands, client_results = _new_client_threads(
+            coordinator_endpoint,
+            coordinator_keys[0],
+            strategy_keys,
+        )
+        client_commands[_STRATEGIES[0]].put(("query", _GROUP_CRASH_BEFORE_FIRST_LEG, None))
+        _next_client_message(client_results[_STRATEGIES[0]], "started")
+        pre_dispatch_query = _next_client_message(client_results[_STRATEGIES[0]], "done")
+        pre_dispatch_snapshot = _query_reply_snapshot(pre_dispatch_query[5])
+        assert pre_dispatch_snapshot.state is GroupOrderState.PREPARING
+        assert pre_dispatch_snapshot.error_code is None
+        assert pre_dispatch_snapshot.budget_reservation is not None
+        assert (
+            pre_dispatch_snapshot.budget_reservation.state
+            is GroupBudgetReservationState.RESERVED
+        )
+        assert pre_dispatch_snapshot.budget_reservation.gross_notional == Decimal("200")
+        assert len(pre_dispatch_snapshot.reservations) == 2
+        assert {
+            item.account_ref: item.phase for item in pre_dispatch_snapshot.reservations
+        } == {
+            "account-a": GroupReservationPhase.ACTIVE,
+            "account-b": GroupReservationPhase.REQUESTING,
+        }
+        assert all(
+            not leg.claimed and not leg.resolved
+            for item in pre_dispatch_snapshot.reservations
+            for leg in item.legs
+        )
+        assert all(
+            leg.submitted_intent is None and leg.child_status is None
+            for leg in pre_dispatch_snapshot.legs
+        )
+        for account_ref in _ACCOUNTS:
+            account_controls[account_ref].send(("status",))
+            status = _receive(account_controls[account_ref])
+            assert status == (
+                "status",
+                (),
+                {"order_queries": 0, "fill_queries": 0},
+            )
+
+        # The exact same immutable request is replayed while its deadline is
+        # still in the future: recovery continues the prepared group rather
+        # than rejecting it. Releasing the write barrier only here keeps every
+        # pre-crash phase provably free of provider dispatch.
+        assert request["deadline_ns"] > time.time_ns(), (
+            "recovery replay must happen strictly before the group deadline"
+        )
+        provider_release.set()
+        client_commands[_STRATEGIES[0]].put(("submit", _GROUP_CRASH_BEFORE_FIRST_LEG, request))
+        replay_started = _next_client_message(client_results[_STRATEGIES[0]], "started")
+        assert replay_started[1:3] == ("submit", _GROUP_CRASH_BEFORE_FIRST_LEG)
+        replay_done = _next_client_message(client_results[_STRATEGIES[0]], "done", timeout=30)
+        recovered_snapshot = _snapshot_from_reply(replay_done[5])
+        assert recovered_snapshot.state is GroupOrderState.PAIRED
+        assert recovered_snapshot.error_code is None
+        assert recovered_snapshot.residual_base_units == 0
+        assert provider_entered.is_set(), "the recovered replay never dispatched the first leg"
+        assert recovered_snapshot.budget_reservation is not None
+        # The one admitted budget hold survives the crash: same quote facts,
+        # now HELD because the recovered dispatch started exactly once.
+        assert recovered_snapshot.budget_reservation.state is GroupBudgetReservationState.HELD
+        assert recovered_snapshot.budget_reservation.gross_notional == Decimal("200")
+        assert (
+            recovered_snapshot.budget_reservation.quote_fingerprint
+            == pre_dispatch_snapshot.budget_reservation.quote_fingerprint
+        )
+        assert (
+            recovered_snapshot.budget_reservation.policy_fingerprint
+            == pre_dispatch_snapshot.budget_reservation.policy_fingerprint
+        )
+        assert len(recovered_snapshot.reservations) == 2
+        assert all(
+            leg.submitted_intent is not None
+            and leg.claim_receipt is not None
+            and leg.child_status is not None
+            and leg.child_status.state is ExecutionState.FILLED
+            and leg.resolution_receipt is not None
+            and leg.resolution_receipt.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED"
+            and leg.resolution_receipt.trade_count == 1
+            and leg.resolution_receipt.dispatch_latch_active is False
+            for leg in recovered_snapshot.legs
+        )
+
+        # Query is a pure projection and must equal the replay receipt exactly.
+        client_commands[_STRATEGIES[0]].put(("query", _GROUP_CRASH_BEFORE_FIRST_LEG, None))
+        _next_client_message(client_results[_STRATEGIES[0]], "started")
+        recovered_query = _next_client_message(client_results[_STRATEGIES[0]], "done")
+        recovered_query_snapshot = _query_reply_snapshot(recovered_query[5])
+        assert recovered_query_snapshot == recovered_snapshot
+
+        _close_client_threads(client_threads, client_commands, client_results)
+        client_threads = {}
+        client_commands = {}
+        client_results = {}
+        _stop_process(coordinator_process, coordinator_control)
+        coordinator_process = None
+        coordinator_control = None
+    finally:
+        reservation_reply_release.set()
+        provider_release.set()
+        primary_error = sys.exc_info()[1]
+        cleanup_error: BaseException | None = None
+        try:
+            _cleanup_group_hosts(
+                provider_release=provider_release,
+                client_threads=client_threads,
+                client_commands=client_commands,
+                client_results=client_results,
+                coordinator_process=coordinator_process,
+                coordinator_control=coordinator_control,
+                account_processes=account_processes,
+                account_controls=account_controls,
+                close_client_threads=_close_client_threads,
+                stop_process=_stop_process,
+                expected_interrupted_calls={
+                    _STRATEGIES[0]: (
+                        "submit",
+                        _GROUP_CRASH_BEFORE_FIRST_LEG,
+                        "RequestOutcomeUnknownError",
+                        None,
+                    )
+                },
+                observed_interrupted_calls=cleanup_interrupted_calls,
+                allowed_pending_completions={
+                    _STRATEGIES[0]: (
+                        ("submit", _GROUP_CRASH_BEFORE_FIRST_LEG),
+                        ("query", _GROUP_CRASH_BEFORE_FIRST_LEG),
+                    )
+                },
+                observed_pending_completions=cleanup_pending_completions,
+            )
+        except BaseException as error:
+            cleanup_error = error
+
+        if cleanup_interrupted_calls:
+            observed = tuple(item[1] for item in cleanup_interrupted_calls)
+            if primary_error is None and cleanup_error is None:
+                cleanup_error = AssertionError(
+                    "cleanup consumed an interrupted submit that the test did not assert: "
+                    f"{observed!r}"
+                )
+            elif primary_error is not None:
+                add_note = getattr(primary_error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"cleanup observed the exact expected lost reply: {observed!r}")
+
+        if cleanup_pending_completions:
+            drained = tuple(
+                (strategy_ref, message[1:3])
+                for strategy_ref, message in cleanup_pending_completions
+            )
+            if primary_error is None and cleanup_error is None:
+                cleanup_error = AssertionError(
+                    "cleanup drained pending client completions that the test did not "
+                    f"assert: {drained!r}"
+                )
+            elif primary_error is not None:
+                add_note = getattr(primary_error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"cleanup drained pending client completions: {drained!r}")
+
+        if cleanup_error is not None:
+            if primary_error is None:
+                raise cleanup_error
+            add_note = getattr(primary_error, "add_note", None)
+            if callable(add_note):
+                add_note(
+                    "test-owned cleanup also failed after all actions were attempted: "
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                )
+
+    assert pre_dispatch_snapshot is not None and recovered_snapshot is not None
+    assert recovered_query_snapshot == recovered_snapshot
+
+    groups = SqliteOrderGroupStore(coordinator_paths["groups"])
+    try:
+        assert groups.get(_PORTFOLIO, _GROUP_CRASH_BEFORE_FIRST_LEG) == recovered_snapshot
+        events = groups.events(_PORTFOLIO, _GROUP_CRASH_BEFORE_FIRST_LEG)
+    finally:
+        groups.close()
+
+    # One durable budget hold: exactly one RESERVED -> HELD transition, one
+    # first-leg and one hedge dispatch start, and no rejection or recovery
+    # event anywhere in the group's event log.
+    budget_transitions = [
+        {
+            "from": event.payload["budget_transition"].get("from"),
+            "to": event.payload["budget_transition"].get("to"),
+        }
+        for event in events
+        if "budget_transition" in event.payload
+    ]
+    assert budget_transitions == [{"from": "RESERVED", "to": "HELD"}], budget_transitions
+    event_types = tuple(event.event_type for event in events)
+    assert event_types.count("FIRST_LEG_SUBMIT_STARTED") == 1
+    assert event_types.count("HEDGE_LEG_SUBMIT_STARTED") == 1
+    assert event_types.count("GROUP_PAIRED") == 1
+    assert "GROUP_REJECTED_BEFORE_DISPATCH" not in event_types
+    assert "GROUP_RECOVERY_REQUIRED" not in event_types
+    assert "GROUP_DEADLINE_ELAPSED" not in event_types
+
+    for account_ref in _ACCOUNTS:
+        risk_scope = AccountScope("fixture", f"provider-{account_ref}", "simulation")
+        gate = DurableRiskGate(account_paths[account_ref]["risk_gate"], _risk_policy())
+        try:
+            resolved = gate.read_group_vector_snapshot(risk_scope, _GROUP_CRASH_BEFORE_FIRST_LEG)
+            assert len(resolved.legs) == 1
+            # The crash never released or duplicated the single committed
+            # vector: its only member was claimed and resolved exactly once.
+            assert resolved.legs[0].claimed is True
+            assert resolved.legs[0].resolved is True
+        finally:
+            gate.close()
+
+        writes, counters = _provider_snapshot(Path(account_paths[account_ref]["provider"]))
+        assert len(writes) == 1
+        assert len(set(writes)) == 1
+        assert counters == {"order_queries": 1, "fill_queries": 1}
+
+        execution_scope = _execution_scope(account_ref, _STRATEGIES[0])
+        execution = SqliteExecutionStore(account_paths[account_ref]["execution"])
+        try:
+            leg_id = group_leg_intent_id(
+                _GROUP_CRASH_BEFORE_FIRST_LEG,
+                "leg-a" if account_ref == "account-a" else "leg-b",
+            )
+            record = execution.get(leg_id, scope=execution_scope)
+            assert record is not None
+            assert record.state is ExecutionState.FILLED
+            # Exactly one dispatch attempt per leg: the recovered replay never
+            # produced a second provider write for any leg.
+            assert record.dispatch_attempts == 1
+        finally:
+            execution.close()
+
+        authority_store = SqliteExecutionStore(account_paths[account_ref]["execution"])
+        authority = ExecutionGroupAuthority(
+            account_paths[account_ref]["group_authority"],
+            completion_verifier=ExecutionStoreGroupCompletionVerifier(
+                authority_store,
+                execution_scopes=(execution_scope,),
+            ),
+        )
+        try:
+            # No dispatch hold was lost or stranded by the pre-dispatch crash.
+            assert authority.pending_holds() == ()
+        finally:
+            authority.close()
+            authority_store.close()
+
+    # Exactly one Risk reserve RPC per account for the whole group: the
+    # recovery replay reconciled through pure queries and never re-reserved.
+    expected_reservation_calls = sorted(
+        [(account, _GROUP_CRASH_BEFORE_FIRST_LEG) for account in _ACCOUNTS]
+    )
+    observed_reservation_calls = [reservation_events.get(timeout=5) for _ in range(2)]
+    assert sorted(observed_reservation_calls) == expected_reservation_calls
+    with pytest.raises(queue.Empty):
+        reservation_events.get(timeout=0.1)

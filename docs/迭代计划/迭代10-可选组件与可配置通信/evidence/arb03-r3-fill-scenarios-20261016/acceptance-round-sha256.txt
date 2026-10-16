@@ -1,0 +1,10 @@
+2f06291dbed35bc56f54d6e502c001fd3316f9408cf4a0fab615acaff03a033e *tests/integration/test_arb03_dim05_group_partial_fill_service.py
+ae6dcd3b496d69a743ce8464c64cefb9e1d1a57d1938874da2cf4564ca3792ce *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/root-adjudication.md
+0d8a94fd03fb7c5f81bf4a1b3158bc01b4cbf6b0f1055e1816f1f56c4dd8bbe1 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/00-INDEX.md
+9d5a777e955b766d4b319dcf914b366d73a4f84b59f97b28323011a47d6c42c7 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/review/arb03-r3-review.md
+da5656b8b1db739df5bcdd11015e0c7ec5a2d8ca784cbd5e6945a9611b14ea06 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/junit/producer.xml
+82d4e408ecb3f1021b2c39d4e691ad29876b2a1d28e644ec5bc47a3e71ae8710 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/junit/review.xml
+13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/exit-producer.txt
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/exit-review.txt
+54ad70d09d1aec2567bf318678c8c6ea2eb2312930f69a77c13195c640ad9741 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/stdout-producer.log
+a669cdc6e584be81e197c253b58a05e88bf10b30a42f88eec990ce7cf5ada9be *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb03-r3-fill-scenarios-20261016/stdout-review.log
