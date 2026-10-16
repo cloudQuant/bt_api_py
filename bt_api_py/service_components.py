@@ -1225,11 +1225,21 @@ def _account_risk_policy_metadata(
             or wire_scope in target_scopes
             or not wire_scope.account_ref
             or wire_scope.account_refs
-            or wire_scope.strategy_ref != strategy_id
+            or not (
+                (wire_scope.strategy_ref == strategy_id and wire_scope.manual_book_ref is None)
+                or (
+                    wire_scope.strategy_ref is None
+                    and wire_scope.account_ref is not None
+                    and not wire_scope.account_refs
+                    and wire_scope.manual_book_ref is not None
+                    and wire_scope.portfolio_ref is None
+                    and wire_scope.group_id is None
+                    and wire_scope.leg_id is None
+                )
+            )
             or wire_scope.run_id is not None
             or wire_scope.group_id is not None
             or wire_scope.leg_id is not None
-            or wire_scope.manual_book_ref is not None
         ):
             raise ServiceComponentError("RISK_POLICY_BINDING_INVALID")
         target_scopes.add(wire_scope)

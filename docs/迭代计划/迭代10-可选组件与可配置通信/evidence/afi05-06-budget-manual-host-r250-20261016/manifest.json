@@ -1,0 +1,506 @@
+{
+  "schema": "bt-api-py.iteration10.canonical-evidence.v1",
+  "round": "R250",
+  "created_utc": "2026-10-16T15:34:32.430659+00:00",
+  "delivery_disposition": "READY_FOR_ROOT_SCOPED_DELIVERY",
+  "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_AUTHENTICATED_AFI_HTTP_TO_SDK_RISK_HOST_BUDGET_ADMISSION_ONLY",
+  "formal_case_count_before_after": "40/68 unchanged",
+  "formal_case_pass_delta": 0,
+  "repositories": {
+    "sdk_parent": {
+      "path": "D:\\bt_api_py",
+      "branch": "dev",
+      "r8_run_guard_head": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "current_head": "366eb466b147cb96b51dd1edc5d57e6510ea5d92",
+      "patch_base_file": {
+        "path": "bt_api_py/service_components.py",
+        "git_blob": "2915af5f369b5f26258e4a3f7c21f93707e487db",
+        "bytes": 105851,
+        "sha256": "afd7f220223af7c026e8d010faa36cacc2b11f2364235fdc5a6383567a69e0f5"
+      }
+    },
+    "risk": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "branch": "dev",
+      "r8_run_guard_head": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "current_head": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "new_code_changes_in_r250": false,
+      "accepted_budget_authority_base": "ccac8818312c1474077c00bfe9d8f12521af39c9"
+    },
+    "base": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "branch": "dev",
+      "r8_run_guard_head": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "current_head": "cc6036c89c534a17d93e6b793f930c576b4aa960"
+    },
+    "transport_zmq": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+      "branch": "dev",
+      "r8_run_guard_head": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "current_head": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "afi": {
+      "path": "D:\\source_code\\ai-for-investor",
+      "branch": "dev",
+      "r8_run_guard_head": "ad9c8dcc7ba6bef1d2cbd915551fe95932e92ee1",
+      "current_head": "ad9c8dcc7ba6bef1d2cbd915551fe95932e92ee1"
+    }
+  },
+  "source_candidates": [
+    {
+      "repository_relative_path": "bt_api_py/service_components.py",
+      "scope": "single strict manual-account-scope validator hunk",
+      "base_commit": "2e9302f46ba8e70fec58014717955ff177a8d8a8",
+      "base_blob": "2915af5f369b5f26258e4a3f7c21f93707e487db",
+      "base": {
+        "bytes": 105851,
+        "sha256": "afd7f220223af7c026e8d010faa36cacc2b11f2364235fdc5a6383567a69e0f5"
+      },
+      "candidate": {
+        "bytes": 106298,
+        "sha256": "36eb79206462ca2850c2259f155a7b94dbafbd5cb548c2eed32ba77bc1bedc6f"
+      },
+      "patch": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-r250-afi05-06-service-components-manual-scope.patch",
+        "bytes": 1276,
+        "sha256": "bd0b32c1db22791357cf415d272bb9f529beb4bca7abb3f3d5e4c02e0945ac14"
+      },
+      "live_file_modified": false,
+      "static_transform_check": "exact predicate occurred once; candidate was generated from source commit 2e9302f46ba8e70fec58014717955ff177a8d8a8 target blob; current HEAD 366eb466b147cb96b51dd1edc5d57e6510ea5d92 target blob was independently verified identical; current HEAD composition was not QA-run",
+      "current_head_blob_verification": {
+        "commit": "366eb466b147cb96b51dd1edc5d57e6510ea5d92",
+        "repository_relative_path": "bt_api_py/service_components.py",
+        "git_blob": "2915af5f369b5f26258e4a3f7c21f93707e487db",
+        "matches_base_blob": true
+      }
+    },
+    {
+      "repository": "D:\\source_code\\ai-for-investor",
+      "repository_relative_path": "src/backend/tests/test_afi_budget_manual_admission_host.py",
+      "role": "focused test only; no AFI production source changed",
+      "bytes": 41980,
+      "sha256": "f9cacbad0b13a7adf177977751f60ca2d9ea693412c535210e8ba0cbaaa82be3"
+    }
+  ],
+  "r8_fixed_runtime": {
+    "export_path": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15",
+    "manifest": {
+      "path": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\export-manifest.json",
+      "bytes": 1149335,
+      "sha256": "2537e50c4d1c59adc9f14466a07cf2aafd95ab0d0507e57c11e5b7224a5f440a"
+    },
+    "source_count": 2190,
+    "sources_unchanged": true,
+    "runtime_source_commits": {
+      "sdk": {
+        "repository": "D:\\bt_api_py",
+        "commit": "53f33158429f89fd9b4dce83c068056c99d6778f",
+        "verified_file_count": 182
+      },
+      "risk": {
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+        "commit": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+        "verified_file_count": 20
+      },
+      "base": {
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+        "commit": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "verified_file_count": 111
+      },
+      "transport_zmq": {
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+        "commit": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "verified_file_count": 7
+      },
+      "afi": {
+        "repository": "D:\\source_code\\ai-for-investor",
+        "commit": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+        "verified_file_count": 1810
+      }
+    },
+    "candidate_overlay_count": 6,
+    "manual_scope_overlay": {
+      "path": "sdk/bt_api_py/service_components.py",
+      "bytes": 108584,
+      "sha256": "510d1c41e4c141496a9bfae56362482090d5020cd5fbad7e17f9f483cd6a556e",
+      "origin": {
+        "kind": "accepted-base-plus-exact-manual-scope-overlay",
+        "repository": "D:\\bt_api_py",
+        "base_commit": "53f33158429f89fd9b4dce83c068056c99d6778f",
+        "base_path": "bt_api_py/service_components.py",
+        "base_bytes": 108127,
+        "base_sha256": "4db8d39dfea9cb166b66bf2eb7f412f3f377084ab084c23a5cb1d6dba43b5ac1",
+        "candidate_source": "D:\\bt_api_py\\.codex-tmp\\iteration10-afi-budget-manual-host-service-components-manual-scope-candidate-r1.py",
+        "candidate_sha256": "510d1c41e4c141496a9bfae56362482090d5020cd5fbad7e17f9f483cd6a556e",
+        "candidate_bytes": 108584,
+        "patch_source": "D:\\bt_api_py\\.codex-tmp\\iteration10-afi-budget-manual-host-service-components-manual-scope-r1.patch",
+        "patch_sha256": "e884a649f1136e4eafb7d290d955bd68e8d816ce12bc82c169353f76d359a5a4",
+        "patch_bytes": 1190,
+        "scope": "one strict manual-account scope alternative; strategy target id remains owner-bound in trusted RiskOrderTarget; no DIM09 or unrelated live service_components hunks"
+      }
+    },
+    "r8_sdk_guard_head": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+    "current_patch_base_head": "366eb466b147cb96b51dd1edc5d57e6510ea5d92"
+  },
+  "r8_author_run": {
+    "actor": {
+      "canonical_actor": "AUTHOR_LOCAL_SYNTHETIC_AUTHENTICATED_AFI_HTTP_TO_SDK_RISK_HOST_BUDGET_ADMISSION_ONLY",
+      "executor": "/root/afi_policy_governance",
+      "execution_location": "author local Windows environment",
+      "root_execution": false,
+      "root_action": "Root read the frozen R8 output and did not rerun the node.",
+      "raw_result_preserved": true,
+      "raw_result_path": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\result.json",
+      "raw_result_evidence_level_field": "ROOT_FIXED_SOURCE_SYNTHETIC_AUTHENTICATED_AFI_HTTP_TO_RISK_HOST_BUDGET_ADMISSION_ONLY",
+      "correction": "The frozen result says ROOT_FIXED_SOURCE; the actor attribution is corrected here without editing result.json."
+    },
+    "output_directory": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8",
+    "actual_spec": {
+      "path": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\spec.json",
+      "bytes": 496815,
+      "sha256": "a8efcf55de2c39aa408c96560014f274f5ff86bddddea05011d51bb0211dccab"
+    },
+    "runner_copy": {
+      "path": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\runner.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "raw_result": {
+      "path": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\result.json",
+      "bytes": 1343,
+      "sha256": "193a38d396f30fa6c3aeae54eb9a03e85ed8a073f8bbe5641fe52c0441fdeefe"
+    },
+    "pytest_exit": 0,
+    "junit": {
+      "tests": 1,
+      "passed": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": "4.809"
+    },
+    "warnings": [
+      "backtrader.feeds.quandl DeprecationWarning",
+      "Windows PyZMQ Proactor selector-thread RuntimeWarning"
+    ],
+    "stderr_empty": true,
+    "source_count": 2190,
+    "sources_unchanged": true,
+    "heads_before": {
+      "D:\\bt_api_py": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "D:\\source_code\\ai-for-investor": "ad9c8dcc7ba6bef1d2cbd915551fe95932e92ee1"
+    },
+    "heads_after": {
+      "D:\\bt_api_py": "9a1495ad4be0670f7f2efe7e81c3ae9650877023",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "D:\\source_code\\ai-for-investor": "ad9c8dcc7ba6bef1d2cbd915551fe95932e92ee1"
+    },
+    "stdout_sha256": "92c9ce49078ef043dd98f300a33928dca4d4c94d0fe8c11b197d17695c4e699d",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "raw_evidence_level_not_edited": "ROOT_FIXED_SOURCE_SYNTHETIC_AUTHENTICATED_AFI_HTTP_TO_RISK_HOST_BUDGET_ADMISSION_ONLY"
+  },
+  "prior_refusal_node": {
+    "run": "R4 Root fixed-source run; not rerun in R250",
+    "result": {
+      "path": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r4\\result.json",
+      "bytes": 1343,
+      "sha256": "6468efefa2a0fedef383e6e8f44b11fb10b1ad81abf6cf52539006fbe38f184a"
+    },
+    "source_count": 2143,
+    "heads_unchanged": true,
+    "case_summary": [
+      {
+        "classname": "tests.test_afi_budget_manual_admission_host",
+        "name": "test_authenticated_manual_http_order_uses_confirmed_budget_risk_host",
+        "time_seconds": "2.073",
+        "status": "failed"
+      },
+      {
+        "classname": "tests.test_afi_budget_manual_admission_host",
+        "name": "test_budget_activation_refuses_missing_confirmation_and_incompatible_old_ledger",
+        "time_seconds": "1.849",
+        "status": "passed"
+      }
+    ],
+    "refusal_case": "test_budget_activation_refuses_missing_confirmation_and_incompatible_old_ledger",
+    "sibling_http_case_failed_in_r4_then_repaired_in_r8": true
+  },
+  "official_clause_mapping": {
+    "source": {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md",
+      "bytes": 161040,
+      "sha256": "a6f8dba3e749bd321e0ba118f666914fe6bf540ae9ea1396c2a4273087d75349",
+      "rows": [
+        797,
+        798
+      ]
+    },
+    "AFI05": {
+      "clause": "草稿/审批/发布/逐账户生效、拒绝/部分生效、旧预留与政策回退；AI/普通用户不能自批增额或解除冻结。",
+      "evidence_mapping": "R219 catalog compiler; R226 persisted owner/checker authority and SDK Host; R228 resolver; R250 authenticated single-account manual HTTP admission consumes confirmed budget and preserves over-limit refusal.",
+      "not_proven": [
+        "ordinary AFI budget-management HTTP/UI draft/approve/publish",
+        "production all-account effective/partial states and rollback/fallback",
+        "ordinary-user/AI HTTP denial for self-approval, increase, or unfreeze",
+        "consumer_effective read from deployed gate binding"
+      ],
+      "formal_status": "NOT_ACCEPTED"
+    },
+    "AFI06": {
+      "clause": "同量纲静态组合预算分配守恒；并发发布、重叠成员、已有占用/UNKNOWN、撤回未确认额度不能二次分配；FX 陈旧及不同 metric 混加拒绝。",
+      "evidence_mapping": "R219 static exact-unit compiler; R226 durable single Risk owner authority; R228 confirmed member resolver; R250 one synthetic account admission path using resolved static budget.",
+      "not_proven": [
+        "live multi-account directory and full occupancy reconciliation",
+        "end-to-end concurrent publication with overlapping members across writers/restarts",
+        "production partial publication and asynchronous global atomicity",
+        "real FX freshness/source behavior"
+      ],
+      "formal_status": "NOT_ACCEPTED"
+    },
+    "prior_round_packets": [
+      {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi05-06-static-budget-20261016",
+        "round": "R219",
+        "evidence_level": null,
+        "manifest": {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-static-budget-20261016\\manifest.json",
+          "bytes": 30431,
+          "sha256": "5a9b2abec0ecf09a7d6e9ba944c6356fa754bb1147862e5f1ee665a42afb8414"
+        },
+        "round_record": {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-static-budget-20261016\\round-record.md",
+          "bytes": 1376,
+          "sha256": "390ade7966f68f4aecbc4516a31ffb8a6ef51542c547748aca2b00d951ceab78"
+        },
+        "formal_pass_delta": null
+      },
+      {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi05-06-budget-authority-r226-20261016",
+        "round": "R226",
+        "evidence_level": "ROOT_LOCAL_SYNTHETIC_SDK_HOST_BUDGET_AUTHORITY_AND_RISK_CATALOG_WIRING_ONLY",
+        "manifest": {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-budget-authority-r226-20261016\\manifest.json",
+          "bytes": 168341,
+          "sha256": "9dc56f8c6d8bcd3e80ef3bcafe2f8e5787a77b67a46afc7d78e9c6cb0787c45d"
+        },
+        "round_record": {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-budget-authority-r226-20261016\\round-record.md",
+          "bytes": 4937,
+          "sha256": "fd1fa1ab403262ad2b6581ef7da3559dd5c159070f2300cf621bc7d603c2626b"
+        },
+        "formal_pass_delta": 0
+      },
+      {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi05-06-budget-admission-resolver-r228-20261016",
+        "round": "R228",
+        "evidence_level": "ROOT_FIXED_SOURCE_RISK_POLICY_CATALOG_BUDGET_ADMISSION_RESOLVER_ONLY",
+        "manifest": {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-budget-admission-resolver-r228-20261016\\manifest.json",
+          "bytes": 44245,
+          "sha256": "910e4dd729d4ab58cf06ffdb174a60674b787b208b0a021a20d59e40a354d7f9"
+        },
+        "round_record": {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-budget-admission-resolver-r228-20261016\\round-record.md",
+          "bytes": 3792,
+          "sha256": "587b681bc4bcfd0d4aa7f3b629cf8302b1b3c1dd5398dde0e76bfae3b1672e18"
+        },
+        "formal_pass_delta": 0
+      }
+    ]
+  },
+  "archive": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-budget-manual-host-r250-20261016\\raw-evidence.zip",
+    "bytes": 875884,
+    "sha256": "64c63e89dc88114a4357e0ea4e70c88cee56fd4abc797c097cbbacc157be2290",
+    "member_count": 28,
+    "members": [
+      {
+        "path": "r8-author-output/command.json",
+        "bytes": 2606,
+        "sha256": "129f61fac930b4deb9488cf935ee40b5578582497a79074d4ce354aaf8327516",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\command.json"
+      },
+      {
+        "path": "r8-author-output/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\exit.txt"
+      },
+      {
+        "path": "r8-author-output/junit.xml",
+        "bytes": 396,
+        "sha256": "b838241d4d443c741611c8b74dd787be027849ec2022a91a00ddd05c6cd61395",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\junit.xml"
+      },
+      {
+        "path": "r8-author-output/result.json",
+        "bytes": 1343,
+        "sha256": "193a38d396f30fa6c3aeae54eb9a03e85ed8a073f8bbe5641fe52c0441fdeefe",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\result.json"
+      },
+      {
+        "path": "r8-author-output/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\runner.py"
+      },
+      {
+        "path": "r8-author-output/running.json",
+        "bytes": 76,
+        "sha256": "dd4d672246d7e2423ea0a27503598af1e75744d8e962dd94714f17a27beb2007",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\running.json"
+      },
+      {
+        "path": "r8-author-output/source-after.json",
+        "bytes": 477713,
+        "sha256": "f559c2702ac06dce24dd50425d09177f9499cc02815c894ddb5c53f5fdaf2143",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\source-after.json"
+      },
+      {
+        "path": "r8-author-output/source-before.json",
+        "bytes": 477713,
+        "sha256": "f559c2702ac06dce24dd50425d09177f9499cc02815c894ddb5c53f5fdaf2143",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\source-before.json"
+      },
+      {
+        "path": "r8-author-output/spec.json",
+        "bytes": 496815,
+        "sha256": "a8efcf55de2c39aa408c96560014f274f5ff86bddddea05011d51bb0211dccab",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\spec.json"
+      },
+      {
+        "path": "r8-author-output/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\stderr.log"
+      },
+      {
+        "path": "r8-author-output/stdout.log",
+        "bytes": 1160,
+        "sha256": "92c9ce49078ef043dd98f300a33928dca4d4c94d0fe8c11b197d17695c4e699d",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8\\stdout.log"
+      },
+      {
+        "path": "r8-author-actor-correction.json",
+        "bytes": 710,
+        "sha256": "fe0574aabc8e5a0c2dee7a533ef38d90d64bbe6d475181f349f2637b0f050dc9",
+        "origin": "derived attribution sidecar; original result unchanged"
+      },
+      {
+        "path": "r4-refusal-history/case-summary.json",
+        "bytes": 1429,
+        "sha256": "11de6530778fac64cf86e9a94fb6b3c0b4c0586152129434655275bfc2e949fd",
+        "origin": "sanitized projection of pinned R4 JUnit and source snapshots"
+      },
+      {
+        "path": "r4-refusal-history/result.json",
+        "bytes": 1343,
+        "sha256": "6468efefa2a0fedef383e6e8f44b11fb10b1ad81abf6cf52539006fbe38f184a",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r4\\result.json"
+      },
+      {
+        "path": "r4-refusal-history/source-before.json",
+        "bytes": 470283,
+        "sha256": "deda45fb145b48eabdb897b515e8d67ee56dab5c47e9ec37af45b56b2c0ddd67",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r4\\source-before.json"
+      },
+      {
+        "path": "r4-refusal-history/source-after.json",
+        "bytes": 470283,
+        "sha256": "deda45fb145b48eabdb897b515e8d67ee56dab5c47e9ec37af45b56b2c0ddd67",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r4\\source-after.json"
+      },
+      {
+        "path": "r4-refusal-history/test_afi_budget_manual_admission_host.py",
+        "bytes": 38550,
+        "sha256": "7ec735b9b2cac2310016cb59d9e53d773e7321faae5451a7c1fb415db9a16512",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r10\\afi\\src\\backend\\tests\\test_afi_budget_manual_admission_host.py"
+      },
+      {
+        "path": "fixed-runtime/r15-export-manifest.json",
+        "bytes": 1149335,
+        "sha256": "2537e50c4d1c59adc9f14466a07cf2aafd95ab0d0507e57c11e5b7224a5f440a",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\export-manifest.json"
+      },
+      {
+        "path": "fixed-runtime/r15-sdk-service_components.py",
+        "bytes": 108584,
+        "sha256": "510d1c41e4c141496a9bfae56362482090d5020cd5fbad7e17f9f483cd6a556e",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\sdk\\bt_api_py\\service_components.py"
+      },
+      {
+        "path": "fixed-runtime/r15-sdk-service_risk_order_entry.py",
+        "bytes": 158736,
+        "sha256": "1a8faacbcb685ff1a6f79ac1373013937468e60e654597bd37aaff61639d9129",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\sdk\\bt_api_py\\service_risk_order_entry.py"
+      },
+      {
+        "path": "fixed-runtime/r15-risk-budget_admission.py",
+        "bytes": 8651,
+        "sha256": "bb0c1c348e15bc3573744579e93ea3219d8aa3682e35feafdf7286e35bfc5aa5",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\risk\\src\\bt_api_risk\\budget_admission.py"
+      },
+      {
+        "path": "fixed-runtime/r15-risk-order_admission.py",
+        "bytes": 19604,
+        "sha256": "1597767c01b36b3ab7e03834af781e7e1583ab0563097e50c8083e7351c156a4",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\risk\\src\\bt_api_risk\\order_admission.py"
+      },
+      {
+        "path": "fixed-runtime/r15-risk-core-admission.py",
+        "bytes": 504020,
+        "sha256": "9bac2206cdae4c3099a1f89f1e21f65c081997ffef45df8a7b53cfafdd4ca79b",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\risk\\src\\bt_api_risk\\core\\admission.py"
+      },
+      {
+        "path": "fixed-runtime/r15-afi-test.py",
+        "bytes": 41980,
+        "sha256": "f9cacbad0b13a7adf177977751f60ca2d9ea693412c535210e8ba0cbaaa82be3",
+        "origin": "D:\\temp\\iteration10-afi-budget-manual-host-accepted-source-20261016-r15\\afi\\src\\backend\\tests\\test_afi_budget_manual_admission_host.py"
+      },
+      {
+        "path": "current-sdk/accepted-head-service_components.py",
+        "bytes": 105851,
+        "sha256": "afd7f220223af7c026e8d010faa36cacc2b11f2364235fdc5a6383567a69e0f5",
+        "origin": "D:\\bt_api_py\\.codex-tmp\\iteration10-r250-afi05-06-service-components-base.py"
+      },
+      {
+        "path": "current-sdk/manual-scope-candidate-service_components.py",
+        "bytes": 106298,
+        "sha256": "36eb79206462ca2850c2259f155a7b94dbafbd5cb548c2eed32ba77bc1bedc6f",
+        "origin": "D:\\bt_api_py\\.codex-tmp\\iteration10-r250-afi05-06-service-components-manual-scope-candidate.py"
+      },
+      {
+        "path": "current-sdk/manual-scope.patch",
+        "bytes": 1276,
+        "sha256": "bd0b32c1db22791357cf415d272bb9f529beb4bca7abb3f3d5e4c02e0945ac14",
+        "origin": "D:\\bt_api_py\\.codex-tmp\\iteration10-r250-afi05-06-service-components-manual-scope.patch"
+      },
+      {
+        "path": "afi-candidate/test_afi_budget_manual_admission_host.py",
+        "bytes": 41980,
+        "sha256": "f9cacbad0b13a7adf177977751f60ca2d9ea693412c535210e8ba0cbaaa82be3",
+        "origin": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_afi_budget_manual_admission_host.py"
+      }
+    ]
+  },
+  "canonical_payloads": {
+    "round_record": {
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi05-06-budget-manual-host-r250-20261016\\round-record.md",
+      "bytes": 6913,
+      "sha256": "742ebc21dc13e9509ebbd5c0d6fff318053a63c4fc410bf342481f024c284cdb"
+    }
+  },
+  "limitations": [
+    "R8 is author-local synthetic QA; Root did not rerun it; frozen result mislabels the actor and is unchanged.",
+    "R8 ran its fixed R15 export (SDK runtime source commit 53f331 plus overlays), not the current SDK HEAD patch composition.",
+    "R250 adds no Risk code and no AFI production policy-management HTTP endpoint.",
+    "No real account, credentials, live provider, or deployment was used.",
+    "No formal AFI05/06 case passed; tracker remains 40/68."
+  ]
+}
