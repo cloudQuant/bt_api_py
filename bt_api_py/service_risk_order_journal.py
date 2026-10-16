@@ -3191,7 +3191,7 @@ class RiskOrderJournal:
     def _validate_transition(current: str, following: str) -> None:
         allowed = {
             "PREPARED": {"RESERVED", "ADMISSION_DENIED", "UNKNOWN"},
-            "RESERVED": {"CLAIMED", "NO_DISPATCH", "UNKNOWN"},
+            "RESERVED": {"CLAIMED", "NO_DISPATCH", "UNKNOWN", "ADMISSION_DENIED"},
             "CLAIMED": {"DISPATCHING", "UNKNOWN"},
             "DISPATCHING": {"ORDER_OBSERVATION", "UNKNOWN"},
             "ORDER_OBSERVATION": {"FILL_OBSERVATION", "UNKNOWN"},

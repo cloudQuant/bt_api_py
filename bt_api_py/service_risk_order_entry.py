@@ -1311,6 +1311,38 @@ class RiskOrderEntryService:
         else:
             return self._recover_claimed(fence, command)
 
+        # The deadline is a durable intent field: only canonical_payload
+        # persists it, and order_request must stay the exact wire payload
+        # that OrderRequest.from_dict rebuilds at dispatch time.
+        if not isinstance(command.canonical_payload, Mapping):
+            return self._mark_unknown(
+                fence, command, "INTENT_DEADLINE_SOURCE_UNCERTAIN", permit_id=permit_id
+            )
+        deadline_ns = command.canonical_payload.get("deadline_ns")
+        if deadline_ns is not None:
+            if type(deadline_ns) is not int or deadline_ns <= 0:
+                return self._mark_unknown(
+                    fence, command, "INTENT_DEADLINE_SOURCE_UNCERTAIN", permit_id=permit_id
+                )
+            try:
+                now_ns = time.time_ns()
+            except Exception:
+                return self._mark_unknown(
+                    fence, command, "INTENT_DEADLINE_CLOCK_UNCERTAIN", permit_id=permit_id
+                )
+            if type(now_ns) is not int or now_ns <= 0:
+                return self._mark_unknown(
+                    fence, command, "INTENT_DEADLINE_CLOCK_UNCERTAIN", permit_id=permit_id
+                )
+            if now_ns >= deadline_ns:
+                return self._release_unclaimed_and_record_denial(
+                    fence,
+                    command,
+                    admission=admission,
+                    permit_id=permit_id,
+                    reason="DEADLINE_EXPIRED",
+                )
+
         if risk_order is None:
             risk_order = self._admission_order(command, target, None)
         try:
@@ -1318,13 +1350,13 @@ class RiskOrderEntryService:
             admission.claim_for_dispatch(permit_id, risk_order)
             claim = self._gate.dispatch_claim_binding(permit_id)
         except RiskAdmissionDeniedError as error:
-            try:
-                admission.release(permit_id, "risk_order_not_dispatched")
-            except Exception:
-                return self._mark_unknown(
-                    fence, command, "UNCLAIMED_RELEASE_UNCERTAIN", permit_id=permit_id
-                )
-            return self._record_denial(fence, command, error.code, permit_id=permit_id)
+            return self._release_unclaimed_and_record_denial(
+                fence,
+                command,
+                admission=admission,
+                permit_id=permit_id,
+                reason=error.code,
+            )
         except Exception:
             try:
                 claim = self._gate.dispatch_claim_binding(permit_id)
@@ -1405,6 +1437,32 @@ class RiskOrderEntryService:
             request=request,
             allow_resolution=True,
         )
+
+    def _release_unclaimed_and_record_denial(
+        self,
+        fence: RiskOrderWriterFence,
+        command: RiskOrderCommand,
+        *,
+        admission: DurableRiskAdmissionAdapter,
+        permit_id: str,
+        reason: str,
+    ) -> RiskOrderCommand:
+        try:
+            admission.release(permit_id, "risk_order_not_dispatched")
+        except PermitInvalidError as release_error:
+            # Another Risk transaction may expire the pending permit after a
+            # denial but before this release call.  DurableRiskGate.release
+            # checks for a dispatch claim before reservation status, so this
+            # exact result proves the permit is inactive and unclaimed.
+            if release_error.code != "PERMIT_NOT_ACTIVE":
+                return self._mark_unknown(
+                    fence, command, "UNCLAIMED_RELEASE_UNCERTAIN", permit_id=permit_id
+                )
+        except Exception:
+            return self._mark_unknown(
+                fence, command, "UNCLAIMED_RELEASE_UNCERTAIN", permit_id=permit_id
+            )
+        return self._record_denial(fence, command, reason, permit_id=permit_id)
 
     def _reconcile_claimed_order(
         self,

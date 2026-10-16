@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="19.989" timestamp="2026-10-16T09:19:18.621694" hostname="yun"><testcase classname="tests.unit.test_service_risk_order_ttl_restart_integration" name="test_spawned_service_risk_order_ttl_expiry_and_unknown_restart" time="18.418" /></testsuite></testsuites>
