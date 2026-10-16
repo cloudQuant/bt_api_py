@@ -1,0 +1,32 @@
+{
+  "case": "AFI01",
+  "decision": "FORMAL_PASS",
+  "formal_count": "41/68",
+  "test_execution": "AUTHOR_PYTEST_LOCAL_ASGI_SDK_SPAWN_SERVICEHOST_SYNTHETIC_PROVIDER",
+  "root_action": "SOURCE_OUTPUT_AND_CLAUSE_REVIEW_NO_REPEATED_QA",
+  "afi_commit": "1955309201c1ac812ab8c5904aa0a105f860679e",
+  "test_checkout": {
+    "path": "src/backend/tests/test_afi01_owner_scope_service_host_integration.py",
+    "bytes": 20440,
+    "sha256": "695c628cee836e611182764c074053d1f2ca393983ac7782cc37cbc60c293ebe"
+  },
+  "test_commit_blob": {
+    "bytes": 20439,
+    "sha256": "fdd9f51ad2d781aa78f208529015a26fd4d63f3ae2eafb9f8b9b77b770706e50"
+  },
+  "normalization_only": true,
+  "r2_artifacts": {
+    "author-focused-run.log": {
+      "bytes": 908,
+      "sha256": "5319c05797ac2614c781f4c52cf7ef3c5ec0125440e01e639a9bff2461e3fc48"
+    },
+    "round-record.md": {
+      "bytes": 1672,
+      "sha256": "dbe7205e4f0dd07d8a62e16a16161dd17634ee3302e5633ed547997a3c84ee24"
+    },
+    "source-pins.json": {
+      "bytes": 4371,
+      "sha256": "bff28f5f541a89b1a3e5fe13faaa3c24bb45cae10be3f1b309d339026a4b9199"
+    }
+  }
+}

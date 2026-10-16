@@ -1,0 +1,86 @@
+{
+  "repo": "D:\\source_code\\ai-for-investor",
+  "parent": "86ed9dbbe6293b71d7279aafb0f93b1e0c36aa3e",
+  "head": "860bd7ba034f1a13db46e48f0fd5d4115274dd3f",
+  "entries": [
+    {
+      "path": "src/backend/app/api/afi_owner_scope.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\api\\afi_owner_scope.py",
+      "sha256": "a7bcf7323840017e529a459f8eaabb316335391282a1c10c9a322b20b4de49e4",
+      "old_blob": null,
+      "blob": "7bedc209bbce1a07b6027263449692d6d84033ff"
+    },
+    {
+      "path": "src/backend/app/api/service_read.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\api\\service_read.py",
+      "sha256": "524f8fcd93265cf41e0649e17e18d580fdd0a38911f8efbad111dd04a3c7e4d9",
+      "old_blob": "85fccb53c8066ea0092b2e6ff61c4d403a1a3100",
+      "blob": "b0bf318bb80a45b0c3fd9303d7bd19461187c862"
+    },
+    {
+      "path": "src/backend/app/api/service_gateway.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\api\\service_gateway.py",
+      "sha256": "57eb3b985f755318a74f30da5ebd64cf69ea38ca115e7cd221fc0fc23d086c29",
+      "old_blob": "5995d95772012af9732089a2bbf052b6568148bd",
+      "blob": "1435d3d1a2d8494844e32f7bea62b9c09043941c"
+    },
+    {
+      "path": "src/backend/app/api/service_orders.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\api\\service_orders.py",
+      "sha256": "0bd188972bda2c7d5693082a45bbb10ee5889d3cdbc9a85636568424f7bdea9e",
+      "old_blob": "562e10814e003a2c6eb8d91c008e9a2bd199d659",
+      "blob": "c5c0ae168481d6c5ba8c39729a141d7d9f2687fe"
+    },
+    {
+      "path": "src/backend/app/api/approved_orders.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\api\\approved_orders.py",
+      "sha256": "86a6ebbff936a1d18a27019f5dc9e29683eba2f6533ca653b1607c500c9abd1f",
+      "old_blob": "04992d69909a7ab9056bdcfae26d2112fc518540",
+      "blob": "cfb42e3c22ec66b2b7d203a48be529d04a70790d"
+    },
+    {
+      "path": "src/backend/app/api/portfolio/compositions.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\api\\portfolio\\compositions.py",
+      "sha256": "f09823b858d687521d96397c11c2d29a56d1fbfd129c5a572ce55774bfd09fff",
+      "old_blob": "647c32228bdee622856e1997123a0a894022091f",
+      "blob": "083e62e813a2c84fe1191ade6d0b10674847d9ec"
+    },
+    {
+      "path": "src/backend/tests/test_afi01_persisted_owner_scope_http.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_afi01_persisted_owner_scope_http.py",
+      "sha256": "b009fea95d3282560ec27be54c47b3b1cf2d2919e7aaa9552627b301183c6e3d",
+      "old_blob": null,
+      "blob": "f1a93d121b64d8c4036c1a918299fd15c0ffcb9f"
+    },
+    {
+      "path": "src/backend/tests/test_service_read_api.py",
+      "payload": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_service_read_api.py",
+      "sha256": "3567fb0c8083925f1e42550e5455022412c006eb88464889978e77291fa60c00",
+      "old_blob": "75bb06479ccf2aabd711d717ac357058d0d68c95",
+      "blob": "c8e4a7bdcda2941b552b2f0ffb0a8f1dd605aafe"
+    }
+  ],
+  "index_empty": true,
+  "selected_checkout_before": {
+    "src/backend/app/api/afi_owner_scope.py": "a7bcf7323840017e529a459f8eaabb316335391282a1c10c9a322b20b4de49e4",
+    "src/backend/app/api/service_read.py": "524f8fcd93265cf41e0649e17e18d580fdd0a38911f8efbad111dd04a3c7e4d9",
+    "src/backend/app/api/service_gateway.py": "57eb3b985f755318a74f30da5ebd64cf69ea38ca115e7cd221fc0fc23d086c29",
+    "src/backend/app/api/service_orders.py": "0bd188972bda2c7d5693082a45bbb10ee5889d3cdbc9a85636568424f7bdea9e",
+    "src/backend/app/api/approved_orders.py": "86a6ebbff936a1d18a27019f5dc9e29683eba2f6533ca653b1607c500c9abd1f",
+    "src/backend/app/api/portfolio/compositions.py": "f09823b858d687521d96397c11c2d29a56d1fbfd129c5a572ce55774bfd09fff",
+    "src/backend/tests/test_afi01_persisted_owner_scope_http.py": "b009fea95d3282560ec27be54c47b3b1cf2d2919e7aaa9552627b301183c6e3d",
+    "src/backend/tests/test_service_read_api.py": "3567fb0c8083925f1e42550e5455022412c006eb88464889978e77291fa60c00"
+  },
+  "selected_checkout_after": {
+    "src/backend/app/api/afi_owner_scope.py": "a7bcf7323840017e529a459f8eaabb316335391282a1c10c9a322b20b4de49e4",
+    "src/backend/app/api/service_read.py": "524f8fcd93265cf41e0649e17e18d580fdd0a38911f8efbad111dd04a3c7e4d9",
+    "src/backend/app/api/service_gateway.py": "57eb3b985f755318a74f30da5ebd64cf69ea38ca115e7cd221fc0fc23d086c29",
+    "src/backend/app/api/service_orders.py": "0bd188972bda2c7d5693082a45bbb10ee5889d3cdbc9a85636568424f7bdea9e",
+    "src/backend/app/api/approved_orders.py": "86a6ebbff936a1d18a27019f5dc9e29683eba2f6533ca653b1607c500c9abd1f",
+    "src/backend/app/api/portfolio/compositions.py": "f09823b858d687521d96397c11c2d29a56d1fbfd129c5a572ce55774bfd09fff",
+    "src/backend/tests/test_afi01_persisted_owner_scope_http.py": "b009fea95d3282560ec27be54c47b3b1cf2d2919e7aaa9552627b301183c6e3d",
+    "src/backend/tests/test_service_read_api.py": "3567fb0c8083925f1e42550e5455022412c006eb88464889978e77291fa60c00"
+  },
+  "selected_checkout_unchanged": true,
+  "whole_worktree_stability_claim": false
+}

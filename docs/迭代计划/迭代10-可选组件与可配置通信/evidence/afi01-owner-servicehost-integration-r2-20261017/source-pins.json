@@ -1,0 +1,68 @@
+{
+  "status": "AUTHOR_PASS_ROOT_REVIEW_PENDING",
+  "evidence_level": "AUTHOR_FOCUSED_LOCAL_SYNTHETIC_HTTP_SDK_SERVICEHOST_TEST_ONLY",
+  "formal_case": "AFI01",
+  "formal_plan_line": 793,
+  "repository": "D:/source_code/ai-for-investor",
+  "branch": "dev",
+  "head_at_run": "fe4c83c5a3425283e2ca3a3eae7c6cf035b6d0bc",
+  "persisted_owner_commit": "860bd7ba034f1a13db46e48f0fd5d4115274dd3f",
+  "persisted_owner_commit_is_ancestor": true,
+  "node": "tests/test_afi01_owner_scope_service_host_integration.py::test_persisted_owners_scope_real_http_sdk_service_host_and_portfolios",
+  "candidate": {
+    "bytes": 20440,
+    "sha256": "695c628cee836e611182764c074053d1f2ca393983ac7782cc37cbc60c293ebe"
+  },
+  "execution": {
+    "working_directory": "D:/source_code/ai-for-investor/src/backend",
+    "python": ".venv/Scripts/python.exe",
+    "pytest": ".venv/Scripts/python.exe -m pytest -q --tb=short tests/test_afi01_owner_scope_service_host_integration.py",
+    "pythonutf8": "1",
+    "pythonpath": [
+      "D:/bt_api_py",
+      "D:/bt_api_py/bt_api/bt_api_base/src",
+      "D:/bt_api_py/bt_api/bt_api_execution/src",
+      "D:/bt_api_py/bt_api/bt_api_transport_zmq/src",
+      "D:/bt_api_py/bt_api/bt_api_gateway/src",
+      "D:/bt_api_py/bt_api/bt_api_risk/src",
+      "D:/bt_api_py/bt_api/bt_api_monitor/src"
+    ],
+    "result": {
+      "collected": 1,
+      "passed": 1,
+      "failed": 0,
+      "seconds": 3.76,
+      "exit_code": 0
+    }
+  },
+  "source_file_pins_read_after_run": [
+    ["tests/test_afi01_owner_scope_service_host_integration.py", 20440, "695c628cee836e611182764c074053d1f2ca393983ac7782cc37cbc60c293ebe"],
+    ["tests/test_service_read_authorized_http_integration.py", 370509, "63ead7acfe3fae8d13f81644b627dd6465b3de0933245a9198fe3c620c39e493"],
+    ["tests/test_service_read_order_local_process.py", 18421, "14f6c01229486f3da1ce002b60618daf56afb1456b47779b87dbbf43f5ea8530"],
+    ["app/api/afi_owner_scope.py", 2785, "a7bcf7323840017e529a459f8eaabb316335391282a1c10c9a322b20b4de49e4"],
+    ["app/api/service_read.py", 12340, "524f8fcd93265cf41e0649e17e18d580fdd0a38911f8efbad111dd04a3c7e4d9"],
+    ["app/api/portfolio/compositions.py", 6111, "f09823b858d687521d96397c11c2d29a56d1fbfd129c5a572ce55774bfd09fff"],
+    ["app/services/service_read/access.py", 17261, "8a55cb031560ec8a82d4e85e3dce16d9ae469e5a7996f7323a1695613172520f"],
+    ["app/services/service_read/client.py", 33617, "575aea9fd98f40179d2ab12e65df3b53ae69b6526f26b663d9d92ae558ac3d04"],
+    ["app/services/service_read/session.py", 32280, "e3af34b88fe36ea05286be5514bff9c1be6d22314c2246c6ee3ff6f79e39e2b3"],
+    ["app/services/service_read/worker.py", 23090, "f86c774d0f26c80c0dabf455a6b84eaa7e861df102c813bc503d5eb92dc43e50"],
+    ["app/models/user.py", 3509, "232a9011ee4b787e37ebbc2b139b8c9236759bfd41f5db8e05ca1b5b5eec0568"],
+    ["app/models/portfolio_composition.py", 1394, "1c2ff09ff656f398127d8d111e2692ba24e685c9afd9991415edf035e7d3d009"]
+  ],
+  "source_tree_caveat": "service_read API/access/client/session/worker and the R93 HTTP integration test were dirty checkout snapshots; their exact observed byte pins are listed above. The new test did not edit those paths. Root must compare/rebind these pins before any controlled run.",
+  "sdk_repo_heads_read_after_run": {
+    "D:/bt_api_py": "4f5ae610b21ac635cc97099209690f8e16995d6c",
+    "D:/bt_api_py/bt_api/bt_api_base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+    "D:/bt_api_py/bt_api/bt_api_execution": "6eb925254e5653f25c8adf6fd3b318176fd46008",
+    "D:/bt_api_py/bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+    "D:/bt_api_py/bt_api/bt_api_gateway": "147ef365706bebab383ec12c628be243b8e0b381",
+    "D:/bt_api_py/bt_api/bt_api_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+    "D:/bt_api_py/bt_api/bt_api_monitor": "7c407634c092ba59383bd870a0b0b19c588ae451"
+  },
+  "limits": [
+    "httpx ASGITransport exercises the production FastAPI routers in-process; no TCP server was opened.",
+    "Synthetic provider and local SQLite ServiceHost only; no actual exchange/account acceptance.",
+    "Uses server-configured ReadAccessDirectory entries keyed by persisted user ids; it does not add an organization-tenant or persistent user-to-account assignment model.",
+    "Does not supersede the accepted AFI07 approver/replay evidence; Root adjudicates AFI01 across the combined evidence."
+  ]
+}

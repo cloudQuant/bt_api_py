@@ -1,0 +1,64 @@
+{
+  "schema": "afi.iter10.owner_scope_fixture_review.v1",
+  "case": "AFI01",
+  "status": "AUTHOR_LOCAL_FOCUSED_TEST_PASS_ONLY",
+  "repository": "D:/source_code/ai-for-investor",
+  "branch": "dev",
+  "head": "86ed9dbbe6293b71d7279aafb0f93b1e0c36aa3e",
+  "source_pins": [
+    {
+      "path": "src/backend/app/api/afi_owner_scope.py",
+      "bytes": 2785,
+      "sha256": "a7bcf7323840017e529a459f8eaabb316335391282a1c10c9a322b20b4de49e4"
+    },
+    {
+      "path": "src/backend/app/api/service_read.py",
+      "bytes": 12340,
+      "sha256": "524f8fcd93265cf41e0649e17e18d580fdd0a38911f8efbad111dd04a3c7e4d9"
+    },
+    {
+      "path": "src/backend/app/api/service_gateway.py",
+      "bytes": 3112,
+      "sha256": "57eb3b985f755318a74f30da5ebd64cf69ea38ca115e7cd221fc0fc23d086c29"
+    },
+    {
+      "path": "src/backend/app/api/service_orders.py",
+      "bytes": 13540,
+      "sha256": "0bd188972bda2c7d5693082a45bbb10ee5889d3cdbc9a85636568424f7bdea9e"
+    },
+    {
+      "path": "src/backend/app/api/approved_orders.py",
+      "bytes": 24899,
+      "sha256": "86a6ebbff936a1d18a27019f5dc9e29683eba2f6533ca653b1607c500c9abd1f"
+    },
+    {
+      "path": "src/backend/app/api/portfolio/compositions.py",
+      "bytes": 6111,
+      "sha256": "f09823b858d687521d96397c11c2d29a56d1fbfd129c5a572ce55774bfd09fff"
+    },
+    {
+      "path": "src/backend/tests/test_afi01_persisted_owner_scope_http.py",
+      "bytes": 10832,
+      "sha256": "b009fea95d3282560ec27be54c47b3b1cf2d2919e7aaa9552627b301183c6e3d"
+    },
+    {
+      "path": "src/backend/tests/test_service_read_api.py",
+      "bytes": 18360,
+      "sha256": "3567fb0c8083925f1e42550e5455022412c006eb88464889978e77291fa60c00"
+    }
+  ],
+  "selected_pytest": ["tests/test_service_read_api.py"],
+  "execution": {
+    "command": ".venv/Scripts/python.exe -m pytest -q tests/test_service_read_api.py",
+    "environment": {"PYTHONUTF8": "1"},
+    "exit_code": 0,
+    "result": "21 passed in 14.11s",
+    "raw_output": "src/backend/.codex-tmp/afi_iter10_afi01_owner_scope_fixture_r1_20261017/pytest.log",
+    "raw_output_bytes": 925,
+    "raw_output_sha256": "bceafbc617939f5d349fe6d59ac968979dac8d897a796dc2560836ba7fdd4286"
+  },
+  "fixture_boundary": "Authenticated bare-router tests override get_current_user and require_persisted_owner_scope to test legacy read projection only. The unauthenticated test does not override the owner guard. Persisted-owner enforcement remains covered by test_afi01_persisted_owner_scope_http.py, which was not rerun.",
+  "evidence_level": "LOCAL_SYNTHETIC_LEGACY_ROUTER_PROJECTION_FIXTURE_ONLY",
+  "staged": false,
+  "commit": null
+}
