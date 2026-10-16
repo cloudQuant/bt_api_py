@@ -432,6 +432,7 @@ class _Builtin:
         default_factory=lambda: MappingProxyType({})
     )
     validator_module_name: str | None = None
+    optional_resource_keys: frozenset[str] = frozenset()
 
 
 _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
@@ -649,6 +650,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             module_name="bt_api_risk.service_component",
             operations_attribute=("SUPPORTED_OPERATIONS",),
             resource_keys=frozenset({"catalog"}),
+            optional_resource_keys=frozenset({"confirmed_policy_store"}),
             public_ports=MappingProxyType(
                 {
                     "service.risk_policy": frozenset(
@@ -658,6 +660,14 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "policy.approve",
                             "policy.publish",
                             "policy.receipt",
+                            "policy.budget.propose",
+                            "policy.budget.approve",
+                            "policy.budget.publish_member",
+                            "policy.budget.confirm_member",
+                            "policy.budget.reject_member",
+                            "policy.budget.mark_unknown",
+                            "policy.budget.retract",
+                            "policy.budget.read",
                         }
                     )
                 }
@@ -666,7 +676,13 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             write_operations_by_port=MappingProxyType(
                 {
                     "service.risk_policy": frozenset(
-                        {"policy.draft", "policy.approve", "policy.publish"}
+                        {
+                            "policy.draft", "policy.approve", "policy.publish",
+                            "policy.budget.propose", "policy.budget.approve",
+                            "policy.budget.publish_member", "policy.budget.confirm_member",
+                            "policy.budget.reject_member", "policy.budget.mark_unknown",
+                            "policy.budget.retract",
+                        }
                     )
                 }
             ),
@@ -1321,6 +1337,9 @@ def build_component(
             tracked_by_caller = True
         public_ports = frozenset(prepared.operations_by_port)
         expected_keys = builtin.resource_keys if public_ports else frozenset()
+        expected_keys = expected_keys | builtin.optional_resource_keys.intersection(
+            resources.values
+        )
         if (
             spec.component == "execution"
             and spec.options.get("role") == "account_owner"
@@ -1539,7 +1558,16 @@ def build_component(
                 if not isinstance(store_type, type) or type(catalog) is not store_type:
                     raise ServiceComponentError("POLICY_CATALOG_STORE_INVALID")
                 constructor = getattr(module, "PolicyCatalogService", None)
-                adapter = constructor(catalog)
+                confirmation_store = None
+                if "confirmed_policy_store" in values:
+                    confirmation_store_type = getattr(module, "ConfirmedPolicyStore", None)
+                    confirmation_store = values["confirmed_policy_store"]
+                    if (
+                        not isinstance(confirmation_store_type, type)
+                        or type(confirmation_store) is not confirmation_store_type
+                    ):
+                        raise ServiceComponentError("CONFIRMED_POLICY_STORE_INVALID")
+                adapter = constructor(catalog, confirmation_store=confirmation_store)
             elif (
                 spec.component == "risk"
                 and spec.options.get("role") == "portfolio_analytics"

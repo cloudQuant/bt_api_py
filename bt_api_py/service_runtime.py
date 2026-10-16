@@ -86,7 +86,12 @@ PORT_OPERATIONS = MappingProxyType(
             {"analysis.submit", "analysis.query", "analysis.cancel", "analysis.input_upload"}
         ),
         "service.risk_policy": frozenset(
-            {"policy.read", "policy.draft", "policy.approve", "policy.publish", "policy.receipt"}
+            {
+                "policy.read", "policy.draft", "policy.approve", "policy.publish", "policy.receipt",
+                "policy.budget.propose", "policy.budget.approve", "policy.budget.publish_member",
+                "policy.budget.confirm_member", "policy.budget.reject_member",
+                "policy.budget.mark_unknown", "policy.budget.retract", "policy.budget.read",
+            }
         ),
         "service.telemetry_ingress": frozenset({"telemetry.append", "events.append"}),
         "service.monitor_query": frozenset(

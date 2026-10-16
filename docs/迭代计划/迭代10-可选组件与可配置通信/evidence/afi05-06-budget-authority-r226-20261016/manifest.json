@@ -1,0 +1,3699 @@
+{
+  "schema": "iteration10-afi05-06-budget-authority-r226/v1",
+  "round": "R226",
+  "date": "2026-10-16",
+  "delivery_disposition": "READY_FOR_ROOT_SCOPED_PARENT_DELIVERY",
+  "evidence_level": "ROOT_LOCAL_SYNTHETIC_SDK_HOST_BUDGET_AUTHORITY_AND_RISK_CATALOG_WIRING_ONLY",
+  "formal_case_count_before_after": "39/68",
+  "formal_case_pass_delta": 0,
+  "formal_case_note": "R226 adds local SDK Host/Risk catalog authority evidence only; no formal AFI05 or AFI06 acceptance, normal AFI UI/HTTP startup, real account/provider call, or effective admission decision is claimed.",
+  "repositories": {
+    "risk_child": {
+      "repo": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "branch": "dev",
+      "commit": "ede55dec5e8e7ad1c5376969eb54e9933ebf9e85",
+      "parent": "647840a75b2071fcb5b4395f554190afe2fae082",
+      "scope_count": 2,
+      "index_empty": true,
+      "postcommit_receipt": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-r226-risk-postcommit.json",
+        "bytes": 659,
+        "sha256": "a41d9cdf816f7cea8832028fd3de74e627adcdc444283c969d98e51ecaebaee4"
+      },
+      "source_files": [
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\service_component.py",
+          "bytes": 104293,
+          "sha256": "e4a92d7bd95dc177ec74dd8c3bf4fba764b68c7313da8bfb8e567c8759aa2f40"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_policy_catalog_budget_authority.py",
+          "bytes": 61163,
+          "sha256": "72e2be81f9cce67563c56b702794236100222d34e779a11749784354c5fcb252"
+        }
+      ]
+    },
+    "sdk_parent": {
+      "repo": "D:\\bt_api_py",
+      "branch": "dev",
+      "head_before_r226_parent_delivery": "0ffd260dd782143e02ffde7332f9bc59a67ad948",
+      "root_host_runtime_guard_head": "ac12f7c3ba3d642ee9e105c442c6987c78bae5d9",
+      "candidate_delivery_commit": "to be recorded by Root after the scoped parent commit",
+      "scope_paths": [
+        "bt_api_py/service_components.py",
+        "bt_api_py/service_runtime.py",
+        "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi05-06-budget-authority-r226-20261016/raw-evidence.zip",
+        "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi05-06-budget-authority-r226-20261016/manifest.json",
+        "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi05-06-budget-authority-r226-20261016/round-record.md",
+        "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md",
+        "bt_api/bt_api_risk"
+      ],
+      "source_files": [
+        {
+          "path": "D:\\bt_api_py\\bt_api_py\\service_components.py",
+          "bytes": 108127,
+          "sha256": "4db8d39dfea9cb166b66bf2eb7f412f3f377084ab084c23a5cb1d6dba43b5ac1"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api_py\\service_runtime.py",
+          "bytes": 80190,
+          "sha256": "d01504653be4bebd8f3d4169f6ea3aeabee832b6341087be2e324946afd66f1d"
+        }
+      ]
+    },
+    "afi_compiler_predecessor": {
+      "repo": "D:\\source_code\\ai-for-investor",
+      "branch": "dev",
+      "commit": "5be2e26c9cbb558187ed4ba7c7ce622989cb50c0e",
+      "evidence": "Inherited R219 offline static budget compiler + Risk catalog result; referenced and retained in predecessor-r219 archive members.",
+      "source_files": [
+        {
+          "path": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\services\\risk_policy_budget.py",
+          "bytes": 12854,
+          "sha256": "8d3ce4e647f6bcc655970f985d2f68282e6b50656bd66c1e13e0bcf4ac39bb99"
+        },
+        {
+          "path": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_risk_policy_budget.py",
+          "bytes": 9362,
+          "sha256": "9b7ce80df23e7b03cf9c86e5c660b9fa1b9a1989a7c3b88f2ab7b7c38bbfdbd0"
+        }
+      ]
+    }
+  },
+  "runtime_source_layers": {
+    "fixed_accepted_sdk_base": "719a2fe26cc32defc495ea138bce3f11f72ee934",
+    "fixed_accepted_risk_base": "71be56e29f867a5a5aaac60331f9eca46c7e09f0",
+    "fixed_base_package": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "fixed_zmq_package": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+    "composition": "R7 export-manifest identifies accepted runtime blobs, R221/R223 overlays, and the R226 policy-only candidate patches separately. Current checkout HEAD guards are separate from those runtime-source commits.",
+    "export_manifest": {
+      "path": "accepted-source/r7-runtime-export/export-manifest.json",
+      "bytes": 173470,
+      "sha256": "e96dbe42cf56b24836a870755e2f53f3cd2858e083bf9810379c5a4b2df57a00"
+    }
+  },
+  "candidate_source_pins": [
+    {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\service_component.py",
+      "bytes": 104293,
+      "sha256": "e4a92d7bd95dc177ec74dd8c3bf4fba764b68c7313da8bfb8e567c8759aa2f40"
+    },
+    {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk\\tests\\test_policy_catalog_budget_authority.py",
+      "bytes": 61163,
+      "sha256": "72e2be81f9cce67563c56b702794236100222d34e779a11749784354c5fcb252"
+    },
+    {
+      "path": "D:\\bt_api_py\\bt_api_py\\service_components.py",
+      "bytes": 108127,
+      "sha256": "4db8d39dfea9cb166b66bf2eb7f412f3f377084ab084c23a5cb1d6dba43b5ac1"
+    },
+    {
+      "path": "D:\\bt_api_py\\bt_api_py\\service_runtime.py",
+      "bytes": 80190,
+      "sha256": "d01504653be4bebd8f3d4169f6ea3aeabee832b6341087be2e324946afd66f1d"
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\app\\services\\risk_policy_budget.py",
+      "bytes": 12854,
+      "sha256": "8d3ce4e647f6bcc655970f985d2f68282e6b50656bd66c1e13e0bcf4ac39bb99"
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_risk_policy_budget.py",
+      "bytes": 9362,
+      "sha256": "9b7ce80df23e7b03cf9c86e5c660b9fa1b9a1989a7c3b88f2ab7b7c38bbfdbd0"
+    },
+    {
+      "path": "D:\\temp\\iteration10-afi-budget-authority-sdk-host-accepted-source-20261016-r7-r223-policy\\patches\\service-components-r223-policy.patch",
+      "bytes": 4053,
+      "sha256": "8cc455c97047ed920aac36d74247c097be7622eb212bc1e2c85d0f6237151c20"
+    },
+    {
+      "path": "D:\\temp\\iteration10-afi-budget-authority-sdk-host-accepted-source-20261016-r7-r223-policy\\patches\\service-runtime-r223-policy.patch",
+      "bytes": 1029,
+      "sha256": "cf483ddc73e5550f77a9383eaa258012e4f9b170b26fab1e8c87fb47af14eeba"
+    }
+  ],
+  "root_runs": {
+    "r3_five_unit_plus_host_failure": {
+      "label": "Five Risk budget-authority unit nodes passed; the one SDK Host node failed at registration.",
+      "output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r3",
+      "pytest_exit": 1,
+      "finished_utc": "2026-10-16T11:46:09.161530+00:00",
+      "tests": 6,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "source_count": 543,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_unchanged": true,
+      "evidence_level": "ROOT_LOCAL_SYNTHETIC_SDK_HOST_RISK_POLICY_BUDGET_AUTHORITY_ONLY",
+      "stdout_sha256": "b67dc7ab0db8af8751cb1a11a5ae5bcbd385c967fa2120721c075510273ad855",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "fd4379cd7683f1bfadac294a3978d804d216daf2a84c950a5a169b1b8e03311f",
+      "junit_sha256": "02dc32fd8de1441f2ddf13a511473d9f6ced470b18856ff90fac692df7f78eee",
+      "junit_tests": [
+        {
+          "name": "test_budget_generation_uses_catalog_and_exact_confirmed_member_receipts",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_missing_confirmation_and_unknown_result_keep_whole_claim_held",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_partial_publish_rejection_retains_capacity_and_cannot_retract",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_budget_dimension_conservation_overlap_and_prepublication_release",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_capacity_and_account_claims_serialize_across_sqlite_connections",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_budget_authority_uses_registered_risk_policy_wire_path",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": true,
+          "errored": false,
+          "skipped": false
+        }
+      ]
+    },
+    "r4_host_failure": {
+      "label": "The Host RPC returned its immutable draft reply; the test then failed on dict-only shape assertion.",
+      "output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r4",
+      "pytest_exit": 1,
+      "finished_utc": "2026-10-16T11:49:45.001474+00:00",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "source_count": 554,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_unchanged": true,
+      "evidence_level": "ROOT_LOCAL_SYNTHETIC_SDK_HOST_RISK_POLICY_BUDGET_AUTHORITY_ONLY",
+      "stdout_sha256": "a56cc4f0123d8b438ee133946c486edbd56669dbe22ccba78a6a70c83f064d15",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "3548285c898e9ea057bb25cd643e13a578c856ea5a7d87a73b60e2a31d347775",
+      "junit_sha256": "9d9c0e7def22a6a9493af989459bdfd34a87cd4e4ee0a577f50ea07b280582e3",
+      "junit_tests": [
+        {
+          "name": "test_budget_authority_uses_registered_risk_policy_wire_path",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": true,
+          "errored": false,
+          "skipped": false
+        }
+      ]
+    },
+    "r5_host_pass": {
+      "label": "One Host node passed against the preceding fixed runtime overlay composition; one Proactor warning.",
+      "output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r5",
+      "pytest_exit": 0,
+      "finished_utc": "2026-10-16T12:09:30.040080+00:00",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "source_count": 557,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "647840a75b2071fcb5b4395f554190afe2fae082",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "647840a75b2071fcb5b4395f554190afe2fae082",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_unchanged": true,
+      "evidence_level": "ROOT_LOCAL_SYNTHETIC_SDK_HOST_RISK_POLICY_BUDGET_AUTHORITY_ONLY",
+      "stdout_sha256": "aaccd5d6b1c0d367294faae0fccc099c3c19e7c89ad3e6fcceb15d3dedf943fb",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "5f7d183ac583204fbaf4e2b123982aa708148a6bcc576059a434cccfc22f6b92",
+      "junit_sha256": "96688499802dfd205f1cb0ce8fc912ab483176e735771ec3fe6d18ccc7691cce",
+      "junit_tests": [
+        {
+          "name": "test_budget_authority_uses_registered_risk_policy_wire_path",
+          "classname": "tests.test_policy_catalog_budget_authority",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        }
+      ]
+    },
+    "r7_composed_host_pass": {
+      "label": "One Host node passed against the R223 + R221 + R226 composed fixed source; one Proactor warning.",
+      "output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r7",
+      "pytest_exit": 0,
+      "finished_utc": "2026-10-16T12:19:36.966377+00:00",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "source_count": 569,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "ac12f7c3ba3d642ee9e105c442c6987c78bae5d9",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "647840a75b2071fcb5b4395f554190afe2fae082",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "ac12f7c3ba3d642ee9e105c442c6987c78bae5d9",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "647840a75b2071fcb5b4395f554190afe2fae082",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_unchanged": true,
+      "evidence_level": "ROOT_LOCAL_SYNTHETIC_SDK_HOST_R223_POLICY_COMPOSITION_ONLY",
+      "stdout_sha256": "649a12e0965dfad135be2898144608f65342deef7632d774ee8a373e7bda38a1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "4ba1f1fd57d0263ba7b8e56e735c971a439260642061baba2a18f9c6719ad6b6",
+      "junit_sha256": "f73741e618d03be7178f949d149af6c50308d12298eaa8d1e6e73f5d05eacbc1",
+      "junit_tests": [
+        {
+          "name": "test_budget_authority_uses_registered_risk_policy_wire_path",
+          "classname": "",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        }
+      ]
+    },
+    "r219_inherited_compiler_qa": {
+      "label": "Inherited R219 compiler/Risk-catalog offline test result; not rerun for R226.",
+      "output_directory": "D:\\temp\\iteration10-afi05-06-budget-focused-root-20261016-r1",
+      "pytest_exit": 0,
+      "finished_utc": "2026-10-16T11:05:03.669524+00:00",
+      "tests": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "source_count": 145,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "a6f220b9b5bdeae313f7324a86ee7a2c53cd10ee",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\source_code\\ai-for-investor": "0c8aa93c1ca83363f13bd2128d40808b481e9e61"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "a6f220b9b5bdeae313f7324a86ee7a2c53cd10ee",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\source_code\\ai-for-investor": "0c8aa93c1ca83363f13bd2128d40808b481e9e61"
+      },
+      "heads_unchanged": true,
+      "evidence_level": "ROOT_OFFLINE_STATIC_BUDGET_COMPILER_AND_RISK_POLICY_CATALOG_ONLY",
+      "stdout_sha256": "b45c8157cd9538f1194a069fdff2debb83b1efbfc39728108aebde091011ed9e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "5ed5d7032008783625e730d317b104aecf27a7dd8dfe2e97bf7654f672fc85ab",
+      "junit_sha256": "0f0f89631567f8932f5d156c4a33e95e9ae484b6cb129768bd3d8d5c64e46fe1",
+      "junit_tests": [
+        {
+          "name": "test_compiled_drafts_are_accepted_by_risk_policy_and_real_catalog",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_allocation_set_hash_is_order_independent_and_binds_membership",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_budget_conservation_does_not_round_large_decimal_allocations",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_invalid_static_budget_is_rejected_before_catalog_access[plan0-policy_refs0-BUDGET_NOT_CONSERVED]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_invalid_static_budget_is_rejected_before_catalog_access[plan1-policy_refs1-MIXED_BUDGET_CURRENCY]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_invalid_static_budget_is_rejected_before_catalog_access[plan2-policy_refs2-MIXED_BUDGET_METRIC]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_invalid_static_budget_is_rejected_before_catalog_access[plan3-policy_refs3-VERSIONED_POLICY_REF_REQUIRED]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_invalid_static_budget_is_rejected_before_catalog_access[plan4-policy_refs4-DUPLICATE_POLICY_REF]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_non_exact_or_out_of_range_amounts_are_rejected[100.0]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_non_exact_or_out_of_range_amounts_are_rejected[100]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_non_exact_or_out_of_range_amounts_are_rejected[amount2]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_non_exact_or_out_of_range_amounts_are_rejected[amount3]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_non_exact_or_out_of_range_amounts_are_rejected[amount4]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_non_exact_or_out_of_range_amounts_are_rejected[amount5]",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_duplicate_account_and_unsupported_metric_are_rejected",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        },
+        {
+          "name": "test_allocation_count_matches_portfolio_membership_bound",
+          "classname": "tests.test_risk_policy_budget",
+          "failed": false,
+          "errored": false,
+          "skipped": false
+        }
+      ]
+    }
+  },
+  "independent_static_review": {
+    "verdict": "GO_STATIC_FOR_ONE_R7_HOST_RUN",
+    "provenance": "Separate reviewer collaboration message; no QA or files changed. Exact frozen spec/export/candidate pins were checked before Root consumed R7.",
+    "r7_spec_sha256": "40bce7590506110c094d3dea5a8fbcff7bbb87a2c9481d7b1659d6e218c00277"
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 3856996,
+    "sha256": "b6ba4a9e22cce2d1fc96f9d162a53d6aeab9c68d5f5ec21468288f8d2068d11a",
+    "members_count": 640,
+    "members": [
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/__init__.py",
+        "bytes": 550,
+        "sha256": "db6d46bcc43662b65ddbb34ee4386a25410927c55cf426b940bf70b1397ea580"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/_compat.py",
+        "bytes": 713,
+        "sha256": "1774a7fa74cf579f6f86a8c1396a83b70ad4f2f36439c2a81bb8035436957e69"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/_plugin_shims.py",
+        "bytes": 887,
+        "sha256": "5dc77358812959dce26674f3189f7034ec4d500cef73d88e64d659ea1d3709c8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/_version.py",
+        "bytes": 92,
+        "sha256": "cf89b9075380ede9257a509bb33f36aadc1997356aed261416c1f828bccebce8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/account_protocol.py",
+        "bytes": 28973,
+        "sha256": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/auth_config.py",
+        "bytes": 5905,
+        "sha256": "5722124358fb6abef8e3ea741cf3bc5ac276d4ea48705c3502cdaa0b1a0fa986"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/balance_utils.py",
+        "bytes": 2953,
+        "sha256": "cce93cca82d7686914dd497982690f7b5c62b59a111f0f634f75f21025aa4420"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/cache.py",
+        "bytes": 7408,
+        "sha256": "570378c7d81b771cacf7347db1f316de1839682c31638243491159fea8848592"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/config_loader.py",
+        "bytes": 9109,
+        "sha256": "c7b5c843e4bb44917c758ed43300ade898f04a77ce57ec1464700e818ee87d4b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/connection_pool.py",
+        "bytes": 7667,
+        "sha256": "c0f90a8fe6251f6593127c037505b6f3d2353aa1448e2998ed6ef62265d5948b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/__init__.py",
+        "bytes": 1452,
+        "sha256": "d0fb3497e7d4b64e45f925fdfd8ca855081b4f50cb5bcd5213a51d7c12b90af8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/accounts/__init__.py",
+        "bytes": 127,
+        "sha256": "ef9a0b561832fd193a761b551ff0bc3c775f6ff22698227d447b19d52e0f6b64"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/accounts/account.py",
+        "bytes": 8011,
+        "sha256": "14a403d07e106438e25d16f5bf2b209adf0374bd1ecfa53e153a1a1d8dfa6d50"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/auto_init_mixin.py",
+        "bytes": 1894,
+        "sha256": "94345716d216e3aedd0aaa3d2cf2588b440d7d277a9237ab4b6cb9bb14ce7ced"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/balances/__init__.py",
+        "bytes": 127,
+        "sha256": "ec0dd1c1e31a6ed546991f63b1288594d419900d50630059b03b5145a85762f1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/balances/balance.py",
+        "bytes": 5677,
+        "sha256": "fdca4237ebe0b82437db1a493b633a46d0a7be5daeeb4b3e1dc4cc96a7631e77"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/bars/__init__.py",
+        "bytes": 115,
+        "sha256": "470eb47b950c999cdce22444aa38b36fd12a8ee3faf57d462d75ae56cf07e1c5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/bars/bar.py",
+        "bytes": 3203,
+        "sha256": "f71b5811846d179b7c5e8e9c78947a749d4fbab84e30900d0999a644da0c0f5f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/exchanges/__init__.py",
+        "bytes": 135,
+        "sha256": "8fd87e19ebe25868f5cd5d03ed4c7dbeb1c0f06feb9cac4f82becc2f52beec46"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/exchanges/exchange_data.py",
+        "bytes": 2650,
+        "sha256": "a7e627c5b4e34ff43b80c483df31f9698a106f7f3d6e5568abbb7570660d49ff"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/fundingrates/__init__.py",
+        "bytes": 140,
+        "sha256": "e41a4fccd0b137131030e868688de2302fa499c81472de6bfdf37dfb538b81a4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/fundingrates/funding_rate.py",
+        "bytes": 5132,
+        "sha256": "434acac9cdf9ab98170974bfe927a8b8e5b70ed608ba273696c0c74d3f7ac7b3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/greeks/__init__.py",
+        "bytes": 124,
+        "sha256": "f0fef9798a82ef1fcdd0eab9fc3a23bee80e2b0f55356e4dcc9fe0ffe0675652"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/greeks/greeks.py",
+        "bytes": 1842,
+        "sha256": "36b16cfe8c4f7b5f259f94f34c10ba63efe05dbba557ac3cf13d05894538be4a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/incomes/__init__.py",
+        "bytes": 124,
+        "sha256": "48ac24cb8557b843a5190fa5bc2d0164e63c55e4663cc0c9085ccd30c2599db1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/incomes/income.py",
+        "bytes": 2832,
+        "sha256": "307ca01a54f164eaa8bfa5457ad0b21a775f352760a64b5b33424d6313c93c0a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/instrument.py",
+        "bytes": 4631,
+        "sha256": "52edcf378ef3fd078dfa1d0126534ceb772471e6bd0d7015dce69062038bc32b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/liquidations/__init__.py",
+        "bytes": 139,
+        "sha256": "674e68a54f763e007b39a260c891f5c44a93481c926935331c6f108266779069"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/liquidations/liquidation.py",
+        "bytes": 2243,
+        "sha256": "16c67ce2dc3f74c34faf381d5c43797442191c77a221d42286e016d6f202e84c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/markprices/__init__.py",
+        "bytes": 134,
+        "sha256": "723b8f2f3b9415b437fd9774b112a5a8f5a88f9afdb5c80e37ae70eb1274ebcb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/markprices/mark_price.py",
+        "bytes": 2657,
+        "sha256": "847a83042f927e0af3acff6fca4f366e62450e0e8469c3771aba7c8d1be73e31"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/orderbooks/__init__.py",
+        "bytes": 133,
+        "sha256": "8d0006f7dfa95a86a40613ab4290fb71cfa800919440a234049a33334a43775d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/orderbooks/orderbook.py",
+        "bytes": 3805,
+        "sha256": "42c2da2745d49afcd805b85406930f5fa2e77f057b0cf4a22d6749b65fe406db"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/orders/__init__.py",
+        "bytes": 121,
+        "sha256": "ab750e365d17144a1d961e5d44b11835c6021e3fdb08e92486d314ad17a2c62c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/orders/order.py",
+        "bytes": 10303,
+        "sha256": "6c260b0d749a9bf4536a8d6a7d4dfc6c4195a4e00ca717f743a1ef80a0454b86"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/positions/__init__.py",
+        "bytes": 130,
+        "sha256": "5af7f9b8bf045ecc81ad3867a51b18983c7cdf9cd5ab23b340474842b7bd11ca"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/positions/position.py",
+        "bytes": 6628,
+        "sha256": "46ef3a7c1af482b11049af0b483ed0ae901861e181878b56440781c09a2a4e5e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/requestdatas/__init__.py",
+        "bytes": 132,
+        "sha256": "8b2da1398da899139f74f5084017a22f8c70e618c39d7013ab8c96ea76567535"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/requestdatas/request_data.py",
+        "bytes": 4808,
+        "sha256": "c66566c0e37558fa92b52cb49b5f64346fb17fda3590c57b953bea132a0f1546"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/symbols/__init__.py",
+        "bytes": 124,
+        "sha256": "c52a55863320364d86b0bc376c134078415e7bde55d54358bdad21dbe6ea2fd9"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/symbols/symbol.py",
+        "bytes": 3252,
+        "sha256": "b3a24d075332dd7250802b14acdba47d65b2df1b3f81f196365bd6d86f411369"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/tickers/__init__.py",
+        "bytes": 124,
+        "sha256": "79799a2072673630d1de968ca422553cd38bbf7c61b47bf8bd13723c2b4c6148"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/tickers/ticker.py",
+        "bytes": 3296,
+        "sha256": "fc3f1ad9ac7889dd7455f46868d354663934fc0b796e2e9e0d38d2e51dd9148a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/timers/__init__.py",
+        "bytes": 121,
+        "sha256": "7f8d81477a63d08d9ec256c8dc1c629f71791ca912dfd5433af87cb4689a885f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/timers/timer.py",
+        "bytes": 423,
+        "sha256": "fb2b449b41cabaf00ad2eb50e6c9ce780eb9555c803357ad6499a1e32c1f65bf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/trades/__init__.py",
+        "bytes": 121,
+        "sha256": "16a2d79eb8074856f5739f083e3d59bf35382d20f45fb9fcd1f116b1175ad6a7"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/containers/trades/trade.py",
+        "bytes": 4670,
+        "sha256": "106ca6dca7d0854f8b40a8f9bb172b8345a9030c5b73cab9b368910f3bb0fd7d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/core/__init__.py",
+        "bytes": 977,
+        "sha256": "3c369463b6b7acb786366862d1b1b5db7564619e2ffabe7cac58ec8276d16b6d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/core/async_context.py",
+        "bytes": 15949,
+        "sha256": "cd08805ffbcf6d9a0ac4cb0077789c54c2536ef12569cc470f29531987e69ccd"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/core/dependency_injection.py",
+        "bytes": 9151,
+        "sha256": "9c250590660547a86d355f8039068c137fd5a8f54db138cd4ac2a4bf39ea3099"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/core/interfaces.py",
+        "bytes": 8808,
+        "sha256": "df436fb4f16ff65accfaa7de5c0311af51c5cae14c6bdde868c6a2abf48d0617"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/core/services.py",
+        "bytes": 23391,
+        "sha256": "fbda5b5de8fff9c923fadaa92901e2e7c333aa93c3af8a4f5996b539d0e620ce"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/deployment_evidence.py",
+        "bytes": 17372,
+        "sha256": "755418506fdfb43e0a720264f3d1d8adcc4243c2611e752b6f1b44d8846e9e45"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/error.py",
+        "bytes": 17274,
+        "sha256": "b99400ee90e49b497fa10eadd7bf01e25e03cf18061bd3742f754c6c3602c35f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/event_bus.py",
+        "bytes": 4487,
+        "sha256": "91fe6b094f03e1a395251bd786e8115709de8bd03343f669fa9b2ca2a2c89966"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/event_clock.py",
+        "bytes": 564,
+        "sha256": "4138d1586c2a7c51ced6d712d8a2542b937f70cacbc225fd80dcb3350b04c688"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/exceptions.py",
+        "bytes": 10432,
+        "sha256": "95269b9029f201f2554c1fb78ad45747b1b1364c8622046cba4fb066bb81b43f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/__init__.py",
+        "bytes": 512,
+        "sha256": "eb46d51c9623154bc3bf726a4bd2c70d75a180ad019eb9bc8e62f20fdb12a20e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/abstract_feed.py",
+        "bytes": 9221,
+        "sha256": "15537c26945cbb2a7d8362e0cfb6c84fbec5fd7fdfa78a11b966c3c85abea9cb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/base_stream.py",
+        "bytes": 3240,
+        "sha256": "58caf56e7880e43545d2d12bbf167e05cea76c3c9e5d37acd15a6cc59b6d8bc6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/capability.py",
+        "bytes": 2813,
+        "sha256": "83f9f6b43ad407379998a5b95c9ad707461ec992116c0443f45835941eb78358"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/connection_mixin.py",
+        "bytes": 1883,
+        "sha256": "91fac238d55fad5efa464c438cd5d86b66e154fa6c94a65d4fcadfbc75223e8a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/feed.py",
+        "bytes": 24441,
+        "sha256": "e16021b07aad6d18066e5ef263e9fee552756631cf5fcdac6a1483b3ff401f07"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/http_client.py",
+        "bytes": 11636,
+        "sha256": "b039d560320646b9cacbb1c8f1a57d28e3891f0b838396427ba6642be78a6937"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/my_websocket_app.py",
+        "bytes": 29560,
+        "sha256": "bee2c32323b0042244480aee9f58fbdde3cff54bcd6c3f7f8a3f8892d774a0c2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/feeds/transport_safety.py",
+        "bytes": 6002,
+        "sha256": "2078ba69c5306f92573263c1d8ecd37d13d22c1d65ca4c40f9fea695b8c455e3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/__init__.py",
+        "bytes": 124,
+        "sha256": "dc374680220fd0cd5fadcaf7a09825943192bf41bb6f04ac4ecb70a00f1f9378"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/async_base.py",
+        "bytes": 7639,
+        "sha256": "fef7f7300d710192d528b24361f74ed1281645f3f595ca3c8731d5b5ff9f69d8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/calculate_time.py",
+        "bytes": 3452,
+        "sha256": "eb0174a00f608a066f057b3708b53e82abe9566ae169cba8e3995c497265b31b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/log_message.py",
+        "bytes": 5275,
+        "sha256": "b7510bb9fa5e7c6ec2a139c7ec48dbf72c289c8b01650bd680254587ee7ea8f7"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/rate_limiters.py",
+        "bytes": 782,
+        "sha256": "4134cbfcaf04974ae1a3ce36c590854cc2dbe5057de8ea6a5d448833a5b609b1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/signers.py",
+        "bytes": 654,
+        "sha256": "32ce9b58815f1999a3464ba7de57342faa806df663129740b47040aaf3d23eb1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/timestamps.py",
+        "bytes": 635,
+        "sha256": "3b1db4601b23d573a43dd7796c9eb9355b569a8ab5e8cb7c6096c28bec00f7df"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/functions/utils.py",
+        "bytes": 10358,
+        "sha256": "99be102e5b67bf86fde17572daf81d963024d2fc417bfdbcfba7fb855fc393a5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/__init__.py",
+        "bytes": 1403,
+        "sha256": "421bfa9c7175e5b28801ecc124d4672ed6bd4f381bbb2e3febc70132c17b7cf5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/adapters/__init__.py",
+        "bytes": 1593,
+        "sha256": "089d956ee708310077b51c08a0cc1bb8726abbe098f916886f434ca3a55aa708"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/adapters/base.py",
+        "bytes": 2393,
+        "sha256": "5b91673066dc7ba46a29fd995f5861cc44ff13318b23b1b22f86bce106bb8658"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/adapters/plugin_adapter.py",
+        "bytes": 3705,
+        "sha256": "1f4e912c1315158a5bbf3b30db7c4b692f96db04e1c0b70cd666088d4ac53072"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/config.py",
+        "bytes": 13879,
+        "sha256": "fa17cb493459d812094fa9da1487f8259d77ad5ddee8d94b5adbd0dc08687eeb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/health.py",
+        "bytes": 4618,
+        "sha256": "2fd9f4cf649a16f8a2f40192eabbfc1a80e56ff6c7dec76fbceed9c991a6a130"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/models.py",
+        "bytes": 3570,
+        "sha256": "e501bcd4fe9bebfce228136479385d504afb2f62cbdfa3b356512b6680fb0b0e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/order_identity_map.py",
+        "bytes": 4905,
+        "sha256": "ad88ceb23194bbfe16e3d139c5c1f87c0f33a586a5105c303fb6454949c66d7b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/order_ref_allocator.py",
+        "bytes": 4853,
+        "sha256": "ed53d75fbb01c22b5b8438909d1f98c60ebc93d987301419e72fbd02cbc4560a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/protocol.py",
+        "bytes": 1161,
+        "sha256": "5484189df2504d3e839c524268c65d11330fd9a61b93ece9bcfab2f2250a5efb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/registrar.py",
+        "bytes": 1273,
+        "sha256": "086baf02bbcfec210a2f84572ac41fae449629cc38f1f3acae235fffc6744db0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/runtime.py",
+        "bytes": 19554,
+        "sha256": "4ff7bd82ca15cbc666417399667c2a2d9189c87956d1f3f30fa069d7ef5b7024"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/runtime_remote.py",
+        "bytes": 29799,
+        "sha256": "02b066fa5b07d0ea1a8a85799bafc2c567aa00bc0fcf32be0127a01be198d86a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/storage/__init__.py",
+        "bytes": 125,
+        "sha256": "b675f84027ab9f00a1aa4a41dcca9afeb415e67a2a1320a9f5cf61475cd5fcfb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/storage/tick_writer.py",
+        "bytes": 6312,
+        "sha256": "63942bd94040855123c0e1d43cea0e872b0b1689750f8e08ba102f0ecd689399"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/gateway/subscription_manager.py",
+        "bytes": 3384,
+        "sha256": "cc7574160b83abf4b3fd7db44152c1a989bb7967c2f5c6fb7a0af25241ea01a7"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/instrument_manager.py",
+        "bytes": 4522,
+        "sha256": "5c0a9f7d62cdd778225a82c7fded5c63d3973063f6ee8a66b4918cefdf3f4de9"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/logging_factory.py",
+        "bytes": 6557,
+        "sha256": "979a2fdc85965a157202a617c1ccc7695512f22ec52ee9c5e03b5a7a693fe947"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/market_history_protocol.py",
+        "bytes": 11394,
+        "sha256": "21096e58d14ebfb05554cf76012793de25846e9f2474b1c42d149edaf6b469ae"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/market_observation_protocol.py",
+        "bytes": 8366,
+        "sha256": "fd3a85080f6ac795becbffee5ce6c0812fc2f83ec9532049432097efad7d5c82"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/market_protocol.py",
+        "bytes": 5880,
+        "sha256": "9ad1a16842dfee03587a815ecf4a9915559287c9ce995f6cff8df15c00309108"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/plugins/__init__.py",
+        "bytes": 553,
+        "sha256": "d2aaaa22452c898ed078159d2826aa2eaf44ead7f38fd84c14290d195d78ab90"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/plugins/errors.py",
+        "bytes": 455,
+        "sha256": "ea865cb2d9ff65dd211975da93b72d4e2c83ecb0c3329bc77cdc1d3c29d29b75"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/plugins/loader.py",
+        "bytes": 11596,
+        "sha256": "ab2f466e1653f824b6da13470eab46abc16931a3f81126a632c7f44a9ffe1dc2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/plugins/protocol.py",
+        "bytes": 413,
+        "sha256": "eae454ba5ca7eac01666c2592b11729ec79b0bf7da6d768610eac62aae6e1f19"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/rate_limiter.py",
+        "bytes": 9781,
+        "sha256": "0332ed05a1b9366921e4151879cb875573763c6f0ef1427f639c1b0f4ed67955"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/registry.py",
+        "bytes": 11083,
+        "sha256": "4bf53c13d228de94b2cf7c5c7a4df0256da815200d4cbedd39c83ede917b2434"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/security.py",
+        "bytes": 7546,
+        "sha256": "f973c8dd55a0de7c405a909579152d6cc7f08b24df7112002b1d6f8ec3f54b12"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/service_protocol.py",
+        "bytes": 26174,
+        "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/telemetry_protocol.py",
+        "bytes": 8505,
+        "sha256": "fc7f2e1907f4bc733f3919a45e7fce189e0d9d03b342872c41289294142987ec"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/testing/__init__.py",
+        "bytes": 322,
+        "sha256": "a1903f41fd0a95779ae8010a4773a4a6bc4f8c45e067e40e46a7c3fe6b40b20e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/testing/fixtures.py",
+        "bytes": 909,
+        "sha256": "92eeb7e38dd4ca7ab7b7a43337b78cae8c75a6844d6530965d6ae7332c97e350"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/utils/__init__.py",
+        "bytes": 125,
+        "sha256": "6815755ee6e1198f1ebfdd3fb8b102fa9d6c565041712cec64154aa4d8138665"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/utils/time.py",
+        "bytes": 745,
+        "sha256": "45bda4c5cfc0847107c695f8433ba19890f12da80828b5110160ca47ddfa70ae"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/websocket/__init__.py",
+        "bytes": 1099,
+        "sha256": "2bd32ce7ba3d94c2291d0033212c5bca2802b02c3e03e81ed989bb7f2222583b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/websocket/exchange_adapters.py",
+        "bytes": 17304,
+        "sha256": "400f338fd41e23654ca26f8b6b41727a0b4b60bdf5aea4bfbcf3593e3aa896c4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/bt_api_base/websocket_manager.py",
+        "bytes": 22434,
+        "sha256": "679f929f944425b346c4010c14c40805886b9be4b0880c21a331a688f1bb50ec"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/base/src/logs/bt_api_registry.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/export-manifest.json",
+        "bytes": 173470,
+        "sha256": "e96dbe42cf56b24836a870755e2f53f3cd2858e083bf9810379c5a4b2df57a00"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/focus-runtime/iteration10-empty-pytest.ini",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/focus-runtime/tests/test_policy_catalog_budget_authority.py",
+        "bytes": 61163,
+        "sha256": "72e2be81f9cce67563c56b702794236100222d34e779a11749784354c5fcb252"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/patches/service-components-r223-policy.patch",
+        "bytes": 4053,
+        "sha256": "8cc455c97047ed920aac36d74247c097be7622eb212bc1e2c85d0f6237151c20"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/patches/service-components.patch",
+        "bytes": 3671,
+        "sha256": "c904caca47bcecff4d0fe1cd79fbe30ca4bae44bcc0717bbbccdec5bff7b1822"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/patches/service-runtime-r223-policy.patch",
+        "bytes": 1029,
+        "sha256": "cf483ddc73e5550f77a9383eaa258012e4f9b170b26fab1e8c87fb47af14eeba"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/patches/service-runtime.patch",
+        "bytes": 888,
+        "sha256": "9fe4c04156adfeb5a5166d279d0cd30d2b52b654fa969951c0f78df2c4e919e3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/__init__.py",
+        "bytes": 8393,
+        "sha256": "59196bdd61d69598481c9c22244c5ead47aadc266d68ae2c1829bda5a1973349"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/allocation_sizing.py",
+        "bytes": 6008,
+        "sha256": "fd7f2d8069873f508a260b60396c5856571f600a3d8e0f755f638a08da36c88e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/containers/risk_events.py",
+        "bytes": 13049,
+        "sha256": "34f537957106ed97262194f5b05cc8bee4aa9be9e2549cfc9e2734316c2c932c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/containers/risk_metrics.py",
+        "bytes": 11132,
+        "sha256": "54ef9c169dafd0063af46cd4ce5480e6add9460883b07d39f7dc9c762c28bc4e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/__init__.py",
+        "bytes": 5011,
+        "sha256": "139275b711feb63e18826717808a69e901d95552bc871c30579aa5b080d61be1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/admission.py",
+        "bytes": 501765,
+        "sha256": "8f2507ef32ecfa3bf4406ed50e60fcc3ff8fe2141143b5e21e2bcf48ae13c234"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/exposure.py",
+        "bytes": 31709,
+        "sha256": "0d1584fe1a4809c27335e2d29268c692db9e59a9747c25adb115c489788d2da0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/freeze_activation.py",
+        "bytes": 3379,
+        "sha256": "4940638bc24b0103169aa9217126cfed389bc4ee3ee2bf32d92a2545843c0655"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/instrument.py",
+        "bytes": 54791,
+        "sha256": "57cfabf8d84b98028e59c558ebfdf8ad6e06f1c64aca8f94c2fb00600f6f689e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/limits_manager.py",
+        "bytes": 33669,
+        "sha256": "379878f312bdfed5c3590c00eef7d9d3aa692f7c27447b8b1109dc30e9f2e6fe"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/policy_engine.py",
+        "bytes": 28266,
+        "sha256": "daf63873daf43228bb04c0ef995f82c01ad334b0e2a28d75a4b0f78367ce35a0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/risk_assessor.py",
+        "bytes": 20265,
+        "sha256": "666bd8b401bf24151d9339676422e6e0b4c6a436a22f03b30ce401fc2d957c08"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/risk_calculator.py",
+        "bytes": 37110,
+        "sha256": "3fbaae7049e870fe62338e2cb07732978f402e639bf3400a37cd2c11143d4c48"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/core/risk_manager.py",
+        "bytes": 15058,
+        "sha256": "01deaa193a978ada7d6e6eaa30738ed347a4087fe6839e1fecfec387340d804f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/ml_models/__init__.py",
+        "bytes": 284,
+        "sha256": "a183b98f8b50cd53867e55485c4293ffbb67653f3296c18eb89f8447dfdd2498"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/ml_models/anomaly_detector.py",
+        "bytes": 34402,
+        "sha256": "c45945c501edf1c9cce3f9a39d9b7fd17ca41e367997e05d16a7d2e27c0cccbf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/ml_models/ensemble_model.py",
+        "bytes": 27242,
+        "sha256": "674ef551ffcc3516ebe0eb9bfacca308be3cf9ca8ef56a13f23d0ddcca90b9fa"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/ml_models/ml_base.py",
+        "bytes": 14869,
+        "sha256": "00b7ad85583d5e4220f73831ac591bd8acf1fdf79d63c2ea49d0b0d729f732ad"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/order_admission.py",
+        "bytes": 19436,
+        "sha256": "1828460401a001cc14da4494a9576752cdbb4e7912659193894c27ab3a6ff95b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/portfolio_analytics.py",
+        "bytes": 52236,
+        "sha256": "93c746350d09ad6e403634092a1504f5bfc655625726b15714af2b945dad0aad"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/portfolio_analytics_v2.py",
+        "bytes": 44071,
+        "sha256": "12f5d467eca0bd40a2b7992fc297f1402e39b03becd1d49d13287fc4d504de9b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/portfolio_metrics_v1.py",
+        "bytes": 20497,
+        "sha256": "55a56d84fd314966f6e61fa6098bb7b5ae5cea27fac6df0ae01b562c3d4da23f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/service_analytics.py",
+        "bytes": 43916,
+        "sha256": "f2109a69b4c5f21a5181b970f34457cc3b4e92a003fd545de035e33d0d2ba5ac"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk-runtime/bt_api_risk/service_component.py",
+        "bytes": 104293,
+        "sha256": "e4a92d7bd95dc177ec74dd8c3bf4fba764b68c7313da8bfb8e567c8759aa2f40"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/__init__.py",
+        "bytes": 8393,
+        "sha256": "59196bdd61d69598481c9c22244c5ead47aadc266d68ae2c1829bda5a1973349"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/allocation_sizing.py",
+        "bytes": 6008,
+        "sha256": "fd7f2d8069873f508a260b60396c5856571f600a3d8e0f755f638a08da36c88e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/containers/risk_events.py",
+        "bytes": 13049,
+        "sha256": "34f537957106ed97262194f5b05cc8bee4aa9be9e2549cfc9e2734316c2c932c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/containers/risk_metrics.py",
+        "bytes": 11132,
+        "sha256": "54ef9c169dafd0063af46cd4ce5480e6add9460883b07d39f7dc9c762c28bc4e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/__init__.py",
+        "bytes": 5011,
+        "sha256": "139275b711feb63e18826717808a69e901d95552bc871c30579aa5b080d61be1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/admission.py",
+        "bytes": 501765,
+        "sha256": "8f2507ef32ecfa3bf4406ed50e60fcc3ff8fe2141143b5e21e2bcf48ae13c234"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/exposure.py",
+        "bytes": 31709,
+        "sha256": "0d1584fe1a4809c27335e2d29268c692db9e59a9747c25adb115c489788d2da0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/freeze_activation.py",
+        "bytes": 3379,
+        "sha256": "4940638bc24b0103169aa9217126cfed389bc4ee3ee2bf32d92a2545843c0655"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/instrument.py",
+        "bytes": 54791,
+        "sha256": "57cfabf8d84b98028e59c558ebfdf8ad6e06f1c64aca8f94c2fb00600f6f689e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/limits_manager.py",
+        "bytes": 33669,
+        "sha256": "379878f312bdfed5c3590c00eef7d9d3aa692f7c27447b8b1109dc30e9f2e6fe"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/policy_engine.py",
+        "bytes": 28266,
+        "sha256": "daf63873daf43228bb04c0ef995f82c01ad334b0e2a28d75a4b0f78367ce35a0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/risk_assessor.py",
+        "bytes": 20265,
+        "sha256": "666bd8b401bf24151d9339676422e6e0b4c6a436a22f03b30ce401fc2d957c08"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/risk_calculator.py",
+        "bytes": 37110,
+        "sha256": "3fbaae7049e870fe62338e2cb07732978f402e639bf3400a37cd2c11143d4c48"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/core/risk_manager.py",
+        "bytes": 15058,
+        "sha256": "01deaa193a978ada7d6e6eaa30738ed347a4087fe6839e1fecfec387340d804f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/ml_models/__init__.py",
+        "bytes": 284,
+        "sha256": "a183b98f8b50cd53867e55485c4293ffbb67653f3296c18eb89f8447dfdd2498"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/ml_models/anomaly_detector.py",
+        "bytes": 34402,
+        "sha256": "c45945c501edf1c9cce3f9a39d9b7fd17ca41e367997e05d16a7d2e27c0cccbf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/ml_models/ensemble_model.py",
+        "bytes": 27242,
+        "sha256": "674ef551ffcc3516ebe0eb9bfacca308be3cf9ca8ef56a13f23d0ddcca90b9fa"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/ml_models/ml_base.py",
+        "bytes": 14869,
+        "sha256": "00b7ad85583d5e4220f73831ac591bd8acf1fdf79d63c2ea49d0b0d729f732ad"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/order_admission.py",
+        "bytes": 19436,
+        "sha256": "1828460401a001cc14da4494a9576752cdbb4e7912659193894c27ab3a6ff95b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/portfolio_analytics.py",
+        "bytes": 52236,
+        "sha256": "93c746350d09ad6e403634092a1504f5bfc655625726b15714af2b945dad0aad"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/portfolio_analytics_v2.py",
+        "bytes": 44071,
+        "sha256": "12f5d467eca0bd40a2b7992fc297f1402e39b03becd1d49d13287fc4d504de9b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/portfolio_metrics_v1.py",
+        "bytes": 20497,
+        "sha256": "55a56d84fd314966f6e61fa6098bb7b5ae5cea27fac6df0ae01b562c3d4da23f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/service_analytics.py",
+        "bytes": 43916,
+        "sha256": "f2109a69b4c5f21a5181b970f34457cc3b4e92a003fd545de035e33d0d2ba5ac"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/risk/src/bt_api_risk/service_component.py",
+        "bytes": 46540,
+        "sha256": "384243756948aabd6ce7dcb6b43333afdbd2fc2f009eb5fd00c5278377dd9ecd"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-head-source/bt_api_py/service_components.py",
+        "bytes": 104194,
+        "sha256": "086db02731e10c6707fe054fd72d0f381f96f9a4212c2435dc08b161fb02d1a0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-head-source/bt_api_py/service_config.py",
+        "bytes": 47179,
+        "sha256": "fbf42e25fded252840da3d4631338749f7fcfe75531bd87c5e799d6a33544a30"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-head-source/bt_api_py/service_deployment.py",
+        "bytes": 22476,
+        "sha256": "dacae8d98580968546587230013a0ed5c851f1d31ffc4d7efb8dfb5c58f5b153"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-head-source/bt_api_py/service_host.py",
+        "bytes": 85172,
+        "sha256": "dab4bff01cff3a2c1b9f6949a02e8f3d643dc832642b39e0d245bfd64a996810"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-head-source/bt_api_py/service_risk_order_entry.py",
+        "bytes": 157824,
+        "sha256": "80f85f5243fe83ca25d2d7d0151fbde191a34f7d5752f5457e9e6136e62429aa"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-head-source/bt_api_py/service_runtime.py",
+        "bytes": 78027,
+        "sha256": "ed6f99024db017e97c3106bcacf9037a566d3e053dfcc0646ac27471ae3aa5f3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/__init__.py",
+        "bytes": 11211,
+        "sha256": "b7de0381707e0043c9cb726b08c639eb3eb9cecbd9dda73ab104f2cff2799fdc"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_compat.py",
+        "bytes": 86,
+        "sha256": "08d2bd8479603efd08f919afd13e3a9aaa27465f4f03f6a1d25b2e71814f5cef"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_contracts/__init__.py",
+        "bytes": 2443,
+        "sha256": "805ddbd2ed1240648719b4128e844b1d895ae3d8aac96dcb1966b2ccdff367db"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_contracts/cache_policy.py",
+        "bytes": 1531,
+        "sha256": "30e60a9d18d55d2903818e1a3dca1adfbbeb914412ead955a1f57d2fba46cf67"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_contracts/capabilities.py",
+        "bytes": 746,
+        "sha256": "303a368f412d8ceba67ab867f717fd6f81dff21d522cb0eaa59838b5b90861c2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_contracts/errors.py",
+        "bytes": 5736,
+        "sha256": "0c26a98c381c9e7afdfa840bd6507c617796cb613973d183ed18f757f4ca0828"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_contracts/models.py",
+        "bytes": 45714,
+        "sha256": "f2d90e8680820867bd300bf893f777995b1c4b1505059615aaacd566215e0a70"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_contracts/subscriptions.py",
+        "bytes": 360,
+        "sha256": "876c49dc25a03a0fb2c8a72880e124b97aa599a816e30a29659682ad1761e2ac"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_ctp_budget.py",
+        "bytes": 26120,
+        "sha256": "cf5cae63435f48239477ce181bc46b5c27b8b1f9cc57077b3c2552e81e0c802b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_ctp_credential_binding.py",
+        "bytes": 17729,
+        "sha256": "698ca7aac861f02daca61262be2485548b6494b043b60c471dc4814bf4a0b48e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_ctp_execution_authorization.py",
+        "bytes": 62306,
+        "sha256": "ddb1098ca16da975f4d8a6bc60f9ce89cbe600d4feedb43179e955577a7f08c0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_ctp_probe.py",
+        "bytes": 2986,
+        "sha256": "2027cde4a15de95fef8826a6732eb64bd9b14687626b6051196c924f9a595611"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_direct_backend.py",
+        "bytes": 21476,
+        "sha256": "8a32989941a7bcbada3a70094e1dcbc595cb68e0b9b4c2b25e44bb0971568cf1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_execution_session.py",
+        "bytes": 493214,
+        "sha256": "50567f940ad0a013834f976cb1ef61d5ce9fb58c47ece1fb26fbd550606b28b8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_feed_adapter.py",
+        "bytes": 2187,
+        "sha256": "576dde325a1f86a127b5ef0fb73bde61525a4a4449fc06f364059583b5b8e038"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_gateway_wire.py",
+        "bytes": 23003,
+        "sha256": "85c8ce4514308bf4fbc0cb3d636f98510243df77b9151b4e9ca5da7536b3616c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_normalization.py",
+        "bytes": 106347,
+        "sha256": "157d43ec3186cf7c91072c1ca1384515ce99eed356f813d88a82e723b4335f87"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_operation_backend.py",
+        "bytes": 3212,
+        "sha256": "6fe48ce146f232882899de8197f25687dd8f6118a3a95c98cfa95cb011c45f4b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_plugin_catalog.py",
+        "bytes": 4876,
+        "sha256": "5ba67cedf2eb0808b88b854624bab0700cb3058b22f022d7be45951a1c91d216"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_venue_mappers/__init__.py",
+        "bytes": 1029,
+        "sha256": "e5cf4d9d32546df33474c573d42cb9c4a0afb881957bb73319d8c29000d67a2d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_venue_mappers/_position.py",
+        "bytes": 1100,
+        "sha256": "07731f2b859b64726da9f7cf01686f6fc96162cfb9e264d67c553f8a7f2feb26"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_venue_mappers/binance.py",
+        "bytes": 12046,
+        "sha256": "dec78456b33bbf3bc91445aee9245daf524a68f04be4dc367022491700181cdf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_venue_mappers/ctp.py",
+        "bytes": 2073,
+        "sha256": "bbcaf0c68b9500a7ac3382d97eeb247cf9ef7fa0d36a9e1faa1000176124fb09"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/_venue_mappers/okx.py",
+        "bytes": 12102,
+        "sha256": "7b65d4e2705af33680ae17e56086c3e0a6c2ceafa460c60027cf4c24438ca907"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/backtrader/__init__.py",
+        "bytes": 115,
+        "sha256": "1f60fecf573884c1136a0dfecfbea597736c0c4c1eb130311e7ce393b9dad7ee"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/backtrader/btapibroker.py",
+        "bytes": 965,
+        "sha256": "72bbc048572db21934a2a1e6bb00b8fb4dd930f83cebd4e1150fe225042e8a8e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/balance_manager.py",
+        "bytes": 3680,
+        "sha256": "1bd2ae19a35a26f6c197de874b2fcac893c0df4255361447114d6d452f9d1a4d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/__init__.py",
+        "bytes": 967,
+        "sha256": "297c7ab0b357cd3da5615a34f1140c27d98dc24529803a0b8638311cecc03c1e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/base.py",
+        "bytes": 2482,
+        "sha256": "8047d767f641b5862fdceeacda1dfd47406e5d0eb6af6177abecc740cac4e83b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/errors.py",
+        "bytes": 1067,
+        "sha256": "ca53549dc5e1b74e8b28400f3dc18690074759e64eb1e151ee4390efd84462e6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/feed_bridge.py",
+        "bytes": 7195,
+        "sha256": "27c2db4480cc24500d76c83b6ae0b7877cd31e00b0c90991a898f564928caac0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/gateway_bridge.py",
+        "bytes": 2846,
+        "sha256": "324c484f891a2f5ed4493ba6ecb47555c4121324be6218a7f1284c4b1a263e9e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/loader.py",
+        "bytes": 2347,
+        "sha256": "7783377146b7e2e49e9f38b6c11106970083dd6d07345ee6a0fe35562d9c940a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/mock.py",
+        "bytes": 6014,
+        "sha256": "93bc87c1429ba99eefcb0dba58f1c69963eeda56585902e1abc34b55f318cc3b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/registry.py",
+        "bytes": 964,
+        "sha256": "837378568d4144cea14a3677a11afbadfdb08c764b9c9f6cb5da8cc567533a4a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/brokers/types.py",
+        "bytes": 2832,
+        "sha256": "204f02fc4e22edde80f8545cce6d8aab494b60dd7bb406f834d2efc08ac82a2b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/bt_api.py",
+        "bytes": 420575,
+        "sha256": "b6c8e6c52fe471f619533d6799ff0a34fef687f3a748b37f294d885ba194cd8d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/certification/__init__.py",
+        "bytes": 722,
+        "sha256": "ab6a4abbe7d32dced1176f6d2fd0eac1cea20134e40050f6fbf6ead965164b58"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/certification/audit.py",
+        "bytes": 3887,
+        "sha256": "9dcf9b582e85096f92b07462408fc9c3655a2d9d1222ed49de4c2a9585ec9569"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/certification/scenarios.py",
+        "bytes": 8552,
+        "sha256": "2b51bbfadba54adc9977c5b7b82ebcc2dead0f99fe87a50f1fc1f56ce92a3b24"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/__init__.py",
+        "bytes": 66,
+        "sha256": "7d851e1d0ee44e5085d40ba4ba4b4dbda328cefc0fe97c40ff0bd46283d75161"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/account_config_example.yaml",
+        "bytes": 488,
+        "sha256": "e84ba13d97917acb82552591871f09ee759dd14220c3212ae49d03083ccaf27a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/balancer.yaml",
+        "bytes": 15756,
+        "sha256": "312807e77ad6ecda79a422e01be81f6d5ecf5f9e3e382919979f9a5776ea15dd"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/binance_spot_symbol_info.pkl",
+        "bytes": 14003248,
+        "sha256": "11059498b96875ecde7c6ec978a238d744a4d1966ea8887472d1a62499133ab4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/binance_swap_symbol_info.pkl",
+        "bytes": 557700,
+        "sha256": "9a3264bbd1bb721178c926669b8d1efa79297268a5ea74c3a81f5ad323223d58"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/cow_swap.yaml",
+        "bytes": 1655,
+        "sha256": "8555bdf6498f1b7e8fff63af2866e516b99ebaffc2ccab987b29711650aedd55"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/curve.yaml",
+        "bytes": 2212,
+        "sha256": "a8faabc99f1ecb141ca0204029360b4389498bae5f38f1ec3e2a48d21090f9a6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/exchange-bundles.toml",
+        "bytes": 967,
+        "sha256": "107730a8a2c1198dec086fba83792ed0e7bde62a884afeb02b2e50e72edeebf4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/pancakeswap.yaml",
+        "bytes": 999,
+        "sha256": "208829c91a4925b15e9190c4a5096064894913724cf0b31f6c9d2de49cbebc6e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/raydium.yaml",
+        "bytes": 3007,
+        "sha256": "e17dee398a9021d3ea2024711fc032ba942c78c33f739cab5ea8961f42d71a0b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/sushiswap.yaml",
+        "bytes": 4950,
+        "sha256": "34169f8b39369fb855c64d92516e39d9cafb1e92d8c5375d4a7ff5b43fd94b30"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/configs/uniswap.yaml",
+        "bytes": 6664,
+        "sha256": "325b820f132771f0636bb06ca3959427bde302c66a586e3d421958e1f128b3d3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/cross_venue.py",
+        "bytes": 34263,
+        "sha256": "5cd8b6e4f28b9a41b31c7d8e5b4e34eeb58fd3322d40eb12f2a0a415896dcb23"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/ctp_close_plan.py",
+        "bytes": 73437,
+        "sha256": "fdb4a9032dff5955a4af3d3578077cf78825b0582c6dceefdca8b99b286a546c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/ctp_env_selector.py",
+        "bytes": 8805,
+        "sha256": "49a55d0f7edf20ae236dbd03beb687e97003152a75e84c5287882b99452ccf99"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/ctp_simnow_execution.py",
+        "bytes": 44194,
+        "sha256": "e97822f7d7c408688400cc5e61d1d5860477c9524b1426eb0145bd8905356323"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/data_downloader.py",
+        "bytes": 6647,
+        "sha256": "d1fd10df1d24873341242033bfc6cf179ee03337a98080c5fe7c24f329ad6111"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/doctor.py",
+        "bytes": 1613,
+        "sha256": "c83a63261e8d7de4544613cbc8fb1e7fe8490b04ddd816ac5995d3344b93f90d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/exceptions.py",
+        "bytes": 1599,
+        "sha256": "1776f03b4a62438c94793e5fc8522d8ca7152e2965fbb42dd4d435fe2d0dcd08"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/__init__.py",
+        "bytes": 1543,
+        "sha256": "b732bb74dc6c810305e268c006644e935441d740c9b00c756f29789663c6d964"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/btapi_adapter.py",
+        "bytes": 485,
+        "sha256": "31d41bb3063828a1a68a14e0d4344118431760269c1ef096b10851242ed4b9d6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/btapi_backend.py",
+        "bytes": 30612,
+        "sha256": "0e6b80a8caed783bdeb996e318bc58f305af8bd1cbdf66957fe13561d0cf9dff"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/btapi_bridge.py",
+        "bytes": 4352,
+        "sha256": "f68eae4290eb6b86dc480d5a2f46a3eb35298f256ef58060d8c701bcf2c1228f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/client.py",
+        "bytes": 32197,
+        "sha256": "c88c32290dce7114e6fb3cca9a19372f5b84eb60ab8736a41adc4aed51ae3112"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/hub.py",
+        "bytes": 4334,
+        "sha256": "6d66f0b049e47137d9617ca6fa58b4febf0327974fa2d6057afb70e335cbe9b3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/memory.py",
+        "bytes": 9962,
+        "sha256": "31d72c6c302f85c9ed128aa4b37245c1a4308b969955b6177461dc6b0c91188f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/private_event_pump.py",
+        "bytes": 1835,
+        "sha256": "e072f0e0a3064feb78754993f76e492d4eafde2fa649546e7d53d8076122c204"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/router.py",
+        "bytes": 38687,
+        "sha256": "f674d9f9505f0eef76bfcc0269e24a9629852fb08a48f814f54ea58ac084c451"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/schema.py",
+        "bytes": 12417,
+        "sha256": "22e81d33ce9d6cb7c75a28886485397e39258d64acd8a2d618b3db7d30496eb8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/service.py",
+        "bytes": 9277,
+        "sha256": "c63f9eec9adad608a8605830f2fe22babea9a37ae3001b3a27a35a2f9057814a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/source_supervisor.py",
+        "bytes": 2775,
+        "sha256": "4e95d31b8a8e150427cf6782a685b4973f33e84cd3f94b7afa41a8b264d76670"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/state.py",
+        "bytes": 8407,
+        "sha256": "db43dc100dc5543540c47e339d3549ee52aed25c295f5d26e267737342bee59f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/forwarding/transport.py",
+        "bytes": 8956,
+        "sha256": "5e21b8c7000ced10f402bc1dcf6a60037db1cae519f8d916fa525d2c6eb0c621"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/gateway/__init__.py",
+        "bytes": 392,
+        "sha256": "77ca6116d22e8a312ee35b30b6b5213a5fa6021f7083ca9e377f23d6eb599f4e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/gateway/client.py",
+        "bytes": 1117,
+        "sha256": "e0d5f442d3c90fd132503eb5ecd02008bb354a115941ce4cdf72e3f72cfe3583"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/gateway/config.py",
+        "bytes": 3270,
+        "sha256": "18444c395be639015ef47963ccdc346a6d1e2ccc87eab380c2a6e2157ca41f88"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/gateway/safety.py",
+        "bytes": 942,
+        "sha256": "505061ff9e0b9226aba7b28fadba9d917f4543af305b2097700bc239dd93a35b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/__init__.py",
+        "bytes": 3104,
+        "sha256": "8190223c7a30a61cb86bcfd422ee9f5cf41c97f338262853e017d83eb5be21ce"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/collector.py",
+        "bytes": 9599,
+        "sha256": "c5b889ef455389ca95d744d58b46545ef28b69ebd42b4982b45e7477d274c411"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/config.py",
+        "bytes": 9883,
+        "sha256": "26874a4e15fb3f57c7ab1f2e99fab00b0e478854827504c15d658d276cd2d335"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/decorators.py",
+        "bytes": 8717,
+        "sha256": "c83f0d72868aeb37f89880fe89201433ce5c55a919457c740f90bd8d32fe32f8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/elk.py",
+        "bytes": 19153,
+        "sha256": "77bbb6fa02d47777e0430cae04d8b52d8554325c93f89e2a791b42d4ef715dec"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/exchange_health.py",
+        "bytes": 13560,
+        "sha256": "b88d2bbb86c80d231ab9a57a0dabf1b8421ba1cc7df24ae7c50401fce10f3ca7"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/grafana.py",
+        "bytes": 20326,
+        "sha256": "44cd3a50f2097255b55b8be90bf0b2bd2153b0d56e53a398ffc774698604599f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/metrics.py",
+        "bytes": 8004,
+        "sha256": "c6d5dcfabb6d04f51fff4b7e6bc578a7f900c87043c7efbd954f2d86b7a3525d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/prometheus.py",
+        "bytes": 11132,
+        "sha256": "f6d8a31f37df86350bfb5e5f98780b029e5215ed8244a376b3167134bc73e8e1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/monitoring/system_metrics.py",
+        "bytes": 13633,
+        "sha256": "d3e4d480b37ff45025029ed21c50889db34f2804be6045d79695d0bbd7ec4d6c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/py.typed",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/__init__.py",
+        "bytes": 1899,
+        "sha256": "2eb76ff5c598cd82c3ce3d47b324683e729294995715fa5253feeb303c638f3e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/containers/__init__.py",
+        "bytes": 317,
+        "sha256": "fcf688536e7c6232fa6c47021e56fb06acef2675bd96f0a07f44dc24c75b37b1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/containers/risk_events.py",
+        "bytes": 10709,
+        "sha256": "05b8322b4153ac350b2e2d86ab20e1ff92a94fffc891227495072b764ad58160"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/containers/risk_metrics.py",
+        "bytes": 10210,
+        "sha256": "2a80eeb7f2b73c392d46367a150c3fc105272fd00b0d0f8a0e7b8c010163dd8e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/__init__.py",
+        "bytes": 366,
+        "sha256": "1d9f2658384bcd3906d7b942e2596ea22f48a72bbd1660f4ac3bdd7344d59fc7"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/actions.py",
+        "bytes": 6032,
+        "sha256": "cdcf56694488510ce4c11c97090449a98e866b8b41f23270359caa4697dcd85b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/compliance_limits.py",
+        "bytes": 689,
+        "sha256": "7c961b2955fb324a4dc685206a2fe156430ea476c6fe42a18c0ddcbcffa060ee"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/compliance_risk.py",
+        "bytes": 3421,
+        "sha256": "1eb5153ae1c6b40f694fcd158cb7374c1dc41da74c3b02297b1c768dd041341c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/credit_risk.py",
+        "bytes": 3719,
+        "sha256": "00fbe7b968929ca40a554e2d55510b4d4c4332c72ce32a7847c15ebe0ff8b287"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/limits_manager.py",
+        "bytes": 16610,
+        "sha256": "a330168d3079143ac6963d3181b68a703177f6191cc636617b55a5ed4bc2d46c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/limits_types.py",
+        "bytes": 2175,
+        "sha256": "a90a3a0948f8148abdbb06bef737843be92958ec4426eea77cbc0f57ee888557"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/liquidity_risk.py",
+        "bytes": 4596,
+        "sha256": "04bcf059b476822805bafd3e501feffaf811807374a29981b572b2041c8a9867"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/margin_limits.py",
+        "bytes": 2058,
+        "sha256": "958261c8a9f2837fa35a8df3a784cb59420d5de672e2b38ac85ee73a6ca27255"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/market_risk.py",
+        "bytes": 7209,
+        "sha256": "25da6c2a4f309c28e55f61938575ceeb681d4ac3f8d0d1e9113efd68b5899354"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/operational_risk.py",
+        "bytes": 5231,
+        "sha256": "7d0615b73b7e37c69427d66b68cd6c99c228169e70ef2f7c191ed317e430ec65"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/order_limits.py",
+        "bytes": 3531,
+        "sha256": "cab4129cda754898fe7bc367fc0958c96ac31a5db47eb68ed041c146b4920086"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/policy_engine.py",
+        "bytes": 20382,
+        "sha256": "f51abf5bcd9d8a62b1fb97ddd124868c2108ec1ca56b060931e0afe8a20ac6e2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/policy_types.py",
+        "bytes": 904,
+        "sha256": "0ff3c67d4960fd6669365aad1031352c7ad5981ca7aca69a8d185f77143453f4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/position_limits.py",
+        "bytes": 7585,
+        "sha256": "d53a5069715743071d4611db48cafad0c77c2803f4f4b82c402cda1699d0c52f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/position_risk.py",
+        "bytes": 2165,
+        "sha256": "ec115badcfe5a2696ee289636c1ae2bebcb590a343926cd2e97c69b57bd8c3e3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/risk_assessor.py",
+        "bytes": 16842,
+        "sha256": "80fa6a339f4b81e0dd79118ae53806c68b540266cc195a2cf3363938fd884613"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/risk_calculator.py",
+        "bytes": 10436,
+        "sha256": "27d53af7481cf764237c2641803370101ea48e0e0775ed7b694696684ba9b822"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/risk_limits.py",
+        "bytes": 2298,
+        "sha256": "461f676bc03c627d5de00c51bdead1176d49b04adab3dea099f91790b31d3f86"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/core/risk_manager.py",
+        "bytes": 15022,
+        "sha256": "8168e80d9330c678d8a1b4ca314c3975cff2d6e962cb77525675f2c53ed33cbf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/ml_models/__init__.py",
+        "bytes": 251,
+        "sha256": "1b80d8b9d96e863d1510f79162e392ef49a5a7318881ad9229ffe5969ab09e93"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/ml_models/anomaly_detector.py",
+        "bytes": 21836,
+        "sha256": "0f510599fad3590fc370f039a5aa8ebce539265430bb513a380e07dcfd704bdf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/ml_models/anomaly_detectors.py",
+        "bytes": 9100,
+        "sha256": "138aa4dc8ee965f3310c39cc6154d0976fd4b5e5e1136d0492f71c3763ba81a4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/ml_models/anomaly_types.py",
+        "bytes": 2148,
+        "sha256": "7044944dde3a7141139f160d7c962a7f71b4c367c58f10e5343edbedafcff2cc"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/ml_models/ensemble_model.py",
+        "bytes": 24915,
+        "sha256": "058ec4b48eb415ca9fb85fe18ff541d045ebf2e2260be7e790834eda641127aa"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/risk_management/ml_models/ml_base.py",
+        "bytes": 13906,
+        "sha256": "ff082deee368cbb589c62d125e3f50efa0a4d72139ac8b1d1039171c76e79743"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/__init__.py",
+        "bytes": 4227,
+        "sha256": "585097eb7f9d3c76908530fd44c1f998a965428aea3d3afa6feab3169e9e3c0e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/cancellation_control.py",
+        "bytes": 60346,
+        "sha256": "c54b52eb85b349640e71f6a32b424b6119a5516eaa0d15560b9d5ca2278b5837"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/catalog.py",
+        "bytes": 5274,
+        "sha256": "bcef090d2c3fbec6bf4af5d6f370f3da271f56edad3018676babb1fe08d91148"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/contracts.py",
+        "bytes": 8345,
+        "sha256": "bf00684cd9c7d76a391b034ce61e5572bdaa7b7a4b3c00653abc12238791fc84"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/fake_dispatch_authority.py",
+        "bytes": 46420,
+        "sha256": "6948e8c9f812f8f159cfde3399531cacec78c081e18dbedd7a97adf43555649a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/gateway_dispatch.py",
+        "bytes": 47746,
+        "sha256": "d733d775df55757596ddd2c09ef76165d3c0237fc051552391f59150e70be573"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/instrument_risk.py",
+        "bytes": 29378,
+        "sha256": "0b1c976b6e8247c29214354ad4845602ef46088ad54f89b62c9e2a10f5b3340a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/managed.py",
+        "bytes": 49066,
+        "sha256": "31e9760c254882104c99698522df758547ad5405dbe5fd75008cac57945e0b5c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/managed_recovery.py",
+        "bytes": 34386,
+        "sha256": "a6e5267b46620ad1a69c49fd6b4f8033c0ac5ab96fb8f98dacd34c580fda2bae"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/runtime_plugins/reconcile_control.py",
+        "bytes": 59661,
+        "sha256": "b044e98bbc2a8a37232bbce80a22360371bd530f6a694db9d8e89cdd304f8413"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/__init__.py",
+        "bytes": 2839,
+        "sha256": "8e1e9fbd329ca8c8bda656f1f5af8963d3e974d414f9f6f1331b0cf2581e82de"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/auth/__init__.py",
+        "bytes": 221,
+        "sha256": "3c1ae8922cf4db36766a5ee2a4c5b0c98b3112521d11ca5b3abf53a9b9d435fc"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/auth/mfa_provider.py",
+        "bytes": 19068,
+        "sha256": "1b24d0441f6a18136868ed874d116d06a9e60200f26b341dcad04090337b05d4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/auth/oauth2_provider.py",
+        "bytes": 25833,
+        "sha256": "c1b9bb056451553a9a90cf884d138999070216746c0bf29971d3d5bfc46cc26d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/core/__init__.py",
+        "bytes": 724,
+        "sha256": "ba8b07858d362ebbbcd86e091e5ba2e4cfecc28937adba8781c736f1db13833f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/core/access_control.py",
+        "bytes": 14584,
+        "sha256": "ac429bbc89ede481f9b57fdeecd504836c9bccf9fbe35e97950c31bbec97e227"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/core/audit_logger.py",
+        "bytes": 19614,
+        "sha256": "bda6fbdfc2a4d962dd702f67202b79d0578c96643901e337f18f7807c8f609cf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/core/compliance_monitor.py",
+        "bytes": 5190,
+        "sha256": "ab053b46fc2dec288db8575612fb17db4aed057cb9753f5c1f0d7218b388a670"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/core/encryption_manager.py",
+        "bytes": 24019,
+        "sha256": "5aa22b432bc2edc466f240f3decc54a1503c5c541d7cd7195e2ea5132b5e5fe8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/core/identity_manager.py",
+        "bytes": 15605,
+        "sha256": "69453004fd133a0360a1a651f4317bc0919fda5bdb1d481246a843f35a10b733"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/core/threat_detection.py",
+        "bytes": 12778,
+        "sha256": "3fb5e416c6e3386e080351b264947151d96f5e25bef8aa91f12af7a16716fff8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/data/__init__.py",
+        "bytes": 178,
+        "sha256": "1aeb92652b1ebcbd10aaae2b656315ac8675e6226711442d94f794ce95ad0e7a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/data/protection.py",
+        "bytes": 15240,
+        "sha256": "66b581d8e81376f464661b9c0595cdeef71abb817312a75501d11216fb2ee244"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/framework.py",
+        "bytes": 16113,
+        "sha256": "2b14597e9bf77b98749b270687fd127b31a39b100f3c973e8a79f9618bdb4186"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/monitoring/__init__.py",
+        "bytes": 176,
+        "sha256": "27c634b67d8c496e01f8543205e7a4b16637d6d93bec4661084b0ac9c9bd00d6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/monitoring/security_monitoring.py",
+        "bytes": 4614,
+        "sha256": "c6111b29d505bb6f4f0db004b66c658e52c6453ed15d1921baca39e94462bc24"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/network/__init__.py",
+        "bytes": 181,
+        "sha256": "9b9b96a1aaef6db0d682a01501e12457822ae09e88e8f9390e9f4bd3004f8f6b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/network/tls_manager.py",
+        "bytes": 2427,
+        "sha256": "3b1ede421053c83d1c56db73769dc504b090f6a31bda10d610a05bf16cd66682"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/recovery/__init__.py",
+        "bytes": 182,
+        "sha256": "11ae110f554b58e25834037dbe51d297b8dd1477d12318ff141d3653e76eebd8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/security_compliance/recovery/disaster_recovery.py",
+        "bytes": 7225,
+        "sha256": "c5cb598ec6b7391249cba4ba392a8b57d6d4cf849d81fb8b3597c7299ad13db5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_account.py",
+        "bytes": 18534,
+        "sha256": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_account_consumer.py",
+        "bytes": 22539,
+        "sha256": "ab826191d444465e33900d316a709158ca3dacd6328727e10ce2be46ef9d2f58"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_account_projection.py",
+        "bytes": 37131,
+        "sha256": "ab32d2cf59a87093c9567bf9ea22ae541448c5a8ffcb822f6d50c0c0a497da14"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_components.py",
+        "bytes": 108127,
+        "sha256": "4db8d39dfea9cb166b66bf2eb7f412f3f377084ab084c23a5cb1d6dba43b5ac1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_config.py",
+        "bytes": 47179,
+        "sha256": "fbf42e25fded252840da3d4631338749f7fcfe75531bd87c5e799d6a33544a30"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_config_io.py",
+        "bytes": 5033,
+        "sha256": "54890a5c41bfe0046b8a39fac40d08a2fcf6caa8a38df6b5fc6a739e9918e4b4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_deployment.py",
+        "bytes": 22476,
+        "sha256": "dacae8d98580968546587230013a0ed5c851f1d31ffc4d7efb8dfb5c58f5b153"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_execution.py",
+        "bytes": 26972,
+        "sha256": "90ae00c99ba2ec2ee24a5a367b47ad73db456590c33913c838591d130d0b4318"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_execution_account_books.py",
+        "bytes": 62932,
+        "sha256": "e9b0fb0ac7e96b1c9fdcbe6bd649346b3fa5d2a7a8ff0c7c1323eaf77c013eea"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_execution_group.py",
+        "bytes": 90253,
+        "sha256": "d6b37ccfce7f2044e935fa22f1706d553122e450e1c1a3e1b849a54573d4addb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_execution_group_authority.py",
+        "bytes": 91923,
+        "sha256": "49fd1fbf347cfbd6b735aa58f9227aeb4d6c33c56a1a5338de92b085c6b69d88"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_execution_group_client.py",
+        "bytes": 62674,
+        "sha256": "6fc51a31e61ce8f0238f65b343133ae58bd6b4e6483947ac67150be4c7e3e2c5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_execution_group_proofs.py",
+        "bytes": 168450,
+        "sha256": "8a508aa99273a747ac720480e34dad5c6cae5cefb8a800a60680e11d36029462"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_execution_monitor.py",
+        "bytes": 42136,
+        "sha256": "6e10bc4bb3978d9011d796e903639ac7896168719a9f6e442302895787f4537d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_group_monitor.py",
+        "bytes": 60086,
+        "sha256": "41ee954cacf970d3acfb1889f4dba84c662a8b0b2f391c5dd28031aefb7ed27b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_group_reservations.py",
+        "bytes": 35172,
+        "sha256": "46b3dff14e355951847b4931eef8ae616947a0a05e76b76bdaa32031cf03acf3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_host.py",
+        "bytes": 85172,
+        "sha256": "dab4bff01cff3a2c1b9f6949a02e8f3d643dc832642b39e0d245bfd64a996810"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_market.py",
+        "bytes": 51773,
+        "sha256": "5b7a357693ef4ddc50ef397f4bfc67ca7116ab2809850c03ee07f05a18bc75b6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_market_legs.py",
+        "bytes": 8519,
+        "sha256": "1d6456c25406dd034cb098a71a3e4e412202b784b93e3f1083295bec6571edf2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_market_monitor.py",
+        "bytes": 19211,
+        "sha256": "de2831bd99d0103d09cb7018140f548c61a43945faa223e2787fd78e380a4f52"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_migration_gate.py",
+        "bytes": 27103,
+        "sha256": "a08cdc643306c8c8b04551e0f2ffa07f85ceeab25bac66675a063affa3ea37bb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_migration_import.py",
+        "bytes": 69848,
+        "sha256": "d4ec88d69e65e7012e20077cf4a4e5123d3e96f70606c0709ddbb2861073bb71"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_migration_map.py",
+        "bytes": 26452,
+        "sha256": "f60351439088513a4b36a81ddb7bd9b3f05c47bb2dc64a8152222f8f126990c2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_monitor.py",
+        "bytes": 10062,
+        "sha256": "6fbc850967e8417b5f9e669b3fce8aee23b3987df37099787d316995cc67abd6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_monitor_control.py",
+        "bytes": 19885,
+        "sha256": "d2f3ac6abc804632778d612a8944f0195da6798d5275ad696802f62c6a9e3c45"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_registry.py",
+        "bytes": 102547,
+        "sha256": "3f02ab77313c7ef3318bcb15128c9e84695b7c701ccb79de5b764f3ea1110166"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_risk_order_entry.py",
+        "bytes": 157824,
+        "sha256": "80f85f5243fe83ca25d2d7d0151fbde191a34f7d5752f5457e9e6136e62429aa"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_risk_order_journal.py",
+        "bytes": 234545,
+        "sha256": "37d89c3394b86245eae578540303707b15287a66f36de112bb18fc3556e6c3fe"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_runtime.py",
+        "bytes": 80190,
+        "sha256": "d01504653be4bebd8f3d4169f6ea3aeabee832b6341087be2e324946afd66f1d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/service_telemetry.py",
+        "bytes": 18683,
+        "sha256": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/testing/__init__.py",
+        "bytes": 455,
+        "sha256": "a81cb87945c7d6caa135d3f4949b41ed2674d216ba31444655d0ae612e55e7d5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/testing/contract_cases.py",
+        "bytes": 2503,
+        "sha256": "369195317037a0c5b561a3d56974625c8cb27c6c99c0e50887cdc0075403a035"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/testing/fixtures.py",
+        "bytes": 1737,
+        "sha256": "0c8b7b0d65a057254321b7aa514b6da3ac6df5bc47283eb29e84f6adeef42847"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/utils/__init__.py",
+        "bytes": 37,
+        "sha256": "a606304c901dde0f6d2a6e3520560d56841bd3045d9392df9104994654fe6f1a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk-runtime/bt_api_py/utils/hyperliquid_types.py",
+        "bytes": 750,
+        "sha256": "8960ea276fdbee5d85738e02e2ecbbae5ada178853b0afd1c3ad9b85c08d3898"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/__init__.py",
+        "bytes": 11211,
+        "sha256": "b7de0381707e0043c9cb726b08c639eb3eb9cecbd9dda73ab104f2cff2799fdc"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_compat.py",
+        "bytes": 86,
+        "sha256": "08d2bd8479603efd08f919afd13e3a9aaa27465f4f03f6a1d25b2e71814f5cef"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_contracts/__init__.py",
+        "bytes": 2443,
+        "sha256": "805ddbd2ed1240648719b4128e844b1d895ae3d8aac96dcb1966b2ccdff367db"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_contracts/cache_policy.py",
+        "bytes": 1531,
+        "sha256": "30e60a9d18d55d2903818e1a3dca1adfbbeb914412ead955a1f57d2fba46cf67"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_contracts/capabilities.py",
+        "bytes": 746,
+        "sha256": "303a368f412d8ceba67ab867f717fd6f81dff21d522cb0eaa59838b5b90861c2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_contracts/errors.py",
+        "bytes": 5736,
+        "sha256": "0c26a98c381c9e7afdfa840bd6507c617796cb613973d183ed18f757f4ca0828"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_contracts/models.py",
+        "bytes": 45714,
+        "sha256": "f2d90e8680820867bd300bf893f777995b1c4b1505059615aaacd566215e0a70"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_contracts/subscriptions.py",
+        "bytes": 360,
+        "sha256": "876c49dc25a03a0fb2c8a72880e124b97aa599a816e30a29659682ad1761e2ac"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_ctp_budget.py",
+        "bytes": 26120,
+        "sha256": "cf5cae63435f48239477ce181bc46b5c27b8b1f9cc57077b3c2552e81e0c802b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_ctp_credential_binding.py",
+        "bytes": 17729,
+        "sha256": "698ca7aac861f02daca61262be2485548b6494b043b60c471dc4814bf4a0b48e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_ctp_execution_authorization.py",
+        "bytes": 62306,
+        "sha256": "ddb1098ca16da975f4d8a6bc60f9ce89cbe600d4feedb43179e955577a7f08c0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_ctp_probe.py",
+        "bytes": 2986,
+        "sha256": "2027cde4a15de95fef8826a6732eb64bd9b14687626b6051196c924f9a595611"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_direct_backend.py",
+        "bytes": 21476,
+        "sha256": "8a32989941a7bcbada3a70094e1dcbc595cb68e0b9b4c2b25e44bb0971568cf1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_execution_session.py",
+        "bytes": 493214,
+        "sha256": "50567f940ad0a013834f976cb1ef61d5ce9fb58c47ece1fb26fbd550606b28b8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_feed_adapter.py",
+        "bytes": 2187,
+        "sha256": "576dde325a1f86a127b5ef0fb73bde61525a4a4449fc06f364059583b5b8e038"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_gateway_wire.py",
+        "bytes": 23003,
+        "sha256": "85c8ce4514308bf4fbc0cb3d636f98510243df77b9151b4e9ca5da7536b3616c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_normalization.py",
+        "bytes": 106347,
+        "sha256": "157d43ec3186cf7c91072c1ca1384515ce99eed356f813d88a82e723b4335f87"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_operation_backend.py",
+        "bytes": 3212,
+        "sha256": "6fe48ce146f232882899de8197f25687dd8f6118a3a95c98cfa95cb011c45f4b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_plugin_catalog.py",
+        "bytes": 4876,
+        "sha256": "5ba67cedf2eb0808b88b854624bab0700cb3058b22f022d7be45951a1c91d216"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_venue_mappers/__init__.py",
+        "bytes": 1029,
+        "sha256": "e5cf4d9d32546df33474c573d42cb9c4a0afb881957bb73319d8c29000d67a2d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_venue_mappers/_position.py",
+        "bytes": 1100,
+        "sha256": "07731f2b859b64726da9f7cf01686f6fc96162cfb9e264d67c553f8a7f2feb26"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_venue_mappers/binance.py",
+        "bytes": 12046,
+        "sha256": "dec78456b33bbf3bc91445aee9245daf524a68f04be4dc367022491700181cdf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_venue_mappers/ctp.py",
+        "bytes": 2073,
+        "sha256": "bbcaf0c68b9500a7ac3382d97eeb247cf9ef7fa0d36a9e1faa1000176124fb09"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/_venue_mappers/okx.py",
+        "bytes": 12102,
+        "sha256": "7b65d4e2705af33680ae17e56086c3e0a6c2ceafa460c60027cf4c24438ca907"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/backtrader/__init__.py",
+        "bytes": 115,
+        "sha256": "1f60fecf573884c1136a0dfecfbea597736c0c4c1eb130311e7ce393b9dad7ee"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/backtrader/btapibroker.py",
+        "bytes": 965,
+        "sha256": "72bbc048572db21934a2a1e6bb00b8fb4dd930f83cebd4e1150fe225042e8a8e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/balance_manager.py",
+        "bytes": 3680,
+        "sha256": "1bd2ae19a35a26f6c197de874b2fcac893c0df4255361447114d6d452f9d1a4d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/__init__.py",
+        "bytes": 967,
+        "sha256": "297c7ab0b357cd3da5615a34f1140c27d98dc24529803a0b8638311cecc03c1e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/base.py",
+        "bytes": 2482,
+        "sha256": "8047d767f641b5862fdceeacda1dfd47406e5d0eb6af6177abecc740cac4e83b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/errors.py",
+        "bytes": 1067,
+        "sha256": "ca53549dc5e1b74e8b28400f3dc18690074759e64eb1e151ee4390efd84462e6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/feed_bridge.py",
+        "bytes": 7195,
+        "sha256": "27c2db4480cc24500d76c83b6ae0b7877cd31e00b0c90991a898f564928caac0"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/gateway_bridge.py",
+        "bytes": 2846,
+        "sha256": "324c484f891a2f5ed4493ba6ecb47555c4121324be6218a7f1284c4b1a263e9e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/loader.py",
+        "bytes": 2347,
+        "sha256": "7783377146b7e2e49e9f38b6c11106970083dd6d07345ee6a0fe35562d9c940a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/mock.py",
+        "bytes": 6014,
+        "sha256": "93bc87c1429ba99eefcb0dba58f1c69963eeda56585902e1abc34b55f318cc3b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/registry.py",
+        "bytes": 964,
+        "sha256": "837378568d4144cea14a3677a11afbadfdb08c764b9c9f6cb5da8cc567533a4a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/brokers/types.py",
+        "bytes": 2832,
+        "sha256": "204f02fc4e22edde80f8545cce6d8aab494b60dd7bb406f834d2efc08ac82a2b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/bt_api.py",
+        "bytes": 420575,
+        "sha256": "b6c8e6c52fe471f619533d6799ff0a34fef687f3a748b37f294d885ba194cd8d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/certification/__init__.py",
+        "bytes": 722,
+        "sha256": "ab6a4abbe7d32dced1176f6d2fd0eac1cea20134e40050f6fbf6ead965164b58"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/certification/audit.py",
+        "bytes": 3887,
+        "sha256": "9dcf9b582e85096f92b07462408fc9c3655a2d9d1222ed49de4c2a9585ec9569"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/certification/scenarios.py",
+        "bytes": 8552,
+        "sha256": "2b51bbfadba54adc9977c5b7b82ebcc2dead0f99fe87a50f1fc1f56ce92a3b24"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/__init__.py",
+        "bytes": 66,
+        "sha256": "7d851e1d0ee44e5085d40ba4ba4b4dbda328cefc0fe97c40ff0bd46283d75161"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/account_config_example.yaml",
+        "bytes": 488,
+        "sha256": "e84ba13d97917acb82552591871f09ee759dd14220c3212ae49d03083ccaf27a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/balancer.yaml",
+        "bytes": 15756,
+        "sha256": "312807e77ad6ecda79a422e01be81f6d5ecf5f9e3e382919979f9a5776ea15dd"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/binance_spot_symbol_info.pkl",
+        "bytes": 14003248,
+        "sha256": "11059498b96875ecde7c6ec978a238d744a4d1966ea8887472d1a62499133ab4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/binance_swap_symbol_info.pkl",
+        "bytes": 557700,
+        "sha256": "9a3264bbd1bb721178c926669b8d1efa79297268a5ea74c3a81f5ad323223d58"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/cow_swap.yaml",
+        "bytes": 1655,
+        "sha256": "8555bdf6498f1b7e8fff63af2866e516b99ebaffc2ccab987b29711650aedd55"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/curve.yaml",
+        "bytes": 2212,
+        "sha256": "a8faabc99f1ecb141ca0204029360b4389498bae5f38f1ec3e2a48d21090f9a6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/exchange-bundles.toml",
+        "bytes": 967,
+        "sha256": "107730a8a2c1198dec086fba83792ed0e7bde62a884afeb02b2e50e72edeebf4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/pancakeswap.yaml",
+        "bytes": 999,
+        "sha256": "208829c91a4925b15e9190c4a5096064894913724cf0b31f6c9d2de49cbebc6e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/raydium.yaml",
+        "bytes": 3007,
+        "sha256": "e17dee398a9021d3ea2024711fc032ba942c78c33f739cab5ea8961f42d71a0b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/sushiswap.yaml",
+        "bytes": 4950,
+        "sha256": "34169f8b39369fb855c64d92516e39d9cafb1e92d8c5375d4a7ff5b43fd94b30"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/configs/uniswap.yaml",
+        "bytes": 6664,
+        "sha256": "325b820f132771f0636bb06ca3959427bde302c66a586e3d421958e1f128b3d3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/cross_venue.py",
+        "bytes": 34263,
+        "sha256": "5cd8b6e4f28b9a41b31c7d8e5b4e34eeb58fd3322d40eb12f2a0a415896dcb23"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/ctp_close_plan.py",
+        "bytes": 73437,
+        "sha256": "fdb4a9032dff5955a4af3d3578077cf78825b0582c6dceefdca8b99b286a546c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/ctp_env_selector.py",
+        "bytes": 8805,
+        "sha256": "49a55d0f7edf20ae236dbd03beb687e97003152a75e84c5287882b99452ccf99"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/ctp_simnow_execution.py",
+        "bytes": 44194,
+        "sha256": "e97822f7d7c408688400cc5e61d1d5860477c9524b1426eb0145bd8905356323"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/data_downloader.py",
+        "bytes": 6647,
+        "sha256": "d1fd10df1d24873341242033bfc6cf179ee03337a98080c5fe7c24f329ad6111"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/doctor.py",
+        "bytes": 1613,
+        "sha256": "c83a63261e8d7de4544613cbc8fb1e7fe8490b04ddd816ac5995d3344b93f90d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/exceptions.py",
+        "bytes": 1599,
+        "sha256": "1776f03b4a62438c94793e5fc8522d8ca7152e2965fbb42dd4d435fe2d0dcd08"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/__init__.py",
+        "bytes": 1543,
+        "sha256": "b732bb74dc6c810305e268c006644e935441d740c9b00c756f29789663c6d964"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/btapi_adapter.py",
+        "bytes": 485,
+        "sha256": "31d41bb3063828a1a68a14e0d4344118431760269c1ef096b10851242ed4b9d6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/btapi_backend.py",
+        "bytes": 30612,
+        "sha256": "0e6b80a8caed783bdeb996e318bc58f305af8bd1cbdf66957fe13561d0cf9dff"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/btapi_bridge.py",
+        "bytes": 4352,
+        "sha256": "f68eae4290eb6b86dc480d5a2f46a3eb35298f256ef58060d8c701bcf2c1228f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/client.py",
+        "bytes": 32197,
+        "sha256": "c88c32290dce7114e6fb3cca9a19372f5b84eb60ab8736a41adc4aed51ae3112"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/hub.py",
+        "bytes": 4334,
+        "sha256": "6d66f0b049e47137d9617ca6fa58b4febf0327974fa2d6057afb70e335cbe9b3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/memory.py",
+        "bytes": 9962,
+        "sha256": "31d72c6c302f85c9ed128aa4b37245c1a4308b969955b6177461dc6b0c91188f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/private_event_pump.py",
+        "bytes": 1835,
+        "sha256": "e072f0e0a3064feb78754993f76e492d4eafde2fa649546e7d53d8076122c204"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/router.py",
+        "bytes": 38687,
+        "sha256": "f674d9f9505f0eef76bfcc0269e24a9629852fb08a48f814f54ea58ac084c451"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/schema.py",
+        "bytes": 12417,
+        "sha256": "22e81d33ce9d6cb7c75a28886485397e39258d64acd8a2d618b3db7d30496eb8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/service.py",
+        "bytes": 9277,
+        "sha256": "c63f9eec9adad608a8605830f2fe22babea9a37ae3001b3a27a35a2f9057814a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/source_supervisor.py",
+        "bytes": 2775,
+        "sha256": "4e95d31b8a8e150427cf6782a685b4973f33e84cd3f94b7afa41a8b264d76670"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/state.py",
+        "bytes": 8407,
+        "sha256": "db43dc100dc5543540c47e339d3549ee52aed25c295f5d26e267737342bee59f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/forwarding/transport.py",
+        "bytes": 8956,
+        "sha256": "5e21b8c7000ced10f402bc1dcf6a60037db1cae519f8d916fa525d2c6eb0c621"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/gateway/__init__.py",
+        "bytes": 392,
+        "sha256": "77ca6116d22e8a312ee35b30b6b5213a5fa6021f7083ca9e377f23d6eb599f4e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/gateway/client.py",
+        "bytes": 1117,
+        "sha256": "e0d5f442d3c90fd132503eb5ecd02008bb354a115941ce4cdf72e3f72cfe3583"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/gateway/config.py",
+        "bytes": 3270,
+        "sha256": "18444c395be639015ef47963ccdc346a6d1e2ccc87eab380c2a6e2157ca41f88"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/gateway/safety.py",
+        "bytes": 942,
+        "sha256": "505061ff9e0b9226aba7b28fadba9d917f4543af305b2097700bc239dd93a35b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/__init__.py",
+        "bytes": 3104,
+        "sha256": "8190223c7a30a61cb86bcfd422ee9f5cf41c97f338262853e017d83eb5be21ce"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/collector.py",
+        "bytes": 9599,
+        "sha256": "c5b889ef455389ca95d744d58b46545ef28b69ebd42b4982b45e7477d274c411"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/config.py",
+        "bytes": 9883,
+        "sha256": "26874a4e15fb3f57c7ab1f2e99fab00b0e478854827504c15d658d276cd2d335"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/decorators.py",
+        "bytes": 8717,
+        "sha256": "c83f0d72868aeb37f89880fe89201433ce5c55a919457c740f90bd8d32fe32f8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/elk.py",
+        "bytes": 19153,
+        "sha256": "77bbb6fa02d47777e0430cae04d8b52d8554325c93f89e2a791b42d4ef715dec"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/exchange_health.py",
+        "bytes": 13560,
+        "sha256": "b88d2bbb86c80d231ab9a57a0dabf1b8421ba1cc7df24ae7c50401fce10f3ca7"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/grafana.py",
+        "bytes": 20326,
+        "sha256": "44cd3a50f2097255b55b8be90bf0b2bd2153b0d56e53a398ffc774698604599f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/metrics.py",
+        "bytes": 8004,
+        "sha256": "c6d5dcfabb6d04f51fff4b7e6bc578a7f900c87043c7efbd954f2d86b7a3525d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/prometheus.py",
+        "bytes": 11132,
+        "sha256": "f6d8a31f37df86350bfb5e5f98780b029e5215ed8244a376b3167134bc73e8e1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/monitoring/system_metrics.py",
+        "bytes": 13633,
+        "sha256": "d3e4d480b37ff45025029ed21c50889db34f2804be6045d79695d0bbd7ec4d6c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/py.typed",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/__init__.py",
+        "bytes": 1899,
+        "sha256": "2eb76ff5c598cd82c3ce3d47b324683e729294995715fa5253feeb303c638f3e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/containers/__init__.py",
+        "bytes": 317,
+        "sha256": "fcf688536e7c6232fa6c47021e56fb06acef2675bd96f0a07f44dc24c75b37b1"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/containers/risk_events.py",
+        "bytes": 10709,
+        "sha256": "05b8322b4153ac350b2e2d86ab20e1ff92a94fffc891227495072b764ad58160"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/containers/risk_metrics.py",
+        "bytes": 10210,
+        "sha256": "2a80eeb7f2b73c392d46367a150c3fc105272fd00b0d0f8a0e7b8c010163dd8e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/__init__.py",
+        "bytes": 366,
+        "sha256": "1d9f2658384bcd3906d7b942e2596ea22f48a72bbd1660f4ac3bdd7344d59fc7"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/actions.py",
+        "bytes": 6032,
+        "sha256": "cdcf56694488510ce4c11c97090449a98e866b8b41f23270359caa4697dcd85b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/compliance_limits.py",
+        "bytes": 689,
+        "sha256": "7c961b2955fb324a4dc685206a2fe156430ea476c6fe42a18c0ddcbcffa060ee"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/compliance_risk.py",
+        "bytes": 3421,
+        "sha256": "1eb5153ae1c6b40f694fcd158cb7374c1dc41da74c3b02297b1c768dd041341c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/credit_risk.py",
+        "bytes": 3719,
+        "sha256": "00fbe7b968929ca40a554e2d55510b4d4c4332c72ce32a7847c15ebe0ff8b287"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/limits_manager.py",
+        "bytes": 16610,
+        "sha256": "a330168d3079143ac6963d3181b68a703177f6191cc636617b55a5ed4bc2d46c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/limits_types.py",
+        "bytes": 2175,
+        "sha256": "a90a3a0948f8148abdbb06bef737843be92958ec4426eea77cbc0f57ee888557"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/liquidity_risk.py",
+        "bytes": 4596,
+        "sha256": "04bcf059b476822805bafd3e501feffaf811807374a29981b572b2041c8a9867"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/margin_limits.py",
+        "bytes": 2058,
+        "sha256": "958261c8a9f2837fa35a8df3a784cb59420d5de672e2b38ac85ee73a6ca27255"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/market_risk.py",
+        "bytes": 7209,
+        "sha256": "25da6c2a4f309c28e55f61938575ceeb681d4ac3f8d0d1e9113efd68b5899354"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/operational_risk.py",
+        "bytes": 5231,
+        "sha256": "7d0615b73b7e37c69427d66b68cd6c99c228169e70ef2f7c191ed317e430ec65"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/order_limits.py",
+        "bytes": 3531,
+        "sha256": "cab4129cda754898fe7bc367fc0958c96ac31a5db47eb68ed041c146b4920086"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/policy_engine.py",
+        "bytes": 20382,
+        "sha256": "f51abf5bcd9d8a62b1fb97ddd124868c2108ec1ca56b060931e0afe8a20ac6e2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/policy_types.py",
+        "bytes": 904,
+        "sha256": "0ff3c67d4960fd6669365aad1031352c7ad5981ca7aca69a8d185f77143453f4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/position_limits.py",
+        "bytes": 7585,
+        "sha256": "d53a5069715743071d4611db48cafad0c77c2803f4f4b82c402cda1699d0c52f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/position_risk.py",
+        "bytes": 2165,
+        "sha256": "ec115badcfe5a2696ee289636c1ae2bebcb590a343926cd2e97c69b57bd8c3e3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/risk_assessor.py",
+        "bytes": 16842,
+        "sha256": "80fa6a339f4b81e0dd79118ae53806c68b540266cc195a2cf3363938fd884613"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/risk_calculator.py",
+        "bytes": 10436,
+        "sha256": "27d53af7481cf764237c2641803370101ea48e0e0775ed7b694696684ba9b822"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/risk_limits.py",
+        "bytes": 2298,
+        "sha256": "461f676bc03c627d5de00c51bdead1176d49b04adab3dea099f91790b31d3f86"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/core/risk_manager.py",
+        "bytes": 15022,
+        "sha256": "8168e80d9330c678d8a1b4ca314c3975cff2d6e962cb77525675f2c53ed33cbf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/ml_models/__init__.py",
+        "bytes": 251,
+        "sha256": "1b80d8b9d96e863d1510f79162e392ef49a5a7318881ad9229ffe5969ab09e93"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/ml_models/anomaly_detector.py",
+        "bytes": 21836,
+        "sha256": "0f510599fad3590fc370f039a5aa8ebce539265430bb513a380e07dcfd704bdf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/ml_models/anomaly_detectors.py",
+        "bytes": 9100,
+        "sha256": "138aa4dc8ee965f3310c39cc6154d0976fd4b5e5e1136d0492f71c3763ba81a4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/ml_models/anomaly_types.py",
+        "bytes": 2148,
+        "sha256": "7044944dde3a7141139f160d7c962a7f71b4c367c58f10e5343edbedafcff2cc"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/ml_models/ensemble_model.py",
+        "bytes": 24915,
+        "sha256": "058ec4b48eb415ca9fb85fe18ff541d045ebf2e2260be7e790834eda641127aa"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/risk_management/ml_models/ml_base.py",
+        "bytes": 13906,
+        "sha256": "ff082deee368cbb589c62d125e3f50efa0a4d72139ac8b1d1039171c76e79743"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/__init__.py",
+        "bytes": 4227,
+        "sha256": "585097eb7f9d3c76908530fd44c1f998a965428aea3d3afa6feab3169e9e3c0e"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/cancellation_control.py",
+        "bytes": 60346,
+        "sha256": "c54b52eb85b349640e71f6a32b424b6119a5516eaa0d15560b9d5ca2278b5837"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/catalog.py",
+        "bytes": 5274,
+        "sha256": "bcef090d2c3fbec6bf4af5d6f370f3da271f56edad3018676babb1fe08d91148"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/contracts.py",
+        "bytes": 8345,
+        "sha256": "bf00684cd9c7d76a391b034ce61e5572bdaa7b7a4b3c00653abc12238791fc84"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/fake_dispatch_authority.py",
+        "bytes": 46420,
+        "sha256": "6948e8c9f812f8f159cfde3399531cacec78c081e18dbedd7a97adf43555649a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/gateway_dispatch.py",
+        "bytes": 47746,
+        "sha256": "d733d775df55757596ddd2c09ef76165d3c0237fc051552391f59150e70be573"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/instrument_risk.py",
+        "bytes": 29378,
+        "sha256": "0b1c976b6e8247c29214354ad4845602ef46088ad54f89b62c9e2a10f5b3340a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/managed.py",
+        "bytes": 49066,
+        "sha256": "31e9760c254882104c99698522df758547ad5405dbe5fd75008cac57945e0b5c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/managed_recovery.py",
+        "bytes": 34386,
+        "sha256": "a6e5267b46620ad1a69c49fd6b4f8033c0ac5ab96fb8f98dacd34c580fda2bae"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/runtime_plugins/reconcile_control.py",
+        "bytes": 59661,
+        "sha256": "b044e98bbc2a8a37232bbce80a22360371bd530f6a694db9d8e89cdd304f8413"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/__init__.py",
+        "bytes": 2839,
+        "sha256": "8e1e9fbd329ca8c8bda656f1f5af8963d3e974d414f9f6f1331b0cf2581e82de"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/auth/__init__.py",
+        "bytes": 221,
+        "sha256": "3c1ae8922cf4db36766a5ee2a4c5b0c98b3112521d11ca5b3abf53a9b9d435fc"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/auth/mfa_provider.py",
+        "bytes": 19068,
+        "sha256": "1b24d0441f6a18136868ed874d116d06a9e60200f26b341dcad04090337b05d4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/auth/oauth2_provider.py",
+        "bytes": 25833,
+        "sha256": "c1b9bb056451553a9a90cf884d138999070216746c0bf29971d3d5bfc46cc26d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/core/__init__.py",
+        "bytes": 724,
+        "sha256": "ba8b07858d362ebbbcd86e091e5ba2e4cfecc28937adba8781c736f1db13833f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/core/access_control.py",
+        "bytes": 14584,
+        "sha256": "ac429bbc89ede481f9b57fdeecd504836c9bccf9fbe35e97950c31bbec97e227"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/core/audit_logger.py",
+        "bytes": 19614,
+        "sha256": "bda6fbdfc2a4d962dd702f67202b79d0578c96643901e337f18f7807c8f609cf"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/core/compliance_monitor.py",
+        "bytes": 5190,
+        "sha256": "ab053b46fc2dec288db8575612fb17db4aed057cb9753f5c1f0d7218b388a670"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/core/encryption_manager.py",
+        "bytes": 24019,
+        "sha256": "5aa22b432bc2edc466f240f3decc54a1503c5c541d7cd7195e2ea5132b5e5fe8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/core/identity_manager.py",
+        "bytes": 15605,
+        "sha256": "69453004fd133a0360a1a651f4317bc0919fda5bdb1d481246a843f35a10b733"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/core/threat_detection.py",
+        "bytes": 12778,
+        "sha256": "3fb5e416c6e3386e080351b264947151d96f5e25bef8aa91f12af7a16716fff8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/data/__init__.py",
+        "bytes": 178,
+        "sha256": "1aeb92652b1ebcbd10aaae2b656315ac8675e6226711442d94f794ce95ad0e7a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/data/protection.py",
+        "bytes": 15240,
+        "sha256": "66b581d8e81376f464661b9c0595cdeef71abb817312a75501d11216fb2ee244"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/framework.py",
+        "bytes": 16113,
+        "sha256": "2b14597e9bf77b98749b270687fd127b31a39b100f3c973e8a79f9618bdb4186"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/monitoring/__init__.py",
+        "bytes": 176,
+        "sha256": "27c634b67d8c496e01f8543205e7a4b16637d6d93bec4661084b0ac9c9bd00d6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/monitoring/security_monitoring.py",
+        "bytes": 4614,
+        "sha256": "c6111b29d505bb6f4f0db004b66c658e52c6453ed15d1921baca39e94462bc24"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/network/__init__.py",
+        "bytes": 181,
+        "sha256": "9b9b96a1aaef6db0d682a01501e12457822ae09e88e8f9390e9f4bd3004f8f6b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/network/tls_manager.py",
+        "bytes": 2427,
+        "sha256": "3b1ede421053c83d1c56db73769dc504b090f6a31bda10d610a05bf16cd66682"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/recovery/__init__.py",
+        "bytes": 182,
+        "sha256": "11ae110f554b58e25834037dbe51d297b8dd1477d12318ff141d3653e76eebd8"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/security_compliance/recovery/disaster_recovery.py",
+        "bytes": 7225,
+        "sha256": "c5cb598ec6b7391249cba4ba392a8b57d6d4cf849d81fb8b3597c7299ad13db5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_account.py",
+        "bytes": 18534,
+        "sha256": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_account_consumer.py",
+        "bytes": 22539,
+        "sha256": "ab826191d444465e33900d316a709158ca3dacd6328727e10ce2be46ef9d2f58"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_account_projection.py",
+        "bytes": 37131,
+        "sha256": "ab32d2cf59a87093c9567bf9ea22ae541448c5a8ffcb822f6d50c0c0a497da14"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_components.py",
+        "bytes": 99728,
+        "sha256": "9625f9ce73189e1c8ed8a2d220fa29ddba7f3c151246556a6def01e6c3effbc3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_config.py",
+        "bytes": 47018,
+        "sha256": "5023a98ebdfb0ca9285616b3ce0107904ed81640e3bde49823217d773343d17c"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_config_io.py",
+        "bytes": 5033,
+        "sha256": "54890a5c41bfe0046b8a39fac40d08a2fcf6caa8a38df6b5fc6a739e9918e4b4"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_deployment.py",
+        "bytes": 22416,
+        "sha256": "997be1908ec15e567800a5ecc8a76eca473c08fcb7677f3cbfa3ac3beaa25865"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_execution.py",
+        "bytes": 26972,
+        "sha256": "90ae00c99ba2ec2ee24a5a367b47ad73db456590c33913c838591d130d0b4318"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_execution_account_books.py",
+        "bytes": 62932,
+        "sha256": "e9b0fb0ac7e96b1c9fdcbe6bd649346b3fa5d2a7a8ff0c7c1323eaf77c013eea"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_execution_group.py",
+        "bytes": 90253,
+        "sha256": "d6b37ccfce7f2044e935fa22f1706d553122e450e1c1a3e1b849a54573d4addb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_execution_group_authority.py",
+        "bytes": 91923,
+        "sha256": "49fd1fbf347cfbd6b735aa58f9227aeb4d6c33c56a1a5338de92b085c6b69d88"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_execution_group_client.py",
+        "bytes": 62674,
+        "sha256": "6fc51a31e61ce8f0238f65b343133ae58bd6b4e6483947ac67150be4c7e3e2c5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_execution_group_proofs.py",
+        "bytes": 168450,
+        "sha256": "8a508aa99273a747ac720480e34dad5c6cae5cefb8a800a60680e11d36029462"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_execution_monitor.py",
+        "bytes": 42136,
+        "sha256": "6e10bc4bb3978d9011d796e903639ac7896168719a9f6e442302895787f4537d"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_group_monitor.py",
+        "bytes": 60086,
+        "sha256": "41ee954cacf970d3acfb1889f4dba84c662a8b0b2f391c5dd28031aefb7ed27b"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_group_reservations.py",
+        "bytes": 35172,
+        "sha256": "46b3dff14e355951847b4931eef8ae616947a0a05e76b76bdaa32031cf03acf3"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_host.py",
+        "bytes": 66673,
+        "sha256": "a2e9a99459182ba82eb95d9df389ad8e29c9815ee7bf0425108b75fb614f568a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_market.py",
+        "bytes": 51773,
+        "sha256": "5b7a357693ef4ddc50ef397f4bfc67ca7116ab2809850c03ee07f05a18bc75b6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_market_legs.py",
+        "bytes": 8519,
+        "sha256": "1d6456c25406dd034cb098a71a3e4e412202b784b93e3f1083295bec6571edf2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_market_monitor.py",
+        "bytes": 19211,
+        "sha256": "de2831bd99d0103d09cb7018140f548c61a43945faa223e2787fd78e380a4f52"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_migration_gate.py",
+        "bytes": 27103,
+        "sha256": "a08cdc643306c8c8b04551e0f2ffa07f85ceeab25bac66675a063affa3ea37bb"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_migration_import.py",
+        "bytes": 69848,
+        "sha256": "d4ec88d69e65e7012e20077cf4a4e5123d3e96f70606c0709ddbb2861073bb71"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_migration_map.py",
+        "bytes": 26452,
+        "sha256": "f60351439088513a4b36a81ddb7bd9b3f05c47bb2dc64a8152222f8f126990c2"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_monitor.py",
+        "bytes": 10062,
+        "sha256": "6fbc850967e8417b5f9e669b3fce8aee23b3987df37099787d316995cc67abd6"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_monitor_control.py",
+        "bytes": 19885,
+        "sha256": "d2f3ac6abc804632778d612a8944f0195da6798d5275ad696802f62c6a9e3c45"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_registry.py",
+        "bytes": 102547,
+        "sha256": "3f02ab77313c7ef3318bcb15128c9e84695b7c701ccb79de5b764f3ea1110166"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_risk_order_entry.py",
+        "bytes": 156992,
+        "sha256": "67c98d5be424c108c0c6988ac178214fca93e27612fdf1b33a80773670777890"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_risk_order_journal.py",
+        "bytes": 234545,
+        "sha256": "37d89c3394b86245eae578540303707b15287a66f36de112bb18fc3556e6c3fe"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_runtime.py",
+        "bytes": 77513,
+        "sha256": "64d4e873888c118bc4fc55cae3f90f0e1983a5dff97354718326f7ee7ffbcd93"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/service_telemetry.py",
+        "bytes": 18683,
+        "sha256": "89a8d82e51f2cbb70dcde4bb069053b4d340778b0aeb222343a9183b14175489"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/testing/__init__.py",
+        "bytes": 455,
+        "sha256": "a81cb87945c7d6caa135d3f4949b41ed2674d216ba31444655d0ae612e55e7d5"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/testing/contract_cases.py",
+        "bytes": 2503,
+        "sha256": "369195317037a0c5b561a3d56974625c8cb27c6c99c0e50887cdc0075403a035"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/testing/fixtures.py",
+        "bytes": 1737,
+        "sha256": "0c8b7b0d65a057254321b7aa514b6da3ac6df5bc47283eb29e84f6adeef42847"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/utils/__init__.py",
+        "bytes": 37,
+        "sha256": "a606304c901dde0f6d2a6e3520560d56841bd3045d9392df9104994654fe6f1a"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/sdk/bt_api_py/utils/hyperliquid_types.py",
+        "bytes": 750,
+        "sha256": "8960ea276fdbee5d85738e02e2ecbbae5ada178853b0afd1c3ad9b85c08d3898"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/transport_zmq/src/bt_api_transport_zmq/__init__.py",
+        "bytes": 1306,
+        "sha256": "bd0a9854d01062f77a032d2b3af3923ac609dc61d50d88860641b92aa7426227"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/transport_zmq/src/bt_api_transport_zmq/client.py",
+        "bytes": 4208,
+        "sha256": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/transport_zmq/src/bt_api_transport_zmq/events.py",
+        "bytes": 3648,
+        "sha256": "5e8fb7c9f4481b2f1386c5f197e3b563a079acf84d47ba8f0c90c694bb56e999"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/transport_zmq/src/bt_api_transport_zmq/market_v2.py",
+        "bytes": 26379,
+        "sha256": "051cb114a41300d9f94630f95ee9a773ce252f36a9f01d94e0d99561db36ac91"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/transport_zmq/src/bt_api_transport_zmq/server.py",
+        "bytes": 16527,
+        "sha256": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/transport_zmq/src/bt_api_transport_zmq/service_v2.py",
+        "bytes": 29701,
+        "sha256": "bc17344835fcd80409cdcfd8037345ccf92b5ece5f57817aeb1eda33af17b280"
+      },
+      {
+        "path": "accepted-source/r7-runtime-export/transport_zmq/src/bt_api_transport_zmq/wire.py",
+        "bytes": 6621,
+        "sha256": "60ef5ea0ea89ff11d1e62c65865a39256cf91c31981553a301f7687394f6372b"
+      },
+      {
+        "path": "candidate/afi-risk-policy-budget.py",
+        "bytes": 12854,
+        "sha256": "8d3ce4e647f6bcc655970f985d2f68282e6b50656bd66c1e13e0bcf4ac39bb99"
+      },
+      {
+        "path": "candidate/afi-test-risk-policy-budget.py",
+        "bytes": 9362,
+        "sha256": "9b7ce80df23e7b03cf9c86e5c660b9fa1b9a1989a7c3b88f2ab7b7c38bbfdbd0"
+      },
+      {
+        "path": "candidate/risk-service-component.py",
+        "bytes": 104293,
+        "sha256": "e4a92d7bd95dc177ec74dd8c3bf4fba764b68c7313da8bfb8e567c8759aa2f40"
+      },
+      {
+        "path": "candidate/risk-test-budget-authority.py",
+        "bytes": 61163,
+        "sha256": "72e2be81f9cce67563c56b702794236100222d34e779a11749784354c5fcb252"
+      },
+      {
+        "path": "candidate/sdk-service-components.py",
+        "bytes": 108127,
+        "sha256": "4db8d39dfea9cb166b66bf2eb7f412f3f377084ab084c23a5cb1d6dba43b5ac1"
+      },
+      {
+        "path": "candidate/sdk-service-runtime.py",
+        "bytes": 80190,
+        "sha256": "d01504653be4bebd8f3d4169f6ea3aeabee832b6341087be2e324946afd66f1d"
+      },
+      {
+        "path": "delivery/risk-postcommit.json",
+        "bytes": 659,
+        "sha256": "a41d9cdf816f7cea8832028fd3de74e627adcdc444283c969d98e51ecaebaee4"
+      },
+      {
+        "path": "predecessor-r219/manifest.json",
+        "bytes": 30431,
+        "sha256": "5a9b2abec0ecf09a7d6e9ba944c6356fa754bb1147862e5f1ee665a42afb8414"
+      },
+      {
+        "path": "predecessor-r219/round-record.md",
+        "bytes": 1376,
+        "sha256": "390ade7966f68f4aecbc4516a31ffb8a6ef51542c547748aca2b00d951ceab78"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/command.json",
+        "bytes": 1587,
+        "sha256": "2b0c236abf0fadb9eb6972ca6fb79ac4bc3cd4aa55a1b084f9bad2a6526b9cde"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/junit.xml",
+        "bytes": 2618,
+        "sha256": "0f0f89631567f8932f5d156c4a33e95e9ae484b6cb129768bd3d8d5c64e46fe1"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/pytest-tmp/test_compiled_drafts_are_accep0/confirmed-policies.sqlite",
+        "bytes": 12288,
+        "sha256": "bceac2d731251288e82ec294e78f24067cb5f934209fc5b9077d4652a3299f4e"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/pytest-tmp/test_compiled_drafts_are_accep0/policy-catalog.sqlite",
+        "bytes": 12288,
+        "sha256": "a70cf20f249b0e841baaebd60804ea83ac4f59a448504d76d3b76d1fcbcfe0c0"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/result.json",
+        "bytes": 1129,
+        "sha256": "5ed5d7032008783625e730d317b104aecf27a7dd8dfe2e97bf7654f672fc85ab"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/running.json",
+        "bytes": 76,
+        "sha256": "5bcbe00e41fbe91cd53accc8e3800905c2bf6c52862f4117ef73427a798cc895"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/source-after.json",
+        "bytes": 27662,
+        "sha256": "3b5122a4b1afbd8eb61ed22aaa18e91ab5c44dce16df07029eceac2b5f6ca1de"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/source-before.json",
+        "bytes": 27662,
+        "sha256": "3b5122a4b1afbd8eb61ed22aaa18e91ab5c44dce16df07029eceac2b5f6ca1de"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/spec.json",
+        "bytes": 33992,
+        "sha256": "50f1ef24c2ae23dd99843a6101d1860d22cb16757d1d8af79541dd0b7a1de38a"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-runs/r219-compiler-offline-pass/stdout.log",
+        "bytes": 101,
+        "sha256": "b45c8157cd9538f1194a069fdff2debb83b1efbfc39728108aebde091011ed9e"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/command.json",
+        "bytes": 1734,
+        "sha256": "66c427804725fe2d96283c8cb96c02aa10ca77ea35b735205d1fafbb05951d6a"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/junit.xml",
+        "bytes": 24849,
+        "sha256": "02dc32fd8de1441f2ddf13a511473d9f6ced470b18856ff90fac692df7f78eee"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "8d3bf6e3a90a0d4ad33ce47ae8aaa612dbf43bed38ddc1733c41c3ed0e48cb67"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-confirmed.sqlite3",
+        "bytes": 12288,
+        "sha256": "f50cff05e69b329cc518839b4432953d363a23a43ff00b81cecc80f57814d27e"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "0195936a6bf0afdf0f9c0407dab6490eac9fb97382c1c2125bcc09419f869392"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_budget_dimension_conserva0/policy-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "a1fe504a637fa90295e500cf8212bb143a8bd9cfd334cfc63ec40bfd617e9e5f"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_budget_generation_uses_ca0/confirmed-policies.sqlite3",
+        "bytes": 12288,
+        "sha256": "d281f2bb47ec7db05e0928fc5d0d702759da51929f2d4cac868d5f69988a41da"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_budget_generation_uses_ca0/policy-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "08b44af081f137c0385afa11f3475354346d6017e259a578c06fb1370901234a"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_capacity_and_account_clai0/shared-policy-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "39b73171e713ee7f2bb773e7b4546f2351404b2d9a0c265e53a69182005c57ce"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_missing_confirmation_and_0/confirmed.sqlite3",
+        "bytes": 12288,
+        "sha256": "d5807ffc881d5a406a5d06de44e72c2ca8756de2bca3cdd79c68ea6e70fcd6bd"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_missing_confirmation_and_0/policy-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "ac524f46b44484da54966ff961d6c86b37ced404d4dfe93a44facef756835b71"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_partial_publish_rejection0/confirmed.sqlite3",
+        "bytes": 12288,
+        "sha256": "f50cff05e69b329cc518839b4432953d363a23a43ff00b81cecc80f57814d27e"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/pytest-tmp/test_partial_publish_rejection0/policy-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "3e0003a474c97cb64f047f7cc98bd1b439d165bfe285fdfb405d596068d107ce"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/result.json",
+        "bytes": 1150,
+        "sha256": "fd4379cd7683f1bfadac294a3978d804d216daf2a84c950a5a169b1b8e03311f"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/running.json",
+        "bytes": 76,
+        "sha256": "4f09d0be951a57d0536df16034b9fd230504edb2343acaef83aa52928eaf9e0c"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/source-after.json",
+        "bytes": 110490,
+        "sha256": "4cec94750bac0eeabf45293d837379b45419d6f820ce491adca6755f2d7f0f0d"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/source-before.json",
+        "bytes": 110490,
+        "sha256": "4cec94750bac0eeabf45293d837379b45419d6f820ce491adca6755f2d7f0f0d"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/spec.json",
+        "bytes": 120264,
+        "sha256": "7b93191a5e3aee644530baa4a940187f128ee9aaf2c30f076e95d563d74b11d1"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-runs/r3-five-unit-plus-host-failure/stdout.log",
+        "bytes": 24614,
+        "sha256": "b67dc7ab0db8af8751cb1a11a5ae5bcbd385c967fa2120721c075510273ad855"
+      },
+      {
+        "path": "root-runs/r4-host-failure/command.json",
+        "bytes": 1795,
+        "sha256": "b695a4ece1b4f3467e3fd7409089ba6e37fcda52819a164619e53b1e5341ef1f"
+      },
+      {
+        "path": "root-runs/r4-host-failure/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "root-runs/r4-host-failure/junit.xml",
+        "bytes": 27179,
+        "sha256": "9d9c0e7def22a6a9493af989459bdfd34a87cd4e4ee0a577f50ea07b280582e3"
+      },
+      {
+        "path": "root-runs/r4-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "18ce689d1fef77738b85141c03ab74feb5dafd08e46a66a6bbb602d2f767d05c"
+      },
+      {
+        "path": "root-runs/r4-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-confirmed.sqlite3",
+        "bytes": 12288,
+        "sha256": "f50cff05e69b329cc518839b4432953d363a23a43ff00b81cecc80f57814d27e"
+      },
+      {
+        "path": "root-runs/r4-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "12d9a329b3a57fb81d918f2e1a6b2fc36de073500325056d67b200c99cb1a086"
+      },
+      {
+        "path": "root-runs/r4-host-failure/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "root-runs/r4-host-failure/result.json",
+        "bytes": 1150,
+        "sha256": "3548285c898e9ea057bb25cd643e13a578c856ea5a7d87a73b60e2a31d347775"
+      },
+      {
+        "path": "root-runs/r4-host-failure/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-runs/r4-host-failure/running.json",
+        "bytes": 76,
+        "sha256": "68c8b3a531f26e3452d408d6a3e08b2c74881a252cde338bfd8841efc1cdbe69"
+      },
+      {
+        "path": "root-runs/r4-host-failure/source-after.json",
+        "bytes": 112279,
+        "sha256": "28245be62be44f46a53b6e57c128166d6a261cdf5cb20109aa91c48217d9191a"
+      },
+      {
+        "path": "root-runs/r4-host-failure/source-before.json",
+        "bytes": 112279,
+        "sha256": "28245be62be44f46a53b6e57c128166d6a261cdf5cb20109aa91c48217d9191a"
+      },
+      {
+        "path": "root-runs/r4-host-failure/spec.json",
+        "bytes": 122977,
+        "sha256": "e8e6132eccf970746379d1ac331b4e2a7c5f211924c29114b51cc16024adb029"
+      },
+      {
+        "path": "root-runs/r4-host-failure/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-runs/r4-host-failure/stdout.log",
+        "bytes": 27281,
+        "sha256": "a56cc4f0123d8b438ee133946c486edbd56669dbe22ccba78a6a70c83f064d15"
+      },
+      {
+        "path": "root-runs/r5-host-pass/command.json",
+        "bytes": 1795,
+        "sha256": "f7dce99a4beee003db4f4fe5fc83ed49c8cab1e6001c6be885bc3d7582dadf19"
+      },
+      {
+        "path": "root-runs/r5-host-pass/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "root-runs/r5-host-pass/junit.xml",
+        "bytes": 386,
+        "sha256": "96688499802dfd205f1cb0ce8fc912ab483176e735771ec3fe6d18ccc7691cce"
+      },
+      {
+        "path": "root-runs/r5-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "5d75568d6c2468b0821e2ce33cc5d19afebd40d0f578dd22e1eeaf31b751142b"
+      },
+      {
+        "path": "root-runs/r5-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-confirmed.sqlite3",
+        "bytes": 12288,
+        "sha256": "3baff28df0fad84f1ef5a389e991a7e8b94ed9e74dfd6457408a793e69920410"
+      },
+      {
+        "path": "root-runs/r5-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "a5b737708959048b79b9b8ce98b397c1d38919d1edb7701b28c767b2124d344c"
+      },
+      {
+        "path": "root-runs/r5-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "root-runs/r5-host-pass/result.json",
+        "bytes": 1150,
+        "sha256": "5f7d183ac583204fbaf4e2b123982aa708148a6bcc576059a434cccfc22f6b92"
+      },
+      {
+        "path": "root-runs/r5-host-pass/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-runs/r5-host-pass/running.json",
+        "bytes": 76,
+        "sha256": "c86fbcd4b8bd8f44d990050f639d1abd3e37112e3291ef0313916dc576c6dd35"
+      },
+      {
+        "path": "root-runs/r5-host-pass/source-after.json",
+        "bytes": 112840,
+        "sha256": "6e0b552a70b234162675a74dbc13a18c952e8bf90ebfaf3be3fea7d9c2cf2992"
+      },
+      {
+        "path": "root-runs/r5-host-pass/source-before.json",
+        "bytes": 112840,
+        "sha256": "6e0b552a70b234162675a74dbc13a18c952e8bf90ebfaf3be3fea7d9c2cf2992"
+      },
+      {
+        "path": "root-runs/r5-host-pass/spec.json",
+        "bytes": 124224,
+        "sha256": "c73d0b36718fbab450525bf2463cd18cec3d0daf0259113151164a3756792b06"
+      },
+      {
+        "path": "root-runs/r5-host-pass/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-runs/r5-host-pass/stdout.log",
+        "bytes": 760,
+        "sha256": "aaccd5d6b1c0d367294faae0fccc099c3c19e7c89ad3e6fcceb15d3dedf943fb"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/command.json",
+        "bytes": 1807,
+        "sha256": "e6df5f679b269c926a30246a154e428d3b633bc025501170f0fcd998c20f8acb"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/junit.xml",
+        "bytes": 344,
+        "sha256": "f73741e618d03be7178f949d149af6c50308d12298eaa8d1e6e73f5d05eacbc1"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-catalog.sqlite3",
+        "bytes": 45056,
+        "sha256": "57579ac3d763a07310ed83d59f6e67e9d7925b66f448b548f1ee0af58f8ddcc1"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-confirmed.sqlite3",
+        "bytes": 12288,
+        "sha256": "c78941e48c6ee8628d340fd77b3468f8f3b0a23769a128f3f032d21524b00a2c"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "98e1190c3ddd646b7adf6ebdc86e48e69eca4d860d2ebdb04e5eedcd6366cb39"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/pytest-tmp/test_budget_authority_uses_reg0/host-budget-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/result.json",
+        "bytes": 1145,
+        "sha256": "4ba1f1fd57d0263ba7b8e56e735c971a439260642061baba2a18f9c6719ad6b6"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/running.json",
+        "bytes": 76,
+        "sha256": "9de8cfd85403a426d800d287af72a0474bb79096c59637b7fb22ef0d9f23de0b"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/source-after.json",
+        "bytes": 121351,
+        "sha256": "788c70cdac31bf3538286b714b4270d42f1c459868767375b3c562612a615da1"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/source-before.json",
+        "bytes": 121351,
+        "sha256": "788c70cdac31bf3538286b714b4270d42f1c459868767375b3c562612a615da1"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/spec.json",
+        "bytes": 138994,
+        "sha256": "40bce7590506110c094d3dea5a8fbcff7bbb87a2c9481d7b1659d6e218c00277"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-runs/r7-composed-host-pass/stdout.log",
+        "bytes": 715,
+        "sha256": "649a12e0965dfad135be2898144608f65342deef7632d774ee8a373e7bda38a1"
+      },
+      {
+        "path": "root-specs/iteration10-afi05-06-budget-authority-host-root-spec-r3-20261016.json",
+        "bytes": 120264,
+        "sha256": "7b93191a5e3aee644530baa4a940187f128ee9aaf2c30f076e95d563d74b11d1"
+      },
+      {
+        "path": "root-specs/iteration10-afi05-06-budget-authority-host-root-spec-r4-20261016.json",
+        "bytes": 122977,
+        "sha256": "e8e6132eccf970746379d1ac331b4e2a7c5f211924c29114b51cc16024adb029"
+      },
+      {
+        "path": "root-specs/iteration10-afi05-06-budget-authority-host-root-spec-r5-r223-20261016.json",
+        "bytes": 124224,
+        "sha256": "c73d0b36718fbab450525bf2463cd18cec3d0daf0259113151164a3756792b06"
+      },
+      {
+        "path": "root-specs/iteration10-afi05-06-budget-authority-host-root-spec-r7-r223-policy-20261016.json",
+        "bytes": 138994,
+        "sha256": "40bce7590506110c094d3dea5a8fbcff7bbb87a2c9481d7b1659d6e218c00277"
+      }
+    ]
+  },
+  "limitations": [
+    "R3 did not capture an actual Host phase or traceback for REQUIRED_REGISTRATION_FAILED; the account-scope resolver mismatch was a source finding, not a proven runtime cause.",
+    "R5 is retained as an intermediate Host pass; R7 is the final one-node run over the R223+R221+R226 composed export.",
+    "The publication receipt and member confirmations establish Risk owner-side authority readiness only. consumer_effective remains false; no admission resolver is connected.",
+    "No normal AFI application startup, HTTP/user-interface integration, real provider/account call, or formal AFI05/AFI06 case pass is asserted."
+  ],
+  "root_verification": {
+    "archive_members_verified": 640,
+    "original_root_qa_bytes_verified": true,
+    "child_postcommit_receipt_verified": true,
+    "accepted_qa_not_repeated": true
+  }
+}
