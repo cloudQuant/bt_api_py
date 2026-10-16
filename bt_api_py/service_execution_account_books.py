@@ -49,6 +49,10 @@ from bt_api_execution.service_order_entry import (
     QUERY_OPERATION,
     SUBMIT_OPERATION,
 )
+from bt_api_execution.strategy_reduction import (
+    OWNER_REDUCE_OPERATION,
+    StrategyReductionHandlerV1,
+)
 from bt_api_execution.service_order_entry import (
     ExecutionOrderEntryService as _ExecutionOrderEntryService,
 )
@@ -66,6 +70,7 @@ SUPPORTED_OPERATIONS = frozenset(
         QUERY_OPERATION,
         ACCOUNT_BOOKS_QUERY_OPERATION,
         APPROVED_TARGET_OPERATION,
+        OWNER_REDUCE_OPERATION,
     }
 )
 _ORDER_OPERATIONS = frozenset({SUBMIT_OPERATION, CANCEL_OPERATION, QUERY_OPERATION})
@@ -1276,6 +1281,11 @@ class ExecutionAccountOwnerService:
         if approved_target_authority is not None:
             order_entry_args["approved_target_authority"] = approved_target_authority
         self._orders = _ExecutionOrderEntryService(store, targets, dispatch, **order_entry_args)
+        self._strategy_reduction = (
+            None
+            if approved_target_authority is None
+            else StrategyReductionHandlerV1(self._orders)
+        )
         self._books = (
             None
             if account_books_source is None
@@ -1286,6 +1296,7 @@ class ExecutionAccountOwnerService:
             operations.add(ACCOUNT_BOOKS_QUERY_OPERATION)
         if approved_target_authority is not None:
             operations.add(APPROVED_TARGET_OPERATION)
+            operations.add(OWNER_REDUCE_OPERATION)
         self.supported_operations = frozenset(operations)
 
     def handle(
@@ -1307,6 +1318,16 @@ class ExecutionAccountOwnerService:
                 scope=scope,
                 arguments=arguments,
             )
+        if operation == OWNER_REDUCE_OPERATION:
+            if self._strategy_reduction is None:
+                return _reply(False, "UNSUPPORTED_OPERATION", {})
+            outcome = self._strategy_reduction.handle(
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                arguments=arguments,
+            )
+            return _reply(True, "OK", {"reduction": outcome.to_payload()})
         return self._orders.handle(
             operation,
             principal_ref=principal_ref,

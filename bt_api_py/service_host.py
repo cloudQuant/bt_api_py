@@ -541,6 +541,7 @@ class ServiceHost:
             trusted_paper_legacy_import_policies: list[
                 TrustedPaperLegacyImportPolicy
             ] = []
+            owner_reduce_omission_allowed: set[str] = set()
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -611,6 +612,12 @@ class ServiceHost:
                 ):
                     raise ServiceHostError("RESOURCE_TRACKING_FAILED")
                 pending_resources = self._pending_resources[-1][2]
+                if (
+                    item.spec.component == "execution"
+                    and item.spec.options.get("role") == "account_owner"
+                    and "approved_target_authority" not in pending_resources.values
+                ):
+                    owner_reduce_omission_allowed.add(item.spec.instance_id)
                 trusted_paper_owner_write_policies.extend(
                     self._paper_owner_write_policies(item, pending_resources)
                 )
@@ -666,6 +673,14 @@ class ServiceHost:
                         and actual.operations
                         == planned.operations - {"execution.account_books.query"}
                         and actual.write_operations == planned.write_operations
+                    )
+                    or (
+                        planned.port == "service.owner_control"
+                        and planned.instance_id in owner_reduce_omission_allowed
+                        and actual.operations
+                        == planned.operations - {"owner.reduce"}
+                        and actual.write_operations
+                        == planned.write_operations - {"owner.reduce"}
                     )
                     or (
                         planned.port == "service.order_entry"

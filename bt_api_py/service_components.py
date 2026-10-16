@@ -572,7 +572,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                     "service.order_query": frozenset(
                         {"orders.query", "execution.account_books.query"}
                     ),
-                    "service.owner_control": frozenset({"owner.cancel"}),
+                    "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
                 }
             ),
             internal_ports=frozenset(),
@@ -585,7 +585,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "orders.submit_approved_target",
                         }
                     ),
-                    "service.owner_control": frozenset({"owner.cancel"}),
+                    "service.owner_control": frozenset({"owner.cancel", "owner.reduce"}),
                 }
             ),
             validator_module_name="bt_api_execution.service_component",
@@ -2233,7 +2233,10 @@ def build_component(
                 if "account_books" in resources.values:
                     expected_operations = expected_operations | {"execution.account_books.query"}
                 if "approved_target_authority" in resources.values:
-                    expected_operations = expected_operations | {"orders.submit_approved_target"}
+                    expected_operations = expected_operations | {
+                        "orders.submit_approved_target",
+                        "owner.reduce",
+                    }
                 if (
                     type(configured_operations) is not frozenset
                     or configured_operations != expected_operations

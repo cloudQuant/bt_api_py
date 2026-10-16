@@ -257,6 +257,29 @@ def _is_exact_owner_cancel_scope(
     )
 
 
+def _is_exact_owner_reduce_scope(
+    identity: WireIdentity,
+    *,
+    port: str,
+    scope: WireScope,
+    operation: str,
+) -> bool:
+    """Recognize the separately granted exact-run strategy reduction route."""
+
+    return (
+        identity.role is WireRole.SERVICE
+        and port == "service.owner_control"
+        and operation == "owner.reduce"
+        and scope.account_ref is not None
+        and not scope.account_refs
+        and scope.strategy_ref is not None
+        and scope.run_id is not None
+        and scope.manual_book_ref is None
+        and scope.group_id is None
+        and scope.leg_id is None
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ServiceCallContext:
     """Trusted context passed to a code-registered business handler."""
@@ -687,6 +710,15 @@ def validate_capabilities_and_grants(
                 capability = capability_map.get((resource.instance_id, resource.port))
                 if capability is None or not resource.operations.issubset(capability.operations):
                     raise ValueError("resource grant exceeds declared capability")
+                if resource.operations == frozenset({"owner.reduce"}) and not (
+                    _is_exact_owner_reduce_scope(
+                        entry.identity,
+                        port=resource.port,
+                        scope=resource.scope,
+                        operation="owner.reduce",
+                    )
+                ):
+                    raise ValueError("owner.reduce requires an exact service strategy run")
                 if resource.scope.run_id is not None and (
                     not (
                         entry.identity.role is WireRole.APPLICATION_CLIENT
@@ -702,6 +734,15 @@ def validate_capabilities_and_grants(
                             port=resource.port,
                             scope=resource.scope,
                             operation="owner.cancel",
+                        )
+                    )
+                    and not (
+                        resource.operations == frozenset({"owner.reduce"})
+                        and _is_exact_owner_reduce_scope(
+                            entry.identity,
+                            port=resource.port,
+                            scope=resource.scope,
+                            operation="owner.reduce",
                         )
                     )
                 ):
@@ -2229,6 +2270,9 @@ class ServiceRegistry:
                     not _is_exact_owner_cancel_scope(
                         identity, port=port, scope=scope, operation=operation
                     )
+                    and not _is_exact_owner_reduce_scope(
+                        identity, port=port, scope=scope, operation=operation
+                    )
                     and not self._is_approved_target_write(
                         identity, port=port, operation=operation
                     )
@@ -2668,6 +2712,8 @@ class ServiceRegistry:
             ):
                 if _is_exact_owner_cancel_scope(
                     identity, port=row["port"], scope=scope, operation=operation
+                ) or _is_exact_owner_reduce_scope(
+                    identity, port=row["port"], scope=scope, operation=operation
                 ):
                     if not self._strategy_owner_run_claim_exists(scope):
                         return self._failure("DUPLICATE_ACTIVE_RUN")
@@ -2840,8 +2886,13 @@ class ServiceRegistry:
             is None
         ):
             return False
-        if operation in capability.write_operations and not _is_exact_owner_cancel_scope(
-            identity, port=port, scope=scope, operation=operation
+        if operation in capability.write_operations and not (
+            _is_exact_owner_cancel_scope(
+                identity, port=port, scope=scope, operation=operation
+            )
+            or _is_exact_owner_reduce_scope(
+                identity, port=port, scope=scope, operation=operation
+            )
         ):
             if identity.role is WireRole.STRATEGY_CLIENT:
                 if scope.strategy_ref is None or scope.run_id is None:
