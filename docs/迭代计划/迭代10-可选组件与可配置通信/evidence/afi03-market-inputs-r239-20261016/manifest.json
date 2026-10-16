@@ -1,0 +1,603 @@
+{
+  "schema": "iteration10-afi03-market-inputs-r239-delivery-v1",
+  "round_id": "R239",
+  "status": "PREPARED_FOR_ROOT_REVIEW_NOT_STAGED_OR_COMMITTED",
+  "created_utc": "2026-10-16",
+  "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_WITH_PRIOR_ROOT_TYPECHECK_NODE_ONLY",
+  "formal_status": "PENDING_FORMAL_REVIEW; this packet does not declare AFI03 formally complete",
+  "repository": {
+    "name": "ai-for-investor",
+    "path": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "current_head_at_packaging": "00cf38fd1dbcd3bd860972bda7f2a4be6f83f138",
+    "fixed_runtime_export_source_commit": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+    "fixed_export_head_is_ancestor_of_current_head": true,
+    "current_head_delta_outside_af03_scope": {
+      "commit": "00cf38fd1dbcd3bd860972bda7f2a4be6f83f138",
+      "subject": "Retire legacy live order writer while preserving paper behavior",
+      "changed_paths": [
+        "src/backend/app/services/ai_trading_service.py",
+        "src/backend/app/services/direct_order_service.py",
+        "src/backend/tests/test_afi10_live_order_retirement.py",
+        "src/backend/tests/test_ai_trading.py",
+        "src/backend/tests/test_direct_order_service.py"
+      ],
+      "overlaps_selected_af03_scope": false
+    },
+    "working_tree_or_index_modified_by_packaging": false,
+    "staged_or_committed_by_packaging": false
+  },
+  "scope": {
+    "selected_candidate_paths": [
+      "src/backend/app/api/portfolio/compositions.py",
+      "src/backend/app/config.py",
+      "src/backend/app/main.py",
+      "src/backend/app/services/portfolio_valuation_bindings.py",
+      "src/backend/tests/test_portfolio_valuation_projection_api.py",
+      "src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+      "src/frontend/src/api/portfolio.ts",
+      "src/frontend/src/views/PortfolioPage.vue"
+    ],
+    "changed_path_count": 8,
+    "new_files": [
+      "src/backend/app/services/portfolio_valuation_bindings.py",
+      "src/backend/tests/test_portfolio_valuation_projection_api.py"
+    ],
+    "tracked_files": [
+      "src/backend/app/api/portfolio/compositions.py",
+      "src/backend/app/config.py",
+      "src/backend/app/main.py",
+      "src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+      "src/frontend/src/api/portfolio.ts",
+      "src/frontend/src/views/PortfolioPage.vue"
+    ],
+    "patch_base": "00cf38fd1dbcd3bd860972bda7f2a4be6f83f138",
+    "fixed_export_candidate_source": "source/fixed-export/export-manifest.json + source/afi03-candidate/*"
+  },
+  "candidate_files": [
+    {
+      "path": "src/backend/app/api/portfolio/compositions.py",
+      "bytes": 5975,
+      "sha256": "599a0a90a70dbc4e2f8870474793ad0a5e76d44df0c0e73f4040b43d0d8d80ac",
+      "git_blob_sha1_if_added": "647c32228bdee622856e1997123a0a894022091f",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\backend\\app\\api\\portfolio\\compositions.py",
+      "live_checkout_bytes": 5975,
+      "live_checkout_sha256": "599a0a90a70dbc4e2f8870474793ad0a5e76d44df0c0e73f4040b43d0d8d80ac",
+      "live_checkout_matches_candidate": true,
+      "live_checkout_note": null
+    },
+    {
+      "path": "src/backend/app/config.py",
+      "bytes": 60062,
+      "sha256": "ae564852fbd8878bf3ada778c7a1eb9c7f9bae49f4ac2054361928bc8057b4d1",
+      "git_blob_sha1_if_added": "3990fba653e4969875c2ca72dbf2c5140a75c193",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\backend\\app\\config.py",
+      "live_checkout_bytes": 60062,
+      "live_checkout_sha256": "ae564852fbd8878bf3ada778c7a1eb9c7f9bae49f4ac2054361928bc8057b4d1",
+      "live_checkout_matches_candidate": true,
+      "live_checkout_note": null
+    },
+    {
+      "path": "src/backend/app/main.py",
+      "bytes": 8784,
+      "sha256": "1b68af1c2e3326daf45e214aad438a45d97f57b01ea4c128fd1c62372ce455a9",
+      "git_blob_sha1_if_added": "dab78007f3b053f37ffbfdb2a145c700b16d7352",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\backend\\app\\main.py",
+      "live_checkout_bytes": 8784,
+      "live_checkout_sha256": "1b68af1c2e3326daf45e214aad438a45d97f57b01ea4c128fd1c62372ce455a9",
+      "live_checkout_matches_candidate": true,
+      "live_checkout_note": null
+    },
+    {
+      "path": "src/backend/app/services/portfolio_valuation_bindings.py",
+      "bytes": 44830,
+      "sha256": "fc0ecc03a2527f78ba554e432a0faf86e705cb9956cf00068ce98098d113eea0",
+      "git_blob_sha1_if_added": "f2a6f33cf919358cca39ab0485b58bac9eaee0ef",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\backend\\app\\services\\portfolio_valuation_bindings.py",
+      "live_checkout_bytes": 44830,
+      "live_checkout_sha256": "fc0ecc03a2527f78ba554e432a0faf86e705cb9956cf00068ce98098d113eea0",
+      "live_checkout_matches_candidate": true,
+      "live_checkout_note": null
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_valuation_projection_api.py",
+      "bytes": 42967,
+      "sha256": "e0c2a1cd890d510e1b8ee7ce595857316b1a89767d07bf247ee2cec3610d3d42",
+      "git_blob_sha1_if_added": "58401560a7ad71dbeca24e704c748bf3522ca7e4",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\backend\\tests\\test_portfolio_valuation_projection_api.py",
+      "live_checkout_bytes": 42967,
+      "live_checkout_sha256": "e0c2a1cd890d510e1b8ee7ce595857316b1a89767d07bf247ee2cec3610d3d42",
+      "live_checkout_matches_candidate": true,
+      "live_checkout_note": null
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+      "bytes": 92738,
+      "sha256": "0f38ef216485b3113841f49f9c1a20e2d11aa9ff5048f3647e41221b5a507a94",
+      "git_blob_sha1_if_added": "6557da37aed1721cbd59527366d1d2446312ae22",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\frontend\\src\\__tests__\\views\\PortfolioPage.test.ts",
+      "live_checkout_bytes": 92738,
+      "live_checkout_sha256": "0f38ef216485b3113841f49f9c1a20e2d11aa9ff5048f3647e41221b5a507a94",
+      "live_checkout_matches_candidate": true,
+      "live_checkout_note": null
+    },
+    {
+      "path": "src/frontend/src/api/portfolio.ts",
+      "bytes": 18316,
+      "sha256": "a3d3c65c173e1f0a07a26cdd09db49d827053e2467f35541dc25e5f5277a1574",
+      "git_blob_sha1_if_added": "de67a275a683e645baaa4dd1e57488b508ff65e5",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\frontend\\src\\api\\portfolio.ts",
+      "live_checkout_bytes": 18316,
+      "live_checkout_sha256": "a3d3c65c173e1f0a07a26cdd09db49d827053e2467f35541dc25e5f5277a1574",
+      "live_checkout_matches_candidate": true,
+      "live_checkout_note": null
+    },
+    {
+      "path": "src/frontend/src/views/PortfolioPage.vue",
+      "bytes": 134714,
+      "sha256": "696a1b617023932efb39071e2b0952ac477fae69b770403e03bf987d4be6aa88",
+      "git_blob_sha1_if_added": "ca7291181b8bdfa683b307d55c416c0fd626dac5",
+      "fixed_export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\frontend\\src\\views\\PortfolioPage.vue",
+      "live_checkout_bytes": 135120,
+      "live_checkout_sha256": "97c6ab921e57764df411f485a2df37e0d9f9c7bffaaf54e3c24fa219ad8272d5",
+      "live_checkout_matches_candidate": false,
+      "live_checkout_note": "contains separately preserved AFI04 analytics-only mount hunk; AFI03 snapshot intentionally excludes it"
+    }
+  ],
+  "base_blob_pins": [
+    {
+      "path": "src/backend/app/api/portfolio/compositions.py",
+      "status_at_head": "tracked",
+      "head_blob_sha1": "db2f664f22153a607b63e3ca230615e06f71137b",
+      "fixed_runtime_blob_sha1": "db2f664f22153a607b63e3ca230615e06f71137b",
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": 5380,
+      "git_mode": "100644"
+    },
+    {
+      "path": "src/backend/app/config.py",
+      "status_at_head": "tracked",
+      "head_blob_sha1": "d8547efecd62111de8793e7fc440d42bd1e3da94",
+      "fixed_runtime_blob_sha1": "d8547efecd62111de8793e7fc440d42bd1e3da94",
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": 57837,
+      "git_mode": "100644"
+    },
+    {
+      "path": "src/backend/app/main.py",
+      "status_at_head": "tracked",
+      "head_blob_sha1": "700a41a1b24883bcdc0a47b60605ccf70dc75150",
+      "fixed_runtime_blob_sha1": "700a41a1b24883bcdc0a47b60605ccf70dc75150",
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": 8187,
+      "git_mode": "100644"
+    },
+    {
+      "path": "src/backend/app/services/portfolio_valuation_bindings.py",
+      "status_at_head": "new_untracked_candidate",
+      "head_blob_sha1": null,
+      "fixed_runtime_blob_sha1": null,
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": null,
+      "git_mode": null
+    },
+    {
+      "path": "src/backend/tests/test_portfolio_valuation_projection_api.py",
+      "status_at_head": "new_untracked_candidate",
+      "head_blob_sha1": null,
+      "fixed_runtime_blob_sha1": null,
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": null,
+      "git_mode": null
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+      "status_at_head": "tracked",
+      "head_blob_sha1": "037806fa4d26608ed4f4b6a6c69474a3892be4e9",
+      "fixed_runtime_blob_sha1": "037806fa4d26608ed4f4b6a6c69474a3892be4e9",
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": 75772,
+      "git_mode": "100644"
+    },
+    {
+      "path": "src/frontend/src/api/portfolio.ts",
+      "status_at_head": "tracked",
+      "head_blob_sha1": "20986ef4c5f2335c5a3a90aa4483d871b02cab03",
+      "fixed_runtime_blob_sha1": "20986ef4c5f2335c5a3a90aa4483d871b02cab03",
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": 14675,
+      "git_mode": "100644"
+    },
+    {
+      "path": "src/frontend/src/views/PortfolioPage.vue",
+      "status_at_head": "tracked",
+      "head_blob_sha1": "9de8f79f59706f1c0f3dccc1368185b0433be073",
+      "fixed_runtime_blob_sha1": "9de8f79f59706f1c0f3dccc1368185b0433be073",
+      "same_blob_at_head_and_fixed_runtime": true,
+      "head_blob_bytes": 124046,
+      "git_mode": "100644"
+    }
+  ],
+  "source_closure": {
+    "fixed_export_root": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12",
+    "fixed_export_manifest": {
+      "raw_evidence_path": "source/fixed-export/export-manifest.json",
+      "bytes": 681525,
+      "sha256": "cd799f2074394ebc8ce8d4d3f35d20584060fc6eab6a72cca0fc4bdf7e456ea5",
+      "candidate_overlay_count": 8
+    },
+    "source_archives_not_copied_into_packet": true,
+    "archive_records": {
+      "afi": {
+        "archive_bytes": 35840000,
+        "archive_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\archives\\afi.tar",
+        "archive_sha256": "6d9f40ed41c75daeca4c1f40cace8997900752cd7bf58c02c79fce63812c49d7",
+        "commit": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+        "pathspec": [
+          "src/backend",
+          "src/frontend/src",
+          "src/frontend/package.json",
+          "src/frontend/package-lock.json",
+          "src/frontend/tsconfig.json",
+          "src/frontend/tsconfig.node.json",
+          "src/frontend/vite.config.ts",
+          "src/frontend/vitest.config.ts",
+          "src/frontend/eslint.config.js"
+        ],
+        "repository": "D:\\source_code\\ai-for-investor"
+      },
+      "sdk_base": {
+        "archive_bytes": 747520,
+        "archive_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\archives\\sdk_base.tar",
+        "archive_sha256": "b48d2799b2c2d110df088df84d08c7971f891ace1e3fb6e33de463280e392085",
+        "commit": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "pathspec": [
+          "src"
+        ],
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_base"
+      },
+      "sdk_gateway": {
+        "archive_bytes": 399360,
+        "archive_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\archives\\sdk_gateway.tar",
+        "archive_sha256": "9962e37d547101478117d146bffbdd8def268e1fb8b90633b8f6782ada17907e",
+        "commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "pathspec": [
+          "src"
+        ],
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway"
+      },
+      "sdk_parent": {
+        "archive_bytes": 19179520,
+        "archive_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\archives\\sdk_parent.tar",
+        "archive_sha256": "a7fec705369ceae19f71fa60b2150dc214f80d3dca053f9d8c04d55da34b1ab5",
+        "commit": "1e79ecfde28e13b95b60ec88b092783564b1ee24",
+        "pathspec": [
+          "bt_api_py"
+        ],
+        "repository": "D:\\bt_api_py"
+      },
+      "sdk_transport": {
+        "archive_bytes": 102400,
+        "archive_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\archives\\sdk_transport.tar",
+        "archive_sha256": "43dc14f4c3af010099ccbb5931d55f7a9ff5a85e33109754705457e33f3c0a44",
+        "commit": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "pathspec": [
+          "src"
+        ],
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq"
+      }
+    },
+    "runtime_sources": {
+      "afi": {
+        "commit": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+        "pathspecs": [
+          "src/backend",
+          "src/frontend/src",
+          "src/frontend/package.json",
+          "src/frontend/package-lock.json",
+          "src/frontend/tsconfig.json",
+          "src/frontend/tsconfig.node.json",
+          "src/frontend/vite.config.ts",
+          "src/frontend/vitest.config.ts",
+          "src/frontend/eslint.config.js"
+        ],
+        "repository": "D:\\source_code\\ai-for-investor",
+        "scope": "complete backend package plus frontend source and typecheck/test configuration"
+      },
+      "sdk_base": {
+        "commit": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "pathspec": "src",
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_base"
+      },
+      "sdk_gateway": {
+        "commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "pathspec": "src",
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway"
+      },
+      "sdk_parent": {
+        "commit": "1e79ecfde28e13b95b60ec88b092783564b1ee24",
+        "pathspec": "bt_api_py only",
+        "repository": "D:\\bt_api_py"
+      },
+      "sdk_transport_zmq": {
+        "commit": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "pathspec": "src",
+        "repository": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq"
+      }
+    },
+    "fixed_export_exclusions": [
+      "bt_api_risk",
+      "bt_api_monitor",
+      "live checkout source overlays",
+      ".git",
+      "credentials",
+      "retained-host artifacts"
+    ],
+    "generated_frontend_inputs": {
+      "src/frontend/auto-imports.d.ts": {
+        "bytes": 233,
+        "export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\frontend\\auto-imports.d.ts",
+        "omitted_generated_declaration": null,
+        "origin": "ignored generated frontend declarations, pinned as environment inputs",
+        "sha256": "9ff922b8d79138e9a85de3eff6e73f0d705858101129595ac85bba552ecca17d",
+        "source_bytes": 233,
+        "source_path": "D:\\source_code\\ai-for-investor\\src\\frontend\\auto-imports.d.ts",
+        "source_sha256": "9ff922b8d79138e9a85de3eff6e73f0d705858101129595ac85bba552ecca17d"
+      },
+      "src/frontend/components.d.ts": {
+        "bytes": 11955,
+        "export_path": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r12\\source\\afi\\src\\frontend\\components.d.ts",
+        "omitted_generated_declaration": "    PortfolioAnalyticsTaskPanel: typeof import('./src/components/portfolio/PortfolioAnalyticsTaskPanel.vue')['default']",
+        "origin": "ignored generated frontend declarations, pinned as environment inputs",
+        "sha256": "e9b95170e8a471f4ac68b3c23e615dc3bb808e58d04e47b4e7ca40330e1226b9",
+        "source_bytes": 12075,
+        "source_path": "D:\\source_code\\ai-for-investor\\src\\frontend\\components.d.ts",
+        "source_sha256": "7799a085684f84d82c82658212f3e7ec88f667bd025f4b2f4f4a4c95f0d566e8"
+      }
+    },
+    "meaning": "R12 export manifest fixes the normal AFI backend package, frontend sources/config, current accepted SDK Base/Gateway/transport and SDK parent R227 runtime closure. Only eight AFI03 candidate overlays are included in this packet; Risk/Monitor and live checkout WIP are excluded."
+  },
+  "patch": {
+    "raw_evidence_path": "source/afi03-selected.patch",
+    "bytes": 704760,
+    "sha256": "5e4dc48a0b9c6cf6535e35243eec9ead237a9c7101f24c6374c6f88c221dab66",
+    "base_commit": "00cf38fd1dbcd3bd860972bda7f2a4be6f83f138",
+    "applies_only_to_selected_candidate_paths": true,
+    "candidate_blob_sha1_values_are_computed_git_blob_ids_not_committed_objects": true
+  },
+  "separate_preserved_hunks": {
+    "portfolio_page_analytics": {
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi04-analytics-http-risk-r236-20261016\\raw-evidence.zip",
+      "archive_entry": "source/afi/PortfolioPage.analytics-only.patch",
+      "bytes": 1163,
+      "sha256": "53b1bb0ddac1a67d3c2b6ba0cb4004b1173dc35b45cca47db48c54ad81df7519",
+      "classification": "separate AFI04 preservation reference, excluded from AFI03 selected patch"
+    },
+    "main_py": {
+      "candidate_file_matches_live_checkout_at_packaging": true,
+      "selected_patch_contains_only_candidate_changes_relative_to_head": true,
+      "other_paper_or_analytics_changes_not_included_by_this_packet": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "AFI03-R15-HTTP1",
+      "attribution": "author",
+      "evidence_level": "AUTHOR_LOCAL_SYNTHETIC",
+      "node": "tests/test_portfolio_valuation_projection_api.py::test_lifespan_bound_market_inputs_use_authorized_v2_and_keep_totals_separate",
+      "result": "PASS",
+      "summary": "1 passed in 4.47s; one inherited backtrader.feeds.quandl deprecation warning.",
+      "raw_output": {
+        "archive_path": "raw-evidence.zip!author/r15-http1/pytest-stdout.log",
+        "bytes": 657,
+        "sha256": "40ec8437f013870ab4cbeaa29268c701f25014f01886a498de22a82978f00330"
+      },
+      "output_directory": "D:\\temp\\iteration10-afi03-market-inputs-author-r15-http1",
+      "provider": "synthetic local fixture; no external provider or real account"
+    },
+    {
+      "id": "AFI03-R16-HTTP2",
+      "attribution": "author",
+      "evidence_level": "AUTHOR_LOCAL_SYNTHETIC",
+      "node": "tests/test_portfolio_valuation_projection_api.py::test_market_data_denial_is_unavailable_and_does_not_change_account_total",
+      "result": "PASS",
+      "summary": "1 passed in 5.00s; one inherited backtrader.feeds.quandl deprecation warning.",
+      "raw_output": {
+        "archive_path": "raw-evidence.zip!author/r16-http2/pytest-stdout.log",
+        "bytes": 657,
+        "sha256": "865b1292af20a4e6e46c94b34a12367c5d9f4a96381e5d7531e84f6ba23ba70e"
+      },
+      "output_directory": "D:\\temp\\iteration10-afi03-market-inputs-author-r16-http2",
+      "provider": "synthetic local fixture; no external provider or real account"
+    },
+    {
+      "id": "AFI03-R17-UI",
+      "attribution": "author",
+      "evidence_level": "AUTHOR_LOCAL_SYNTHETIC",
+      "node": "PortfolioPage > shows market inputs and independent cuts without adding them to account totals",
+      "result": "PASS_SELECTED_NODE",
+      "summary": "1 selected passed; 38 filtered/skipped in 1.83s.",
+      "raw_output": {
+        "archive_path": "raw-evidence.zip!author/r17-ui/vitest-stdout.log",
+        "bytes": 5158,
+        "sha256": "de988a14fafdd61199b2095ca0c2730140bc53390dd397c8971f44cae23a9975"
+      },
+      "output_directory": "D:\\temp\\iteration10-afi03-market-inputs-author-r17-ui",
+      "source": "fixed R12 export snapshot"
+    },
+    {
+      "id": "AFI03-ROOT-TYPECHECK-R5",
+      "attribution": "Root prior node evidence",
+      "evidence_level": "ROOT_FRONTEND_TYPECHECK_NODE_ONLY",
+      "command_result": {
+        "archive_path": "raw-evidence.zip!typecheck/r5/command-result.json",
+        "bytes": 709,
+        "sha256": "c523efb7eee8410bf4af3c1452d5a08672125c876677a4aed207512d1007465c"
+      },
+      "summary": "vue-tsc --noEmit exit 0 with empty stdout/stderr on fixed R8 frontend source. This was one successful node in a mixed R5 UI run; the enclosing Vitest node failed, so no overall R5 run pass is claimed.",
+      "source_binding": {
+        "export_used_by_typecheck": "D:\\temp\\iteration10-afi03-market-inputs-fixed-20261016-r8",
+        "typecheck_source_pin_count": 453,
+        "all_source_pins_unchanged": true,
+        "frontend_files_matching_r239_candidate": [
+          {
+            "path": "src/frontend/src/api/portfolio.ts",
+            "sha256": "a3d3c65c173e1f0a07a26cdd09db49d827053e2467f35541dc25e5f5277a1574",
+            "same_before_after": true
+          },
+          {
+            "path": "src/frontend/src/views/PortfolioPage.vue",
+            "sha256": "696a1b617023932efb39071e2b0952ac477fae69b770403e03bf987d4be6aa88",
+            "same_before_after": true
+          }
+        ],
+        "enclosing_result_commands_ok": false,
+        "enclosing_r5_vitest_exit_code": 1
+      }
+    }
+  ],
+  "non_passing_attempts_not_counted": [
+    {
+      "id": "Root R9 HTTP collection attempt",
+      "outcome": "setup/collection error before test execution",
+      "reason": "pytest asyncio plugin was not loaded in that process",
+      "pass_count": 0,
+      "included_as_passing_evidence": false
+    }
+  ],
+  "explicit_limitations": [
+    "R15/R16/R17 are author-level synthetic tests, not Root acceptance or real-provider evidence.",
+    "No Root formal AFI03 pass is claimed; formal reviewer is auditing requirements.",
+    "The prior typecheck is a standalone successful node only; its enclosing R5 selected UI run failed and is recorded as such.",
+    "This packet does not establish real-market provider availability or real-account valuation.",
+    "The separate analytics-only PortfolioPage patch is preserved as reference but excluded from the AFI03 patch and candidate blob.",
+    "AFI03 FX/mark source provenance, freshness, multiplier, independent cuts, and failure/coverage display are represented for local synthetic acceptance only; final formal scope adjudication remains pending."
+  ],
+  "raw_archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 453634,
+    "sha256": "2ebafab9be83abcd2b281b7e18b662f131cf29f54bcdd4a6dd3a8d8255e76006",
+    "entries": [
+      {
+        "path": "author/r15-http1/pytest-stdout.log",
+        "bytes": 657,
+        "sha256": "40ec8437f013870ab4cbeaa29268c701f25014f01886a498de22a82978f00330"
+      },
+      {
+        "path": "author/r16-http2/pytest-stdout.log",
+        "bytes": 657,
+        "sha256": "865b1292af20a4e6e46c94b34a12367c5d9f4a96381e5d7531e84f6ba23ba70e"
+      },
+      {
+        "path": "author/r17-ui/vitest-stdout.log",
+        "bytes": 5158,
+        "sha256": "de988a14fafdd61199b2095ca0c2730140bc53390dd397c8971f44cae23a9975"
+      },
+      {
+        "path": "source/afi03-base-tracked-blobs.json",
+        "bytes": 3007,
+        "sha256": "3823745532a4b27ca6b323d1d218c439182933a610cd0ad1beef217a1dec812e"
+      },
+      {
+        "path": "source/afi03-candidate/src/backend/app/api/portfolio/compositions.py",
+        "bytes": 5975,
+        "sha256": "599a0a90a70dbc4e2f8870474793ad0a5e76d44df0c0e73f4040b43d0d8d80ac"
+      },
+      {
+        "path": "source/afi03-candidate/src/backend/app/config.py",
+        "bytes": 60062,
+        "sha256": "ae564852fbd8878bf3ada778c7a1eb9c7f9bae49f4ac2054361928bc8057b4d1"
+      },
+      {
+        "path": "source/afi03-candidate/src/backend/app/main.py",
+        "bytes": 8784,
+        "sha256": "1b68af1c2e3326daf45e214aad438a45d97f57b01ea4c128fd1c62372ce455a9"
+      },
+      {
+        "path": "source/afi03-candidate/src/backend/app/services/portfolio_valuation_bindings.py",
+        "bytes": 44830,
+        "sha256": "fc0ecc03a2527f78ba554e432a0faf86e705cb9956cf00068ce98098d113eea0"
+      },
+      {
+        "path": "source/afi03-candidate/src/backend/tests/test_portfolio_valuation_projection_api.py",
+        "bytes": 42967,
+        "sha256": "e0c2a1cd890d510e1b8ee7ce595857316b1a89767d07bf247ee2cec3610d3d42"
+      },
+      {
+        "path": "source/afi03-candidate/src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+        "bytes": 92738,
+        "sha256": "0f38ef216485b3113841f49f9c1a20e2d11aa9ff5048f3647e41221b5a507a94"
+      },
+      {
+        "path": "source/afi03-candidate/src/frontend/src/api/portfolio.ts",
+        "bytes": 18316,
+        "sha256": "a3d3c65c173e1f0a07a26cdd09db49d827053e2467f35541dc25e5f5277a1574"
+      },
+      {
+        "path": "source/afi03-candidate/src/frontend/src/views/PortfolioPage.vue",
+        "bytes": 134714,
+        "sha256": "696a1b617023932efb39071e2b0952ac477fae69b770403e03bf987d4be6aa88"
+      },
+      {
+        "path": "source/afi03-selected.patch",
+        "bytes": 704760,
+        "sha256": "5e4dc48a0b9c6cf6535e35243eec9ead237a9c7101f24c6374c6f88c221dab66"
+      },
+      {
+        "path": "source/fixed-export/export-manifest.json",
+        "bytes": 681525,
+        "sha256": "cd799f2074394ebc8ce8d4d3f35d20584060fc6eab6a72cca0fc4bdf7e456ea5"
+      },
+      {
+        "path": "source/separately-preserved/PortfolioPage.analytics-only.patch",
+        "bytes": 1163,
+        "sha256": "53b1bb0ddac1a67d3c2b6ba0cb4004b1173dc35b45cca47db48c54ad81df7519"
+      },
+      {
+        "path": "typecheck/r5/command-result.json",
+        "bytes": 709,
+        "sha256": "c523efb7eee8410bf4af3c1452d5a08672125c876677a4aed207512d1007465c"
+      },
+      {
+        "path": "typecheck/r5/enclosing-r5-result.json",
+        "bytes": 6020,
+        "sha256": "86e2b1c8f7f1da692350f57e02ba3674dc7da42426cf920915c77d2ba066efb0"
+      },
+      {
+        "path": "typecheck/r5/heads-after.json",
+        "bytes": 1667,
+        "sha256": "2beb6df9433e3d9dbb5fa3c372fbc14f025b0aafe999441c785089f2e0adb0cb"
+      },
+      {
+        "path": "typecheck/r5/heads-before.json",
+        "bytes": 1667,
+        "sha256": "2beb6df9433e3d9dbb5fa3c372fbc14f025b0aafe999441c785089f2e0adb0cb"
+      },
+      {
+        "path": "typecheck/r5/source-after.json",
+        "bytes": 93488,
+        "sha256": "cbf5d224a464c66f6fcdd18b663247d93ac39765e5e132ac81338d54859cdaf0"
+      },
+      {
+        "path": "typecheck/r5/source-before.json",
+        "bytes": 93488,
+        "sha256": "cbf5d224a464c66f6fcdd18b663247d93ac39765e5e132ac81338d54859cdaf0"
+      },
+      {
+        "path": "typecheck/r5/spec.json",
+        "bytes": 97035,
+        "sha256": "9c8a95d79a8f8c4580babcb4203f5f051f1a03603f64efe4727ec4faaa7d8b34"
+      },
+      {
+        "path": "typecheck/r5/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "typecheck/r5/stdout.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  }
+}
