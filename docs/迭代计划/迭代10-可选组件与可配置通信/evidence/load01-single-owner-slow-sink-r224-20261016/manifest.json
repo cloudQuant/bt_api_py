@@ -1,0 +1,511 @@
+{
+  "schema": "iteration10-load01-single-owner-slow-sink-r224-v1",
+  "round": "R224: one-owner ten-scope slow-sink fairness and durable drain",
+  "repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "parent_at_preparation": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+    "delivery_commit": "pending Root scoped commit"
+  },
+  "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+  "code_scope": {
+    "changed_paths": [
+      {
+        "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+        "sha256": "69a45bb19b789048b4b33f38b5c5ee404b8c1f8d87271b81ac042752b68068f1",
+        "bytes": 287236,
+        "root_r7_source_pin": "69a45bb19b789048b4b33f38b5c5ee404b8c1f8d87271b81ac042752b68068f1"
+      }
+    ],
+    "inherited_related_source": {
+      "path": "tests/unit/test_load01_rpc_telemetry_contract.py",
+      "sha256": "dc71425cc77213570391a401fc068b23b7a3488d9c2e76608c974b7723dcc9c2",
+      "git_blob": "6d9e581e306a4ce198ac63b8c8de9ad0181e0929",
+      "bytes": 22574,
+      "status": "unchanged already-committed source; not a changed R224 path"
+    },
+    "changed_path_count": 1,
+    "scope_note": "The actual canonical diff is one changed source path. The separate telemetry-contract test is inherited and recorded as a related source dependency, not staged or represented as a new round change.",
+    "r6_to_r7": {
+      "from_sha256": "e6313cbd188724b2dde1c61f2bb2249a44146134d19854264500f00dc6ec15d1",
+      "to_sha256": "69a45bb19b789048b4b33f38b5c5ee404b8c1f8d87271b81ac042752b68068f1",
+      "diff_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-load01-slow-sink-r6-to-r7.diff",
+      "diff_sha256": "07584f0d0b132c790b5d34260f7b33ca9a5b5baf9745f8038a9ab28e74828c76",
+      "change": "Recompute remaining monotonic wait after every sleep return; preserve the existing 0 <= lateness < 0.250 assertion."
+    }
+  },
+  "source_provenance": {
+    "materialization": "Root R7 QA used a new fixed non-Git source export. The export was assembled from 3,714 exact R6-pinned source paths, then overlaid only the runner file listed above.",
+    "source_root": "D:\\temp\\iteration10-load01-slow-sink-focused-source-20261016-r7\\source",
+    "source_pin_count": 7502,
+    "source_before_sha256": "f8d487a5fbd02ee14b64dfd360cd59a88cbd85701d2cd57ca080c383fd7c5686",
+    "source_after_sha256": "f8d487a5fbd02ee14b64dfd360cd59a88cbd85701d2cd57ca080c383fd7c5686",
+    "sources_unchanged": true,
+    "repository_head_assertions": "Root result repositories={}, heads_before={}, heads_after={}; no Git HEAD assertion was made by this QA.",
+    "seven_r5_public_zip_sha256": {
+      "D:\\temp\\it10load01-20261016-r5-resume\\bt_api_base.zip": "cc6053eb2b8d0186c6b1d98ded521454bb374f39183a4d27176326847daaae60",
+      "D:\\temp\\it10load01-20261016-r5-resume\\bt_api_execution.zip": "14efac09b8bf8073826e85a8c37c9750689f3b12c20a9764b4614a8d0bd961aa",
+      "D:\\temp\\it10load01-20261016-r5-resume\\bt_api_gateway.zip": "03ba4df4643054c275dc8df1e074050a125ca4e806af648d32d324d815ddd686",
+      "D:\\temp\\it10load01-20261016-r5-resume\\bt_api_monitor.zip": "041d3908de1f8039268ee72d58695149bc1da2deba50fdb170839980f1d2896d",
+      "D:\\temp\\it10load01-20261016-r5-resume\\bt_api_risk.zip": "5ad071e3a8fc20034e3003c15999cf7afeaeb5bacf9a81ac2f7ae23ebad4bf7e",
+      "D:\\temp\\it10load01-20261016-r5-resume\\bt_api_transport_zmq.zip": "07f8cd6b0c8308e22555fcfc196efc14b85a332c2ba5b679a3bfa6fad25f8c41",
+      "D:\\temp\\it10load01-20261016-r5-resume\\parent.zip": "3e32218bd459810130d33559aebbd51524f275deb9e834fe3025bfe89d103bb7"
+    },
+    "r5_source_parent": "e08da3c58cb3b3b040f7799642de38523bbd3229",
+    "r7_overlay": {
+      "only_path": "tests/unit/test_load01_hundred_strategy_30min.py",
+      "raw_sha256": "69a45bb19b789048b4b33f38b5c5ee404b8c1f8d87271b81ac042752b68068f1",
+      "thresholds_or_business_timeout_changed": false
+    }
+  },
+  "root_qa": {
+    "output": "D:\\temp\\iteration10-load01-slow-sink-focused-qa-root-20261016-r7",
+    "command": [
+      "C:\\anaconda3\\python.exe",
+      "-m",
+      "pytest",
+      "-q",
+      "--noconftest",
+      "-p",
+      "no:cacheprovider",
+      "-p",
+      "no:asyncio",
+      "--junitxml=D:\\temp\\iteration10-load01-slow-sink-focused-qa-root-20261016-r7\\junit.xml",
+      "--basetemp=D:\\temp\\iteration10-load01-slow-sink-focused-qa-root-20261016-r7\\pytest-tmp",
+      "tests/unit/test_load01_hundred_strategy_30min.py::test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains"
+    ],
+    "pytest_exit": 0,
+    "console_summary": "1 passed, 1 warning in 24.06s",
+    "junit": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "node": "test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains",
+      "case_seconds": 21.105,
+      "suite_seconds": 23.222,
+      "timestamp": "2026-10-16T20:00:33.087121"
+    },
+    "finished_utc": "2026-10-16T20:00:57.759222+08:00",
+    "source_pins": 7502,
+    "sources_unchanged": true,
+    "repositories": {},
+    "heads_unchanged": true,
+    "stdout_sha256": "ffd688161d3ebdaaed45cfac3d565188eb83c1eac84591de2da483035f50ae33",
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "warning": "One existing PytestConfigWarning: Unknown config option asyncio_default_fixture_loop_scope."
+  },
+  "observed_workload": {
+    "topology": {
+      "owners": 1,
+      "relay_scopes": 10,
+      "cycles_per_scope": 2,
+      "cycle_period_seconds": 5,
+      "lease_seconds": 30,
+      "rpc_timeout_ms": 5000
+    },
+    "observed_cycle_intervals_seconds": {
+      "0": 5.0,
+      "1": 5.0,
+      "2": 5.0,
+      "3": 5.0,
+      "4": 5.0,
+      "5": 5.0,
+      "6": 5.0,
+      "7": 5.0,
+      "8": 5.0,
+      "9": 5.0
+    },
+    "expected_source_rows": 160,
+    "expected_order_rpc_requests": 40,
+    "correlated_order_rpc_requests": 40,
+    "before_drain": {
+      "durable_rows": 88,
+      "pending_backlog_rows": 72,
+      "source_rows": 160
+    },
+    "after_drain": {
+      "durable_rows": 160,
+      "durable_unique_rows": 160,
+      "source_rows": 160
+    },
+    "source_rows_per_scope": 16,
+    "source_rows_per_owner_per_second": 16.0,
+    "configured_relay_capacity_per_owner_per_second": 20.0,
+    "configured_capacity_utilization": 0.8,
+    "measured_append_samples": 160,
+    "measured_append_min_ms": 28.0419,
+    "measured_append_max_ms": 33.1192,
+    "owner_pump_gap_execution_to_account_max_ms": 770.9072
+  },
+  "normal_shutdown": {
+    "owner": {
+      "pid": 80264,
+      "normal_close_ack": true,
+      "normal_exit": true,
+      "exit_code": 0,
+      "forced_terminate": false,
+      "process_handle_closed": true,
+      "completed_stages": [
+        "source-snapshot",
+        "relay-close",
+        "reader-close",
+        "relay-runtime-close",
+        "execution-host-close",
+        "account-host-close",
+        "store-close"
+      ],
+      "callback_errors": [],
+      "total_relayed": 160,
+      "relay_cleanup_failures": 0,
+      "unregister_uncertainties": 0
+    },
+    "monitor": {
+      "pid": 23112,
+      "normal_close_ack": true,
+      "normal_exit": true,
+      "exit_code": 0,
+      "forced_terminate": false,
+      "process_handle_closed": true
+    },
+    "cleanup_receipt_note": "cleanup_close_reply_observed=false because no fallback cleanup close was needed; primary normal_close_ack and normal_exit are true, exit codes are zero, and forced_terminate is false.",
+    "exact_pid_query_time": "2026-10-16T20:07:39.0971442+08:00",
+    "exact_pids_currently_present": false,
+    "current_pid_metadata": []
+  },
+  "prior_r2_unit_nodes": {
+    "output": "D:\\temp\\iteration10-load01-slow-sink-focused-qa-root-20261016-r2",
+    "overall": "One integration node failed; two unit nodes passed.",
+    "pytest_exit": 1,
+    "junit": {
+      "tests": 3,
+      "failures": 1,
+      "errors": 0,
+      "cases": [
+        {
+          "name": "test_load01_relay_scheduler_is_fair_and_bounds_each_poll_slice",
+          "seconds": 0.001,
+          "failed": false
+        },
+        {
+          "name": "test_load01_failure_rpc_snapshot_retains_full_ring_and_timing_totals",
+          "seconds": 0.002,
+          "failed": false
+        },
+        {
+          "name": "test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains",
+          "seconds": 26.759,
+          "failed": true
+        }
+      ]
+    },
+    "console_summary": "1 failed, 2 passed, 1 warning in 29.19s",
+    "integration_failure": "Expected 40 source rows before drain but observed 160; that row-count model was corrected.",
+    "r7_relation": "R7 only rechecks the deadline within the slow-sink integration loop. The two previously passing unit nodes and their assertions are unchanged and were not rerun.",
+    "result_sha256": "6d8a987458edcb8d1959b92861bfabad1cac0a5a24d01d6297dd074088ade911",
+    "junit_sha256": "1129008541dbffdf2a0ec9800026a8ea95495e9e6dec5ea0147cbfc741d35b93",
+    "stdout_sha256": "5d321da8de4356e412d7a8f156c0906951537325ecbb03f1aa9902166088b8f7",
+    "runner_source_sha256": "4abb9ca8a3e774cb995e34a784244b4516c6d0d88e51c33cd8d581067b5492fa",
+    "runner_source_bytes": 255463,
+    "runner_source_root": "D:\\temp\\iteration10-load01-slow-sink-focused-source-20261016-r1\\source",
+    "runner_source_pin_matches_spec": true,
+    "unit_node_ast_sha256": {
+      "test_load01_relay_scheduler_is_fair_and_bounds_each_poll_slice": "b31d6017c7fae43ea7ae5271505274ae07f5baee0d6f9099b0e409239912c706",
+      "test_load01_failure_rpc_snapshot_retains_full_ring_and_timing_totals": "47c994fd1ec20bc7921e746946b3c10ef95d2aa71a3e06666d8df2ea1add770a"
+    }
+  },
+  "load01_acceptance": {
+    "load01_pass": false,
+    "formal_acceptance_claimed": false,
+    "pilot_run_in_this_round": false,
+    "next_action": "After this scoped source/evidence delivery is accepted on dev, Root prepares and serially runs one new 120-second LOAD01 pilot on a fresh fixed-source export."
+  },
+  "unchanged_pilot_constraints": {
+    "strategies": 100,
+    "accounts": 10,
+    "topics": 20,
+    "market_events_hz": 200,
+    "order_cycles_hz_per_account": 2,
+    "rpc_timeout_seconds": 5,
+    "lease_seconds": 30,
+    "pilot_seconds": 120,
+    "full_run_seconds": 1800,
+    "free_memory_reserve_bytes": 2147483648,
+    "projected_child_rss_bytes": 8455716864,
+    "minimum_available_memory_bytes": 10603200512,
+    "reduced_thresholds": false
+  },
+  "raw_evidence_zip": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\load01-single-owner-slow-sink-r224-20261016\\raw-evidence.zip",
+    "bytes": 1582258,
+    "sha256": "48a07917b175856189e645a9760f7df9e6f69bea4cfed4d571c897d9783e0ffe",
+    "members": [
+      {
+        "name": "r7-root-qa/command.json",
+        "bytes": 1547,
+        "sha256": "ba43b3bc2f4d2f99c80e005acf8506301275b239680dbd68c5bbd01ef8f170de"
+      },
+      {
+        "name": "r7-root-qa/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "name": "r7-root-qa/junit.xml",
+        "bytes": 373,
+        "sha256": "648bd4c98f4a1798c6f360d82f348ca8db252cdd7fd05556ff1fbda34f295e99"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-child-cleanup.json",
+        "bytes": 1032,
+        "sha256": "50c81d86babb438f3ed8d549464de82055796bbf6d8ddc10eead4123fe2d0753"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-fixed-source-manifest.json",
+        "bytes": 46766,
+        "sha256": "58c0cdb6c2f2aea48f543da5ac40ee7cc8c9e39a683ccd9345c607e3d2b3466b"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink-observation.json",
+        "bytes": 7304,
+        "sha256": "4b3cc73bb26e131e308ccab65b38f9e85f9aac5bd1655f9a3e04eff97a80db68"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/journals/execution.sqlite3",
+        "bytes": 630784,
+        "sha256": "056995612cebea86a0f380fae3eb313d897139fde6ab571a2a1573d27180ffae"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/journals/execution.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/journals/execution.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/journals/execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/journals/gateway.sqlite3",
+        "bytes": 94208,
+        "sha256": "b706033593505f5c3fbd613f4984d6b41ec558e598a7f6191670d1a11215637e"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/monitor-outbox.sqlite3",
+        "bytes": 282624,
+        "sha256": "c03554b840629d058194747b8ce349ba98f9dd55aadd387f39074782543940bc"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/monitor-outbox.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/monitor-outbox.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/account.sqlite3",
+        "bytes": 40960,
+        "sha256": "f53689d71eba0f2b39360b46bdd4d0ee980901b80bcf54ccde51b4811da0ab51"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/account.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/execution.sqlite3",
+        "bytes": 53248,
+        "sha256": "799e935a3664a351d6c03cf7888562000175b1e3bf2e7357dd8359863ef349e7"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/execution.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/monitor-durable.sqlite3",
+        "bytes": 53248,
+        "sha256": "839f215659fda31756c217c305c50f2d1be8983fbda596a30125ff1a52a33133"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/monitor-durable.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/monitor-telemetry.sqlite3",
+        "bytes": 40960,
+        "sha256": "1fdd1d399c92d304e68105767b906f84a4f35ff1701923967ab2d4ff8ff3e78c"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/registries/monitor-telemetry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-00-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "f34e05d44cd2db461dfc28bfdc1650f83b00e0eac2a7e3508607513a84635152"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-01-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "3af177d5783a7f9e0afc572354c7497c2c089f1eaa444729be163b5bffd4681c"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-02-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "ceced62293ef99a4aded0fd59c7a2896c9a362f1e2db298c76e2d34d41a57c2c"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-03-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "04a4d2ff367b20b2c061f5001c1d84ca0dd80e8855c274593117039da2cb3744"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-04-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "132c963cd135ba2700c896c7ec2f32ad79960e88d132f59b1829b2a7bac5b2e0"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-05-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "4b4018cdf9bf3f4cb26bd1a6e70639395a68e0606f788cf199d7e778638a2052"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-06-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "effff3a9bca790ddf808a0dd59e414dfc509e41c3dc65eb79568201c2eb71d07"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-07-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "46c3870f5ef9c73a2e3e39509b2f5849c90892648acde33c135228eb5e680ad1"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-08-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "b60c936086783d97f0a71b634da22645f5aa42299e4ccf21636e2e4a5890e615"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/relay-checkpoints/relay-00-09-checkpoint.sqlite3",
+        "bytes": 8192,
+        "sha256": "a27ffc6337dad0491b7bc340072b48629ee5f1cac29091c06842bbd500fdb881"
+      },
+      {
+        "name": "r7-root-qa/pytest-tmp/test_load01_single_owner_ten_s0/single-owner-slow-sink/session-guards/account-b6f6ec02ed1f5072e01413066f4f98d2077e312b641a19c3931f241547134865.session-lock",
+        "bytes": 193,
+        "sha256": "6b9a59199cff84a532db07dae4c6e9304d26cdd685798f3764da22d1830f7b62"
+      },
+      {
+        "name": "r7-root-qa/result.json",
+        "bytes": 462,
+        "sha256": "0b344597ad3d811fb077a1a4c80083d0be24398f7d41460e4478aac0a84b9633"
+      },
+      {
+        "name": "r7-root-qa/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "name": "r7-root-qa/running.json",
+        "bytes": 76,
+        "sha256": "99f273a07fb56a979093d12c57b77d33ffacb1b501650455efe3c256d2df0c67"
+      },
+      {
+        "name": "r7-root-qa/source-after.json",
+        "bytes": 1902754,
+        "sha256": "f8d487a5fbd02ee14b64dfd360cd59a88cbd85701d2cd57ca080c383fd7c5686"
+      },
+      {
+        "name": "r7-root-qa/source-before.json",
+        "bytes": 1902754,
+        "sha256": "f8d487a5fbd02ee14b64dfd360cd59a88cbd85701d2cd57ca080c383fd7c5686"
+      },
+      {
+        "name": "r7-root-qa/spec.json",
+        "bytes": 1912645,
+        "sha256": "52ef0d164534f023bdd54e4775d8b3f0f8042b7243ff5206a6aefbd222f5201b"
+      },
+      {
+        "name": "r7-root-qa/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "r7-root-qa/stdout.log",
+        "bytes": 651,
+        "sha256": "ffd688161d3ebdaaed45cfac3d565188eb83c1eac84591de2da483035f50ae33"
+      },
+      {
+        "name": "r7-input/slow-sink-source-manifest-r7.json",
+        "bytes": 8842,
+        "sha256": "b01b250f63c535af9ba659c66fc5e65e36665f3521a898d7a3b062891086a9ff"
+      },
+      {
+        "name": "r7-input/slow-sink-focused-qa-spec-r7.json",
+        "bytes": 1912645,
+        "sha256": "52ef0d164534f023bdd54e4775d8b3f0f8042b7243ff5206a6aefbd222f5201b"
+      },
+      {
+        "name": "r7-input/r6-to-r7.diff",
+        "bytes": 685,
+        "sha256": "07584f0d0b132c790b5d34260f7b33ca9a5b5baf9745f8038a9ab28e74828c76"
+      },
+      {
+        "name": "candidate-source/tests/unit/test_load01_hundred_strategy_30min.py",
+        "bytes": 287236,
+        "sha256": "69a45bb19b789048b4b33f38b5c5ee404b8c1f8d87271b81ac042752b68068f1"
+      },
+      {
+        "name": "inherited-source/tests/unit/test_load01_rpc_telemetry_contract.py",
+        "bytes": 22574,
+        "sha256": "dc71425cc77213570391a401fc068b23b7a3488d9c2e76608c974b7723dcc9c2"
+      },
+      {
+        "name": "prior-r2-two-unit-context/result.json",
+        "bytes": 462,
+        "sha256": "6d8a987458edcb8d1959b92861bfabad1cac0a5a24d01d6297dd074088ade911"
+      },
+      {
+        "name": "prior-r2-two-unit-context/junit.xml",
+        "bytes": 1512,
+        "sha256": "1129008541dbffdf2a0ec9800026a8ea95495e9e6dec5ea0147cbfc741d35b93"
+      },
+      {
+        "name": "prior-r2-two-unit-context/stdout.log",
+        "bytes": 2297,
+        "sha256": "5d321da8de4356e412d7a8f156c0906951537325ecbb03f1aa9902166088b8f7"
+      },
+      {
+        "name": "prior-r2-two-unit-context/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "prior-r2-source/tests/unit/test_load01_hundred_strategy_30min.py",
+        "bytes": 255463,
+        "sha256": "4abb9ca8a3e774cb995e34a784244b4516c6d0d88e51c33cd8d581067b5492fa"
+      },
+      {
+        "name": "prior-r2-root-qa/spec.json",
+        "bytes": 956839,
+        "sha256": "c88e0d21fd8957916b462efa5530bcb50e58e4f1bc4e12e34f08d11d670f3fb5"
+      }
+    ]
+  },
+  "root_verification": {
+    "archive_members_verified": 52,
+    "same_raw_r7_files_verified": true,
+    "passed_node_ast_equivalence_verified": true,
+    "accepted_qa_not_repeated": true
+  }
+}

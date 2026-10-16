@@ -5,12 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import multiprocessing
+from multiprocessing.connection import wait as wait_connections
 import os
 import random
 import sqlite3
 import sys
 import threading
 import time
+import traceback
 import zipfile
 from collections import Counter, deque
 from collections.abc import Mapping
@@ -90,6 +92,8 @@ _TOPICS = 20
 _MARKET_HZ = 200
 _LIFECYCLES_PER_ACCOUNT_HZ = 2
 _EVENT_TYPES = ("execution.lifecycle", "execution.cancellation")
+_RELAY_POLL_INTERVAL_SECONDS = 0.5
+_RELAY_EVENTS_PER_SLICE = 1
 _RELAY_MAX_EVENTS = 1_000_000
 _RELAY_MAX_BYTES = 512 * 1024 * 1024
 _MIN_FREE_BYTES = 2 * 1024**3
@@ -199,6 +203,62 @@ class _RoundRobinMarketPollScheduler:
         stream_id = self._stream_ids[self._next_index]
         self._next_index = (self._next_index + 1) % len(self._stream_ids)
         return stream_id
+
+
+class _RoundRobinRelayPollScheduler:
+    """Return one due relay scope per owner service-pump turn."""
+
+    def __init__(
+        self,
+        local_indices: tuple[int, ...],
+        *,
+        start_at: float,
+        interval_seconds: float = _RELAY_POLL_INTERVAL_SECONDS,
+    ) -> None:
+        if len(set(local_indices)) != len(local_indices):
+            raise ValueError("relay local indices must be unique")
+        if type(start_at) not in (int, float) or start_at < 0:
+            raise ValueError("relay scheduler start time is invalid")
+        if (
+            type(interval_seconds) not in (int, float)
+            or interval_seconds <= 0
+        ):
+            raise ValueError("relay scheduler interval is invalid")
+        self._local_indices = local_indices
+        self._next_due_at = {index: float(start_at) for index in local_indices}
+        self._interval_seconds = float(interval_seconds)
+        self._next_index = 0
+
+    def next_index(
+        self,
+        now: float,
+        *,
+        eligible: set[int] | None = None,
+        force: bool = False,
+    ) -> int | None:
+        if type(now) not in (int, float) or now < 0:
+            raise ValueError("relay scheduler time is invalid")
+        if eligible is not None and not eligible.issubset(self._next_due_at):
+            raise ValueError("relay scheduler eligibility is invalid")
+        if not self._local_indices:
+            return None
+        for offset in range(len(self._local_indices)):
+            position = (self._next_index + offset) % len(self._local_indices)
+            local_index = self._local_indices[position]
+            if eligible is not None and local_index not in eligible:
+                continue
+            if not force and float(now) < self._next_due_at[local_index]:
+                continue
+            self._next_index = (position + 1) % len(self._local_indices)
+            return local_index
+        return None
+
+    def mark_polled(self, local_index: int) -> None:
+        if local_index not in self._next_due_at:
+            raise ValueError("relay scheduler index is unknown")
+        # Keep the original fixed-rate interval. A delayed poll remains due
+        # and catches up one event at a time, with service pumps between slices.
+        self._next_due_at[local_index] += self._interval_seconds
 
 
 def _load01_has_started(now: float, scheduled_start: float) -> bool:
@@ -486,6 +546,7 @@ class _Load01RpcTrace:
         self.emit_ns_total = self.emit_ns_max = 0
         self.installation_error: str | None = None
         self.maintenance: dict[str, dict[str, int]] = {}
+        self.timing_durations: dict[str, dict[str, int]] = {}
         self.server_sockets: dict[int, str] = {}
         self.dequeued_ns: dict[int, int] = {}
         self.local = threading.local()
@@ -537,10 +598,22 @@ class _Load01RpcTrace:
             pass
 
     def maintain(self, name: str, start: int | None, end: int | None) -> None:
+        self._record_duration(self.maintenance, name, start, end)
+
+    def duration(self, name: str, start: int | None, end: int | None) -> None:
+        self._record_duration(self.timing_durations, name, start, end)
+
+    @staticmethod
+    def _record_duration(
+        target: dict[str, dict[str, int]],
+        name: str,
+        start: int | None,
+        end: int | None,
+    ) -> None:
         if type(start) is not int or type(end) is not int:
             return
         try:
-            row = self.maintenance.setdefault(name, {"count": 0, "total_ns": 0, "max_ns": 0})
+            row = target.setdefault(name, {"count": 0, "total_ns": 0, "max_ns": 0})
             duration = max(0, end - start)
             row["count"] += 1
             row["total_ns"] += duration
@@ -566,8 +639,11 @@ class _Load01RpcTrace:
             "event_recording_overhead_measured_ns_max": self.emit_ns_max,
             "installation_error": self.installation_error,
             "overhead_note": "Measured record construction/append; clock reads, wrapper dispatch, "
-            "maintenance timing, and output serialization add further cost.",
+            "maintenance, pump-gap, relay-poll timing and output serialization add further cost.",
             "maintenance_durations": {key: dict(value) for key, value in self.maintenance.items()},
+            "timing_durations": {
+                key: dict(value) for key, value in self.timing_durations.items()
+            },
             "events": list(self.events)[-limit:],
         }
 
@@ -579,6 +655,24 @@ def _load01_trace_snapshot_or_none(
         return trace.snapshot(max_events)
     except BaseException:
         return None
+
+
+def _load01_failure_trace_snapshot_or_none(
+    trace: _Load01RpcTrace,
+) -> dict[str, Any] | None:
+    return _load01_trace_snapshot_or_none(trace, max_events=_LOAD01_RPC_RING_SIZE)
+
+
+def _load01_poll_relay_slice(
+    relay: ServiceExecutionMonitorRelay,
+    trace: _Load01RpcTrace,
+    scope_ref: str,
+) -> Any:
+    started = trace.now()
+    try:
+        return relay.poll(limit=_RELAY_EVENTS_PER_SLICE)
+    finally:
+        trace.duration(f"owner.relay.poll:{scope_ref}", started, trace.now())
 
 
 def _send_load01_rpc_diagnostic(
@@ -820,6 +914,7 @@ def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
             "event_count_total", "event_count_overwritten",
             "event_recording_overhead_measured_ns_total",
             "event_recording_overhead_measured_ns_max", "maintenance_durations",
+            "timing_durations",
         )} | {"name": name})
         for value in group:
             for event in value.get("events", ()):
@@ -864,8 +959,9 @@ def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
         "ring_capacity_per_process": _LOAD01_RPC_RING_SIZE,
         "event_filter": "orders.submit and orders.cancel only",
         "clock_note": "perf_counter_ns; same-host cross-process comparison is supported by Python 3.10+",
-        "hook_overhead_note": "Wrappers and boundary clock reads add runtime cost; measured record "
-        "construction/append is reported per process, excluding wrapper and clock-read costs.",
+        "hook_overhead_note": "Measured record construction/append excludes wrapper dispatch, "
+        "clock reads, aggregate timing updates, relay polling bookkeeping, and output serialization; "
+        "these add runtime cost. Owner relay poll durations include synchronous sink and checkpoint work.",
         "processes": processes, "correlated_requests": requests,
     }
 
@@ -1921,6 +2017,40 @@ def _monitor_process(
         control.close()
 
 
+def _load01_slow_sink_monitor_process(control, *args) -> None:
+    """Run the real Monitor worker with one bounded terminal append delay."""
+
+    durable_config_raw, telemetry_config_raw, *tail = args[:9]
+    delay_seconds, delay_count, delay_samples = args[9:]
+    original_append_bounded = DurableOutbox.append_bounded
+
+    def delayed_append_bounded(self, event, *, max_events, max_bytes):
+        started_ns = time.perf_counter_ns()
+        time.sleep(delay_seconds)
+        injected_delay_ns = time.perf_counter_ns() - started_ns
+        try:
+            return original_append_bounded(
+                self, event, max_events=max_events, max_bytes=max_bytes
+            )
+        finally:
+            with delay_count.get_lock():
+                index = delay_count.value
+                if index < len(delay_samples):
+                    delay_samples[index] = injected_delay_ns
+                delay_count.value = index + 1
+
+    DurableOutbox.append_bounded = delayed_append_bounded
+    try:
+        _monitor_process(
+            control,
+            durable_config_raw,
+            telemetry_config_raw,
+            *tail,
+        )
+    finally:
+        DurableOutbox.append_bounded = original_append_bounded
+
+
 def _monitor_db_status(outbox_path: str, telemetry: MonitorTelemetryService) -> dict[str, Any]:
     path = Path(outbox_path).resolve()
     uri = path.as_uri() + "?mode=ro"
@@ -2064,6 +2194,91 @@ def _owner_process(
     relays: dict[int, ServiceExecutionMonitorRelay] = {}
     relay_delivered_by_scope: Counter[str] = Counter()
     gateway_worker = None
+    owner_phase = "owner-setup"
+    close_phase: str | None = None
+    close_stages_completed: list[str] = []
+    normal_drain_completed = False
+    source_evidence: list[dict[str, Any]] | None = None
+    total_relayed = 0
+    close_callback_errors: list[dict[str, Any]] = []
+
+    def close_facts() -> dict[str, Any]:
+        def host_facts(host) -> dict[str, Any] | None:
+            if host is None:
+                return None
+            try:
+                summary = host.summary
+                upstream = summary["upstream"]
+                last_upstream_cleanup = summary["last_upstream_cleanup"]
+                return {
+                    "state": host.state,
+                    "cleanup_failures": list(summary["cleanup_failures"]),
+                    "cleanup_history": list(summary["cleanup_history"]),
+                    "upstream": None if upstream is None else dict(upstream),
+                    "last_upstream_cleanup": (
+                        None
+                        if last_upstream_cleanup is None
+                        else dict(last_upstream_cleanup)
+                    ),
+                }
+            except BaseException:
+                return {"snapshot_available": False}
+
+        if relay_runtime is None:
+            relay_facts = None
+        else:
+            try:
+                bindings = relay_runtime.bindings
+                relay_facts = {
+                    "state": relay_runtime.state,
+                    "cleanup_failures": relay_runtime.cleanup_failures,
+                    "unregister_uncertainties": relay_runtime.unregister_uncertainties,
+                    "unknown_registration_count": relay_runtime.unknown_registration_count,
+                    "binding_count": len(bindings),
+                    "active_binding_count": sum(bool(binding.active) for binding in bindings),
+                }
+            except BaseException:
+                relay_facts = {"snapshot_available": False}
+
+        try:
+            worker_facts = None if gateway_worker is None else {
+                "state": gateway_worker.state,
+                "ready": gateway_worker.ready,
+                "provider_connect_calls": account_provider.connect_calls,
+                "provider_read_calls": account_provider.read_calls,
+                "provider_close_calls": account_provider.close_calls,
+            }
+        except BaseException:
+            worker_facts = {"snapshot_available": False}
+
+        if source_evidence is None:
+            drain_facts = None
+        else:
+            drain_facts = [
+                {
+                    "scope_ref": item["scope_ref"],
+                    "source_rows": item["source_rows"],
+                    "source_rows_by_stream": dict(item["source_rows_by_stream"]),
+                    "relay_delivered": item["relay_delivered"],
+                }
+                for item in source_evidence
+            ]
+        return {
+            "owner_phase": owner_phase,
+            "close_phase": close_phase,
+            "completed_close_stages": list(close_stages_completed),
+            "normal_drain_completed": normal_drain_completed,
+            "relay_count": len(relays),
+            "reader_count": len(readers),
+            "total_relayed": total_relayed,
+            "relay_delivered_by_scope": dict(relay_delivered_by_scope),
+            "source_drain_by_scope": drain_facts,
+            "relay_runtime": relay_facts,
+            "execution_host": host_facts(execution_host),
+            "account_host": host_facts(account_host),
+            "account_worker": worker_facts,
+            "component_close_callback_errors": list(close_callback_errors),
+        }
 
     account_scope_ref = f"load01-gateway-journal-{account_index:02d}"
     state_scope_ref = f"load01-account-state-{account_index:02d}"
@@ -2207,9 +2422,18 @@ def _owner_process(
 
             def close_gateway_resources() -> None:
                 if gateway_worker is not None:
-                    gateway_worker.close()
-                if journal is not None:
-                    journal.close()
+                    try:
+                        gateway_worker.close()
+                    except BaseException as exc:
+                        close_callback_errors.append(
+                            {
+                                "phase": "gateway-worker-close",
+                                "type": f"{type(exc).__module__}.{type(exc).__qualname__}",
+                                "code": _safe_diagnostic_code(exc),
+                                "traceback": "".join(traceback.format_exception(exc)),
+                            }
+                        )
+                        raise
 
             return ComponentResources.owned(
                 {
@@ -2244,6 +2468,7 @@ def _owner_process(
         )
         account_host.start()
         execution_host.start()
+        owner_phase = "owner-started"
 
         scope_records = []
         for local_index in range(_PER_ACCOUNT):
@@ -2330,34 +2555,70 @@ def _owner_process(
         ):
             raise AssertionError("LOAD01 owner failed to register its ten Monitor relay scopes")
         control.send(("relay-ready", account_index, os.getpid(), len(relay_runtime.bindings)))
+        owner_phase = "owner-active"
 
-        total_relayed = 0
         last_report = time.monotonic()
-        next_relay_poll = time.monotonic()
+        relay_poll_scheduler = _RoundRobinRelayPollScheduler(
+            tuple(relays), start_at=last_report
+        )
         next_relay_maintenance = time.monotonic()
         draining = False
         drain_deadline = 0.0
+        drain_round_remaining: set[int] = set()
+        drain_round_delivered = 0
+        last_execution_pump_end_ns: int | None = None
         while True:
+            account_pump_started_ns = rpc_trace.now()
+            if type(last_execution_pump_end_ns) is int:
+                rpc_trace.duration(
+                    "owner.host_pump_gap:execution_to_account",
+                    last_execution_pump_end_ns,
+                    account_pump_started_ns,
+                )
             account_host.serve_once(timeout_ms=0)
+            account_pump_ended_ns = rpc_trace.now()
+            execution_pump_started_ns = rpc_trace.now()
+            rpc_trace.duration(
+                "owner.host_pump_gap:account_to_execution",
+                account_pump_ended_ns,
+                execution_pump_started_ns,
+            )
             execution_host.serve_once(timeout_ms=0)
+            last_execution_pump_end_ns = rpc_trace.now()
             now = time.monotonic()
             if now >= next_relay_maintenance:
                 relay_runtime.maintain()
                 next_relay_maintenance = time.monotonic() + 0.5
-            if now >= next_relay_poll or draining:
-                round_delivered = 0
-                for local_index, relay in relays.items():
-                    result = relay.poll(limit=64)
-                    round_delivered += result.remote_delivered
-                    relay_delivered_by_scope[scope_records[local_index]["scope_ref"]] += (
-                        result.remote_delivered
-                    )
-                total_relayed += round_delivered
-                next_relay_poll = now + 0.5
-                if draining and round_delivered == 0:
-                    break
-                if draining and now > drain_deadline:
-                    raise TimeoutError("LOAD01 durable Monitor relay did not drain")
+            if draining and time.monotonic() > drain_deadline:
+                raise TimeoutError("LOAD01 durable Monitor relay did not drain")
+            local_index = relay_poll_scheduler.next_index(
+                now,
+                eligible=drain_round_remaining if draining else None,
+                force=draining,
+            )
+            if local_index is not None:
+                result = _load01_poll_relay_slice(
+                    relays[local_index],
+                    rpc_trace,
+                    scope_records[local_index]["scope_ref"],
+                )
+                relay_poll_scheduler.mark_polled(local_index)
+                total_relayed += result.remote_delivered
+                relay_delivered_by_scope[scope_records[local_index]["scope_ref"]] += (
+                    result.remote_delivered
+                )
+                if draining:
+                    drain_round_remaining.remove(local_index)
+                    drain_round_delivered += result.remote_delivered
+                    if not drain_round_remaining:
+                        if drain_round_delivered == 0:
+                            normal_drain_completed = True
+                            owner_phase = "normal-drain-complete"
+                            break
+                        drain_round_remaining = set(relays)
+                        drain_round_delivered = 0
+                    if time.monotonic() > drain_deadline:
+                        raise TimeoutError("LOAD01 durable Monitor relay did not drain")
 
             if control.poll(0):
                 next_command = control.recv()
@@ -2381,11 +2642,13 @@ def _owner_process(
                             control,
                             f"owner-{account_index:02d}",
                             os.getpid(),
-                            _load01_trace_snapshot_or_none(rpc_trace, max_events=32),
+                            _load01_failure_trace_snapshot_or_none(rpc_trace),
                             "emergency",
                         )
                     draining = True
+                    owner_phase = "normal-drain"
                     drain_deadline = time.monotonic() + 120
+                    drain_round_remaining = set(relays)
                 else:
                     raise AssertionError("unknown LOAD01 owner control")
 
@@ -2408,6 +2671,8 @@ def _owner_process(
                 last_report = now
             time.sleep(0.001)
 
+        owner_phase = "normal-close"
+        close_phase = "source-snapshot"
         source_evidence = []
         for local_index, reader in readers.items():
             source_evidence.append(
@@ -2419,24 +2684,38 @@ def _owner_process(
                     ],
                 }
             )
+        close_stages_completed.append(close_phase)
+        close_phase = "relay-close"
         for relay in relays.values():
             relay.close()
+        close_stages_completed.append(close_phase)
         relays.clear()
+        close_phase = "reader-close"
         for reader in readers.values():
             reader.close()
+        close_stages_completed.append(close_phase)
         readers.clear()
+        close_phase = "relay-runtime-close"
         relay_runtime.close()
+        close_stages_completed.append(close_phase)
         relay_runtime_state = relay_runtime.state
         relay_cleanup_failures = relay_runtime.cleanup_failures
         relay_unregister_uncertainties = relay_runtime.unregister_uncertainties
+        close_phase = "execution-host-close"
         execution_host.close()
+        close_stages_completed.append(close_phase)
         execution_state = execution_host.state
         execution_cleanup_failures = execution_host.summary["cleanup_failures"]
+        close_phase = "account-host-close"
         account_host.close()
+        close_stages_completed.append(close_phase)
         account_state = account_host.state
         account_cleanup_failures = account_host.summary["cleanup_failures"]
+        close_phase = "store-close"
         store.close()
         store = None
+        close_stages_completed.append(close_phase)
+        close_phase = "closed-ack-send"
         control.send(
             (
                 "closed",
@@ -2456,10 +2735,47 @@ def _owner_process(
                 tuple(scope_records),
                 tuple(source_evidence),
                 _load01_trace_snapshot_or_none(rpc_trace),
+                close_facts(),
             )
         )
     except BaseException as exc:
-        rpc_timing_at_failure = _load01_trace_snapshot_or_none(rpc_trace, max_events=32)
+        rpc_timing_at_failure = _load01_failure_trace_snapshot_or_none(rpc_trace)
+        exception_chain: list[dict[str, Any]] = []
+        current_error: BaseException | None = exc
+        seen_errors: set[int] = set()
+        while isinstance(current_error, BaseException) and id(current_error) not in seen_errors:
+            seen_errors.add(id(current_error))
+            exception_chain.append(
+                {
+                    "type": f"{type(current_error).__module__}.{type(current_error).__qualname__}",
+                    "code": _safe_diagnostic_code(current_error),
+                    "message": str(current_error),
+                }
+            )
+            current_error = current_error.__cause__ or current_error.__context__
+        failure_facts = {
+            "exception_chain": exception_chain,
+            "traceback": "".join(traceback.format_exception(exc)),
+            "close_facts_before_exception_cleanup": close_facts(),
+        }
+        failure_path = Path(execution_store_path).with_name(
+            "single-owner-close-failure.json"
+        )
+        failure_record = {
+            "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+            "failure": failure_facts,
+            "rpc_timing_at_failure": rpc_timing_at_failure,
+        }
+        try:
+            failure_path.write_text(
+                json.dumps(failure_record, sort_keys=True, indent=2, allow_nan=False) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as artifact_error:
+            failure_facts["diagnostic_artifact_write_code"] = _safe_diagnostic_code(
+                artifact_error
+            )
+            failure_record["failure"] = failure_facts
         _send_load01_rpc_diagnostic(
             control,
             f"owner-{account_index:02d}",
@@ -2468,33 +2784,45 @@ def _owner_process(
             "failure",
         )
         cleanup_started_ns = rpc_trace.now()
-        for relay in relays.values():
-            with suppress(BaseException):
-                relay.close()
-        for reader in readers.values():
-            with suppress(BaseException):
-                reader.close()
+        exception_cleanup_errors: list[dict[str, Any]] = []
+
+        def cleanup_after_failure(phase: str, operation) -> None:
+            try:
+                operation()
+            except BaseException as cleanup_error:
+                exception_cleanup_errors.append(
+                    {
+                        "phase": phase,
+                        "type": f"{type(cleanup_error).__module__}.{type(cleanup_error).__qualname__}",
+                        "code": _safe_diagnostic_code(cleanup_error),
+                        "traceback": "".join(traceback.format_exception(cleanup_error)),
+                    }
+                )
+
+        for local_index, relay in relays.items():
+            cleanup_after_failure(f"relay-close:{local_index:02d}", relay.close)
+        for local_index, reader in readers.items():
+            cleanup_after_failure(f"reader-close:{local_index:02d}", reader.close)
         if relay_runtime is not None and relay_runtime.state != "closed":
-            with suppress(BaseException):
-                relay_runtime.close()
-        for host in (execution_host, account_host):
+            cleanup_after_failure("relay-runtime-close", relay_runtime.close)
+        for phase, host in (
+            ("execution-host-close", execution_host),
+            ("account-host-close", account_host),
+        ):
             if host is not None and host.state not in {"closed", "failed"}:
-                with suppress(BaseException):
-                    host.close()
+                cleanup_after_failure(phase, host.close)
         if store is not None:
-            with suppress(BaseException):
-                store.close()
-        with suppress(BaseException):
-            if journal is not None:
-                journal.close()
+            cleanup_after_failure("store-close", store.close)
         cleanup_ended_ns = rpc_trace.now()
         owner_diagnostic = {
-            "rpc_timing_at_failure": rpc_timing_at_failure,
+            **failure_record,
             "cleanup_duration_ns": (
                 max(0, cleanup_ended_ns - cleanup_started_ns)
                 if type(cleanup_started_ns) is int and type(cleanup_ended_ns) is int
                 else None
             ),
+            "close_facts_after_exception_cleanup": close_facts(),
+            "exception_cleanup_errors": exception_cleanup_errors,
         }
         with suppress(Exception):
             control.send(
@@ -3060,7 +3388,7 @@ def _strategy_process(
                             control,
                             f"strategy-{index:03d}",
                             os.getpid(),
-                            _load01_trace_snapshot_or_none(rpc_trace, max_events=32),
+                            _load01_failure_trace_snapshot_or_none(rpc_trace),
                             "emergency",
                         )
                     break
@@ -3125,7 +3453,7 @@ def _strategy_process(
     except BaseException as exc:
         if runtime_probe is not None:
             runtime_probe.set_phase("startup-failed")
-        rpc_timing_at_failure = _load01_trace_snapshot_or_none(rpc_trace, max_events=32)
+        rpc_timing_at_failure = _load01_failure_trace_snapshot_or_none(rpc_trace)
         _send_load01_rpc_diagnostic(
             control,
             f"strategy-{index:03d}",
@@ -3446,8 +3774,33 @@ def _collect_expected(
         for key in tuple(pending):
             record = records[key]
             deferred = record.setdefault("deferred_messages", [])
-            if deferred or record["pipe"].poll(0):
-                message = deferred.pop(0) if deferred else record["pipe"].recv()
+            if deferred:
+                message = deferred.pop(0)
+                made_progress = True
+                tag = message[0] if isinstance(message, tuple) and message else None
+                if tag == "rpc-diagnostic":
+                    _consume_rpc_diagnostic(record, message)
+                    continue
+                if tag == "progress":
+                    _save_progress(message, progress)
+                    continue
+                if tag == "error":
+                    raise _load01_child_failure(label, record["name"], message)
+                if tag != expected_tag:
+                    raise AssertionError(
+                        f"{label} child returned an unexpected control tag: {record['name']}:{tag}"
+                    )
+                received[key] = message
+                pending.remove(key)
+                continue
+            ready, message, terminal = _recv_pipe_event_if_ready(record["pipe"])
+            if terminal is not None:
+                record["control_pipe_terminal_before_expected"] = terminal
+                raise AssertionError(
+                    f"{label} child control pipe ended before {expected_tag}: "
+                    f"{record['name']}:{record['process'].exitcode}"
+                )
+            if ready:
                 made_progress = True
                 tag = message[0] if isinstance(message, tuple) and message else None
                 if tag == "rpc-diagnostic":
@@ -3466,8 +3819,13 @@ def _collect_expected(
                 pending.remove(key)
                 continue
             if not record["process"].is_alive():
-                while record["pipe"].poll(0):
-                    message = record["pipe"].recv()
+                while True:
+                    ready, message, terminal = _recv_pipe_event_if_ready(record["pipe"])
+                    if terminal is not None:
+                        record["control_pipe_terminal_before_expected"] = terminal
+                        break
+                    if not ready:
+                        break
                     tag = message[0] if isinstance(message, tuple) and message else None
                     if tag == "rpc-diagnostic":
                         _consume_rpc_diagnostic(record, message)
@@ -3484,9 +3842,20 @@ def _collect_expected(
         for key, record in records.items():
             if key in pending:
                 continue
-            if not record["pipe"].poll(0):
+            if "control_pipe_terminal_after_expected" in record:
                 continue
-            message = record["pipe"].recv()
+            ready, message, terminal = _recv_pipe_event_if_ready(record["pipe"])
+            if terminal is not None:
+                record["control_pipe_terminal_after_expected"] = terminal
+                if expected_tag != "closed":
+                    raise AssertionError(
+                        f"{label} child control pipe ended after {expected_tag} "
+                        f"before close acknowledgement: {record['name']}"
+                    )
+                made_progress = True
+                continue
+            if not ready:
+                continue
             tag = message[0] if isinstance(message, tuple) and message else None
             if tag == "error":
                 raise _load01_child_failure(
@@ -3506,6 +3875,33 @@ def _collect_expected(
         state = {records[key]["name"]: records[key]["process"].exitcode for key in pending}
         raise TimeoutError(f"{label} timed out waiting for {expected_tag}: {state}")
     return received
+
+
+def _recv_pipe_event_if_ready(pipe) -> tuple[bool, Any, dict[str, Any] | None]:
+    """Read one control message without treating a closed Windows pipe as data."""
+    try:
+        if pipe not in wait_connections([pipe], timeout=0):
+            return False, None, None
+    except OSError as exc:
+        if getattr(exc, "winerror", None) != 109 and exc.errno != 109:
+            raise
+        return True, None, {
+            "type": f"{type(exc).__module__}.{type(exc).__qualname__}",
+            "errno": exc.errno,
+            "winerror": getattr(exc, "winerror", None),
+        }
+    try:
+        return True, pipe.recv(), None
+    except EOFError as exc:
+        return True, None, {"type": f"{type(exc).__module__}.{type(exc).__qualname__}"}
+    except OSError as exc:
+        if getattr(exc, "winerror", None) != 109 and exc.errno != 109:
+            raise
+        return True, None, {
+            "type": f"{type(exc).__module__}.{type(exc).__qualname__}",
+            "errno": exc.errno,
+            "winerror": getattr(exc, "winerror", None),
+        }
 
 
 class _Load01ChildFailureError(RuntimeError):
@@ -3562,8 +3958,13 @@ def _save_progress(message: tuple[Any, ...], progress: dict[str, Any]) -> None:
 
 def _drain_progress(records: dict[str, dict[str, Any]], progress: dict[str, Any]) -> None:
     for record in records.values():
-        while record["pipe"].poll(0):
-            message = record["pipe"].recv()
+        while True:
+            ready, message, terminal = _recv_pipe_event_if_ready(record["pipe"])
+            if terminal is not None:
+                record["control_pipe_terminal_during_load"] = terminal
+                break
+            if not ready:
+                break
             tag = message[0] if isinstance(message, tuple) and message else None
             if tag == "progress":
                 _save_progress(message, progress)
@@ -3576,6 +3977,10 @@ def _drain_progress(records: dict[str, dict[str, Any]], progress: dict[str, Any]
                 raise AssertionError(
                     f"LOAD01 child sent an unexpected message during load: {record['name']}:{tag}"
                 )
+        if record.get("control_pipe_terminal_during_load") is not None:
+            raise AssertionError(
+                f"LOAD01 child control pipe ended before shutdown: {record['name']}"
+            )
         if not record["process"].is_alive():
             raise AssertionError(
                 f"LOAD01 child exited before shutdown: "
@@ -3812,9 +4217,14 @@ def _emergency_cleanup(
         pipe = record["pipe"]
         for _ in range(limit):
             try:
-                if not pipe.poll(0):
+                ready, message, terminal = _recv_pipe_event_if_ready(pipe)
+                if terminal is not None:
+                    record["rpc_timing_collection_error"] = terminal["type"]
+                    record["rpc_timing_pipe_terminal"] = terminal
                     return
-                retain_message(record, pipe.recv())
+                if not ready:
+                    return
+                retain_message(record, message)
             except (EOFError, OSError, ValueError) as exc:
                 record["rpc_timing_collection_error"] = type(exc).__name__
                 return
@@ -5111,6 +5521,1106 @@ def test_load01_scheduled_start_and_round_robin_market_budget() -> None:
     second_turn = [scheduler.next_stream_id() for _ in range(_TOPICS)]
     assert first_turn == list(stream_ids)
     assert second_turn == list(stream_ids)
+
+
+def test_load01_relay_scheduler_is_fair_and_bounds_each_poll_slice(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    relay_indices = tuple(range(_PER_ACCOUNT))
+    scheduler = _RoundRobinRelayPollScheduler(relay_indices, start_at=0.0)
+    observed: list[int] = []
+    for _ in relay_indices:
+        local_index = scheduler.next_index(0.0)
+        assert local_index is not None
+        observed.append(local_index)
+        scheduler.mark_polled(local_index)
+    assert observed == list(relay_indices)
+    assert scheduler.next_index(0.499) is None
+    assert scheduler.next_index(0.5) == 0
+
+    scheduler.mark_polled(0)
+    drain_eligible = {2, 7}
+    assert scheduler.next_index(0.5, eligible=drain_eligible, force=True) == 2
+    scheduler.mark_polled(2)
+    assert scheduler.next_index(0.5, eligible=drain_eligible, force=True) == 7
+    assert _RELAY_POLL_INTERVAL_SECONDS == 0.5
+    assert _RELAY_EVENTS_PER_SLICE == 1
+
+    class _Relay:
+        def __init__(self) -> None:
+            self.limits: list[int] = []
+
+        def poll(self, *, limit: int) -> Any:
+            self.limits.append(limit)
+            return SimpleNamespace(remote_delivered=1)
+
+    relay = _Relay()
+    trace = _Load01RpcTrace("owner-test")
+    stamps = iter((100, 180))
+    monkeypatch.setattr(trace, "now", lambda: next(stamps))
+    result = _load01_poll_relay_slice(relay, trace, "scope-test")
+    assert result.remote_delivered == 1
+    assert relay.limits == [1]
+    assert trace.timing_durations == {
+        "owner.relay.poll:scope-test": {"count": 1, "total_ns": 80, "max_ns": 80}
+    }
+
+
+def test_load01_failure_rpc_snapshot_retains_full_ring_and_timing_totals() -> None:
+    trace = _Load01RpcTrace("owner-test")
+    for sequence in range(1, _LOAD01_RPC_RING_SIZE + 46):
+        trace.add(
+            "client_send",
+            ("orders.submit", f"message-{sequence}", f"intent-{sequence}"),
+            at=sequence,
+        )
+    trace.duration("owner.host_pump_gap:account_to_execution", 10, 40)
+    trace.duration("owner.host_pump_gap:account_to_execution", 30, 45)
+
+    snapshot = _load01_failure_trace_snapshot_or_none(trace)
+    assert snapshot is not None
+    assert snapshot["ring_capacity"] == _LOAD01_RPC_RING_SIZE == 256
+    assert snapshot["event_count_total"] == 301
+    assert snapshot["event_count_overwritten"] == 45
+    assert len(snapshot["events"]) == _LOAD01_RPC_RING_SIZE
+    assert snapshot["events"][0]["sequence"] == 46
+    assert snapshot["events"][-1]["sequence"] == 301
+    assert snapshot["timing_durations"] == {
+        "owner.host_pump_gap:account_to_execution": {
+            "count": 2,
+            "total_ns": 45,
+            "max_ns": 30,
+        }
+    }
+    report = _load01_rpc_timing_report({"owner-00": snapshot})
+    assert report["processes"][0]["timing_durations"] == snapshot["timing_durations"]
+
+
+def test_load01_single_owner_ten_scope_slow_sink_interleaves_and_drains(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Drive two paced cycles through the production owner loop and real relay/outbox."""
+
+    if os.name != "nt":
+        pytest.skip("LOAD01 owner pump slice uses the Windows spawn baseline")
+
+    source_root = Path(__file__).resolve().parents[2]
+    source_roots = (
+        source_root / "bt_api_py",
+        source_root / "bt_api" / "bt_api_base" / "src",
+        source_root / "bt_api" / "bt_api_execution" / "src",
+        source_root / "bt_api" / "bt_api_gateway" / "src",
+        source_root / "bt_api" / "bt_api_monitor" / "src",
+        source_root / "bt_api" / "bt_api_risk" / "src",
+        source_root / "bt_api" / "bt_api_transport_zmq" / "src",
+    )
+    manifest_files = {
+        path.relative_to(source_root).as_posix(): _sha256(path)
+        for base in source_roots
+        for path in base.rglob("*.py")
+        if "__pycache__" not in path.parts
+    }
+    integration_runner = (
+        source_root / "tests" / "unit" / "test_service_gateway_hundred_strategy_integration.py"
+    )
+    manifest_files[integration_runner.relative_to(source_root).as_posix()] = _sha256(
+        integration_runner
+    )
+    load_runner = Path(__file__).resolve()
+    manifest_files[load_runner.relative_to(source_root).as_posix()] = _sha256(load_runner)
+    manifest_path = tmp_path / "single-owner-fixed-source-manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "parent_commit": _FIXED_PARENT,
+                "files": manifest_files,
+            },
+            sort_keys=True,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BT_API_LOAD01_SOURCE_ROOT", str(source_root))
+    monkeypatch.setenv("BT_API_LOAD01_SOURCE_MANIFEST", str(manifest_path))
+
+    assert _PER_ACCOUNT == 10
+    assert _LIFECYCLES_PER_ACCOUNT_HZ == 2
+    assert _RPC_TIMEOUT_MS == 5_000
+    cycle_period = _PER_ACCOUNT / _LIFECYCLES_PER_ACCOUNT_HZ
+    cycles_per_strategy = 2
+    rate_window_seconds = cycle_period * cycles_per_strategy
+    slow_sink_delay_seconds = 0.028
+    order_rpc_calls_per_cycle = 2
+    expected_source_event_types_by_stream = {
+        "execution": (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+        ),
+        "cancellation": (
+            "cancel_intent_recorded",
+            "cancel_intent_admitted",
+            "cancel_dispatch_claimed",
+            "cancel_provider_observation",
+        ),
+    }
+    expected_source_rows_by_stream_per_scope = {
+        stream: cycles_per_strategy * len(event_types)
+        for stream, event_types in expected_source_event_types_by_stream.items()
+    }
+    source_events_per_cycle = sum(
+        len(event_types) for event_types in expected_source_event_types_by_stream.values()
+    )
+    source_events_per_scope = sum(expected_source_rows_by_stream_per_scope.values())
+    expected_event_rows = source_events_per_scope * _PER_ACCOUNT
+    expected_rpc_count = order_rpc_calls_per_cycle * cycles_per_strategy * _PER_ACCOUNT
+    expected_source_event_type_counts = {
+        (stream, event_type): cycles_per_strategy * _PER_ACCOUNT
+        for stream, event_types in expected_source_event_types_by_stream.items()
+        for event_type in event_types
+    }
+    expected_monitor_event_type_by_stream = {
+        "execution": "execution.lifecycle",
+        "cancellation": "execution.cancellation",
+    }
+    assert cycle_period == 5.0
+    assert 0.020 <= slow_sink_delay_seconds <= 0.036
+    assert order_rpc_calls_per_cycle == 2
+    assert source_events_per_cycle == 8
+    assert source_events_per_scope == 16
+    assert expected_source_rows_by_stream_per_scope == {"execution": 8, "cancellation": 8}
+    assert expected_event_rows == 160
+    assert expected_rpc_count == 40
+    scheduled_cycles_per_scope_per_second = cycles_per_strategy / rate_window_seconds
+    scheduled_rpc_requests_per_scope_per_second = (
+        order_rpc_calls_per_cycle * cycles_per_strategy / rate_window_seconds
+    )
+    scheduled_rpc_requests_per_owner_per_second = (
+        scheduled_rpc_requests_per_scope_per_second * _PER_ACCOUNT
+    )
+    scheduled_source_events_per_scope_per_second = (
+        source_events_per_cycle * cycles_per_strategy / rate_window_seconds
+    )
+    scheduled_source_events_per_owner_per_second = (
+        scheduled_source_events_per_scope_per_second * _PER_ACCOUNT
+    )
+    configured_relay_capacity_per_scope_per_second = 1 / _RELAY_POLL_INTERVAL_SECONDS
+    configured_relay_capacity_per_owner_per_second = (
+        configured_relay_capacity_per_scope_per_second * _PER_ACCOUNT
+    )
+    configured_relay_capacity_utilization = (
+        scheduled_source_events_per_scope_per_second
+        / configured_relay_capacity_per_scope_per_second
+    )
+    configured_relay_headroom_fraction_of_demand = (
+        configured_relay_capacity_per_scope_per_second
+        - scheduled_source_events_per_scope_per_second
+    ) / scheduled_source_events_per_scope_per_second
+    assert scheduled_cycles_per_scope_per_second == pytest.approx(0.2)
+    assert scheduled_rpc_requests_per_scope_per_second == pytest.approx(0.4)
+    assert scheduled_rpc_requests_per_owner_per_second == pytest.approx(4.0)
+    assert scheduled_source_events_per_scope_per_second == pytest.approx(1.6)
+    assert scheduled_source_events_per_owner_per_second == pytest.approx(16.0)
+    assert configured_relay_capacity_per_scope_per_second == pytest.approx(2.0)
+    assert configured_relay_capacity_per_owner_per_second == pytest.approx(20.0)
+    assert configured_relay_capacity_utilization == pytest.approx(0.8)
+    assert configured_relay_headroom_fraction_of_demand == pytest.approx(0.25)
+
+    context = multiprocessing.get_context("spawn")
+    account_endpoint, execution_endpoint, durable_endpoint, telemetry_endpoint, unused_endpoint = (
+        _free_endpoints(5)
+    )
+    account_server_keys = zmq.curve_keypair()
+    execution_server_keys = zmq.curve_keypair()
+    durable_server_keys = zmq.curve_keypair()
+    telemetry_server_keys = zmq.curve_keypair()
+    relay_public, relay_secret = zmq.curve_keypair()
+    strategy_keys = {index: zmq.curve_keypair() for index in range(_PER_ACCOUNT)}
+
+    account_service = _account_service_info(0, account_endpoint, account_server_keys[0])
+    execution_service = _execution_service_info(0, execution_endpoint, execution_server_keys[0])
+    strategy_audience = tuple(
+        (
+            strategy_keys[index][0],
+            _principal_ref(index),
+            _strategy_ref(index),
+            _ACCOUNT_REFS[0],
+        )
+        for index in range(_PER_ACCOUNT)
+    )
+    owner_strategy_audience = tuple(
+        {
+            "index": index,
+            "public_key": strategy_keys[index][0],
+            "principal_ref": _principal_ref(index),
+            "strategy_ref": _strategy_ref(index),
+        }
+        for index in range(_PER_ACCOUNT)
+    )
+
+    work_root = tmp_path / "single-owner-slow-sink"
+    registry_root = work_root / "registries"
+    journal_root = work_root / "journals"
+    guard_root = work_root / "session-guards"
+    checkpoint_root = work_root / "relay-checkpoints"
+    for directory in (registry_root, journal_root, guard_root, checkpoint_root):
+        directory.mkdir(parents=True, exist_ok=True)
+    execution_store_path = journal_root / "execution.sqlite3"
+    outbox_path = work_root / "monitor-outbox.sqlite3"
+
+    owner_record: dict[str, Any] | None = None
+    monitor_record: dict[str, Any] | None = None
+    client_runtimes: list[ServiceClientRuntime] = []
+
+    def reap_owned_process(record: dict[str, Any] | None, *, close_command: bool) -> None:
+        if record is None or record.get("closed"):
+            return
+        process = record["process"]
+        pipe = record["pipe"]
+        record["cleanup_pid"] = record.get("pid", process.pid)
+        record["cleanup_close_requested"] = bool(record.get("close_sent"))
+        record["cleanup_forced_terminate"] = False
+        record["cleanup_process_handle_closed"] = False
+        record["cleanup_close_reply_observed"] = False
+        record["cleanup_close_reply_clean"] = False
+        liveness_observed = True
+        try:
+            alive = process.is_alive()
+        except (AssertionError, OSError, ValueError):
+            alive = False
+            liveness_observed = False
+
+        def observe_cleanup_message(message: Any) -> None:
+            if not isinstance(message, tuple) or not message:
+                return
+            tag = message[0]
+            if tag == "rpc-diagnostic":
+                _consume_rpc_diagnostic(record, message)
+                return
+            if tag == "progress":
+                _save_progress(message, progress)
+                return
+            if tag != "closed":
+                return
+            if record["kind"] == "owner" and len(message) >= 10:
+                pid_matches = message[2] == record["pid"]
+                clean = (
+                    pid_matches
+                    and message[3] == "closed"
+                    and type(message[4]) is tuple
+                    and message[4] == ()
+                    and message[5] == "closed"
+                    and type(message[6]) is tuple
+                    and message[6] == ()
+                    and message[7] == "closed"
+                    and type(message[8]) is int
+                    and message[8] == 0
+                    and type(message[9]) is int
+                    and message[9] == 0
+                )
+                record["cleanup_close_reply_observed"] = bool(pid_matches)
+                record["cleanup_close_reply_clean"] = bool(clean)
+                if len(message) > 17 and type(message[17]) is dict:
+                    record["cleanup_close_facts"] = message[17]
+            elif record["kind"] == "monitor" and len(message) >= 6:
+                pid_matches = message[1] == record["pid"]
+                clean = (
+                    pid_matches
+                    and message[2] == "closed"
+                    and type(message[3]) is tuple
+                    and message[3] == ()
+                    and message[4] == "closed"
+                    and type(message[5]) is tuple
+                    and message[5] == ()
+                )
+                record["cleanup_close_reply_observed"] = bool(pid_matches)
+                record["cleanup_close_reply_clean"] = bool(clean)
+
+        if alive and close_command:
+            if not record.get("close_sent"):
+                try:
+                    pipe.send(("close",))
+                    record["close_sent"] = True
+                    record["cleanup_close_requested"] = True
+                except (EOFError, OSError, ValueError):
+                    pass
+            close_deadline = time.monotonic() + 12
+            while alive and time.monotonic() < close_deadline:
+                try:
+                    ready, message, terminal = _recv_pipe_event_if_ready(pipe)
+                    if terminal is not None:
+                        record["cleanup_control_pipe_terminal"] = terminal
+                    elif ready:
+                        observe_cleanup_message(message)
+                except (OSError, ValueError) as exc:
+                    record["cleanup_control_pipe_read_error"] = {
+                        "type": f"{type(exc).__module__}.{type(exc).__qualname__}",
+                        "errno": getattr(exc, "errno", None),
+                        "winerror": getattr(exc, "winerror", None),
+                    }
+                process.join(0.01)
+                alive = process.is_alive()
+        for _ in range(64):
+            try:
+                ready, message, terminal = _recv_pipe_event_if_ready(pipe)
+                if terminal is not None:
+                    record["cleanup_control_pipe_terminal"] = terminal
+                    break
+                if not ready:
+                    break
+            except (OSError, ValueError) as exc:
+                record["cleanup_control_pipe_read_error"] = {
+                    "type": f"{type(exc).__module__}.{type(exc).__qualname__}",
+                    "errno": getattr(exc, "errno", None),
+                    "winerror": getattr(exc, "winerror", None),
+                }
+                break
+            observe_cleanup_message(message)
+        if alive:
+            # Only this test's own child is eligible for last-resort cleanup.
+            record["cleanup_forced_terminate"] = True
+            process.terminate()
+            process.join(5)
+        with suppress(EOFError, OSError, ValueError):
+            pipe.close()
+        try:
+            exit_code = process.exitcode
+        except (AssertionError, OSError, ValueError):
+            exit_code = None
+            liveness_observed = False
+        record["cleanup_exit_code"] = exit_code
+        record["cleanup_liveness_observed"] = liveness_observed
+        record["normal_close_ack"] = bool(
+            record.get("normal_close_ack") or record.get("cleanup_close_reply_clean")
+        )
+        record["normal_exit"] = bool(
+            record.get("normal_exit")
+            or (
+                record["normal_close_ack"]
+                and exit_code == 0
+                and not record["cleanup_forced_terminate"]
+            )
+        )
+        record["cleanup_normal_close_ack"] = bool(record.get("normal_close_ack"))
+        record["cleanup_normal_exit"] = bool(
+            record.get("normal_exit")
+            and record.get("normal_close_ack")
+            and exit_code == 0
+            and not record["cleanup_forced_terminate"]
+        )
+        if record["cleanup_normal_exit"]:
+            record["cleanup_mode"] = "normal_close_acknowledged_exit"
+        elif record["cleanup_forced_terminate"]:
+            record["cleanup_mode"] = "forced_terminate"
+        elif record["cleanup_close_requested"] and exit_code is not None:
+            record["cleanup_mode"] = "close_requested_exit_without_normal_ack"
+        elif exit_code is not None:
+            record["cleanup_mode"] = "exit_observed_without_normal_ack"
+        else:
+            record["cleanup_mode"] = "exit_unobserved"
+        if exit_code is not None:
+            with suppress(AssertionError, OSError, ValueError):
+                process.close()
+                record["cleanup_process_handle_closed"] = True
+
+    try:
+        owner_record = _start_process(
+            context,
+            _owner_process,
+            (
+                0,
+                _account_service_config(account_service, account_endpoint),
+                _execution_service_config(execution_service),
+                str(registry_root / "account.sqlite3"),
+                str(registry_root / "execution.sqlite3"),
+                str(journal_root / "gateway.sqlite3"),
+                str(guard_root),
+                str(execution_store_path),
+                str(checkpoint_root),
+                account_server_keys,
+                execution_server_keys,
+                owner_strategy_audience,
+                unused_endpoint,
+            ),
+            "load01-single-owner",
+        )
+        owner_record.update(
+            {"pid": owner_record["process"].pid, "kind": "owner", "ready": False}
+        )
+        progress: dict[str, Any] = {"strategy": {}, "owner": {}}
+        owner_ready = _collect_expected(
+            {0: owner_record}, "ready", 60.0, "single owner", progress
+        )[0]
+        assert owner_ready[2] == 0
+        assert owner_ready[3] == owner_record["pid"]
+        assert owner_ready[6]["worker_ready"] is True
+        owner_record["ready"] = True
+        scope_records = owner_ready[7]
+        assert len(scope_records) == _PER_ACCOUNT
+
+        durable_config = _monitor_service_config(
+            service_id=_DURABLE_ID,
+            scope_ref=_DURABLE_ROOT_SCOPE_REF,
+            instance_id=_DURABLE_INSTANCE,
+            listener_ref=_DURABLE_LISTENER_REF,
+            endpoint=durable_endpoint,
+            security_ref=_DURABLE_SECURITY_REF,
+            role="durable_ingress",
+        )
+        telemetry_config = _monitor_service_config(
+            service_id=_TELEMETRY_ID,
+            scope_ref=_TELEMETRY_SCOPE_REF,
+            instance_id=_TELEMETRY_INSTANCE,
+            listener_ref=_TELEMETRY_LISTENER_REF,
+            endpoint=telemetry_endpoint,
+            security_ref=_TELEMETRY_SECURITY_REF,
+            role="telemetry_ingress",
+        )
+        relay_principal = f"{_RELAY_PRINCIPAL_PREFIX}00"
+        relay_actor = f"{_RELAY_CLIENT_PREFIX}00"
+        monitor_owner_audience = (
+            {
+                "public_key": relay_public,
+                "principal_ref": relay_principal,
+                "actor_ref": relay_actor,
+                "scopes": scope_records,
+            },
+        )
+        delay_count = context.Value("i", 0)
+        delay_samples = context.Array("Q", expected_event_rows, lock=False)
+        monitor_record = _start_process(
+            context,
+            _load01_slow_sink_monitor_process,
+            (
+                durable_config,
+                telemetry_config,
+                str(registry_root / "monitor-durable.sqlite3"),
+                str(registry_root / "monitor-telemetry.sqlite3"),
+                str(outbox_path),
+                durable_server_keys,
+                telemetry_server_keys,
+                monitor_owner_audience,
+                strategy_audience,
+                slow_sink_delay_seconds,
+                delay_count,
+                delay_samples,
+            ),
+            "load01-slow-sink-monitor",
+        )
+        monitor_record.update(
+            {"pid": monitor_record["process"].pid, "kind": "monitor", "ready": False}
+        )
+        monitor_ready = _collect_expected(
+            {0: monitor_record}, "ready", 60.0, "slow sink Monitor", progress
+        )[0]
+        assert monitor_ready[2] == monitor_record["pid"]
+        assert monitor_ready[5:7] == ("started", "started")
+        monitor_record["ready"] = True
+
+        relay_identity = (relay_principal, relay_actor, relay_public, relay_secret)
+        owner_record["pipe"].send(
+            ("connect-monitor", monitor_ready[3], durable_server_keys[0], relay_identity)
+        )
+        relay_ready = _collect_expected(
+            {0: owner_record}, "relay-ready", 60.0, "single-owner relay", progress
+        )[0]
+        assert relay_ready[1:4] == (0, owner_record["pid"], _PER_ACCOUNT)
+        owner_record["relay_ready"] = True
+
+        for index in range(_PER_ACCOUNT):
+            strategy_ref = _strategy_ref(index)
+            wire_scope = WireScope(
+                _DOMAIN, account_ref=_ACCOUNT_REFS[0], strategy_ref=strategy_ref
+            )
+            order_scope_ref = execution_service["order_scope_ref"]
+            transport_ref = f"load01-slow-execution-client-{index:02d}-v1"
+            raw_config = {
+                "client_config_schema_version": 1,
+                "process_role": "strategy_client",
+                "registration": {"strategy_ref": strategy_ref},
+                "clients": {
+                    "execution": {
+                        "config_schema_version": 1,
+                        "settings": {
+                            "bindings": [
+                                {
+                                    "mount": "broker.orders",
+                                    "service_id": execution_service["service_id"],
+                                    "instance_id": execution_service["instance_id"],
+                                    "scope_ref": order_scope_ref,
+                                    "account_ref": _ACCOUNT_REFS[0],
+                                    "transport_ref": transport_ref,
+                                }
+                            ],
+                            "options": {
+                                "request_timeout_ms": _RPC_TIMEOUT_MS,
+                                "heartbeat_interval_seconds": _HEARTBEAT_SECONDS,
+                            },
+                        },
+                    }
+                },
+                "communication": {
+                    "config_schema_version": 1,
+                    "profiles": {
+                        transport_ref: {
+                            "backend": "zmq",
+                            "config_schema_version": 1,
+                            "endpoints": {"rpc_connect": execution_endpoint},
+                            "security_profile_ref": execution_service["security_ref"],
+                            "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
+                        }
+                    },
+                },
+            }
+            client = ServiceClientRuntime(
+                parse_client_config(raw_config),
+                identity=WireIdentity(
+                    WireRole.STRATEGY_CLIENT, _principal_ref(index), strategy_ref
+                ),
+                scope_resolver=lambda ref, scopes={order_scope_ref: wire_scope}: scopes[ref],
+                peer_resolver=lambda service_id, peers={
+                    execution_service["service_id"]: execution_service["peer"]
+                }: peers[service_id],
+                transport_factory=ZmqTransportFactory(
+                    {
+                        execution_service["security_ref"]: ClientCurveKeys(
+                            execution_service["server_public"],
+                            strategy_keys[index][0],
+                            strategy_keys[index][1],
+                        )
+                    }
+                ),
+                requested_operations={"broker.orders": _ORDER_OPS},
+            )
+            client.start()
+            client_runtimes.append(client)
+
+        period_start = time.monotonic() + 0.25
+        cycle_start_times: dict[int, list[float]] = {
+            index: [] for index in range(_PER_ACCOUNT)
+        }
+        expected_rpc_requests: set[tuple[str, str]] = set()
+        for cycle in range(cycles_per_strategy):
+            for index, runtime in enumerate(client_runtimes):
+                scheduled = (
+                    period_start
+                    + cycle * cycle_period
+                    + index * (cycle_period / _PER_ACCOUNT)
+                )
+                while True:
+                    wait_seconds = scheduled - time.monotonic()
+                    if wait_seconds <= 0:
+                        break
+                    time.sleep(wait_seconds)
+                cycle_started = time.monotonic()
+                assert 0 <= cycle_started - scheduled < 0.250
+                cycle_start_times[index].append(cycle_started)
+                intent_id = f"load01-slow-owner-{cycle:02d}-{index:02d}"
+                expected_rpc_requests.add(("orders.submit", intent_id))
+                submitted = runtime.call(
+                    "broker.orders",
+                    "orders.submit",
+                    _sample_intent(intent_id),
+                    scope_ref=execution_service["order_scope_ref"],
+                )
+                assert submitted.get("code") == "OK"
+                provider_order_id = submitted["result"]["record"].get(
+                    "provider_order_id"
+                )
+                assert provider_order_id == f"paper-{intent_id}"
+                cancel_id = f"cancel-{intent_id}"
+                expected_rpc_requests.add(("orders.cancel", cancel_id))
+                cancelled = runtime.call(
+                    "broker.orders",
+                    "orders.cancel",
+                    {
+                        "cancel_id": cancel_id,
+                        "target_intent_id": intent_id,
+                        "provider_order_id": provider_order_id,
+                        "metadata_version": "load01-synthetic-v1",
+                        "tags": {"scenario": "LOAD01", "synthetic": "true"},
+                    },
+                    scope_ref=execution_service["order_scope_ref"],
+                )
+                assert cancelled.get("code") == "OK"
+                assert cancelled["result"]["record"]["cancel_id"] == cancel_id
+
+        assert all(len(starts) == cycles_per_strategy for starts in cycle_start_times.values())
+        observed_cycle_intervals = {
+            index: starts[1] - starts[0]
+            for index, starts in cycle_start_times.items()
+        }
+        assert all(
+            interval == pytest.approx(cycle_period, abs=0.250)
+            for interval in observed_cycle_intervals.values()
+        )
+
+        def read_source_rows() -> list[tuple[str, str, str, str, str, int, str, str]]:
+            rows: list[tuple[str, str, str, str, str, int, str, str]] = []
+            for index in range(_PER_ACCOUNT):
+                scope = ExecutionScope(
+                    "synthetic",
+                    "paper",
+                    _ACCOUNT_REFS[0],
+                    _strategy_ref(index),
+                    _EXECUTION_DAY,
+                )
+                reader = ExecutionJournalReader(execution_store_path, scope=scope)
+                try:
+                    outbox_scope = _relay_outbox_scope(reader.generation, scope.key)
+                    for stream, event_type in (
+                        ("execution", "execution.lifecycle"),
+                        ("cancellation", "execution.cancellation"),
+                    ):
+                        cursor = 0
+                        while True:
+                            page = reader.read_page(stream, after_sequence=cursor, limit=32)
+                            if not page.events:
+                                break
+                            for event in page.events:
+                                rows.append(
+                                    (
+                                        outbox_scope,
+                                        event.event_id,
+                                        event_type,
+                                        stream,
+                                        event.event_type,
+                                        event.sequence,
+                                        reader.generation,
+                                        scope.key,
+                                    )
+                                )
+                                cursor = event.sequence
+                            if len(page.events) < 32:
+                                break
+                finally:
+                    reader.close()
+            return rows
+
+        source_before_drain = read_source_rows()
+        assert len(source_before_drain) == expected_event_rows
+        assert len(
+            {
+                (scope, stream, event_id)
+                for scope, event_id, _, stream, _, _, _, _ in source_before_drain
+            }
+        ) == expected_event_rows
+        source_event_type_counts = Counter(
+            (stream, source_event_type)
+            for _, _, _, stream, source_event_type, _, _, _ in source_before_drain
+        )
+        assert dict(source_event_type_counts) == expected_source_event_type_counts
+        source_rows_by_scope: dict[str, Counter[str]] = {}
+        for scope, _, monitor_event_type, stream, _, _, _, _ in source_before_drain:
+            assert monitor_event_type == expected_monitor_event_type_by_stream[stream]
+            source_rows_by_scope.setdefault(scope, Counter())[stream] += 1
+        assert len(source_rows_by_scope) == _PER_ACCOUNT
+        assert all(
+            dict(counts) == expected_source_rows_by_stream_per_scope
+            for counts in source_rows_by_scope.values()
+        )
+
+        monitor_record["pipe"].send(("status",))
+        pre_drain_status = _collect_expected(
+            {0: monitor_record}, "status", 15.0, "pre-drain Monitor status", progress
+        )[0][1]
+        assert pre_drain_status["durable_scope_count"] <= _PER_ACCOUNT
+        assert pre_drain_status["durable_event_rows"] < len(source_before_drain)
+        pending_backlog_rows = len(source_before_drain) - pre_drain_status["durable_event_rows"]
+        assert pending_backlog_rows > 0
+
+        for runtime in client_runtimes:
+            runtime.close()
+            assert runtime.state == "closed"
+            assert runtime.cleanup_failures == 0
+            assert runtime.unregister_uncertainties == 0
+
+        owner_record["pipe"].send(("close", "diagnostic"))
+        owner_record["close_sent"] = True
+        try:
+            owner_closed = _collect_expected(
+                {0: owner_record}, "closed", 30.0, "single-owner normal drain", progress
+            )[0]
+        except _Load01ChildFailureError as exc:
+            failure_path = tmp_path / "single-owner-close-failure.json"
+            with suppress(OSError):
+                failure_path.write_text(
+                    json.dumps(
+                        {
+                            "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+                            "child_code": exc.code,
+                            "child_diagnostic": exc.child_diagnostic,
+                        },
+                        sort_keys=True,
+                        indent=2,
+                        allow_nan=False,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            raise
+        assert owner_closed[1:3] == (0, owner_record["pid"])
+        assert owner_closed[3] == owner_closed[5] == owner_closed[7] == "closed"
+        assert type(owner_closed[4]) is tuple and owner_closed[4] == ()
+        assert type(owner_closed[6]) is tuple and owner_closed[6] == ()
+        assert type(owner_closed[8]) is int and owner_closed[8] == 0
+        assert type(owner_closed[9]) is int and owner_closed[9] == 0
+        assert owner_closed[10:13] == (
+            cycles_per_strategy * _PER_ACCOUNT,
+            cycles_per_strategy * _PER_ACCOUNT,
+            expected_event_rows,
+        )
+        assert owner_closed[13]["provider_close_calls"] == 1
+        source_evidence = owner_closed[15]
+        owner_close_facts = owner_closed[17]
+        assert owner_close_facts["normal_drain_completed"] is True
+        assert owner_close_facts["completed_close_stages"] == [
+            "source-snapshot",
+            "relay-close",
+            "reader-close",
+            "relay-runtime-close",
+            "execution-host-close",
+            "account-host-close",
+            "store-close",
+        ]
+        assert owner_close_facts["relay_count"] == owner_close_facts["reader_count"] == 0
+        assert owner_close_facts["total_relayed"] == expected_event_rows
+        assert owner_close_facts["relay_runtime"]["state"] == "closed"
+        assert owner_close_facts["relay_runtime"]["cleanup_failures"] == 0
+        assert owner_close_facts["relay_runtime"]["unregister_uncertainties"] == 0
+        assert owner_close_facts["execution_host"]["state"] == "closed"
+        assert owner_close_facts["execution_host"]["cleanup_failures"] == []
+        assert owner_close_facts["account_host"]["state"] == "closed"
+        assert owner_close_facts["account_host"]["cleanup_failures"] == []
+        assert owner_close_facts["account_worker"]["state"] == "closed"
+        assert owner_close_facts["account_worker"]["provider_close_calls"] == 1
+        assert sum(
+            item["source_rows"] for item in owner_close_facts["source_drain_by_scope"]
+        ) == expected_event_rows
+        assert sum(
+            item["relay_delivered"] for item in owner_close_facts["source_drain_by_scope"]
+        ) == expected_event_rows
+        assert len(source_evidence) == _PER_ACCOUNT
+        assert all(
+            item["source_rows"] == source_events_per_scope
+            and item["source_rows_by_stream"] == expected_source_rows_by_stream_per_scope
+            and item["relay_delivered"] == source_events_per_scope
+            for item in source_evidence
+        )
+        _normal_close_records(
+            {"owner-slow": owner_record}, {"owner-slow": owner_closed}
+        )
+
+        trace_snapshot = owner_record["rpc_timing_snapshots"]["emergency"]
+        assert trace_snapshot["ring_capacity"] == _LOAD01_RPC_RING_SIZE
+        assert trace_snapshot["event_count_total"] == 4 * expected_rpc_count
+        assert trace_snapshot["event_count_overwritten"] == 0
+        trace_events_by_request: dict[tuple[str, str, str], set[str]] = {}
+        for event in trace_snapshot["events"]:
+            key = (event["operation"], event["message_id"], event["correlation_id"])
+            trace_events_by_request.setdefault(key, set()).add(event["event"])
+        assert len(trace_events_by_request) == expected_rpc_count
+        required_stages = {"server_dequeue", "handler_enter", "handler_return", "reply_send"}
+        assert all(required_stages <= stages for stages in trace_events_by_request.values())
+        assert sum(
+            "server_dequeue" in stages for stages in trace_events_by_request.values()
+        ) == expected_rpc_count
+        observed_rpc_requests = {
+            (operation, correlation_id)
+            for operation, _message_id, correlation_id in trace_events_by_request
+        }
+        assert observed_rpc_requests == expected_rpc_requests
+        rpc_report = _load01_rpc_timing_report({"owner-00": trace_snapshot})
+        assert len(rpc_report["correlated_requests"]) == expected_rpc_count
+        assert all(
+            request["durations_ms"]["handler"] is not None
+            and request["durations_ms"]["handler"] < _RPC_TIMEOUT_MS
+            and request["durations_ms"]["dequeue_to_handler_including_auth_decode_validation"]
+            is not None
+            for request in rpc_report["correlated_requests"]
+        )
+
+        timing = owner_closed[16]["timing_durations"]
+        poll_rows = [
+            timing[f"owner.relay.poll:{item['scope_ref']}"] for item in scope_records
+        ]
+        poll_counts = [row["count"] for row in poll_rows]
+        assert min(poll_counts) >= source_events_per_scope
+        assert sum(poll_counts) >= expected_event_rows
+        assert max(poll_counts) - min(poll_counts) <= 1
+        assert min(row["max_ns"] for row in poll_rows) >= 20_000_000
+        assert max(row["max_ns"] for row in poll_rows) < _RPC_TIMEOUT_MS * 1_000_000
+        pump_gap = timing["owner.host_pump_gap:execution_to_account"]
+        assert pump_gap["max_ns"] >= 20_000_000
+        assert pump_gap["max_ns"] < _RPC_TIMEOUT_MS * 1_000_000
+        assert pump_gap["count"] >= sum(poll_counts) - 1
+        assert timing["owner.host_pump_gap:account_to_execution"]["count"] > 0
+
+        monitor_record["pipe"].send(("close",))
+        monitor_record["close_sent"] = True
+        monitor_closed = _collect_expected(
+            {0: monitor_record}, "closed", 30.0, "slow sink Monitor close", progress
+        )[0]
+        assert monitor_closed[1] == monitor_record["pid"]
+        assert monitor_closed[2] == "closed"
+        assert type(monitor_closed[3]) is tuple and monitor_closed[3] == ()
+        assert monitor_closed[4] == "closed"
+        assert type(monitor_closed[5]) is tuple and monitor_closed[5] == ()
+        final_status = monitor_closed[6]
+        assert final_status["durable_event_rows"] == expected_event_rows
+        assert final_status["durable_scope_count"] == _PER_ACCOUNT
+
+        _normal_close_records(
+            {"monitor-slow": monitor_record}, {"monitor-slow": monitor_closed}
+        )
+
+        source_after_drain = read_source_rows()
+        assert len(source_after_drain) == expected_event_rows
+        assert sorted(source_after_drain) == sorted(source_before_drain)
+
+        readonly_outbox_path = outbox_path.resolve()
+        with sqlite3.connect(
+            readonly_outbox_path.as_uri() + "?mode=ro", uri=True, timeout=5.0
+        ) as connection:
+            connection.execute("PRAGMA query_only=ON")
+            durable_rows = connection.execute(
+                "SELECT scope, event_id, event_type, data_json "
+                "FROM monitor_outbox_events ORDER BY sequence"
+            ).fetchall()
+        expected_outbox_scopes = {item["outbox_scope"] for item in scope_records}
+        expected_scope_records = {item["outbox_scope"]: item for item in scope_records}
+        assert len(expected_scope_records) == _PER_ACCOUNT
+        assert len(durable_rows) == expected_event_rows
+        assert {row[0] for row in durable_rows} == expected_outbox_scopes
+        actual_pairs: list[tuple[str, str, str, str, str, int, str, str]] = []
+        actual_outbox_event_ids: set[str] = set()
+        for scope, outbox_event_id, monitor_event_type, data_json in durable_rows:
+            assert type(outbox_event_id) is str
+            assert outbox_event_id not in actual_outbox_event_ids
+            actual_outbox_event_ids.add(outbox_event_id)
+            envelope_data = json.loads(data_json)
+            assert type(envelope_data) is dict
+            source_payload = envelope_data.get("payload")
+            assert type(source_payload) is dict
+            stream = source_payload.get("stream")
+            assert stream in expected_monitor_event_type_by_stream
+            assert monitor_event_type == expected_monitor_event_type_by_stream[stream]
+            assert type(source_payload.get("source_event_id")) is str
+            assert type(source_payload.get("business_event_type")) is str
+            assert source_payload["business_event_type"] in (
+                expected_source_event_types_by_stream[stream]
+            )
+            assert type(source_payload.get("source_sequence")) is int
+            source_record = expected_scope_records[scope]
+            assert source_payload.get("journal_generation") == source_record[
+                "source_generation"
+            ]
+            assert source_payload.get("source_scope_key") == source_record[
+                "source_scope_key"
+            ]
+            actual_pairs.append(
+                (
+                    scope,
+                    source_payload["source_event_id"],
+                    monitor_event_type,
+                    stream,
+                    source_payload["business_event_type"],
+                    source_payload["source_sequence"],
+                    source_payload["journal_generation"],
+                    source_payload["source_scope_key"],
+                )
+            )
+        assert len(actual_pairs) == expected_event_rows
+        assert len(actual_outbox_event_ids) == expected_event_rows
+        assert len(set(actual_pairs)) == len(actual_pairs)
+        assert sorted(actual_pairs) == sorted(source_after_drain)
+
+        measured_delays = [
+            int(delay_samples[index]) for index in range(delay_count.value)
+        ]
+        assert delay_count.value == expected_event_rows
+        assert len(measured_delays) == delay_count.value
+        assert all(20_000_000 <= value < _RPC_TIMEOUT_MS * 1_000_000 for value in measured_delays)
+        (tmp_path / "single-owner-slow-sink-observation.json").write_text(
+            json.dumps(
+                {
+                    "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+                    "topology": {
+                        "owners": 1,
+                        "relay_scopes": _PER_ACCOUNT,
+                        "scheduled_cycles_per_scope_per_second": (
+                            scheduled_cycles_per_scope_per_second
+                        ),
+                        "order_rpc_calls_per_cycle": order_rpc_calls_per_cycle,
+                        "scheduled_rpc_requests_per_scope_per_second": (
+                            scheduled_rpc_requests_per_scope_per_second
+                        ),
+                        "scheduled_rpc_requests_per_owner_per_second": (
+                            scheduled_rpc_requests_per_owner_per_second
+                        ),
+                        "source_event_types_by_stream": expected_source_event_types_by_stream,
+                        "source_events_per_cycle": source_events_per_cycle,
+                        "source_rows_by_stream_per_scope": (
+                            expected_source_rows_by_stream_per_scope
+                        ),
+                        "source_events_per_scope_per_second": (
+                            scheduled_source_events_per_scope_per_second
+                        ),
+                        "source_events_per_owner_per_second": (
+                            scheduled_source_events_per_owner_per_second
+                        ),
+                        "configured_relay_capacity_per_scope_per_second": (
+                            configured_relay_capacity_per_scope_per_second
+                        ),
+                        "configured_relay_capacity_per_owner_per_second": (
+                            configured_relay_capacity_per_owner_per_second
+                        ),
+                        "configured_relay_capacity_utilization": (
+                            configured_relay_capacity_utilization
+                        ),
+                        "configured_relay_headroom_fraction_of_demand": (
+                            configured_relay_headroom_fraction_of_demand
+                        ),
+                        "rate_window_seconds": rate_window_seconds,
+                        "cycles_per_strategy": cycles_per_strategy,
+                        "expected_source_rows_per_scope": source_events_per_scope,
+                        "expected_source_rows_total": expected_event_rows,
+                        "expected_rpc_requests_total": expected_rpc_count,
+                        "observed_cycle_intervals_seconds": {
+                            str(index): interval
+                            for index, interval in observed_cycle_intervals.items()
+                        },
+                        "rpc_timeout_ms": _RPC_TIMEOUT_MS,
+                        "lease_seconds": _LEASE_SECONDS,
+                    },
+                    "sink_delay": {
+                        "target_ms": slow_sink_delay_seconds * 1000,
+                        "measured_count": delay_count.value,
+                        "measured_min_ms": min(measured_delays) / 1_000_000,
+                        "measured_max_ms": max(measured_delays) / 1_000_000,
+                    },
+                    "before_drain": {
+                        "source_rows": len(source_before_drain),
+                        "durable_rows": pre_drain_status["durable_event_rows"],
+                        "pending_backlog_rows": pending_backlog_rows,
+                    },
+                    "after_drain": {
+                        "source_rows": len(source_after_drain),
+                        "durable_rows": len(actual_pairs),
+                        "durable_unique_rows": len(set(actual_pairs)),
+                    },
+                    "owner_pump_gap_execution_to_account_max_ms": (
+                        pump_gap["max_ns"] / 1_000_000
+                    ),
+                    "relay_poll_by_scope": {
+                        item["scope_ref"]: {
+                            "count": timing[f"owner.relay.poll:{item['scope_ref']}"]["count"],
+                            "max_ms": (
+                                timing[f"owner.relay.poll:{item['scope_ref']}"]["max_ns"]
+                                / 1_000_000
+                            ),
+                        }
+                        for item in scope_records
+                    },
+                    "correlated_order_rpc_count": len(rpc_report["correlated_requests"]),
+                    "owner_pid": owner_record["pid"],
+                    "monitor_pid": monitor_record["pid"],
+                    "owner_close_facts": owner_close_facts,
+                    "normal_close": True,
+                },
+                sort_keys=True,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+    finally:
+        for runtime in client_runtimes:
+            if runtime.state != "closed":
+                with suppress(BaseException):
+                    runtime.close()
+        try:
+            if owner_record is not None and not owner_record.get("closed"):
+                reap_owned_process(
+                    owner_record,
+                    close_command=bool(owner_record.get("relay_ready")),
+                )
+            if monitor_record is not None and not monitor_record.get("closed"):
+                reap_owned_process(
+                    monitor_record, close_command=bool(monitor_record.get("ready"))
+                )
+        finally:
+            def shutdown_fact(
+                label: str, record: dict[str, Any] | None
+            ) -> dict[str, Any]:
+                if record is None:
+                    return {
+                        "role": label,
+                        "pid": None,
+                        "exit_code": None,
+                        "cleanup_mode": "not_started",
+                        "normal_close_ack": False,
+                        "cleanup_close_reply_observed": False,
+                        "cleanup_close_reply_clean": False,
+                        "cleanup_close_facts": None,
+                        "normal_exit": False,
+                        "forced_terminate": False,
+                        "process_handle_closed": False,
+                    }
+                exit_code = record.get("exit_code", record.get("cleanup_exit_code"))
+                normal_close_ack = bool(record.get("normal_close_ack"))
+                normal_exit = bool(
+                    record.get("normal_exit")
+                    and normal_close_ack
+                    and exit_code == 0
+                    and not record.get("cleanup_forced_terminate", False)
+                )
+                cleanup_mode = record.get("cleanup_mode")
+                if normal_exit:
+                    cleanup_mode = "normal_close_acknowledged_exit"
+                elif cleanup_mode is None:
+                    if record.get("cleanup_forced_terminate"):
+                        cleanup_mode = "forced_terminate"
+                    elif exit_code is not None:
+                        cleanup_mode = "exit_observed_without_normal_ack"
+                    else:
+                        cleanup_mode = "exit_unobserved"
+                return {
+                    "role": label,
+                    "pid": record.get("pid", record.get("cleanup_pid")),
+                    "exit_code": exit_code,
+                    "cleanup_mode": cleanup_mode,
+                    "normal_close_ack": normal_close_ack,
+                    "cleanup_close_reply_observed": bool(
+                        record.get("cleanup_close_reply_observed")
+                    ),
+                    "cleanup_close_reply_clean": bool(
+                        record.get("cleanup_close_reply_clean")
+                    ),
+                    "cleanup_close_facts": record.get("cleanup_close_facts"),
+                    "normal_exit": normal_exit,
+                    "close_requested": bool(
+                        record.get("close_sent") or record.get("cleanup_close_requested")
+                    ),
+                    "forced_terminate": bool(record.get("cleanup_forced_terminate")),
+                    "liveness_observed": record.get("cleanup_liveness_observed"),
+                    "process_handle_closed": bool(
+                        record.get("closed") or record.get("cleanup_process_handle_closed")
+                    ),
+                }
+
+            cleanup_receipt = {
+                "evidence_level": "SOURCE_FAKE_SINGLE_OWNER_REAL_HOST_RELAY_OUTBOX_ONLY",
+                "children": [
+                    shutdown_fact("owner", owner_record),
+                    shutdown_fact("monitor", monitor_record),
+                ],
+            }
+            (tmp_path / "single-owner-child-cleanup.json").write_text(
+                json.dumps(cleanup_receipt, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
 
 def test_load01_market_host_and_client_profiles_request_negotiated_v2() -> None:
