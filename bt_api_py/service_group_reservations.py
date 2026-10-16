@@ -11,10 +11,10 @@ from __future__ import annotations
 import re
 import threading
 import time
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import Any, Callable
+from typing import Any
 
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution.contracts import OrderIntent, order_intent_from_payload
@@ -578,6 +578,7 @@ class GroupReservationsService:
             target,
             expected_risk_legs=None,
         )
+        snapshot = self._released_operation_projection(snapshot, binding, target)
         return self._store.record_reservation_snapshot(
             registration,
             origin_run_id=origin_run_id,
@@ -585,6 +586,61 @@ class GroupReservationsService:
             reservation=snapshot,
             operation="reservations.release",
         ).reservation  # type: ignore[return-value]
+
+    @staticmethod
+    def _released_operation_projection(
+        snapshot: GroupAccountReservationSnapshot,
+        binding: AcceptedGroupBinding,
+        target: GroupReservationTarget,
+    ) -> GroupAccountReservationSnapshot:
+        """Project a completed release effect without rewriting Risk facts.
+
+        Risk may expire an unclaimed vector while processing the explicit
+        release request. The account-service envelope can report completion
+        when every returned leg is terminal and none was claimed or resolved;
+        its per-leg state remains the exact durable Risk state. This is used
+        only on the actual release response, never on a read-only query.
+        """
+
+        if (
+            type(snapshot) is not GroupAccountReservationSnapshot
+            or type(binding) is not AcceptedGroupBinding
+            or type(target) is not GroupReservationTarget
+        ):
+            raise GroupReservationsServiceError("INVALID_RELEASE_RESULT")
+        accepted = binding.reservation
+        expected_leg_ids = {leg_id for leg_id, _intent in binding.members}
+        actual_legs = {leg.leg_id: leg for leg in snapshot.legs}
+        accepted_legs = {} if accepted is None else {leg.leg_id: leg for leg in accepted.legs}
+        if (
+            accepted is None
+            or snapshot.group_id != binding.group_id
+            or snapshot.account_ref != binding.account_ref
+            or snapshot.scope_fingerprint != risk_account_scope_fingerprint(target.account_scope.key)
+            or snapshot.group_fingerprint != accepted.group_fingerprint
+            or snapshot.policy_fingerprint != accepted.policy_fingerprint
+            or snapshot.deadline_ns != binding.deadline_ns
+            or set(actual_legs) != expected_leg_ids
+            or set(accepted_legs) != expected_leg_ids
+        ):
+            raise GroupReservationsServiceError("INVALID_RELEASE_RESULT")
+        for leg_id, actual in actual_legs.items():
+            prior = accepted_legs[leg_id]
+            if (
+                actual.permit_id != prior.permit_id
+                or actual.intent_id != prior.intent_id
+                or actual.reserved_intent_hash != prior.reserved_intent_hash
+                or actual.exposure_profile_fingerprint != prior.exposure_profile_fingerprint
+            ):
+                raise GroupReservationsServiceError("INVALID_RELEASE_RESULT")
+        if all(
+            leg.state in {"RELEASED", "EXPIRED"}
+            and not leg.claimed
+            and not leg.resolved
+            for leg in actual_legs.values()
+        ):
+            return replace(snapshot, phase=GroupReservationPhase.RELEASED)
+        return snapshot
 
     @staticmethod
     def _reference(value: object, name: str) -> str:

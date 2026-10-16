@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import multiprocessing
 import queue
+import sqlite3
+import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -114,8 +116,8 @@ from tests.unit._service_group_provider_fixtures import (
     _V2_FILL_SCHEMA,
     _V2_INSTRUMENT,
     _V2_ORDER_SCHEMA,
-    _V2SyntheticBtApiFeed,
     _arm_incomplete_fills,
+    _V2SyntheticBtApiFeed,
 )
 
 _DOMAIN = "paper:arb02-budget-service"
@@ -138,6 +140,8 @@ _REQUEST_TIMEOUT_MS = 8_000
 _SERVER_OPTIONS = {"high_water_mark": 32, "max_message_bytes": _MESSAGE_LIMIT}
 _GROUP_ACCEPTED = "arb02-last-budget-accepted"
 _GROUP_DENIED = "arb02-last-budget-denied"
+_GROUP_EXPIRED_UNCLAIMED = "arb02-expired-unclaimed-crash"
+_GROUP_UNKNOWN_AFTER_TTL = "arb02-unknown-after-ttl"
 
 
 def _attempt_cleanup(actions: tuple[Callable[[], object], ...]) -> BaseException | None:
@@ -206,9 +210,7 @@ def _cleanup_failed_host_start(
                                 RuntimeError("Host child did not acknowledge normal close")
                             )
                     else:
-                        failures.append(
-                            TimeoutError("Host child did not acknowledge normal close")
-                        )
+                        failures.append(TimeoutError("Host child did not acknowledge normal close"))
                 except BaseException as error:
                     failures.append(error)
 
@@ -265,12 +267,27 @@ def _cleanup_group_hosts(
     account_controls: Mapping[str, Any],
     close_client_threads: Callable[..., object],
     stop_process: Callable[..., object],
+    expected_interrupted_calls: Mapping[str, tuple[Any, ...]] | None = None,
+    observed_interrupted_calls: list[tuple[str, tuple[Any, ...]]] | None = None,
+    allowed_pending_completions: Mapping[str, tuple[tuple[str, str], ...]] | None = None,
+    observed_pending_completions: list[tuple[str, tuple[Any, ...]]] | None = None,
 ) -> None:
     actions: list[Callable[[], object]] = [provider_release.set]
     if client_threads:
-        actions.append(
-            lambda: close_client_threads(client_threads, client_commands, client_results)
-        )
+
+        def close_clients() -> None:
+            observed = close_client_threads(
+                client_threads,
+                client_commands,
+                client_results,
+                allowed_call_errors=expected_interrupted_calls,
+                allowed_pending_completions=allowed_pending_completions,
+                observed_pending_completions=observed_pending_completions,
+            )
+            if observed_interrupted_calls is not None:
+                observed_interrupted_calls.extend(observed)
+
+        actions.append(close_clients)
     if coordinator_process is not None and coordinator_control is not None:
         actions.append(lambda: stop_process(coordinator_process, coordinator_control))
     for account_ref in reversed(_ACCOUNTS):
@@ -514,14 +531,16 @@ class _MultiAccountResources:
         # RiskOrderJournal opens SQLite connections per operation and has no
         # persistent close method; only the other fixture-owned resources
         # expose close().
-        failure = _attempt_cleanup((
-            self.authority.close,
-            self.accepted_store.close,
-            self.risk_gate.close,
-            self.proof_journal.close,
-            self.execution_store.close,
-            self.bt_api.close,
-        ))
+        failure = _attempt_cleanup(
+            (
+                self.authority.close,
+                self.accepted_store.close,
+                self.risk_gate.close,
+                self.proof_journal.close,
+                self.execution_store.close,
+                self.bt_api.close,
+            )
+        )
         if failure is not None:
             raise RuntimeError("ARB02 synthetic account resources failed to close") from failure
 
@@ -696,6 +715,11 @@ def _account_host_process(
     initial_states: tuple[str, ...],
     provider_entered: Any,
     provider_release: Any,
+    reservation_observation_group_id: str | None = None,
+    reservation_committed: Any | None = None,
+    reservation_reply_entered: Any | None = None,
+    reservation_reply_release: Any | None = None,
+    reservation_events: Any | None = None,
 ) -> None:
     config = parse_service_config(raw_config)
     coordinator_identity = WireIdentity(
@@ -758,6 +782,38 @@ def _account_host_process(
                 provider_entered,
                 provider_release,
             )
+            if reservation_events is not None:
+                admission = resources.bundle.risk_admission
+                original_reserve = admission.reserve_group_vector
+
+                def observe_reserve(scope, group_id, members, *, deadline_ns):
+                    # Test telemetry at the real account-owner adapter seam.
+                    # The original durable Risk call remains authoritative.
+                    reservation_events.put((account_ref, group_id))
+                    return original_reserve(scope, group_id, members, deadline_ns=deadline_ns)
+
+                admission.reserve_group_vector = observe_reserve
+            if reservation_observation_group_id is not None and reservation_committed is not None:
+                original_complete = resources.accepted_store.complete_reservation
+
+                def complete_and_observe(binding, reservation):
+                    completed = original_complete(binding, reservation)
+                    if binding.group_id == reservation_observation_group_id:
+                        reservation_committed.set()
+                        if reservation_reply_entered is not None:
+                            reservation_reply_entered.set()
+                        if (
+                            reservation_reply_release is not None
+                            and not reservation_reply_release.wait(60)
+                        ):
+                            raise TimeoutError(
+                                "test-owned reservation reply barrier was not released"
+                            )
+                    return completed
+
+                # Delegate to the real accepted-store transaction, pausing only
+                # after Risk and local receipt commits and before the RPC reply.
+                resources.accepted_store.complete_reservation = complete_and_observe
         if component == "execution":
             return ComponentResources.borrowed(
                 {
@@ -1270,13 +1326,40 @@ def _next_client_message(
         raise AssertionError(f"unexpected strategy client message: {message!r}")
 
 
+def _next_client_call_outcome(messages: queue.Queue, timeout: float = 20) -> tuple[Any, ...]:
+    """Read one call completion while allowing an expected lost reply."""
+
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        assert remaining > 0, "client owner did not report the interrupted call"
+        message = messages.get(timeout=remaining)
+        if message[0] in {"done", "call_error"}:
+            return message
+        if message[0] in {"thread_error", "close_error"}:
+            raise AssertionError(f"strategy client failed before call outcome: {message!r}")
+        raise AssertionError(f"unexpected strategy client message: {message!r}")
+
+
+def _wait_for_deadline(deadline_ns: int) -> None:
+    """Wait only for a newly created synthetic group's immutable deadline."""
+
+    assert type(deadline_ns) is int and deadline_ns > 0
+    while time.time_ns() <= deadline_ns:
+        remaining = deadline_ns - time.time_ns()
+        time.sleep(min(0.05, max(0.001, remaining / 1_000_000_000)))
+    assert time.time_ns() > deadline_ns
+
+
 def _group_request(
     group_id: str,
     strategy_ref: str,
     metadata_reference_ns: int,
+    *,
+    lifetime_ns: int = 120_000_000_000,
 ) -> dict[str, Any]:
     now_ns = time.time_ns()
-    deadline_ns = now_ns + 120_000_000_000
+    deadline_ns = now_ns + lifetime_ns
     metadata = _metadata(metadata_reference_ns)
     legs = []
     for leg_id, account_ref, side in (
@@ -1311,6 +1394,134 @@ def _snapshot_from_reply(reply: Mapping[str, Any]) -> GroupOrderSnapshot:
     result = reply.get("result")
     assert isinstance(result, Mapping) and result.get("found") is True, result
     return GroupOrderSnapshot.from_payload(_plain_runtime_json(result["snapshot"]))
+
+
+def _provider_snapshot_with_pending_faults(
+    path: Path, expected_faults: tuple[str, ...]
+) -> tuple[tuple[str, ...], dict[str, int]]:
+    """Read the provider ledger at a phase where a specific fault is pending."""
+
+    with sqlite3.connect(path) as connection:
+        writes = tuple(
+            str(row[0])
+            for row in connection.execute(
+                "SELECT client_order_id FROM provider_writes ORDER BY sequence"
+            )
+        )
+        counters = {
+            str(row[0]): int(row[1])
+            for row in connection.execute(
+                "SELECT name, count FROM provider_counters ORDER BY name"
+            )
+        }
+        faults = tuple(
+            str(row[0]) for row in connection.execute("SELECT name FROM provider_faults ORDER BY name")
+        )
+    assert faults == expected_faults, (faults, expected_faults)
+    return writes, counters
+
+
+def _unknown_submit_snapshot_from_outcome(
+    outcome: tuple[Any, ...], group_id: str
+) -> GroupOrderSnapshot:
+    """Validate the exact pending UNKNOWN submit before returning its snapshot."""
+
+    assert len(outcome) == 6 and outcome[0] == "done", outcome
+    assert outcome[1:3] == ("submit", group_id), outcome
+    assert type(outcome[3]) is int and type(outcome[4]) is int and outcome[4] >= outcome[3]
+    snapshot = _snapshot_from_reply(outcome[5])
+    assert snapshot.state is GroupOrderState.RECOVERY_REQUIRED
+    assert snapshot.budget_reservation is not None
+    assert snapshot.budget_reservation.state is GroupBudgetReservationState.HELD
+    unknown_leg = next(leg for leg in snapshot.legs if leg.leg_id == "leg-a")
+    assert unknown_leg.submitted_intent is not None
+    assert unknown_leg.child_status is not None
+    assert unknown_leg.child_status.state is ExecutionState.UNKNOWN
+    return snapshot
+
+
+def test_provider_inflight_snapshot_requires_the_exact_pending_fault(tmp_path: Path) -> None:
+    """The in-flight exception is narrow; the ordinary snapshot stays strict."""
+
+    path = tmp_path / "provider.sqlite3"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "CREATE TABLE provider_writes (sequence INTEGER PRIMARY KEY, client_order_id TEXT)"
+        )
+        connection.execute(
+            "CREATE TABLE provider_counters (name TEXT PRIMARY KEY, count INTEGER NOT NULL)"
+        )
+        connection.execute("CREATE TABLE provider_faults (name TEXT PRIMARY KEY)")
+        connection.execute(
+            "INSERT INTO provider_counters(name, count) VALUES ('order_queries', 0), ('fill_queries', 0)"
+        )
+        connection.execute("INSERT INTO provider_writes VALUES (1, 'child-1')")
+        connection.execute("INSERT INTO provider_faults VALUES ('incomplete_next_fills')")
+
+    expected = (("child-1",), {"fill_queries": 0, "order_queries": 0})
+    assert _provider_snapshot_with_pending_faults(path, ("incomplete_next_fills",)) == expected
+    with pytest.raises(AssertionError):
+        _provider_snapshot(path)
+
+    with sqlite3.connect(path) as connection:
+        connection.execute("INSERT INTO provider_faults VALUES ('unexpected_fault')")
+    with pytest.raises(AssertionError):
+        _provider_snapshot_with_pending_faults(path, ("incomplete_next_fills",))
+
+    with sqlite3.connect(path) as connection:
+        connection.execute("DELETE FROM provider_faults")
+    assert _provider_snapshot(path) == expected
+
+
+def test_failed_cleanup_drains_only_declared_pending_completions() -> None:
+    """A failed run may drain exactly the in-flight completion it declares."""
+
+    drained_message = ("done", "submit", _GROUP_EXPIRED_UNCLAIMED, 10, 20, {"ok": True})
+
+    def run_cleanup(
+        allowed: Mapping[str, tuple[tuple[str, str], ...]] | None,
+    ) -> tuple[BaseException | None, tuple[tuple[str, tuple[Any, ...]], ...]]:
+        commands: queue.Queue = queue.Queue()
+        results: queue.Queue = queue.Queue()
+
+        def owner() -> None:
+            # The queued completion sits ahead of the close acknowledgement,
+            # exactly like a submit that resolves during failed cleanup.
+            results.put(drained_message)
+            commands.get(timeout=10)
+            results.put(("closed", "closed", ()))
+
+        thread = threading.Thread(target=owner, daemon=True)
+        thread.start()
+        observed: list[tuple[str, tuple[Any, ...]]] = []
+        try:
+            _close_client_threads(
+                {_STRATEGIES[0]: thread},
+                {_STRATEGIES[0]: commands},
+                {_STRATEGIES[0]: results},
+                allowed_pending_completions=allowed,
+                observed_pending_completions=observed,
+            )
+        except BaseException as error:
+            return error, tuple(observed)
+        return None, tuple(observed)
+
+    strict_error, strict_observed = run_cleanup(None)
+    assert isinstance(strict_error, AssertionError)
+    assert "unexpected" in str(strict_error)
+    assert strict_observed == ()
+
+    wrong_group_error, wrong_group_observed = run_cleanup(
+        {_STRATEGIES[0]: (("submit", _GROUP_UNKNOWN_AFTER_TTL),)}
+    )
+    assert isinstance(wrong_group_error, AssertionError)
+    assert wrong_group_observed == ()
+
+    drained_error, drained_observed = run_cleanup(
+        {_STRATEGIES[0]: (("submit", _GROUP_EXPIRED_UNCLAIMED),)}
+    )
+    assert drained_error is None
+    assert drained_observed == ((_STRATEGIES[0], drained_message),)
 
 
 def _query_reply_snapshot(reply: Mapping[str, Any]) -> GroupOrderSnapshot:
@@ -1396,11 +1607,27 @@ def _start_coordinator(
         if cleanup_error is not None:
             add_note = getattr(startup_error, "add_note", None)
             if callable(add_note):
-                add_note(
-                    "coordinator startup cleanup also failed: "
-                    f"{type(cleanup_error).__name__}"
-                )
+                add_note(f"coordinator startup cleanup also failed: {type(cleanup_error).__name__}")
         raise
+
+
+def _terminate_test_coordinator(process: Any, control: Any) -> int:
+    """Crash only the coordinator child created by the calling integration test."""
+
+    assert process.is_alive(), "test-owned coordinator must be live before crash injection"
+    exitcode: int | None = None
+    try:
+        process.terminate()
+        process.join(15)
+        if process.is_alive():
+            raise AssertionError("test-owned coordinator survived crash injection")
+        exitcode = process.exitcode
+    finally:
+        control.close()
+        if not process.is_alive():
+            process.close()
+    assert type(exitcode) is int and exitcode != 0
+    return exitcode
 
 
 def _activate_owner_routes(account_controls: Mapping[str, Any], bindings: tuple[Any, ...]) -> None:
@@ -1419,19 +1646,86 @@ def _close_client_threads(
     threads: Mapping[str, threading.Thread],
     commands: Mapping[str, queue.Queue],
     results: Mapping[str, queue.Queue],
-) -> None:
+    *,
+    allowed_call_errors: Mapping[str, tuple[Any, ...]] | None = None,
+    allowed_pending_completions: Mapping[str, tuple[tuple[str, str], ...]] | None = None,
+    observed_pending_completions: list[tuple[str, tuple[Any, ...]]] | None = None,
+) -> tuple[tuple[str, tuple[Any, ...]], ...]:
+    failures: list[BaseException] = []
+    closed_threads: set[str] = set()
+    interrupted_calls: list[tuple[str, tuple[Any, ...]]] = []
     for strategy_ref in _STRATEGIES:
         thread = threads.get(strategy_ref)
         if thread is not None and thread.is_alive():
-            commands[strategy_ref].put(("close",))
+            try:
+                commands[strategy_ref].put(("close",))
+            except BaseException as error:
+                failures.append(error)
     for strategy_ref in _STRATEGIES:
         thread = threads.get(strategy_ref)
         if thread is None:
             continue
-        thread.join(20)
-        assert not thread.is_alive(), f"{strategy_ref} client owner did not close"
-        if not results[strategy_ref].empty():
-            _next_client_message(results[strategy_ref], "closed", timeout=2)
+        try:
+            thread.join(20)
+            if thread.is_alive():
+                failures.append(AssertionError(f"{strategy_ref} client owner did not close"))
+        except BaseException as error:
+            failures.append(error)
+    # Every thread has had its bounded join attempt before queue assertions run,
+    # so one expected lost reply cannot prevent the other clients from closing.
+    for strategy_ref in _STRATEGIES:
+        if strategy_ref not in threads:
+            continue
+        messages = results[strategy_ref]
+        while True:
+            try:
+                message = messages.get_nowait()
+            except queue.Empty:
+                break
+            if message[0] == "closed":
+                if strategy_ref in closed_threads:
+                    failures.append(AssertionError(f"{strategy_ref} client closed more than once"))
+                closed_threads.add(strategy_ref)
+                continue
+            if message[0] == "done":
+                allowed = (
+                    allowed_pending_completions.get(strategy_ref)
+                    if allowed_pending_completions is not None
+                    else None
+                )
+                if allowed is not None and message[1:3] in allowed:
+                    # A failed run can leave a declared RPC in flight; its
+                    # completion reaches the queue before the owner observes
+                    # the close command. Record it instead of failing again.
+                    if observed_pending_completions is not None:
+                        observed_pending_completions.append((strategy_ref, message))
+                    continue
+            if message[0] == "call_error":
+                expected = (
+                    allowed_call_errors.get(strategy_ref)
+                    if allowed_call_errors is not None
+                    else None
+                )
+                if expected is not None and message[1:] == expected:
+                    interrupted_calls.append((strategy_ref, message))
+                    continue
+            failures.append(
+                AssertionError(f"unexpected {strategy_ref} client shutdown message: {message!r}")
+            )
+        if strategy_ref not in closed_threads:
+            failures.append(
+                AssertionError(f"{strategy_ref} client owner did not report normal close")
+            )
+    if failures:
+        first_failure = failures[0]
+        add_note = getattr(first_failure, "add_note", None)
+        if callable(add_note):
+            for additional in failures[1:]:
+                add_note(
+                    f"additional client cleanup failure: {type(additional).__name__}: {additional}"
+                )
+        raise first_failure
+    return tuple(interrupted_calls)
 
 
 @pytest.mark.integration
@@ -1761,5 +2055,582 @@ def test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen(
                 assert execution.get(second_leg_id, scope=execution_scope) is None
             else:
                 assert execution.get(second_leg_id, scope=execution_scope) is None
+        finally:
+            execution.close()
+
+
+@pytest.mark.integration
+def test_expired_unclaimed_release_and_dispatched_unknown_hold_across_coordinator_crash(
+    tmp_path: Path,
+) -> None:
+    """Recover only unclaimed expired vectors; keep dispatched UNKNOWN held."""
+
+    metadata_reference_ns = time.time_ns()
+    account_paths = {
+        account: {
+            name: str(tmp_path / f"{account}-{name}.sqlite3")
+            for name in (
+                "registry",
+                "provider",
+                "execution",
+                "risk_order_journal",
+                "proof",
+                "risk_gate",
+                "accepted",
+                "group_authority",
+            )
+        }
+        for account in _ACCOUNTS
+    }
+    coordinator_paths = {
+        "registry": str(tmp_path / "coordinator-registry.sqlite3"),
+        "groups": str(tmp_path / "coordinator-groups.sqlite3"),
+        "run_bindings": str(tmp_path / "coordinator-run-bindings.sqlite3"),
+    }
+    account_endpoints = {account: _endpoint() for account in _ACCOUNTS}
+    account_keys = {account: zmq.curve_keypair() for account in _ACCOUNTS}
+    coordinator_keys = zmq.curve_keypair()
+    coordinator_client_keys = zmq.curve_keypair()
+    strategy_keys = {strategy: zmq.curve_keypair() for strategy in _STRATEGIES}
+    account_configs = {
+        account: _account_service_config(
+            account, account_endpoints[account], f"arb02-account-server-{account}"
+        )
+        for account in _ACCOUNTS
+    }
+    context = multiprocessing.get_context("spawn")
+    provider_entered = context.Event()
+    provider_release = context.Event()
+    reservation_committed = {account: context.Event() for account in _ACCOUNTS}
+    reservation_reply_entered = context.Event()
+    reservation_reply_release = context.Event()
+    reservation_events = context.Queue()
+    account_processes: dict[str, Any] = {}
+    account_controls: dict[str, Any] = {}
+    coordinator_process = None
+    coordinator_control = None
+    client_threads: dict[str, threading.Thread] = {}
+    client_commands: dict[str, queue.Queue] = {}
+    client_results: dict[str, queue.Queue] = {}
+    expired_snapshot: GroupOrderSnapshot | None = None
+    unknown_snapshot: GroupOrderSnapshot | None = None
+    unknown_recovered: GroupOrderSnapshot | None = None
+    cleanup_interrupted_calls: list[tuple[str, tuple[Any, ...]]] = []
+    cleanup_pending_completions: list[tuple[str, tuple[Any, ...]]] = []
+
+    try:
+        # Account Hosts and the first coordinator are fully ready before either
+        # short absolute request deadline is created.
+        for account_ref in _ACCOUNTS:
+            parent_control, child_control = context.Pipe(duplex=True)
+            process = None
+            process_started = False
+            try:
+                process = context.Process(
+                    name=f"arb02-account-host-{account_ref}",
+                    target=_account_host_process,
+                    args=(
+                        child_control,
+                        account_configs[account_ref],
+                        account_paths[account_ref]["registry"],
+                        account_paths[account_ref],
+                        account_ref,
+                        account_keys[account_ref][0],
+                        account_keys[account_ref][1],
+                        coordinator_client_keys[0],
+                        metadata_reference_ns,
+                        ("open",) if account_ref == "account-a" else ("filled",),
+                        provider_entered,
+                        provider_release,
+                        _GROUP_EXPIRED_UNCLAIMED,
+                        reservation_committed[account_ref],
+                        reservation_reply_entered if account_ref == "account-b" else None,
+                        reservation_reply_release if account_ref == "account-b" else None,
+                        reservation_events,
+                    ),
+                )
+                process.start()
+                process_started = True
+                child_control.close()
+                ready = _receive(parent_control)
+                assert ready == ("ready", account_endpoints[account_ref])
+            except BaseException as startup_error:
+                cleanup_error = _cleanup_failed_host_start(
+                    process,
+                    parent_control,
+                    child_control,
+                    process_started=process_started,
+                )
+                if cleanup_error is not None:
+                    add_note = getattr(startup_error, "add_note", None)
+                    if callable(add_note):
+                        add_note(
+                            "account Host startup cleanup also failed: "
+                            f"{type(cleanup_error).__name__}"
+                        )
+                raise
+            assert process is not None
+            account_processes[account_ref] = process
+            account_controls[account_ref] = parent_control
+
+        (
+            coordinator_process,
+            coordinator_control,
+            coordinator_endpoint,
+            upstream_bindings,
+        ) = _start_coordinator(
+            context,
+            account_configs,
+            coordinator_paths,
+            account_endpoints,
+            {account: account_keys[account][0] for account in _ACCOUNTS},
+            coordinator_keys,
+            coordinator_client_keys,
+            strategy_keys,
+            metadata_reference_ns,
+        )
+        _activate_owner_routes(account_controls, upstream_bindings)
+        client_threads, client_commands, client_results = _new_client_threads(
+            coordinator_endpoint,
+            coordinator_keys[0],
+            strategy_keys,
+        )
+
+        expired_request = _group_request(
+            _GROUP_EXPIRED_UNCLAIMED,
+            _STRATEGIES[0],
+            metadata_reference_ns,
+            lifetime_ns=6_000_000_000,
+        )
+        client_commands[_STRATEGIES[0]].put(("submit", _GROUP_EXPIRED_UNCLAIMED, expired_request))
+        expired_started = _next_client_message(client_results[_STRATEGIES[0]], "started")
+        assert expired_started[1:3] == ("submit", _GROUP_EXPIRED_UNCLAIMED)
+        assert reservation_committed["account-a"].wait(5)
+        assert reservation_committed["account-b"].wait(5)
+        assert reservation_reply_entered.wait(5), (
+            "account B did not reach the post-commit/pre-reply crash barrier"
+        )
+        assert not provider_entered.is_set(), "an unclaimed reservation reached a provider"
+        assert _provider_snapshot(Path(account_paths["account-a"]["provider"])) == (
+            (),
+            {"order_queries": 0, "fill_queries": 0},
+        )
+
+        # B's real Risk vector and local accepted binding have committed. The
+        # account handler withholds only its RPC response while the newly
+        # created immutable deadline passes; then only this test's coordinator
+        # process is crashed.
+        _wait_for_deadline(expired_request["deadline_ns"])
+        expired_coordinator_exit = _terminate_test_coordinator(
+            coordinator_process, coordinator_control
+        )
+        coordinator_process = None
+        coordinator_control = None
+        assert expired_coordinator_exit != 0
+        reservation_reply_release.set()
+        for account_ref in _ACCOUNTS:
+            account_controls[account_ref].send(("status",))
+            status = _receive(account_controls[account_ref])
+            assert status == (
+                "status",
+                (),
+                {"order_queries": 0, "fill_queries": 0},
+            )
+
+        lost_reply = _next_client_call_outcome(client_results[_STRATEGIES[0]])
+        assert lost_reply == (
+            "call_error",
+            "submit",
+            _GROUP_EXPIRED_UNCLAIMED,
+            "RequestOutcomeUnknownError",
+            None,
+        )
+        _close_client_threads(client_threads, client_commands, client_results)
+        client_threads = {}
+        client_commands = {}
+        client_results = {}
+
+        # Reopen the same group/run-binding stores. Exact replay proves each
+        # persisted vector is unclaimed before issuing one explicit release.
+        (
+            coordinator_process,
+            coordinator_control,
+            coordinator_endpoint,
+            upstream_bindings,
+        ) = _start_coordinator(
+            context,
+            account_configs,
+            coordinator_paths,
+            account_endpoints,
+            {account: account_keys[account][0] for account in _ACCOUNTS},
+            coordinator_keys,
+            coordinator_client_keys,
+            strategy_keys,
+            metadata_reference_ns,
+        )
+        _activate_owner_routes(account_controls, upstream_bindings)
+        client_threads, client_commands, client_results = _new_client_threads(
+            coordinator_endpoint,
+            coordinator_keys[0],
+            strategy_keys,
+        )
+        client_commands[_STRATEGIES[0]].put(("submit", _GROUP_EXPIRED_UNCLAIMED, expired_request))
+        _next_client_message(client_results[_STRATEGIES[0]], "started")
+        expired_done = _next_client_message(client_results[_STRATEGIES[0]], "done")
+        expired_snapshot = _snapshot_from_reply(expired_done[5])
+        assert expired_snapshot.state is GroupOrderState.REJECTED_BEFORE_DISPATCH
+        assert expired_snapshot.error_code == "reservation_not_active"
+        assert expired_snapshot.budget_reservation is not None
+        assert expired_snapshot.budget_reservation.state is GroupBudgetReservationState.RELEASED
+        assert all(item.phase.value == "RELEASED" for item in expired_snapshot.reservations)
+        assert all(leg.submitted_intent is None for leg in expired_snapshot.legs)
+        client_commands[_STRATEGIES[0]].put(("query", _GROUP_EXPIRED_UNCLAIMED, None))
+        _next_client_message(client_results[_STRATEGIES[0]], "started")
+        queried = _next_client_message(client_results[_STRATEGIES[0]], "done")
+        assert _query_reply_snapshot(queried[5]) == expired_snapshot
+
+        # The same portfolio does not grant one strategy visibility into the
+        # other strategy's durable run binding. The second client must remain
+        # unable to query the first client's reservation after reopen.
+        client_commands[_STRATEGIES[1]].put(("query", _GROUP_EXPIRED_UNCLAIMED, None))
+        _next_client_message(client_results[_STRATEGIES[1]], "started")
+        denied_query = _next_client_message(client_results[_STRATEGIES[1]], "done")
+        assert denied_query[5] == {
+            "ok": False,
+            "code": "GROUP_BINDING_UNAVAILABLE",
+            "result": {},
+        }
+        assert all(
+            not _provider_snapshot(Path(account_paths[account]["provider"]))[0]
+            for account in _ACCOUNTS
+        )
+
+        _close_client_threads(client_threads, client_commands, client_results)
+        client_threads = {}
+        client_commands = {}
+        client_results = {}
+        _stop_process(coordinator_process, coordinator_control)
+        coordinator_process = None
+        coordinator_control = None
+
+        # The second branch dispatches one real synthetic provider write while
+        # the account owner blocks before returning its observation. Crossing
+        # its deadline cannot release its Risk claim or portfolio hold.
+        account_controls["account-a"].send(("arm-incomplete-fills",))
+        assert _receive(account_controls["account-a"]) == ("armed", "account-a")
+        client_commands, client_results = {}, {}
+        (
+            coordinator_process,
+            coordinator_control,
+            coordinator_endpoint,
+            upstream_bindings,
+        ) = _start_coordinator(
+            context,
+            account_configs,
+            coordinator_paths,
+            account_endpoints,
+            {account: account_keys[account][0] for account in _ACCOUNTS},
+            coordinator_keys,
+            coordinator_client_keys,
+            strategy_keys,
+            metadata_reference_ns,
+        )
+        _activate_owner_routes(account_controls, upstream_bindings)
+        client_threads, client_commands, client_results = _new_client_threads(
+            coordinator_endpoint,
+            coordinator_keys[0],
+            strategy_keys,
+        )
+        # Start the short absolute deadline only after every owner, coordinator,
+        # route, and client runtime needed by this branch is ready.
+        unknown_request = _group_request(
+            _GROUP_UNKNOWN_AFTER_TTL,
+            _STRATEGIES[0],
+            metadata_reference_ns,
+            lifetime_ns=6_000_000_000,
+        )
+        client_commands[_STRATEGIES[0]].put(("submit", _GROUP_UNKNOWN_AFTER_TTL, unknown_request))
+        unknown_started = _next_client_message(client_results[_STRATEGIES[0]], "started")
+        assert unknown_started[1:3] == ("submit", _GROUP_UNKNOWN_AFTER_TTL)
+        assert provider_entered.wait(10), "the claimed group never reached its provider write"
+        # The write is durably committed while the feed still waits at its
+        # release barrier. The barrier outlives both the 5s account writer
+        # lease and the 6s group deadline, so when the write resumes the
+        # expired writer fence makes the proof guard mark the attempt UNKNOWN
+        # (GROUP_OWNER_FENCE_UNAVAILABLE) before any fill observation. The
+        # armed incomplete-fills fault therefore stays pending, which is the
+        # positive evidence that no get_deals observation ever ran.
+        writes_at_dispatch, counters_at_dispatch = _provider_snapshot_with_pending_faults(
+            Path(account_paths["account-a"]["provider"]),
+            ("incomplete_next_fills",),
+        )
+        assert len(writes_at_dispatch) == 1
+        assert counters_at_dispatch["fill_queries"] == 0
+        _wait_for_deadline(unknown_request["deadline_ns"])
+        provider_release.set()
+        unknown_done = _next_client_message(client_results[_STRATEGIES[0]], "done", timeout=15)
+        unknown_snapshot = _unknown_submit_snapshot_from_outcome(
+            unknown_done, _GROUP_UNKNOWN_AFTER_TTL
+        )
+        unknown_leg = next(leg for leg in unknown_snapshot.legs if leg.leg_id == "leg-a")
+
+        _close_client_threads(client_threads, client_commands, client_results)
+        client_threads = {}
+        client_commands = {}
+        client_results = {}
+        _stop_process(coordinator_process, coordinator_control)
+        coordinator_process = None
+        coordinator_control = None
+
+        # A normal close/reopen starts a fresh coordinator epoch over the same
+        # SQLite stores. The dispatched-UNKNOWN hold is deliberately preserved,
+        # so the account authority refuses every coordinator generation change
+        # while that hold exists (GroupAuthorityBusyError: a dispatch hold
+        # blocks coordinator change; only a trusted verifier proof may release
+        # it first). Query is pure and the exact same-ID submit only reconciles
+        # the original child ID through the read-only order route, so this
+        # phase performs no owner-route activation; nothing may create a second
+        # provider write or release the hold.
+        (
+            coordinator_process,
+            coordinator_control,
+            coordinator_endpoint,
+            upstream_bindings,
+        ) = _start_coordinator(
+            context,
+            account_configs,
+            coordinator_paths,
+            account_endpoints,
+            {account: account_keys[account][0] for account in _ACCOUNTS},
+            coordinator_keys,
+            coordinator_client_keys,
+            strategy_keys,
+            metadata_reference_ns,
+        )
+        client_threads, client_commands, client_results = _new_client_threads(
+            coordinator_endpoint,
+            coordinator_keys[0],
+            strategy_keys,
+        )
+        client_commands[_STRATEGIES[0]].put(("query", _GROUP_UNKNOWN_AFTER_TTL, None))
+        _next_client_message(client_results[_STRATEGIES[0]], "started")
+        unknown_query = _next_client_message(client_results[_STRATEGIES[0]], "done")
+        assert _query_reply_snapshot(unknown_query[5]) == unknown_snapshot
+        client_commands[_STRATEGIES[0]].put(("submit", _GROUP_UNKNOWN_AFTER_TTL, unknown_request))
+        _next_client_message(client_results[_STRATEGIES[0]], "started")
+        unknown_replay_done = _next_client_message(
+            client_results[_STRATEGIES[0]], "done", timeout=15
+        )
+        unknown_recovered = _snapshot_from_reply(unknown_replay_done[5])
+        assert unknown_recovered.state is GroupOrderState.RECOVERY_REQUIRED
+        assert unknown_recovered.budget_reservation is not None
+        assert unknown_recovered.budget_reservation.state is GroupBudgetReservationState.HELD
+        recovered_leg = next(leg for leg in unknown_recovered.legs if leg.leg_id == "leg-a")
+        assert recovered_leg.submitted_intent == unknown_leg.submitted_intent
+        assert recovered_leg.child_status is not None
+        assert recovered_leg.child_status.state is ExecutionState.UNKNOWN
+        assert all(
+            leg.submitted_intent is None for leg in unknown_recovered.legs if leg.leg_id != "leg-a"
+        )
+        # The recovery replay is read-only: no second provider write and no
+        # order/fill query may happen while the UNKNOWN hold is unresolved,
+        # and the never-consumed fault proves no get_deals observation ran.
+        final_writes, final_counters = _provider_snapshot_with_pending_faults(
+            Path(account_paths["account-a"]["provider"]),
+            ("incomplete_next_fills",),
+        )
+        assert len(final_writes) == 1
+        assert final_counters == {"order_queries": 0, "fill_queries": 0}
+
+        _close_client_threads(client_threads, client_commands, client_results)
+        client_threads = {}
+        client_commands = {}
+        client_results = {}
+        _stop_process(coordinator_process, coordinator_control)
+        coordinator_process = None
+        coordinator_control = None
+    finally:
+        reservation_reply_release.set()
+        provider_release.set()
+        primary_error = sys.exc_info()[1]
+        cleanup_error: BaseException | None = None
+        try:
+            _cleanup_group_hosts(
+                provider_release=provider_release,
+                client_threads=client_threads,
+                client_commands=client_commands,
+                client_results=client_results,
+                coordinator_process=coordinator_process,
+                coordinator_control=coordinator_control,
+                account_processes=account_processes,
+                account_controls=account_controls,
+                close_client_threads=_close_client_threads,
+                stop_process=_stop_process,
+                expected_interrupted_calls={
+                    _STRATEGIES[0]: (
+                        "submit",
+                        _GROUP_EXPIRED_UNCLAIMED,
+                        "RequestOutcomeUnknownError",
+                        None,
+                    )
+                },
+                observed_interrupted_calls=cleanup_interrupted_calls,
+                allowed_pending_completions={
+                    _STRATEGIES[0]: (
+                        ("submit", _GROUP_EXPIRED_UNCLAIMED),
+                        ("query", _GROUP_EXPIRED_UNCLAIMED),
+                        ("submit", _GROUP_UNKNOWN_AFTER_TTL),
+                        ("query", _GROUP_UNKNOWN_AFTER_TTL),
+                    ),
+                    _STRATEGIES[1]: (("query", _GROUP_EXPIRED_UNCLAIMED),),
+                },
+                observed_pending_completions=cleanup_pending_completions,
+            )
+        except BaseException as error:
+            cleanup_error = error
+
+        if cleanup_interrupted_calls:
+            observed = tuple(item[1] for item in cleanup_interrupted_calls)
+            if primary_error is None and cleanup_error is None:
+                cleanup_error = AssertionError(
+                    "cleanup consumed an interrupted submit that the test did not assert: "
+                    f"{observed!r}"
+                )
+            elif primary_error is not None:
+                add_note = getattr(primary_error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"cleanup observed the exact expected lost reply: {observed!r}")
+
+        if cleanup_pending_completions:
+            drained = tuple(
+                (strategy_ref, message[1:3])
+                for strategy_ref, message in cleanup_pending_completions
+            )
+            drain_error: BaseException | None = None
+            for _strategy_ref, message in cleanup_pending_completions:
+                if message[1:3] == ("submit", _GROUP_UNKNOWN_AFTER_TTL):
+                    try:
+                        _unknown_submit_snapshot_from_outcome(message, _GROUP_UNKNOWN_AFTER_TTL)
+                    except BaseException as error:
+                        drain_error = error
+                        break
+            if primary_error is None and cleanup_error is None:
+                if drain_error is not None:
+                    cleanup_error = drain_error
+                else:
+                    cleanup_error = AssertionError(
+                        "cleanup drained pending client completions that the test did not "
+                        f"assert: {drained!r}"
+                    )
+            elif primary_error is not None:
+                add_note = getattr(primary_error, "add_note", None)
+                if callable(add_note):
+                    drain_note = f"cleanup drained pending client completions: {drained!r}"
+                    if drain_error is not None:
+                        drain_note = f"{drain_note}; validation failed: {drain_error!r}"
+                    add_note(drain_note)
+            elif drain_error is not None:
+                add_note = getattr(cleanup_error, "add_note", None)
+                if callable(add_note):
+                    add_note(f"drained completion validation failed: {drain_error!r}")
+
+        if cleanup_error is not None:
+            if primary_error is None:
+                raise cleanup_error
+            add_note = getattr(primary_error, "add_note", None)
+            if callable(add_note):
+                add_note(
+                    "test-owned cleanup also failed after all actions were attempted: "
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                )
+
+    assert (
+        expired_snapshot is not None
+        and unknown_snapshot is not None
+        and unknown_recovered is not None
+    )
+    groups = SqliteOrderGroupStore(coordinator_paths["groups"])
+    try:
+        assert groups.get(_PORTFOLIO, _GROUP_EXPIRED_UNCLAIMED) == expired_snapshot
+        assert groups.get(_PORTFOLIO, _GROUP_UNKNOWN_AFTER_TTL) == unknown_recovered
+    finally:
+        groups.close()
+
+    expected_reservation_calls = sorted(
+        [
+            (account, group_id)
+            for group_id in (_GROUP_EXPIRED_UNCLAIMED, _GROUP_UNKNOWN_AFTER_TTL)
+            for account in _ACCOUNTS
+        ]
+    )
+    observed_reservation_calls = [reservation_events.get(timeout=5) for _ in range(4)]
+    assert sorted(observed_reservation_calls) == expected_reservation_calls
+    with pytest.raises(queue.Empty):
+        reservation_events.get(timeout=0.1)
+
+    for account_ref in _ACCOUNTS:
+        risk_scope = AccountScope("fixture", f"provider-{account_ref}", "simulation")
+        gate = DurableRiskGate(account_paths[account_ref]["risk_gate"], _risk_policy())
+        try:
+            released = gate.read_group_vector_snapshot(risk_scope, _GROUP_EXPIRED_UNCLAIMED)
+            assert all(
+                leg.state.value == "expired" and not leg.claimed and not leg.resolved
+                for leg in released.legs
+            )
+            held = gate.read_group_vector_snapshot(risk_scope, _GROUP_UNKNOWN_AFTER_TTL)
+            assert len(held.legs) == 1
+            held_leg = held.legs[0]
+            assert held_leg.expires_at_ns <= time.time_ns()
+            assert held_leg.resolved is False
+            # An unresolved claimed leg keeps its raw status and the freeze
+            # latch: no TTL may settle it while the outcome is unproven.
+            assert held_leg.state.value == "active"
+            assert held_leg.claimed is (account_ref == "account-a")
+        finally:
+            gate.close()
+
+        if account_ref == "account-a":
+            writes, counters = _provider_snapshot_with_pending_faults(
+                Path(account_paths[account_ref]["provider"]),
+                ("incomplete_next_fills",),
+            )
+            assert len(writes) == 1
+            assert counters == {"order_queries": 0, "fill_queries": 0}
+        else:
+            writes, counters = _provider_snapshot(Path(account_paths[account_ref]["provider"]))
+            assert writes == ()
+            assert counters == {"order_queries": 0, "fill_queries": 0}
+
+        execution = SqliteExecutionStore(account_paths[account_ref]["execution"])
+        try:
+            expired_first = execution.get(
+                group_leg_intent_id(_GROUP_EXPIRED_UNCLAIMED, "leg-a"),
+                scope=_execution_scope(account_ref, _STRATEGIES[0]),
+            )
+            expired_second = execution.get(
+                group_leg_intent_id(_GROUP_EXPIRED_UNCLAIMED, "leg-b"),
+                scope=_execution_scope(account_ref, _STRATEGIES[0]),
+            )
+            assert expired_first is None and expired_second is None
+            if account_ref == "account-a":
+                dispatched = execution.get(
+                    group_leg_intent_id(_GROUP_UNKNOWN_AFTER_TTL, "leg-a"),
+                    scope=_execution_scope(account_ref, _STRATEGIES[0]),
+                )
+                # The fence was lost before the observation phase, so the
+                # durable record remains DISPATCHING: no lease can move it,
+                # and the UNKNOWN outcome lives in the proof journal.
+                assert dispatched is not None
+                assert dispatched.state is ExecutionState.DISPATCHING
+                assert dispatched.unknown_reason is None
+                assert dispatched.dispatch_attempts == 1
+            else:
+                assert (
+                    execution.get(
+                        group_leg_intent_id(_GROUP_UNKNOWN_AFTER_TTL, "leg-b"),
+                        scope=_execution_scope(account_ref, _STRATEGIES[0]),
+                    )
+                    is None
+                )
         finally:
             execution.close()

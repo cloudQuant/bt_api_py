@@ -1,0 +1,79 @@
+{
+  "schema": "iteration10-arb02-recovery-overlay-v1",
+  "artifact_id": "iteration10-arb02-group-budget-fixed-source-r11",
+  "base_manifest": "source-manifest-base.json",
+  "base_manifest_sha256": "8f8957753fe23142b03a7a266a17c02474729478bae15e3cdc103e44ad7b420b",
+  "sdk_commit": "c1d9d6926f2e1151ef487fff419329d2ca13af8e",
+  "gitlinks": {
+    "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api/bt_api_execution": "12372d82bb5c871e8a46c39c3daed9f85edccb0c",
+    "bt_api/bt_api_risk": "c6fcacda5efb5153d8c3e2be7b17f335f2732a9e",
+    "bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "overlay": [
+    {
+      "package": "sdk",
+      "path": "bt_api_py/service_group_reservations.py",
+      "source_path": "D:\\bt_api_py\\bt_api_py\\service_group_reservations.py",
+      "size": 35992,
+      "sha256": "675a54b731fdcbbca61078377f42f9e7bde8205f09a4aa3540e9f379e1487169",
+      "reason": "SDK group reservation adapter release projection"
+    },
+    {
+      "package": "sdk",
+      "path": "tests/unit/test_service_group_reservations.py",
+      "source_path": "D:\\bt_api_py\\tests\\unit\\test_service_group_reservations.py",
+      "size": 28757,
+      "sha256": "ebbdad3854f3f3dd90587d1185da949039a621ecd49fd2f101731d1328bb7861",
+      "reason": "Risk expiry/release projection regressions"
+    },
+    {
+      "package": "sdk",
+      "path": "tests/integration/test_arb02_group_budget_service.py",
+      "source_path": "D:\\bt_api_py\\tests\\integration\\test_arb02_group_budget_service.py",
+      "size": 109556,
+      "sha256": "b24e4f998963a6b9feb6333d05a22aac1125584a097d4d01b2d2f1aa8859065a",
+      "reason": "R11: the deadline-crossed dispatched leg loses its 5s writer lease before the fill-observation phase, so the production proof guard correctly journals the attempt as UNKNOWN (GROUP_OWNER_FENCE_UNAVAILABLE) without consuming the armed incomplete-fills fault. The fixture now asserts exactly those on-site semantics: pending-fault snapshot with 1 write and 0/0 provider counters, durable record stays DISPATCHING (unknown_reason None), claimed leg stays raw-status active with the freeze latch, budget HELD with RECOVERY_REQUIRED, and the read-only same-ID replay adds no second write or query."
+    },
+    {
+      "package": "execution",
+      "path": "src/bt_api_execution/group_coordinator.py",
+      "source_path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\group_coordinator.py",
+      "size": 66514,
+      "sha256": "61b8508d3cdde0b51877229b6065517e62132afe1c55d8fe5e31befaadb2e2ad",
+      "reason": "expired unclaimed coordinator recovery and release lifecycle"
+    },
+    {
+      "package": "execution",
+      "path": "tests/test_group_coordinator.py",
+      "source_path": "D:\\bt_api_py\\bt_api\\bt_api_execution\\tests\\test_group_coordinator.py",
+      "size": 34776,
+      "sha256": "fd7df6bccabd51f16cd50bff3c4f974c6ff9f67ebd173a36d9e2c8d70b047c89",
+      "reason": "coordinator expiry/release focused tests"
+    },
+    {
+      "package": "sdk",
+      "path": "bt_api_py/service_execution_group.py",
+      "source_path": "D:\\bt_api_py\\bt_api_py\\service_execution_group.py",
+      "size": 86687,
+      "sha256": "5606785cd59711c03b57dab1de34f9dd6ed542d1a4034819fec5d1883c75702d",
+      "reason": "exact expired same-ID submit replay after coordinator-store reopen"
+    },
+    {
+      "package": "sdk",
+      "path": "tests/unit/test_service_execution_group.py",
+      "source_path": "D:\\bt_api_py\\tests\\unit\\test_service_execution_group.py",
+      "size": 71242,
+      "sha256": "24010a4937bf262a54556c1e0679932c589828d1fc4ee618b37c76878d44a3c3",
+      "reason": "real Registry + SQLite exact expired replay regression"
+    }
+  ],
+  "selected_node": "tests/integration/test_arb02_group_budget_service.py::test_expired_unclaimed_release_and_dispatched_unknown_hold_across_coordinator_crash",
+  "excluded_accepted_node": "tests/integration/test_arb02_group_budget_service.py::test_two_strategy_clients_compete_for_one_portfolio_hold_across_reopen",
+  "host_started": false,
+  "overlay_policy": "All seven overlay paths are unchanged from R10-r2 except the refreshed integration-test version: R11 only aligns the terminal fixture assertions with the on-site semantics of the fence-lost deadline-crossed dispatch (UNKNOWN before any fill observation; the still pending fault proves it). Every archive byte and every other candidate byte, including the other six overlays, is preserved byte-for-byte from R10-r2.",
+  "parent_artifact": {
+    "artifact_id": "iteration10-arb02-group-budget-fixed-source-r10-r2",
+    "source_manifest_sha256": "5ce287eb7e4045ee5e215a57623f8b19b9b1edc00953c17de23c01678e44142a"
+  }
+}

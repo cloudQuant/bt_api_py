@@ -1,0 +1,24 @@
+{
+  "pytest_exit": 1,
+  "finished_utc": "2026-10-16T01:01:59.409772+00:00",
+  "source_count": 1808,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "833b101c09b80850ffaf2ddf5a68c36a8ecb8060",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "12372d82bb5c871e8a46c39c3daed9f85edccb0c",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "756ffbd42caac1618f286239dedecce278d781d2",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "833b101c09b80850ffaf2ddf5a68c36a8ecb8060",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "12372d82bb5c871e8a46c39c3daed9f85edccb0c",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "756ffbd42caac1618f286239dedecce278d781d2",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "cd2e3002166e5e06053dfe92945604f726c8370e28b7bde878ba86e0063c787a",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FIXED_SOURCE_THREE_SERVICEHOST_CURVE_SYNTHETIC_PROVIDER_TTL_CRASH_UNKNOWN_SCENARIO_ONLY"
+}

@@ -1,0 +1,28 @@
+{
+  "artifact_id": "iteration10-arb02-group-budget-fixed-source-r11",
+  "parent_artifact": {
+    "artifact_id": "iteration10-arb02-group-budget-fixed-source-r10-r2",
+    "source_manifest_sha256": "5ce287eb7e4045ee5e215a57623f8b19b9b1edc00953c17de23c01678e44142a"
+  },
+  "source_manifest_sha256": "fa6e9bc161f61550a6b0431e0223ef658078ec62b2cbdc0dd05cb8d4952118ee",
+  "focused_qa_sha256": "a749673a2cc4c1f94016cca8cd75b441f38066eb4c9c5c70952c4db4ef1846e0",
+  "integration_test_sha256": "b24e4f998963a6b9feb6333d05a22aac1125584a097d4d01b2d2f1aa8859065a",
+  "source_count": 1808,
+  "candidate_prepared": true,
+  "host_or_pytest_run": false,
+  "prior_r10_r2_result": {
+    "spec": "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r10-r2\\focused-qa.json",
+    "spec_sha256": "42ddf821d85e72509ab6a8732796a2e66be247ed14c0f9d7fb4b69b0f9f953e3",
+    "output": "D:\\temp\\iteration10-arb02-group-budget-fixed-source-r10-r2-qa-output",
+    "pytest_exit_code": 1,
+    "summary": "1 failed in 42.21s; the final replay phase's strict provider snapshot asserted zero faults while the armed incomplete-fills fault was still pending (test line 2431): the deadline-crossed write lost its 5s writer lease before the observation phase, so the guard marked ATTEMPT_UNKNOWN without consuming the fault."
+  },
+  "classification": "The R10-r2 failure is designed guard behavior, not a production defect: bt_api_py/service_execution_group_proofs.py submit() re-checks the writer fence (_assert_current) after the blocked make_order returns; the expired lease raises WriterLeaseUnavailable (bt_api/bt_api_execution/src/bt_api_execution/store.py _assert_active_writer_lease), which is mapped to GROUP_OWNER_FENCE_UNAVAILABLE and _mark_unknown, so query_order/get_deals are unreachable and the fault stays pending. group_coordinator.py records the UNKNOWN receipt and keeps RECOVERY_REQUIRED with the budget HELD (dispatched legs are never released by the deadline).",
+  "hypothesis": "The R10-r2 failure is a fixture defect: the terminal assertions still described the observation-phase timeline. R11 aligns only the fixture with the verified on-site semantics (1 write; 0 order queries; 0 fill queries; fault pending; record DISPATCHING; claimed leg raw-status active with freeze latch; budget HELD).",
+  "r11_local_results": {
+    "helpers": "2 passed in 1.61s; exit 0",
+    "focused_node_scratch": "1 passed in 39.46s; exit 0"
+  },
+  "scope_limit": "A fixed-source candidate only; no Host/process was started by this build and no formal ARB02 pass is claimed.",
+  "prepared_utc": "2026-10-16T01:17:45.952210+00:00"
+}

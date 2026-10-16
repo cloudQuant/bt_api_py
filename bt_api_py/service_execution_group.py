@@ -523,15 +523,23 @@ class GroupCoordinatorService:
                 return self._query(registration, target, arguments)
             if target.portfolio_budget_policy is None or target.budget_quote_builder is None:
                 return _failure("GROUP_BUDGET_POLICY_REQUIRED")
-            request = self._parse_request(registration, target, arguments)
-            # Persist the Registry-derived run before package acceptance. An
-            # exact retry after a restart returns the original normalized
-            # request (including server receive time) for fingerprint equality.
-            run_binding = self._run_bindings.bind(
-                registration,
-                request,
-                coordinator_principal_ref=self._identity.principal_ref,
-            )
+            run_binding = self._existing_submit_binding(registration, arguments)
+            if run_binding is None:
+                request = self._parse_request(registration, target, arguments)
+                # Persist the Registry-derived run before package acceptance.
+                run_binding = self._run_bindings.bind(
+                    registration,
+                    request,
+                    coordinator_principal_ref=self._identity.principal_ref,
+                )
+            else:
+                # A retry may arrive after the immutable group deadline. Only
+                # a current, authorized registration may recover an existing
+                # binding, and its complete business payload must match the
+                # previously persisted request before owner recovery advances
+                # anything. New IDs still take the strict fresh-deadline path
+                # above; no deadline, ID, quote, or reservation is replaced.
+                self._assert_exact_submit_replay(run_binding.request, arguments)
             call = _CoordinatorCall(registration, target_scope, target, run_binding)
             token = _CURRENT_COORDINATOR_CALL.set(call)
             try:
@@ -553,6 +561,77 @@ class GroupCoordinatorService:
             return _failure("GROUP_BINDING_UNAVAILABLE")
         except (TypeError, ValueError, KeyError):
             return _failure("INVALID_REQUEST")
+
+    def _existing_submit_binding(
+        self,
+        registration: ActiveRegistrationContext,
+        arguments: Mapping[str, Any],
+    ) -> GroupOriginRunBinding | None:
+        """Read an existing same-ID submit binding under the current grant."""
+
+        expected_keys = {"group_id", "deadline_ns", "first_leg_id", "legs"}
+        if not isinstance(arguments, Mapping) or set(arguments) != expected_keys:
+            return None
+        group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
+        return self._run_bindings.get_for_registration(
+            registration,
+            group_id,
+            coordinator_principal_ref=self._identity.principal_ref,
+            operation="groups.submit",
+        )
+
+    @staticmethod
+    def _assert_exact_submit_replay(
+        accepted: GroupOrderIntent,
+        arguments: Mapping[str, Any],
+    ) -> None:
+        """Require the replay body to equal the previously accepted business intent."""
+
+        if not isinstance(arguments, Mapping) or set(arguments) != {
+            "group_id",
+            "deadline_ns",
+            "first_leg_id",
+            "legs",
+        }:
+            raise ServiceExecutionGroupError("INVALID_REQUEST")
+        group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
+        first_leg_id = _reference(arguments["first_leg_id"], "FIRST_LEG_INVALID")
+        deadline_ns = arguments["deadline_ns"]
+        if type(deadline_ns) is not int or not 0 < deadline_ns <= _MAX_SQLITE_INTEGER:
+            raise ServiceExecutionGroupError("GROUP_DEADLINE_INVALID")
+        raw_legs = arguments["legs"]
+        if isinstance(raw_legs, (str, bytes)) or not isinstance(raw_legs, Sequence):
+            raise ServiceExecutionGroupError("GROUP_LEGS_INVALID")
+        if len(raw_legs) != len(accepted.legs):
+            raise ServiceExecutionGroupError("GROUP_LEGS_INVALID")
+        if (
+            group_id != accepted.group_id
+            or deadline_ns != accepted.deadline_ns
+            or first_leg_id != accepted.first_leg_id
+        ):
+            raise AcceptedGroupConflictError("submit replay changed its accepted group identity")
+        for raw_leg, planned in zip(raw_legs, accepted.legs, strict=True):
+            if not isinstance(raw_leg, Mapping) or set(raw_leg) != {
+                "leg_id",
+                "account_ref",
+                "intent",
+            }:
+                raise ServiceExecutionGroupError("GROUP_LEG_INVALID")
+            leg_id = _reference(raw_leg["leg_id"], "GROUP_LEG_INVALID")
+            account_ref = _reference(raw_leg["account_ref"], "GROUP_ACCOUNT_INVALID")
+            payload = raw_leg["intent"]
+            if not isinstance(payload, Mapping):
+                raise ServiceExecutionGroupError("GROUP_INTENT_INVALID")
+            try:
+                intent = order_intent_from_payload(payload)
+            except Exception:
+                raise ServiceExecutionGroupError("GROUP_INTENT_INVALID") from None
+            if (
+                leg_id != planned.leg_id
+                or account_ref != planned.account_ref
+                or intent.to_payload() != planned.maximum_intent.to_payload()
+            ):
+                raise AcceptedGroupConflictError("submit replay changed an accepted leg")
 
     def _build_budget_quote(
         self,

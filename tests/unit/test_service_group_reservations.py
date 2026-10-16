@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -12,27 +13,27 @@ from bt_api_execution.group_order_contracts import (
     GroupAccountReservationSnapshot,
     GroupReservationPhase,
 )
-from bt_api_py.service_execution_group_client import AcceptedGroupBindingStore
-from bt_api_py.service_group_reservations import (
-    GroupReservationTarget,
-    GroupReservationsService,
-)
-from bt_api_py.service_registry import (
-    ActiveRegistrationContext,
-    ServiceCallContext,
-    TrustedGroupReservationPolicy,
-)
 from bt_api_risk import (
+    INSTRUMENT_METADATA_DIGEST_TAG,
     AccountScope,
     DurableRiskAdmissionAdapter,
     DurableRiskGate,
-    INSTRUMENT_METADATA_DIGEST_TAG,
     InstrumentRiskAdmissionMapper,
     InstrumentRiskMetadata,
     InstrumentRiskRegistry,
     RiskPolicy,
 )
 
+from bt_api_py.service_execution_group_client import AcceptedGroupBindingStore
+from bt_api_py.service_group_reservations import (
+    GroupReservationsService,
+    GroupReservationTarget,
+)
+from bt_api_py.service_registry import (
+    ActiveRegistrationContext,
+    ServiceCallContext,
+    TrustedGroupReservationPolicy,
+)
 
 _PRINCIPAL = "coordinator-service"
 _INSTANCE = "risk-owner-a"
@@ -142,8 +143,15 @@ def _runtime(
     metadata: InstrumentRiskMetadata | None = None,
     seed_allocation: bool = True,
     account_limit: Decimal = Decimal("10000"),
+    risk_clock_seconds: list[float] | None = None,
 ):
     risk_scope = _RISK_SCOPE
+    gate_clock = None if risk_clock_seconds is None else lambda: risk_clock_seconds[0]
+    gate_clock_ns = (
+        None
+        if risk_clock_seconds is None
+        else lambda: int(risk_clock_seconds[0] * 1_000_000_000)
+    )
     gate = DurableRiskGate(
         tmp_path / gate_path,
         RiskPolicy(
@@ -154,6 +162,8 @@ def _runtime(
             require_strategy_allocation=True,
             notional_unit="USD",
         ),
+        clock=gate_clock,
+        clock_ns=gate_clock_ns,
     )
     if seed_allocation:
         gate.set_strategy_allocation(
@@ -292,6 +302,164 @@ def test_real_risk_vector_reserve_query_is_read_only_then_release_unclaimed(tmp_
             leg.state.value
             for leg in admission.read_group_vector_snapshot(_RISK_SCOPE, _GROUP_ID).legs
         } == {"released"}
+    finally:
+        _close_runtime(service, store, gate)
+
+
+def test_expired_unclaimed_release_returns_released_envelope_and_expired_risk_facts(
+    tmp_path,
+):
+    risk_clock_seconds = [time.time() + 2]
+    service, store, admission, gate, registration, metadata = _runtime(
+        tmp_path, risk_clock_seconds=risk_clock_seconds
+    )
+    deadline_ns = int(risk_clock_seconds[0] * 1_000_000_000) + 5_000_000_000
+    members = (
+        (
+            "leg-a",
+            _intent(
+                metadata,
+                group_id=_GROUP_ID,
+                leg_id="leg-a",
+                deadline_ns=deadline_ns,
+                side=Side.BUY,
+            ),
+        ),
+        (
+            "leg-b",
+            _intent(
+                metadata,
+                group_id=_GROUP_ID,
+                leg_id="leg-b",
+                deadline_ns=deadline_ns,
+                side=Side.SELL,
+            ),
+        ),
+    )
+    try:
+        reserved = service.handle(
+            "reservations.reserve",
+            context=registration.context,
+            arguments=_arguments(_GROUP_ID, deadline_ns, members),
+        )
+        assert reserved["ok"] is True
+        reserved_snapshot = GroupAccountReservationSnapshot.from_payload(reserved["result"])
+        assert reserved_snapshot.phase is GroupReservationPhase.ACTIVE
+
+        risk_clock_seconds[0] = deadline_ns / 1_000_000_000 + 1
+        released = service.handle(
+            "reservations.release",
+            context=registration.context,
+            arguments={
+                "origin_run_id": _RUN_ID,
+                "group_id": _GROUP_ID,
+                "reason": "release-after-expiry",
+            },
+        )
+        assert released["ok"] is True
+        released_snapshot = GroupAccountReservationSnapshot.from_payload(released["result"])
+        assert released_snapshot.phase is GroupReservationPhase.RELEASED
+        assert {leg.state for leg in released_snapshot.legs} == {"EXPIRED"}
+        assert all(not leg.claimed and not leg.resolved for leg in released_snapshot.legs)
+
+        risk_snapshot = admission.read_group_vector_snapshot(_RISK_SCOPE, _GROUP_ID)
+        assert {leg.state.name for leg in risk_snapshot.legs} == {"EXPIRED"}
+        assert all(not leg.claimed and not leg.resolved for leg in risk_snapshot.legs)
+
+        # A read-only query retains its existing Risk-state projection and
+        # does not rewrite the release receipt persisted by the effect call.
+        stored_before_query = _sqlite_rows(
+            tmp_path / "accepted-groups.sqlite3",
+            "SELECT binding_json, updated_at_ns FROM accepted_group_bindings",
+        )
+        queried = service.handle(
+            "reservations.query",
+            context=registration.context,
+            arguments={"origin_run_id": _RUN_ID, "group_id": _GROUP_ID},
+        )
+        assert queried["ok"] is True
+        query_snapshot = GroupAccountReservationSnapshot.from_payload(queried["result"])
+        assert query_snapshot.phase is GroupReservationPhase.DENIED
+        assert {leg.state for leg in query_snapshot.legs} == {"EXPIRED"}
+        assert _sqlite_rows(
+            tmp_path / "accepted-groups.sqlite3",
+            "SELECT binding_json, updated_at_ns FROM accepted_group_bindings",
+        ) == stored_before_query
+    finally:
+        _close_runtime(service, store, gate)
+
+
+def test_release_projection_rejects_active_mixed_and_claimed_legs(tmp_path):
+    service, store, admission, gate, registration, metadata = _runtime(tmp_path)
+    deadline_ns = time.time_ns() + 120_000_000_000
+    members = (
+        (
+            "leg-a",
+            _intent(
+                metadata,
+                group_id=_GROUP_ID,
+                leg_id="leg-a",
+                deadline_ns=deadline_ns,
+                side=Side.BUY,
+            ),
+        ),
+        (
+            "leg-b",
+            _intent(
+                metadata,
+                group_id=_GROUP_ID,
+                leg_id="leg-b",
+                deadline_ns=deadline_ns,
+                side=Side.SELL,
+            ),
+        ),
+    )
+    try:
+        reserved = service.handle(
+            "reservations.reserve",
+            context=registration.context,
+            arguments=_arguments(_GROUP_ID, deadline_ns, members),
+        )
+        assert reserved["ok"] is True
+        snapshot = GroupAccountReservationSnapshot.from_payload(reserved["result"])
+        binding = store.get_binding(
+            registration,
+            origin_run_id=_RUN_ID,
+            group_id=_GROUP_ID,
+            operation="reservations.release",
+        )
+        assert binding is not None and binding.reservation is not None
+        target = GroupReservationTarget(_RISK_SCOPE, admission)
+        first, second = snapshot.legs
+        expired = replace(first, state="EXPIRED")
+        released = replace(first, state="RELEASED")
+        claimed = replace(
+            first,
+            actual_intent_hash="a" * 64,
+            state="SETTLED",
+            claimed=True,
+        )
+
+        terminal = replace(
+            snapshot,
+            phase=GroupReservationPhase.DENIED,
+            legs=(expired, replace(second, state="RELEASED")),
+        )
+        projected = service._released_operation_projection(terminal, binding, target)
+        assert projected.phase is GroupReservationPhase.RELEASED
+        assert [leg.state for leg in projected.legs] == ["EXPIRED", "RELEASED"]
+
+        unsafe_snapshots = (
+            snapshot,
+            replace(snapshot, legs=(expired, second)),
+            replace(snapshot, legs=(released, second)),
+            replace(snapshot, legs=(claimed, second)),
+            replace(snapshot, legs=(claimed, replace(second, state="EXPIRED"))),
+        )
+        for candidate in unsafe_snapshots:
+            unchanged = service._released_operation_projection(candidate, binding, target)
+            assert unchanged is candidate
+            assert unchanged.phase is not GroupReservationPhase.RELEASED
     finally:
         _close_runtime(service, store, gate)
 

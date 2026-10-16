@@ -19,7 +19,14 @@ from types import MappingProxyType
 from typing import Any
 
 import pytest
-from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_base.service_protocol import (
+    WireEnvelope,
+    WireHeader,
+    WireIdentity,
+    WireMessageKind,
+    WireRole,
+    WireScope,
+)
 from bt_api_execution import (
     AccountScopedGroupAdmissionAdapter,
     ExecutionScope,
@@ -93,7 +100,11 @@ from bt_api_py.service_group_reservations import (
 )
 from bt_api_py.service_registry import (
     ActiveRegistrationContext,
+    PrincipalGrant,
+    ResourceGrant,
     ServiceCallContext,
+    ServiceCapability,
+    ServiceRegistry,
     TrustedGroupReservationPolicy,
     TrustedGroupResolutionPolicy,
     TrustedGroupWritePolicy,
@@ -699,6 +710,264 @@ def test_budget_denial_and_unsupported_builder_error_are_stable_and_pre_dispatch
         service.close()
         group_store.close()
         run_bindings.close()
+
+
+def test_exact_expired_group_submit_replay_uses_registry_binding_without_requoting(
+    tmp_path: Path,
+) -> None:
+    """A current Registry grant can replay the exact durable ID after its deadline.
+
+    The first request is durably rejected by the trusted budget policy, so the
+    test can exercise the persisted idempotency boundary without dispatching a
+    provider order or creating account reservations.
+    """
+
+    now_ns = [time.time_ns()]
+    stable_scope, target, fingerprints = _target(now_ns[0])
+    metadata = next(iter(target.accounts.values())).instruments["BTC-USDT"].metadata
+    policy, base_builder = _budget_binding(
+        metadata,
+        max_group_gross_notional=Decimal("1"),
+        max_active_gross_notional=Decimal("100000"),
+    )
+    quote_calls: list[tuple[str, int]] = []
+
+    def counted_builder(request, current_policy, *, now_ns: int):
+        quote_calls.append((request.group_id, now_ns))
+        return base_builder(request, current_policy, now_ns=now_ns)
+
+    target = replace(
+        target,
+        portfolio_budget_policy=policy,
+        budget_quote_builder=counted_builder,
+    )
+    runtime = _LoopbackRuntime(fingerprints)
+    service_path = tmp_path / "coordinator"
+    service_path.mkdir()
+    service, group_store, run_bindings = _make_service(
+        service_path, runtime, stable_scope, target, now_ns=now_ns
+    )
+
+    identity = WireIdentity(
+        WireRole.STRATEGY_CLIENT,
+        _STRATEGY_PRINCIPAL,
+        actor_ref=_STRATEGY,
+    )
+    registered_scope = replace(stable_scope, run_id=_RUN)
+    capability = ServiceCapability(
+        _COORDINATOR_INSTANCE,
+        "service.order_group_entry",
+        GROUP_COORDINATOR_OPERATIONS,
+        frozenset({"groups.submit"}),
+    )
+    resource = ResourceGrant(
+        _COORDINATOR_INSTANCE,
+        "service.order_group_entry",
+        _COORDINATOR_SCOPE_REF,
+        stable_scope,
+        GROUP_COORDINATOR_OPERATIONS,
+    )
+    registry = ServiceRegistry(
+        tmp_path / "registry.sqlite3",
+        service_id="group-coordinator-test",
+        capabilities=(capability,),
+        grants={_STRATEGY_PRINCIPAL: (PrincipalGrant(identity, (resource,)),)},
+        policy_version="policy-v1",
+        requirements_version="requirements-v1",
+        lease_seconds=7_200,
+        clock=lambda: now_ns[0] / 1_000_000_000,
+    )
+    service_holder: list[GroupCoordinatorService] = [service]
+    registry.register_handler(
+        _COORDINATOR_INSTANCE,
+        "groups.submit",
+        lambda context, arguments: service_holder[0].handle(
+            "groups.submit", context=context, arguments=arguments
+        ),
+    )
+    registry.register_handler(
+        _COORDINATOR_INSTANCE,
+        "groups.query",
+        lambda context, arguments: service_holder[0].handle(
+            "groups.query", context=context, arguments=arguments
+        ),
+    )
+
+    message_number = 0
+
+    def registry_call(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
+        nonlocal message_number
+        message_number += 1
+        request = WireEnvelope(
+            header=WireHeader(
+                protocol_version=2,
+                kind=WireMessageKind.REQUEST,
+                message_id=f"expired-replay-{message_number}",
+                correlation_id=None,
+                identity=identity,
+                scope=registered_scope,
+                operation=operation,
+                schema_id="sdk.service.call",
+                schema_version=1,
+                sent_at_utc="2026-10-16T00:00:00Z",
+            ),
+            payload={
+                "registration_id": registration_id,
+                "service_epoch": service_epoch,
+                "instance_id": _COORDINATOR_INSTANCE,
+                "arguments": payload,
+            },
+        )
+        response = registry.handle(_STRATEGY_PRINCIPAL, request)
+        assert response["ok"] is True
+        return dict(response["result"])
+
+    registration_response = registry.handle(
+        _STRATEGY_PRINCIPAL,
+        WireEnvelope(
+            header=WireHeader(
+                protocol_version=2,
+                kind=WireMessageKind.REQUEST,
+                message_id="expired-replay-register",
+                correlation_id=None,
+                identity=identity,
+                scope=registered_scope,
+                operation="service.register",
+                schema_id="sdk.service.control",
+                schema_version=1,
+                sent_at_utc="2026-10-16T00:00:00Z",
+            ),
+            payload={
+                "registration_key": "expired-replay-registration-key",
+                "client_session_id": "expired-replay-client-session",
+                "instance_id": _COORDINATOR_INSTANCE,
+                "port": "service.order_group_entry",
+                "scope_ref": _COORDINATOR_SCOPE_REF,
+                "operations": tuple(sorted(GROUP_COORDINATOR_OPERATIONS)),
+            },
+        ),
+    )
+    assert registration_response["ok"] is True
+    registration_result = registration_response["result"]
+    registration_id = registration_result["registration_id"]
+    service_epoch = registration_result["service_epoch"]
+    registration_contexts = registry.active_registration_contexts(
+        instance_id=_COORDINATOR_INSTANCE,
+        port="service.order_group_entry",
+    )
+    assert len(registration_contexts) == 1
+    service.maintain_registrations(registration_contexts)
+
+    request = _arguments(now_ns[0], metadata)
+    resources_open = True
+    restarted_resources = None
+    try:
+        first = registry_call("groups.submit", request)
+        assert first["ok"] is True
+        first_snapshot = GroupOrderSnapshot.from_payload(first["result"]["snapshot"])
+        assert first_snapshot.state is GroupOrderState.REJECTED_BEFORE_DISPATCH
+        assert first_snapshot.error_code == "group_budget_limit_exceeded"
+        assert quote_calls == [(request["group_id"], now_ns[0])]
+        assert run_bindings.get(_PORTFOLIO, _GROUP_ID) is not None
+        assert runtime.calls == []
+        assert runtime.reservations == {}
+        assert runtime.submitted == []
+
+        # Close and reopen only the coordinator's durable stores. The real
+        # Registry registration remains current while the original absolute
+        # group deadline expires.
+        deadline_ns = request["deadline_ns"]
+        service.close()
+        group_store.close()
+        run_bindings.close()
+        resources_open = False
+        now_ns[0] = deadline_ns + 1
+
+        restarted_runtime = _LoopbackRuntime(fingerprints)
+        restarted_resources = _make_service(
+            service_path,
+            restarted_runtime,
+            stable_scope,
+            target,
+            now_ns=now_ns,
+        )
+        restarted_service, restarted_groups, restarted_bindings = restarted_resources
+        service_holder[0] = restarted_service
+        restarted_service.maintain_registrations(
+            registry.active_registration_contexts(
+                instance_id=_COORDINATOR_INSTANCE,
+                port="service.order_group_entry",
+            )
+        )
+
+        queried = registry_call("groups.query", {"group_id": _GROUP_ID})
+        assert queried["ok"] is True
+        assert GroupOrderSnapshot.from_payload(queried["result"]["snapshot"]) == first_snapshot
+
+        replayed = registry_call("groups.submit", request)
+        assert replayed["ok"] is True
+        assert GroupOrderSnapshot.from_payload(replayed["result"]["snapshot"]) == first_snapshot
+        assert len(quote_calls) == 1
+        assert restarted_runtime.calls == []
+        assert restarted_runtime.reservations == {}
+        assert restarted_runtime.submitted == []
+
+        changed_request = dict(request)
+        changed_legs = [dict(item) for item in request["legs"]]
+        changed_intent = order_intent_from_payload(changed_legs[0]["intent"])
+        changed_legs[0]["intent"] = replace(
+            changed_intent,
+            price=changed_intent.price + Decimal("1"),
+        ).to_payload()
+        changed_request["legs"] = changed_legs
+        conflict = registry_call("groups.submit", changed_request)
+        assert conflict == {"ok": False, "code": "GROUP_BINDING_CONFLICT", "result": {}}
+        assert len(quote_calls) == 1
+        assert restarted_runtime.calls == []
+        assert restarted_runtime.reservations == {}
+        assert restarted_runtime.submitted == []
+
+        expired_group_id = "new-expired-group"
+        expired_request = {
+            "group_id": expired_group_id,
+            "deadline_ns": deadline_ns,
+            "first_leg_id": "new-leg-a",
+            "legs": [],
+        }
+        for leg_id, account_ref, side in (
+            ("new-leg-a", "account-a", Side.BUY),
+            ("new-leg-b", "account-b", Side.SELL),
+        ):
+            child = _intent(
+                account_ref=account_ref,
+                leg_id=leg_id,
+                deadline_ns=deadline_ns,
+                metadata=metadata,
+                side=side,
+            )
+            child = replace(child, intent_id=group_leg_intent_id(expired_group_id, leg_id))
+            expired_request["legs"].append(
+                {"leg_id": leg_id, "account_ref": account_ref, "intent": child.to_payload()}
+            )
+        expired = registry_call("groups.submit", expired_request)
+        assert expired == {"ok": False, "code": "GROUP_DEADLINE_INVALID", "result": {}}
+        assert restarted_bindings.get(_PORTFOLIO, expired_group_id) is None
+        assert restarted_groups.get(_PORTFOLIO, expired_group_id) is None
+        assert len(quote_calls) == 1
+        assert restarted_runtime.calls == []
+        assert restarted_runtime.reservations == {}
+        assert restarted_runtime.submitted == []
+    finally:
+        if resources_open:
+            service.close()
+            group_store.close()
+            run_bindings.close()
+        if restarted_resources is not None:
+            restarted_service, restarted_groups, restarted_bindings = restarted_resources
+            restarted_service.close()
+            restarted_groups.close()
+            restarted_bindings.close()
+        registry.close()
 
 
 def test_budget_resources_must_pair_match_portfolio_and_not_conflict(tmp_path: Path) -> None:

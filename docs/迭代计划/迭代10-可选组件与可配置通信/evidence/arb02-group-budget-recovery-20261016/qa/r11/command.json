@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\qa-harness\\pytest.ini",
+    "--rootdir",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\candidate\\sdk",
+    "-q",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\iteration10-arb02-group-budget-fixed-source-r11-qa-output\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-arb02-group-budget-fixed-source-r11-qa-output\\pytest-tmp",
+    "tests/integration/test_arb02_group_budget_service.py::test_expired_unclaimed_release_and_dispatched_unknown_hold_across_coordinator_crash"
+  ],
+  "cwd": "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\candidate\\sdk",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\candidate\\sdk;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\candidate\\base\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\candidate\\execution\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\candidate\\risk\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb02-group-budget-fixed-source-r11\\candidate\\transport\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T01:17:48.967776+00:00"
+}

@@ -1,0 +1,424 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_expired_unclaimed_release_and_dispatched_unknown_hold_across_coordinator_crash _
+
+tmp_path = WindowsPath('D:/temp/iteration10-arb02-group-budget-fixed-source-r10-r2-qa-output/pytest-tmp/test_expired_unclaimed_release0')
+
+    @pytest.mark.integration
+    def test_expired_unclaimed_release_and_dispatched_unknown_hold_across_coordinator_crash(
+        tmp_path: Path,
+    ) -> None:
+        """Recover only unclaimed expired vectors; keep dispatched UNKNOWN held."""
+    
+        metadata_reference_ns = time.time_ns()
+        account_paths = {
+            account: {
+                name: str(tmp_path / f"{account}-{name}.sqlite3")
+                for name in (
+                    "registry",
+                    "provider",
+                    "execution",
+                    "risk_order_journal",
+                    "proof",
+                    "risk_gate",
+                    "accepted",
+                    "group_authority",
+                )
+            }
+            for account in _ACCOUNTS
+        }
+        coordinator_paths = {
+            "registry": str(tmp_path / "coordinator-registry.sqlite3"),
+            "groups": str(tmp_path / "coordinator-groups.sqlite3"),
+            "run_bindings": str(tmp_path / "coordinator-run-bindings.sqlite3"),
+        }
+        account_endpoints = {account: _endpoint() for account in _ACCOUNTS}
+        account_keys = {account: zmq.curve_keypair() for account in _ACCOUNTS}
+        coordinator_keys = zmq.curve_keypair()
+        coordinator_client_keys = zmq.curve_keypair()
+        strategy_keys = {strategy: zmq.curve_keypair() for strategy in _STRATEGIES}
+        account_configs = {
+            account: _account_service_config(
+                account, account_endpoints[account], f"arb02-account-server-{account}"
+            )
+            for account in _ACCOUNTS
+        }
+        context = multiprocessing.get_context("spawn")
+        provider_entered = context.Event()
+        provider_release = context.Event()
+        reservation_committed = {account: context.Event() for account in _ACCOUNTS}
+        reservation_reply_entered = context.Event()
+        reservation_reply_release = context.Event()
+        reservation_events = context.Queue()
+        account_processes: dict[str, Any] = {}
+        account_controls: dict[str, Any] = {}
+        coordinator_process = None
+        coordinator_control = None
+        client_threads: dict[str, threading.Thread] = {}
+        client_commands: dict[str, queue.Queue] = {}
+        client_results: dict[str, queue.Queue] = {}
+        expired_snapshot: GroupOrderSnapshot | None = None
+        unknown_snapshot: GroupOrderSnapshot | None = None
+        unknown_recovered: GroupOrderSnapshot | None = None
+        cleanup_interrupted_calls: list[tuple[str, tuple[Any, ...]]] = []
+        cleanup_pending_completions: list[tuple[str, tuple[Any, ...]]] = []
+    
+        try:
+            # Account Hosts and the first coordinator are fully ready before either
+            # short absolute request deadline is created.
+            for account_ref in _ACCOUNTS:
+                parent_control, child_control = context.Pipe(duplex=True)
+                process = None
+                process_started = False
+                try:
+                    process = context.Process(
+                        name=f"arb02-account-host-{account_ref}",
+                        target=_account_host_process,
+                        args=(
+                            child_control,
+                            account_configs[account_ref],
+                            account_paths[account_ref]["registry"],
+                            account_paths[account_ref],
+                            account_ref,
+                            account_keys[account_ref][0],
+                            account_keys[account_ref][1],
+                            coordinator_client_keys[0],
+                            metadata_reference_ns,
+                            ("open",) if account_ref == "account-a" else ("filled",),
+                            provider_entered,
+                            provider_release,
+                            _GROUP_EXPIRED_UNCLAIMED,
+                            reservation_committed[account_ref],
+                            reservation_reply_entered if account_ref == "account-b" else None,
+                            reservation_reply_release if account_ref == "account-b" else None,
+                            reservation_events,
+                        ),
+                    )
+                    process.start()
+                    process_started = True
+                    child_control.close()
+                    ready = _receive(parent_control)
+                    assert ready == ("ready", account_endpoints[account_ref])
+                except BaseException as startup_error:
+                    cleanup_error = _cleanup_failed_host_start(
+                        process,
+                        parent_control,
+                        child_control,
+                        process_started=process_started,
+                    )
+                    if cleanup_error is not None:
+                        add_note = getattr(startup_error, "add_note", None)
+                        if callable(add_note):
+                            add_note(
+                                "account Host startup cleanup also failed: "
+                                f"{type(cleanup_error).__name__}"
+                            )
+                    raise
+                assert process is not None
+                account_processes[account_ref] = process
+                account_controls[account_ref] = parent_control
+    
+            (
+                coordinator_process,
+                coordinator_control,
+                coordinator_endpoint,
+                upstream_bindings,
+            ) = _start_coordinator(
+                context,
+                account_configs,
+                coordinator_paths,
+                account_endpoints,
+                {account: account_keys[account][0] for account in _ACCOUNTS},
+                coordinator_keys,
+                coordinator_client_keys,
+                strategy_keys,
+                metadata_reference_ns,
+            )
+            _activate_owner_routes(account_controls, upstream_bindings)
+            client_threads, client_commands, client_results = _new_client_threads(
+                coordinator_endpoint,
+                coordinator_keys[0],
+                strategy_keys,
+            )
+    
+            expired_request = _group_request(
+                _GROUP_EXPIRED_UNCLAIMED,
+                _STRATEGIES[0],
+                metadata_reference_ns,
+                lifetime_ns=6_000_000_000,
+            )
+            client_commands[_STRATEGIES[0]].put(("submit", _GROUP_EXPIRED_UNCLAIMED, expired_request))
+            expired_started = _next_client_message(client_results[_STRATEGIES[0]], "started")
+            assert expired_started[1:3] == ("submit", _GROUP_EXPIRED_UNCLAIMED)
+            assert reservation_committed["account-a"].wait(5)
+            assert reservation_committed["account-b"].wait(5)
+            assert reservation_reply_entered.wait(5), (
+                "account B did not reach the post-commit/pre-reply crash barrier"
+            )
+            assert not provider_entered.is_set(), "an unclaimed reservation reached a provider"
+            assert _provider_snapshot(Path(account_paths["account-a"]["provider"])) == (
+                (),
+                {"order_queries": 0, "fill_queries": 0},
+            )
+    
+            # B's real Risk vector and local accepted binding have committed. The
+            # account handler withholds only its RPC response while the newly
+            # created immutable deadline passes; then only this test's coordinator
+            # process is crashed.
+            _wait_for_deadline(expired_request["deadline_ns"])
+            expired_coordinator_exit = _terminate_test_coordinator(
+                coordinator_process, coordinator_control
+            )
+            coordinator_process = None
+            coordinator_control = None
+            assert expired_coordinator_exit != 0
+            reservation_reply_release.set()
+            for account_ref in _ACCOUNTS:
+                account_controls[account_ref].send(("status",))
+                status = _receive(account_controls[account_ref])
+                assert status == (
+                    "status",
+                    (),
+                    {"order_queries": 0, "fill_queries": 0},
+                )
+    
+            lost_reply = _next_client_call_outcome(client_results[_STRATEGIES[0]])
+            assert lost_reply == (
+                "call_error",
+                "submit",
+                _GROUP_EXPIRED_UNCLAIMED,
+                "RequestOutcomeUnknownError",
+                None,
+            )
+            _close_client_threads(client_threads, client_commands, client_results)
+            client_threads = {}
+            client_commands = {}
+            client_results = {}
+    
+            # Reopen the same group/run-binding stores. Exact replay proves each
+            # persisted vector is unclaimed before issuing one explicit release.
+            (
+                coordinator_process,
+                coordinator_control,
+                coordinator_endpoint,
+                upstream_bindings,
+            ) = _start_coordinator(
+                context,
+                account_configs,
+                coordinator_paths,
+                account_endpoints,
+                {account: account_keys[account][0] for account in _ACCOUNTS},
+                coordinator_keys,
+                coordinator_client_keys,
+                strategy_keys,
+                metadata_reference_ns,
+            )
+            _activate_owner_routes(account_controls, upstream_bindings)
+            client_threads, client_commands, client_results = _new_client_threads(
+                coordinator_endpoint,
+                coordinator_keys[0],
+                strategy_keys,
+            )
+            client_commands[_STRATEGIES[0]].put(("submit", _GROUP_EXPIRED_UNCLAIMED, expired_request))
+            _next_client_message(client_results[_STRATEGIES[0]], "started")
+            expired_done = _next_client_message(client_results[_STRATEGIES[0]], "done")
+            expired_snapshot = _snapshot_from_reply(expired_done[5])
+            assert expired_snapshot.state is GroupOrderState.REJECTED_BEFORE_DISPATCH
+            assert expired_snapshot.error_code == "reservation_not_active"
+            assert expired_snapshot.budget_reservation is not None
+            assert expired_snapshot.budget_reservation.state is GroupBudgetReservationState.RELEASED
+            assert all(item.phase.value == "RELEASED" for item in expired_snapshot.reservations)
+            assert all(leg.submitted_intent is None for leg in expired_snapshot.legs)
+            client_commands[_STRATEGIES[0]].put(("query", _GROUP_EXPIRED_UNCLAIMED, None))
+            _next_client_message(client_results[_STRATEGIES[0]], "started")
+            queried = _next_client_message(client_results[_STRATEGIES[0]], "done")
+            assert _query_reply_snapshot(queried[5]) == expired_snapshot
+    
+            # The same portfolio does not grant one strategy visibility into the
+            # other strategy's durable run binding. The second client must remain
+            # unable to query the first client's reservation after reopen.
+            client_commands[_STRATEGIES[1]].put(("query", _GROUP_EXPIRED_UNCLAIMED, None))
+            _next_client_message(client_results[_STRATEGIES[1]], "started")
+            denied_query = _next_client_message(client_results[_STRATEGIES[1]], "done")
+            assert denied_query[5] == {
+                "ok": False,
+                "code": "GROUP_BINDING_UNAVAILABLE",
+                "result": {},
+            }
+            assert all(
+                not _provider_snapshot(Path(account_paths[account]["provider"]))[0]
+                for account in _ACCOUNTS
+            )
+    
+            _close_client_threads(client_threads, client_commands, client_results)
+            client_threads = {}
+            client_commands = {}
+            client_results = {}
+            _stop_process(coordinator_process, coordinator_control)
+            coordinator_process = None
+            coordinator_control = None
+    
+            # The second branch dispatches one real synthetic provider write while
+            # the account owner blocks before returning its observation. Crossing
+            # its deadline cannot release its Risk claim or portfolio hold.
+            account_controls["account-a"].send(("arm-incomplete-fills",))
+            assert _receive(account_controls["account-a"]) == ("armed", "account-a")
+            client_commands, client_results = {}, {}
+            (
+                coordinator_process,
+                coordinator_control,
+                coordinator_endpoint,
+                upstream_bindings,
+            ) = _start_coordinator(
+                context,
+                account_configs,
+                coordinator_paths,
+                account_endpoints,
+                {account: account_keys[account][0] for account in _ACCOUNTS},
+                coordinator_keys,
+                coordinator_client_keys,
+                strategy_keys,
+                metadata_reference_ns,
+            )
+            _activate_owner_routes(account_controls, upstream_bindings)
+            client_threads, client_commands, client_results = _new_client_threads(
+                coordinator_endpoint,
+                coordinator_keys[0],
+                strategy_keys,
+            )
+            # Start the short absolute deadline only after every owner, coordinator,
+            # route, and client runtime needed by this branch is ready.
+            unknown_request = _group_request(
+                _GROUP_UNKNOWN_AFTER_TTL,
+                _STRATEGIES[0],
+                metadata_reference_ns,
+                lifetime_ns=6_000_000_000,
+            )
+            client_commands[_STRATEGIES[0]].put(("submit", _GROUP_UNKNOWN_AFTER_TTL, unknown_request))
+            unknown_started = _next_client_message(client_results[_STRATEGIES[0]], "started")
+            assert unknown_started[1:3] == ("submit", _GROUP_UNKNOWN_AFTER_TTL)
+            assert provider_entered.wait(10), "the claimed group never reached its provider write"
+            # The write is durably committed while the feed still waits at its
+            # release barrier, so the armed incomplete-fills fault is exactly
+            # pending: only the later fill observation consumes it.
+            writes_at_dispatch, counters_at_dispatch = _provider_snapshot_with_pending_faults(
+                Path(account_paths["account-a"]["provider"]),
+                ("incomplete_next_fills",),
+            )
+            assert len(writes_at_dispatch) == 1
+            assert counters_at_dispatch["fill_queries"] == 0
+            _wait_for_deadline(unknown_request["deadline_ns"])
+            provider_release.set()
+            unknown_done = _next_client_message(client_results[_STRATEGIES[0]], "done", timeout=15)
+            unknown_snapshot = _unknown_submit_snapshot_from_outcome(
+                unknown_done, _GROUP_UNKNOWN_AFTER_TTL
+            )
+            unknown_leg = next(leg for leg in unknown_snapshot.legs if leg.leg_id == "leg-a")
+    
+            _close_client_threads(client_threads, client_commands, client_results)
+            client_threads = {}
+            client_commands = {}
+            client_results = {}
+            _stop_process(coordinator_process, coordinator_control)
+            coordinator_process = None
+            coordinator_control = None
+    
+            # A normal close/reopen starts a fresh coordinator epoch over the same
+            # SQLite stores. The dispatched-UNKNOWN hold is deliberately preserved,
+            # so the account authority refuses every coordinator generation change
+            # while that hold exists (GroupAuthorityBusyError: a dispatch hold
+            # blocks coordinator change; only a trusted verifier proof may release
+            # it first). Query is pure and the exact same-ID submit only reconciles
+            # the original child ID through the read-only order route, so this
+            # phase performs no owner-route activation; nothing may create a second
+            # provider write or release the hold.
+            (
+                coordinator_process,
+                coordinator_control,
+                coordinator_endpoint,
+                upstream_bindings,
+            ) = _start_coordinator(
+                context,
+                account_configs,
+                coordinator_paths,
+                account_endpoints,
+                {account: account_keys[account][0] for account in _ACCOUNTS},
+                coordinator_keys,
+                coordinator_client_keys,
+                strategy_keys,
+                metadata_reference_ns,
+            )
+            client_threads, client_commands, client_results = _new_client_threads(
+                coordinator_endpoint,
+                coordinator_keys[0],
+                strategy_keys,
+            )
+            client_commands[_STRATEGIES[0]].put(("query", _GROUP_UNKNOWN_AFTER_TTL, None))
+            _next_client_message(client_results[_STRATEGIES[0]], "started")
+            unknown_query = _next_client_message(client_results[_STRATEGIES[0]], "done")
+            assert _query_reply_snapshot(unknown_query[5]) == unknown_snapshot
+            client_commands[_STRATEGIES[0]].put(("submit", _GROUP_UNKNOWN_AFTER_TTL, unknown_request))
+            _next_client_message(client_results[_STRATEGIES[0]], "started")
+            unknown_replay_done = _next_client_message(
+                client_results[_STRATEGIES[0]], "done", timeout=15
+            )
+            unknown_recovered = _snapshot_from_reply(unknown_replay_done[5])
+            assert unknown_recovered.state is GroupOrderState.RECOVERY_REQUIRED
+            assert unknown_recovered.budget_reservation is not None
+            assert unknown_recovered.budget_reservation.state is GroupBudgetReservationState.HELD
+            recovered_leg = next(leg for leg in unknown_recovered.legs if leg.leg_id == "leg-a")
+            assert recovered_leg.submitted_intent == unknown_leg.submitted_intent
+            assert recovered_leg.child_status is not None
+            assert recovered_leg.child_status.state is ExecutionState.UNKNOWN
+            assert all(
+                leg.submitted_intent is None for leg in unknown_recovered.legs if leg.leg_id != "leg-a"
+            )
+>           final_writes, _ = _provider_snapshot(Path(account_paths["account-a"]["provider"]))
+
+tests\integration\test_arb02_group_budget_service.py:2431: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('D:/temp/iteration10-arb02-group-budget-fixed-source-r10-r2-qa-output/pytest-tmp/test_expired_unclaimed_release0/account-a-provider.sqlite3')
+
+    def _provider_snapshot(path: Path) -> tuple[tuple[str, ...], dict[str, int]]:
+        with sqlite3.connect(path) as connection:
+            writes = tuple(
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT client_order_id FROM provider_writes ORDER BY sequence"
+                )
+            )
+            counters = {
+                str(row[0]): int(row[1])
+                for row in connection.execute("SELECT name, count FROM provider_counters ORDER BY name")
+            }
+            faults = connection.execute("SELECT COUNT(*) FROM provider_faults").fetchone()[0]
+>       assert faults == 0
+E       assert 1 == 0
+
+tests\integration\test_service_execution_group_local_process.py:1080: AssertionError
+---------------------------- Captured stderr call -----------------------------
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+- generated xml file: D:\temp\iteration10-arb02-group-budget-fixed-source-r10-r2-qa-output\junit.xml -
+=========================== short test summary info ===========================
+FAILED tests/integration/test_arb02_group_budget_service.py::test_expired_unclaimed_release_and_dispatched_unknown_hold_across_coordinator_crash
+1 failed in 42.21s
