@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "round_id": "iteration10-scn01-binance-certlib-retire-optional16-r245-2026-10-16",
+  "status": "READY_FOR_ROOT_SOURCE_REVIEW_AND_SCOPED_DELIVERY",
+  "evidence_level": "SOURCE_FAKE_BINANCE_NORMAL_FACTORY_RETIRED_BRIDGE_FAIL_CLOSED_ONLY",
+  "root_qa": {
+    "status": "NOT_RUN_BY_DESIGN_AUTHOR_QA_ALREADY_PASSED",
+    "spec": "root-qa-spec.json",
+    "output": "D:\\temp\\iteration10-scn01-binance-certlib-root-20261016-r245",
+    "spec_sha256": "99021612c5107cd0bb1f5bb239453b2c6ca1b7a1c7255b1e5ecbe63b223b521b"
+  },
+  "root_review": {
+    "status": "PENDING_ROOT_SOURCE_AND_RAW_EVIDENCE_REVIEW",
+    "scope": [
+      "Review the exact two candidate source pins and their focused author test.",
+      "Verify raw-evidence.zip and its three member hashes against the author command/result/output records.",
+      "Do not rerun the already-passed six-test author QA; no Root QA result is claimed."
+    ],
+    "commit_gate": "Root review only; scoped Backtrader delivery follows after independent_static_review is set to GO."
+  },
+  "bt_candidate": {
+    "repository": "D:/source_code/backtrader",
+    "branch": "dev",
+    "parent": "57c9fc613f263877b08da11eacadcb5a8eaccaad",
+    "scope": [
+      {
+        "path": "examples/live/000_live_certification/binance_penetration/certlib/__init__.py",
+        "role": "Retire the Optional16 Gateway/component bridge from the normal Binance certlib entry; reject unsupported topology before importing the venue client and preserve direct construction.",
+        "sha256": "e70dd0bad27a3b9b51048d74c181dd93276bca68ffa229157ed79da0cfff666b",
+        "size_bytes": 2119
+      },
+      {
+        "path": "tests/unit/test_scn01_binance_certlib_fail_closed.py",
+        "role": "Exercise the real factory source: five unsupported topology variants fail before bridge/provider imports, and default direct construction still passes the original synthetic credential/config values to BinanceDemoClient.",
+        "sha256": "5e250d8290345420116e9b3108c36444e5aadf0915e89f79cacebe47003c7ce0",
+        "size_bytes": 3555
+      }
+    ]
+  },
+  "source_pins": [
+    {
+      "path": "examples/live/000_live_certification/binance_penetration/certlib/__init__.py",
+      "sha256": "e70dd0bad27a3b9b51048d74c181dd93276bca68ffa229157ed79da0cfff666b",
+      "size_bytes": 2119
+    },
+    {
+      "path": "tests/unit/test_scn01_binance_certlib_fail_closed.py",
+      "sha256": "5e250d8290345420116e9b3108c36444e5aadf0915e89f79cacebe47003c7ce0",
+      "size_bytes": 3555
+    }
+  ],
+  "author_local": {
+    "pytest_exit": 0,
+    "collected": 6,
+    "passed": 6,
+    "failed": 0,
+    "duration_seconds": 0.63,
+    "warning_count": 1,
+    "warning": "Existing pytest config warning: asyncio_default_fixture_loop_scope is unknown when the unrelated asyncio plugin is disabled.",
+    "evidence_level": "AUTHOR_SOURCE_FAKE_NORMAL_FACTORY_ONLY",
+    "root_qa": "NOT_RUN_BY_DESIGN_NO_REPEAT",
+    "formal_status": {
+      "scn01_pass": false,
+      "before": "39/68",
+      "after": "39/68",
+      "run_snapshot_note": "The raw author result captured 39/68 before a separate case acceptance moved the current project count to 40/68; R245 itself adds no formal PASS."
+    }
+  },
+  "raw_evidence": {
+    "path": "raw-evidence.zip",
+    "sha256": "f8ec1379ae2e9031e2cfc81b7531e71399f96a6fc7b9af3a2f133e391ec989e9",
+    "size_bytes": 1204,
+    "member_count": 3,
+    "members": [
+      {
+        "path": "author-command.json",
+        "size_bytes": 409,
+        "sha256": "50d66d78e08d6ef781ddcda7f8ef69de3ea3608e4dc97a2d200ceb3ce4b5c04f"
+      },
+      {
+        "path": "author-result.json",
+        "size_bytes": 467,
+        "sha256": "e4757527e146f1acaa770fbead4e51280a0d0496e93553fd3b9864ba3b9581d7"
+      },
+      {
+        "path": "author-combined-output.log",
+        "size_bytes": 550,
+        "sha256": "9ee2d787ca4ade3110037ff91453895ea0d5604868fadba90a2f6cf4f158a70e"
+      }
+    ]
+  },
+  "sdk_commit_scope": [
+    "raw-evidence.zip",
+    "manifest.json",
+    "round-record.md"
+  ],
+  "formal_status": {
+    "scn01_formal_pass": false,
+    "formal_pass_before": "40/68",
+    "formal_pass_after": "40/68",
+    "round_delta": 0
+  }
+}
