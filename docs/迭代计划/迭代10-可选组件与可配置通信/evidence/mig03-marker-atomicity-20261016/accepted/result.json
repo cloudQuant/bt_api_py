@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T06:59:23.638946+00:00",
+  "source_count": 284,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "ed3555fc32fdf51213d0e34ba13afa73a2283e2b",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "ed3555fc32fdf51213d0e34ba13afa73a2283e2b",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "0de0e25a86f996a509051cedf9cc9b799ee3940b6a217681d102d6aa0f23e7e4",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "LOCAL_MARKER_CROSS_PROCESS_ATOMICITY_ONLY_WINDOWS_SHARED_READ_LOCK_REPAIR"
+}

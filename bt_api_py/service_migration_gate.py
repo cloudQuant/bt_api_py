@@ -43,14 +43,16 @@ wired into ordinary write paths without migration ever being in effect.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
+import time
 import uuid
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 MIGRATION_MARKER_SUFFIX = ".migration-cutover.json"
 MIGRATION_MARKER_SCHEMA_VERSION = 1
@@ -67,6 +69,12 @@ CODE_CUTOVER_MARKER_CONFLICT = "CUTOVER_MARKER_CONFLICT"
 CODE_CUTOVER_MARKER_UNREADABLE = "CUTOVER_MARKER_UNREADABLE"
 CODE_NO_ACTIVE_CUTOVER = "NO_ACTIVE_CUTOVER"
 CODE_INVALID_MIGRATION_GATE_ARGUMENT = "INVALID_MIGRATION_GATE_ARGUMENT"
+CODE_MIGRATION_GATE_LOCK_TIMEOUT = "MIGRATION_GATE_LOCK_TIMEOUT"
+CODE_MIGRATION_GATE_LOCK_FAILURE = "MIGRATION_GATE_LOCK_FAILURE"
+CODE_MARKER_DURABILITY_UNCERTAIN = "CUTOVER_MARKER_DURABILITY_UNCERTAIN"
+
+_MIGRATION_LOCK_TIMEOUT_SECONDS = 5.0
+_MIGRATION_LOCK_POLL_SECONDS = 0.01
 
 
 class MigrationGateError(RuntimeError):
@@ -114,8 +122,25 @@ def read_migration_marker(state_path: str | os.PathLike[str]) -> MigrationCutove
     path = marker_path(state_path)
     if not path.exists():
         return None
+    with _marker_state_lock(state_path):
+        return _read_migration_marker_unlocked(state_path)
+
+
+def _read_migration_marker_unlocked(
+    state_path: str | os.PathLike[str],
+) -> MigrationCutoverMarker | None:
+    """Read marker bytes while the caller already owns the transition lock."""
+
+    path = marker_path(state_path)
+    if not path.exists():
+        return None
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        # A concurrent, successful rollback may remove the marker between the
+        # existence check and open. That is an atomic state transition, not a
+        # corrupt marker.
+        return None
     except Exception:
         raise MigrationGateError(CODE_CUTOVER_MARKER_UNREADABLE) from None
     return _marker_from_document(document)
@@ -142,23 +167,24 @@ def arm_migration_cutover(
         raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
     if migration_id is not None:
         _require_text(migration_id)
-    existing = read_migration_marker(state_path)
-    if existing is not None:
-        if (
-            existing.source_epoch == source_epoch
-            and existing.destination_epoch == new_epoch
-            and (migration_id is None or existing.migration_id == migration_id)
-        ):
-            return existing
-        raise MigrationGateError(CODE_CUTOVER_MARKER_CONFLICT)
-    marker = MigrationCutoverMarker(
-        migration_id=migration_id or uuid.uuid4().hex,
-        source_epoch=source_epoch,
-        destination_epoch=new_epoch,
-        status=STATUS_COMMITTED,
-    )
-    _write_marker(state_path, marker)
-    return marker
+    with _marker_state_lock(state_path):
+        existing = _read_migration_marker_unlocked(state_path)
+        if existing is not None:
+            if (
+                existing.source_epoch == source_epoch
+                and existing.destination_epoch == new_epoch
+                and (migration_id is None or existing.migration_id == migration_id)
+            ):
+                return existing
+            raise MigrationGateError(CODE_CUTOVER_MARKER_CONFLICT)
+        marker = MigrationCutoverMarker(
+            migration_id=migration_id or uuid.uuid4().hex,
+            source_epoch=source_epoch,
+            destination_epoch=new_epoch,
+            status=STATUS_COMMITTED,
+        )
+        _write_marker(state_path, marker)
+        return marker
 
 
 def record_migration_first_write(
@@ -179,21 +205,26 @@ def record_migration_first_write(
         raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
     if recorded_at is not None:
         _require_text(recorded_at)
-    marker = read_migration_marker(state_path)
-    if marker is None or marker.sealed:
+    # Keep never-armed calls side-effect free; if the marker exists, the
+    # authoritative decision is made only after re-reading it under the lock.
+    if not marker_path(state_path).exists():
         return False
-    sealed = MigrationCutoverMarker(
-        migration_id=marker.migration_id,
-        source_epoch=marker.source_epoch,
-        destination_epoch=marker.destination_epoch,
-        status=STATUS_SEALED,
-        first_write_fact_kind=fact_kind,
-        first_write_recorded_at=recorded_at or _utc_now_text(),
-        accepted_reverse_epoch=marker.accepted_reverse_epoch,
-        accepted_reverse_reference=marker.accepted_reverse_reference,
-    )
-    _write_marker(state_path, sealed)
-    return True
+    with _marker_state_lock(state_path):
+        marker = _read_migration_marker_unlocked(state_path)
+        if marker is None or marker.sealed:
+            return False
+        sealed = MigrationCutoverMarker(
+            migration_id=marker.migration_id,
+            source_epoch=marker.source_epoch,
+            destination_epoch=marker.destination_epoch,
+            status=STATUS_SEALED,
+            first_write_fact_kind=fact_kind,
+            first_write_recorded_at=recorded_at or _utc_now_text(),
+            accepted_reverse_epoch=marker.accepted_reverse_epoch,
+            accepted_reverse_reference=marker.accepted_reverse_reference,
+        )
+        _write_marker(state_path, sealed)
+        return True
 
 
 def enforce_migration_start(
@@ -244,18 +275,21 @@ def rollback_migration_cutover(
 
     if deployment_epoch is not None:
         _require_epoch(deployment_epoch)
-    marker = read_migration_marker(state_path)
-    if marker is None:
+    if not marker_path(state_path).exists():
         return False
-    if not marker.sealed:
+    with _marker_state_lock(state_path):
+        marker = _read_migration_marker_unlocked(state_path)
+        if marker is None:
+            return False
+        if not marker.sealed:
+            _remove_marker(state_path)
+            return True
+        if marker.accepted_reverse_epoch is None:
+            raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
+        if deployment_epoch is not None and deployment_epoch != marker.accepted_reverse_epoch:
+            raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
         _remove_marker(state_path)
         return True
-    if marker.accepted_reverse_epoch is None:
-        raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
-    if deployment_epoch is not None and deployment_epoch != marker.accepted_reverse_epoch:
-        raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
-    _remove_marker(state_path)
-    return True
 
 
 def accept_reverse_migration(
@@ -273,30 +307,33 @@ def accept_reverse_migration(
 
     _require_epoch(accepted_epoch)
     _require_text(reference)
-    marker = read_migration_marker(state_path)
-    if marker is None:
+    if not marker_path(state_path).exists():
         raise MigrationGateError(CODE_NO_ACTIVE_CUTOVER)
-    if accepted_epoch == marker.destination_epoch:
-        raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
-    if marker.accepted_reverse_epoch is not None:
-        if (
-            marker.accepted_reverse_epoch == accepted_epoch
-            and marker.accepted_reverse_reference == reference
-        ):
-            return marker
-        raise MigrationGateError(CODE_CUTOVER_MARKER_CONFLICT)
-    updated = MigrationCutoverMarker(
-        migration_id=marker.migration_id,
-        source_epoch=marker.source_epoch,
-        destination_epoch=marker.destination_epoch,
-        status=marker.status,
-        first_write_fact_kind=marker.first_write_fact_kind,
-        first_write_recorded_at=marker.first_write_recorded_at,
-        accepted_reverse_epoch=accepted_epoch,
-        accepted_reverse_reference=reference,
-    )
-    _write_marker(state_path, updated)
-    return updated
+    with _marker_state_lock(state_path):
+        marker = _read_migration_marker_unlocked(state_path)
+        if marker is None:
+            raise MigrationGateError(CODE_NO_ACTIVE_CUTOVER)
+        if accepted_epoch == marker.destination_epoch:
+            raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
+        if marker.accepted_reverse_epoch is not None:
+            if (
+                marker.accepted_reverse_epoch == accepted_epoch
+                and marker.accepted_reverse_reference == reference
+            ):
+                return marker
+            raise MigrationGateError(CODE_CUTOVER_MARKER_CONFLICT)
+        updated = MigrationCutoverMarker(
+            migration_id=marker.migration_id,
+            source_epoch=marker.source_epoch,
+            destination_epoch=marker.destination_epoch,
+            status=marker.status,
+            first_write_fact_kind=marker.first_write_fact_kind,
+            first_write_recorded_at=marker.first_write_recorded_at,
+            accepted_reverse_epoch=accepted_epoch,
+            accepted_reverse_reference=reference,
+        )
+        _write_marker(state_path, updated)
+        return updated
 
 
 def _utc_now_text() -> str:
@@ -344,6 +381,7 @@ def _marker_from_document(document: Any) -> MigrationCutoverMarker:
     try:
         if (
             type(document) is not dict
+            or type(document.get("schema_version")) is not int
             or document.get("schema_version") != MIGRATION_MARKER_SCHEMA_VERSION
         ):
             raise ValueError
@@ -406,6 +444,95 @@ def _write_marker(state_path: str | os.PathLike[str], marker: MigrationCutoverMa
     _atomic_write_json(marker_path(state_path), _marker_document(marker))
 
 
+@contextmanager
+def _marker_state_lock(state_path: str | os.PathLike[str]) -> Iterator[None]:
+    """Serialize migration-marker transitions across processes.
+
+    The sidecar is intentionally persistent. Removing a locked sidecar could
+    let another process create and lock a different inode while a waiter still
+    owns the original one.
+    """
+
+    marker = marker_path(state_path)
+    lock_path = marker.with_name(marker.name + ".lock")
+    owner_file = None
+    acquired = False
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        owner_file = open(lock_path, "a+b")  # noqa: SIM115 -- held through the transition.
+        if os.name == "nt":
+            owner_file.seek(0, os.SEEK_END)
+            if owner_file.tell() == 0:
+                owner_file.write(b"\0")
+                owner_file.flush()
+        owner_file.seek(0)
+        deadline = time.monotonic() + _MIGRATION_LOCK_TIMEOUT_SECONDS
+        if os.name == "nt":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(owner_file.fileno(), msvcrt.LK_NBLCK, 1)
+                    acquired = True
+                    break
+                except OSError as exc:
+                    if exc.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                        raise MigrationGateError(CODE_MIGRATION_GATE_LOCK_FAILURE) from None
+                    if time.monotonic() >= deadline:
+                        raise MigrationGateError(CODE_MIGRATION_GATE_LOCK_TIMEOUT) from None
+                    time.sleep(_MIGRATION_LOCK_POLL_SECONDS)
+        else:
+            import fcntl
+
+            while True:
+                try:
+                    fcntl.flock(owner_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise MigrationGateError(CODE_MIGRATION_GATE_LOCK_TIMEOUT) from None
+                    time.sleep(_MIGRATION_LOCK_POLL_SECONDS)
+    except MigrationGateError:
+        if owner_file is not None:
+            with suppress(Exception):
+                owner_file.close()
+        raise
+    except Exception:
+        if owner_file is not None:
+            with suppress(Exception):
+                owner_file.close()
+        raise MigrationGateError(CODE_MIGRATION_GATE_LOCK_FAILURE) from None
+    body_failed = False
+    release_failed = False
+    try:
+        yield
+    except BaseException:
+        body_failed = True
+        raise
+    finally:
+        if owner_file is not None:
+            if acquired:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        owner_file.seek(0)
+                        msvcrt.locking(owner_file.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(owner_file.fileno(), fcntl.LOCK_UN)
+                except Exception:
+                    release_failed = True
+            try:
+                owner_file.close()
+            except Exception:
+                release_failed = True
+        if release_failed and not body_failed:
+            raise MigrationGateError(CODE_MIGRATION_GATE_LOCK_FAILURE) from None
+
+
 def _remove_marker(state_path: str | os.PathLike[str]) -> None:
     path = marker_path(state_path)
     try:
@@ -413,11 +540,17 @@ def _remove_marker(state_path: str | os.PathLike[str]) -> None:
     except FileNotFoundError:
         return
     if os.name != "nt":
-        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            # The unlink already happened; reopening the old marker would
+            # reverse an accepted state transition. Report the uncertain
+            # directory durability without recreating the file.
+            raise MigrationGateError(CODE_MARKER_DURABILITY_UNCERTAIN) from None
 
 
 def _atomic_write_json(path: Path, value: Any) -> None:
@@ -433,11 +566,25 @@ def _atomic_write_json(path: Path, value: Any) -> None:
             os.fsync(stream.fileno())
         os.replace(temporary, path)
         if os.name != "nt":
-            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
             try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-    finally:
+                directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            except OSError:
+                # Atomic replace is the visible commit point. Do not restore
+                # old bytes after it: a rollback could reopen an older epoch.
+                raise MigrationGateError(CODE_MARKER_DURABILITY_UNCERTAIN) from None
+    except BaseException:
+        with suppress(FileNotFoundError):
+            try:
+                temporary.unlink()
+            except OSError:
+                # Preserve the primary write/replace failure; an orphaned
+                # unique temp file is safer than replacing the original error.
+                pass
+        raise
+    else:
         with suppress(FileNotFoundError):
             temporary.unlink()

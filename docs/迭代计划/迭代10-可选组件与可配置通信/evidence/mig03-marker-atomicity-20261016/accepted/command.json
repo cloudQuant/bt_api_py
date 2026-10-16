@@ -1,0 +1,28 @@
+{
+  "argv": [
+    "C:/Anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--noconftest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+    "--junitxml=D:\\temp\\iteration10-mig03-atomicity-root-r2-20261016\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-mig03-atomicity-root-r2-20261016\\pytest-tmp",
+    "D:\\bt_api_py\\tests\\unit\\test_service_migration_gate_atomicity.py"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1",
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "BT_API_PY_LIGHT_IMPORT": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS",
+    "PYTHONSTARTUP",
+    "PYTHONHOME"
+  ],
+  "started_utc": "2026-10-16T06:59:16.632611+00:00"
+}

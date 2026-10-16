@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 1,
+  "finished_utc": "2026-10-16T06:46:06.041127+00:00",
+  "source_count": 284,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "7c135ccd8b86adc4921df67f168b2693dc5499c2",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "7c135ccd8b86adc4921df67f168b2693dc5499c2",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "73626b2583e318c52ced91b89086c74a9a9af13d9cfbb4b4e2a23b8b6417013c",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "LOCAL_REAL_CROSS_PROCESS_MARKER_LOCK_AND_FAULT_INJECTION_ONLY"
+}

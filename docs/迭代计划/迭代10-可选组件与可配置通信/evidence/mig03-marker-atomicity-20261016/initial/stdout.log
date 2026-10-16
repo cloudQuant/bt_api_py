@@ -1,0 +1,68 @@
+....F..                                                                  [100%]
+================================== FAILURES ===================================
+_______ test_atomic_file_readers_observe_only_complete_marker_documents _______
+
+tmp_path = WindowsPath('D:/temp/iteration10-mig03-atomicity-root-20261016/pytest-tmp/test_atomic_file_readers_obser0')
+
+    def test_atomic_file_readers_observe_only_complete_marker_documents(tmp_path: Path) -> None:
+        state = tmp_path / "registry.sqlite3"
+        armed = gate.arm_migration_cutover(
+            state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
+        )
+        gate.record_migration_first_write(state, fact_kind="dispatch")
+        sealed = gate.read_migration_marker(state)
+        assert sealed is not None
+        documents = [gate._marker_document(armed), gate._marker_document(sealed)]
+        path = gate.marker_path(state)
+        writer = r"""
+    import json, sys, time
+    from pathlib import Path
+    from bt_api_py.service_migration_gate import _atomic_write_json
+    
+    path = Path(sys.argv[1])
+    documents = json.loads(sys.argv[2])
+    ready = Path(sys.argv[3])
+    ready.write_text('writing', encoding='utf-8')
+    for index in range(500):
+        _atomic_write_json(path, documents[index % 2])
+        time.sleep(0.001)
+    """
+        process = _python_process(
+            writer,
+            str(path),
+            json.dumps(documents, separators=(",", ":")),
+            str(tmp_path / "writer-ready"),
+        )
+        _wait_for_file(tmp_path / "writer-ready", process)
+        seen = set()
+        try:
+            while process.poll() is None:
+                marker = gate.read_migration_marker(state)
+                assert marker is not None
+                assert marker.migration_id == armed.migration_id
+                assert (marker.status, marker.first_write_fact_kind) in {
+                    (gate.STATUS_COMMITTED, None),
+                    (gate.STATUS_SEALED, "dispatch"),
+                }
+                seen.add(marker.status)
+            stdout, stderr = _finish(process)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+    
+        assert stdout == ""
+>       assert stderr == ""
+E       assert "Traceback (m...tover.json'\n" == ''
+E         
+E         + Traceback (most recent call last):
+E         +   File "<string>", line 11, in <module>
+E         +   File "D:\bt_api_py\bt_api_py\service_migration_gate.py", line 555, in _atomic_write_json
+E         +     os.replace(temporary, path)
+E         + PermissionError: [WinError 5] ¾Ü¾ø·ÃÎÊ¡£: 'D:\\temp\\iteration10-mig03-atomicity-root-20261016\\pytest-tmp\\test_atomic_file_readers_obser0\\.registry.sqlite3.migration-cutover.json.b067e86c621a42f88220e754b541b5e5.tmp' -> 'D:\\temp\\iteration10-mig03-atomicity-root-20261016\\pytest-tmp\\test_atomic_file_readers_obser0\\registry.sqlite3.migration-cutover.json'
+
+tests\unit\test_service_migration_gate_atomicity.py:350: AssertionError
+- generated xml file: D:\temp\iteration10-mig03-atomicity-root-20261016\junit.xml -
+=========================== short test summary info ===========================
+FAILED ::test_atomic_file_readers_observe_only_complete_marker_documents - as...
+1 failed, 6 passed in 5.64s

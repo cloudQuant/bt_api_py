@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="7" time="5.339" timestamp="2026-10-16T14:46:00.251223" hostname="yun"><testcase classname="" name="test_late_rollback_rereads_sealed_marker_before_removing_it" time="0.750" /><testcase classname="" name="test_concurrent_different_epoch_arms_have_exactly_one_winner" time="1.550" /><testcase classname="" name="test_lock_wait_is_bounded_and_released_after_contention" time="1.537" /><testcase classname="" name="test_pre_replace_write_failure_preserves_old_file_and_allows_recovery" time="0.022" /><testcase classname="" name="test_atomic_file_readers_observe_only_complete_marker_documents" time="0.712"><failure message="assert &quot;Traceback (m...tover.json'\n&quot; == ''&#10;  &#10;  + Traceback (most recent call last):&#10;  +   File &quot;&lt;string&gt;&quot;, line 11, in &lt;module&gt;&#10;  +   File &quot;D:\bt_api_py\bt_api_py\service_migration_gate.py&quot;, line 555, in _atomic_write_json&#10;  +     os.replace(temporary, path)&#10;  + PermissionError: [WinError 5] 拒绝访问。: 'D:\\temp\\iteration10-mig03-atomicity-root-20261016\\pytest-tmp\\test_atomic_file_readers_obser0\\.registry.sqlite3.migration-cutover.json.b067e86c621a42f88220e754b541b5e5.tmp' -&gt; 'D:\\temp\\iteration10-mig03-atomicity-root-20261016\\pytest-tmp\\test_atomic_file_readers_obser0\\registry.sqlite3.migration-cutover.json'">tmp_path = WindowsPath('D:/temp/iteration10-mig03-atomicity-root-20261016/pytest-tmp/test_atomic_file_readers_obser0')
+
+    def test_atomic_file_readers_observe_only_complete_marker_documents(tmp_path: Path) -&gt; None:
+        state = tmp_path / "registry.sqlite3"
+        armed = gate.arm_migration_cutover(
+            state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
+        )
+        gate.record_migration_first_write(state, fact_kind="dispatch")
+        sealed = gate.read_migration_marker(state)
+        assert sealed is not None
+        documents = [gate._marker_document(armed), gate._marker_document(sealed)]
+        path = gate.marker_path(state)
+        writer = r"""
+    import json, sys, time
+    from pathlib import Path
+    from bt_api_py.service_migration_gate import _atomic_write_json
+    
+    path = Path(sys.argv[1])
+    documents = json.loads(sys.argv[2])
+    ready = Path(sys.argv[3])
+    ready.write_text('writing', encoding='utf-8')
+    for index in range(500):
+        _atomic_write_json(path, documents[index % 2])
+        time.sleep(0.001)
+    """
+        process = _python_process(
+            writer,
+            str(path),
+            json.dumps(documents, separators=(",", ":")),
+            str(tmp_path / "writer-ready"),
+        )
+        _wait_for_file(tmp_path / "writer-ready", process)
+        seen = set()
+        try:
+            while process.poll() is None:
+                marker = gate.read_migration_marker(state)
+                assert marker is not None
+                assert marker.migration_id == armed.migration_id
+                assert (marker.status, marker.first_write_fact_kind) in {
+                    (gate.STATUS_COMMITTED, None),
+                    (gate.STATUS_SEALED, "dispatch"),
+                }
+                seen.add(marker.status)
+            stdout, stderr = _finish(process)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+    
+        assert stdout == ""
+&gt;       assert stderr == ""
+E       assert "Traceback (m...tover.json'\n" == ''
+E         
+E         + Traceback (most recent call last):
+E         +   File "&lt;string&gt;", line 11, in &lt;module&gt;
+E         +   File "D:\bt_api_py\bt_api_py\service_migration_gate.py", line 555, in _atomic_write_json
+E         +     os.replace(temporary, path)
+E         + PermissionError: [WinError 5] 拒绝访问。: 'D:\\temp\\iteration10-mig03-atomicity-root-20261016\\pytest-tmp\\test_atomic_file_readers_obser0\\.registry.sqlite3.migration-cutover.json.b067e86c621a42f88220e754b541b5e5.tmp' -&gt; 'D:\\temp\\iteration10-mig03-atomicity-root-20261016\\pytest-tmp\\test_atomic_file_readers_obser0\\registry.sqlite3.migration-cutover.json'
+
+tests\unit\test_service_migration_gate_atomicity.py:350: AssertionError</failure></testcase><testcase classname="" name="test_schema_version_requires_an_exact_integer[True]" time="0.008" /><testcase classname="" name="test_schema_version_requires_an_exact_integer[1.0]" time="0.008" /></testsuite></testsuites>
