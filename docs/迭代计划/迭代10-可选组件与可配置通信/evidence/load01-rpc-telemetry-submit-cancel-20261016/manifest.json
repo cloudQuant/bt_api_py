@@ -1,0 +1,388 @@
+{
+  "candidate_source": [
+    {
+      "bytes": 218847,
+      "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+      "sha256": "958f221fd56f9c7a23e6e0637c9bc88c5bc342d6bbf82224ab9cdb03e332a96b"
+    },
+    {
+      "bytes": 22574,
+      "path": "tests/unit/test_load01_rpc_telemetry_contract.py",
+      "sha256": "dc71425cc77213570391a401fc068b23b7a3488d9c2e76608c974b7723dcc9c2"
+    }
+  ],
+  "evidence_level": "SOURCE_FAKE_RPC_TELEMETRY_CONTRACT_ONLY",
+  "fixed_source_provenance": {
+    "archive_source": "D:\\temp\\it10load01-20261016-r5-resume",
+    "export_head_at_preparation": "0302917dd50184a74cfa8d66c5e597cec904984c",
+    "materialization": "Fresh extraction from seven R5-frozen ZIPs; no Git worktree or R6 result tree copied.",
+    "overlays": {
+      "runner": {
+        "candidate_bytes": 218847,
+        "candidate_sha256": "958f221fd56f9c7a23e6e0637c9bc88c5bc342d6bbf82224ab9cdb03e332a96b",
+        "committed_base": {
+          "bytes": 216208,
+          "commit": "ce1b678389456ed8e2b13a1bc710abeacb22605a",
+          "git_blob": "830539294db786e8e55ef598fe4839d7ac887b52",
+          "sha256": "27d377d05c55ae005ba532d9493f07d396cdc1d24d23b23e9b2d7ac4942c1143"
+        },
+        "path": "source/tests/unit/test_load01_hundred_strategy_30min.py",
+        "source": "D:\\bt_api_py\\tests\\unit\\test_load01_hundred_strategy_30min.py"
+      },
+      "telemetry_test": {
+        "candidate_bytes": 22574,
+        "candidate_sha256": "dc71425cc77213570391a401fc068b23b7a3488d9c2e76608c974b7723dcc9c2",
+        "committed_base": {
+          "bytes": 17397,
+          "commit": "ce1b678389456ed8e2b13a1bc710abeacb22605a",
+          "git_blob": "ba2c216090ca157fa7c696955361bdc8253279c7",
+          "sha256": "e9837a4f86bd0b398f7577f34fb78934f2028ae445bf7330ca7ee4d02055e6cf"
+        },
+        "path": "source/tests/unit/test_load01_rpc_telemetry_contract.py",
+        "source": "D:\\bt_api_py\\tests\\unit\\test_load01_rpc_telemetry_contract.py"
+      }
+    },
+    "package_gitlinks": {
+      "bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "bt_api/bt_api_execution": "f5c030644dea06ce91afbaacf94e11e353538186",
+      "bt_api/bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "bt_api/bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+      "bt_api/bt_api_risk": "adb6ec58308149faa93c02920b72f98ac3796056",
+      "bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "provenance_manifest": {
+      "bytes": 4531,
+      "sha256": "d42d9682ffee4a53520bd4a8040378ed2a75e5e3f5590be39986313ae4ff5cd1"
+    },
+    "seven_frozen_archives": [
+      {
+        "bytes": 14994406,
+        "members": 3877,
+        "name": "parent.zip",
+        "sha256": "3e32218bd459810130d33559aebbd51524f275deb9e834fe3025bfe89d103bb7"
+      },
+      {
+        "bytes": 310519,
+        "members": 261,
+        "name": "bt_api_base.zip",
+        "sha256": "cc6053eb2b8d0186c6b1d98ded521454bb374f39183a4d27176326847daaae60"
+      },
+      {
+        "bytes": 54830,
+        "members": 23,
+        "name": "bt_api_transport_zmq.zip",
+        "sha256": "07f8cd6b0c8308e22555fcfc196efc14b85a332c2ba5b679a3bfa6fad25f8c41"
+      },
+      {
+        "bytes": 154707,
+        "members": 41,
+        "name": "bt_api_gateway.zip",
+        "sha256": "03ba4df4643054c275dc8df1e074050a125ca4e806af648d32d324d815ddd686"
+      },
+      {
+        "bytes": 145856,
+        "members": 53,
+        "name": "bt_api_monitor.zip",
+        "sha256": "041d3908de1f8039268ee72d58695149bc1da2deba50fdb170839980f1d2896d"
+      },
+      {
+        "bytes": 501701,
+        "members": 76,
+        "name": "bt_api_execution.zip",
+        "sha256": "14efac09b8bf8073826e85a8c37c9750689f3b12c20a9764b4614a8d0bd961aa"
+      },
+      {
+        "bytes": 310232,
+        "members": 65,
+        "name": "bt_api_risk.zip",
+        "sha256": "5ad071e3a8fc20034e3003c15999cf7afeaeb5bacf9a81ac2f7ae23ebad4bf7e"
+      }
+    ],
+    "source_parent_commit": "e08da3c58cb3b3b040f7799642de38523bbd3229",
+    "source_tree_file_count": 3714,
+    "source_tree_pin_map_sha256": "1f4079f01d69681c11dedd64aa103be81cdf6605e151832e1a9e3537284d7344"
+  },
+  "formal_load01_pass": false,
+  "r6_pilot_failure": {
+    "child_exit_code_counts": {
+      "-15": 108,
+      "0": 2,
+      "1": 2
+    },
+    "child_records": 112,
+    "formal_acceptance_eligible": false,
+    "normal_pass": false,
+    "normal_shutdown_complete": false,
+    "orders_submit_outcome": "UNKNOWN: client send followed by the 5-second response timeout; server-side completion is unobserved.",
+    "outer_result": {
+      "evidence_level": "ITERATION10_LOAD01_PILOT_120S_FIXED_R5_ZIP_EXPORT_CE1B678_TELEMETRY_RUNNER_METADATA_REBOUND_NOT_FORMAL",
+      "finished_utc": "2026-10-16T17:06:19.846288+08:00",
+      "heads_after": {},
+      "heads_before": {},
+      "heads_unchanged": true,
+      "pytest_exit": 1,
+      "source_count": 37,
+      "sources_unchanged": true,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "f440c6a6110ab5078cd9e18ae9918256de65ef865cc46c95045e1641be0b390a"
+    },
+    "output": "D:\\temp\\iteration10-load01-pilot-e08da3c5-ce1b678-20261016-r6-resume",
+    "owned_pids_read_only_check": {
+      "checked_at_utc": "2026-10-16T09:33:04.7564703Z",
+      "owned_pid_count": 112,
+      "present_count": 0,
+      "scope": "R6 child record PIDs only; no historical host or PID 81428"
+    },
+    "phase": "sustained-load",
+    "pilot_payload": {
+      "bytes": 1488936,
+      "sha256": "b98a825fff6fed54533791f3348f472edd62fc66e4b03bc6ce0450b5e76b72db"
+    },
+    "result": {
+      "bytes": 510,
+      "sha256": "9eaa12045e70ab0c7a280d55f5fe6b1aa5330b27a6afbec209622849aaeb4529"
+    },
+    "safe_code": "CHILD_FAILED",
+    "source_pin_count": 37,
+    "sources_unchanged": true,
+    "state": "FAILED",
+    "termination_requests": {
+      "other_strategy_exit_1": 2,
+      "owners": 10,
+      "strategies": 98,
+      "total": 108
+    }
+  },
+  "raw_evidence_zip": {
+    "bytes": 752276,
+    "members": [
+      {
+        "bytes": 218847,
+        "name": "candidate-source/tests/unit/test_load01_hundred_strategy_30min.py",
+        "sha256": "958f221fd56f9c7a23e6e0637c9bc88c5bc342d6bbf82224ab9cdb03e332a96b"
+      },
+      {
+        "bytes": 22574,
+        "name": "candidate-source/tests/unit/test_load01_rpc_telemetry_contract.py",
+        "sha256": "dc71425cc77213570391a401fc068b23b7a3488d9c2e76608c974b7723dcc9c2"
+      },
+      {
+        "bytes": 1521,
+        "name": "r6-pilot/command.json",
+        "sha256": "c0514caf3242d64247eb7d247536380163094b2c58e38b5e1da9baac22c9a13b"
+      },
+      {
+        "bytes": 3,
+        "name": "r6-pilot/exit.txt",
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "bytes": 1091,
+        "name": "r6-pilot/failure-facts.md",
+        "sha256": "c575b5df5000fb8e5eba54663cf663c62220fedd1e0e62f3e620cf476ee3ac7b"
+      },
+      {
+        "bytes": 912,
+        "name": "r6-pilot/junit.xml",
+        "sha256": "01d02f5a9ad377d220eb5c0401f212ee5efa661838f631f9fa8882e4a9ecd344"
+      },
+      {
+        "bytes": 1488936,
+        "name": "r6-pilot/load01-pilot-result.json",
+        "sha256": "b98a825fff6fed54533791f3348f472edd62fc66e4b03bc6ce0450b5e76b72db"
+      },
+      {
+        "bytes": 176,
+        "name": "r6-pilot/owned-pid-observation.json",
+        "sha256": "d7445d01c7bc68ac193c804f84f9b64e0ba68c81d51c3c998135bc3319a7412d"
+      },
+      {
+        "bytes": 510,
+        "name": "r6-pilot/result.json",
+        "sha256": "9eaa12045e70ab0c7a280d55f5fe6b1aa5330b27a6afbec209622849aaeb4529"
+      },
+      {
+        "bytes": 3204,
+        "name": "r6-pilot/runner.py",
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "bytes": 6171,
+        "name": "r6-pilot/source-after.json",
+        "sha256": "0d4cdb9d3686752620171b702d1f73e9500999f20e8c971f9f9378e5b66865a3"
+      },
+      {
+        "bytes": 6171,
+        "name": "r6-pilot/source-before.json",
+        "sha256": "0d4cdb9d3686752620171b702d1f73e9500999f20e8c971f9f9378e5b66865a3"
+      },
+      {
+        "bytes": 12357,
+        "name": "r6-pilot/spec.json",
+        "sha256": "47341f8b8218a7804b5aa7727dc013fc93971b702924aa75723e56bf438f6fa8"
+      },
+      {
+        "bytes": 0,
+        "name": "r6-pilot/stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "bytes": 9932,
+        "name": "r6-pilot/stdout.log",
+        "sha256": "f440c6a6110ab5078cd9e18ae9918256de65ef865cc46c95045e1641be0b390a"
+      },
+      {
+        "bytes": 984,
+        "name": "review/current-static-review.md",
+        "sha256": "c7c03ac8a1c6b3f2a040eb0dde291a8ee89bf19dfc4842ef4e2bc82c35922a4c"
+      },
+      {
+        "bytes": 1653,
+        "name": "root-focused-qa/command.json",
+        "sha256": "2774324a541d44ebb7bcf1c83085fc52f6100d6f9a28cb78dff02e69178f23fd"
+      },
+      {
+        "bytes": 3,
+        "name": "root-focused-qa/exit.txt",
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "bytes": 529,
+        "name": "root-focused-qa/junit.xml",
+        "sha256": "93e89568322ba02f5378fdf163e6f7b289d940f5b872c23cc194025b54fb5dae"
+      },
+      {
+        "bytes": 449,
+        "name": "root-focused-qa/result.json",
+        "sha256": "4ff404b5ee6987639ba475dcd46eb81e1988308856bf3b16019f8e82d67d162d"
+      },
+      {
+        "bytes": 3204,
+        "name": "root-focused-qa/runner.py",
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "bytes": 932116,
+        "name": "root-focused-qa/source-after.json",
+        "sha256": "043f54d36ce0dfed1b91eed002d24bd287904e4a462f8bc9a906a2e349cb67fc"
+      },
+      {
+        "bytes": 932116,
+        "name": "root-focused-qa/source-before.json",
+        "sha256": "043f54d36ce0dfed1b91eed002d24bd287904e4a462f8bc9a906a2e349cb67fc"
+      },
+      {
+        "bytes": 941743,
+        "name": "root-focused-qa/spec.json",
+        "sha256": "ecbaafb9768bd6f3fe5f652034769a192f255a6a671645aa3a01716ddbdcf3cd"
+      },
+      {
+        "bytes": 0,
+        "name": "root-focused-qa/stderr.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "bytes": 654,
+        "name": "root-focused-qa/stdout.log",
+        "sha256": "c7ea6f3454edca24eb752f92be0e9ad9778f5ceff9716dbf2f47d056b09dcf00"
+      },
+      {
+        "bytes": 941743,
+        "name": "source-provenance/focused-qa-spec.json",
+        "sha256": "ecbaafb9768bd6f3fe5f652034769a192f255a6a671645aa3a01716ddbdcf3cd"
+      },
+      {
+        "bytes": 10053,
+        "name": "source-provenance/prepare-source-helper.py",
+        "sha256": "033687ed9b78c9ff46ecfeb8e9b6a933089897e22f2182edaf37b0231f1870db"
+      },
+      {
+        "bytes": 4531,
+        "name": "source-provenance/r5-seven-zip-export.json",
+        "sha256": "d42d9682ffee4a53520bd4a8040378ed2a75e5e3f5590be39986313ae4ff5cd1"
+      }
+    ],
+    "path": "raw-evidence.zip",
+    "sha256": "9fbba8b17035eca29d876ccbf3800f7e392492caaa72b4e86cc50f581e9174be"
+  },
+  "repository": {
+    "branch": "dev",
+    "candidate_paths_staged": false,
+    "head_at_package_preparation": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+    "name": "bt_api_py"
+  },
+  "root_focused_qa": {
+    "junit": {
+      "bytes": 529,
+      "sha256": "93e89568322ba02f5378fdf163e6f7b289d940f5b872c23cc194025b54fb5dae"
+    },
+    "nodes": [
+      "tests/unit/test_load01_rpc_telemetry_contract.py::test_hook_correlates_submit_cancel_boundaries_and_preserves_rpc_semantics",
+      "tests/unit/test_load01_rpc_telemetry_contract.py::test_emergency_cleanup_drains_final_snapshot_before_terminate"
+    ],
+    "output": "D:\\temp\\iteration10-load01-rpc-telemetry-focused-qa-root-20261016-r1",
+    "result": {
+      "evidence_level": "SOURCE_FAKE_RPC_TELEMETRY_CONTRACT_ONLY",
+      "finished_utc": "2026-10-16T17:28:29.077817+08:00",
+      "heads_after": {},
+      "heads_before": {},
+      "heads_unchanged": true,
+      "pytest_exit": 0,
+      "source_count": 3723,
+      "sources_unchanged": true,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "c7ea6f3454edca24eb752f92be0e9ad9778f5ceff9716dbf2f47d056b09dcf00"
+    },
+    "source_pin_count": 3723,
+    "source_pin_map_sha256": "1f4079f01d69681c11dedd64aa103be81cdf6605e151832e1a9e3537284d7344",
+    "source_tree_file_count": 3714,
+    "spec": {
+      "bytes": 941743,
+      "sha256": "ecbaafb9768bd6f3fe5f652034769a192f255a6a671645aa3a01716ddbdcf3cd"
+    },
+    "spec_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-load01-rpc-telemetry-focused-qa-spec-r1.json",
+    "spec_sha256": "ecbaafb9768bd6f3fe5f652034769a192f255a6a671645aa3a01716ddbdcf3cd",
+    "tool_id": "5f2e96",
+    "pytest_stdout_summary": "2 passed, 1 warning in 2.26s",
+    "pytest_session_duration_seconds": 2.26,
+    "pytest_session_duration_source": "Final summary line in the preserved Root stdout.log.",
+    "pytest_warning_count": 1,
+    "pytest_warning": "PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope",
+    "pytest_stderr_empty": true,
+    "pytest_stdout": {
+      "bytes": 654,
+      "sha256": "c7ea6f3454edca24eb752f92be0e9ad9778f5ceff9716dbf2f47d056b09dcf00"
+    },
+    "junit_testsuite_time_seconds": 1.929,
+    "junit_duration_source": "testsuite@time from preserved junit.xml; not the pytest stdout session duration."
+  },
+  "round": "LOAD01 submit/cancel telemetry and R6 diagnostic follow-up",
+  "round_record": {
+    "path": "round-record.md",
+    "bytes": 3720,
+    "sha256": "850d73e1925c4af8981f8267b853361e121759212f062a01e1c2d17eb82ae0bc"
+  },
+  "schema": "iteration10-load01-rpc-telemetry-submit-cancel-evidence-v1",
+  "static_review": {
+    "disposition": "GO_STATIC_FOR_ROOT_SOURCEFAKE",
+    "execution": "No tests/QA/Host/pilot by reviewer",
+    "nonblocking_note": "Fake Pipe.poll does not assert timeout=0; implementation calls poll(0) at runner line 3815.",
+    "reviewer": "/root/review_bt_store_feed"
+  },
+  "unchanged_constraints": {
+    "acceptance_thresholds_changed": false,
+    "accounts": 10,
+    "business_retries_changed": false,
+    "full_run_seconds": 1800,
+    "lease_seconds": 30,
+    "market_hz": 200,
+    "order_hz": 2,
+    "pilot_seconds": 120,
+    "production_sources_changed": false,
+    "resource_thresholds_changed": false,
+    "ring_capacity_per_process": 256,
+    "rpc_timeout_seconds": 5,
+    "strategies": 100,
+    "topics": 20
+  }
+}

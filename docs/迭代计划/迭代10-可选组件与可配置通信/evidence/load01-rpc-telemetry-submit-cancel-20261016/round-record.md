@@ -1,0 +1,18 @@
+# LOAD01 submit/cancel RPC telemetry: sourcefake acceptance and R6 failure
+
+Prepared 2026-10-16T09:33:32.546437Z in the existing SDK dev checkout. This is a narrow diagnostic telemetry round. **LOAD01 remains unaccepted; this package is not a LOAD01 pass.** It does not authorize another pilot. Root will schedule a serial R7 pilot only after the scoped source commit and a fresh runtime preflight.
+
+Root's fixed-source QA (tool 5f2e96) ran exactly the two focused fake contract nodes and passed 2/2. The pytest stdout summary is 2 passed, 1 warning in 2.26s; the warning is the existing PytestConfigWarning for unknown config option asyncio_default_fixture_loop_scope. The JUnit testsuite reports time=1.929 seconds (JUnit timing, distinct from the pytest stdout session duration). Pytest exited 0, stderr is empty, and 3,723 source pins were unchanged. The reviewer returned GO_STATIC_FOR_ROOT_SOURCEFAKE for the exact candidate pins below. This establishes SOURCE_FAKE_RPC_TELEMETRY_CONTRACT_ONLY, not real-load overhead or performance.
+
+The runner extends the bounded per-process ring to orders.submit and orders.cancel, correlating intent_id and cancel_id, and snapshots owner/strategy failure paths using the existing Pipe before termination. The static review confirms ring capacity 256, the existing nonblocking drain and cleanup grace, all business retries, and the 100-strategy / 10-account / 20-topic / 200 Hz market / 2 Hz order / 5-second RPC / 30-second lease / resource / 120-second pilot / 1,800-second full-run gates remain unchanged. No production source was changed. A nonblocking review note is preserved in the archive: the fake Pipe.poll does not assert timeout=0, although the implementation calls poll(0).
+
+Candidate source pins:
+
+- tests/unit/test_load01_hundred_strategy_30min.py: 218847 bytes / 958f221fd56f9c7a23e6e0637c9bc88c5bc342d6bbf82224ab9cdb03e332a96b
+- tests/unit/test_load01_rpc_telemetry_contract.py: 22574 bytes / dc71425cc77213570391a401fc068b23b7a3488d9c2e76608c974b7723dcc9c2
+
+At package preparation, SDK HEAD was 937350b138ea952a14e1ab08539dc295efb1d0a4 on dev; the two candidate paths are unstaged working-tree edits and are not represented as commit bytes. The fixed-source QA export was freshly extracted from the seven frozen R5 ZIPs based on parent source commit e08da3c58cb3b3b040f7799642de38523bbd3229 and six exact package gitlinks. The export-preparation HEAD was 0302917dd50184a74cfa8d66c5e597cec904984c; the runner and test are explicitly pinned overlays, not bytes claimed to originate from a commit. The ZIP archives remain at their existing temporary source locations and are identified in manifest.json; raw-evidence.zip contains their provenance record, not duplicate source ZIPs.
+
+R6 remains a failed consumed pilot: FAILED / CHILD_FAILED during sustained-load, normal_shutdown_complete=false. It records 112 children (108 exit -15, two exit 0, two exit 1). Root's precise classification is 108 termination requests (10 owners + 98 strategies), with two other strategies exiting 1. A read-only query of only the 112 R6-owned PIDs found 0 present after the run; no historical host or PID 81428 was queried. Same-call evidence shows an orders.submit request sent and followed by the 5-second response timeout; outcome remains UNKNOWN. It does not prove server-side commit or rejection. R6 recorded 37 source pins unchanged. The raw result is preserved, not rewritten or relabeled as success.
+
+The archive is 752276 bytes / 9fbba8b17035eca29d876ccbf3800f7e392492caaa72b4e86cc50f581e9174be; member pins are in manifest.json. No progress tracker was edited, no source staged or committed, and no pilot metadata or new pilot was generated or launched in this round.

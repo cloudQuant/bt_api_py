@@ -477,7 +477,7 @@ _LOAD01_RPC_TRACE: _Load01RpcTrace | None = None
 
 
 class _Load01RpcTrace:
-    """Bounded per-child trace for synthetic orders.cancel RPCs."""
+    """Bounded per-child trace for synthetic orders.submit/cancel RPCs."""
 
     def __init__(self, role: str) -> None:
         self.role, self.pid = role, os.getpid()
@@ -498,7 +498,7 @@ class _Load01RpcTrace:
             return None
 
     def add(
-        self, event: str, key: tuple[str, str], *, at: int | None = None,
+        self, event: str, key: tuple[str, str, str], *, at: int | None = None,
         start: int | None = None, end: int | None = None, service: str | None = None,
         outcome: str | None = None, error: str | None = None,
     ) -> None:
@@ -512,9 +512,13 @@ class _Load01RpcTrace:
             self.total += 1
             row = {
                 "sequence": self.sequence, "event": event, "at_perf_counter_ns": stamp,
-                "message_id": key[0], "cancel_id": key[1],
+                "operation": key[0], "message_id": key[1], "correlation_id": key[2],
                 "process_role": self.role, "pid": self.pid,
             }
+            if key[0] == "orders.cancel":
+                row["cancel_id"] = key[2]
+            elif key[0] == "orders.submit":
+                row["intent_id"] = key[2]
             if service is not None:
                 row["service_id"] = service
             if outcome is not None:
@@ -586,24 +590,26 @@ def _send_load01_rpc_diagnostic(
         control.send(("rpc-diagnostic", role, pid, snapshot, stage))
 
 
-def _load01_cancel_key(request: Any) -> tuple[str, str] | None:
+def _load01_order_key(request: Any) -> tuple[str, str, str] | None:
     try:
         header = request.header
-        if header.operation != "orders.cancel":
+        operation = header.operation
+        if operation not in _ORDER_OPS:
             return None
         payload = request.payload
         args = payload.get("arguments") if isinstance(payload, Mapping) else None
         if not isinstance(args, Mapping):
             return None
         message_id = _bounded_diagnostic_text(header.message_id, maximum=128)
-        cancel_id = _bounded_diagnostic_text(args.get("cancel_id"), maximum=128)
-        return (message_id, cancel_id) if message_id and cancel_id else None
+        argument_name = "cancel_id" if operation == "orders.cancel" else "intent_id"
+        correlation_id = _bounded_diagnostic_text(args.get(argument_name), maximum=128)
+        return (operation, message_id, correlation_id) if message_id and correlation_id else None
     except BaseException:
         return None
 
 
 def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
-    """Install pass-through hooks in a synthetic child; all non-cancel calls fast-path."""
+    """Install pass-through hooks in a synthetic child; non-order calls fast-path."""
     global _LOAD01_RPC_TRACE
     if _LOAD01_RPC_TRACE is not None:
         return _LOAD01_RPC_TRACE
@@ -675,7 +681,7 @@ def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
         return frames
 
     def request_wrapper(client, envelope, *, timeout):
-        key = _load01_cancel_key(envelope)
+        key = _load01_order_key(envelope)
         if key is None:
             return request(client, envelope, timeout=timeout)
         prior = getattr(state, "client_request", None)
@@ -690,7 +696,8 @@ def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
             except BaseException:
                 error = "UNEXPECTED_ERROR"
             trace.add(
-                "client_outcome", key, start=start, end=trace.now(), outcome="exception",
+                "client_outcome", key, start=start, end=trace.now(),
+                outcome="timeout" if isinstance(exc, TimeoutError) else "exception",
                 error=error,
             )
             raise
@@ -706,7 +713,7 @@ def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
             return server_init(server, *args, **kwargs)
 
         def handler_wrapper(principal, envelope):
-            key = _load01_cancel_key(envelope)
+            key = _load01_order_key(envelope)
             socket_id = id(server._socket)
             if key is None:
                 active = getattr(state, "server_request", None)
@@ -799,7 +806,7 @@ def _install_load01_rpc_trace(process_role: str) -> _Load01RpcTrace:
 
 
 def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
-    by_request: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    by_request: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     processes, seen = [], set()
     for name, values in sorted(snapshots.items()):
         group = values if type(values) is list else [values]
@@ -816,14 +823,17 @@ def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
         )} | {"name": name})
         for value in group:
             for event in value.get("events", ()):
-                key = (event.get("message_id"), event.get("cancel_id"))
+                key = (
+                    event.get("operation"), event.get("message_id"),
+                    event.get("correlation_id"),
+                )
                 marker = (event.get("pid"), event.get("sequence"))
                 if all(type(item) is str for item in key) and marker not in seen:
                     seen.add(marker)
                     by_request.setdefault(key, []).append(event)
 
     requests = []
-    for (message_id, cancel_id), events in sorted(by_request.items()):
+    for (operation, message_id, correlation_id), events in sorted(by_request.items()):
         events.sort(key=lambda event: event["at_perf_counter_ns"])
         stamps = {}
         for event in events:
@@ -834,7 +844,11 @@ def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
                 type(start) is int and type(end) is int and end >= start
             ) else None
         requests.append({
-            "message_id": message_id, "cancel_id": cancel_id, "events": events,
+            "operation": operation, "message_id": message_id,
+            "correlation_id": correlation_id,
+            **({"cancel_id": correlation_id} if operation == "orders.cancel" else {}),
+            **({"intent_id": correlation_id} if operation == "orders.submit" else {}),
+            "events": events,
             "durations_ms": {
                 "client_send_to_server_dequeue": duration("client_send", "server_dequeue"),
                 "dequeue_to_handler_including_auth_decode_validation": duration(
@@ -848,7 +862,7 @@ def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
         })
     return {
         "ring_capacity_per_process": _LOAD01_RPC_RING_SIZE,
-        "event_filter": "orders.cancel only",
+        "event_filter": "orders.submit and orders.cancel only",
         "clock_note": "perf_counter_ns; same-host cross-process comparison is supported by Python 3.10+",
         "hook_overhead_note": "Wrappers and boundary clock reads add runtime cost; measured record "
         "construction/append is reported per process, excluding wrapper and clock-read costs.",
@@ -2446,6 +2460,13 @@ def _owner_process(
         )
     except BaseException as exc:
         rpc_timing_at_failure = _load01_trace_snapshot_or_none(rpc_trace, max_events=32)
+        _send_load01_rpc_diagnostic(
+            control,
+            f"owner-{account_index:02d}",
+            os.getpid(),
+            rpc_timing_at_failure,
+            "failure",
+        )
         cleanup_started_ns = rpc_trace.now()
         for relay in relays.values():
             with suppress(BaseException):
@@ -2475,13 +2496,6 @@ def _owner_process(
                 else None
             ),
         }
-        _send_load01_rpc_diagnostic(
-            control,
-            f"owner-{account_index:02d}",
-            os.getpid(),
-            rpc_timing_at_failure,
-            "failure",
-        )
         with suppress(Exception):
             control.send(
                 (
@@ -3112,6 +3126,13 @@ def _strategy_process(
         if runtime_probe is not None:
             runtime_probe.set_phase("startup-failed")
         rpc_timing_at_failure = _load01_trace_snapshot_or_none(rpc_trace, max_events=32)
+        _send_load01_rpc_diagnostic(
+            control,
+            f"strategy-{index:03d}",
+            os.getpid(),
+            rpc_timing_at_failure,
+            "failure",
+        )
         cleanup_started_ns = rpc_trace.now()
         child_diagnostic = {
             "runtime_start_duration_ms": runtime_start_duration_ms,
@@ -3224,13 +3245,6 @@ def _strategy_process(
             max(0, cleanup_ended_ns - cleanup_started_ns)
             if type(cleanup_started_ns) is int and type(cleanup_ended_ns) is int
             else None
-        )
-        _send_load01_rpc_diagnostic(
-            control,
-            f"strategy-{index:03d}",
-            os.getpid(),
-            rpc_timing_at_failure,
-            "failure",
         )
         with suppress(Exception):
             control.send(
@@ -3411,6 +3425,9 @@ def _consume_rpc_diagnostic(record: dict[str, Any], message: Any) -> bool:
         return True
     stage = message[4]
     record.setdefault("rpc_timing_snapshots", {})[stage] = message[3]
+    stages = record.setdefault("rpc_timing_snapshot_stages", [])
+    if stage not in stages:
+        stages.append(stage)
     return True
 
 
@@ -3774,6 +3791,9 @@ def _emergency_cleanup(
     def retain_snapshot(record: dict[str, Any], label: str, value: Any) -> None:
         if type(value) is dict:
             record.setdefault("rpc_timing_snapshots", {})[label] = value
+            stages = record.setdefault("rpc_timing_snapshot_stages", [])
+            if label not in stages:
+                stages.append(label)
 
     def retain_message(record: dict[str, Any], message: Any) -> None:
         if not isinstance(message, tuple) or not message:
@@ -3799,10 +3819,22 @@ def _emergency_cleanup(
                 record["rpc_timing_collection_error"] = type(exc).__name__
                 return
 
+    # Failed children can already have queued their bounded failure snapshot.
+    # Drain those pipes before asking the surviving workers to close.
+    for record in records.values():
+        if record["closed"]:
+            continue
+        try:
+            if not record["process"].is_alive():
+                drain_diagnostics(record, 64)
+        except (AssertionError, OSError, ValueError) as exc:
+            cleanup_errors.append(f"{record['name']}:state:{type(exc).__name__}")
+
     for record in records.values():
         if record["closed"]:
             continue
         process = record["process"]
+        diagnostic_ready = False
         try:
             if process.is_alive() and not (
                 record["kind"] == "strategy" and not record.get("ready")
@@ -3813,8 +3845,12 @@ def _emergency_cleanup(
                 record["pipe"].send(
                     ("close", "diagnostic") if diagnostic_ready else ("close",)
                 )
+                if diagnostic_ready:
+                    record["rpc_diagnostic_close_sent"] = True
         except (BrokenPipeError, EOFError, OSError) as exc:
             cleanup_errors.append(f"{record['name']}:close-send:{type(exc).__name__}")
+            if diagnostic_ready:
+                drain_diagnostics(record, 64)
 
     def join_until(timeout: float) -> list[dict[str, Any]]:
         deadline = time.monotonic() + timeout
@@ -3839,7 +3875,16 @@ def _emergency_cleanup(
 
     survivors = join_until(20)
     if survivors:
+        # A bounded final nonblocking drain closes the race where the child
+        # publishes its snapshot just after the grace loop's last poll.
+        for item in records.values():
+            if not item["closed"]:
+                drain_diagnostics(item, 64)
+        survivors = [item for item in survivors if item["process"].is_alive()]
         for item in survivors:
+            item["rpc_snapshot_received_before_terminate"] = bool(
+                item.get("rpc_timing_snapshot_stages")
+            )
             try:
                 item["process"].terminate()
                 terminated.append(item["name"])
@@ -4910,6 +4955,15 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 ),
                 "normal_exit": bool(record.get("normal_exit", False)),
                 "closed": bool(record.get("closed", False)),
+                "rpc_diagnostic_close_sent": bool(
+                    record.get("rpc_diagnostic_close_sent", False)
+                ),
+                "rpc_timing_snapshot_stages": list(
+                    record.get("rpc_timing_snapshot_stages", ())
+                ),
+                "rpc_snapshot_received_before_terminate": record.get(
+                    "rpc_snapshot_received_before_terminate"
+                ),
                 "rpc_timing_collection_error": record.get("rpc_timing_collection_error"),
             }
             for record in child_records.values()

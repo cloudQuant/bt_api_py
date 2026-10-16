@@ -48,14 +48,18 @@ def _assert_originals_restored(original_methods, original_trace) -> None:
     assert runner._LOAD01_RPC_TRACE is original_trace
 
 
-def _envelope(message_id: str, cancel_id: str, operation: str = "orders.cancel"):
+def _envelope(message_id: str, correlation_id: str, operation: str = "orders.cancel"):
+    argument_name = {
+        "orders.cancel": "cancel_id",
+        "orders.submit": "intent_id",
+    }.get(operation, "unused_id")
     return SimpleNamespace(
         header=SimpleNamespace(operation=operation, message_id=message_id),
-        payload={"arguments": {"cancel_id": cancel_id}},
+        payload={"arguments": {argument_name: correlation_id}},
     )
 
 
-def test_hook_correlates_cancel_boundaries_and_preserves_rpc_semantics() -> None:
+def test_hook_correlates_submit_cancel_boundaries_and_preserves_rpc_semantics() -> None:
     client_socket, server_socket = object(), object()
     client_send_result, reply_send_result = object(), object()
     handler_result, request_result = {"handled": True}, object()
@@ -97,7 +101,7 @@ def test_hook_correlates_cancel_boundaries_and_preserves_rpc_semantics() -> None
 
     def request(client, envelope_arg, *, timeout):
         calls.append(("request", envelope_arg, timeout))
-        if envelope_arg.header.operation != "orders.cancel":
+        if envelope_arg.header.operation not in {"orders.submit", "orders.cancel"}:
             zmq.Socket.send(client._socket, b"query-frame", flags=zmq.NOBLOCK, copy=False)
             raise mode["request_error"]
         sent = zmq.Socket.send(client._socket, b"request-frame", flags=zmq.NOBLOCK, copy=False)
@@ -160,6 +164,10 @@ def test_hook_correlates_cancel_boundaries_and_preserves_rpc_semantics() -> None
         assert service_v2.ZmqServiceClient.request(client, first, timeout=5.0) is request_result
         second = _envelope("cancel-message-2", "cancel-order-2")
         assert service_v2.ZmqServiceClient.request(client, second, timeout=5.0) is request_result
+        submit = _envelope(
+            "submit-message-1", "submit-intent-1", operation="orders.submit"
+        )
+        assert service_v2.ZmqServiceClient.request(client, submit, timeout=5.0) is request_result
 
         send_again = zmq.Again()
         mode["send_error"] = send_again
@@ -177,6 +185,18 @@ def test_hook_correlates_cancel_boundaries_and_preserves_rpc_semantics() -> None
         with pytest.raises(service_v2.RequestOutcomeUnknownError) as caught_timeout:
             service_v2.ZmqServiceClient.request(client, timeout_request, timeout=5.0)
         assert caught_timeout.value is timeout_error
+        mode["request_error"] = None
+
+        submit_timeout_error = service_v2.RequestOutcomeUnknownError(
+            "submit-timeout", "response_timeout"
+        )
+        mode["request_error"] = submit_timeout_error
+        submit_timeout = _envelope(
+            "submit-timeout", "submit-timeout-intent", operation="orders.submit"
+        )
+        with pytest.raises(service_v2.RequestOutcomeUnknownError) as caught_submit_timeout:
+            service_v2.ZmqServiceClient.request(client, submit_timeout, timeout=5.0)
+        assert caught_submit_timeout.value is submit_timeout_error
         mode["request_error"] = None
 
         receive_again = zmq.Again()
@@ -208,39 +228,44 @@ def test_hook_correlates_cancel_boundaries_and_preserves_rpc_semantics() -> None
         mode["request_error"] = None
 
         request_calls = [call for call in calls if call[0] == "request"]
-        assert len(request_calls) == 7
+        assert len(request_calls) == 9
         assert all(call[2] == 5.0 for call in request_calls)
         assert calls.count(("send", client_socket, (b"request-frame",), {
             "flags": zmq.NOBLOCK, "copy": False
-        })) == 6
+        })) == 8
         assert calls.count(("send", client_socket, (b"query-frame",), {
             "flags": zmq.NOBLOCK, "copy": False
         })) == 1
         assert calls.count(("send_multipart", server_socket, ([b"reply-frame"],), {
             "flags": zmq.NOBLOCK, "copy": False
-        })) == 3
+        })) == 4
         assert seen_handlers == [
             ("trusted-principal", first),
             ("trusted-principal", second),
+            ("trusted-principal", submit),
             ("trusted-principal", reply_failure),
         ]
 
         snapshot = trace.snapshot()
         assert snapshot["ring_capacity"] == 256
         assert len(trace.events) <= 256
-        grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
         for event in snapshot["events"]:
-            grouped.setdefault((event["message_id"], event["cancel_id"]), []).append(event)
+            grouped.setdefault(
+                (event["operation"], event["message_id"], event["correlation_id"]), []
+            ).append(event)
         assert set(grouped) == {
-            ("cancel-message-1", "cancel-order-1"),
-            ("cancel-message-2", "cancel-order-2"),
-            ("cancel-send-again", "cancel-send-again"),
-            ("cancel-timeout", "cancel-timeout"),
-            ("cancel-receive-again", "cancel-receive-again"),
-            ("cancel-reply-again", "cancel-reply-again"),
+            ("orders.cancel", "cancel-message-1", "cancel-order-1"),
+            ("orders.cancel", "cancel-message-2", "cancel-order-2"),
+            ("orders.submit", "submit-message-1", "submit-intent-1"),
+            ("orders.cancel", "cancel-send-again", "cancel-send-again"),
+            ("orders.cancel", "cancel-timeout", "cancel-timeout"),
+            ("orders.submit", "submit-timeout", "submit-timeout-intent"),
+            ("orders.cancel", "cancel-receive-again", "cancel-receive-again"),
+            ("orders.cancel", "cancel-reply-again", "cancel-reply-again"),
         }
         assert all(
-            (event["message_id"], event["cancel_id"]) == key
+            (event["operation"], event["message_id"], event["correlation_id"]) == key
             for key, events in grouped.items()
             for event in events
         )
@@ -249,36 +274,53 @@ def test_hook_correlates_cancel_boundaries_and_preserves_rpc_semantics() -> None
             "reply_send", "client_outcome",
         }
         for key in (
-            ("cancel-message-1", "cancel-order-1"),
-            ("cancel-message-2", "cancel-order-2"),
+            ("orders.cancel", "cancel-message-1", "cancel-order-1"),
+            ("orders.cancel", "cancel-message-2", "cancel-order-2"),
+            ("orders.submit", "submit-message-1", "submit-intent-1"),
         ):
             assert {event["event"] for event in grouped[key]} == complete_flow
         assert {
             event["event"]: event.get("outcome")
-            for event in grouped[("cancel-send-again", "cancel-send-again")]
+            for event in grouped[("orders.cancel", "cancel-send-again", "cancel-send-again")]
         } == {"client_send": "again", "client_outcome": "exception"}
         assert {
             event["event"]: event.get("outcome")
-            for event in grouped[("cancel-timeout", "cancel-timeout")]
+            for event in grouped[("orders.cancel", "cancel-timeout", "cancel-timeout")]
+        } == {"client_send": "sent", "client_outcome": "timeout"}
+        assert {
+            event["event"]: event.get("error_code")
+            for event in grouped[("orders.submit", "submit-timeout", "submit-timeout-intent")]
+        }["client_outcome"] == "response_timeout"
+        assert {
+            event["event"]: event.get("outcome")
+            for event in grouped[("orders.submit", "submit-timeout", "submit-timeout-intent")]
+        } == {"client_send": "sent", "client_outcome": "timeout"}
+        assert {
+            event["event"]: event.get("outcome")
+            for event in grouped[("orders.cancel", "cancel-receive-again", "cancel-receive-again")]
         } == {"client_send": "sent", "client_outcome": "exception"}
         assert {
             event["event"]: event.get("outcome")
-            for event in grouped[("cancel-receive-again", "cancel-receive-again")]
-        } == {"client_send": "sent", "client_outcome": "exception"}
-        assert {
-            event["event"]: event.get("outcome")
-            for event in grouped[("cancel-reply-again", "cancel-reply-again")]
+            for event in grouped[("orders.cancel", "cancel-reply-again", "cancel-reply-again")]
         }["reply_send"] == "again"
 
         report = runner._load01_rpc_timing_report({"unit-test": snapshot})
         assert report["ring_capacity_per_process"] == 256
-        assert report["event_filter"] == "orders.cancel only"
+        assert report["event_filter"] == "orders.submit and orders.cancel only"
         reported = {
-            (item["message_id"], item["cancel_id"]): item
+            (item["operation"], item["message_id"], item["correlation_id"]): item
             for item in report["correlated_requests"]
         }
         assert set(reported) == set(grouped)
-        first_durations = reported[("cancel-message-1", "cancel-order-1")]["durations_ms"]
+        assert reported[
+            ("orders.submit", "submit-message-1", "submit-intent-1")
+        ]["intent_id"] == "submit-intent-1"
+        assert "cancel_id" not in reported[
+            ("orders.submit", "submit-message-1", "submit-intent-1")
+        ]
+        first_durations = reported[
+            ("orders.cancel", "cancel-message-1", "cancel-order-1")
+        ]["durations_ms"]
         assert set(first_durations) == {
             "client_send_to_server_dequeue",
             "dequeue_to_handler_including_auth_decode_validation",
@@ -429,3 +471,97 @@ def test_failed_snapshot_is_not_sent_and_invalid_diagnostics_do_not_mask_message
         assert record["closed"] and process.closed and pipe.closed
         assert cleanup_errors == []
         assert "rpc_timing_snapshots" not in record
+
+
+def test_emergency_cleanup_drains_final_snapshot_before_terminate(monkeypatch) -> None:
+    snapshot = {"pid": 73, "events": [{"message_id": "submit-1"}]}
+    diagnostic = ("rpc-diagnostic", "owner-00", 73, snapshot, "emergency")
+
+    class Pipe:
+        def __init__(self):
+            self.messages = []
+            self.polls = 0
+            self.closed = False
+
+        def send(self, message):
+            assert message == ("close", "diagnostic")
+
+        def poll(self, _timeout=0):
+            self.polls += 1
+            # Simulate the snapshot arriving immediately after the grace loop's
+            # last poll, so the final pre-terminate drain must collect it.
+            return self.polls >= 2 and bool(self.messages)
+
+        def recv(self):
+            return self.messages.pop(0)
+
+        def close(self):
+            self.closed = True
+
+    record: dict[str, Any] = {}
+
+    class Process:
+        def __init__(self):
+            self.alive = True
+            self.exitcode = None
+            self.closed = False
+
+        def is_alive(self):
+            return self.alive
+
+        def join(self, _timeout=0):
+            return None
+
+        def terminate(self):
+            assert record.get("rpc_timing_snapshots", {}).get("emergency") == snapshot
+            assert record.get("rpc_snapshot_received_before_terminate") is True
+            self.alive = False
+            self.exitcode = -15
+
+        def kill(self):
+            raise AssertionError("snapshot should be drained before terminate")
+
+        def close(self):
+            self.closed = True
+
+    ticks = iter((0.0, 0.0, 21.0, 21.0, 32.0))
+    monkeypatch.setattr(runner.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(runner.time, "sleep", lambda _seconds: None)
+    pipe = Pipe()
+    pipe.messages.append(diagnostic)
+    process = Process()
+    record.update({
+        "pid": 73,
+        "name": "owner-00",
+        "kind": "owner",
+        "rpc_diagnostic_ready": True,
+        "pipe": pipe,
+        "process": process,
+        "closed": False,
+    })
+
+    class Flag:
+        def __init__(self):
+            self.is_set = False
+
+        def set(self):
+            self.is_set = True
+
+    abort_event, stop_event = Flag(), Flag()
+    terminated: list[str] = []
+    cleanup_errors: list[str] = []
+    runner._emergency_cleanup(
+        {"owner-00": record},
+        abort_event=abort_event,
+        stop_event=stop_event,
+        terminated=terminated,
+        cleanup_errors=cleanup_errors,
+    )
+
+    assert abort_event.is_set and stop_event.is_set
+    assert record["rpc_diagnostic_close_sent"] is True
+    assert record["rpc_snapshot_received_before_terminate"] is True
+    assert record["rpc_timing_snapshot_stages"] == ["emergency"]
+    assert terminated == ["owner-00"]
+    assert record["closed"] and pipe.closed and process.closed
+    assert cleanup_errors == []
