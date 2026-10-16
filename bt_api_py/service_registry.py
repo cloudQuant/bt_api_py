@@ -36,6 +36,10 @@ from bt_api_base.service_protocol import (
     WireValidationError,
     validate_request,
 )
+from .service_migration_gate import (
+    MigrationGateError,
+    record_migration_write_attempt,
+)
 
 _CONTROL_SCHEMA = "sdk.service.control"
 _CALL_SCHEMA = "sdk.service.call"
@@ -539,6 +543,7 @@ class ServiceRegistry:
         requirements_ref: str | None = None,
         account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = (),
         account_risk_policy_required_routes: frozenset[tuple[str, str]] = frozenset(),
+        migration_deployment_epoch: str | None = None,
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
@@ -561,6 +566,10 @@ class ServiceRegistry:
             or (reply_size_checker is not None and not callable(reply_size_checker))
         ):
             raise TypeError("ready or clock is invalid")
+        if migration_deployment_epoch is not None and (
+            type(migration_deployment_epoch) is not str or not migration_deployment_epoch
+        ):
+            raise ValueError("migration_deployment_epoch is invalid")
         capability_map, trusted_grants = validate_capabilities_and_grants(capabilities, grants)
         effective_access_policy_ref = policy_version if access_policy_ref is None else access_policy_ref
         effective_requirements_ref = (
@@ -704,6 +713,7 @@ class ServiceRegistry:
         self.max_registration_keys = max_registration_keys
         self._clock = clock
         self._reply_size_checker = reply_size_checker
+        self._migration_deployment_epoch = migration_deployment_epoch
         self._capabilities = capability_map
         self._grants = trusted_grants
         self._trusted_group_write_policies = trusted_group_write_policies
@@ -717,6 +727,7 @@ class ServiceRegistry:
         self._closed = False
         self._epoch = uuid.uuid4().hex
         db_path = str(path)
+        self._migration_state_path = None if db_path == ":memory:" else Path(db_path)
         self._db: sqlite3.Connection | None = None
         self._owner_key: str | None = None
         self._owner_file: Any = None
@@ -778,6 +789,18 @@ class ServiceRegistry:
     @property
     def service_epoch(self) -> str:
         return self._epoch
+
+    def _record_migration_write_attempt(self, *, fact_kind: str) -> bool:
+        """Seal before an authorized write, bound to the deployment epoch."""
+
+        state_path = self._migration_state_path
+        if state_path is None:
+            return False
+        return record_migration_write_attempt(
+            state_path,
+            deployment_epoch=self._migration_deployment_epoch,
+            fact_kind=fact_kind,
+        )
 
     @property
     def ready(self) -> bool:
@@ -2207,6 +2230,21 @@ class ServiceRegistry:
                 result_fits,
             )
             arguments = MappingProxyType(dict(payload["arguments"]))
+        write_fact_kind = (
+            "dispatch"
+            if operation in write_ops
+            else (
+                "cursor"
+                if capability.port == "service.account_read" and operation == "account.ack"
+                else None
+            )
+        )
+        if write_fact_kind is not None:
+            try:
+                self._record_migration_write_attempt(fact_kind=write_fact_kind)
+            except (MigrationGateError, OSError):
+                # Marker/epoch/lock uncertainty must prevent handler entry.
+                return self._failure("UNAVAILABLE")
         try:
             result = handler(context, arguments)
             if not isinstance(result, Mapping):

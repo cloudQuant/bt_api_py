@@ -41,7 +41,11 @@ from .service_components import (
 )
 from .service_config import ServiceConfig, ServiceConfigError
 from .service_deployment import validate_deployment
-from .service_migration_gate import MigrationGateError, enforce_migration_start
+from .service_migration_gate import (
+    MigrationGateError,
+    enforce_migration_start,
+    record_migration_write_attempt,
+)
 from .service_registry import (
     ActiveRegistrationContext,
     PrincipalGrant,
@@ -663,6 +667,7 @@ class ServiceHost:
                     trusted_group_resolution_policies=self._authority.group_resolution_policies,
                     account_risk_policy_bindings=account_risk_policy_bindings,
                     account_risk_policy_required_routes=account_risk_policy_required_routes,
+                    migration_deployment_epoch=self._migration_deployment_epoch,
                 )
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
@@ -789,6 +794,15 @@ class ServiceHost:
             )
         except MigrationGateError as exc:
             raise ServiceHostError(exc.code) from None
+
+    def _record_migration_write_attempt(self, *, fact_kind: str) -> bool:
+        """Seal a cutover before a Host-owned internal writer is entered."""
+
+        return record_migration_write_attempt(
+            self._registry_path,
+            deployment_epoch=self._migration_deployment_epoch,
+            fact_kind=fact_kind,
+        )
 
     def _validate_authority_references(self) -> None:
         authority = self._authority
@@ -1180,7 +1194,23 @@ class ServiceHost:
         if registry is None:
             return
         active_market_registrations = 0
+        prepared_by_instance = {item.spec.instance_id: item for item in self._prepared}
         for component in self._components:
+            prepared = prepared_by_instance.get(component.instance_id)
+            spec = None if prepared is None else prepared.spec
+            role = None if spec is None else spec.options.get("role")
+            analytics_task_writer = (
+                spec is not None
+                and spec.component == "risk"
+                and role == "portfolio_analytics"
+            )
+            group_registration_writer = spec is not None and (
+                (
+                    spec.component == "execution"
+                    and role in {"group_coordinator", "group_account_owner"}
+                )
+                or (spec.component == "risk" and role == "group_reservations")
+            )
             maintain = None if registrations_only else component.maintain
             maintain_registrations = component.maintain_registrations
             if maintain is None and maintain_registrations is None:
@@ -1193,6 +1223,8 @@ class ServiceHost:
                         type(registration_id) is not str for registration_id in active_ids
                     ):
                         raise TypeError("invalid registry registration projection")
+                    if analytics_task_writer:
+                        self._record_migration_write_attempt(fact_kind="dispatch")
                     maintain(active_ids)
                 if maintain_registrations is not None:
                     contexts = tuple(
@@ -1229,6 +1261,7 @@ class ServiceHost:
                             or scope.account_refs
                         ):
                             raise TypeError("invalid trusted group registration scope")
+                        self._record_migration_write_attempt(fact_kind="ownership")
                         registry.bind_trusted_group_run(
                             scope.execution_domain_ref,
                             scope.strategy_ref,
@@ -1250,6 +1283,8 @@ class ServiceHost:
                         type(context) is not ActiveRegistrationContext for context in contexts
                     ):
                         raise TypeError("invalid registry registration context projection")
+                    if group_registration_writer:
+                        self._record_migration_write_attempt(fact_kind="ownership")
                     maintain_registrations(contexts)
             except Exception:
                 self._component_maintenance_faults.add(component.instance_id)

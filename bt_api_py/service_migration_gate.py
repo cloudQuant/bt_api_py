@@ -4,25 +4,32 @@ The iteration-10 plan requires that, after a new-epoch owner has produced its
 first new business write, running the old deployment/epoch against the same
 state is refused until an accepted reverse state conversion exists (formal
 plan L865: "首次新派发、预算/归属等状态写入后，必须有已验收的反向状态转换、重新对账
-及 writer 交接，才可恢复旧版本；没有该方案则止增并向前修复").  Before that first
-write a controlled rollback with the complete old deployment stays permitted
-and unchanged.
+及 writer 交接，才可恢复旧版本；没有该方案则止增并向前修复"). Production
+currently seals conservatively at the authorized handler-entry/write-attempt
+boundary, before exact downstream commit is known. Before the barrier a
+controlled rollback with the complete old deployment stays permitted.
 
 This module implements the missing machine gate as a small durable JSON
 marker beside the state it protects (by default the SDK registry database),
 shaped after the execution-journal cutover transaction in
 ``bt_api_py/_execution_session.py``: an explicit COMMITTED status, atomic
-publish, and a destination-exists style conflict refusal.  It reuses the
-existing registry ``service_epoch`` facts (``bt_api_py/service_registry.py``)
-as the old/new owner identity and invents no parallel fencing system.
+publish, and a destination-exists style conflict refusal. Registry
+``service_epoch`` values remain per-process lease facts. Production write
+attempts are bound to the explicit stable deployment epoch supplied by the
+Host, never to a random process epoch.
 
 Lifecycle:
 
 * ``arm_migration_cutover(state, source_epoch=..., new_epoch=...)`` records a
   COMMITTED cutover marker (the state was taken over by ``new_epoch``).
-* ``record_migration_first_write(state, fact_kind=...)`` seals the marker on
-  the first new business write (dispatch/order/ownership/reservation/
-  idempotency/cursor fact).  Sealing is one-way and durable.
+* ``record_migration_write_attempt(state, deployment_epoch=...,
+  fact_kind=...)`` seals the marker immediately before an authorized
+  production write handler or internal writer is entered. This is a
+  conservative write-attempt barrier; it does not prove that downstream
+  storage committed. Sealing is one-way and durable.
+* ``record_migration_first_write`` remains as a low-level compatibility
+  primitive. Production write boundaries use the epoch-bound write-attempt
+  API.
 * ``enforce_migration_start(state, deployment_epoch=...)`` is the start gate:
   with no marker nothing changes; a COMMITTED marker keeps the rollback window
   open; a SEALED marker refuses every deployment/epoch except the accepted
@@ -36,9 +43,9 @@ Lifecycle:
 * ``accept_reverse_migration(state, accepted_epoch=..., reference=...)``
   records the operator-approved reverse conversion (absent by default).
 
-Every function is benign on a state that was never armed: no marker file, no
-behavior change, and the first-write recorder is a silent no-op so it can be
-wired into ordinary write paths without migration ever being in effect.
+The write-attempt API is benign on a state that was never armed: no marker
+file, no behavior change, and no lock acquisition. Concurrent initial arming
+is an offline cutover concern and is not fenced by that fast path.
 """
 
 from __future__ import annotations
@@ -72,6 +79,7 @@ CODE_INVALID_MIGRATION_GATE_ARGUMENT = "INVALID_MIGRATION_GATE_ARGUMENT"
 CODE_MIGRATION_GATE_LOCK_TIMEOUT = "MIGRATION_GATE_LOCK_TIMEOUT"
 CODE_MIGRATION_GATE_LOCK_FAILURE = "MIGRATION_GATE_LOCK_FAILURE"
 CODE_MARKER_DURABILITY_UNCERTAIN = "CUTOVER_MARKER_DURABILITY_UNCERTAIN"
+CODE_MIGRATION_GATE_EPOCH_MISMATCH = "MIGRATION_GATE_EPOCH_MISMATCH"
 
 _MIGRATION_LOCK_TIMEOUT_SECONDS = 5.0
 _MIGRATION_LOCK_POLL_SECONDS = 0.01
@@ -100,7 +108,7 @@ class MigrationCutoverMarker:
 
     @property
     def sealed(self) -> bool:
-        """True once the new owner recorded its first new business write."""
+        """True once the authorized write-attempt barrier has been crossed."""
 
         return self.status == STATUS_SEALED
 
@@ -120,7 +128,7 @@ def read_migration_marker(state_path: str | os.PathLike[str]) -> MigrationCutove
     """
 
     path = marker_path(state_path)
-    if not path.exists():
+    if not _marker_exists(path):
         return None
     with _marker_state_lock(state_path):
         return _read_migration_marker_unlocked(state_path)
@@ -132,7 +140,7 @@ def _read_migration_marker_unlocked(
     """Read marker bytes while the caller already owns the transition lock."""
 
     path = marker_path(state_path)
-    if not path.exists():
+    if not _marker_exists(path):
         return None
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -144,6 +152,24 @@ def _read_migration_marker_unlocked(
     except Exception:
         raise MigrationGateError(CODE_CUTOVER_MARKER_UNREADABLE) from None
     return _marker_from_document(document)
+
+
+def _marker_exists(path: Path) -> bool:
+    """Distinguish a genuinely missing marker from an inaccessible one.
+
+    ``Path.exists`` may suppress operating-system errors on supported Python
+    versions, which would turn an unreadable armed marker into the unarmed
+    fast path. Only ``FileNotFoundError`` represents absence here; all other
+    stat failures fail closed with the existing finite unreadable code.
+    """
+
+    try:
+        path.stat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise MigrationGateError(CODE_CUTOVER_MARKER_UNREADABLE) from None
+    return True
 
 
 def arm_migration_cutover(
@@ -193,12 +219,13 @@ def record_migration_first_write(
     fact_kind: str,
     recorded_at: str | None = None,
 ) -> bool:
-    """Seal the cutover marker on the first new business write.
+    """Seal the marker as a compatibility-level first-write operation.
 
     Returns ``True`` only for the call that performed the COMMITTED -> SEALED
     transition; repeated calls are idempotent and keep the first recorded
-    fact.  Without an armed marker this is a benign no-op returning ``False``
-    so the recorder can be wired into ordinary write paths.
+    fact. Without an armed marker this remains a benign no-op returning
+    ``False``. Production boundaries use the epoch-bound
+    :func:`record_migration_write_attempt` instead.
     """
 
     if fact_kind not in BUSINESS_WRITE_FACT_KINDS:
@@ -207,11 +234,78 @@ def record_migration_first_write(
         _require_text(recorded_at)
     # Keep never-armed calls side-effect free; if the marker exists, the
     # authoritative decision is made only after re-reading it under the lock.
-    if not marker_path(state_path).exists():
+    if not _marker_exists(marker_path(state_path)):
         return False
     with _marker_state_lock(state_path):
         marker = _read_migration_marker_unlocked(state_path)
         if marker is None or marker.sealed:
+            return False
+        sealed = MigrationCutoverMarker(
+            migration_id=marker.migration_id,
+            source_epoch=marker.source_epoch,
+            destination_epoch=marker.destination_epoch,
+            status=STATUS_SEALED,
+            first_write_fact_kind=fact_kind,
+            first_write_recorded_at=recorded_at or _utc_now_text(),
+            accepted_reverse_epoch=marker.accepted_reverse_epoch,
+            accepted_reverse_reference=marker.accepted_reverse_reference,
+        )
+        _write_marker(state_path, sealed)
+        return True
+
+
+def record_migration_write_attempt(
+    state_path: str | os.PathLike[str],
+    *,
+    deployment_epoch: str | None,
+    fact_kind: str,
+    recorded_at: str | None = None,
+) -> bool:
+    """Seal immediately before entering a production writer, epoch-bound.
+
+    The marker-absent path remains a side-effect-free no-op for deployments
+    that have never armed MIG03. Once a marker exists, its state is reread
+    while holding the transition lock and the caller must name either the
+    declared destination deployment or an explicitly accepted reverse
+    deployment. A process-local registry epoch is not a substitute.
+
+    ``True`` means this call published COMMITTED -> SEALED before the writer
+    was entered. It records an attempted write boundary only; downstream
+    handler or journal commit requires separate service evidence.
+
+    A later attempt against an already SEALED marker reconfirms parent-
+    directory durability before allowing the caller to proceed. This also
+    covers a prior replace that became visible before its directory fsync
+    reported failure.
+    """
+
+    if fact_kind not in BUSINESS_WRITE_FACT_KINDS:
+        raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
+    if recorded_at is not None:
+        _require_text(recorded_at)
+    # Preserve the ordinary unarmed fast path. Concurrent initial arming is
+    # part of the offline cutover protocol and is not fenced by this no-op.
+    if not _marker_exists(marker_path(state_path)):
+        return False
+    with _marker_state_lock(state_path):
+        marker = _read_migration_marker_unlocked(state_path)
+        if marker is None:
+            return False
+        if (
+            type(deployment_epoch) is not str
+            or not deployment_epoch
+            or (
+                deployment_epoch != marker.destination_epoch
+                and deployment_epoch != marker.accepted_reverse_epoch
+            )
+        ):
+            raise MigrationGateError(CODE_MIGRATION_GATE_EPOCH_MISMATCH)
+        if marker.sealed:
+            # A prior replace may have made SEALED visible but failed the
+            # parent-directory fsync. Reconfirm durability on every later
+            # writer attempt before using the existing one-way seal to admit
+            # the handler.
+            _fsync_parent_directory(marker_path(state_path))
             return False
         sealed = MigrationCutoverMarker(
             migration_id=marker.migration_id,
@@ -275,7 +369,7 @@ def rollback_migration_cutover(
 
     if deployment_epoch is not None:
         _require_epoch(deployment_epoch)
-    if not marker_path(state_path).exists():
+    if not _marker_exists(marker_path(state_path)):
         return False
     with _marker_state_lock(state_path):
         marker = _read_migration_marker_unlocked(state_path)
@@ -307,7 +401,7 @@ def accept_reverse_migration(
 
     _require_epoch(accepted_epoch)
     _require_text(reference)
-    if not marker_path(state_path).exists():
+    if not _marker_exists(marker_path(state_path)):
         raise MigrationGateError(CODE_NO_ACTIVE_CUTOVER)
     with _marker_state_lock(state_path):
         marker = _read_migration_marker_unlocked(state_path)
@@ -565,17 +659,7 @@ def _atomic_write_json(path: Path, value: Any) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
-        if os.name != "nt":
-            try:
-                directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-                try:
-                    os.fsync(directory_fd)
-                finally:
-                    os.close(directory_fd)
-            except OSError:
-                # Atomic replace is the visible commit point. Do not restore
-                # old bytes after it: a rollback could reopen an older epoch.
-                raise MigrationGateError(CODE_MARKER_DURABILITY_UNCERTAIN) from None
+        _fsync_parent_directory(path)
     except BaseException:
         with suppress(FileNotFoundError):
             try:
@@ -588,3 +672,20 @@ def _atomic_write_json(path: Path, value: Any) -> None:
     else:
         with suppress(FileNotFoundError):
             temporary.unlink()
+
+
+def _fsync_parent_directory(path: Path) -> None:
+    """Confirm a marker directory entry using the writer's durability rule."""
+
+    if os.name == "nt":
+        return
+    try:
+        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError:
+        # Atomic replace is the visible commit point. Do not restore old bytes
+        # after it: a rollback could reopen an older epoch.
+        raise MigrationGateError(CODE_MARKER_DURABILITY_UNCERTAIN) from None
