@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, fields, replace
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -922,7 +922,7 @@ class RiskOrderJournal:
                 expected.get("position_source_receipt_sha256"),
                 "baseline position source receipt",
             )
-            with self._connection() as connection:
+            with closing(self._connection()) as connection:
                 self._assert_current_in(connection, fence)
                 row = connection.execute(
                     "SELECT * FROM risk_order_gross_baselines "
@@ -1009,7 +1009,7 @@ class RiskOrderJournal:
             return
         verified = None
         try:
-            with self._connection() as connection:
+            with closing(self._connection()) as connection:
                 self._assert_current_in(connection, fence)
                 row = connection.execute(
                     "SELECT * FROM risk_order_gross_baselines WHERE scope_key=? AND account_revision=?",
@@ -1074,7 +1074,7 @@ class RiskOrderJournal:
         """Load the one immutable, source-complete first terminal observation."""
 
         self._assert_current(fence)
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             self._assert_current_in(connection, fence)
             command = connection.execute(
                 "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
@@ -1319,7 +1319,7 @@ class RiskOrderJournal:
 
         self._assert_current(fence)
         try:
-            with self._connection() as connection:
+            with closing(self._connection()) as connection:
                 self._assert_current_in(connection, fence)
                 row = connection.execute(
                     "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
@@ -1726,7 +1726,7 @@ class RiskOrderJournal:
         try:
             if proof.claim != claim or proof.scope != fence.scope:
                 return None
-            with self._connection() as connection:
+            with closing(self._connection()) as connection:
                 self._assert_current_in(connection, fence)
                 command_row = connection.execute(
                     "SELECT * FROM risk_order_commands WHERE scope_key=? AND risk_intent_id=?",
@@ -1907,7 +1907,7 @@ class RiskOrderJournal:
         try:
             if proof.scope != fence.scope or proof.scope != claim.scope:
                 return None
-            with self._connection() as connection:
+            with closing(self._connection()) as connection:
                 self._assert_current_in(connection, fence)
                 command_row = connection.execute(
                     "SELECT * FROM risk_order_commands WHERE scope_key=? AND risk_intent_id=?",
@@ -2283,7 +2283,7 @@ class RiskOrderJournal:
                 )
             )[:32]
         )
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             order_row = connection.execute(
                 "SELECT revision, record_sha256 FROM risk_order_events "
                 "WHERE scope_key=? AND principal_ref=? AND intent_id=? "
@@ -2393,7 +2393,7 @@ class RiskOrderJournal:
     ) -> RiskOrderCommand | None:
         """Read one exact principal/account command; never accepts provider IDs."""
 
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             row = connection.execute(
                 "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
                 (scope.key, principal_ref, intent_id),
@@ -2411,7 +2411,7 @@ class RiskOrderJournal:
 
         if type(revision) is not int or revision <= 0:
             raise RiskOrderJournalError("INVALID_EVENT_REVISION")
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             command = connection.execute(
                 "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
                 (scope.key, principal_ref, intent_id),
@@ -2448,7 +2448,7 @@ class RiskOrderJournal:
         """Fail closed from provider reads when an immutable proof may exist."""
 
         self._assert_current(fence)
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             self._assert_current_in(connection, fence)
             row = connection.execute(
                 "SELECT 1 FROM risk_order_events WHERE scope_key=? AND principal_ref=? "
@@ -2502,7 +2502,7 @@ class RiskOrderJournal:
         ):
             return False
 
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             self._assert_current_in(connection, fence)
             command_row = connection.execute(
                 "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
@@ -2920,7 +2920,7 @@ class RiskOrderJournal:
         self._assert_current(fence)
         if type(claim) is not DispatchClaimBinding or claim.scope != fence.scope:
             raise RiskOrderJournalError("RECOVERY_CLAIM_SCOPE_INVALID")
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             self._assert_current_in(connection, fence)
             return self._load_dispatch_proof_for_recovery_in(
                 connection,
@@ -3143,7 +3143,7 @@ class RiskOrderJournal:
         fence: RiskOrderWriterFence,
     ) -> VerifiedDispatchRecoveryResolution | None:
         try:
-            with self._connection() as connection:
+            with closing(self._connection()) as connection:
                 self._assert_current_in(connection, fence)
                 command_row = connection.execute(
                     "SELECT * FROM risk_order_commands WHERE scope_key=? AND risk_intent_id=?",
@@ -3198,7 +3198,7 @@ class RiskOrderJournal:
     def commands_for_scope(self, scope: AccountScope) -> tuple[RiskOrderCommand, ...]:
         """Return immutable command snapshots for startup recovery."""
 
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             rows = connection.execute(
                 "SELECT * FROM risk_order_commands WHERE scope_key=? ORDER BY created_revision",
                 (scope.key,),
@@ -3280,7 +3280,7 @@ class RiskOrderJournal:
         fence: RiskOrderWriterFence,
     ) -> VerifiedDispatchResolution | None:
         try:
-            with self._connection() as connection:
+            with closing(self._connection()) as connection:
                 self._assert_current_in(connection, fence)
                 command = connection.execute(
                     "SELECT * FROM risk_order_commands WHERE scope_key=? AND risk_intent_id=?",
@@ -3414,7 +3414,7 @@ class RiskOrderJournal:
             return None
 
     def _initialize(self) -> None:
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS risk_order_meta (
@@ -3559,9 +3559,13 @@ class RiskOrderJournal:
 
     def _connection(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._path, timeout=30.0, isolation_level=None)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys=ON")
-        connection.execute("PRAGMA busy_timeout=30000")
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys=ON")
+            connection.execute("PRAGMA busy_timeout=30000")
+        except BaseException:
+            connection.close()
+            raise
         return connection
 
     @contextmanager
@@ -3644,7 +3648,7 @@ class RiskOrderJournal:
         active = _thread_fences().get(fence.scope.key)
         if active is not fence:
             raise RiskOrderJournalError("WRITER_FENCE_NOT_HELD")
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             self._assert_current_in(connection, fence)
 
     @staticmethod
@@ -4200,7 +4204,7 @@ class RiskOrderJournal:
         """Load and re-attest the exact durable CLOSE proof before recovery."""
 
         self._assert_current(fence)
-        with self._connection() as connection:
+        with closing(self._connection()) as connection:
             self._assert_current_in(connection, fence)
             command_row = connection.execute(
                 "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
