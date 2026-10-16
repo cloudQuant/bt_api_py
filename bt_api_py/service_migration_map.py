@@ -40,8 +40,9 @@ Rules enforced by the store (durable, SQLite, standard library only):
 * resolving an unknown source never invents an identity: it returns status
   ``UNALLOCATED`` with the 待对账 reconciliation-queue marker, and repeated
   resolution or reopen keeps it unallocated;
-* there is no update, delete, rename or reassign API at all: the only write is
-  ``register`` and the only transition is absent -> mapped.
+* there is no update, delete, rename or reassign API at all: the only writes
+  are ``register`` and all-or-nothing ``register_batch`` and the only
+  transition is absent -> mapped.
 
 The store is fail-closed: an existing file that is not a compatible mapping
 database raises ``MigrationMapError(MIGRATION_MAP_UNREADABLE)`` instead of
@@ -193,6 +194,18 @@ class IdentityMapping:
 
 
 @dataclass(frozen=True, slots=True)
+class IdentityRegistration:
+    """One requested mapping for an atomic :meth:`register_batch` call."""
+
+    source_kind: str
+    source_value: str
+    target_value: str
+    recorded_epoch: str | None = None
+    note: str | None = None
+    recorded_at: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class IdentityResolution:
     """Outcome of resolving one legacy identity against the store.
 
@@ -268,7 +281,7 @@ class MigrationIdentityStore:
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
         self.close()
 
-    # -- write surface (the only write; no update/delete/rename exists) ----
+    # -- write surface (no update/delete/rename exists) -------------------
 
     def register(
         self,
@@ -344,6 +357,117 @@ class MigrationIdentityStore:
             recorded_epoch=recorded_epoch,
             note=note,
         )
+
+    def register_batch(
+        self, registrations: tuple[IdentityRegistration, ...]
+    ) -> tuple[IdentityMapping, ...]:
+        """Atomically register a batch, retaining existing idempotent rows.
+
+        All source and exclusive-target conflicts are checked under one SQLite
+        ``BEGIN IMMEDIATE`` transaction before any new row is inserted.  A
+        conflict or backend failure rolls the whole batch back.  Repeated
+        identical source/target entries in the input share one inserted row;
+        their result slots all point at the first persisted record.  Existing
+        matching rows are returned unchanged, including their original
+        provenance.
+        """
+
+        if type(registrations) is not tuple or any(
+            type(item) is not IdentityRegistration for item in registrations
+        ):
+            raise MigrationMapError(CODE_INVALID_MIGRATION_MAP_ARGUMENT)
+        if not registrations:
+            return ()
+
+        ordered_sources: list[tuple[str, str]] = []
+        requested_by_source: dict[
+            tuple[str, str], tuple[IdentityRegistration, str, str]
+        ] = {}
+        for item in registrations:
+            _require_source_kind(item.source_kind)
+            _require_text(item.source_value)
+            _require_text(item.target_value)
+            if item.recorded_epoch is not None:
+                _require_text(item.recorded_epoch)
+            if item.note is not None:
+                _require_text(item.note)
+            if item.recorded_at is not None:
+                _require_text(item.recorded_at)
+
+            source = (item.source_kind, item.source_value)
+            target_kind = TARGET_KIND_BY_SOURCE[item.source_kind]
+            prior = requested_by_source.get(source)
+            if prior is not None:
+                if prior[2] != item.target_value:
+                    raise MigrationMapError(CODE_SOURCE_ALREADY_MAPPED)
+                ordered_sources.append(source)
+                continue
+            requested_by_source[source] = (item, target_kind, item.target_value)
+            ordered_sources.append(source)
+
+        new_targets: dict[tuple[str, str], tuple[str, str]] = {}
+        for source, (_item, target_kind, target_value) in requested_by_source.items():
+            if target_kind not in EXCLUSIVE_TARGET_KINDS:
+                continue
+            target = (target_kind, target_value)
+            prior_source = new_targets.get(target)
+            if prior_source is not None and prior_source != source:
+                raise MigrationMapError(CODE_TARGET_ALREADY_BOUND)
+            new_targets[target] = source
+
+        connection = self._connection_or_raise()
+        records_by_source: dict[tuple[str, str], IdentityMapping] = {}
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            pending: list[tuple[tuple[str, str], IdentityRegistration, str, str]] = []
+            for source, (item, target_kind, target_value) in requested_by_source.items():
+                existing = self._select_source(*source)
+                if existing is not None:
+                    if existing.target_kind != target_kind or existing.target_value != target_value:
+                        raise MigrationMapError(CODE_SOURCE_ALREADY_MAPPED)
+                    records_by_source[source] = existing
+                    continue
+                if target_kind in EXCLUSIVE_TARGET_KINDS:
+                    bound = self._select_target(target_kind, target_value)
+                    if bound is not None:
+                        raise MigrationMapError(CODE_TARGET_ALREADY_BOUND)
+                pending.append((source, item, target_kind, target_value))
+
+            for source, item, target_kind, target_value in pending:
+                timestamp = item.recorded_at if item.recorded_at is not None else _utc_now_text()
+                connection.execute(
+                    _INSERT_MAPPING_SQL,
+                    (
+                        source[0],
+                        source[1],
+                        target_kind,
+                        target_value,
+                        timestamp,
+                        item.recorded_epoch,
+                        item.note,
+                    ),
+                )
+                records_by_source[source] = IdentityMapping(
+                    source_kind=source[0],
+                    source_value=source[1],
+                    target_kind=target_kind,
+                    target_value=target_value,
+                    recorded_at=timestamp,
+                    recorded_epoch=item.recorded_epoch,
+                    note=item.note,
+                )
+            connection.execute("COMMIT")
+        except MigrationMapError:
+            _rollback(connection)
+            raise
+        except sqlite3.Error:
+            _rollback(connection)
+            raise MigrationMapError(CODE_MIGRATION_MAP_BACKEND_FAILURE) from None
+        except BaseException:
+            _rollback(connection)
+            raise
+
+        return tuple(records_by_source[source] for source in ordered_sources)
 
     # -- read surface ------------------------------------------------------
 

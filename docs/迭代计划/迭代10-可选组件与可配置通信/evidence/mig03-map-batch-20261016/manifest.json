@@ -1,0 +1,90 @@
+{
+  "_schema": "bt_api_py-dev-commit-spec-v1",
+  "_status": "DRAFT_FOR_ROOT_REVIEW; NOT_STAGED; NOT_COMMITTED",
+  "_round": 206,
+  "_repository": "D:/bt_api_py",
+  "_branch": "dev",
+  "_parent_head": "9520b20525e83e8944be5a6227b3a5da7e6a88b2",
+  "_accepted_evidence_level": "LOCAL_SQLITE_BATCH",
+  "_commit_scope_paths": [
+    "bt_api_py/service_migration_map.py",
+    "tests/unit/test_service_migration_map_batch.py",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-batch-20261016/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-batch-20261016/root-adjudication.md",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-batch-20261016/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md"
+  ],
+  "_excluded_parallel_paths": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_load01_rpc_telemetry_contract.py",
+    "tests/test_mig01_gateway_entrypoints_retired.py",
+    "bt_api_py/service_execution_group.py",
+    "bt_api_py/service_execution_group_authority.py",
+    "bt_api_py/service_execution_group_client.py",
+    "bt_api_py/service_execution_group_proofs.py",
+    "bt_api_py/service_group_reservations.py",
+    "bt_api_py/service_group_monitor.py",
+    "tests/unit/test_service_execution_group_*.py",
+    "tests/unit/test_service_group_reservations.py",
+    "tests/integration/test_service_execution_group_*.py",
+    "tests/integration/test_arb0[2346]*group*.py",
+    "bt_api/bt_api_execution/src/bt_api_execution/group_*.py",
+    "bt_api/bt_api_execution/tests/test_group_*.py"
+  ],
+  "_qa": {
+    "raw_run_directory": "D:/temp/iteration10-mig03-map-batch-root-20261016-r1",
+    "command": "C:/Anaconda3/python.exe -m pytest -q -c D:/bt_api_py/.codex-tmp/iteration10-resume-sync-pytest.ini --noconftest --junitxml=D:/temp/iteration10-mig03-map-batch-root-20261016-r1/junit.xml --basetemp=D:/temp/iteration10-mig03-map-batch-root-20261016-r1/pytest-tmp tests/unit/test_service_migration_map_batch.py",
+    "exit_code": 0,
+    "summary": "5 passed in 1.21s",
+    "stderr_bytes": 0,
+    "source_pin_count": 175,
+    "sources_unchanged": true,
+    "heads_before_after": {
+      "D:/bt_api_py": "9520b20525e83e8944be5a6227b3a5da7e6a88b2",
+      "D:/bt_api_py/bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+    }
+  },
+  "_limitations": [
+    "Accepted only as LOCAL_SQLITE_BATCH.",
+    "The mapping store does not prove source-to-target identity relationships are verified, true, complete, or authorized.",
+    "This round does not implement an offline importer or establish production migration.",
+    "MIG03 remains partial; reconciliation-journal preservation and production first-write sealing remain outside this round.",
+    "No formal acceptance tracker counts change; 37/68 remains."
+  ],
+  "bt_api_py/service_migration_map.py": {
+    "bytes": 26452,
+    "sha256": "f60351439088513a4b36a81ddb7bd9b3f05c47bb2dc64a8152222f8f126990c2"
+  },
+  "tests/unit/test_service_migration_map_batch.py": {
+    "bytes": 10515,
+    "sha256": "589a73d0a1a99f691cbe7c1d85703b0ced44b14833e92b8ccda8b6adb01b9fff"
+  },
+  "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-batch-20261016/raw-evidence.zip": {
+    "bytes": 37908,
+    "sha256": "1ad2f2887549d6afccae906e28a94107ba41bdefb432b8aec467a3a3c4c289fd"
+  },
+  "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-map-batch-20261016/root-adjudication.md": {
+    "bytes": 1601,
+    "sha256": "f71468fa5aadf9311753d597cfbee7335f0a4739b98cd13447055cf44896fb8a"
+  },
+  "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md": {
+    "bytes": 489442,
+    "sha256": "e3238920b34108c40f9318663eb0389ffe2a9c65fd44e9d7494902695667ee1f"
+  },
+  "_raw_archive_members": {
+    "qa/command.json": {"bytes": 810, "sha256": "ffe310c8ed9e77fdccc6f268616da5712dcefbf6900ec1ec9c0c62786f08f01b"},
+    "qa/exit.txt": {"bytes": 3, "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"},
+    "qa/junit.xml": {"bytes": 741, "sha256": "698f0eb946d1d7c517fa55c88d890d55d982785f6b7a9548cca1a57a2078af26"},
+    "qa/result.json": {"bytes": 774, "sha256": "9621be7bd10326fe893f40827688b5905bd0530234b1b74e17f5c2039f32bf69"},
+    "qa/runner.py": {"bytes": 3204, "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"},
+    "qa/running.json": {"bytes": 76, "sha256": "784f426019292d6d63381b121013950b35e5376e98c0ece5bd75bd1489bd93b9"},
+    "qa/source-after.json": {"bytes": 24872, "sha256": "69c47b5a4ed3aa46f1c67baa2c9bfb454b76c2e9b0493240ce493a93ae3efab6"},
+    "qa/source-before.json": {"bytes": 24872, "sha256": "69c47b5a4ed3aa46f1c67baa2c9bfb454b76c2e9b0493240ce493a93ae3efab6"},
+    "qa/spec.json": {"bytes": 26166, "sha256": "b2c467fb1e13f313571e3e7d8f70125bd4bf6cecbf11b5e8489e8eedb28db3af"},
+    "qa/stderr.log": {"bytes": 0, "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    "qa/stdout.log": {"bytes": 188, "sha256": "dcfd509b15711819d5580b9e765029a3a8b29c4bd7707beb027600c13f386726"},
+    "source/bt_api_py/service_migration_map.py": {"bytes": 26452, "sha256": "f60351439088513a4b36a81ddb7bd9b3f05c47bb2dc64a8152222f8f126990c2"},
+    "source/tests/unit/test_service_migration_map_batch.py": {"bytes": 10515, "sha256": "589a73d0a1a99f691cbe7c1d85703b0ced44b14833e92b8ccda8b6adb01b9fff"}
+  },
+  "archive_sha256": "1ad2f2887549d6afccae906e28a94107ba41bdefb432b8aec467a3a3c4c289fd"
+}
