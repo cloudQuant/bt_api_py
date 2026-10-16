@@ -1,0 +1,49 @@
+{
+  "argv": [
+    "C:/anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--no-header",
+    "-p",
+    "xdist",
+    "-p",
+    "no:cacheprovider",
+    "--deselect=tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result0-True]",
+    "--deselect=tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result1-False]",
+    "--deselect=tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result2-False]",
+    "--junitxml=D:\\temp\\it10dim06-20261016-r2\\junit.xml",
+    "--basetemp=D:\\temp\\it10dim06-20261016-r2\\pytest-tmp",
+    "tests/bt_api_contract/test_ctp_orderref_consume.py",
+    "tests/bt_api_contract/test_execution_session.py",
+    "tests/bt_api_contract/test_execution_arming.py",
+    "tests/bt_api_contract/test_execution_recovery.py",
+    "tests/bt_api_contract/test_position_mode_mutation.py",
+    "tests/bt_api_contract/test_position_intent_contract.py",
+    "tests/bt_api_contract/test_ctp_order_mapping.py",
+    "tests/bt_api_contract/test_cross_venue_contract.py",
+    "tests/bt_api_contract/test_ctp_simnow_public_adapter.py",
+    "tests/bt_api_contract/test_ctp_entry_approval_arm.py",
+    "tests/bt_api_contract/test_ctp_simnow_read_observation.py",
+    "tests/bt_api_contract/test_ctp_entry_write_guard.py",
+    "tests/bt_api_contract/test_ctp_dependency_version_pin.py"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_ctp\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T02:32:38.421732+00:00"
+}

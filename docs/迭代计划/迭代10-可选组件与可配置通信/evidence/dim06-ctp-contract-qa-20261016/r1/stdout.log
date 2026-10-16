@@ -1,0 +1,56 @@
+........................................................................ [ 13%]
+........................................................................ [ 27%]
+......ss................................................................ [ 41%]
+........FFF............................................................. [ 55%]
+........................................................................ [ 69%]
+........................................................................ [ 83%]
+........................................................................ [ 97%]
+............s..                                                          [100%]
+================================== FAILURES ===================================
+_ test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result0-True] _
+tests\bt_api_contract\test_execution_session.py:3711: in test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ¡ª the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result1-False] _
+tests\bt_api_contract\test_execution_session.py:3711: in test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ¡ª the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+_ test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result2-False] _
+tests\bt_api_contract\test_execution_session.py:3711: in test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent
+    api = BtApi(
+bt_api_py\bt_api.py:988: in __init__
+    self._backend = self._build_backend(self.transport_mode, forwarding_config)
+bt_api_py\bt_api.py:3653: in _build_backend
+    raise LegacyForwardingRetiredError(
+E   bt_api_py._contracts.errors.LegacyForwardingRetiredError: legacy forwarding entry point retired: transport_mode=ZMQ ¡ª the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/bt_api_contract/test_ctp_entry_write_guard.py::test_async_worker_cannot_start_from_candidate_binding_without_handoff
+  C:\anaconda3\Lib\site-packages\_pytest\python.py:182: PytestUnhandledCoroutineWarning: async def functions are not natively supported and have been skipped.
+  You need to install a suitable plugin for your async framework, for example:
+    - anyio
+    - pytest-asyncio
+    - pytest-tornasync
+    - pytest-trio
+    - pytest-twisted
+    warnings.warn(PytestUnhandledCoroutineWarning(msg.format(nodeid)))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+--------- generated xml file: D:\temp\it10dim06-20261016-r1\junit.xml ---------
+=========================== short test summary info ===========================
+FAILED tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result0-True]
+FAILED tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result1-False]
+FAILED tests/bt_api_contract/test_execution_session.py::test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent[result2-False]
+3 failed, 513 passed, 3 skipped, 2 warnings in 21.89s

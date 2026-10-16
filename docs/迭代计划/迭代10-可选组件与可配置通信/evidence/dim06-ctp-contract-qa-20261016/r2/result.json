@@ -1,0 +1,20 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T02:33:10.710119+00:00",
+  "source_count": 30,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "4e46ff01a68edb15a4f4803fea45ee9da5a7f2c6",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "4e46ff01a68edb15a4f4803fea45ee9da5a7f2c6",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "ac04c31821aaa16612271b868e3566faf84d027043cf338c03c9643fe72b8cdc",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "DIM06_CTP_CONTRACT_FIXED_SOURCE_CLEAN_SUBSET_NO_HOST"
+}
