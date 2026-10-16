@@ -1,0 +1,1132 @@
+{
+  "schema": "iteration10-mig03-boundary-inventory-r235-v1",
+  "status": "PREPARED_FOR_ROOT_REVIEW_NOT_STAGED_OR_COMMITTED",
+  "round": 235,
+  "date": "2026-10-16",
+  "repositories": [
+    {
+      "branch": "dev",
+      "path": "D:/bt_api_py",
+      "head": "53f33158429f89fd9b4dce83c068056c99d6778f"
+    },
+    {
+      "branch": "dev",
+      "path": "D:/source_code/ai-for-investor",
+      "head": "ac52830cd66c8ca79547db5be56a971906ccef4c"
+    }
+  ],
+  "source_scope": [
+    {
+      "repository": "D:/bt_api_py",
+      "path": "bt_api_py/service_migration_boundary.py",
+      "bytes": 33282,
+      "sha256": "d19b271b9fc5620bc3b621d5c8f4fba19e591aab6e47286f13b3f1e53aba7ca3"
+    },
+    {
+      "repository": "D:/bt_api_py",
+      "path": "tests/unit/test_service_migration_boundary.py",
+      "bytes": 14500,
+      "sha256": "bda7b508abc5e8f568b654b30e44e60fa31189760d113d42030e08bf537ad83c"
+    },
+    {
+      "repository": "D:/bt_api_py",
+      "path": "tests/integration/test_service_migration_boundary_inventory.py",
+      "bytes": 59240,
+      "sha256": "80c923e3a104a172cd1f8f84a3cf4cbc200c8b05b54175c1fd9abcef5bcd06b3"
+    },
+    {
+      "repository": "D:/source_code/ai-for-investor",
+      "path": "src/backend/app/services/mig03_boundary_inventory.py",
+      "bytes": 44117,
+      "sha256": "34f1204439c16c544161519cb59a1efe0c3e00003e9eb9b5b40b0803b2dc228d"
+    },
+    {
+      "repository": "D:/source_code/ai-for-investor",
+      "path": "src/backend/tests/test_mig03_boundary_inventory.py",
+      "bytes": 21784,
+      "sha256": "1bbbbe03eee7d94c12aa62aeb9251a7d034b177229cc8c70ff3bbc102f1984d8"
+    }
+  ],
+  "qa_evidence_level": "ROOT_FOCUSED_SYNTHETIC_MIG03_FULL_BOUNDARY_INVENTORY_SAME_PATH_STATE_CONSERVATION_NOT_FORMAL_MIG03_PASS",
+  "qa_runs": [
+    {
+      "run": "r2",
+      "output_directory": "D:\\temp\\iteration10-mig03-boundary-inventory-root-20261016-r2",
+      "python_exit_code": 1,
+      "collected_nodes": 15,
+      "passed_nodes": 9,
+      "failed_nodes": 6,
+      "source_count": 2185,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "stderr_bytes": 0,
+      "stdout_sha256": "52cfe2613ed1a495ceae48daf3ac5ff4942c9142fad665d6602bd0504672fa39",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "spec_sha256": "09601809f69e2d8254190193bf30953872f30aca6f51902433fce06277cd2446",
+      "runner_sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "tests": [
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_preflight_requires_every_fixed_boundary_category_before_arm",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_preflight_requires_real_normal_exit_and_consumer_close_facts",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_post_write_check_rejects_old_epoch_acceptance_and_missing_write_kind",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_conservation_compares_ids_amounts_positions_unknown_and_stream_epoch",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_control_store_changes_keep_registry_identities_and_consumer_snapshot",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_amount_conservation_keeps_precision_beyond_decimal_context",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_sqlite_snapshot_is_read_only_bounded_and_schema_pinned",
+          "status": "FAIL"
+        },
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_external_participant_requires_schema_and_identity_pins",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.integration.test_service_migration_boundary_inventory::test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_preserves_operation_approval_fills_fees_and_positions",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_rejects_unbound_paper_snapshot_account",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_rejects_http_operation_with_mismatched_approval",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_rejects_invalid_approval_event_order",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_rejects_oversized_row_before_orm_read",
+          "status": "PASS"
+        },
+        {
+          "node": "::test_mig03_afi_scheduler_shutdown_waits_for_all_snapshot_tasks",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "run": "r3",
+      "output_directory": "D:\\temp\\iteration10-mig03-boundary-inventory-root-20261016-r3",
+      "python_exit_code": 1,
+      "collected_nodes": 6,
+      "passed_nodes": 4,
+      "failed_nodes": 2,
+      "source_count": 2316,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "stderr_bytes": 0,
+      "stdout_sha256": "5647fffd85b10c11e9cefbf89e31790d7d8f4ae9c40a94b15f2c3abf5121205f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "spec_sha256": "38b8652a36571f242e54a0a8536d34db65606d1a4c949d51ab610e514413e027",
+      "runner_sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "tests": [
+        {
+          "node": "tests.unit.test_service_migration_boundary::test_sqlite_snapshot_is_read_only_bounded_and_schema_pinned",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.integration.test_service_migration_boundary_inventory::test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_preserves_operation_approval_fills_fees_and_positions",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_rejects_unbound_paper_snapshot_account",
+          "status": "PASS"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_rejects_http_operation_with_mismatched_approval",
+          "status": "PASS"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_rejects_invalid_approval_event_order",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "run": "r4-nodepaths-pre-fix",
+      "output_directory": "D:\\temp\\iteration10-mig03-boundary-inventory-root-20261016-r4",
+      "python_exit_code": 4,
+      "collected_nodes": 0,
+      "passed_nodes": 0,
+      "failed_nodes": 0,
+      "source_count": 2329,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "stderr_bytes": 163,
+      "stdout_sha256": "16111c53d55b8ed061540b9054ca907b5b2f6ab60888496aacbed15611c31509",
+      "stderr_sha256": "7e9ba8092d686a84840bc8208878b2ed112f8341dcc2f886594d293cde3cb399",
+      "spec_sha256": "9bef00b1b372707d455b6c210601255e7dca5b4b56078e1cf9a4c70d89283ba8",
+      "runner_sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "tests": []
+    },
+    {
+      "run": "r5-nodepaths",
+      "output_directory": "D:\\temp\\iteration10-mig03-boundary-inventory-root-20261016-r5-nodepaths",
+      "python_exit_code": 1,
+      "collected_nodes": 4,
+      "passed_nodes": 2,
+      "failed_nodes": 2,
+      "source_count": 2329,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "stderr_bytes": 0,
+      "stdout_sha256": "65d9e5e186ee4705e12ed29d9b46ed8078b86cc2df690801a263259785c36a3e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "spec_sha256": "a3c063ad4f7e10eb7eac6be603622cf7395573bc325e572b9e2d269446c3ffe9",
+      "runner_sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "tests": [
+        {
+          "node": "tests.integration.test_service_migration_boundary_inventory::test_consumer_projection_hash_normalizes_immutable_json_values",
+          "status": "PASS"
+        },
+        {
+          "node": "tests.integration.test_service_migration_boundary_inventory::test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_amount_projection_roundtrips_typed_numeric_values",
+          "status": "PASS"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_preserves_operation_approval_fills_fees_and_positions",
+          "status": "FAIL"
+        }
+      ]
+    },
+    {
+      "run": "r6-conservation",
+      "output_directory": "D:\\temp\\iteration10-mig03-boundary-inventory-root-20261016-r6-conservation",
+      "python_exit_code": 1,
+      "collected_nodes": 2,
+      "passed_nodes": 1,
+      "failed_nodes": 1,
+      "source_count": 2332,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "stderr_bytes": 0,
+      "stdout_sha256": "5ab0c567ecbb1f892ca216a5040ca636232e18444131c457ef02d7edf215bfb8",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "spec_sha256": "49b58e745c292fc0a7757b0fc3deeae3a9ac99f9badcf8e3414af7df9733493e",
+      "runner_sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0",
+      "tests": [
+        {
+          "node": "::test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state",
+          "status": "FAIL"
+        },
+        {
+          "node": "::test_mig03_afi_inventory_preserves_operation_approval_fills_fees_and_positions",
+          "status": "PASS"
+        }
+      ]
+    },
+    {
+      "run": "r7-sdk-conservation",
+      "output_directory": "D:\\temp\\iteration10-mig03-boundary-inventory-root-20261016-r7-sdk-conservation",
+      "python_exit_code": 1,
+      "collected_nodes": 1,
+      "passed_nodes": 0,
+      "failed_nodes": 1,
+      "source_count": 2334,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "stderr_bytes": 0,
+      "stdout_sha256": "b9d89ded024b9d9db2ca3dd770215537588eee81ea8e1f5cc5940709720f09cf",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "spec_sha256": "daf9da99ecb1022ffd013caa3baef38ee80ac6aeff258c6e205791952d731dad",
+      "runner_sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0",
+      "tests": [
+        {
+          "node": "::test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state",
+          "status": "FAIL"
+        }
+      ]
+    },
+    {
+      "run": "r8-sdk-conservation",
+      "output_directory": "D:\\temp\\iteration10-mig03-boundary-inventory-root-20261016-r8-sdk-conservation",
+      "python_exit_code": 0,
+      "collected_nodes": 1,
+      "passed_nodes": 1,
+      "failed_nodes": 0,
+      "source_count": 2337,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "stderr_bytes": 0,
+      "stdout_sha256": "109bcaa7816fe862e159a9c45eca839bf6204ee8c2fae7d4097363ed5de53b75",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "spec_sha256": "5b2d5a2a2bdda7e33afe3c49a20f96f59ba8f6b7e8004d59d180d456ca3ff584",
+      "runner_sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0",
+      "tests": [
+        {
+          "node": "::test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state",
+          "status": "PASS"
+        }
+      ]
+    }
+  ],
+  "raw_evidence_archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 2541847,
+    "sha256": "eeb9f7f1f3bc89838bc279575fe3ce163399ad2f9b392453a6e0e5acea9414b7",
+    "member_count": 160,
+    "members": [
+      {
+        "path": "raw/r2/command.json",
+        "bytes": 2712,
+        "sha256": "01d24875de2729ec0b8a89a95b132367d40921ca0c9586c77cda82f876e32598"
+      },
+      {
+        "path": "raw/r2/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/r2/junit.xml",
+        "bytes": 17883,
+        "sha256": "68de048ae7174634770dd6cd6f5c02885068f964a13fb6063f20afe726ec3c29"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_mig03_afi_inventory_prese0/afi-mig03.sqlite3",
+        "bytes": 225280,
+        "sha256": "d8f138cd18b976010fcb9c32758ef0234348e5748ffa893b8488b2b4903b0ca3"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_mig03_afi_inventory_rejec0/afi-mig03-unbound.sqlite3",
+        "bytes": 225280,
+        "sha256": "f1ec76522b2162d07fe45cdf8cf008c2d5123e0e714a4006ecb1d372aac6074a"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_mig03_afi_inventory_rejec1/afi-mig03-mismatched-approval.sqlite3",
+        "bytes": 225280,
+        "sha256": "56d250bee8c3ad1b3c3d63319cbbaba75b2400e75deed6c631bfbddab802f233"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_mig03_afi_inventory_rejec2/afi-mig03-invalid-event-order.sqlite3",
+        "bytes": 225280,
+        "sha256": "c472c5428a2e67d7f7ca1a6fe35257684d7b74df823d921201d9c6efef56f057"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_mig03_afi_inventory_rejec3/afi-mig03-oversized-row.sqlite3",
+        "bytes": 229376,
+        "sha256": "8aee7d8e70cc7bbcd34cc7e7cb0db9ceb217a0746b5634e4f7980d0930a4b04b"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_preflight_requires_every_0/registry.sqlite3",
+        "bytes": 15,
+        "sha256": "bbeff974264739ac74135cfc26c1a611dd30d7f50dcdff67c207fb31b079ea49"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_preflight_requires_every_0/registry.sqlite3.migration-cutover.json",
+        "bytes": 223,
+        "sha256": "44c51d87f9ed925fabaecd907c593bd23b6456e9ed50c5acba660decb6407b36"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_preflight_requires_every_0/registry.sqlite3.migration-cutover.json.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r2/pytest-tmp/test_sqlite_snapshot_is_read_o0/execution.sqlite3",
+        "bytes": 24576,
+        "sha256": "1a2bf7ea3abceb869efb6fa03c1aa80dc33e9367261654758389a7f97e5630b2"
+      },
+      {
+        "path": "raw/r2/result.json",
+        "bytes": 1533,
+        "sha256": "c64bf33f01ccdbeb2b506dbf4449ccc395339e54ae0b7cfc04a095659013620e"
+      },
+      {
+        "path": "raw/r2/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/r2/running.json",
+        "bytes": 76,
+        "sha256": "1fd6dfa47821de704f0ecb838aeaab45aafe2899206494762420c9b1bd08714e"
+      },
+      {
+        "path": "raw/r2/source-after.json",
+        "bytes": 456264,
+        "sha256": "052b573b3fc81dbdaf52c05b8632b6f908701583352df87248bb6ce079b265bd"
+      },
+      {
+        "path": "raw/r2/source-before.json",
+        "bytes": 456264,
+        "sha256": "052b573b3fc81dbdaf52c05b8632b6f908701583352df87248bb6ce079b265bd"
+      },
+      {
+        "path": "raw/r2/spec.json",
+        "bytes": 466470,
+        "sha256": "09601809f69e2d8254190193bf30953872f30aca6f51902433fce06277cd2446"
+      },
+      {
+        "path": "raw/r2/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r2/stdout.log",
+        "bytes": 14888,
+        "sha256": "52cfe2613ed1a495ceae48daf3ac5ff4942c9142fad665d6602bd0504672fa39"
+      },
+      {
+        "path": "raw/r3/command.json",
+        "bytes": 3494,
+        "sha256": "6fc6a494bc2cb5d25096f5e167ff415265d74234e60b049fb5f025bebf122245"
+      },
+      {
+        "path": "raw/r3/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/r3/junit.xml",
+        "bytes": 13313,
+        "sha256": "dbbba4a133c6dccea761b904649acb9fed3e9c387caa382b89122780913c8eb2"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_afi_inventory_prese0/afi-mig03.sqlite3",
+        "bytes": 225280,
+        "sha256": "8a8098d943807082c73833874aa93037c51b464311a0b721e7e7a513bf02f4ac"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_afi_inventory_rejec0/afi-mig03-unbound.sqlite3",
+        "bytes": 225280,
+        "sha256": "0462b2fe783ee2ed7f608e3418f458e017bfa26006303db4183d2c9ab62a3237"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_afi_inventory_rejec1/afi-mig03-mismatched-approval.sqlite3",
+        "bytes": 225280,
+        "sha256": "a2064b499d833a5f0a49fd9280487357c4b3e3306822419a0c8a2bee2d3d6410"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_afi_inventory_rejec2/afi-mig03-invalid-event-order.sqlite3",
+        "bytes": 225280,
+        "sha256": "e53c30a69a775c5017408f6873f8ce7b05ac8bd1d24ff55332865cb801567520"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-afi.sqlite3",
+        "bytes": 225280,
+        "sha256": "9c6ed4bb30f552ab3ea699b5504cea7644e209391470421eee573d02af637df9"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-consumer.sqlite3",
+        "bytes": 8192,
+        "sha256": "92f67721b8a7ee2c005748a7bf4b53d2611cabbf8d4402c2842bff903eba69d3"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3",
+        "bytes": 524288,
+        "sha256": "50eca45686ac5e66f9647cec41000ffb7f644c89468bd4430e366c24f0bff559"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3",
+        "bytes": 94208,
+        "sha256": "f8ff4933bb2db9a20fc50adc9c4890b99574ef8e920cc27bb46064a63ecc7371"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-provider.sqlite3",
+        "bytes": 12288,
+        "sha256": "fc5d6e96fed3ad9dc1d84ff30117c49293eb0be641c6d24f44b062e87e0245cf"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "8ab2edfb0327fbf95231adb73687b0d3aae3660b0dfa55d378cccdc087d8059c"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-risk.sqlite3",
+        "bytes": 327680,
+        "sha256": "eea79971af8549dbc382cdd956fffa200afbdc5f4fabf702a51ae1d9a122a155"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-risk.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-risk.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r3/pytest-tmp/test_sqlite_snapshot_is_read_o0/execution.sqlite3",
+        "bytes": 28672,
+        "sha256": "d4df617596d3a3007ff458abdedebe09a5aacfb9c1ec529e77c66d017c2c599a"
+      },
+      {
+        "path": "raw/r3/result.json",
+        "bytes": 1533,
+        "sha256": "b747fdca7a782db52b9c8a417c5c4896af2e95f6ea8ca1b2a0c1802223929665"
+      },
+      {
+        "path": "raw/r3/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/r3/running.json",
+        "bytes": 76,
+        "sha256": "12bc3180dda73784a76bc7e07613c3d0aa8f2d73b3a86f9aa857d400a086245f"
+      },
+      {
+        "path": "raw/r3/source-after.json",
+        "bytes": 485398,
+        "sha256": "c5f2e367c113be7bee7bb9313c508e6d6e5bb81e922ca1b8c229fdb97f2ddec5"
+      },
+      {
+        "path": "raw/r3/source-before.json",
+        "bytes": 485398,
+        "sha256": "c5f2e367c113be7bee7bb9313c508e6d6e5bb81e922ca1b8c229fdb97f2ddec5"
+      },
+      {
+        "path": "raw/r3/spec.json",
+        "bytes": 497744,
+        "sha256": "38b8652a36571f242e54a0a8536d34db65606d1a4c949d51ab610e514413e027"
+      },
+      {
+        "path": "raw/r3/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r3/stdout.log",
+        "bytes": 13259,
+        "sha256": "5647fffd85b10c11e9cefbf89e31790d7d8f4ae9c40a94b15f2c3abf5121205f"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/command.json",
+        "bytes": 3154,
+        "sha256": "2c8fd62c440ef8b717aa96e8a150a552f1ec7caa075d6631ddf73622e03a44ab"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/exit.txt",
+        "bytes": 3,
+        "sha256": "7c468f5e59f2871b946e051445493bbcace531d597edbbcc9935e7d02d025114"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/junit.xml",
+        "bytes": 203,
+        "sha256": "70bbb0e72c7f311572e56333bb7c27a8a892d8774492952e306c0eb34912f016"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/result.json",
+        "bytes": 1533,
+        "sha256": "776eb3b80c1d3be93bce9d8bdfb85a099e581dbfc18ca70cd26eafeabc51d148"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/running.json",
+        "bytes": 76,
+        "sha256": "88021ef965a070e7cd424b128a9a78bd2717d335722207a1119a8869d80432ee"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/source-after.json",
+        "bytes": 494632,
+        "sha256": "7d1399d10d3e9b12d1f705f3d58eed50ca7e5d4bbf4c6b2e2a4c1c56d89df6f3"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/source-before.json",
+        "bytes": 494632,
+        "sha256": "7d1399d10d3e9b12d1f705f3d58eed50ca7e5d4bbf4c6b2e2a4c1c56d89df6f3"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/spec.json",
+        "bytes": 505970,
+        "sha256": "9bef00b1b372707d455b6c210601255e7dca5b4b56078e1cf9a4c70d89283ba8"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/stderr.log",
+        "bytes": 163,
+        "sha256": "7e9ba8092d686a84840bc8208878b2ed112f8341dcc2f886594d293cde3cb399"
+      },
+      {
+        "path": "raw/r4-nodepaths-pre-fix/stdout.log",
+        "bytes": 122,
+        "sha256": "16111c53d55b8ed061540b9054ca907b5b2f6ab60888496aacbed15611c31509"
+      },
+      {
+        "path": "raw/r5-nodepaths/command.json",
+        "bytes": 3352,
+        "sha256": "e2f973a267c5149530f7c309f2be2266d0f0271684a08ce7a1f24a396c537a08"
+      },
+      {
+        "path": "raw/r5-nodepaths/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/r5-nodepaths/junit.xml",
+        "bytes": 30717,
+        "sha256": "4f63d744fd6b28180b669605571ae9fd5b9f24959cf0b5f966f7636b8471a1f9"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_afi_inventory_prese0/afi-mig03.sqlite3",
+        "bytes": 225280,
+        "sha256": "38a9e5bfaf5c2109186d1d8633473a55633a6625f24c78102d1a70b043c25a46"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-afi.sqlite3",
+        "bytes": 225280,
+        "sha256": "4ea57a085320704dcfc41978e34358ceb67a3d386a44e00766c7c5fac35bcf95"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-consumer.sqlite3",
+        "bytes": 8192,
+        "sha256": "6bf5647fa188af82cba5fb95401926c03afe07522556713189d34aecbb695f5d"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3",
+        "bytes": 524288,
+        "sha256": "78951fd5c0c2684d8032a7f3c2407b7d7c70f3cd8b9a80855ef9315fcdd86d9a"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3",
+        "bytes": 94208,
+        "sha256": "90e13ee2acb403ec8ddc03642c67bdb9b348170b5d71163e3cf7ca8e73168265"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-map.sqlite3",
+        "bytes": 36864,
+        "sha256": "9eb2738610dc33b8dd60d4e57f66a80baca9bef66025b57b3b48266fb7090efd"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-provider.sqlite3",
+        "bytes": 12288,
+        "sha256": "fc5d6e96fed3ad9dc1d84ff30117c49293eb0be641c6d24f44b062e87e0245cf"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "a414fe91d235b5d9ce0a0aa95bdd370046d594de24fb488e51641cf26aeb6ec8"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json",
+        "bytes": 297,
+        "sha256": "758e47439f70768a0e4f456a0c14c08031a0b94bd1dedc74ed67296d5e7b1f65"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r5-nodepaths/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-risk.sqlite3",
+        "bytes": 327680,
+        "sha256": "0970997a82da03907e4e08e34f45a978b8fc7217dc94523cd2b0e9c0d55a033b"
+      },
+      {
+        "path": "raw/r5-nodepaths/result.json",
+        "bytes": 1533,
+        "sha256": "2e83896968183435233af98836812b561e857a6923e6669f1fcba353f910d4b3"
+      },
+      {
+        "path": "raw/r5-nodepaths/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/r5-nodepaths/running.json",
+        "bytes": 76,
+        "sha256": "3c509afe87f6660f7045992918d8677a74a4a79040cffe4cfb39daf0064c19ab"
+      },
+      {
+        "path": "raw/r5-nodepaths/source-after.json",
+        "bytes": 494632,
+        "sha256": "7d1399d10d3e9b12d1f705f3d58eed50ca7e5d4bbf4c6b2e2a4c1c56d89df6f3"
+      },
+      {
+        "path": "raw/r5-nodepaths/source-before.json",
+        "bytes": 494632,
+        "sha256": "7d1399d10d3e9b12d1f705f3d58eed50ca7e5d4bbf4c6b2e2a4c1c56d89df6f3"
+      },
+      {
+        "path": "raw/r5-nodepaths/spec.json",
+        "bytes": 509769,
+        "sha256": "a3c063ad4f7e10eb7eac6be603622cf7395573bc325e572b9e2d269446c3ffe9"
+      },
+      {
+        "path": "raw/r5-nodepaths/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r5-nodepaths/stdout.log",
+        "bytes": 31198,
+        "sha256": "65d9e5e186ee4705e12ed29d9b46ed8078b86cc2df690801a263259785c36a3e"
+      },
+      {
+        "path": "raw/r6-conservation/command.json",
+        "bytes": 2884,
+        "sha256": "965aba9c0535fee5bf811321c7ac599a43929b83e1f2b01c3960a6377c8301d6"
+      },
+      {
+        "path": "raw/r6-conservation/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/r6-conservation/junit.xml",
+        "bytes": 24991,
+        "sha256": "a07635ec1095673f379071bc612205296cbc0dc0a09eb1b6d94dc27558c58018"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_afi_inventory_prese0/afi-mig03.sqlite3",
+        "bytes": 229376,
+        "sha256": "6a04ee9e5ea3e3c2355def3d71937e6b12b9dbd4ed7def5e5aef2ccd56ccd34e"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-afi.sqlite3",
+        "bytes": 225280,
+        "sha256": "dd0054b1a3964e049ef8951f63450598fca15d08f3b2e35efccd71a729b7763f"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-consumer.sqlite3",
+        "bytes": 8192,
+        "sha256": "9a73fafeb3be6d0b4d4e995a8e2810d9195072430046b2bb255fe92d0a240f2b"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3",
+        "bytes": 524288,
+        "sha256": "7c602f472be5e298dbd9dae82f34528b6cc6ac70c13373bf585df72503bd2daf"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3",
+        "bytes": 94208,
+        "sha256": "9857c76b0f4fb53c95ed9a93067f3d40d15d92a2ab5bc073fe56e97f9640e136"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-map.sqlite3",
+        "bytes": 36864,
+        "sha256": "2c2db6044b3f17adc3c592fdf8f903ffcf0eef81d4c019b33424dafc9609346c"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-provider.sqlite3",
+        "bytes": 12288,
+        "sha256": "fc5d6e96fed3ad9dc1d84ff30117c49293eb0be641c6d24f44b062e87e0245cf"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "d0f543d59d043c163aec61671f53cfbcab77083b6b01b8b2fe7a5fb2438ac53e"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json",
+        "bytes": 297,
+        "sha256": "6ac4b7562dc8df4e931909ccbbd97e7a0d824d2206cf4bb3134138117f273816"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r6-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-risk.sqlite3",
+        "bytes": 327680,
+        "sha256": "6229413cd722148152df97567218a42e10219cba79994eb1446078b83c24112a"
+      },
+      {
+        "path": "raw/r6-conservation/result.json",
+        "bytes": 1533,
+        "sha256": "d03da9b93acfd89cffce94c78a6f2380b12dbb208502de41dd3e0127e836d344"
+      },
+      {
+        "path": "raw/r6-conservation/runner.py",
+        "bytes": 3400,
+        "sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0"
+      },
+      {
+        "path": "raw/r6-conservation/running.json",
+        "bytes": 76,
+        "sha256": "ec50fcea11cfa6375e72c921e71524795700acd50bffabb43e8531e0061ef774"
+      },
+      {
+        "path": "raw/r6-conservation/source-after.json",
+        "bytes": 495193,
+        "sha256": "5dc326df84b20d4416d2368767d1a406e055ed4545baaf716a32cb39a1176c09"
+      },
+      {
+        "path": "raw/r6-conservation/source-before.json",
+        "bytes": 495193,
+        "sha256": "5dc326df84b20d4416d2368767d1a406e055ed4545baaf716a32cb39a1176c09"
+      },
+      {
+        "path": "raw/r6-conservation/spec.json",
+        "bytes": 507712,
+        "sha256": "49b58e745c292fc0a7757b0fc3deeae3a9ac99f9badcf8e3414af7df9733493e"
+      },
+      {
+        "path": "raw/r6-conservation/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r6-conservation/stdout.log",
+        "bytes": 25777,
+        "sha256": "5ab0c567ecbb1f892ca216a5040ca636232e18444131c457ef02d7edf215bfb8"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/command.json",
+        "bytes": 2695,
+        "sha256": "87af3eaea04be3984022488895a4ce2cf870f2e61eff6e345f3a27a2da94d533"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/junit.xml",
+        "bytes": 30820,
+        "sha256": "1384177c2ee313f8ebc6c4cc61462fcabae18139218fc4619b02b8f453fd4280"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-afi.sqlite3",
+        "bytes": 225280,
+        "sha256": "38533f30f966392b86da6c327f0e994587a19ec67f17de3b24a8e0f3045fba1a"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-consumer.sqlite3",
+        "bytes": 8192,
+        "sha256": "966b1baad0ce0a9ad74f9dfa6a1d30f50a5c5d67b1a562887e05dda018ce1284"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3",
+        "bytes": 524288,
+        "sha256": "1af4bb312bd813abb47b67b1c479c19f4fbaaab10c29bdda586aef52f5ec5fdb"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3",
+        "bytes": 94208,
+        "sha256": "0e13b2ee939e04fcae1d8fef9db6dd9559229b8e52492779d3dca3416bacbdb9"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3-shm",
+        "bytes": 32768,
+        "sha256": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3-wal",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-map.sqlite3",
+        "bytes": 36864,
+        "sha256": "6053ecc63f9e799501a8870b946a561cf598d651a61ffa99479a46403e2755d7"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-provider.sqlite3",
+        "bytes": 12288,
+        "sha256": "fc5d6e96fed3ad9dc1d84ff30117c49293eb0be641c6d24f44b062e87e0245cf"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "82c77dff217cfa1c1e9de8f5800d1dbfa7a6d7a0bc4425544567ff8dddc17fa6"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json",
+        "bytes": 297,
+        "sha256": "37f626ffadb3357a3b6e0a6afba3a05fe47de216855714585fea509aed77d011"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-risk.sqlite3",
+        "bytes": 327680,
+        "sha256": "d19cabaf7a39661f65afe438326f59c4a1708a7111ff19145060cbe9a18162c9"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/result.json",
+        "bytes": 1533,
+        "sha256": "4e8fa4bd32f4ee2fe2f2a74a3460c360ac4c7b7e79dae7d3c9abf861a8b3dcd9"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/runner.py",
+        "bytes": 3400,
+        "sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/running.json",
+        "bytes": 76,
+        "sha256": "73c872fd8be44b5559eaa996b2ea961e72ec92f8932f50f6989541e1b4790291"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/source-after.json",
+        "bytes": 495559,
+        "sha256": "0624bc770f14f03f4f7e70184b7281bfd0d160b1e596e87f0deb89c4bbec86a6"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/source-before.json",
+        "bytes": 495559,
+        "sha256": "0624bc770f14f03f4f7e70184b7281bfd0d160b1e596e87f0deb89c4bbec86a6"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/spec.json",
+        "bytes": 505248,
+        "sha256": "daf9da99ecb1022ffd013caa3baef38ee80ac6aeff258c6e205791952d731dad"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r7-sdk-conservation/stdout.log",
+        "bytes": 31672,
+        "sha256": "b9d89ded024b9d9db2ca3dd770215537588eee81ea8e1f5cc5940709720f09cf"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/command.json",
+        "bytes": 2695,
+        "sha256": "d8414c7bddb0957d5a62df51385b2f0c3affc099005e5f2701ef4fc76089c3a2"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/junit.xml",
+        "bytes": 334,
+        "sha256": "98357956e37483ee0df75a0f20ee96bcad96cf4d0eaba99e95feb307d12015e7"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-afi.sqlite3",
+        "bytes": 225280,
+        "sha256": "1e761705cf78af5075d859bf5a5510e8fb5b12a49e9a3883354cd75611c93466"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-consumer.sqlite3",
+        "bytes": 8192,
+        "sha256": "92432846e387a9aa6a44c78671104f4b740a3efa6d564436448c0c317f418e3f"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3",
+        "bytes": 524288,
+        "sha256": "b304cab1afef3b6d3eeb16c75b7da271eafe29fd1c3121499a5f7e76bbe8034c"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-execution.sqlite3.service_execution_owner.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-gateway.sqlite3",
+        "bytes": 94208,
+        "sha256": "f212d8a75fd62f5d4b6b5520d86aed10c732f5d05d7890ae3f77175c00422bc7"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-map.sqlite3",
+        "bytes": 36864,
+        "sha256": "9388bbc642f7c0c354704528e9a7588be646d997c9c59c8b9561c04cb558ab5c"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-provider.sqlite3",
+        "bytes": 12288,
+        "sha256": "fc5d6e96fed3ad9dc1d84ff30117c49293eb0be641c6d24f44b062e87e0245cf"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3",
+        "bytes": 40960,
+        "sha256": "f5499d23c58b150689ce9b892790ec884ec0913175c47382764ef2e70f15240b"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json",
+        "bytes": 297,
+        "sha256": "1810706e8280e5ab829ad6823821b807740e27d4a0700ad854679c42347e18cd"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.migration-cutover.json.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-registry.sqlite3.service_registry.lock",
+        "bytes": 1,
+        "sha256": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/pytest-tmp/test_mig03_full_boundary_inven0/mig03-boundary-risk.sqlite3",
+        "bytes": 327680,
+        "sha256": "71af13cf68aa1e4c95502be35845134da7e090e47eff286f823acdc020856164"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/result.json",
+        "bytes": 1533,
+        "sha256": "a8678865a5af1abe743fcf3f64520b047cd5aad64a4578a726f82fa934db8aad"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/runner.py",
+        "bytes": 3400,
+        "sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/running.json",
+        "bytes": 76,
+        "sha256": "c806fd6398e4c400db43f0c59f83391c0d5728910f58a7cb1dda1513054872a4"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/source-after.json",
+        "bytes": 496096,
+        "sha256": "41df0712d1f80a8153ccbae273402845c33de4b697336605be4ce2081897168d"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/source-before.json",
+        "bytes": 496096,
+        "sha256": "41df0712d1f80a8153ccbae273402845c33de4b697336605be4ce2081897168d"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/spec.json",
+        "bytes": 506487,
+        "sha256": "5b2d5a2a2bdda7e33afe3c49a20f96f59ba8f6b7e8004d59d180d456ca3ff584"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/r8-sdk-conservation/stdout.log",
+        "bytes": 215,
+        "sha256": "109bcaa7816fe862e159a9c45eca839bf6204ee8c2fae7d4097363ed5de53b75"
+      }
+    ]
+  },
+  "formal_status": {
+    "acceptance": "MIG03 remains PARTIAL pending Root adjudication",
+    "formal_pass_count": "unchanged",
+    "limitations": [
+      "Synthetic deployment only",
+      "groups marked NOT_APPLICABLE after verified config absence; no group-ledger migration",
+      "consumer list is exhaustive only for test deployment",
+      "local fence reference is not external provider-fence proof",
+      "same-path retained stores; no copyDB or cross-database atomicity claim",
+      "no production account/private database/provider operation",
+      "§11.3 config-change freeze is not challenged as a separate mutation case",
+      "the test submits/replays before a dedicated read-only-before-write-open sequence; write-attempt barrier seals conservatively"
+    ]
+  },
+  "exact_source_delivery_paths": [
+    "D:/bt_api_py/bt_api_py/service_migration_boundary.py",
+    "D:/bt_api_py/tests/unit/test_service_migration_boundary.py",
+    "D:/bt_api_py/tests/integration/test_service_migration_boundary_inventory.py",
+    "D:/source_code/ai-for-investor/src/backend/app/services/mig03_boundary_inventory.py",
+    "D:/source_code/ai-for-investor/src/backend/tests/test_mig03_boundary_inventory.py",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-boundary-inventory-r235-20261016/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-boundary-inventory-r235-20261016/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-boundary-inventory-r235-20261016/round-record.md",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md"
+  ],
+  "accepted_node_policy": "Sequential Root runs retained independently; no aggregate run claim and no accepted node rerun.",
+  "final_static_review": {
+    "status": "PENDING_ROOT_REVIEW",
+    "note": "Prior GO_STATIC covers the 2316-pin candidate before final integration source 80c923e3a104a172cd1f8f84a3cf4cbc200c8b05b54175c1fd9abcef5bcd06b3; it is not represented as review of R8."
+  }
+}
