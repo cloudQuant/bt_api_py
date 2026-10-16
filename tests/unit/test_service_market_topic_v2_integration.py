@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import queue
 import socket
 import threading
@@ -9,18 +10,30 @@ import time
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import zmq
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+import bt_api_gateway.market_hub as gateway_market_hub_module
 from bt_api_gateway.market_hub import GatewayMarketHub
 
-from bt_api_py.service_components import ComponentResources
+from bt_api_py.service_components import (
+    ComponentResources,
+    ComponentSpec,
+    PreparedComponent,
+    ServiceComponent,
+)
 from bt_api_py.service_config import parse_client_config, parse_service_config
 from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
 from bt_api_py.service_market import ServiceMarketClient, ZmqMarketTransportFactory
-from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
+from bt_api_py.service_registry import (
+    PrincipalGrant,
+    ResourceGrant,
+    ServiceCapability,
+    ServiceRegistry,
+)
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
     ServiceClientRuntime,
@@ -612,3 +625,408 @@ def test_real_host_topic_v2_filters_two_streams_and_v1_remains_compatible(tmp_pa
         if legacy_runtime is not None:
             assert legacy_runtime.state == "closed"
         assert not failures, tuple(failures)
+
+
+def test_service_host_market_startup_sampling_separates_handler_and_maintenance(
+    tmp_path, monkeypatch
+):
+    """Measure actual local-wire handler and owner maintenance work at small scale."""
+
+    samples: list[tuple[str, int, int]] = []
+    sample_lock = threading.Lock()
+
+    def record(kind: str, duration_ns: int, count: int = 0) -> None:
+        with sample_lock:
+            samples.append((kind, duration_ns, count))
+
+    original_maintain_components = ServiceHost._maintain_components
+
+    def measured_maintain_components(host, *, registrations_only: bool = False):
+        started_ns = time.perf_counter_ns()
+        try:
+            return original_maintain_components(
+                host, registrations_only=registrations_only
+            )
+        finally:
+            record("host_maintenance", time.perf_counter_ns() - started_ns)
+
+    original_active_ids = ServiceRegistry.active_registration_ids
+
+    def measured_active_ids(registry, *, instance_id: str):
+        started_ns = time.perf_counter_ns()
+        result = original_active_ids(registry, instance_id=instance_id)
+        record("registry_projection", time.perf_counter_ns() - started_ns, len(result))
+        return result
+
+    original_hub_maintain = GatewayMarketHub.maintain
+
+    def measured_hub_maintain(hub, active_registration_ids):
+        ids = tuple(active_registration_ids)
+        started_ns = time.perf_counter_ns()
+        result = original_hub_maintain(hub, ids)
+        record("hub_maintenance", time.perf_counter_ns() - started_ns, len(ids))
+        return result
+
+    original_handle = ServiceRegistry.handle
+
+    def measured_handle(registry, authenticated_principal, request):
+        operation = request.header.operation
+        started_ns = time.perf_counter_ns()
+        try:
+            return original_handle(registry, authenticated_principal, request)
+        finally:
+            if operation in {"market.subscribe", "market.snapshot"}:
+                record(
+                    operation,
+                    time.perf_counter_ns() - started_ns,
+                )
+
+    monkeypatch.setattr(ServiceHost, "_maintain_components", measured_maintain_components)
+    monkeypatch.setattr(ServiceRegistry, "active_registration_ids", measured_active_ids)
+    monkeypatch.setattr(GatewayMarketHub, "maintain", measured_hub_maintain)
+    monkeypatch.setattr(ServiceRegistry, "handle", measured_handle)
+
+    server_public, server_secret = zmq.curve_keypair()
+    client_public, client_secret = zmq.curve_keypair()
+    host = _LocalMarketHost(
+        tmp_path,
+        wire_version=2,
+        server_keys=(server_public, server_secret),
+        client_public_key=client_public,
+    )
+    runtimes: list[ServiceClientRuntime] = []
+    markets: list[ServiceMarketClient] = []
+    try:
+        # Multiple independent registrations make the owner-side projection
+        # cost observable while keeping this diagnostic far below LOAD01's
+        # constrained 112-child topology.
+        for _ in range(8):
+            runtime = _new_client(
+                host,
+                wire_version=2,
+                server_key=server_public,
+                public_key=client_public,
+                secret_key=client_secret,
+            )
+            runtimes.append(runtime)
+            market = _new_market(
+                runtime,
+                _KEY_A,
+                server_key=server_public,
+                public_key=client_public,
+                secret_key=client_secret,
+            )
+            markets.append(market)
+            runtime.start()
+            market.start()
+
+        snapshots = [duration for kind, duration, _ in samples if kind == "market.snapshot"]
+        subscriptions = [duration for kind, duration, _ in samples if kind == "market.subscribe"]
+        assert len(snapshots) == len(markets), (len(snapshots), len(markets))
+        assert len(subscriptions) == len(markets), (len(subscriptions), len(markets))
+        maintenance = [duration for kind, duration, _ in samples if kind == "host_maintenance"]
+        projections = [
+            (duration, count)
+            for kind, duration, count in samples
+            if kind == "registry_projection"
+        ]
+        hubs = [
+            (duration, count)
+            for kind, duration, count in samples
+            if kind == "hub_maintenance"
+        ]
+        assert maintenance and projections and hubs
+
+        def distribution(values: list[int]) -> dict[str, int]:
+            ordered = sorted(values)
+            return {
+                "count": len(values),
+                "total_ns": sum(values),
+                "mean_ns": sum(values) // len(values),
+                "median_ns": ordered[len(ordered) // 2],
+                "max_ns": max(values),
+            }
+
+        print(
+            "LOAD01_SMALL_WIRE_STAGE_SAMPLE "
+            + json.dumps(
+                {
+                    "clients": len(markets),
+                    "snapshot_handler": distribution(snapshots),
+                    "subscribe_handler": distribution(subscriptions),
+                    "host_maintenance": distribution(maintenance),
+                    "registry_projection": distribution(
+                        [duration for duration, _count in projections]
+                    ),
+                    "registry_projection_max_registration_count": max(
+                        count for _duration, count in projections
+                    ),
+                    "hub_maintenance": distribution(
+                        [duration for duration, _count in hubs]
+                    ),
+                    "hub_maintenance_max_registration_count": max(
+                        count for _duration, count in hubs
+                    ),
+                },
+                sort_keys=True,
+            )
+        )
+    finally:
+        failures = []
+        for market in reversed(markets):
+            try:
+                market.close()
+            except BaseException as exc:
+                failures.append(type(exc).__name__)
+        for runtime in reversed(runtimes):
+            try:
+                runtime.close()
+            except BaseException as exc:
+                failures.append(type(exc).__name__)
+        try:
+            host.close()
+        except BaseException as exc:
+            failures.append(type(exc).__name__)
+        assert all(runtime.state == "closed" for runtime in runtimes)
+        assert not failures, tuple(failures)
+
+
+def test_single_market_hub_skips_duplicate_sweep_but_checks_expiry_and_unregister(
+    tmp_path, monkeypatch
+):
+    """Requests still expire/unregister at the registry boundary; market polling continues."""
+
+    registry_now = [1_000.0]
+    expired_registration_id: list[str | None] = [None]
+    market_only_checks: list[bool] = []
+    original_registry_init = ServiceRegistry.__init__
+    original_registry_handle = ServiceRegistry.handle
+    original_market_only_guard = ServiceHost._is_single_market_hub_host
+
+    def controlled_registry_init(registry, *args, **kwargs):
+        kwargs["lease_seconds"] = 30
+        kwargs["clock"] = lambda: registry_now[0]
+        return original_registry_init(registry, *args, **kwargs)
+
+    def expire_at_request_boundary(registry, principal, request):
+        if (
+            request.header.operation == "market.snapshot"
+            and request.payload.get("registration_id")
+            == expired_registration_id[0]
+        ):
+            # Let Host's preflight see a live lease, then expire it immediately
+            # before the actual Registry.handle/_dispatch authorization check.
+            registry_now[0] = 1_031.0
+        return original_registry_handle(registry, principal, request)
+
+    def observe_market_only_guard(host):
+        result = original_market_only_guard(host)
+        market_only_checks.append(result)
+        return result
+
+    monkeypatch.setattr(ServiceRegistry, "__init__", controlled_registry_init)
+    monkeypatch.setattr(ServiceRegistry, "handle", expire_at_request_boundary)
+    monkeypatch.setattr(ServiceHost, "_is_single_market_hub_host", observe_market_only_guard)
+
+    server_public, server_secret = zmq.curve_keypair()
+    client_public, client_secret = zmq.curve_keypair()
+    host = _LocalMarketHost(
+        tmp_path,
+        wire_version=2,
+        server_keys=(server_public, server_secret),
+        client_public_key=client_public,
+    )
+    unregistered_runtime: ServiceClientRuntime | None = None
+    expired_runtime: ServiceClientRuntime | None = None
+    live_runtime: ServiceClientRuntime | None = None
+    live_market: ServiceMarketClient | None = None
+    try:
+        unregistered_runtime = _new_client(
+            host,
+            wire_version=2,
+            server_key=server_public,
+            public_key=client_public,
+            secret_key=client_secret,
+        )
+        unregistered_runtime.start()
+        unregistered_binding = next(
+            binding
+            for binding in unregistered_runtime.bindings
+            if binding.mount == "store.market"
+        )
+        assert unregistered_runtime._unregister_binding(unregistered_binding) is True
+        try:
+            unregistered_runtime.call(
+                "store.market",
+                "market.snapshot",
+                {"key": _KEY_A.to_dict()},
+                scope_ref=_SERVICE_SCOPE_REF,
+            )
+        except ServiceRuntimeError as exc:
+            assert exc.code == "NOT_REGISTERED"
+        else:
+            raise AssertionError("an unregistered lease reached the market handler")
+
+        expired_runtime = _new_client(
+            host,
+            wire_version=2,
+            server_key=server_public,
+            public_key=client_public,
+            secret_key=client_secret,
+        )
+        expired_runtime.start()
+        expired_binding = next(
+            binding
+            for binding in expired_runtime.bindings
+            if binding.mount == "store.market"
+        )
+        expired_registration_id[0] = expired_binding.registration_id
+
+        registry_now[0] = 1_010.0
+        live_runtime = _new_client(
+            host,
+            wire_version=2,
+            server_key=server_public,
+            public_key=client_public,
+            secret_key=client_secret,
+        )
+        live_runtime.start()
+        live_market = _new_market(
+            live_runtime,
+            _KEY_A,
+            server_key=server_public,
+            public_key=client_public,
+            secret_key=client_secret,
+        )
+        live_market.start()
+        time.sleep(0.2)
+        sequence = host.publish(_KEY_A, "before-expiry")
+        assert _receive_marker(live_market, "before-expiry")[2] == sequence
+
+        # The test hook advances the authoritative clock only after this request
+        # has passed Host's pre-maintenance sweep, so the registry itself must
+        # reject it before entering the market component handler.
+        try:
+            expired_runtime.call(
+                "store.market",
+                "market.snapshot",
+                {"key": _KEY_A.to_dict()},
+                scope_ref=_SERVICE_SCOPE_REF,
+            )
+        except ServiceRuntimeError as exc:
+            assert exc.code == "NOT_REGISTERED"
+        else:
+            raise AssertionError("an expired lease reached the market handler")
+
+        # A different, still-live registration continues receiving real CURVE
+        # publisher events after the expired lease was rejected.
+        sequence = host.publish(_KEY_A, "after-expiry")
+        assert _receive_marker(live_market, "after-expiry")[2] == sequence
+        assert market_only_checks and all(market_only_checks), market_only_checks
+    finally:
+        failures = []
+        if live_market is not None:
+            try:
+                live_market.close()
+            except BaseException as exc:
+                failures.append(type(exc).__name__)
+        for runtime in (live_runtime, expired_runtime, unregistered_runtime):
+            if runtime is None:
+                continue
+            try:
+                runtime.close()
+            except BaseException as exc:
+                failures.append(type(exc).__name__)
+        try:
+            host.close()
+        except BaseException as exc:
+            failures.append(type(exc).__name__)
+        if live_runtime is not None:
+            assert live_runtime.state == "closed"
+        if expired_runtime is not None:
+            assert expired_runtime.state == "closed"
+        if unregistered_runtime is not None:
+            assert unregistered_runtime.state == "closed"
+        assert not failures, tuple(failures)
+
+
+def test_market_only_maintenance_guard_requires_validated_types_and_module_identity():
+    market_spec = ComponentSpec(
+        component="gateway",
+        instance_id=_SERVICE_INSTANCE,
+        bind_ports=("service.market_source",),
+        options={"role": "market_hub"},
+    )
+    prepared = PreparedComponent(
+        spec=market_spec,
+        options={"role": "market_hub"},
+        module=gateway_market_hub_module,
+        operations_by_port={"service.market_source": _MARKET_OPERATIONS},
+        write_operations_by_port={"service.market_source": frozenset()},
+    )
+    capability = ServiceCapability(
+        instance_id=_SERVICE_INSTANCE,
+        port="service.market_source",
+        operations=_MARKET_OPERATIONS,
+        write_operations=frozenset(),
+    )
+    component = ServiceComponent(
+        component="gateway",
+        instance_id=_SERVICE_INSTANCE,
+        capabilities=(capability,),
+        handlers={operation: lambda _context, _payload: {} for operation in _MARKET_OPERATIONS},
+        internal_ports={},
+        readiness=lambda: True,
+        close=lambda: None,
+        maintain=lambda _active_ids: None,
+    )
+    market_host = SimpleNamespace(
+        _state="started",
+        _registry=object(),
+        _server=object(),
+        _upstream=None,
+        _market_endpoint="inproc://market",
+        _market_publisher=object(),
+        _prepared=(prepared,),
+        _components=(component,),
+    )
+    # The trusted types and canonical module identity take the positive branch
+    # without any Paper-WIP fields on the host.
+    assert ServiceHost._is_single_market_hub_host(market_host) is True
+
+    # Same-name modules and matching duck-typed fields do not establish that
+    # this is the canonical validated component built by ServiceHost.start.
+    counterfeit_prepared = SimpleNamespace(
+        spec=SimpleNamespace(
+            component="gateway",
+            instance_id=_SERVICE_INSTANCE,
+            bind_ports=("service.market_source",),
+            options={"role": "market_hub"},
+        ),
+        module=SimpleNamespace(__name__="bt_api_gateway.market_hub"),
+        operations_by_port={"service.market_source": _MARKET_OPERATIONS},
+        write_operations_by_port={"service.market_source": frozenset()},
+    )
+    counterfeit_host = SimpleNamespace(
+        _state="started",
+        _registry=object(),
+        _server=object(),
+        _upstream=None,
+        _market_endpoint="inproc://market",
+        _market_publisher=object(),
+        _prepared=(counterfeit_prepared,),
+        _components=(component,),
+    )
+    assert ServiceHost._is_single_market_hub_host(counterfeit_host) is False
+
+    mixed_host = SimpleNamespace(
+        _state="started",
+        _registry=object(),
+        _server=object(),
+        _upstream=None,
+        _market_endpoint="inproc://market",
+        _market_publisher=object(),
+        _prepared=(prepared, prepared),
+        _components=(component, component),
+    )
+    assert ServiceHost._is_single_market_hub_host(mixed_host) is False

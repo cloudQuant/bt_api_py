@@ -11,6 +11,7 @@ manifest cannot name Python modules or executable factories.
 from __future__ import annotations
 
 import re
+import sys
 import threading
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -29,6 +30,7 @@ from bt_api_base.service_protocol import (
 
 from .service_components import (
     BorrowedServiceClient,
+    ComponentSpec,
     ComponentResources,
     PreparedComponent,
     ServiceComponent,
@@ -822,13 +824,77 @@ class ServiceHost:
             self._maintain_components()
             self._refresh_registry_readiness()
             handled = self._server.serve_once(bounded_timeout)
-            self._maintain_components()
+            # Only the validated single market-hub Host can defer this second
+            # sweep: its next owner-loop iteration performs the same preflight,
+            # and Registry.handle independently checks expiry for this request.
+            # Mixed Hosts retain the post-request sweep because their component
+            # maintenance can include non-market owner work.
+            if not handled or not self._is_single_market_hub_host():
+                self._maintain_components()
             self._refresh_registry_readiness()
             return handled
         except ServiceHostError:
             raise
         except Exception:
             raise ServiceHostError("SERVE_FAILED") from None
+
+    def _is_single_market_hub_host(self) -> bool:
+        """Return true only for the validated, market-only built-in composition."""
+
+        if (
+            self._state != "started"
+            or self._registry is None
+            or self._server is None
+            or self._upstream is not None
+            or not self._market_endpoint
+            or self._market_publisher is None
+            or len(self._prepared) != 1
+            or len(self._components) != 1
+        ):
+            return False
+        prepared = self._prepared[0]
+        component = self._components[0]
+        trusted_market_module = sys.modules.get("bt_api_gateway.market_hub")
+        if (
+            type(prepared) is not PreparedComponent
+            or type(prepared.spec) is not ComponentSpec
+            or type(component) is not ServiceComponent
+            or prepared.module is not trusted_market_module
+        ):
+            return False
+        spec = prepared.spec
+        if (
+            spec.component != "gateway"
+            or spec.options.get("role") != "market_hub"
+            or spec.bind_ports != ("service.market_source",)
+            or set(prepared.operations_by_port) != {"service.market_source"}
+            or prepared.write_operations_by_port.get("service.market_source") != frozenset()
+            or component.component != "gateway"
+            or component.instance_id != spec.instance_id
+            or component.internal_ports
+            or component.maintain_registrations is not None
+            or component.maintain is None
+            or len(component.capabilities) != 1
+        ):
+            return False
+        capability = component.capabilities[0]
+        if type(capability) is not ServiceCapability:
+            return False
+        return (
+            capability.instance_id == spec.instance_id
+            and capability.port == "service.market_source"
+            and not capability.write_operations
+            and capability.operations <= frozenset(
+                {
+                    "market.subscribe",
+                    "market.unsubscribe",
+                    "market.snapshot",
+                    "market.head",
+                    "market.read_after",
+                    "market.history",
+                }
+            )
+        )
 
     def close(self) -> None:
         """Mark the registry unready and close owned resources in reverse order."""
