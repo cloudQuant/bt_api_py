@@ -1,0 +1,376 @@
+{
+  "schema": "iteration10-dim04-r230-evidence-manifest-v1",
+  "round": "R230",
+  "date": "2026-10-16",
+  "scope": "DIM04_LOCAL_SYNTHETIC_PROVIDER_SERVICEHOST_SELFTRADE_OWNER_PATH",
+  "accepted_evidence": "One Root-consumed selected integration node passed; this is not formal DIM04 acceptance.",
+  "formal_dim04_pass": false,
+  "tracker_updated": false,
+  "candidate": {
+    "path": "tests/integration/test_dim04_strategy_account_isolation.py",
+    "bytes": 25003,
+    "sha256": "d5dcae21f561c75cb75a5561c5efadd939f29763f4b1c4f409d4fbda60449bef",
+    "source_export": "D:\\bt_api_py\\.codex-tmp\\it10-dim04-strategy-account-isolation-source-r6-r227-host-closure-20261016",
+    "immutable_after_acceptance": true
+  },
+  "qa_runs": [
+    {
+      "label": "R4-clean",
+      "output_directory": "D:\\temp\\iteration10-dim04-strategy-account-isolation-r4-clean-20261016",
+      "prepared_spec": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim04-strategy-account-isolation-r4-clean-20261016.json",
+        "bytes": 84234,
+        "sha256": "fe414621cd0a3e9883ad27da598fc88a9134c254f93ecbb55cfcec89876ab7a3"
+      },
+      "root_bound_spec": {
+        "archive_path": "r4-clean/spec.json",
+        "bytes": 84464,
+        "sha256": "32a31600b6369e97c2db6e1ae59d2a14f6be6cca83c64b7628eaad77c1c898fa"
+      },
+      "runner": {
+        "archive_path": "r4-clean/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "raw_output_file_count": 11,
+      "pytest_exit": 1,
+      "tests": 0,
+      "passed": 0,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 0.0,
+      "captured_runtime_warning_count": 1,
+      "source_count": 362,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "77b86e2139708455722a3f11955cce18b14647fe",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ede55dec5e8e7ad1c5376969eb54e9933ebf9e85",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "77b86e2139708455722a3f11955cce18b14647fe",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ede55dec5e8e7ad1c5376969eb54e9933ebf9e85",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_unchanged": true,
+      "stdout_sha256": "b7b469b3840e30f33485af387c9a2f4fbdf9d3c0b37c8c6b885ce7fa785f6b39",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "a268c9b7ad750aa0e3ca1e9ca49dbcfa0c7332edb1596d3e26b3b52255f70083",
+      "junit_sha256": "0625ba3ecea0e8822cf45d28a64c71fc135ce49fdd31cd93a74bbf7dfcee12df",
+      "evidence_level": "LOCAL_SYNTHETIC_PROVIDER_SERVICEHOST_DIM04_SELFTRADE_OWNER_PATH",
+      "outcome": "The fixture expected the query for each denied BTC intent to return ok=true/code=OK. The actual durable query returned ADMISSION_DENIED with found=true, a REJECTED record, and dispatch_attempts=0. This was an incorrect fixture assertion; R5 corrected it to the actual rejected-query contract."
+    },
+    {
+      "label": "R5",
+      "output_directory": "D:\\temp\\iteration10-dim04-strategy-account-isolation-r5-r226-query-contract-clean-20261016",
+      "prepared_spec": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim04-strategy-account-isolation-r5-r226-query-contract-clean-20261016.json",
+        "bytes": 93204,
+        "sha256": "1c640b04c0aba1715a253a9619858b212fa1d1e839a02214574e60830518b76e"
+      },
+      "root_bound_spec": {
+        "archive_path": "r5-r226-query-contract-clean/spec.json",
+        "bytes": 93224,
+        "sha256": "bce658f9518f9daee6996ee60764905377a7d63165010902f3653141bd2d9f01"
+      },
+      "runner": {
+        "archive_path": "r5-r226-query-contract-clean/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "raw_output_file_count": 11,
+      "pytest_exit": 1,
+      "tests": 0,
+      "passed": 0,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 0.0,
+      "captured_runtime_warning_count": 1,
+      "source_count": 362,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "1e79ecfde28e13b95b60ec88b092783564b1ee24",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ede55dec5e8e7ad1c5376969eb54e9933ebf9e85",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "1e79ecfde28e13b95b60ec88b092783564b1ee24",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ede55dec5e8e7ad1c5376969eb54e9933ebf9e85",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_unchanged": true,
+      "stdout_sha256": "363acd892532a6720750489cce7ffd229ef704b2fd0b08adafe5b6a35b8ea803",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "83c6fc45fec0d9da22b354ffe233423f635d68e89724763f95bd7fa121c9658c",
+      "junit_sha256": "8bdd6be07a2c42cbfcc40afd4881814b259e6dd50c4ec11807a3884c34e61a7c",
+      "evidence_level": "LOCAL_SYNTHETIC_PROVIDER_SERVICEHOST_DIM04_SELFTRADE_OWNER_PATH",
+      "outcome": "Both BTC denials and rejected-order queries passed; the unrelated ETH intent was FILLED with one dispatch, and both client processes closed normally. The test then raised NameError at the provider_write_count helper reference _dim01, while the imported module is dim01. The provider-write-count assertion, normal Host close, and final durable-state checks were not reached."
+    },
+    {
+      "label": "R6",
+      "output_directory": "D:\\temp\\iteration10-dim04-strategy-account-isolation-r6-r227-host-closure-20261016",
+      "prepared_spec": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim04-strategy-account-isolation-r6-r227-host-closure-20261016.json",
+        "bytes": 92601,
+        "sha256": "13f1332702e41ee8778278da683892a86f7fa2edf485381567b2b2ff1b4d15d9"
+      },
+      "root_bound_spec": {
+        "archive_path": "r6-r227-host-closure/spec.json",
+        "bytes": 92613,
+        "sha256": "359c1e49d6d123203e2fc83262f9ddf12ee71de0b34c38001509d06e82884c30"
+      },
+      "runner": {
+        "archive_path": "r6-r227-host-closure/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "raw_output_file_count": 11,
+      "pytest_exit": 0,
+      "tests": 1,
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 10.41,
+      "captured_runtime_warning_count": 0,
+      "source_count": 362,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "33c381007abcfc437044c67f4c752a788944846d",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "33c381007abcfc437044c67f4c752a788944846d",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_unchanged": true,
+      "stdout_sha256": "1025a3c64863527319642bb829c74ff5e46fb41566d827122f17aa9839ee9cff",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result_sha256": "21ee89680d71cb5e9f4ffb39377725017c63171379d338332c5e6acdf3e1744b",
+      "junit_sha256": "66b86fb38f0502e401994959da2fbf6cc08d8232d1c9a9c158a18e90eeed72b8",
+      "evidence_level": "LOCAL_SYNTHETIC_PROVIDER_SERVICEHOST_DIM04_SELFTRADE_OWNER_PATH",
+      "outcome": "PASS: one selected integration node passed in the Root-run frozen source export using a local synthetic provider and real SDK ServiceHost/SQLite owner path."
+    }
+  ],
+  "archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 245915,
+    "sha256": "2a535548a586623c2896db2d4979419087505831d0b1b3ee3e318ca315cd5afb",
+    "entry_count": 37,
+    "entries": [
+      {
+        "path": "r4-clean/command.json",
+        "bytes": 1631,
+        "sha256": "baac578d3828465913ef236459f84706aaaff29dace697874e578fb0688ccc97"
+      },
+      {
+        "path": "r4-clean/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "r4-clean/junit.xml",
+        "bytes": 6149,
+        "sha256": "0625ba3ecea0e8822cf45d28a64c71fc135ce49fdd31cd93a74bbf7dfcee12df"
+      },
+      {
+        "path": "r4-clean/result.json",
+        "bytes": 1514,
+        "sha256": "a268c9b7ad750aa0e3ca1e9ca49dbcfa0c7332edb1596d3e26b3b52255f70083"
+      },
+      {
+        "path": "r4-clean/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "r4-clean/running.json",
+        "bytes": 76,
+        "sha256": "c0133c2ee6eeafc1ccc30e3cc3d944cc11d49bd4de3868fae48c69836c88a4b8"
+      },
+      {
+        "path": "r4-clean/source-after.json",
+        "bytes": 78180,
+        "sha256": "8a3a6c0760bb431a75cd685c541b5bb93462045a2f0fc303ee856a8433ce0e34"
+      },
+      {
+        "path": "r4-clean/source-before.json",
+        "bytes": 78180,
+        "sha256": "8a3a6c0760bb431a75cd685c541b5bb93462045a2f0fc303ee856a8433ce0e34"
+      },
+      {
+        "path": "r4-clean/spec.json",
+        "bytes": 84464,
+        "sha256": "32a31600b6369e97c2db6e1ae59d2a14f6be6cca83c64b7628eaad77c1c898fa"
+      },
+      {
+        "path": "r4-clean/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r4-clean/stdout.log",
+        "bytes": 6500,
+        "sha256": "b7b469b3840e30f33485af387c9a2f4fbdf9d3c0b37c8c6b885ce7fa785f6b39"
+      },
+      {
+        "path": "r4-clean/prepared-source-spec.json",
+        "bytes": 84234,
+        "sha256": "fe414621cd0a3e9883ad27da598fc88a9134c254f93ecbb55cfcec89876ab7a3"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/command.json",
+        "bytes": 1811,
+        "sha256": "461ef15ccb4e3e7b0a44b091651154e3e91fcc959ce311df1efcd0ffddca5b47"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/junit.xml",
+        "bytes": 7164,
+        "sha256": "8bdd6be07a2c42cbfcc40afd4881814b259e6dd50c4ec11807a3884c34e61a7c"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/result.json",
+        "bytes": 1514,
+        "sha256": "83c6fc45fec0d9da22b354ffe233423f635d68e89724763f95bd7fa121c9658c"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/running.json",
+        "bytes": 76,
+        "sha256": "5c5a61642ac3043f10daea624384e201d53376b9234fc6d8bd3b342729f3c988"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/source-after.json",
+        "bytes": 85380,
+        "sha256": "1ee7971a7a7ec93a3b290d39923a5a35a8aadb7c4825e1a2d9611a34ac907200"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/source-before.json",
+        "bytes": 85380,
+        "sha256": "1ee7971a7a7ec93a3b290d39923a5a35a8aadb7c4825e1a2d9611a34ac907200"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/spec.json",
+        "bytes": 93224,
+        "sha256": "bce658f9518f9daee6996ee60764905377a7d63165010902f3653141bd2d9f01"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/stdout.log",
+        "bytes": 7740,
+        "sha256": "363acd892532a6720750489cce7ffd229ef704b2fd0b08adafe5b6a35b8ea803"
+      },
+      {
+        "path": "r5-r226-query-contract-clean/prepared-source-spec.json",
+        "bytes": 93204,
+        "sha256": "1c640b04c0aba1715a253a9619858b212fa1d1e839a02214574e60830518b76e"
+      },
+      {
+        "path": "r6-r227-host-closure/command.json",
+        "bytes": 1739,
+        "sha256": "5f2a901a1375ef01bedec4216a5e1f778638cf8fa60fb67e28c8b383357c1519"
+      },
+      {
+        "path": "r6-r227-host-closure/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "r6-r227-host-closure/junit.xml",
+        "bytes": 393,
+        "sha256": "66b86fb38f0502e401994959da2fbf6cc08d8232d1c9a9c158a18e90eeed72b8"
+      },
+      {
+        "path": "r6-r227-host-closure/result.json",
+        "bytes": 1514,
+        "sha256": "21ee89680d71cb5e9f4ffb39377725017c63171379d338332c5e6acdf3e1744b"
+      },
+      {
+        "path": "r6-r227-host-closure/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "r6-r227-host-closure/running.json",
+        "bytes": 76,
+        "sha256": "62be3e22c0f0ca5d90f5f4d4b66b9c93ff4b2a2eec85197e402c18fb92ba112a"
+      },
+      {
+        "path": "r6-r227-host-closure/source-after.json",
+        "bytes": 82500,
+        "sha256": "04279bb4b0407ed136973b7cc72bcb649943b0898effcd04e68837f1e7c77a73"
+      },
+      {
+        "path": "r6-r227-host-closure/source-before.json",
+        "bytes": 82500,
+        "sha256": "04279bb4b0407ed136973b7cc72bcb649943b0898effcd04e68837f1e7c77a73"
+      },
+      {
+        "path": "r6-r227-host-closure/spec.json",
+        "bytes": 92613,
+        "sha256": "359c1e49d6d123203e2fc83262f9ddf12ee71de0b34c38001509d06e82884c30"
+      },
+      {
+        "path": "r6-r227-host-closure/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r6-r227-host-closure/stdout.log",
+        "bytes": 219,
+        "sha256": "1025a3c64863527319642bb829c74ff5e46fb41566d827122f17aa9839ee9cff"
+      },
+      {
+        "path": "r6-r227-host-closure/prepared-source-spec.json",
+        "bytes": 92601,
+        "sha256": "13f1332702e41ee8778278da683892a86f7fa2edf485381567b2b2ff1b4d15d9"
+      },
+      {
+        "path": "candidate/test_dim04_strategy_account_isolation.py",
+        "bytes": 25003,
+        "sha256": "d5dcae21f561c75cb75a5561c5efadd939f29763f4b1c4f409d4fbda60449bef"
+      }
+    ]
+  },
+  "boundary": [
+    "The successful R6 node uses a local synthetic provider and a real SDK ServiceHost/SQLite ownership path.",
+    "No external provider, real account, exchange position truth, or venue acceptance is established.",
+    "The raw R4 and R5 failures remain preserved as harness/fixture defects and are not rewritten as passes.",
+    "The formal DIM04 clause still requires close-position ownership/reconciliation and strategy-scoped batch-cancel behavior across its stated position modes and late-fill cases."
+  ]
+}
