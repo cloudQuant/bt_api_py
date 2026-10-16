@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="23.581" timestamp="2026-10-16T08:40:24.369344+08:00" hostname="yun"><testcase classname="tests.test_service_read_authorized_http_integration" name="test_approved_target_http_reaches_real_execution_host_and_replays_journal" time="20.590"><failure message="AssertionError: assert 2 == 1&#10; +  where 2 = len(('cf55e93e30e8458fa308866e8be7465b', 'ef3a72cedc35417f8c64c3e722ae8a10'))">tests\test_service_read_authorized_http_integration.py:6471: in test_approved_target_http_reaches_real_execution_host_and_replays_journal
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_authorized_http_integration.py:6427: in test_approved_target_http_reaches_real_execution_host_and_replays_journal
+    asyncio.run(_exercise())
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Users\yunji\AppData\Local\Programs\Python\Python312\Lib\asyncio\base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests\test_service_read_authorized_http_integration.py:6370: in _exercise
+    assert len(synthetic_risk_permits) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len(('cf55e93e30e8458fa308866e8be7465b', 'ef3a72cedc35417f8c64c3e722ae8a10'))</failure></testcase></testsuite></testsuites>

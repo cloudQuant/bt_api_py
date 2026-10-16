@@ -18,7 +18,7 @@ Only `src/backend/tests/test_service_read_authorized_http_integration.py` change
 
 Spec `D:/bt_api_py/.codex-tmp/iteration10-approved-target-http-qa-root-r7.json` (`5a1d07fa48475699a6c911f78f44caaa1309db2ffc1586187adce9bdeb059abb`, built by `build-approved-target-http-r7-spec.py`, `a12ccbfb043dc1ab1dbbdec5acfbf0d7818fe17d88433ab226d59417958ea10f`). Command: `C:/Anaconda3/python.exe D:\bt_api_py\.codex-tmp\iteration10-focused-qa.py D:\bt_api_py\.codex-tmp\iteration10-approved-target-http-qa-root-r7.json`. Output `D:/temp/afi_iter10_approved_target_http_root_20261016_r7`.
 
-Result: exit 0, `1 passed, 2 warnings in 23.84s` (both warnings pre-existing: Starlette 422 deprecation and a quandl import warning), stdout sha256 `977f4eb64403697175d2835e54dd115f17d77163aa8314fc6b343cbbb44655df`, stderr empty, 2,147 source pins unchanged, AFI head/branch unchanged. Raw command/spec/source-before/after/stdout/stderr/junit/exit archived in the output directory.
+Result: exit 0, `1 passed, 2 warnings in 23.84s` (both warnings pre-existing: Starlette 422 deprecation and a quandl import warning), stdout sha256 `977f4eb64403697175d2835e54dd115f17d77163aa8314fc6b343cbbb44655df`, stderr empty, 2,147 source pins unchanged, AFI head/branch unchanged. Raw command/spec/source-before/after/stdout/stderr/junit/exit archived in the output directory and, together with the R6 failure key files, beside this record under `qa/r7/` and `qa/r6-failure/` (exit `0` and `1` respectively).
 
 Covered by the accepted node (real AFI lifespan, real HTTP via ASGI client, real SDK service-read deployment with owner thread, real spawned Execution ServiceHost child process with CURVE registration, SQLite journal, synthetic provider/Risk leaves):
 
