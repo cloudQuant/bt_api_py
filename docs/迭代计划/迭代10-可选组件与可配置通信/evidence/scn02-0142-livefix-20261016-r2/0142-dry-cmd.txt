@@ -1,0 +1,7 @@
+cwd: /d/source_code/backtrader/examples/unified/014_2_ctp_options_midfreq
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd(dry): C:/anaconda3/python.exe run.py
+note: successor #2 iteration-10 r2 dry run. No mode flag (default_dry tier, cli_tier null — same as r1 dry run).
+NO --allow-write (would be refused by contract). Offline only; network must be 0.
+outputs: 0142-dry.stdout.txt / 0142-dry.stderr.txt / 0142-dry.exitcode.txt
+interpreter: Python 3.11.5 (C:/anaconda3/python.exe)

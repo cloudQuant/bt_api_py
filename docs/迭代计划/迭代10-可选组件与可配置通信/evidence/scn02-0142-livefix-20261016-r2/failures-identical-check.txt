@@ -1,0 +1,17 @@
+== fixed tree: unit-tests-out.txt
+   FAILED lines: 38  ERROR lines: 2  counts: (38, 854, 13, 2)
+== pristine HEAD subset: head-pristine-failing-subset.txt
+   FAILED lines: 38  ERROR lines: 2  counts: (38, 221, 0, 2)
+
+FAILED set identical: True
+ERROR set identical:  True
+FAILED order identical: True
+ERROR order identical:  True
+FAILED only in fixed tree: 0
+FAILED only in pristine subset: 0
+ERROR only in fixed tree: 0
+ERROR only in pristine subset: 0
+duplicate FAILED lines in fixed/head: False/False
+failed+error totals (fixed/head/listed): 40/40/40/40 -> match: True
+
+VERDICT (unit-tests-out.txt vs head-pristine-failing-subset.txt): IDENTICAL failure/error lists

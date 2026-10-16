@@ -1,0 +1,9 @@
+cwd: /d/source_code/backtrader/examples/unified/014_2_ctp_options_midfreq
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd(live): C:/anaconda3/python.exe run.py --live --run-seconds 240 --evidence-dir D:/temp/it10scn02-0142-livefix-20261016-r2/0142-live-evidence
+note: successor #2 iteration-10 r2 live observation run on the FIXED tree (btapistore.py 451b488f…).
+Same invocation as SCN02 R3/R4 014_2 observe (front-pair selection, whitelist, bounded 240s window).
+NO --allow-write (would be refused by contract: write_tier_not_implemented_for_decision_only_strategy).
+outputs: 0142-live.stdout.txt / 0142-live.stderr.txt / 0142-live.exitcode.txt (root);
+run evidence (run.json, strategy_report.json) in 0142-live-evidence/.
+interpreter: Python 3.11.5 (C:/anaconda3/python.exe)

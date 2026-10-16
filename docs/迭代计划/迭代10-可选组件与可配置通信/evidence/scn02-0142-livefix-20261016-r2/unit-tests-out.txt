@@ -1,0 +1,2866 @@
+........................................................................ [  7%]
+.......................................................................F [ 15%]
+FFFF.........FFF..FFF..FFFFFF........................................... [ 23%]
+........................................................................ [ 31%]
+........................................................................ [ 39%]
+........................................................................ [ 47%]
+........................................................................ [ 55%]
+........................................................................ [ 63%]
+....................................................................FFFF [ 71%]
+FFFFFFF...................sssssssssssss................................. [ 79%]
+..F................................................FF..F................ [ 87%]
+..............F...F..F................................EEF.........FF.... [ 95%]
+...........................................                              [100%]
+=================================== ERRORS ====================================
+_ ERROR at setup of test_session_drives_cerebro_refresh_and_renews_due_runtime_leases _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_session_drives_cerebro_re0')
+
+    @pytest.fixture
+    def local_execution_host(tmp_path):
+        """Keep the spawned service under normal-close cleanup for all test paths."""
+    
+>       endpoint, keys, host = _start_host(tmp_path)
+                               ^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\stores\test_service_execution_session_local_process.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_session_drives_cerebro_re0')
+
+    def _start_host(tmp_path):
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+            "strategy_secret": strategy_secret,
+        }
+        host = _start_process(
+            context,
+            _host_process,
+            (
+                _service_config(endpoint),
+                str(tmp_path / "session-registry.sqlite3"),
+                keys,
+                str(tmp_path / "session-execution.sqlite3"),
+            ),
+            "bt-execution-session-host",
+        )
+        ready = _receive(host["pipe"])
+>       assert ready[0] == "ready", ready
+E       AssertionError: ('error', 'TRANSPORT_UNAVAILABLE')
+E       assert 'error' == 'ready'
+E         
+E         - ready
+E         + error
+
+tests\unit\stores\test_service_execution_session_local_process.py:131: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+Process bt-execution-session-host:
+_ ERROR at setup of test_session_closes_runtime_store_and_host_when_strategy_start_raises _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_session_closes_runtime_st0')
+
+    @pytest.fixture
+    def local_execution_host(tmp_path):
+        """Keep the spawned service under normal-close cleanup for all test paths."""
+    
+>       endpoint, keys, host = _start_host(tmp_path)
+                               ^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\stores\test_service_execution_session_local_process.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_session_closes_runtime_st0')
+
+    def _start_host(tmp_path):
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+            "strategy_secret": strategy_secret,
+        }
+        host = _start_process(
+            context,
+            _host_process,
+            (
+                _service_config(endpoint),
+                str(tmp_path / "session-registry.sqlite3"),
+                keys,
+                str(tmp_path / "session-execution.sqlite3"),
+            ),
+            "bt-execution-session-host",
+        )
+        ready = _receive(host["pipe"])
+>       assert ready[0] == "ready", ready
+E       AssertionError: ('error', 'TRANSPORT_UNAVAILABLE')
+E       assert 'error' == 'ready'
+E         
+E         - ready
+E         + error
+
+tests\unit\stores\test_service_execution_session_local_process.py:131: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+Process bt-execution-session-host:
+================================== FAILURES ===================================
+___ test_ctp_forwarding_store_direct_writes_fail_closed_before_api[ctp-CTP] ___
+
+provider = 'ctp', exchange = 'CTP'
+
+    @pytest.mark.parametrize(
+        "provider,exchange",
+        [("ctp", "CTP"), ("btapi", "CTP___FUTURE")],
+    )
+    def test_ctp_forwarding_store_direct_writes_fail_closed_before_api(provider, exchange):
+        """CTP provider or exchange routes may not use the generic forwarding writer."""
+        store = object.__new__(BtApiStore)
+        store.provider = provider
+        store.backend = "forwarding"
+        store._sdk_mode = False
+        store._config = {"exchange": exchange}
+        store._api_kwargs = {"exchange": exchange}
+        store._managed_execution_adapter = None
+        calls = []
+        fake_api = types.SimpleNamespace(
+            submit_order=lambda payload: calls.append(("submit", payload)) or {"ok": True},
+            cancel_order=lambda ref, dataname=None: calls.append(("cancel", ref, dataname))
+            or {"ok": True, "status": "accepted"},
+        )
+        store._ensure_api_ready = lambda: fake_api
+        store._order_to_payload = lambda order: {"symbol": "IF2506", "side": "buy"}
+        store._extract_external_order_id = lambda response: None
+        store._submit_response_looks_accepted = lambda response: True
+        store.emit_runtime_event = lambda *args, **kwargs: None
+        store._extract_dataname = lambda data: "IF2506"
+    
+        with pytest.raises(BtApiStoreError, match="direct CTP Store order writes are disabled"):
+>           store.submit_order(object())
+
+tests\unit\stores\test_btapistore.py:3908: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_connected'") raised in repr()] BtApiStore object at 0x2d3ae1418d0>
+order = <object object at 0x000002D3AD0A6070>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_ctp_forwarding_store_direct_writes_fail_closed_before_api[btapi-CTP___FUTURE] _
+
+provider = 'btapi', exchange = 'CTP___FUTURE'
+
+    @pytest.mark.parametrize(
+        "provider,exchange",
+        [("ctp", "CTP"), ("btapi", "CTP___FUTURE")],
+    )
+    def test_ctp_forwarding_store_direct_writes_fail_closed_before_api(provider, exchange):
+        """CTP provider or exchange routes may not use the generic forwarding writer."""
+        store = object.__new__(BtApiStore)
+        store.provider = provider
+        store.backend = "forwarding"
+        store._sdk_mode = False
+        store._config = {"exchange": exchange}
+        store._api_kwargs = {"exchange": exchange}
+        store._managed_execution_adapter = None
+        calls = []
+        fake_api = types.SimpleNamespace(
+            submit_order=lambda payload: calls.append(("submit", payload)) or {"ok": True},
+            cancel_order=lambda ref, dataname=None: calls.append(("cancel", ref, dataname))
+            or {"ok": True, "status": "accepted"},
+        )
+        store._ensure_api_ready = lambda: fake_api
+        store._order_to_payload = lambda order: {"symbol": "IF2506", "side": "buy"}
+        store._extract_external_order_id = lambda response: None
+        store._submit_response_looks_accepted = lambda response: True
+        store.emit_runtime_event = lambda *args, **kwargs: None
+        store._extract_dataname = lambda data: "IF2506"
+    
+        with pytest.raises(BtApiStoreError, match="direct CTP Store order writes are disabled"):
+>           store.submit_order(object())
+
+tests\unit\stores\test_btapistore.py:3908: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_connected'") raised in repr()] BtApiStore object at 0x2d3ae41b8d0>
+order = <object object at 0x000002D3AD0A5FD0>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_____ test_forwarding_ctp_signal_in_lower_precedence_config_fails_closed ______
+
+    def test_forwarding_ctp_signal_in_lower_precedence_config_fails_closed():
+        """Any CTP exchange signal is denied despite conflicting forwarding kwargs."""
+        store = object.__new__(BtApiStore)
+        store.provider = "btapi"
+        store.backend = "forwarding"
+        store._sdk_mode = False
+        store._config = {"exchange": "CTP___SHFE"}
+        store._api_kwargs = {"exchange_type": "BINANCE"}
+        store._managed_execution_adapter = None
+        calls = []
+        fake_api = types.SimpleNamespace(
+            submit_order=lambda payload: calls.append(("submit", payload)) or {"ok": True},
+            cancel_order=lambda ref, dataname=None: calls.append(("cancel", ref, dataname))
+            or {"ok": True, "status": "accepted"},
+        )
+        store._ensure_api_ready = lambda: fake_api
+        store._order_to_payload = lambda order: {"symbol": "IF2506", "side": "buy"}
+        store._extract_external_order_id = lambda response: None
+        store._submit_response_looks_accepted = lambda response: True
+        store.emit_runtime_event = lambda *args, **kwargs: None
+        store._extract_dataname = lambda data: "IF2506"
+    
+        with pytest.raises(BtApiStoreError, match="direct CTP Store order writes are disabled"):
+>           store.submit_order(object())
+
+tests\unit\stores\test_btapistore.py:3943: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_connected'") raised in repr()] BtApiStore object at 0x2d3ae142050>
+order = <object object at 0x000002D3AD0A6070>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+____ test_forwarding_ctp_signal_fails_closed_through_adapter_legacy_ports _____
+
+    def test_forwarding_ctp_signal_fails_closed_through_adapter_legacy_ports():
+        """An adapter cannot dispatch a conflicting CTP forwarding route via legacy ports."""
+        class DispatchAdapter:
+            def submit_order(self, order, legacy_dispatch):
+                return legacy_dispatch(order)
+    
+            def cancel_order(self, order_or_ref, dataname, legacy_dispatch):
+                return legacy_dispatch(order_or_ref, dataname)
+    
+        store = object.__new__(BtApiStore)
+        store.provider = "btapi"
+        store.backend = "forwarding"
+        store._sdk_mode = False
+        store._config = {"exchange": "CTP"}
+        store._api_kwargs = {"exchange_type": "BINANCE"}
+        store._managed_execution_adapter = DispatchAdapter()
+        calls = []
+        fake_api = types.SimpleNamespace(
+            submit_order=lambda payload: calls.append(("submit", payload)) or {"ok": True},
+            cancel_order=lambda ref, dataname=None: calls.append(("cancel", ref, dataname))
+            or {"ok": True, "status": "accepted"},
+        )
+        store._ensure_api_ready = lambda: fake_api
+        store._order_to_payload = lambda order: {"symbol": "IF2506", "side": "buy"}
+        store._extract_external_order_id = lambda response: None
+        store._submit_response_looks_accepted = lambda response: True
+        store.emit_runtime_event = lambda *args, **kwargs: None
+        store._extract_dataname = lambda data: "IF2506"
+    
+        with pytest.raises(BtApiStoreError, match="direct CTP Store order writes are disabled"):
+>           store.submit_order(object())
+
+tests\unit\stores\test_btapistore.py:3979: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_connected'") raised in repr()] BtApiStore object at 0x2d3ae141990>
+order = <object object at 0x000002D3AD0A5FD0>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_____ test_non_ctp_forwarding_store_legacy_order_route_remains_available ______
+
+    def test_non_ctp_forwarding_store_legacy_order_route_remains_available():
+        """The CTP fail-close predicate must preserve non-CTP forwarding behavior."""
+        store = object.__new__(BtApiStore)
+        store.provider = "btapi"
+        store.backend = "forwarding"
+        store._sdk_mode = False
+        store._config = {"exchange": "CTP"}
+        store._api_kwargs = {"exchange": "BINANCE___SPOT", "exchange_type": "CTP"}
+        store._managed_execution_adapter = None
+        calls = []
+        fake_api = types.SimpleNamespace(
+            submit_order=lambda payload: calls.append(("submit", payload)) or {"ok": True},
+            cancel_order=lambda ref, dataname=None: calls.append(("cancel", ref, dataname))
+            or {"ok": True, "status": "accepted"},
+        )
+        store._ensure_api_ready = lambda: fake_api
+        store._order_to_payload = lambda order: {"symbol": "BTC-USDT", "side": "buy"}
+        store._extract_external_order_id = lambda response: None
+        store._submit_response_looks_accepted = lambda response: True
+        store.emit_runtime_event = lambda *args, **kwargs: None
+        store._extract_dataname = lambda data: "BTC-USDT"
+    
+>       assert store.submit_order(object()) == {"ok": True}
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\stores\test_btapistore.py:4007: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_connected'") raised in repr()] BtApiStore object at 0x2d3ae140310>
+order = <object object at 0x000002D3AD0A6070>
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+____ test_injected_ctp_api_route_mismatch_blocks_direct_submit_and_cancel _____
+
+    def test_injected_ctp_api_route_mismatch_blocks_direct_submit_and_cancel():
+        api = FakeApi({"CTP___TEST": {}})
+        store = make_store(provider="binance", api=api, snapshot=api.exchange_kwargs)
+    
+        with pytest.raises(BtApiStoreError, match="route identity mismatch"):
+>           store.submit_order(SimpleNamespace(ref=1, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3b40bba90>
+order = namespace(ref=1, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_post_init_binance_to_ctp_route_mutation_blocks_all_generic_write_sinks _
+
+    def test_post_init_binance_to_ctp_route_mutation_blocks_all_generic_write_sinks():
+        api = FakeApi({"BINANCE": {}})
+        store = make_store(provider="btapi", api=api, snapshot=api.exchange_kwargs)
+        queue_calls = []
+        store._enqueue_order_command = lambda order: queue_calls.append(("submit", order))
+        store._ensure_api_ready = lambda: queue_calls.append(("ensure",))
+        store._require_async_sdk_commands = lambda: queue_calls.append(("contract",))
+        store._start_command_worker = lambda: queue_calls.append(("worker",))
+        store._sdk_cancel_request = lambda *args: pytest.fail("cancel request builder reached")
+    
+        api.exchange_kwargs.clear()
+        api.exchange_kwargs["CTP___TEST"] = {}
+    
+        with pytest.raises(BtApiStoreError, match="route identity changed"):
+>           store.enqueue_order(SimpleNamespace(ref=2, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae141ed0>
+order = namespace(ref=2, info={})
+
+    def enqueue_order(self, order) -> Dict[str, Any]:
+        """Queue a typed SDK order and revoke recovery if dispatch cannot start."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:7427: AttributeError
+_____ test_managed_adapter_is_not_called_for_store_api_identity_mismatch ______
+
+    def test_managed_adapter_is_not_called_for_store_api_identity_mismatch():
+        api = FakeApi({"CTP___TEST": {}})
+        adapter = Adapter()
+        store = make_store(
+            provider="binance",
+            api=api,
+            snapshot=api.exchange_kwargs,
+            adapter=adapter,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="route identity mismatch"):
+>           store.submit_order(SimpleNamespace(ref=3, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:191: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae266e90>
+order = namespace(ref=3, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_ctp_route_suffix_mutation_is_detected_even_when_provider_root_matches __
+
+    def test_ctp_route_suffix_mutation_is_detected_even_when_provider_root_matches():
+        api = FakeApi({"CTP___FUTURE": {}})
+        store = make_store(provider="btapi", api=api, snapshot=api.exchange_kwargs)
+        api.exchange_kwargs.clear()
+        api.exchange_kwargs["CTP___SIM"] = {}
+    
+        with pytest.raises(BtApiStoreError, match="route identity changed"):
+>           store.enqueue_order(SimpleNamespace(ref=4, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:252: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad8ae4d0>
+order = namespace(ref=4, info={})
+
+    def enqueue_order(self, order) -> Dict[str, Any]:
+        """Queue a typed SDK order and revoke recovery if dispatch cannot start."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:7427: AttributeError
+___________ test_recovery_exit_route_mismatch_aborts_before_raising ___________
+
+    def test_recovery_exit_route_mismatch_aborts_before_raising():
+        api = FakeApi({"BINANCE": {}})
+        store = make_store(provider="btapi", api=api, snapshot=api.exchange_kwargs)
+        abort_calls = []
+        queue_calls = []
+        store.abort_execution_recovery = lambda reason: abort_calls.append(reason)
+        store._enqueue_order_command = lambda order: queue_calls.append(order)
+        api.exchange_kwargs.clear()
+        api.exchange_kwargs["CTP___TEST"] = {}
+        order = SimpleNamespace(ref=5, info={"execution_role": "recovery_exit"})
+    
+        with pytest.raises(BtApiStoreError, match="route identity changed"):
+>           store.enqueue_order(order)
+
+tests\unit\stores\test_btapistore_api_route_identity.py:270: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad921010>
+order = namespace(ref=5, info={'execution_role': 'recovery_exit'})
+
+    def enqueue_order(self, order) -> Dict[str, Any]:
+        """Queue a typed SDK order and revoke recovery if dispatch cannot start."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:7427: AttributeError
+___________ test_malformed_sdk_routes_fail_closed_with_store_error ____________
+
+    def test_malformed_sdk_routes_fail_closed_with_store_error():
+        api = FakeApi({"BINANCE": {}})
+        store = make_store(provider="btapi", api=api, snapshot=api.exchange_kwargs)
+        store._sdk_routes = []
+        queue_calls = []
+        store._enqueue_order_command = lambda order: queue_calls.append(order)
+    
+        with pytest.raises(BtApiStoreError, match="route identity is unavailable"):
+>           store.enqueue_order(SimpleNamespace(ref=6, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:286: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae5c5810>
+order = namespace(ref=6, info={})
+
+    def enqueue_order(self, order) -> Dict[str, Any]:
+        """Queue a typed SDK order and revoke recovery if dispatch cannot start."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:7427: AttributeError
+_ test_lazy_api_route_mismatch_is_rechecked_before_direct_sink_lookup[submit] _
+
+operation = 'submit'
+
+    @pytest.mark.parametrize("operation", ["submit", "cancel"])
+    def test_lazy_api_route_mismatch_is_rechecked_before_direct_sink_lookup(operation):
+        SlottedPropertyApi.route_reads.clear()
+        SlottedPropertyApi.calls.clear()
+        SlottedPropertyApi.lookups.clear()
+        api = SlottedPropertyApi()
+        store = make_store(provider="binance", api=None, snapshot={})
+        store._sdk_mode = False
+    
+        def ensure_api_ready():
+            store._api = api
+            return api
+    
+        store._ensure_api_ready = ensure_api_ready
+        store._order_to_payload = lambda _order: {"symbol": "FAKE"}
+        store.emit_runtime_event = lambda *_args, **_kwargs: None
+        store.sanitize_exception = lambda _error: None
+        store._safe_exception_code = lambda _error, fallback: fallback
+    
+        with pytest.raises(BtApiStoreError, match="route identity is unavailable"):
+            if operation == "submit":
+>               store.submit_order(SimpleNamespace(ref=9, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:349: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae61dc10>
+order = namespace(ref=9, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_lazy_api_route_mismatch_is_rechecked_before_direct_sink_lookup[cancel] _
+
+operation = 'cancel'
+
+    @pytest.mark.parametrize("operation", ["submit", "cancel"])
+    def test_lazy_api_route_mismatch_is_rechecked_before_direct_sink_lookup(operation):
+        SlottedPropertyApi.route_reads.clear()
+        SlottedPropertyApi.calls.clear()
+        SlottedPropertyApi.lookups.clear()
+        api = SlottedPropertyApi()
+        store = make_store(provider="binance", api=None, snapshot={})
+        store._sdk_mode = False
+    
+        def ensure_api_ready():
+            store._api = api
+            return api
+    
+        store._ensure_api_ready = ensure_api_ready
+        store._order_to_payload = lambda _order: {"symbol": "FAKE"}
+        store.emit_runtime_event = lambda *_args, **_kwargs: None
+        store.sanitize_exception = lambda _error: None
+        store._safe_exception_code = lambda _error, fallback: fallback
+    
+        with pytest.raises(BtApiStoreError, match="route identity is unavailable"):
+            if operation == "submit":
+                store.submit_order(SimpleNamespace(ref=9, info={}))
+            else:
+>               store.cancel_order_ref("fake-order")
+
+tests\unit\stores\test_btapistore_api_route_identity.py:351: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae0371d0>
+order_ref = 'fake-order', dataname = None
+
+    def cancel_order_ref(self, order_ref, dataname: Optional[str] = None):
+        """Cancel through managed execution or, when absent, the legacy Store path."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8436: AttributeError
+_ test_lazy_api_without_route_identity_fails_before_direct_sink_lookup[submit] _
+
+operation = 'submit'
+
+    @pytest.mark.parametrize("operation", ["submit", "cancel"])
+    def test_lazy_api_without_route_identity_fails_before_direct_sink_lookup(operation):
+        NoRouteApi.lookups.clear()
+        NoRouteApi.calls.clear()
+        api = NoRouteApi()
+        store = make_store(provider="binance", api=None, snapshot={})
+        store._sdk_mode = False
+        readiness_calls = []
+    
+        def ensure_api_ready():
+            readiness_calls.append("ready")
+            store._api = api
+            return api
+    
+        store._ensure_api_ready = ensure_api_ready
+        store._order_to_payload = lambda _order: {"symbol": "FAKE"}
+        store.emit_runtime_event = lambda *_args, **_kwargs: None
+        store.sanitize_exception = lambda _error: None
+        store._safe_exception_code = lambda _error, fallback: fallback
+    
+        with pytest.raises(BtApiStoreError, match="route identity is unavailable"):
+            if operation == "submit":
+>               store.submit_order(SimpleNamespace(ref=10, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:380: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3b3f91c10>
+order = namespace(ref=10, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_lazy_api_without_route_identity_fails_before_direct_sink_lookup[cancel] _
+
+operation = 'cancel'
+
+    @pytest.mark.parametrize("operation", ["submit", "cancel"])
+    def test_lazy_api_without_route_identity_fails_before_direct_sink_lookup(operation):
+        NoRouteApi.lookups.clear()
+        NoRouteApi.calls.clear()
+        api = NoRouteApi()
+        store = make_store(provider="binance", api=None, snapshot={})
+        store._sdk_mode = False
+        readiness_calls = []
+    
+        def ensure_api_ready():
+            readiness_calls.append("ready")
+            store._api = api
+            return api
+    
+        store._ensure_api_ready = ensure_api_ready
+        store._order_to_payload = lambda _order: {"symbol": "FAKE"}
+        store.emit_runtime_event = lambda *_args, **_kwargs: None
+        store.sanitize_exception = lambda _error: None
+        store._safe_exception_code = lambda _error, fallback: fallback
+    
+        with pytest.raises(BtApiStoreError, match="route identity is unavailable"):
+            if operation == "submit":
+                store.submit_order(SimpleNamespace(ref=10, info={}))
+            else:
+>               store.cancel_order_ref("fake-order")
+
+tests\unit\stores\test_btapistore_api_route_identity.py:382: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3b3f3d6d0>
+order_ref = 'fake-order', dataname = None
+
+    def cancel_order_ref(self, order_ref, dataname: Optional[str] = None):
+        """Cancel through managed execution or, when absent, the legacy Store path."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8436: AttributeError
+_________ test_unconvertible_sdk_route_fails_closed_with_store_error __________
+
+    def test_unconvertible_sdk_route_fails_closed_with_store_error():
+        api = FakeApi({"BINANCE": {}})
+        store = make_store(provider="btapi", api=api, snapshot=api.exchange_kwargs)
+        store._sdk_routes = {"symbol": InvalidRoute()}
+    
+        with pytest.raises(BtApiStoreError, match="route identity is unavailable"):
+>           store.enqueue_order(SimpleNamespace(ref=8, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:395: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3aa763490>
+order = namespace(ref=8, info={})
+
+    def enqueue_order(self, order) -> Dict[str, Any]:
+        """Queue a typed SDK order and revoke recovery if dispatch cannot start."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:7427: AttributeError
+______ test_matching_ctp_route_still_rejects_normal_direct_store_enqueue ______
+
+    def test_matching_ctp_route_still_rejects_normal_direct_store_enqueue():
+        api = FakeApi({"CTP___SIM": {}})
+        store = make_store(provider="ctp", api=api, snapshot=api.exchange_kwargs)
+        queue_calls = []
+        store._enqueue_order_command = lambda order: queue_calls.append(order)
+    
+        with pytest.raises(BtApiStoreError, match="direct CTP SDK order enqueue is disabled"):
+>           store.enqueue_order(SimpleNamespace(ref=7, info={}))
+
+tests\unit\stores\test_btapistore_api_route_identity.py:408: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad83f810>
+order = namespace(ref=7, info={})
+
+    def enqueue_order(self, order) -> Dict[str, Any]:
+        """Queue a typed SDK order and revoke recovery if dispatch cannot start."""
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:7427: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-conflicting-ctp-signal] _
+
+provider = 'btapi', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'BINANCE'}, operation = 'submit'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+>               store.submit_order(SimpleNamespace(ref=1, info={}))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3aff1fd50>
+order = namespace(ref=1, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-gateway-ctp-route-alias] _
+
+provider = 'btapi', backend = 'gateway'
+config = {'exchange_type': 'CTP___SHFE'}, api_kwargs = {}, operation = 'submit'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+>               store.submit_order(SimpleNamespace(ref=1, info={}))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad86fd50>
+order = namespace(ref=1, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-ctp-sdk-snapshot] _
+
+provider = 'btapi', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'CTP'}, operation = 'submit'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+>               store.submit_order(SimpleNamespace(ref=1, info={}))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ac8648d0>
+order = namespace(ref=1, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-ctp-provider] _
+
+provider = 'ctp', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'CTP'}, operation = 'submit'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+>               store.submit_order(SimpleNamespace(ref=1, info={}))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad86ef10>
+order = namespace(ref=1, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-ctp-gateway-provider] _
+
+provider = 'ctp_gateway', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'CTP'}, operation = 'submit'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+>               store.submit_order(SimpleNamespace(ref=1, info={}))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:112: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad8ad310>
+order = namespace(ref=1, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-conflicting-ctp-signal] _
+
+provider = 'btapi', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'BINANCE'}, operation = 'cancel'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+                store.submit_order(SimpleNamespace(ref=1, info={}))
+            else:
+>               store.cancel_order(SimpleNamespace(ref=1, info={}, data=None))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad8ac450>
+order = namespace(ref=1, info={}, data=None)
+
+    def cancel_order(self, order):
+        """Cancel through the managed route when one is attached."""
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8393: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-gateway-ctp-route-alias] _
+
+provider = 'btapi', backend = 'gateway'
+config = {'exchange_type': 'CTP___SHFE'}, api_kwargs = {}, operation = 'cancel'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+                store.submit_order(SimpleNamespace(ref=1, info={}))
+            else:
+>               store.cancel_order(SimpleNamespace(ref=1, info={}, data=None))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae0a8990>
+order = namespace(ref=1, info={}, data=None)
+
+    def cancel_order(self, order):
+        """Cancel through the managed route when one is attached."""
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8393: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-ctp-sdk-snapshot] _
+
+provider = 'btapi', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'CTP'}, operation = 'cancel'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+                store.submit_order(SimpleNamespace(ref=1, info={}))
+            else:
+>               store.cancel_order(SimpleNamespace(ref=1, info={}, data=None))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ad0a9390>
+order = namespace(ref=1, info={}, data=None)
+
+    def cancel_order(self, order):
+        """Cancel through the managed route when one is attached."""
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8393: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-ctp-provider] _
+
+provider = 'ctp', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'CTP'}, operation = 'cancel'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+                store.submit_order(SimpleNamespace(ref=1, info={}))
+            else:
+>               store.cancel_order(SimpleNamespace(ref=1, info={}, data=None))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae618e10>
+order = namespace(ref=1, info={}, data=None)
+
+    def cancel_order(self, order):
+        """Cancel through the managed route when one is attached."""
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8393: AttributeError
+_ test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-ctp-gateway-provider] _
+
+provider = 'ctp_gateway', backend = 'forwarding', config = {'exchange': 'CTP'}
+api_kwargs = {'exchange_type': 'CTP'}, operation = 'cancel'
+
+    @pytest.mark.parametrize(("provider", "backend", "config", "api_kwargs"), _CTP_ALIAS_ROUTES)
+    @pytest.mark.parametrize("operation", ("submit", "cancel"))
+    def test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch(
+        provider, backend, config, api_kwargs, operation
+    ):
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider=provider,
+            backend=backend,
+            config=config,
+            api_kwargs=api_kwargs,
+            adapter=adapter,
+            sdk_exchanges={"CTP": {}}
+            if backend == "forwarding" and api_kwargs.get("exchange_type") == "CTP"
+            else None,
+        )
+    
+        with pytest.raises(BtApiStoreError, match="generic managed execution adapter"):
+            if operation == "submit":
+                store.submit_order(SimpleNamespace(ref=1, info={}))
+            else:
+>               store.cancel_order(SimpleNamespace(ref=1, info={}, data=None))
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:114: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae036b10>
+order = namespace(ref=1, info={}, data=None)
+
+    def cancel_order(self, order):
+        """Cancel through the managed route when one is attached."""
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8393: AttributeError
+__________ test_non_ctp_forwarding_managed_adapter_remains_available __________
+
+    def test_non_ctp_forwarding_managed_adapter_remains_available():
+        adapter = _SelfDispatchingAdapter()
+        store = _store(
+            provider="btapi",
+            backend="forwarding",
+            config={"exchange": "BINANCE"},
+            api_kwargs={"exchange_type": "BINANCE"},
+            adapter=adapter,
+        )
+    
+>       assert store.submit_order(SimpleNamespace(ref=2, info={})) == {"status": "projected"}
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\stores\test_btapistore_untyped_ctp_managed_route.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <[AttributeError("'BtApiStore' object has no attribute '_started'") raised in repr()] BtApiStore object at 0x2d3ae0e1850>
+order = namespace(ref=2, info={})
+
+    def submit_order(self, order):
+        """Submit through the sealed managed adapter or the legacy Store path.
+    
+        A managed adapter receives the private legacy dispatcher as an
+        injected port.  The Store never catches an adapter failure and retries
+        it directly: that would turn a missing journal, permit, or monitor
+        fact into an accidental provider write.
+        """
+    
+>       if self._service_read_only:
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'BtApiStore' object has no attribute '_service_read_only'
+
+backtrader\stores\btapistore.py:8022: AttributeError
+_____________ test_accepted_intent_projects_the_provider_identity _____________
+
+    def test_accepted_intent_projects_the_provider_identity() -> None:
+        client = _FakeClient(submit_view=_view())
+        adapter = ServiceExecutionAdapter(client)
+    
+        response = adapter.submit_order(_limit_order(), _legacy_dispatch)
+    
+        assert response["status"] == "accepted"
+        assert response["external_order_id"] == "provider-order-1"
+        assert response["managed_intent_id"] == "intent-1"
+        assert response["service_execution_state"] == "ACKED"
+        assert response["data_name"] == "BTC-USDT"
+>       assert client.submitted == [
+            {
+                "intent_id": "intent-1",
+                "signal_id": "signal-1",
+                "instrument": "BTC-USDT",
+                "side": "BUY",
+                "position_effect": "OPEN",
+                "order_type": "LIMIT",
+                "quantity": 2,
+                "price": 101.0,
+                "reduce_only": False,
+                "metadata_version": "metadata-v1",
+                # A per-object framework reference is not published by default:
+                # it would break intent idempotency on a resubmit.
+                "tags": {},
+            }
+        ]
+E       AssertionError: assert [{'intent_id'...: 'BUY', ...}] == [{'intent_id'...: 'BUY', ...}]
+E         
+E         At index 0 diff: {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': Decimal('2'), 'price': Decimal('101.0'), 'time_in_force': 'GTC', 'reduce_only': False, 'metadata_version': 'metadata-v1', 'deadline_ns': None, 'tags': {}} != {'intent_id': 'intent-1', 'signal_id': 'signal-1', 'instrument': 'BTC-USDT', 'side': 'BUY', 'position_effect': 'OPEN', 'order_type': 'LIMIT', 'quantity': 2, 'price': 101.0, 'reduce_only': False, 'metadata_version': 'metadata-v1', 'tags': {}}
+E         Use -v to get more diff
+
+tests\unit\stores\test_service_execution_adapter.py:139: AssertionError
+_ test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection __
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_recovery_submit_persists_0')
+
+    def test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection(tmp_path) -> None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+    
+        projection = adapter.submit_order(order, _legacy_dispatch)
+    
+        manifest = client.manifest_seen_before_submit
+>       assert manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1448: AssertionError
+_____ test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal ______
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_recovery_cancel_binds_tar0')
+
+    def test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal(tmp_path) -> None:
+        namespace = ServiceExecutionRecoveryNamespace("account-a", "strategy-a", "stable-run")
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        client = _RecoveryClient(journal, namespace)
+        adapter = ServiceExecutionAdapter(client, recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+        order = _limit_order()
+        _bind_recovery_owner(order)
+        adapter.submit_order(order, _legacy_dispatch)
+        # In the real flow this provider identity comes from a prior authenticated
+        # durable snapshot; this unit checks that it is bound before cancel RPC.
+        order.info["external_order_id"] = "provider-order-1"
+    
+        projection = adapter.cancel_order(order, "BTC-USDT", _legacy_dispatch)
+    
+        cancel_manifest = client.cancel_manifest_seen_before_rpc
+>       assert cancel_manifest is not None
+E       assert None is not None
+
+tests\unit\stores\test_service_execution_adapter.py:1493: AssertionError
+________ test_backtrader_orders_route_through_a_real_execution_service ________
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_backtrader_orders_route_t0')
+
+    def test_backtrader_orders_route_through_a_real_execution_service(tmp_path):
+        from bt_api_py.service_config import parse_client_config
+        from bt_api_py.service_execution import ServiceExecutionClient, ServiceExecutionError
+        from bt_api_py.service_runtime import (
+            ClientCurveKeys,
+            ServiceClientRuntime,
+            ZmqTransportFactory,
+        )
+    
+        from tests.unit.brokers.test_btapibroker_managed_execution_projection import (
+            _ResponseProvider,
+            _make_started_stack,
+        )
+    
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+        }
+        host = None
+        runtime = None
+        store = None
+        try:
+            host = _start_process(
+                context,
+                _host_process,
+                (
+                    _service_config(endpoint),
+                    str(tmp_path / "bt-execution-registry.sqlite3"),
+                    keys,
+                    str(tmp_path / "bt-execution.sqlite3"),
+                ),
+                "bt-execution-host",
+            )
+            ready = _receive(host["pipe"])
+>           assert ready[0] == "ready", ready
+E           AssertionError: ('error', 'TRANSPORT_UNAVAILABLE')
+E           assert 'error' == 'ready'
+E             
+E             - ready
+E             + error
+
+tests\unit\stores\test_service_execution_adapter_local_process.py:471: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_backtrader_orders_route_t0')
+
+    def test_backtrader_orders_route_through_a_real_execution_service(tmp_path):
+        from bt_api_py.service_config import parse_client_config
+        from bt_api_py.service_execution import ServiceExecutionClient, ServiceExecutionError
+        from bt_api_py.service_runtime import (
+            ClientCurveKeys,
+            ServiceClientRuntime,
+            ZmqTransportFactory,
+        )
+    
+        from tests.unit.brokers.test_btapibroker_managed_execution_projection import (
+            _ResponseProvider,
+            _make_started_stack,
+        )
+    
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+        }
+        host = None
+        runtime = None
+        store = None
+        try:
+            host = _start_process(
+                context,
+                _host_process,
+                (
+                    _service_config(endpoint),
+                    str(tmp_path / "bt-execution-registry.sqlite3"),
+                    keys,
+                    str(tmp_path / "bt-execution.sqlite3"),
+                ),
+                "bt-execution-host",
+            )
+            ready = _receive(host["pipe"])
+            assert ready[0] == "ready", ready
+            assert ready[1] == endpoint
+    
+            runtime = ServiceClientRuntime(
+                parse_client_config(_client_config(endpoint, "bt-execution-curve-v1")),
+                identity=WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL, _STRATEGY),
+                scope_resolver=lambda _ref: _SCOPE,
+                peer_resolver=lambda _service: WireIdentity(
+                    WireRole.SERVICE, _SERVICE_PRINCIPAL, _SERVICE_ID
+                ),
+                transport_factory=ZmqTransportFactory(
+                    {
+                        "bt-execution-curve-v1": ClientCurveKeys(
+                            server_public, strategy_public, strategy_secret
+                        )
+                    }
+                ),
+            )
+            assert runtime.start().degraded_count == 0
+    
+            client = ServiceExecutionClient(
+                runtime,
+                "broker.orders",
+                scope_ref=_ORDER_SCOPE_REF,
+                query_mount="broker.order_query",
+                query_scope_ref=_QUERY_SCOPE_REF,
+            )
+            adapter = ServiceExecutionAdapter(client)
+            provider = _ResponseProvider([])
+            store, data, broker = _make_started_stack(None, provider, managed_execution_adapter=adapter)
+    
+            order = broker.buy(
+                owner=None,
+                data=data,
+                size=2,
+                price=101.0,
+                exectype=bt.Order.Limit,
+                **_managed_broker_info("intent-1"),
+            )
+            assert order.status == bt.Order.Accepted
+            assert order.info.get("external_order_id") == "provider-order-1"
+            counts = _command(host, "counts")
+            assert counts[1] == ("intent-1",)
+            # The legacy provider route stayed untouched.
+            assert provider.submitted_orders == []
+    
+            # A repeated framework order with the same identity is neither
+            # redispatched by the service nor booked a second time by the Broker:
+            # the durable record is a replay, and only an audited recovery receipt
+            # may project it again.
+            duplicate = broker.buy(
+                owner=None,
+                data=data,
+                size=2,
+                price=101.0,
+                exectype=bt.Order.Limit,
+                **_managed_broker_info("intent-1"),
+            )
+            assert duplicate.status == bt.Order.Rejected
+            assert duplicate.info.get("error_code") == "managed_execution_projection_replay_blocked"
+            assert duplicate.executed.size == pytest.approx(0.0)
+            assert _command(host, "counts")[1] == ("intent-1",)
+    
+            # A provider failure is a durable UNKNOWN record and is not resent.
+            assert _command(host, "fail_next_submit") == ("armed",)
+            unknown = broker.buy(
+                owner=None,
+                data=data,
+                size=2,
+                price=101.0,
+                exectype=bt.Order.Limit,
+                **_managed_broker_info("intent-2"),
+            )
+            assert unknown.info.get("execution_unknown") is True
+            assert unknown.alive() is True
+            assert unknown.executed.size == pytest.approx(0.0)
+            assert _command(host, "counts")[1] == ("intent-1", "intent-2")
+            assert client.query("intent-2").state == "UNKNOWN"
+    
+            # A filled durable record reaches the framework order through the
+            # refresh schedule: the service dispatches once, the loop projects it.
+            from backtrader.stores.service_refresh_loop import ManagedOrderRefreshLoop
+    
+            clock = [0.0]
+            loop = ManagedOrderRefreshLoop(
+                broker, interval_seconds=1.0, monotonic_clock=lambda: clock[0]
+            )
+            assert _command(host, "fill_next_submit") == ("armed",)
+            filled_order = broker.buy(
+                owner=None,
+                data=data,
+                size=2,
+                price=101.0,
+                exectype=bt.Order.Limit,
+                **_managed_broker_info("intent-3"),
+            )
+            assert filled_order.status == bt.Order.Completed
+            assert filled_order.executed.size == pytest.approx(2.0)
+            assert filled_order.executed.price == pytest.approx(101.5)
+    
+            # The strategy sees each state once: a repeated refresh pass of an
+            # unchanged record must not notify again.
+            notifications: list[tuple[int, int]] = []
+            original_notify = broker.notify
+    
+            def _recording_notify(order):
+                notifications.append((getattr(order, "ref", None), order.status))
+                return original_notify(order)
+    
+            broker.notify = _recording_notify
+    
+            # A second live order stays accepted until the loop projects its record.
+            accepted_order = broker.buy(
+                owner=None,
+                data=data,
+                size=2,
+                price=101.0,
+                exectype=bt.Order.Limit,
+                **_managed_broker_info("intent-4"),
+            )
+            assert accepted_order.status == bt.Order.Accepted
+            # A refresh pass projects whatever the journal now holds; an order whose
+            # record has not advanced must not change state, and the filled record
+            # was already projected at submit time.
+            loop.run_once()
+            clock[0] = 1.0
+            loop.run_once()
+            assert accepted_order.status == bt.Order.Accepted
+            assert accepted_order.executed.size == pytest.approx(0.0)
+            assert filled_order.status == bt.Order.Completed
+            assert filled_order.executed.size == pytest.approx(2.0)
+            assert loop.stats.failures == 0
+            assert _command(host, "counts")[1] == ("intent-1", "intent-2", "intent-3", "intent-4")
+    
+            # The accepted order was notified once when it was submitted, and the
+            # refresh passes that found no new revision added nothing.
+            accepted_ref = accepted_order.ref
+            accepted_notifications = [item for item in notifications if item[0] == accepted_ref]
+            assert accepted_notifications == [(accepted_ref, bt.Order.Accepted)]
+            assert (
+                not [item for item in notifications if item[0] == filled_order.ref]
+                or [item for item in notifications if item[0] == filled_order.ref][-1][1]
+                == bt.Order.Completed
+            )
+            broker.notify = original_notify
+    
+            # Cancellation reaches the same account entry with the evidenced order.
+            broker.cancel(order)
+            assert _command(host, "counts")[2] == ("cancel.intent-1",)
+            assert provider.cancelled_orders == []
+            assert order.alive() is True
+    
+            # The durable facts survive the service being replaced.
+            _close_host(host)
+            host = _start_process(
+                context,
+                _host_process,
+                (
+                    _service_config(endpoint),
+                    str(tmp_path / "bt-execution-registry.sqlite3"),
+                    keys,
+                    str(tmp_path / "bt-execution.sqlite3"),
+                ),
+                "bt-execution-host-r2",
+            )
+            assert _receive(host["pipe"])[0] == "ready"
+            # A restarted service has a new epoch: the borrowed runtime must
+            # recover its registration before any business call, and the refusal
+            # proves the old registration is not silently reused.
+            with pytest.raises(ServiceExecutionError, match="STALE_EPOCH"):
+                client.query("intent-1")
+            assert runtime.recover().degraded_count == 0
+            assert client.query("intent-1").state == "ACKED"
+            assert client.query("intent-2").state == "UNKNOWN"
+            # The replacement service dispatches nothing for durable facts.
+            assert _command(host, "counts")[1] == ()
+        finally:
+            if store is not None:
+                with suppress(Exception):
+                    store.stop()
+            if runtime is not None:
+                with suppress(Exception):
+                    runtime.close()
+            if host is not None:
+>               _close_host(host)
+
+tests\unit\stores\test_service_execution_adapter_local_process.py:655: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\stores\test_service_execution_adapter_local_process.py:668: in _close_host
+    host["pipe"].send(("close",))
+C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\connection.py:206: in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <multiprocessing.connection.PipeConnection object at 0x000002D3AFED5190>
+buf = <memory at 0x000002D3AE030AC0>
+
+    def _send_bytes(self, buf):
+        if self._send_ov is not None:
+            # A connection should only be used by a single thread
+            raise ValueError("concurrent send_bytes() calls "
+                             "are not supported")
+>       ov, err = _winapi.WriteFile(self._handle, buf, overlapped=True)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BrokenPipeError: [WinError 232] 管道正在被关闭。
+
+C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\connection.py:289: BrokenPipeError
+---------------------------- Captured stderr call -----------------------------
+Process bt-execution-host:
+-------------------------- Captured stderr teardown ---------------------------
+Traceback (most recent call last):
+  File "C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "D:\source_code\backtrader\tests\unit\stores\test_service_execution_adapter_local_process.py", line 294, in _host_process
+    host.start()
+  File "D:\bt_api_py\bt_api_py\service_host.py", line 436, in start
+    raise ServiceHostError("TRANSPORT_UNAVAILABLE") from None
+bt_api_py.service_host.ServiceHostError: TRANSPORT_UNAVAILABLE
+_______ test_event_page_preserves_negative_cumulative_commission_rebate _______
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_event_page_preserves_nega0')
+
+    def test_event_page_preserves_negative_cumulative_commission_rebate(tmp_path) -> None:
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        event = _event(_INTENT, fingerprint, 11)
+        event["details"]["cumulative_commission"] = "-0.01"
+    
+>       assert journal.apply_events_page(namespace, _page(10, 11, 11, [event], has_more=False)) is True
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\stores\test_service_execution_recovery.py:453: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:1050: in apply_events_page
+    self._apply_one_event(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x000002D3ADF4A210>
+cursor = <sqlite3.Cursor object at 0x000002D3AD70A7C0>
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'scope_key': 'execution-scope-a', 'intent_id': 'intent-1', 'intent_fingerprint': '867e648f35bca36b96408f8098c2a741c11...17f420b854ee9592ea0d8e', 'submit_fingerprint': 'ac41c06d5c1fd21557e6b71bdd905ee32ceba38f46aa4d3a176c3882cf5d5542', ...}
+now_ns = 1792120636439406900, event_version = 1, event_context_resolver = None
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+        *,
+        event_version: int,
+        event_context_resolver: Optional[Callable[..., Any]],
+    ) -> None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled < previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+>                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:2789: ServiceExecutionRecoveryError
+__ test_event_receipt_projection_cursor_and_callback_pending_commit_together __
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_event_receipt_projection_0')
+
+    def test_event_receipt_projection_cursor_and_callback_pending_commit_together(tmp_path) -> None:
+        path = tmp_path / "recovery.sqlite3"
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(path)
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        journal.install_snapshot(namespace, _snapshot([_snapshot_order(_INTENT, fingerprint)]))
+        own_event = _event(_INTENT, fingerprint, 11)
+        old_run_event = _event("older-run-intent", _digest("older-payload"), 12)
+        page_one = _page(10, 11, 12, [own_event], has_more=True)
+        page_two = _page(11, 12, 12, [old_run_event], has_more=False)
+    
+>       assert journal.apply_events_page(namespace, page_one) is True
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\stores\test_service_execution_recovery.py:536: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_recovery.py:1050: in apply_events_page
+    self._apply_one_event(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryJournal object at 0x000002D3ADDB9CD0>
+cursor = <sqlite3.Cursor object at 0x000002D3B1C6B6C0>
+namespace = ServiceExecutionRecoveryNamespace(account_ref='account-a', strategy_ref='strategy-a', logical_run_id='stable-run-1')
+event = {'scope_key': 'execution-scope-a', 'intent_id': 'intent-1', 'intent_fingerprint': '867e648f35bca36b96408f8098c2a741c11...17f420b854ee9592ea0d8e', 'submit_fingerprint': 'ac41c06d5c1fd21557e6b71bdd905ee32ceba38f46aa4d3a176c3882cf5d5542', ...}
+now_ns = 1792120636886098700, event_version = 1, event_context_resolver = None
+
+    def _apply_one_event(
+        self,
+        cursor: sqlite3.Cursor,
+        namespace: ServiceExecutionRecoveryNamespace,
+        event: Mapping[str, Any],
+        now_ns: int,
+        *,
+        event_version: int,
+        event_context_resolver: Optional[Callable[..., Any]],
+    ) -> None:
+        receipt_id = _receipt_id(
+            str(event["scope_key"]),
+            str(event["journal_generation"]),
+            str(int(event["sequence"])),
+            str(event["event_id"]),
+            str(event["event_sha256"]),
+            str(event["intent_fingerprint"]),
+        )
+        event_json = _canonical_json(event)
+        existing = cursor.execute(
+            """SELECT event_id, event_sha256, intent_id, intent_fingerprint, event_json
+               FROM service_recovery_event_receipts
+               WHERE account_ref = ? AND strategy_ref = ? AND logical_run_id = ?
+                 AND scope_key = ? AND journal_generation = ? AND sequence = ?""",
+            (
+                namespace.account_ref,
+                namespace.strategy_ref,
+                namespace.logical_run_id,
+                event["scope_key"],
+                event["journal_generation"],
+                event["sequence"],
+            ),
+        ).fetchone()
+        if existing is not None:
+            if (
+                str(existing["event_id"]) != event["event_id"]
+                or str(existing["event_sha256"]) != event["event_sha256"]
+                or str(existing["intent_id"]) != event["intent_id"]
+                or str(existing["intent_fingerprint"]) != event["intent_fingerprint"]
+                or str(existing["event_json"]) != event_json
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_RECEIPT_CONFLICT")
+            return
+    
+        manifest = cursor.execute(
+            """SELECT logical_run_id, submit_fingerprint, payload_json, server_scope_key,
+                      server_intent_fingerprint
+               FROM service_recovery_intents
+               WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?""",
+            (namespace.account_ref, namespace.strategy_ref, event["intent_id"]),
+        ).fetchone()
+        matched = False
+        if manifest is not None and str(manifest["logical_run_id"]) == namespace.logical_run_id:
+            if str(manifest["submit_fingerprint"]) != event["submit_fingerprint"]:
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SUBMIT_FINGERPRINT_MISMATCH")
+            if manifest["server_scope_key"] not in (None, event["scope_key"]):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_SCOPE_MISMATCH")
+            if manifest["server_intent_fingerprint"] not in (
+                None,
+                event["intent_fingerprint"],
+            ):
+                raise ServiceExecutionRecoveryError("RECOVERY_EVENT_INTENT_FINGERPRINT_MISMATCH")
+            cursor.execute(
+                """UPDATE service_recovery_intents
+                   SET server_scope_key = ?, server_intent_fingerprint = ?, updated_at_ns = ?
+                   WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                     AND logical_run_id = ?""",
+                (
+                    event["scope_key"],
+                    event["intent_fingerprint"],
+                    now_ns,
+                    namespace.account_ref,
+                    namespace.strategy_ref,
+                    event["intent_id"],
+                    namespace.logical_run_id,
+                ),
+            )
+            matched = True
+        if matched and event["event_type"] in {
+            "provider_observation",
+            "reconciled_observation",
+            "provider_commission_evidence",
+            "cancelled_by_cancel_intent",
+        }:
+            positions, cumulative = self._trade_projection_before(
+                cursor, namespace, int(event["sequence"])
+            )
+            details = event["details"]
+            filled = _decimal_value(details["filled_quantity"], nonnegative=True)
+            previous = cumulative.get(str(event["intent_id"]), Decimal(0))
+            if filled < previous:
+                raise ServiceExecutionRecoveryError("RECOVERY_FILL_CURSOR_REGRESSION")
+            delta = filled - previous
+            if delta:
+                binding_row = cursor.execute(
+                    """SELECT binding_json FROM service_recovery_intent_bindings
+                       WHERE account_ref = ? AND strategy_ref = ? AND intent_id = ?
+                         AND logical_run_id = ?""",
+                    (
+                        *_intent_namespace_values(namespace, str(event["intent_id"])),
+                        namespace.logical_run_id,
+                    ),
+                ).fetchone()
+                if binding_row is None:
+>                   raise ServiceExecutionRecoveryError("RECOVERY_TRADE_BINDING_MISSING")
+E                   backtrader.stores.service_execution_recovery.ServiceExecutionRecoveryError: RECOVERY_TRADE_BINDING_MISSING
+
+backtrader\stores\service_execution_recovery.py:2789: ServiceExecutionRecoveryError
+___ test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks ___
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_adapter_pulls_snapshot_pa0')
+
+    def test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks(tmp_path) -> None:
+        from backtrader.stores.service_execution_adapter import ServiceExecutionAdapter
+    
+        namespace = _namespace()
+        journal = ServiceExecutionRecoveryJournal(tmp_path / "recovery.sqlite3")
+        fingerprint = journal.prepare_intent(
+            namespace, intent_id=_INTENT, submit_payload=_submit_payload()
+        )
+        snapshot = _snapshot([_snapshot_order(_INTENT, fingerprint)])
+        own_event = _event(_INTENT, fingerprint, 11)
+        next_event = _event(_INTENT, fingerprint, 12, event_type="reconciled_observation")
+        pages = [
+            _page(10, 11, 12, [own_event], has_more=True),
+            _page(11, 12, 12, [next_event], has_more=False),
+            _page(12, 12, 12, [], has_more=False),
+        ]
+        calls = []
+    
+        class _RecoveryClient:
+            def submit(self, **_kwargs):
+                raise AssertionError("the recovery pull must not submit an intent")
+    
+            def cancel(self, **_kwargs):
+                raise AssertionError("the recovery pull must not cancel an intent")
+    
+            def query(self, *_args, **_kwargs):
+                raise AssertionError("the recovery pull must not query per-order records")
+    
+            def query_recovery_snapshot(self):
+                return snapshot
+    
+            def query_recovery_events_after(self, **kwargs):
+                calls.append(kwargs)
+                return pages.pop(0)
+    
+        adapter = ServiceExecutionAdapter(_RecoveryClient(), recovery_journal=journal)
+        adapter.bind_recovery_namespace(namespace)
+    
+>       initialized = adapter.initialize_recovery(page_limit=2)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\stores\test_service_execution_recovery.py:658: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+backtrader\stores\service_execution_adapter.py:304: in initialize_recovery
+    pages_applied = self._consume_recovery_pages(page_limit=page_limit, max_pages=max_pages)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <backtrader.stores.service_execution_adapter.ServiceExecutionAdapter object at 0x000002D3ADF6C050>
+page_limit = 2, max_pages = 64
+
+    def _consume_recovery_pages(self, *, page_limit: int, max_pages: int) -> int:
+        if type(page_limit) is not int or not 1 <= page_limit <= 128:
+            raise ServiceExecutionAdapterError("invalid recovery page limit")
+        if type(max_pages) is not int or not 1 <= max_pages <= 1024:
+            raise ServiceExecutionAdapterError("invalid recovery page budget")
+        journal, namespace = self._require_recovery()
+        page_reader = getattr(self._client, "query_recovery_events_after", None)
+        if not callable(page_reader):
+            raise ServiceExecutionReadError("recovery_events_api_unavailable")
+        pages_applied = 0
+        for _ in range(max_pages):
+            cursor = journal.cursor(namespace)
+            generation = cursor["journal_generation"]
+            directory_revision = cursor["scope_directory_revision"]
+            after_sequence = cursor["event_cursor"]
+            if (
+                type(generation) is not str
+                or not generation
+                or type(directory_revision) is not str
+                or not directory_revision
+                or type(after_sequence) is not int
+            ):
+                raise ServiceExecutionReadError("recovery_snapshot_required")
+            try:
+                request = {
+                    "after_sequence": after_sequence,
+                    "expected_journal_generation": generation,
+                    "expected_directory_revision": directory_revision,
+                    "limit": page_limit,
+                }
+                if self._recovery_event_version == 2:
+                    request["version"] = 2
+                page = page_reader(
+                    **request,
+                )
+                page_changed = journal.apply_events_page(
+                    namespace,
+                    page,
+                    event_context_resolver=self._recovery_event_context_resolver,
+                    owner_token=self._recovery_consumer_token,
+                )
+            except ServiceExecutionRecoveryError as error:
+>               raise ServiceExecutionReadError(f"recovery_{error.code.lower()}") from None
+E               backtrader.stores.service_execution_adapter.ServiceExecutionReadError: Managed service read failed (recovery_recovery_trade_binding_missing)
+
+backtrader\stores\service_execution_adapter.py:572: ServiceExecutionReadError
+_________ test_public_configured_example_runs_cerebro_in_a_subprocess _________
+
+    def test_public_configured_example_runs_cerebro_in_a_subprocess() -> None:
+        """The published config/CLI entry owns a real client and local host lifecycle."""
+    
+        import json
+        import subprocess
+        import sys
+        from pathlib import Path
+    
+        repository = Path(__file__).resolve().parents[3]
+        config = repository / "examples" / "service_execution_session" / "config.example.json"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "examples.service_execution_session.run",
+                "--config",
+                str(config),
+            ],
+            cwd=repository,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    
+>       assert completed.returncode == 0, (completed.stdout, completed.stderr)
+E       AssertionError: ('SERVICE_EXECUTION_SESSION_DEMO_ERROR RuntimeError
+E         ', '')
+E       assert 2 == 0
+E        +  where 2 = CompletedProcess(args=['C:\\anaconda3\\envs\\btcpp-py311\\python.exe', '-m', 'examples.service_execution_session.run',..._session\\config.example.json'], returncode=2, stdout='SERVICE_EXECUTION_SESSION_DEMO_ERROR RuntimeError\n', stderr='').returncode
+
+tests\unit\stores\test_service_execution_session_local_process.py:472: AssertionError
+_ test_cerebro_notifies_delayed_service_fill_or_cancel_once[filled-after-partial] _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_cerebro_notifies_delayed_0')
+terminal_observation = 'FILLED', expected_terminal_status = 4
+expected_terminal_size = 2.0, expected_terminal_price = 101.5
+terminal_quantity = '2', terminal_price = '101.5'
+
+    @pytest.mark.parametrize(
+        (
+            "terminal_observation",
+            "expected_terminal_status",
+            "expected_terminal_size",
+            "expected_terminal_price",
+            "terminal_quantity",
+            "terminal_price",
+        ),
+        (
+            ("FILLED", bt.Order.Completed, 2.0, 101.5, "2", "101.5"),
+            ("CANCELLED", bt.Order.Canceled, 1.0, 100.5, "1", "100.5"),
+        ),
+        ids=("filled-after-partial", "cancelled-after-partial"),
+    )
+    def test_cerebro_notifies_delayed_service_fill_or_cancel_once(
+        tmp_path,
+        terminal_observation,
+        expected_terminal_status,
+        expected_terminal_size,
+        expected_terminal_price,
+        terminal_quantity,
+        terminal_price,
+    ) -> None:
+        """Delayed synthetic service observations reach Strategy.notify_order."""
+    
+        from bt_api_execution import ExecutionScope
+    
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        scope_key = ExecutionScope("PAPER", "simulation", _ACCOUNT, _STRATEGY, _TRADING_DAY).key
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+        }
+        host = None
+        runtime = None
+        store = None
+        legacy_provider = _ResponseProvider([])
+        clock = [0.0]
+    
+        try:
+            host = _start_process(
+                context,
+                _host_process,
+                (
+                    _service_config(endpoint),
+                    str(tmp_path / "refresh-registry.sqlite3"),
+                    keys,
+                    str(tmp_path / "refresh-execution.sqlite3"),
+                ),
+                "bt-refresh-notification-host",
+            )
+            ready = _receive(host["pipe"])
+>           assert ready[0] == "ready", ready
+E           AssertionError: ('error', 'TRANSPORT_UNAVAILABLE')
+E           assert 'error' == 'ready'
+E             
+E             - ready
+E             + error
+
+tests\unit\stores\test_service_refresh_notification_local_process.py:123: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_cerebro_notifies_delayed_0')
+terminal_observation = 'FILLED', expected_terminal_status = 4
+expected_terminal_size = 2.0, expected_terminal_price = 101.5
+terminal_quantity = '2', terminal_price = '101.5'
+
+    @pytest.mark.parametrize(
+        (
+            "terminal_observation",
+            "expected_terminal_status",
+            "expected_terminal_size",
+            "expected_terminal_price",
+            "terminal_quantity",
+            "terminal_price",
+        ),
+        (
+            ("FILLED", bt.Order.Completed, 2.0, 101.5, "2", "101.5"),
+            ("CANCELLED", bt.Order.Canceled, 1.0, 100.5, "1", "100.5"),
+        ),
+        ids=("filled-after-partial", "cancelled-after-partial"),
+    )
+    def test_cerebro_notifies_delayed_service_fill_or_cancel_once(
+        tmp_path,
+        terminal_observation,
+        expected_terminal_status,
+        expected_terminal_size,
+        expected_terminal_price,
+        terminal_quantity,
+        terminal_price,
+    ) -> None:
+        """Delayed synthetic service observations reach Strategy.notify_order."""
+    
+        from bt_api_execution import ExecutionScope
+    
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        scope_key = ExecutionScope("PAPER", "simulation", _ACCOUNT, _STRATEGY, _TRADING_DAY).key
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+        }
+        host = None
+        runtime = None
+        store = None
+        legacy_provider = _ResponseProvider([])
+        clock = [0.0]
+    
+        try:
+            host = _start_process(
+                context,
+                _host_process,
+                (
+                    _service_config(endpoint),
+                    str(tmp_path / "refresh-registry.sqlite3"),
+                    keys,
+                    str(tmp_path / "refresh-execution.sqlite3"),
+                ),
+                "bt-refresh-notification-host",
+            )
+            ready = _receive(host["pipe"])
+            assert ready[0] == "ready", ready
+            assert ready[1] == endpoint
+    
+            runtime = ServiceClientRuntime(
+                parse_client_config(_client_config(endpoint, _CURVE_REFERENCE)),
+                identity=WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL, _STRATEGY),
+                scope_resolver=lambda _ref: _SCOPE,
+                peer_resolver=lambda _service: WireIdentity(
+                    WireRole.SERVICE, _SERVICE_PRINCIPAL, _SERVICE_ID
+                ),
+                transport_factory=ZmqTransportFactory(
+                    {_CURVE_REFERENCE: ClientCurveKeys(server_public, strategy_public, strategy_secret)}
+                ),
+            )
+            assert runtime.start().degraded_count == 0
+    
+            client = ServiceExecutionClient(
+                runtime,
+                "broker.orders",
+                scope_ref=_ORDER_SCOPE_REF,
+                query_mount="broker.order_query",
+                query_scope_ref=_QUERY_SCOPE_REF,
+            )
+            adapter = ServiceExecutionAdapter(client)
+            store = make_store(
+                api=legacy_provider,
+                managed_execution_adapter=adapter,
+            )
+            broker = store.getbroker(
+                validation_enabled=False,
+                cash_check_enabled=False,
+                account_refresh_interval=3600.0,
+                positions_refresh_interval=3600.0,
+                open_orders_refresh_interval=3600.0,
+            )
+            frame = pd.DataFrame(
+                {
+                    "open": [100.0] * 5,
+                    "high": [102.0] * 5,
+                    "low": [99.0] * 5,
+                    "close": [101.0] * 5,
+                    "volume": [1.0] * 5,
+                    "openinterest": [0.0] * 5,
+                },
+                index=[dt.datetime(2024, 1, day) for day in range(1, 6)],
+            )
+            data = bt.feeds.PandasData(dataname=frame)
+            cerebro = bt.Cerebro(stdstats=False, runonce=False)
+            cerebro.setbroker(broker)
+            cerebro.adddata(data, name="BTC-USDT")
+    
+            class _RefreshStrategy(bt.Strategy):
+                def __init__(self) -> None:
+                    self.order = None
+                    self.notifications = []
+                    self.phase = "submit"
+                    self.refresh_loop = ManagedOrderRefreshLoop(
+                        self.broker,
+                        interval_seconds=1.0,
+                        monotonic_clock=lambda: clock[0],
+                    )
+    
+                def notify_order(self, order) -> None:
+                    if order.info.get("managed_intent_id") != _INTENT_ID:
+                        return
+                    self.notifications.append(
+                        (
+                            order.status,
+                            float(order.executed.size or 0.0),
+                            float(order.executed.price or 0.0),
+                        )
+                    )
+    
+                def next(self) -> None:
+                    if self.phase == "submit":
+                        self.order = self.buy(
+                            data=self.datas[0],
+                            size=2,
+                            price=101.0,
+                            exectype=bt.Order.Limit,
+                            **_managed_broker_info(_INTENT_ID),
+                        )
+                        self.phase = "await_acceptance"
+                        return
+    
+                    statuses = [status for status, _size, _price in self.notifications]
+                    if self.phase == "await_acceptance" and bt.Order.Accepted in statuses:
+                        accepted = client.query(_INTENT_ID)
+                        assert accepted is not None
+                        assert accepted.state == "ACKED"
+                        assert accepted.provider_order_id == "provider-order-1"
+                        partial = _command(
+                            host,
+                            "record_observation",
+                            _INTENT_ID,
+                            "PARTIALLY_FILLED",
+                            "1",
+                            "100.5",
+                        )
+                        assert partial == (
+                            "observation_recorded",
+                            "ACKED",
+                            _INTENT_ID,
+                            scope_key,
+                            "PARTIALLY_FILLED",
+                            "provider-order-1",
+                            "1",
+                            "100.5",
+                        )
+                        clock[0] = 1.0
+                        assert self.refresh_loop.run_once() == (self.order.ref,)
+                        self.phase = "await_partial"
+                        return
+    
+                    if self.phase == "await_partial" and bt.Order.Partial in statuses:
+                        assert self.notifications == [
+                            (bt.Order.Accepted, 0.0, 0.0),
+                            (bt.Order.Partial, 1.0, 100.5),
+                        ]
+                        assert statuses.count(bt.Order.Partial) == 1
+                        # The same durable revision is queried again. It must not
+                        # create a second partial notification before the terminal
+                        # observation arrives.
+                        clock[0] = 2.0
+                        assert self.refresh_loop.run_once() == ()
+                        assert self.refresh_loop.stats.applied == 1
+                        assert self.refresh_loop.stats.failures == 0
+    
+                        terminal = _command(
+                            host,
+                            "record_observation",
+                            _INTENT_ID,
+                            terminal_observation,
+                            terminal_quantity,
+                            terminal_price,
+                        )
+                        assert terminal == (
+                            "observation_recorded",
+                            "PARTIALLY_FILLED",
+                            _INTENT_ID,
+                            scope_key,
+                            terminal_observation,
+                            "provider-order-1",
+                            terminal_quantity,
+                            terminal_price,
+                        )
+                        clock[0] = 3.0
+                        assert self.refresh_loop.run_once() == (self.order.ref,)
+                        self.phase = "await_terminal"
+                        return
+    
+                    if self.phase == "await_terminal" and expected_terminal_status in statuses:
+                        terminal_count = sum(
+                            status in (bt.Order.Completed, bt.Order.Canceled) for status in statuses
+                        )
+                        assert terminal_count == 1
+                        clock[0] = 4.0
+                        assert self.refresh_loop.run_once() == ()
+                        self.phase = "done"
+                        self.cerebro.runstop()
+    
+            cerebro.addstrategy(_RefreshStrategy)
+            results = cerebro.run()
+            strategy = results[0]
+    
+            assert strategy.phase == "done"
+            assert [status for status, _size, _price in strategy.notifications] == [
+                bt.Order.Accepted,
+                bt.Order.Partial,
+                expected_terminal_status,
+            ]
+            terminal_notifications = [
+                (status, size, price)
+                for status, size, price in strategy.notifications
+                if status in (bt.Order.Completed, bt.Order.Canceled)
+            ]
+            assert terminal_notifications == [
+                (expected_terminal_status, expected_terminal_size, expected_terminal_price)
+            ]
+            assert strategy.order.status == expected_terminal_status
+            assert strategy.order.executed.size == pytest.approx(expected_terminal_size)
+            assert strategy.order.executed.price == pytest.approx(expected_terminal_price)
+    
+            counts = _command(host, "counts")
+            assert counts[1] == (_INTENT_ID,)
+            assert counts[2] == ()
+            assert counts[3] == (_INTENT_ID,)
+            assert legacy_provider.submitted_orders == []
+            durable = client.query(_INTENT_ID)
+            assert durable.state == terminal_observation
+            assert durable.provider_order_id == "provider-order-1"
+            assert str(durable.filled_quantity) == terminal_quantity
+    
+            assert strategy.refresh_loop.stats.attempts == 4
+            assert strategy.refresh_loop.stats.applied == 2
+            assert strategy.refresh_loop.stats.failures == 0
+    
+            assert not store.is_connected
+            assert store.get_command_health()["shutdown_state"] == "PASS"
+            assert legacy_provider.connected is False
+            runtime.close()
+            assert runtime.state == "closed"
+            runtime = None
+            _close_host(host)
+            host = None
+        finally:
+            if store is not None:
+                with suppress(Exception):
+                    store.stop()
+            if runtime is not None:
+                with suppress(Exception):
+                    runtime.close()
+            if host is not None:
+>               _close_host(host)
+
+tests\unit\stores\test_service_refresh_notification_local_process.py:336: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\stores\test_service_execution_adapter_local_process.py:668: in _close_host
+    host["pipe"].send(("close",))
+C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\connection.py:206: in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <multiprocessing.connection.PipeConnection object at 0x000002D3AFFA1A50>
+buf = <memory at 0x000002D3AFF38400>
+
+    def _send_bytes(self, buf):
+        if self._send_ov is not None:
+            # A connection should only be used by a single thread
+            raise ValueError("concurrent send_bytes() calls "
+                             "are not supported")
+>       ov, err = _winapi.WriteFile(self._handle, buf, overlapped=True)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BrokenPipeError: [WinError 232] 管道正在被关闭。
+
+C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\connection.py:289: BrokenPipeError
+---------------------------- Captured stderr call -----------------------------
+Process bt-refresh-notification-host:
+-------------------------- Captured stderr teardown ---------------------------
+Traceback (most recent call last):
+  File "C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "D:\source_code\backtrader\tests\unit\stores\test_service_execution_adapter_local_process.py", line 294, in _host_process
+    host.start()
+  File "D:\bt_api_py\bt_api_py\service_host.py", line 436, in start
+    raise ServiceHostError("TRANSPORT_UNAVAILABLE") from None
+bt_api_py.service_host.ServiceHostError: TRANSPORT_UNAVAILABLE
+_ test_cerebro_notifies_delayed_service_fill_or_cancel_once[cancelled-after-partial] _
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_cerebro_notifies_delayed_1')
+terminal_observation = 'CANCELLED', expected_terminal_status = 5
+expected_terminal_size = 1.0, expected_terminal_price = 100.5
+terminal_quantity = '1', terminal_price = '100.5'
+
+    @pytest.mark.parametrize(
+        (
+            "terminal_observation",
+            "expected_terminal_status",
+            "expected_terminal_size",
+            "expected_terminal_price",
+            "terminal_quantity",
+            "terminal_price",
+        ),
+        (
+            ("FILLED", bt.Order.Completed, 2.0, 101.5, "2", "101.5"),
+            ("CANCELLED", bt.Order.Canceled, 1.0, 100.5, "1", "100.5"),
+        ),
+        ids=("filled-after-partial", "cancelled-after-partial"),
+    )
+    def test_cerebro_notifies_delayed_service_fill_or_cancel_once(
+        tmp_path,
+        terminal_observation,
+        expected_terminal_status,
+        expected_terminal_size,
+        expected_terminal_price,
+        terminal_quantity,
+        terminal_price,
+    ) -> None:
+        """Delayed synthetic service observations reach Strategy.notify_order."""
+    
+        from bt_api_execution import ExecutionScope
+    
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        scope_key = ExecutionScope("PAPER", "simulation", _ACCOUNT, _STRATEGY, _TRADING_DAY).key
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+        }
+        host = None
+        runtime = None
+        store = None
+        legacy_provider = _ResponseProvider([])
+        clock = [0.0]
+    
+        try:
+            host = _start_process(
+                context,
+                _host_process,
+                (
+                    _service_config(endpoint),
+                    str(tmp_path / "refresh-registry.sqlite3"),
+                    keys,
+                    str(tmp_path / "refresh-execution.sqlite3"),
+                ),
+                "bt-refresh-notification-host",
+            )
+            ready = _receive(host["pipe"])
+>           assert ready[0] == "ready", ready
+E           AssertionError: ('error', 'TRANSPORT_UNAVAILABLE')
+E           assert 'error' == 'ready'
+E             
+E             - ready
+E             + error
+
+tests\unit\stores\test_service_refresh_notification_local_process.py:123: AssertionError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1031/test_cerebro_notifies_delayed_1')
+terminal_observation = 'CANCELLED', expected_terminal_status = 5
+expected_terminal_size = 1.0, expected_terminal_price = 100.5
+terminal_quantity = '1', terminal_price = '100.5'
+
+    @pytest.mark.parametrize(
+        (
+            "terminal_observation",
+            "expected_terminal_status",
+            "expected_terminal_size",
+            "expected_terminal_price",
+            "terminal_quantity",
+            "terminal_price",
+        ),
+        (
+            ("FILLED", bt.Order.Completed, 2.0, 101.5, "2", "101.5"),
+            ("CANCELLED", bt.Order.Canceled, 1.0, 100.5, "1", "100.5"),
+        ),
+        ids=("filled-after-partial", "cancelled-after-partial"),
+    )
+    def test_cerebro_notifies_delayed_service_fill_or_cancel_once(
+        tmp_path,
+        terminal_observation,
+        expected_terminal_status,
+        expected_terminal_size,
+        expected_terminal_price,
+        terminal_quantity,
+        terminal_price,
+    ) -> None:
+        """Delayed synthetic service observations reach Strategy.notify_order."""
+    
+        from bt_api_execution import ExecutionScope
+    
+        context = multiprocessing.get_context("spawn")
+        endpoint = _endpoint()
+        server_public, server_secret = zmq.curve_keypair()
+        strategy_public, strategy_secret = zmq.curve_keypair()
+        scope_key = ExecutionScope("PAPER", "simulation", _ACCOUNT, _STRATEGY, _TRADING_DAY).key
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "strategy_public": strategy_public,
+        }
+        host = None
+        runtime = None
+        store = None
+        legacy_provider = _ResponseProvider([])
+        clock = [0.0]
+    
+        try:
+            host = _start_process(
+                context,
+                _host_process,
+                (
+                    _service_config(endpoint),
+                    str(tmp_path / "refresh-registry.sqlite3"),
+                    keys,
+                    str(tmp_path / "refresh-execution.sqlite3"),
+                ),
+                "bt-refresh-notification-host",
+            )
+            ready = _receive(host["pipe"])
+            assert ready[0] == "ready", ready
+            assert ready[1] == endpoint
+    
+            runtime = ServiceClientRuntime(
+                parse_client_config(_client_config(endpoint, _CURVE_REFERENCE)),
+                identity=WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL, _STRATEGY),
+                scope_resolver=lambda _ref: _SCOPE,
+                peer_resolver=lambda _service: WireIdentity(
+                    WireRole.SERVICE, _SERVICE_PRINCIPAL, _SERVICE_ID
+                ),
+                transport_factory=ZmqTransportFactory(
+                    {_CURVE_REFERENCE: ClientCurveKeys(server_public, strategy_public, strategy_secret)}
+                ),
+            )
+            assert runtime.start().degraded_count == 0
+    
+            client = ServiceExecutionClient(
+                runtime,
+                "broker.orders",
+                scope_ref=_ORDER_SCOPE_REF,
+                query_mount="broker.order_query",
+                query_scope_ref=_QUERY_SCOPE_REF,
+            )
+            adapter = ServiceExecutionAdapter(client)
+            store = make_store(
+                api=legacy_provider,
+                managed_execution_adapter=adapter,
+            )
+            broker = store.getbroker(
+                validation_enabled=False,
+                cash_check_enabled=False,
+                account_refresh_interval=3600.0,
+                positions_refresh_interval=3600.0,
+                open_orders_refresh_interval=3600.0,
+            )
+            frame = pd.DataFrame(
+                {
+                    "open": [100.0] * 5,
+                    "high": [102.0] * 5,
+                    "low": [99.0] * 5,
+                    "close": [101.0] * 5,
+                    "volume": [1.0] * 5,
+                    "openinterest": [0.0] * 5,
+                },
+                index=[dt.datetime(2024, 1, day) for day in range(1, 6)],
+            )
+            data = bt.feeds.PandasData(dataname=frame)
+            cerebro = bt.Cerebro(stdstats=False, runonce=False)
+            cerebro.setbroker(broker)
+            cerebro.adddata(data, name="BTC-USDT")
+    
+            class _RefreshStrategy(bt.Strategy):
+                def __init__(self) -> None:
+                    self.order = None
+                    self.notifications = []
+                    self.phase = "submit"
+                    self.refresh_loop = ManagedOrderRefreshLoop(
+                        self.broker,
+                        interval_seconds=1.0,
+                        monotonic_clock=lambda: clock[0],
+                    )
+    
+                def notify_order(self, order) -> None:
+                    if order.info.get("managed_intent_id") != _INTENT_ID:
+                        return
+                    self.notifications.append(
+                        (
+                            order.status,
+                            float(order.executed.size or 0.0),
+                            float(order.executed.price or 0.0),
+                        )
+                    )
+    
+                def next(self) -> None:
+                    if self.phase == "submit":
+                        self.order = self.buy(
+                            data=self.datas[0],
+                            size=2,
+                            price=101.0,
+                            exectype=bt.Order.Limit,
+                            **_managed_broker_info(_INTENT_ID),
+                        )
+                        self.phase = "await_acceptance"
+                        return
+    
+                    statuses = [status for status, _size, _price in self.notifications]
+                    if self.phase == "await_acceptance" and bt.Order.Accepted in statuses:
+                        accepted = client.query(_INTENT_ID)
+                        assert accepted is not None
+                        assert accepted.state == "ACKED"
+                        assert accepted.provider_order_id == "provider-order-1"
+                        partial = _command(
+                            host,
+                            "record_observation",
+                            _INTENT_ID,
+                            "PARTIALLY_FILLED",
+                            "1",
+                            "100.5",
+                        )
+                        assert partial == (
+                            "observation_recorded",
+                            "ACKED",
+                            _INTENT_ID,
+                            scope_key,
+                            "PARTIALLY_FILLED",
+                            "provider-order-1",
+                            "1",
+                            "100.5",
+                        )
+                        clock[0] = 1.0
+                        assert self.refresh_loop.run_once() == (self.order.ref,)
+                        self.phase = "await_partial"
+                        return
+    
+                    if self.phase == "await_partial" and bt.Order.Partial in statuses:
+                        assert self.notifications == [
+                            (bt.Order.Accepted, 0.0, 0.0),
+                            (bt.Order.Partial, 1.0, 100.5),
+                        ]
+                        assert statuses.count(bt.Order.Partial) == 1
+                        # The same durable revision is queried again. It must not
+                        # create a second partial notification before the terminal
+                        # observation arrives.
+                        clock[0] = 2.0
+                        assert self.refresh_loop.run_once() == ()
+                        assert self.refresh_loop.stats.applied == 1
+                        assert self.refresh_loop.stats.failures == 0
+    
+                        terminal = _command(
+                            host,
+                            "record_observation",
+                            _INTENT_ID,
+                            terminal_observation,
+                            terminal_quantity,
+                            terminal_price,
+                        )
+                        assert terminal == (
+                            "observation_recorded",
+                            "PARTIALLY_FILLED",
+                            _INTENT_ID,
+                            scope_key,
+                            terminal_observation,
+                            "provider-order-1",
+                            terminal_quantity,
+                            terminal_price,
+                        )
+                        clock[0] = 3.0
+                        assert self.refresh_loop.run_once() == (self.order.ref,)
+                        self.phase = "await_terminal"
+                        return
+    
+                    if self.phase == "await_terminal" and expected_terminal_status in statuses:
+                        terminal_count = sum(
+                            status in (bt.Order.Completed, bt.Order.Canceled) for status in statuses
+                        )
+                        assert terminal_count == 1
+                        clock[0] = 4.0
+                        assert self.refresh_loop.run_once() == ()
+                        self.phase = "done"
+                        self.cerebro.runstop()
+    
+            cerebro.addstrategy(_RefreshStrategy)
+            results = cerebro.run()
+            strategy = results[0]
+    
+            assert strategy.phase == "done"
+            assert [status for status, _size, _price in strategy.notifications] == [
+                bt.Order.Accepted,
+                bt.Order.Partial,
+                expected_terminal_status,
+            ]
+            terminal_notifications = [
+                (status, size, price)
+                for status, size, price in strategy.notifications
+                if status in (bt.Order.Completed, bt.Order.Canceled)
+            ]
+            assert terminal_notifications == [
+                (expected_terminal_status, expected_terminal_size, expected_terminal_price)
+            ]
+            assert strategy.order.status == expected_terminal_status
+            assert strategy.order.executed.size == pytest.approx(expected_terminal_size)
+            assert strategy.order.executed.price == pytest.approx(expected_terminal_price)
+    
+            counts = _command(host, "counts")
+            assert counts[1] == (_INTENT_ID,)
+            assert counts[2] == ()
+            assert counts[3] == (_INTENT_ID,)
+            assert legacy_provider.submitted_orders == []
+            durable = client.query(_INTENT_ID)
+            assert durable.state == terminal_observation
+            assert durable.provider_order_id == "provider-order-1"
+            assert str(durable.filled_quantity) == terminal_quantity
+    
+            assert strategy.refresh_loop.stats.attempts == 4
+            assert strategy.refresh_loop.stats.applied == 2
+            assert strategy.refresh_loop.stats.failures == 0
+    
+            assert not store.is_connected
+            assert store.get_command_health()["shutdown_state"] == "PASS"
+            assert legacy_provider.connected is False
+            runtime.close()
+            assert runtime.state == "closed"
+            runtime = None
+            _close_host(host)
+            host = None
+        finally:
+            if store is not None:
+                with suppress(Exception):
+                    store.stop()
+            if runtime is not None:
+                with suppress(Exception):
+                    runtime.close()
+            if host is not None:
+>               _close_host(host)
+
+tests\unit\stores\test_service_refresh_notification_local_process.py:336: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\stores\test_service_execution_adapter_local_process.py:668: in _close_host
+    host["pipe"].send(("close",))
+C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\connection.py:206: in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <multiprocessing.connection.PipeConnection object at 0x000002D3B40BA890>
+buf = <memory at 0x000002D3AE031C00>
+
+    def _send_bytes(self, buf):
+        if self._send_ov is not None:
+            # A connection should only be used by a single thread
+            raise ValueError("concurrent send_bytes() calls "
+                             "are not supported")
+>       ov, err = _winapi.WriteFile(self._handle, buf, overlapped=True)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       BrokenPipeError: [WinError 232] 管道正在被关闭。
+
+C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\connection.py:289: BrokenPipeError
+---------------------------- Captured stderr call -----------------------------
+Process bt-refresh-notification-host:
+-------------------------- Captured stderr teardown ---------------------------
+Traceback (most recent call last):
+  File "C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\anaconda3\envs\btcpp-py311\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "D:\source_code\backtrader\tests\unit\stores\test_service_execution_adapter_local_process.py", line 294, in _host_process
+    host.start()
+  File "D:\bt_api_py\bt_api_py\service_host.py", line 436, in start
+    raise ServiceHostError("TRANSPORT_UNAVAILABLE") from None
+bt_api_py.service_host.ServiceHostError: TRANSPORT_UNAVAILABLE
+=========================== short test summary info ===========================
+FAILED tests/unit/stores/test_btapistore.py::test_ctp_forwarding_store_direct_writes_fail_closed_before_api[ctp-CTP]
+FAILED tests/unit/stores/test_btapistore.py::test_ctp_forwarding_store_direct_writes_fail_closed_before_api[btapi-CTP___FUTURE]
+FAILED tests/unit/stores/test_btapistore.py::test_forwarding_ctp_signal_in_lower_precedence_config_fails_closed
+FAILED tests/unit/stores/test_btapistore.py::test_forwarding_ctp_signal_fails_closed_through_adapter_legacy_ports
+FAILED tests/unit/stores/test_btapistore.py::test_non_ctp_forwarding_store_legacy_order_route_remains_available
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_injected_ctp_api_route_mismatch_blocks_direct_submit_and_cancel
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_post_init_binance_to_ctp_route_mutation_blocks_all_generic_write_sinks
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_managed_adapter_is_not_called_for_store_api_identity_mismatch
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_ctp_route_suffix_mutation_is_detected_even_when_provider_root_matches
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_recovery_exit_route_mismatch_aborts_before_raising
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_malformed_sdk_routes_fail_closed_with_store_error
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_lazy_api_route_mismatch_is_rechecked_before_direct_sink_lookup[submit]
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_lazy_api_route_mismatch_is_rechecked_before_direct_sink_lookup[cancel]
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_lazy_api_without_route_identity_fails_before_direct_sink_lookup[submit]
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_lazy_api_without_route_identity_fails_before_direct_sink_lookup[cancel]
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_unconvertible_sdk_route_fails_closed_with_store_error
+FAILED tests/unit/stores/test_btapistore_api_route_identity.py::test_matching_ctp_route_still_rejects_normal_direct_store_enqueue
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-conflicting-ctp-signal]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-gateway-ctp-route-alias]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-ctp-sdk-snapshot]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-ctp-provider]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[submit-forwarding-ctp-gateway-provider]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-conflicting-ctp-signal]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-gateway-ctp-route-alias]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-ctp-sdk-snapshot]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-ctp-provider]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_untyped_ctp_managed_alias_rejects_before_adapter_dispatch[cancel-forwarding-ctp-gateway-provider]
+FAILED tests/unit/stores/test_btapistore_untyped_ctp_managed_route.py::test_non_ctp_forwarding_managed_adapter_remains_available
+FAILED tests/unit/stores/test_service_execution_adapter.py::test_accepted_intent_projects_the_provider_identity
+FAILED tests/unit/stores/test_service_execution_adapter.py::test_recovery_submit_persists_manifest_and_ignores_filled_reply_projection
+FAILED tests/unit/stores/test_service_execution_adapter.py::test_recovery_cancel_binds_target_before_rpc_and_stays_nonterminal
+FAILED tests/unit/stores/test_service_execution_adapter_local_process.py::test_backtrader_orders_route_through_a_real_execution_service
+FAILED tests/unit/stores/test_service_execution_recovery.py::test_event_page_preserves_negative_cumulative_commission_rebate
+FAILED tests/unit/stores/test_service_execution_recovery.py::test_event_receipt_projection_cursor_and_callback_pending_commit_together
+FAILED tests/unit/stores/test_service_execution_recovery.py::test_adapter_pulls_snapshot_pages_and_delivers_only_committed_callbacks
+FAILED tests/unit/stores/test_service_execution_session_local_process.py::test_public_configured_example_runs_cerebro_in_a_subprocess
+FAILED tests/unit/stores/test_service_refresh_notification_local_process.py::test_cerebro_notifies_delayed_service_fill_or_cancel_once[filled-after-partial]
+FAILED tests/unit/stores/test_service_refresh_notification_local_process.py::test_cerebro_notifies_delayed_service_fill_or_cancel_once[cancelled-after-partial]
+ERROR tests/unit/stores/test_service_execution_session_local_process.py::test_session_drives_cerebro_refresh_and_renews_due_runtime_leases
+ERROR tests/unit/stores/test_service_execution_session_local_process.py::test_session_closes_runtime_store_and_host_when_strategy_start_raises
+38 failed, 854 passed, 13 skipped, 2 errors in 40.18s

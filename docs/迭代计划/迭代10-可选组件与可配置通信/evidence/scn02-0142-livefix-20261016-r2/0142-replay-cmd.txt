@@ -1,0 +1,8 @@
+cwd: /d/source_code/backtrader/examples/unified/014_2_ctp_options_midfreq
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd(replay): C:/anaconda3/python.exe run.py --replay --evidence-dir D:/temp/it10scn02-0142-livefix-20261016-r2/0142-replay-evidence
+note: successor #2 iteration-10 r2 replay run (same flag pattern as r1 replay). NO --allow-write.
+offline minute FQ2 fixture replay (SYNTHETIC_REPLAY_ONLY_NOT_MARKET_OR_PROFITABILITY_EVIDENCE); network 0 expected.
+outputs: 0142-replay.stdout.txt / 0142-replay.stderr.txt / 0142-replay.exitcode.txt (root);
+run evidence (report.json) in 0142-replay-evidence/.
+interpreter: Python 3.11.5 (C:/anaconda3/python.exe)

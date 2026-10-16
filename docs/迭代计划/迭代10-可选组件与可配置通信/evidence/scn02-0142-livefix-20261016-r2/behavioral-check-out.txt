@@ -1,0 +1,42 @@
+== 1. pure helper _infer_ctp_instrument_exchange ==
+PASS infer('SA701') got='CZCE' expected='CZCE'
+PASS infer('SA701C1080') got='CZCE' expected='CZCE'
+PASS infer('SA701P1080') got='CZCE' expected='CZCE'
+PASS infer('SR801') got='CZCE' expected='CZCE'
+PASS infer('UR2505') got='CZCE' expected='CZCE'
+PASS infer('CF601') got='CZCE' expected='CZCE'
+PASS infer('UR2505C1900') got='' expected=''
+PASS infer('rb2510') got='' expected=''
+PASS infer('rb2510C3300') got='' expected=''
+PASS infer('m2501C2900') got='' expected=''
+PASS infer('IO2501C4000') got='' expected=''
+PASS infer('IF2501') got='' expected=''
+PASS infer('') got='' expected=''
+PASS infer(None) got='' expected=''
+PASS infer('   ') got='' expected=''
+== 2. subscribe retains exchange / infers CZCE for bare aliases ==
+PASS md got deduped instruments calls=[['SA701', 'SA701C1080', 'SA701P1080']]
+PASS map all CZCE map={'SA701': 'CZCE', 'SA701C1080': 'CZCE', 'SA701P1080': 'CZCE'}
+== 3. tick with EMPTY venue ExchangeID gets fallback exchange ==
+PASS SA701 tick exists 
+PASS SA701 tick exchange == CZCE exchange='CZCE'
+PASS SA701 tick exchange_id == CZCE exchange_id='CZCE'
+PASS SA701C1080 option tick exchange == CZCE exchange='CZCE'
+== 4. venue-provided ExchangeID path is untouched ==
+PASS provided CZCE stays CZCE exchange='CZCE'
+PASS provided lowercase czce -> CZCE (as before) exchange='CZCE'
+== 5. unsubscribed / non-inferable instrument behaves as today (empty) ==
+PASS rb2510 not in map map={}
+PASS rb2510 tick exchange stays '' exchange=''
+PASS unsubscribed XX9999 tick exchange stays '' exchange=''
+== 6. typed alias precedence and retention ==
+PASS typed exchange retained map={'SR801': 'CZCE', 'rb2510': 'SHFE'}
+PASS aliases recorded aliases={'SR801': {'CZCE.SR801'}, 'rb2510': {'SHFE.rb2510'}}
+PASS bare SA701 inferred after typed subs map={'SR801': 'CZCE', 'rb2510': 'SHFE', 'SA701': 'CZCE'}
+PASS SA701 inferred CZCE map={'SA701': 'CZCE'}
+PASS explicit typed exchange overrides inference map={'SA701': 'SHFE'}
+PASS bare alias does not clobber typed exchange map={'rb2510': 'SHFE'}
+== 7. empty symbol subscribe is a no-op ==
+PASS no md subscribe call for empties calls=[]
+
+RESULT: ALL CHECKS PASS

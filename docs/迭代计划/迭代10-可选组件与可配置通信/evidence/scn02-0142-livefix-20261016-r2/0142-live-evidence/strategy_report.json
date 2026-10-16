@@ -1,0 +1,113 @@
+{
+  "accepted_cutoff_tick_features": [],
+  "actual_order_permission": "NOT_PROVEN",
+  "actual_pnl": null,
+  "actual_pnl_status": "NOT_AVAILABLE",
+  "barrier": {
+    "clock_domain": "iter42-ctp-options-mid-66456-4ab6358c",
+    "clock_mode": "live",
+    "last_input": null,
+    "late_bar_policy": "retired_bucket_no_backfill",
+    "policy_timeout_seconds": 2.0,
+    "quote_cutoff": "frozen_at_bar_seal",
+    "results": [],
+    "tick_feature_scope": "full_5s_60s_window",
+    "timeframe_seconds": 60.0,
+    "tradable_signal_scope": "fq2_frozen_features_only"
+  },
+  "candidate_id": "ctp-options-midfreq-live-observe-r1",
+  "contracts": {
+    "call": "CZCE.SA701C1080",
+    "future": "CZCE.SA701",
+    "put": "CZCE.SA701P1080"
+  },
+  "execution_basis": "market_data_only_feed_sealed_engineering_observation",
+  "external_network_requests": "NOT_PROVEN",
+  "external_trade_writes": "NOT_PROVEN",
+  "external_trade_writes_basis": "NOT_PROVEN: the strategy only sees its local callback graph and cannot attest raw external provider network requests or writes.",
+  "feature_contract": {
+    "current_residual_added_after_calculation": true,
+    "history_bars": 60,
+    "long_window": "[T-60s,T)",
+    "max_cross_leg_skew_ms": 500.0,
+    "max_segment_seconds": 2.0,
+    "short_window": "[T-5s,T)"
+  },
+  "feature_history": [],
+  "feed_evidence": {
+    "clock_domain": "iter42-ctp-options-mid-66456-4ab6358c",
+    "clock_mode": "live",
+    "fault": null,
+    "max_pending_decisions": 8,
+    "pending_decision_count": 0,
+    "required": true
+  },
+  "gates": {
+    "G1_full_offline_contract": "NOT_EVALUATED_ENGINEERING_OBSERVATION",
+    "G2_package_native": "NOT_EVALUATED_ENGINEERING_OBSERVATION",
+    "G3_evaluation": "NOT_APPLICABLE_ENGINEERING_ONLY",
+    "G3_first_set_read_only": "NOT_RUN_ENGINEERING_STRATEGY_OBSERVATION",
+    "G4_simnow_mechanical": "NOT_RUN",
+    "R1_oos_research": "NOT_RUN",
+    "R2_natural_signal_research": "NOT_RUN"
+  },
+  "history_window_bars": 60,
+  "input_boundary": "feed_sealed_closed_bar_evidence",
+  "local_broker": "BtApiBroker",
+  "minute_bar_interval": 1,
+  "minute_events": [
+    {
+      "kind": "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+      "origin": "notify_bar"
+    },
+    {
+      "kind": "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+      "origin": "notify_bar"
+    },
+    {
+      "kind": "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+      "origin": "notify_bar"
+    },
+    {
+      "kind": "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+      "origin": "notify_bar"
+    },
+    {
+      "kind": "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+      "origin": "notify_bar"
+    },
+    {
+      "kind": "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+      "origin": "notify_bar"
+    },
+    {
+      "kind": "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+      "origin": "notify_bar"
+    }
+  ],
+  "mode": "engineering_observation",
+  "orders_submitted": 0,
+  "ordinary_decision_count": 0,
+  "ordinary_decision_path": "closed minute bar next() only",
+  "ordinary_decisions": [],
+  "pnl_statement": "This is a zero-write Set-2 engineering observation, not G3/G4, fill, or PnL evidence.",
+  "rejected_tick_count": 0,
+  "rejections": [
+    "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+    "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+    "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+    "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+    "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+    "FEED_CLOSED_BAR_PROVENANCE_REQUIRED",
+    "FEED_CLOSED_BAR_PROVENANCE_REQUIRED"
+  ],
+  "scope": "second_set_engineering_shadow_observation",
+  "status": "ENGINEERING_OBSERVATION_RUNTIME",
+  "tick_callback_count": 0,
+  "token_ledger": {
+    "consumed_count": 0,
+    "issued": [],
+    "issued_count": 0
+  },
+  "triple_leg_synchronization": "same candidate/session/generation minute input"
+}
