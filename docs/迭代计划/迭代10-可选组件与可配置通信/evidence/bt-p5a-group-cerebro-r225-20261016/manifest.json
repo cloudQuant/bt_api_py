@@ -1,0 +1,416 @@
+{
+  "schema": "iteration10-r225-bt-p5a-group-cerebro-evidence/v1",
+  "round": "R225",
+  "date": "2026-10-16",
+  "delivery_disposition": "GO_FOR_SCOPED_DELIVERY",
+  "evidence_level": "BT_ADAPTER_CEREBRO_REGISTRY_ONLY",
+  "formal_case_count_before_after": "39/68",
+  "formal_case_pass_delta": 0,
+  "formal_case_note": "R225 adds adapter integration evidence only; no formal DIM09/SCN02 PASS. BT01/BT02 R204 PASS is inherited, not rerun.",
+  "backtrader_delivery": {
+    "repo": "D:\\source_code\\backtrader",
+    "branch": "dev",
+    "head": "438b127fcff2c0619b13835248ee3ef210cc0728",
+    "parent": "38f764dbf2d51adcba4c6a0901734639096365a3",
+    "scope_count": 6,
+    "index_empty": true,
+    "unrelated_tracked_changes_preserved": true,
+    "postcommit_receipt": {
+      "source_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-r225-bt-postcommit.json",
+      "archive_path": "accepted-source/postcommit.json",
+      "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-r225-bt-postcommit.json",
+      "bytes": 1064,
+      "sha256": "2964e456c07fdcd8538b94ababb3b44023213376029e27e96ce9885836337742"
+    },
+    "source_files": [
+      {
+        "path": "backtrader/brokers/btapibroker.py",
+        "bytes": 468663,
+        "sha256": "82b4e6230a47e5aa752ef5415e78fc725eadf92cf0a1aab8e59729b4d1357272"
+      },
+      {
+        "path": "backtrader/stores/btapistore.py",
+        "bytes": 799699,
+        "sha256": "60935ca2e1d39923ee07b49152a0ed4c5b85e66c743f9b3104dd2645034a6f96"
+      },
+      {
+        "path": "backtrader/stores/service_execution_group.py",
+        "bytes": 32446,
+        "sha256": "77556c807b7cb17fe3477851108848b4b01016272f9775801d2524aaed8ac30c"
+      },
+      {
+        "path": "backtrader/stores/service_execution_session.py",
+        "bytes": 55183,
+        "sha256": "c492095af903e475b9a9269f845f9ec30f190eb063fe029fefc2b45c83664af3"
+      },
+      {
+        "path": "backtrader/strategy.py",
+        "bytes": 194988,
+        "sha256": "48db62f985c8edf78987e36ab8e2e037b97a65b56396aaab758b50d84d4015a8"
+      },
+      {
+        "path": "tests/integration/test_btapi_execution_group_cerebro.py",
+        "bytes": 37295,
+        "sha256": "2e532b86bc55f1455a03bba4a3003d6fc67995c7456e61082242755f7cddb1ee"
+      }
+    ]
+  },
+  "root_runs": {
+    "r3": {
+      "output_directory": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r3",
+      "pytest_exit": 1,
+      "source_count": 857,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "heads": {
+        "D:/source_code/backtrader": "38f764dbf2d51adcba4c6a0901734639096365a3",
+        "D:/bt_api_py": "a6f220b9b5bdeae313f7324a86ee7a2c53cd10ee",
+        "D:/bt_api_py/bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:/bt_api_py/bt_api/bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:/bt_api_py/bt_api/bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+        "D:/bt_api_py/bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "evidence_level": "BT_ADAPTER_CEREBRO_REGISTRY_ONLY",
+      "result": {
+        "archive_path": "root-r3/result.json",
+        "bytes": 1439,
+        "sha256": "2a68fe8fe51dd178d0fdbcee08ec307690e90a92853971aa1f743ab15251ec22"
+      },
+      "junit": {
+        "archive_path": "root-r3/junit.xml",
+        "bytes": 4173,
+        "sha256": "3b10f224eba77d85d07d8250fc9327a63e4267fa4671d1b470b607d17a1fa3b9",
+        "tests": 3,
+        "failures": 1,
+        "errors": 0,
+        "seconds": 8.929
+      },
+      "stdout_sha256": "ef048e668b6b8e8d07407d83ecafb964c5a15b09b2bb31b677ba218829eba76d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "r8": {
+      "output_directory": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r8",
+      "pytest_exit": 1,
+      "source_count": 857,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "heads": {
+        "D:/source_code/backtrader": "38f764dbf2d51adcba4c6a0901734639096365a3",
+        "D:/bt_api_py": "00cd647b57defb533d43eeb8cca16be195d6489e",
+        "D:/bt_api_py/bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:/bt_api_py/bt_api/bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:/bt_api_py/bt_api/bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+        "D:/bt_api_py/bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "evidence_level": "BT_ADAPTER_CEREBRO_REGISTRY_ONLY",
+      "result": {
+        "archive_path": "root-r8/result.json",
+        "bytes": 1439,
+        "sha256": "5d06701673a9b611b7acfc32ce06b01464753959eafee2c40bd2e2a2b6d409ca"
+      },
+      "junit": {
+        "archive_path": "root-r8/junit.xml",
+        "bytes": 8540,
+        "sha256": "7a32c17cdadf2352529d040eff13b362a18d2ec5b82441a7b17dbbb575de6a6e",
+        "tests": 2,
+        "failures": 1,
+        "errors": 0,
+        "seconds": 9.786
+      },
+      "stdout_sha256": "fc5ef7d78ce0204e042e366b9710d4e812f2c296b9db41aecd0e064c6080b5ae",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "r9": {
+      "output_directory": "D:\\temp\\iteration10-bt-p5a-group-cerebro-root-20261016-r9",
+      "pytest_exit": 0,
+      "source_count": 857,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "heads": {
+        "D:/source_code/backtrader": "38f764dbf2d51adcba4c6a0901734639096365a3",
+        "D:/bt_api_py": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+        "D:/bt_api_py/bt_api/bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:/bt_api_py/bt_api/bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:/bt_api_py/bt_api/bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53",
+        "D:/bt_api_py/bt_api/bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "evidence_level": "BT_ADAPTER_CEREBRO_REGISTRY_ONLY",
+      "result": {
+        "archive_path": "root-r9/result.json",
+        "bytes": 1439,
+        "sha256": "2e9b5ae132dc651e9d06a13d07e836589c384b31199d888560144f41836354d5"
+      },
+      "junit": {
+        "archive_path": "root-r9/junit.xml",
+        "bytes": 326,
+        "sha256": "6c6c68c0d7b35dad2ab7bf3428e857dda186dd1617106a6796a0f207b54787b6",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "seconds": 7.312
+      },
+      "stdout_sha256": "2d270f6b8cdb87e0c79c135ae2d89e22ff0cb67896ccdb5479b629a84fea361d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "previously_passed_nodes_reused_without_rerun": [
+    {
+      "run": "R3",
+      "node": "test_strategy_group_route_rejects_runtime_owned_by_another_session",
+      "status": "PASS",
+      "function_ast_sha256": "12ec82aa2ef84d9647677b9a579801a424a1ddb483ba473f9404831bb6a5ca8d"
+    },
+    {
+      "run": "R3",
+      "node": "test_strategy_group_route_allows_unowned_registered_runtime_borrow",
+      "status": "PASS",
+      "function_ast_sha256": "e80711c2b0827c2163ad989dea1a37cfdb8026717ec973a8ae1bb2f5ffa6d581"
+    },
+    {
+      "run": "R8",
+      "node": "test_group_monitor_page_rejects_boolean_requested_cursor",
+      "status": "PASS",
+      "function_ast_sha256": "b17248a501ad0e29784efe22c568f7b25de80a253fcf2d1d89046a9fdb7a4ac5"
+    },
+    {
+      "run": "R9",
+      "node": "test_group_residual_stays_strategy_scoped_in_shared_account_cerebro",
+      "status": "PASS",
+      "selection": "sole node in R9"
+    }
+  ],
+  "independent_static_review": {
+    "reviewer_task": "/root/review_bt_store_feed",
+    "disposition": "GO_STATIC_FOR_ONE_ROOT_RUN",
+    "scope": "exact R9 source/spec, 857 source pins, six repository HEADs",
+    "raw_review_file_archived": false
+  },
+  "raw_archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 700771,
+    "sha256": "c6888ad50ee97580d50d8a19e4cba160b2147e8b8afe9bed0fbbedbd9abf9de4",
+    "entry_count": 40,
+    "entries": [
+      {
+        "path": "accepted-source/backtrader/brokers/btapibroker.py",
+        "bytes": 468663,
+        "sha256": "82b4e6230a47e5aa752ef5415e78fc725eadf92cf0a1aab8e59729b4d1357272"
+      },
+      {
+        "path": "accepted-source/backtrader/stores/btapistore.py",
+        "bytes": 799699,
+        "sha256": "60935ca2e1d39923ee07b49152a0ed4c5b85e66c743f9b3104dd2645034a6f96"
+      },
+      {
+        "path": "accepted-source/backtrader/stores/service_execution_group.py",
+        "bytes": 32446,
+        "sha256": "77556c807b7cb17fe3477851108848b4b01016272f9775801d2524aaed8ac30c"
+      },
+      {
+        "path": "accepted-source/backtrader/stores/service_execution_session.py",
+        "bytes": 55183,
+        "sha256": "c492095af903e475b9a9269f845f9ec30f190eb063fe029fefc2b45c83664af3"
+      },
+      {
+        "path": "accepted-source/backtrader/strategy.py",
+        "bytes": 194988,
+        "sha256": "48db62f985c8edf78987e36ab8e2e037b97a65b56396aaab758b50d84d4015a8"
+      },
+      {
+        "path": "accepted-source/postcommit.json",
+        "bytes": 1064,
+        "sha256": "2964e456c07fdcd8538b94ababb3b44023213376029e27e96ce9885836337742"
+      },
+      {
+        "path": "accepted-source/tests/integration/test_btapi_execution_group_cerebro.py",
+        "bytes": 37295,
+        "sha256": "2e532b86bc55f1455a03bba4a3003d6fc67995c7456e61082242755f7cddb1ee"
+      },
+      {
+        "path": "root-r3/command.json",
+        "bytes": 1835,
+        "sha256": "1c437342c0d3953cf5ab0fc8dba32aa07755f44d1ac519345a94ceae9527d416"
+      },
+      {
+        "path": "root-r3/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "root-r3/junit.xml",
+        "bytes": 4173,
+        "sha256": "3b10f224eba77d85d07d8250fc9327a63e4267fa4671d1b470b607d17a1fa3b9"
+      },
+      {
+        "path": "root-r3/result.json",
+        "bytes": 1439,
+        "sha256": "2a68fe8fe51dd178d0fdbcee08ec307690e90a92853971aa1f743ab15251ec22"
+      },
+      {
+        "path": "root-r3/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-r3/running.json",
+        "bytes": 76,
+        "sha256": "5f82d0268a25e23379d735487417734eab4e50504039e1d67092cb8091abad58"
+      },
+      {
+        "path": "root-r3/source-after.json",
+        "bytes": 145447,
+        "sha256": "0a37c956061ebd384b49c34d428c2a3205e48e577bd243a2f798faaf1372d55d"
+      },
+      {
+        "path": "root-r3/source-before.json",
+        "bytes": 145447,
+        "sha256": "0a37c956061ebd384b49c34d428c2a3205e48e577bd243a2f798faaf1372d55d"
+      },
+      {
+        "path": "root-r3/spec.json",
+        "bytes": 157367,
+        "sha256": "a8c9ecee7bfbf4ee2f594cc7c5ab692708fc1637db7e16f7441f09b19ed2e123"
+      },
+      {
+        "path": "root-r3/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-r3/stdout.log",
+        "bytes": 4501,
+        "sha256": "ef048e668b6b8e8d07407d83ecafb964c5a15b09b2bb31b677ba218829eba76d"
+      },
+      {
+        "path": "root-r8/command.json",
+        "bytes": 1693,
+        "sha256": "11c2b3f6988b7b134b79e29882262437b192fd78b6d4f151c372203a88f89f58"
+      },
+      {
+        "path": "root-r8/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "root-r8/junit.xml",
+        "bytes": 8540,
+        "sha256": "7a32c17cdadf2352529d040eff13b362a18d2ec5b82441a7b17dbbb575de6a6e"
+      },
+      {
+        "path": "root-r8/result.json",
+        "bytes": 1439,
+        "sha256": "5d06701673a9b611b7acfc32ce06b01464753959eafee2c40bd2e2a2b6d409ca"
+      },
+      {
+        "path": "root-r8/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-r8/running.json",
+        "bytes": 76,
+        "sha256": "1922598fd7f85693a9bfc5e2bb36c39d3a42a7fdf3fe751b7204c59c6e61f813"
+      },
+      {
+        "path": "root-r8/source-after.json",
+        "bytes": 145446,
+        "sha256": "794573752e4d0171d56295a1c17cdc4f276bba952d79f46626f1352f4ced6a43"
+      },
+      {
+        "path": "root-r8/source-before.json",
+        "bytes": 145446,
+        "sha256": "794573752e4d0171d56295a1c17cdc4f276bba952d79f46626f1352f4ced6a43"
+      },
+      {
+        "path": "root-r8/spec.json",
+        "bytes": 158883,
+        "sha256": "b6b9337d81ee18ca02258a8b5019a848d9b11e519b49b61e5e0b09051f030409"
+      },
+      {
+        "path": "root-r8/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-r8/stdout.log",
+        "bytes": 8715,
+        "sha256": "fc5ef7d78ce0204e042e366b9710d4e812f2c296b9db41aecd0e064c6080b5ae"
+      },
+      {
+        "path": "root-r9/command.json",
+        "bytes": 1571,
+        "sha256": "85cb24d6450b0716e6e825597a904a95cdcea5bdd6c97f743ad183b59a8790af"
+      },
+      {
+        "path": "root-r9/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "root-r9/junit.xml",
+        "bytes": 326,
+        "sha256": "6c6c68c0d7b35dad2ab7bf3428e857dda186dd1617106a6796a0f207b54787b6"
+      },
+      {
+        "path": "root-r9/result.json",
+        "bytes": 1439,
+        "sha256": "2e9b5ae132dc651e9d06a13d07e836589c384b31199d888560144f41836354d5"
+      },
+      {
+        "path": "root-r9/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "root-r9/running.json",
+        "bytes": 76,
+        "sha256": "d810f960718fe2dc4ee6ffc90f882e8495071cf8f12fcbc4eee80a54e35e03fa"
+      },
+      {
+        "path": "root-r9/source-after.json",
+        "bytes": 145446,
+        "sha256": "98e81695d3954c1ce24d19014121e15f985a393a1c636cfc97c7971c1d47b596"
+      },
+      {
+        "path": "root-r9/source-before.json",
+        "bytes": 145446,
+        "sha256": "98e81695d3954c1ce24d19014121e15f985a393a1c636cfc97c7971c1d47b596"
+      },
+      {
+        "path": "root-r9/spec.json",
+        "bytes": 158847,
+        "sha256": "bb3cc19af6bc24a099a9092dcef1dc48631a7a6a8d41d72819c6096485f26bce"
+      },
+      {
+        "path": "root-r9/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "root-r9/stdout.log",
+        "bytes": 653,
+        "sha256": "2d270f6b8cdb87e0c79c135ae2d89e22ff0cb67896ccdb5479b629a84fea361d"
+      }
+    ]
+  },
+  "root_adjudication": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\bt-p5a-group-cerebro-r225-20261016\\root-adjudication.md",
+    "bytes": 6770,
+    "sha256": "7b326ff3d362bb481b919e0fd4013c35a0f3f1ddd4328d1b9d4db315dff9e7ec"
+  },
+  "next_acceptance": {
+    "minimum_scope": "Preserve v1; add strict typed v3 three-leg adapter mapping and residual-vector projection; then use real SDK ServiceHost and ZMQ/CURVE through normal Cerebro with a synthetic provider leaf.",
+    "branches": [
+      "C/P/F PAIRED with ratio/multiplier, budget and residual-vector evidence",
+      "mid-chain rejection or UNKNOWN without duplicate dispatch",
+      "owner/coordinator restart followed by original group ID query and durable cursor recovery",
+      "strategy/portfolio route isolation across shared Broker"
+    ],
+    "reuse": "Reference accepted DIM09 R174/R183/R187 SDK service-level evidence without rerunning accepted suites.",
+    "formal_plan_refs": [
+      "正式迭代计划.md:781",
+      "正式迭代计划.md:648",
+      "正式迭代计划.md:1034-1042"
+    ]
+  }
+}
