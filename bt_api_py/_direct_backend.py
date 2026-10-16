@@ -14,7 +14,6 @@ from bt_api_py._contracts.models import (
     OrderRequest,
     QueryOrderRequest,
 )
-from bt_api_py._gateway_wire import build_intent, outcome_from_ack, outcome_from_dispatch_status
 
 
 class DirectBackend:
@@ -31,15 +30,10 @@ class DirectBackend:
         get_feed: Any,
         feeds: dict[str, Any],
         execution_capability: Any = None,
-        client: Any = None,
     ) -> None:
         self._get_feed = get_feed
         self._feeds = feeds
         self._execution_capability = execution_capability
-        # Optional wire client hook: ``None`` keeps the direct feed semantics
-        # byte-unchanged; a client (assembled only from the gateway wire config)
-        # routes typed writes over the gateway command wire instead.
-        self._client = client
 
     def _feed(self, exchange_name: str) -> Any:
         return self._get_feed(exchange_name)
@@ -50,35 +44,6 @@ class DirectBackend:
         capability = self._execution_capability
         capability = capability() if callable(capability) else capability
         return {"_execution_capability": capability} if capability is not None else {}
-
-    def _wire_write(self, operation: str, exchange_name: str, request: Any) -> dict[str, Any]:
-        """Route one typed write over the attached gateway wire client.
-
-        The wire reaction mirrors the retired forwarding client: build the
-        intent, send it, normalize the acknowledgement.  A dispatch failure is
-        never a rejection by itself: the router status probe (when the
-        transport exposes one) decides unknown vs definite, otherwise the
-        outcome stays unknown and must be reconciled, never blind-retried.
-        """
-        client = self._client
-        command = build_intent(
-            operation,
-            exchange_name,
-            request,
-            strategy_id=str(getattr(client, "strategy_id", "") or ""),
-        )
-        try:
-            ack = client._send_command_sync(command)
-        except Exception:
-            status_row = None
-            probe = getattr(client, "command_status", None)
-            if callable(probe):
-                try:
-                    status_row = probe(command.command_id)
-                except Exception:
-                    status_row = None
-            return outcome_from_dispatch_status(status_row, command=command)
-        return outcome_from_ack(ack, command=command)
 
     def get_tick(
         self,
@@ -325,8 +290,6 @@ class DirectBackend:
             )
 
     def make_order(self, exchange_name: str, request: OrderRequest) -> Any:
-        if self._client is not None:
-            return self._wire_write("make_order", exchange_name, request)
         self._validate_order_units(exchange_name, request)
         feed = self._feed(exchange_name)
         from bt_api_py._feed_adapter import FeedAdapter
@@ -405,8 +368,6 @@ class DirectBackend:
         extra_data: Any = None,
         **kwargs: Any,
     ) -> Any:
-        if self._client is not None:
-            return self._wire_write("cancel_order", exchange_name, request)
         order_id = request.order_id or request.client_order_id
         if str(exchange_name).partition("___")[0].upper() == "CTP":
             order_id = request.order_id
@@ -540,32 +501,16 @@ class DirectBackend:
         return await method(request.symbol, order_id, extra_data=extra_data, **kwargs)
 
     def poll_event(self, exchange_name: str) -> Any:
-        """Poll one private/broker message from the wire client.
-
-        Only meaningful for a wire-configured session; a plain direct backend
-        has no event ingress and reports the capability gap.
-        """
+        """Reject private-event polling on the ordinary direct backend."""
         del exchange_name
-        client = self._client
-        if client is None:
-            raise CapabilityNotSupportedError(
-                "poll_event",
-                detail="transport=direct has no event ingress",
-            )
-        updater = getattr(client, "poll_broker_update", None)
-        if not callable(updater):
-            return None
-        return updater()
+        raise CapabilityNotSupportedError(
+            "poll_event",
+            detail="transport=direct has no event ingress",
+        )
 
     def close(self) -> None:
-        """Disconnect the attached wire client; a plain direct backend is inert."""
-        client = self._client
-        if client is None:
-            return
-        self._client = None
-        disconnect = getattr(client, "disconnect", None)
-        if callable(disconnect):
-            disconnect()
+        """The direct backend borrows feeds and owns no transport resource."""
+        return None
 
     def get_command_status(self, exchange_name: str, command_id: str) -> Any:
         del exchange_name, command_id

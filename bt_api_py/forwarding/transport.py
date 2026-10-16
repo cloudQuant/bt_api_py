@@ -5,10 +5,12 @@ from __future__ import annotations
 import inspect
 import threading
 from collections.abc import Awaitable, Callable
+from typing import NoReturn
 
 import zmq
 from bt_api_base.logging_factory import get_logger
 
+from bt_api_py._contracts.errors import LegacyForwardingRetiredError
 from bt_api_py.forwarding.memory import _run_awaitable_sync
 from bt_api_py.forwarding.schema import (
     CommandAck,
@@ -21,6 +23,16 @@ from bt_api_py.forwarding.schema import (
 )
 
 logger = get_logger("forwarding.transport")
+_MIGRATION_DETAIL = (
+    "the legacy ZMQ forwarding command channel was retired; ordinary backtests use BtApi "
+    "with the direct transport, managed account reads use ServiceClientRuntime with "
+    "ServiceHost and service.account_read, and managed writes use Backtrader "
+    "ServiceExecutionSession with ServiceHost and service.order_entry"
+)
+
+
+def _raise_retired_command_transport(target: str) -> NoReturn:
+    raise LegacyForwardingRetiredError(target, detail=_MIGRATION_DETAIL)
 
 
 class ZmqMarketPublisher:
@@ -161,7 +173,8 @@ class ZmqCommandServer:
         bind: bool = True,
         context: zmq.Context | None = None,
     ) -> None:
-        """__init__ method"""
+        """Retired command endpoint; it cannot create a socket or worker."""
+        _raise_retired_command_transport("bt_api_py.forwarding.transport.ZmqCommandServer")
         self.endpoint = endpoint
         self.handler = handler
         self.context = context or zmq.Context.instance()
@@ -174,7 +187,7 @@ class ZmqCommandServer:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        """start method"""
+        _raise_retired_command_transport("bt_api_py.forwarding.transport.ZmqCommandServer.start")
         if self._thread is not None and self._thread.is_alive():
             return
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -188,6 +201,7 @@ class ZmqCommandServer:
         self.socket.close(linger=0)
 
     def _run(self) -> None:
+        _raise_retired_command_transport("bt_api_py.forwarding.transport.ZmqCommandServer._run")
         while not self._stop.is_set():
             if self.socket.poll(50) == 0:
                 continue
@@ -227,14 +241,16 @@ class ZmqCommandClient:
     """ZeroMQ DEALER command client."""
 
     def __init__(self, endpoint: str, *, context: zmq.Context | None = None) -> None:
-        """__init__ method"""
+        """Retired command client; it cannot create a socket or dispatch a command."""
+        _raise_retired_command_transport("bt_api_py.forwarding.transport.ZmqCommandClient")
         self.endpoint = endpoint
         self.context = context or zmq.Context.instance()
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.connect(endpoint)
 
     def send(self, command: OrderCommand, timeout_ms: int = 2000) -> CommandAck:
-        """send method"""
+        del command, timeout_ms
+        _raise_retired_command_transport("bt_api_py.forwarding.transport.ZmqCommandClient.send")
         timeout_ms = _normalize_timeout_ms(timeout_ms)
         self.socket.send(serialize_message(command))
         if self.socket.poll(timeout_ms) == 0:

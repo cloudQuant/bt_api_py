@@ -8,7 +8,6 @@ import pytest
 from bt_api_base.plugins.loader import PluginLoader
 from bt_api_base.registry import ExchangeRegistry
 
-import bt_api_py.bt_api as bt_api_module
 from bt_api_py.bt_api import BtApi
 
 
@@ -25,12 +24,10 @@ class _FakeEntryPoint:
 
 def setup_function() -> None:
     ExchangeRegistry.clear()
-    bt_api_module._runtime_registrar._adapters.clear()
 
 
 def teardown_function() -> None:
     ExchangeRegistry.clear()
-    bt_api_module._runtime_registrar._adapters.clear()
 
 
 def _load_alpaca_plugin(monkeypatch) -> PluginLoader:
@@ -38,7 +35,7 @@ def _load_alpaca_plugin(monkeypatch) -> PluginLoader:
     if not (package_root / "bt_api_alpaca" / "plugin.py").is_file():
         pytest.skip(f"alpaca plugin checkout not present: {package_root}")
     monkeypatch.syspath_prepend(str(package_root))
-    loader = PluginLoader(ExchangeRegistry, bt_api_module._runtime_registrar)
+    loader = PluginLoader(ExchangeRegistry)
     monkeypatch.setattr(loader, "_discover_entry_points", lambda group: [_FakeEntryPoint()])
     loader.load_all()
     return loader
@@ -48,7 +45,6 @@ def test_plugin_loader_registers_bt_api_alpaca_for_bt_api(monkeypatch) -> None:
     loader = _load_alpaca_plugin(monkeypatch)
 
     assert "bt_api_alpaca" in loader.loaded
-    assert bt_api_module._runtime_registrar.get_adapter("ALPACA") is not None
     assert ExchangeRegistry.get_feed_class("ALPACA___STK") is not None
     assert ExchangeRegistry.get_exchange_data_class("ALPACA___STK") is not None
 

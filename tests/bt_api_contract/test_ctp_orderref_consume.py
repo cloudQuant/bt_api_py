@@ -23,10 +23,8 @@ from bt_api_py import (
     NormalizedApiError,
     OrderRequest,
 )
-from bt_api_py._contracts.errors import CapabilityNotSupportedError
-from bt_api_py._contracts.models import ForwardingConfig, OrderType, Side
+from bt_api_py._contracts.models import OrderType, Side
 from bt_api_py._execution_session import _ExecutionSession
-from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
 
 VENUE = "CTP___FUTURE"
 ACCOUNT = "acct_0123456789abcdef"
@@ -1325,19 +1323,7 @@ def test_cancel_public_sync_async_paths_reject_echo_before_dispatch(tmp_path, mo
         asyncio.run(no_session_api.async_cancel_order("SIM___SPOT", request=request))
     assert wrong_venue_async.value.code == "ctp_cancel_identity_venue_mismatch"
 
-    forwarder = ZmqBtApiBackend(
-        ForwardingConfig(
-            command_endpoint="inproc://commands",
-            market_endpoint="inproc://market",
-            private_endpoint="inproc://private",
-            account_id="acct-1",
-            strategy_id="strategy-1",
-        )
-    )
-    forwarder._client = object()
-    with pytest.raises(CapabilityNotSupportedError) as forwarded:
-        forwarder.cancel_order("SIM___SPOT", request)
-    assert forwarded.value.definite_reject is True
-    assert forwarder._clients == {}
+    # The identity-bearing request is rejected on the existing service route
+    # before either the execution session or the authority can authorize a write.
     assert authority.native_calls == authority.queue_calls == 0
     assert session.cancel_calls == 0

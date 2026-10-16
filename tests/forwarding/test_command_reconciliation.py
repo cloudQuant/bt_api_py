@@ -1,4 +1,4 @@
-"""Forwarded command fidelity, idempotency collision, and reconciliation."""
+"""Command DTO fidelity remains useful after the forwarding writer retirement."""
 
 from __future__ import annotations
 
@@ -6,13 +6,10 @@ import asyncio
 
 import pytest
 
-from bt_api_py._contracts.errors import CommandResultUnknownError, ProtocolCorrelationError
-from bt_api_py._contracts.models import CommandStatus
-from bt_api_py.brokers.mock import MockBrokerAdapter
+from bt_api_py._contracts.errors import LegacyForwardingRetiredError
 from bt_api_py.forwarding.client import ForwardingClient
-from bt_api_py.forwarding.memory import InMemoryForwardingBus
 from bt_api_py.forwarding.router import OrderRouter
-from bt_api_py.forwarding.schema import CommandAck, OrderCommand
+from bt_api_py.forwarding.schema import OrderCommand
 
 
 def test_wire_command_keeps_all_typed_order_intent_and_fingerprint() -> None:
@@ -43,81 +40,8 @@ def test_wire_command_keeps_all_typed_order_intent_and_fingerprint() -> None:
     assert len(command.request_fingerprint) == 64
 
 
-@pytest.mark.asyncio
-async def test_router_rejects_same_idempotency_key_with_different_fingerprint() -> None:
-    adapter = MockBrokerAdapter()
-    adapter.exchange_name = "SIM___SPOT"
-    router = OrderRouter(
-        adapter,
-        write_enabled=True,
-        write_scope=("SIM", "SPOT", "paper"),
-    )
-    await router.connect()
-    first = OrderCommand(
-        strategy_id="s1",
-        account_id="paper",
-        exchange="SIM",
-        market_type="SPOT",
-        symbol="RB2510",
-        side="buy",
-        size=1,
-        order_type="limit",
-        price=3500,
-        idempotency_key="same-key",
-    )
-    conflicting = OrderCommand(
-        strategy_id="s1",
-        account_id="paper",
-        exchange="SIM",
-        market_type="SPOT",
-        symbol="RB2510",
-        side="buy",
-        size=2,
-        order_type="limit",
-        price=3500,
-        idempotency_key="same-key",
-    )
-
-    await router.handle_command(first)
-    with pytest.raises(ProtocolCorrelationError, match="idempotency_key"):
-        await router.handle_command(conflicting)
-
-
-def test_timeout_carries_command_correlation_for_reconciliation() -> None:
-    class TimeoutBus(InMemoryForwardingBus):
-        def send_command_sync(
-            self, command: OrderCommand, *, timeout: float | None = None
-        ) -> CommandAck:
-            raise TimeoutError("timed out")
-
-    client = ForwardingClient(bus=TimeoutBus(), command_timeout=0.01)
-    with pytest.raises(CommandResultUnknownError) as error:
-        client.submit_order(
-            {
-                "symbol": "RB2510",
-                "side": "buy",
-                "size": 1,
-                "order_type": "limit",
-                "price": 3500,
-            }
-        )
-
-    assert error.value.command_id
-    assert error.value.idempotency_key
-
-
-def test_client_reconciles_terminal_command_status() -> None:
-    bus = InMemoryForwardingBus()
-    adapter = MockBrokerAdapter()
-    adapter.exchange_name = "SIM___SPOT"
-    router = OrderRouter(
-        adapter,
-        bus=bus,
-        write_enabled=True,
-        write_scope=("SIM", "SPOT", "paper"),
-    )
-    asyncio.run(router.connect())
-    client = ForwardingClient(bus=bus, account_id="paper", strategy_id="s1")
+def test_direct_router_handler_entry_fails_closed_without_constructor_state() -> None:
+    router = object.__new__(OrderRouter)
     command = OrderCommand(
         strategy_id="s1",
         account_id="paper",
@@ -126,12 +50,8 @@ def test_client_reconciles_terminal_command_status() -> None:
         symbol="RB2510",
         side="buy",
         size=1,
-        idempotency_key="reconcile-1",
+        idempotency_key="legacy-direct-handler",
     )
-    ack = client._send_command_sync(command)
 
-    status = client.get_command_status(ack.command_id)
-
-    assert isinstance(status, CommandStatus)
-    assert status.command_id == ack.command_id
-    assert status.status == "succeeded"
+    with pytest.raises(LegacyForwardingRetiredError, match="service.order_entry"):
+        asyncio.run(router.handle_command(command))

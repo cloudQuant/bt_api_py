@@ -8,11 +8,11 @@ from collections import OrderedDict
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 from bt_api_base.logging_factory import get_logger
 
-from bt_api_py._contracts.errors import ProtocolCorrelationError
+from bt_api_py._contracts.errors import LegacyForwardingRetiredError, ProtocolCorrelationError
 from bt_api_py.brokers.base import BrokerAdapter
 from bt_api_py.brokers.errors import BrokerError
 from bt_api_py.brokers.types import CancelOrderRequest, OrderRequest
@@ -31,6 +31,16 @@ _WRITE_SCOPE_MISMATCH_REASON = (
     "provider write was not attempted"
 )
 _SCOPE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+_MIGRATION_DETAIL = (
+    "the legacy OrderRouter was retired; ordinary backtests use BtApi with the direct "
+    "transport, managed account reads use ServiceClientRuntime with ServiceHost and "
+    "service.account_read, and managed writes use Backtrader ServiceExecutionSession with "
+    "ServiceHost and service.order_entry"
+)
+
+
+def _raise_retired_writer(target: str) -> NoReturn:
+    raise LegacyForwardingRetiredError(target, detail=_MIGRATION_DETAIL)
 
 
 def _scope_token(value: object) -> str | None:
@@ -203,7 +213,8 @@ class OrderRouter:
         write_enabled: bool = False,
         write_scope: tuple[str, str, str] | None = None,
     ) -> None:
-        """__init__ method"""
+        """Retired writer; use the ServiceHost ``service.order_entry`` port."""
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter")
         self.adapter = adapter
         self.bus = bus
         self.risk_rules = risk_rules or RiskRuleSet()
@@ -232,11 +243,11 @@ class OrderRouter:
             self.bus.set_command_handler(self.handle_command)
 
     async def connect(self) -> bool:
-        """connect method"""
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter.connect")
         return await self.adapter.connect()
 
     async def disconnect(self) -> bool:
-        """disconnect method"""
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter.disconnect")
         return await self.adapter.disconnect()
 
     async def health(self) -> dict[str, Any]:
@@ -280,7 +291,8 @@ class OrderRouter:
         }
 
     async def handle_command(self, command: OrderCommand) -> CommandAck:
-        """handle_command method"""
+        del command
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter.handle_command")
         self._purge_expired_receipts()
         command_type = str(command.command_type or "").lower()
         if command_type == "get_command_status":
@@ -322,7 +334,8 @@ class OrderRouter:
         return self._reject(command, f"unsupported command_type: {command.command_type}")
 
     async def place_order(self, command: OrderCommand) -> CommandAck:
-        """place_order method"""
+        del command
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter.place_order")
         disabled = self._reject_write_when_disabled(command)
         if disabled is not None:
             return disabled
@@ -448,7 +461,8 @@ class OrderRouter:
         return ack
 
     async def cancel_order(self, command: OrderCommand) -> CommandAck:
-        """cancel_order method"""
+        del command
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter.cancel_order")
         disabled = self._reject_write_when_disabled(command)
         if disabled is not None:
             return disabled
@@ -537,7 +551,8 @@ class OrderRouter:
         return ack
 
     async def cancel_all(self, command: OrderCommand) -> CommandAck:
-        """Cancel every cancellable order in the command's scoped account."""
+        del command
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter.cancel_all")
         disabled = self._reject_write_when_disabled(command)
         if disabled is not None:
             return disabled
@@ -570,7 +585,8 @@ class OrderRouter:
         return ack
 
     async def query_order(self, command: OrderCommand) -> CommandAck:
-        """Look up one order without ever consulting another account scope."""
+        del command
+        _raise_retired_writer("bt_api_py.forwarding.router.OrderRouter.query_order")
         cached = self._get_cached_ack(command)
         if cached is not None:
             return cached

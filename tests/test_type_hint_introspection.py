@@ -6,19 +6,13 @@ from typing import get_type_hints
 
 import pytest
 
+from bt_api_py import _direct_backend
 from bt_api_py import _feed_adapter, _plugin_catalog
 from bt_api_py._contracts import models
 from bt_api_py._venue_mappers import binance, okx
 from bt_api_py.brokers import base as broker_base
 from bt_api_py.brokers import loader as broker_loader
-from bt_api_py.forwarding import (
-    btapi_backend,
-    btapi_bridge,
-    private_event_pump,
-    router,
-    service,
-    source_supervisor,
-)
+from bt_api_py import service_execution, service_runtime
 from bt_api_py.monitoring import exchange_health
 from bt_api_py.risk_management.core import (
     actions,
@@ -67,13 +61,16 @@ TYPE_HINT_TARGETS = (
     ("models.TradingReadiness", models.TradingReadiness),
     ("PluginCatalog.__init__", _plugin_catalog.PluginCatalog.__init__),
     ("BrokerAdapter.stream_events", broker_base.BrokerAdapter.stream_events),
-    ("ZmqBtApiBackend._private_cache_event", btapi_backend.ZmqBtApiBackend._private_cache_event),
+    ("DirectBackend._execution_options", _direct_backend.DirectBackend._execution_options),
     (
-        "ZmqBtApiBackend._positions_from_payloads",
-        btapi_backend.ZmqBtApiBackend._positions_from_payloads,
+        "DirectBackend._read_method",
+        _direct_backend.DirectBackend._read_method,
     ),
-    ("ZmqBtApiBackend._orders_from_payloads", btapi_backend.ZmqBtApiBackend._orders_from_payloads),
-    ("ZmqBtApiBackend._fills_from_payloads", btapi_backend.ZmqBtApiBackend._fills_from_payloads),
+    (
+        "DirectBackend._validate_order_units",
+        _direct_backend.DirectBackend._validate_order_units,
+    ),
+    ("DirectBackend.make_order", _direct_backend.DirectBackend.make_order),
     ("HealthCheck", exchange_health.HealthCheck),
     ("ActionMixin", actions.ActionMixin),
     ("ActionMixin._initialize_default_actions", actions.ActionMixin._initialize_default_actions),
@@ -101,13 +98,16 @@ TYPE_HINT_TARGETS = (
     ("okx.map_order_request", okx.map_order_request),
     ("broker_loader.load_adapter", broker_loader.load_adapter),
     ("run_broker_contract_cases", contract_cases.run_broker_contract_cases),
-    ("BtApiForwardingBridge.__init__", btapi_bridge.BtApiForwardingBridge.__init__),
-    ("PrivateEventPump.__init__", private_event_pump.PrivateEventPump.__init__),
-    ("OrderRouter.__init__", router.OrderRouter.__init__),
-    ("ForwardingRuntime", service.ForwardingRuntime),
-    ("ZmqForwardingRuntime.__init__", service.ZmqForwardingRuntime.__init__),
-    ("UpstreamSource.start", source_supervisor.UpstreamSource.start),
-    ("SourceSupervisor.subscribe", source_supervisor.SourceSupervisor.subscribe),
+    ("ServiceClientRuntime.__init__", service_runtime.ServiceClientRuntime.__init__),
+    ("ServiceClientRuntime.call", service_runtime.ServiceClientRuntime.call),
+    ("ServiceExecutionClient.__init__", service_execution.ServiceExecutionClient.__init__),
+    ("ServiceExecutionClient.submit", service_execution.ServiceExecutionClient.submit),
+    ("ServiceExecutionClient.cancel", service_execution.ServiceExecutionClient.cancel),
+    ("ServiceExecutionClient.query", service_execution.ServiceExecutionClient.query),
+    (
+        "ServiceExecutionClient.query_recovery_snapshot",
+        service_execution.ServiceExecutionClient.query_recovery_snapshot,
+    ),
     ("LimitsManager.check_pre_trade_limits", limits_manager.LimitsManager.check_pre_trade_limits),
     ("LimitsManager.check_position_limits", limits_manager.LimitsManager.check_position_limits),
     (
@@ -133,7 +133,11 @@ TYPE_HINT_TARGETS = (
 )
 
 
-@pytest.mark.parametrize(("target_name", "target"), TYPE_HINT_TARGETS)
+@pytest.mark.parametrize(
+    ("target_name", "target"),
+    TYPE_HINT_TARGETS,
+    ids=[name for name, _ in TYPE_HINT_TARGETS],
+)
 def test_runtime_type_hints_resolve(target_name, target):
     try:
         get_type_hints(target)

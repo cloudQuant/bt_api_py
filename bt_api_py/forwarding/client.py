@@ -9,7 +9,7 @@ from math import isfinite
 from types import SimpleNamespace
 from typing import Any, NoReturn, TypeVar
 
-from bt_api_py._contracts.errors import CommandResultUnknownError
+from bt_api_py._contracts.errors import LegacyForwardingRetiredError
 from bt_api_py._contracts.models import CommandStatus
 from bt_api_py.forwarding.memory import InMemoryForwardingBus, MarketSubscription
 from bt_api_py.forwarding.schema import (
@@ -18,14 +18,18 @@ from bt_api_py.forwarding.schema import (
     PrivateEvent,
     normalize_market_symbol,
 )
-from bt_api_py.forwarding.transport import (
-    ZmqCommandClient,
-    ZmqEventSubscriber,
-    ZmqMarketSubscriber,
-)
-
 _EVENT_CACHE_KINDS = ("tick", "orderbook", "bar", "broker_update")
 _CachedEvent = TypeVar("_CachedEvent")
+_MIGRATION_DETAIL = (
+    "the legacy forwarding command channel was retired; ordinary backtests use BtApi with the "
+    "direct transport, managed account reads use ServiceClientRuntime with ServiceHost and "
+    "service.account_read, and managed writes use Backtrader ServiceExecutionSession with "
+    "ServiceHost and service.order_entry"
+)
+
+
+def _raise_retired_command(target: str) -> NoReturn:
+    raise LegacyForwardingRetiredError(target, detail=_MIGRATION_DETAIL)
 
 
 class ForwardingClient:
@@ -66,8 +70,6 @@ class ForwardingClient:
         self._positions_cache: list[dict[str, Any]] | None = None
         self._orders_cache: list[dict[str, Any]] | None = None
         self._deals_cache: list[dict[str, Any]] | None = None
-        self._pending_commands: set[str] = set()
-        self._pending_commands_by_id: dict[str, OrderCommand] = {}
         self._latest_market_events: dict[tuple[str, str], MarketEvent] = {}
         self._latest_account_event: PrivateEvent | None = None
         self._latest_position_events: dict[str, PrivateEvent] = {}
@@ -79,12 +81,8 @@ class ForwardingClient:
         if self.connected:
             return True
         self.connected = True
-        self._private_subscriptions.append(
-            self.bus.subscribe_private(f"acct.{self.account_id}.", replay=self.replay)
-        )
-        self._private_subscriptions.append(
-            self.bus.subscribe_private(f"strategy.{self.strategy_id}.", replay=self.replay)
-        )
+        # The retired forwarding command/query channel has no private-event
+        # consumer.  Market reads remain available through this client.
         return True
 
     start = connect
@@ -233,199 +231,85 @@ class ForwardingClient:
         }
 
     def get_balance(self, *, allow_cached_failure: bool = True) -> dict[str, Any]:
-        """get_balance method"""
-        self._drain_private()
-        command = OrderCommand(
-            command_type="get_account",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
-        )
-        try:
-            ack = self._send_command_sync(command)
-        except (RuntimeError, TimeoutError):
-            if allow_cached_failure and self._account_cache is not None:
-                return dict(self._account_cache)
-            raise
-        if ack.accepted:
-            self._account_cache = {
-                "cash": ack.payload.get("available_cash", ack.payload.get("cash", 0.0)),
-                "value": ack.payload.get("equity", ack.payload.get("value", 0.0)),
-                **ack.payload,
-            }
-        return dict(self._account_cache or {})
+        """Retired account snapshot; use ServiceClientRuntime account reads."""
+        del allow_cached_failure
+        _raise_retired_command("bt_api_py.forwarding.client.ForwardingClient.get_balance")
 
     get_account = get_balance
 
     def get_positions(self, *, allow_cached_failure: bool = True) -> list[dict[str, Any]]:
-        """get_positions method"""
-        self._drain_private()
-        command = OrderCommand(
-            command_type="list_positions",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
-        )
-        try:
-            ack = self._send_command_sync(command)
-        except (RuntimeError, TimeoutError):
-            if allow_cached_failure and self._positions_cache is not None:
-                return list(self._positions_cache)
-            raise
-        if ack.accepted:
-            self._positions_cache = list(ack.payload.get("positions", []))
-        return list(self._positions_cache or [])
+        """Retired account snapshot; use ServiceClientRuntime account reads."""
+        del allow_cached_failure
+        _raise_retired_command("bt_api_py.forwarding.client.ForwardingClient.get_positions")
 
     def fetch_open_orders(self, *, allow_cached_failure: bool = True) -> list[dict[str, Any]]:
-        """fetch_open_orders method"""
-        self._drain_private()
-        command = OrderCommand(
-            command_type="list_orders",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
+        """Retired account snapshot; use ServiceClientRuntime account reads."""
+        del allow_cached_failure
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient.fetch_open_orders"
         )
-        try:
-            ack = self._send_command_sync(command)
-        except (RuntimeError, TimeoutError):
-            if allow_cached_failure and self._orders_cache is not None:
-                return list(self._orders_cache)
-            raise
-        if ack.accepted:
-            self._orders_cache = [
-                order
-                for order in ack.payload.get("orders", [])
-                if order.get("status") in {"submitted", "new"}
-            ]
-        return list(self._orders_cache or [])
 
     get_open_orders = fetch_open_orders
 
     def submit_order(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """submit_order method"""
-        command = self._payload_to_order_command(payload)
-        ack = self._send_command_sync(command)
-        self._drain_private()
-        if not ack.accepted:
-            raise RuntimeError(ack.reason or "forwarded order rejected")
-        result = dict(ack.payload)
-        result.setdefault("id", ack.order_id)
-        result.setdefault("order_id", ack.order_id)
-        result.setdefault("order_ref", payload.get("bt_order_ref") or command.client_order_id)
-        return result
+        """Retired write path; use ServiceExecutionSession for managed orders."""
+        del payload
+        _raise_retired_command("bt_api_py.forwarding.client.ForwardingClient.submit_order")
 
     create_order = submit_order
 
     def cancel_order(self, order_ref: Any, dataname: str | None = None) -> dict[str, Any]:
-        """cancel_order method"""
-        command = OrderCommand(
-            command_type="cancel_order",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
-            symbol=str(dataname or ""),
-            order_id=str(order_ref or ""),
-            idempotency_key=f"cancel:{self.strategy_id}:{self.account_id}:{order_ref}",
-        )
-        ack = self._send_command_sync(command)
-        self._drain_private()
-        if not ack.accepted:
-            raise RuntimeError(ack.reason or "forwarded cancel rejected")
-        result = dict(ack.payload)
-        result.setdefault("id", ack.order_id)
-        result.setdefault("order_id", ack.order_id)
-        result.setdefault("order_ref", order_ref)
-        return result
+        """Retired write path; use ServiceExecutionSession for managed orders."""
+        del order_ref, dataname
+        _raise_retired_command("bt_api_py.forwarding.client.ForwardingClient.cancel_order")
 
     def cancel_all(
         self, symbol: str | None = None, *, idempotency_key: str | None = None
     ) -> dict[str, Any]:
-        command = OrderCommand(
-            command_type="cancel_all",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
-            symbol=str(symbol or ""),
-            idempotency_key=idempotency_key
-            or f"cancel-all:{self.strategy_id}:{self.account_id}:{symbol or '*'}",
-        )
-        ack = self._send_command_sync(command)
-        if not ack.accepted:
-            raise RuntimeError(ack.reason or "forwarded cancel-all rejected")
-        return dict(ack.payload)
+        """Retired write path; use ServiceExecutionSession for managed orders."""
+        del symbol, idempotency_key
+        _raise_retired_command("bt_api_py.forwarding.client.ForwardingClient.cancel_all")
 
     def query_order(self, order_ref: Any, dataname: str | None = None) -> dict[str, Any]:
-        command = OrderCommand(
-            command_type="query_order",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
-            symbol=str(dataname or ""),
-            order_id=str(order_ref or ""),
-            idempotency_key=f"query:{self.strategy_id}:{self.account_id}:{order_ref}",
-        )
-        ack = self._send_command_sync(command)
-        if not ack.accepted:
-            raise RuntimeError(ack.reason or "forwarded query rejected")
-        return dict(ack.payload)
+        del order_ref, dataname
+        _raise_retired_command("bt_api_py.forwarding.client.ForwardingClient.query_order")
 
     def get_deals(self, *, allow_cached_failure: bool = True) -> list[dict[str, Any]]:
-        """Read private fills through the router or a deliberate cache fallback."""
-        self._drain_private()
-        command = OrderCommand(
-            command_type="list_deals",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
-        )
-        try:
-            ack = self._send_command_sync(command)
-        except (RuntimeError, TimeoutError):
-            if allow_cached_failure and self._deals_cache is not None:
-                return list(self._deals_cache)
-            raise
-        if ack.accepted:
-            self._deals_cache = list(ack.payload.get("deals", []))
-        return list(self._deals_cache or [])
+        """Retired fill snapshot; use ServiceClientRuntime account reads."""
+        del allow_cached_failure
+        _raise_retired_command("bt_api_py.forwarding.client.ForwardingClient.get_deals")
 
     def get_command_status(self, command_id: str) -> CommandStatus:
-        command = OrderCommand(
-            command_type="get_command_status",
-            strategy_id=self.strategy_id,
-            account_id=self.account_id,
-            query_command_id=command_id,
-            idempotency_key=f"status:{self.strategy_id}:{self.account_id}:{command_id}",
-        )
-        ack = self._send_command_sync(command)
-        payload = dict(ack.payload)
-        status = str(payload.get("status") or ack.status)
-        return CommandStatus(
-            command_id=str(payload.get("command_id") or command_id),
-            idempotency_key=str(payload.get("idempotency_key") or ""),
-            status=status,
-            account_id=str(payload.get("account_id") or self.account_id),
-            strategy_id=str(payload.get("strategy_id") or self.strategy_id),
-            accepted=payload.get("accepted"),
-            order_id=payload.get("order_id"),
-            reason=str(payload.get("reason") or ack.reason),
-            raw=payload,
+        del command_id
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient.get_command_status"
         )
 
     def latest_account_event(self) -> PrivateEvent | None:
-        self._drain_private()
-        return self._latest_account_event
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient.latest_account_event"
+        )
 
     def latest_position_events(self) -> list[PrivateEvent]:
-        self._drain_private()
-        return list(self._latest_position_events.values())
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient.latest_position_events"
+        )
 
     def latest_order_events(self) -> list[PrivateEvent]:
-        self._drain_private()
-        return list(self._latest_order_events.values())
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient.latest_order_events"
+        )
 
     def latest_fill_events(self) -> list[PrivateEvent]:
-        self._drain_private()
-        return list(self._latest_fill_events.values())
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient.latest_fill_events"
+        )
 
     def poll_broker_update(self) -> dict[str, Any] | None:
-        """poll_broker_update method"""
-        self._drain_private()
-        if not self._broker_updates:
-            return None
-        return self._broker_updates.popleft()
+        """Retired private-event read; use the service account-read path."""
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient.poll_broker_update"
+        )
 
     def _payload_to_order_command(self, payload: dict[str, Any]) -> OrderCommand:
         symbol = str(payload.get("symbol") or payload.get("data_name") or "")
@@ -451,27 +335,18 @@ class ForwardingClient:
         )
 
     def _send_command_sync(self, command: OrderCommand):
-        key = str(command.idempotency_key or command.command_id)
-        try:
-            ack = self.bus.send_command_sync(command, timeout=self.command_timeout)
-        except TimeoutError:
-            self._pending_commands.add(key)
-            self._pending_commands_by_id[command.command_id] = command
-            raise CommandResultUnknownError(
-                command.command_id, key, detail="forwarding command timed out; reconcile status"
-            ) from None
-        self._pending_commands.discard(key)
-        self._pending_commands_by_id.pop(command.command_id, None)
-        return ack
+        del command
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient._send_command_sync"
+        )
 
     def pending_commands(self) -> list[str]:
-        """返回超时后结果未知、尚未取回 ack 的命令 key 列表，供对账。"""
-        return sorted(self._pending_commands)
+        """Return no pending commands because the retired channel cannot dispatch one."""
+        return []
 
     def _refresh_event_caches(self) -> None:
         for symbol_key in list(self._market_subscriptions):
             self._drain_market(symbol_key)
-        self._drain_private()
 
     def _drain_market(self, symbol: str) -> None:
         symbol_key = normalize_market_symbol(symbol)
@@ -504,12 +379,9 @@ class ForwardingClient:
             self._append_cached_event(self._bars[symbol], _market_event_to_bar(event), "bar")
 
     def _drain_private(self) -> None:
-        for subscription in list(self._private_subscriptions):
-            while True:
-                event = subscription.poll()
-                if event is None:
-                    break
-                self._cache_private_event(event)
+        _raise_retired_command(
+            "bt_api_py.forwarding.client.ForwardingClient._drain_private"
+        )
 
     def _cache_private_event(self, event: PrivateEvent) -> None:
         if event.account_id != self.account_id or (
@@ -662,129 +534,24 @@ _ORDER_COMMAND_KEYS = {
 }
 
 
-class ZmqForwardingClient(ForwardingClient):
-    """Forwarding client that talks to a standalone ZeroMQ forwarding service."""
+class ZmqForwardingClient:
+    """Retired network client for the v1 forwarding runtime."""
 
-    def __init__(
-        self,
-        *,
-        market_endpoint: str,
-        command_endpoint: str,
-        private_endpoint: str | None = None,
-        exchange: str = "SIM",
-        market_type: str = "SPOT",
-        account_id: str = "paper",
-        strategy_id: str = "default",
-        command_timeout_ms: int = 2000,
-        event_cache_size: int | None = 4096,
-    ) -> None:
-        """__init__ method"""
-        super().__init__(
-            bus=InMemoryForwardingBus(),
-            exchange=exchange,
-            market_type=market_type,
-            account_id=account_id,
-            strategy_id=strategy_id,
-            event_cache_size=event_cache_size,
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise LegacyForwardingRetiredError(
+            "bt_api_py.forwarding.client.ZmqForwardingClient",
+            detail=(
+                "the legacy ZMQ forwarding client was retired; use ServiceClientRuntime "
+                "with ServiceHost ports for managed service calls, and use Backtrader "
+                "ServiceExecutionSession with service.order_entry for managed writes"
+            ),
         )
-        self.market_endpoint = market_endpoint
-        self.command_endpoint = command_endpoint
-        self.private_endpoint = private_endpoint
-        self.command_timeout_ms = _normalize_command_timeout_ms(command_timeout_ms)
-        self._command_client: ZmqCommandClient | None = None
-        self._market_subscriptions: dict[str, ZmqMarketSubscriber] = {}
-        self._private_subscriptions: list[ZmqEventSubscriber] = []
-
-    def connect(self) -> bool:
-        """connect method"""
-        if self.connected:
-            return True
-        self._command_client = ZmqCommandClient(self.command_endpoint)
-        if self.private_endpoint:
-            self._private_subscriptions.append(
-                ZmqEventSubscriber(self.private_endpoint, f"acct.{self.account_id}.")
-            )
-            self._private_subscriptions.append(
-                ZmqEventSubscriber(self.private_endpoint, f"strategy.{self.strategy_id}.")
-            )
-        self.connected = True
-        return True
-
-    start = connect
-
-    def disconnect(self) -> bool:
-        """disconnect method"""
-        for subscription in list(self._market_subscriptions.values()):
-            subscription.close()
-        for subscription in list(self._private_subscriptions):
-            subscription.close()
-        if self._command_client is not None:
-            self._command_client.close()
-        self._market_subscriptions.clear()
-        self._private_subscriptions.clear()
-        self._command_client = None
-        self._clear_event_caches()
-        self.connected = False
-        return True
-
-    stop = disconnect
-
-    def subscribe(self, symbols: str | list[str]) -> None:
-        """subscribe method"""
-        if isinstance(symbols, str):
-            symbols = [symbols]
-        if not self.connected:
-            self.connect()
-        for symbol in symbols:
-            symbol_key = normalize_market_symbol(symbol)
-            if symbol_key in self._market_subscriptions:
-                continue
-            prefix = f"md.{self.exchange.upper()}.{self.market_type.upper()}.{symbol_key}."
-            self._market_subscriptions[symbol_key] = ZmqMarketSubscriber(
-                self.market_endpoint, prefix
-            )
-
-    def _drain_market(self, symbol: str) -> None:
-        symbol_key = normalize_market_symbol(symbol)
-        if symbol_key not in self._market_subscriptions:
-            self.subscribe(symbol_key)
-        subscription = self._market_subscriptions[symbol_key]
-        while True:
-            event = subscription.poll(0)
-            if event is None:
-                break
-            self._cache_market_event(event)
-
-    def _drain_private(self) -> None:
-        for subscription in list(self._private_subscriptions):
-            while True:
-                event = subscription.poll(0)
-                if event is None:
-                    break
-                if isinstance(event, PrivateEvent):
-                    self._cache_private_event(event)
-
-    def _send_command_sync(self, command: OrderCommand):
-        if self._command_client is None:
-            self.connect()
-        if self._command_client is None:
-            raise RuntimeError("ZMQ command client is not connected")
-        key = str(command.idempotency_key or command.command_id)
-        try:
-            ack = self._command_client.send(command, timeout_ms=self.command_timeout_ms)
-        except TimeoutError:
-            self._pending_commands.add(key)
-            self._pending_commands_by_id[command.command_id] = command
-            raise CommandResultUnknownError(
-                command.command_id, key, detail="forwarding command timed out; reconcile status"
-            ) from None
-        self._pending_commands.discard(key)
-        self._pending_commands_by_id.pop(command.command_id, None)
-        return ack
 
 
 def _require(payload: dict, key: str) -> NoReturn:
-    """Raise when a required order payload field is missing."""
+    """Reject missing required order fields during passive DTO conversion."""
+    del payload
     raise ValueError(f"{key} is required; refusing to default to a marketable value")
 
 

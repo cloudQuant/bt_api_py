@@ -1,19 +1,8 @@
-"""Light SDK-side client DTOs projected over the ``bt_api_gateway.command.v1`` envelope.
+"""Historical gateway wire DTOs retained for old evidence and migration errors.
 
-This module is the SDK half of the gateway write wire.  It is deliberately
-self-contained: nothing here imports ``bt_api_gateway`` (a server-side package)
-and nothing imports the retired ``bt_api_py.forwarding`` tree.  The DTO field
-sets mirror the historical forwarding order-intent and acknowledgement wire
-shapes (field-for-field), so the client path
-``BtApi -> DirectBackend wire hook -> transport client`` keeps the same
-serialized contract while the server side is the durable command router.
-
-Write outcomes are normalized onto the SDK write-contract keys consumed by
-``bt_api_py._normalization.order``: ``status``, ``execution_unknown``,
-``terminal_confirmed``, ``definite_reject``, ``order_id`` and
-``client_order_id``.  A missing or unrecognized router status maps to an
-unknown outcome (never blind-retry); raw exception text is never projected
-into an outcome row.
+The normal managed writer is ``ServiceExecutionSession`` over ServiceHost's
+``service.order_entry`` port.  This module no longer supplies a client or a
+second write path; ``GatewayWireClient`` construction fails closed.
 """
 
 from __future__ import annotations
@@ -26,7 +15,11 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from bt_api_py._contracts.errors import CapabilityNotSupportedError, NormalizedApiError
+from bt_api_py._contracts.errors import (
+    CapabilityNotSupportedError,
+    LegacyForwardingRetiredError,
+    NormalizedApiError,
+)
 
 GATEWAY_COMMAND_WIRE_SCHEMA = "bt_api_gateway.command.v1"
 SCHEMA_VERSION = "1.0"
@@ -289,12 +282,7 @@ def command_from_envelope(value: Mapping[str, Any]) -> OrderCommand:
 
 @dataclass(frozen=True)
 class GatewayWireConfig:
-    """Client-side replacement for the retired ``ForwardingConfig`` input.
-
-    The endpoints identify the gateway transport; ``dispatch`` is the attached
-    transport entry point used by :class:`GatewayWireClient`.  Without a
-    dispatch the client stays inert (no socket is opened in this SDK round).
-    """
+    """Historical config shape accepted only so migration errors stay typed."""
 
     command_endpoint: str
     market_endpoint: str
@@ -313,57 +301,17 @@ class GatewayWireConfig:
 
 
 class GatewayWireClient:
-    """Thin SDK client over the gateway command wire (durable-router peer).
-
-    The client owns only the client half: it projects the intent into the
-    versioned envelope and parses the returned acknowledgement.  Server-side
-    durability, authorization and provider dispatch stay on the gateway side.
-    """
+    """Retired gateway client kept as a typed fail-closed compatibility name."""
 
     def __init__(self, config: GatewayWireConfig) -> None:
-        if not isinstance(config, GatewayWireConfig):
-            raise TypeError("GatewayWireConfig is required")
-        self._config = config
-
-    @property
-    def account_id(self) -> str:
-        return self._config.account_id
-
-    @property
-    def strategy_id(self) -> str:
-        return self._config.strategy_id
-
-    def _send_command_sync(self, command: OrderCommand) -> CommandAck:
-        """Send one intent and return the parsed acknowledgement.
-
-        A transport failure raises; the SDK caller converts it into an unknown
-        outcome (or a definite reject when router status proves rejection).
-        """
-        envelope = command_to_envelope(command)
-        dispatch = self._config.dispatch
-        if dispatch is None:
-            raise CapabilityNotSupportedError(
-                "gateway_wire",
-                detail="no transport dispatch is attached to this gateway wire client",
-            )
-        value = dispatch(envelope)
-        if isinstance(value, CommandAck):
-            return value
-        if isinstance(value, Mapping):
-            payload = value.get("ack", value)
-            if isinstance(payload, Mapping):
-                return CommandAck.from_dict(payload)
-        raise GatewayWireError("transport dispatch must return a gateway command ack mapping")
-
-    def command_status(self, command_id: str) -> Any:
-        """Read one durable command status row when the transport supports it."""
-        probe = getattr(self._config.dispatch, "command_status", None)
-        if callable(probe):
-            return probe(command_id)
-        return None
-
-    def disconnect(self) -> None:
-        """Release the client (no persistent resource is held)."""
+        del config
+        raise LegacyForwardingRetiredError(
+            "GatewayWireClient",
+            detail=(
+                "the gateway command writer was retired; managed service writes must use "
+                "Backtrader ServiceExecutionSession with ServiceHost and service.order_entry"
+            ),
+        )
 
 
 _NATIVE_INTENT_FIELDS = (

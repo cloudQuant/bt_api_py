@@ -10,7 +10,6 @@ import pytest
 from bt_api_py import BtApi, NormalizedApiError
 from bt_api_py._contracts import CapabilityNotSupportedError, LegacyForwardingRetiredError
 from bt_api_py._contracts.models import (
-    CancelOrderRequest,
     ForwardingConfig,
     OrderRequest,
     OrderType,
@@ -797,31 +796,30 @@ def test_zmq_initialization_retired_and_never_creates_direct_feed(monkeypatch):
     create_feed.assert_not_called()
 
 
-def test_zmq_native_intent_rejected_before_dispatch():
-    from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
+def test_retired_zmq_native_order_route_rejects_before_runtime_setup(monkeypatch):
+    plugin_load = Mock(side_effect=AssertionError("retired plugin loading"))
+    backend_build = Mock(side_effect=AssertionError("retired backend construction"))
+    monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", plugin_load)
+    monkeypatch.setattr(BtApi, "_build_backend", backend_build)
 
-    backend = ZmqBtApiBackend(
-        ForwardingConfig(
-            command_endpoint="inproc://c",
-            market_endpoint="inproc://m",
-            private_endpoint="inproc://p",
-            account_id="a",
-            strategy_id="s",
+    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
+        BtApi(
+            {"MT5___FX": {}},
+            debug=False,
+            transport_mode="zmq",
+            forwarding_config=ForwardingConfig(
+                command_endpoint="inproc://c",
+                market_endpoint="inproc://m",
+                private_endpoint="inproc://p",
+                account_id="a",
+                strategy_id="s",
+            ),
         )
-    )
-    backend._client = SimpleNamespace(_send_command_sync=Mock())
-    with pytest.raises(CapabilityNotSupportedError):
-        backend.make_order(
-            "MT5___FX",
-            request(quantity_unit="base", position_id="position-10", offset="close"),
-        )
-    assert not backend._client._send_command_sync.called
-    with pytest.raises(CapabilityNotSupportedError):
-        backend.query_order(
-            "BINANCE___SWAP",
-            QueryOrderRequest(symbol="BTCUSDT", account_id="a", client_order_id="client-1"),
-        )
-    assert not backend._client._send_command_sync.called
+
+    assert excinfo.value.target == "transport_mode=ZMQ"
+    assert "ServiceExecutionSession" in excinfo.value.detail
+    plugin_load.assert_not_called()
+    backend_build.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -875,108 +873,70 @@ def test_foreign_fee_currency_is_explicit_not_converted():
     assert row["cumulative_commission"] == 0.00001 and row["commission_currency"] == "BTC"
 
 
-def test_forwarding_extra_roundtrip_reaches_existing_gateway_runtime():
-    from bt_api_base.gateway.config import GatewayConfig
-    from bt_api_base.gateway.runtime import GatewayRuntime
+def test_direct_gateway_wire_config_is_rejected_before_runtime_setup(monkeypatch):
+    from bt_api_py._gateway_wire import GatewayWireClient, GatewayWireConfig
 
-    from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
-    from bt_api_py.forwarding.schema import OrderCommand
-
-    config = ForwardingConfig(
-        command_endpoint="inproc://c",
-        market_endpoint="inproc://m",
-        private_endpoint="inproc://p",
-        account_id="a",
-        strategy_id="s",
-    )
-    runtime = GatewayRuntime(
-        GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="a", enable_trading=True)
-    )
-    runtime.adapter = SimpleNamespace(
-        place_order=Mock(
-            return_value={
-                "order_id": "order-22",
-                "position_id": "position-10",
-                "trade_id": "deal-23",
-                "status": "completed",
-                "volume": 0.01,
-                "price": 1.12,
-            }
-        )
+    from_plugins = Mock(side_effect=AssertionError("plugin loading must stay untouched"))
+    create_feed = Mock(side_effect=AssertionError("direct feed setup must stay untouched"))
+    construct_client = Mock(side_effect=AssertionError("retired wire client must stay untouched"))
+    dispatch = Mock(side_effect=AssertionError("retired gateway dispatch"))
+    monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", from_plugins)
+    monkeypatch.setattr("bt_api_py.bt_api.ExchangeRegistry.create_feed", create_feed)
+    monkeypatch.setattr(GatewayWireClient, "__init__", construct_client)
+    config = GatewayWireConfig(
+        command_endpoint="inproc://command",
+        market_endpoint="inproc://market",
+        private_endpoint="inproc://private",
+        account_id="account-a",
+        strategy_id="strategy-a",
+        dispatch=dispatch,
     )
 
-    class Client:
-        def _send_command_sync(self, command):
-            wire = OrderCommand.from_dict(command.to_dict())
-            assert (
-                wire.extra == command.extra
-                and wire.request_fingerprint == command.request_fingerprint
-            )
-            return runtime._handle_command(wire)
+    config_mapping = {
+        "command_endpoint": config.command_endpoint,
+        "market_endpoint": config.market_endpoint,
+        "private_endpoint": config.private_endpoint,
+        "account_id": config.account_id,
+        "strategy_id": config.strategy_id,
+        "dispatch": dispatch,
+    }
+    for legacy_config in (config, config_mapping):
+        with pytest.raises(LegacyForwardingRetiredError) as exc_info:
+            BtApi({"MT5___FX": {}}, debug=False, gateway_wire_config=legacy_config)
 
-    backend = ZmqBtApiBackend(config)
-    backend._client = Client()
-    req = OrderRequest(
-        symbol="EURUSD",
-        side=Side.SELL,
-        order_type=OrderType.MARKET,
-        quantity=Decimal(".01"),
-        quantity_unit="lots",
-        account_id="a",
-        client_order_id="123456789012",
-        position_id="position-10",
-        position_side="long",
-        offset="close",
-        reduce_only=True,
-    )
-    result = backend.make_order("MT5___FX", req)
-    payload = runtime.adapter.place_order.call_args.args[0]
-    assert payload["quantity_unit"] == "lots" and payload["size"] == "0.01"
-    assert payload["position_id"] == "position-10" and payload["offset"] == "close"
-    assert payload["reduce_only"] is True and payload["position_side"] == "long"
-    assert result.order_id == "order-22"
-    normalized = normalize_result("make_order", result, "MT5___FX", request=req)
-    assert normalized["filled"] == 0.01 and normalized["position_id"] == "position-10"
+        assert exc_info.value.target == "gateway_wire_config"
+        assert "ServiceExecutionSession" in exc_info.value.detail
+        assert "service.order_entry" in exc_info.value.detail
+    from_plugins.assert_not_called()
+    create_feed.assert_not_called()
+    construct_client.assert_not_called()
+    dispatch.assert_not_called()
 
 
-def test_ctp_cancel_references_do_not_authorize_forwarding_dispatch():
-    from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
+def test_retired_zmq_ctp_cancel_route_rejects_before_runtime_setup(monkeypatch):
+    plugin_load = Mock(side_effect=AssertionError("retired plugin loading"))
+    create_feed = Mock(side_effect=AssertionError("retired CTP feed setup"))
+    monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", plugin_load)
+    monkeypatch.setattr("bt_api_py.bt_api.ExchangeRegistry.create_feed", create_feed)
 
-    backend = ZmqBtApiBackend(
-        ForwardingConfig(
-            command_endpoint="inproc://c",
-            market_endpoint="inproc://m",
-            private_endpoint="inproc://p",
-            account_id="a",
-            strategy_id="s",
-        )
-    )
-    send = Mock(side_effect=AssertionError("forwarding send"))
-    client = Mock()
-    client._send_command_sync = send
-    backend._client = client
-    native_intent = Mock()
-    backend._native_intent = native_intent
-
-    with pytest.raises(CapabilityNotSupportedError) as exc_info:
-        backend.cancel_order(
-            "CTP___FUTURE",
-            CancelOrderRequest(
-                symbol="rb2701",
+    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
+        BtApi(
+            {"CTP___FUTURE": {}},
+            debug=False,
+            transport_mode="zmq",
+            forwarding_config=ForwardingConfig(
+                command_endpoint="inproc://c",
+                market_endpoint="inproc://m",
+                private_endpoint="inproc://p",
                 account_id="a",
-                order_id="sys-9",
-                client_order_id="000000000137",
-                order_ref="000000000137",
-                front_id=3,
-                session_id=4,
-                exchange_id="SHFE",
+                strategy_id="s",
             ),
         )
 
-    assert exc_info.value.definite_reject is True
-    assert "I9 cancel-action authority" in exc_info.value.detail
-    native_intent.assert_not_called()
-    send.assert_not_called()
+    assert excinfo.value.target == "transport_mode=ZMQ"
+    assert "ServiceExecutionSession" in excinfo.value.detail
+    plugin_load.assert_not_called()
+    create_feed.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -1007,23 +967,8 @@ def test_ctp_cancel_references_do_not_authorize_forwarding_dispatch():
         ),
     ],
 )
-def test_native_forwarding_position_snapshot_preserves_volume_and_identity(exchange, raw, unit):
-    from datetime import UTC, datetime
-
-    from bt_api_py._contracts.models import Freshness
-    from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
-
-    backend = ZmqBtApiBackend(
-        ForwardingConfig(
-            command_endpoint="inproc://c",
-            market_endpoint="inproc://m",
-            private_endpoint="inproc://p",
-            account_id="a",
-            strategy_id="s",
-        )
-    )
-    snapshots = backend._positions_from_payloads([raw], Freshness("live", datetime.now(UTC)))
-    result = normalize_result("get_position", snapshots, exchange)[0]
+def test_normalized_native_position_snapshot_preserves_volume_and_identity(exchange, raw, unit):
+    result = normalize_result("get_position", [raw], exchange)[0]
     assert result["symbol"] == raw["instrument"] and result["size"] == raw["volume"]
     assert result["quantity_unit"] == unit and result["position_side"] == raw["direction"]
     if exchange.startswith("MT5"):
@@ -1043,26 +988,27 @@ def test_normalized_position_rejects_boolean_quantity(raw_quantity):
 
 
 @pytest.mark.parametrize("operation", ["query_order", "get_deals"])
-def test_native_gateway_unimplemented_reconciliation_is_explicit(operation):
-    from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
+def test_direct_mt5_reconciliation_operations_remain_available(operation, api):
+    feed = SimpleNamespace(
+        query_order=Mock(return_value={"orderId": "9", "status": "FILLED"}),
+        get_deals=Mock(return_value=[{"trade_id": "deal-1"}]),
+    )
+    api.exchange_feeds["MT5___FX"] = feed
 
-    backend = ZmqBtApiBackend(
-        ForwardingConfig(
-            command_endpoint="inproc://c",
-            market_endpoint="inproc://m",
-            private_endpoint="inproc://p",
-            account_id="a",
-            strategy_id="s",
+    if operation == "query_order":
+        result = api.query_order(
+            "MT5___FX", QueryOrderRequest(symbol="EURUSD", account_id="a", order_id="9")
         )
-    )
-    assert backend.get_capabilities("MT5___FX")[operation] is False
-    args = (
-        (QueryOrderRequest(symbol="EURUSD", account_id="a", order_id="9"),)
-        if operation == "query_order"
-        else ()
-    )
-    with pytest.raises(CapabilityNotSupportedError):
-        getattr(backend, operation)("MT5___FX", *args)
+        assert result["orderId"] == "9"
+        feed.query_order.assert_called_once()
+        feed.get_deals.assert_not_called()
+    else:
+        result = api.get_deals("MT5___FX", "EURUSD")
+        assert result == [{"trade_id": "deal-1"}]
+        feed.get_deals.assert_called_once()
+        feed.query_order.assert_not_called()
+
+    assert api.transport_mode.value == "direct"
 
 
 def test_requestdata_default_normalizer_unwraps_exchangeinfo_symbols(api):

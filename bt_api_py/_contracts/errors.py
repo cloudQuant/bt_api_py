@@ -135,10 +135,10 @@ class LegacyOrderApiError(BtApiContractError):
 class LegacyForwardingRetiredError(BtApiContractError):
     """Raised when a retired legacy forwarding/gateway entry point is used.
 
-    The legacy ZMQ forwarding runtime and the package-level forwarding /
-    ``GatewayClient`` exports are retired from the SDK public surface.  The
-    migration target is ``BtApi`` on the direct transport; the deprecated
-    surfaces fail closed instead of silently resolving to the legacy runtime.
+    The legacy ZMQ forwarding runtime and package-level forwarding exports
+    fail closed. Ordinary backtest calls stay on direct ``BtApi``; managed
+    writes use Backtrader ``ServiceExecutionSession`` with ServiceHost's
+    ``service.order_entry`` port.
     """
 
     def __init__(self, target: str, *, detail: str = "") -> None:

@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
@@ -9,13 +10,11 @@ from bt_api_py import BtApi
 from bt_api_py._contracts.errors import CapabilityNotSupportedError
 from bt_api_py._contracts.models import (
     CancelOrderRequest,
-    ForwardingConfig,
     OrderRequest,
     OrderType,
     QueryOrderRequest,
     Side,
 )
-from bt_api_py.forwarding.btapi_backend import ZmqBtApiBackend
 
 
 def order(**changes: Any) -> OrderRequest:
@@ -100,9 +99,12 @@ def test_exchange_order_id_takes_precedence(api):
 def test_unsupported_quantity_units_fail_before_dispatch(api):
     with pytest.raises(CapabilityNotSupportedError):
         api.make_order("BINANCE___SWAP", order(quantity_unit="contracts"))
-    backend = ZmqBtApiBackend(ForwardingConfig("unused", "unused", "unused", "demo", "arb"))
+
+    feed = Mock()
+    api.exchange_feeds["OKX___SWAP"] = feed
     with pytest.raises(CapabilityNotSupportedError):
-        backend.make_order("OKX___SWAP", order(quantity_unit="contracts"))
+        api.make_order("OKX___SWAP", order(quantity_unit="lots"))
+    feed.make_order.assert_not_called()
 
 
 @pytest.mark.parametrize(

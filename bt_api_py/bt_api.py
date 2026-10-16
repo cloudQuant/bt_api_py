@@ -61,7 +61,6 @@ from ._contracts.models import (
     TradingReadiness,
     TransportMode,
 )
-from ._gateway_wire import GatewayWireClient, GatewayWireConfig
 from ._ctp_execution_authorization import (
     _CONTEXT_FIELDS,
     APPROVAL_PURPOSE,
@@ -90,6 +89,7 @@ from ._ctp_execution_authorization import (
     revalidate_ctp_execution_approval,
     verify_ctp_execution_approval,
 )
+
 from .balance_manager import BalanceManagerMixin
 from .data_downloader import DataDownloaderMixin
 
@@ -854,33 +854,15 @@ def _execution_credential_fingerprints(
     return fingerprints
 
 
-class _RuntimeRegistrar:
-    """Minimal runtime registrar for adapter registration."""
-
-    def __init__(self) -> None:
-        self._adapters: dict[str, type] = {}
-
-    def register_adapter(self, exchange_type: str, adapter_cls: type) -> None:
-        normalized = str(exchange_type).strip().upper()
-        self._adapters[normalized] = adapter_cls
-
-    def get_adapter(self, exchange_type: str) -> type | None:
-        return self._adapters.get(str(exchange_type).strip().upper())
-
-    def list_adapters(self) -> list[str]:
-        return list(self._adapters.keys())
-
-
-_runtime_registrar = _RuntimeRegistrar()
 _plugins_loaded = False
 
 
-def _initialize_plugin_and_legacy_registrations() -> None:
-    """Load all plugins via entry points and commit registrations to the global registry."""
+def _initialize_plugins() -> None:
+    """Load provider plugins into the direct ExchangeRegistry only."""
     from bt_api_base.plugins.loader import PluginLoader
 
     registry = ExchangeRegistry._get_default()
-    loader = PluginLoader(registry, _runtime_registrar)
+    loader = PluginLoader(registry)
     loader.load_all()
 
 
@@ -890,7 +872,7 @@ def _ensure_plugins_loaded() -> None:
     if _plugins_loaded:
         return
     try:
-        _initialize_plugin_and_legacy_registrations()
+        _initialize_plugins()
     except Exception as exc:
         get_logger("api").warning(f"Plugin loading degraded: {type(exc).__name__}: {exc}")
     finally:
@@ -922,7 +904,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         *,
         transport_mode: TransportMode | str = TransportMode.DIRECT,
         forwarding_config: ForwardingConfig | None = None,
-        gateway_wire_config: GatewayWireConfig | None = None,
+        gateway_wire_config: object | None = None,
         execution_config: dict[str, Any] | None = None,
     ) -> None:
         """初始化 BtApi 实例。
@@ -936,16 +918,31 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
                 LegacyForwardingRetiredError。
             forwarding_config: ZMQ 模式的历史配置输入；该模式退役后仅保留
                 作显式拒绝输入（ForwardingConfig 仍可构造）。
+            gateway_wire_config: 历史 gateway writer 配置；非 None 时在任何
+                plugin/feed/backend 初始化前抛出 LegacyForwardingRetiredError。
             execution_config: Optional durable execution session. None preserves
                 legacy behavior; configured writes require typed normalized calls.
         """
         requested_transport_mode = TransportMode(transport_mode)
-        if requested_transport_mode is TransportMode.ZMQ and gateway_wire_config is None:
+        if requested_transport_mode is TransportMode.ZMQ:
             # Keep the established ZMQ retirement diagnostic while rejecting
             # before logger, event-bus, plugin, feed, socket, or thread setup.
             raise LegacyForwardingRetiredError(
                 "transport_mode=ZMQ",
-                detail="the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT",
+                detail=(
+                    "the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT "
+                    "for ordinary direct/backtest calls or Backtrader "
+                    "ServiceExecutionSession for managed service writes"
+                ),
+            )
+        if gateway_wire_config is not None:
+            raise LegacyForwardingRetiredError(
+                "gateway_wire_config",
+                detail=(
+                    "the legacy gateway wire writer was retired; managed service writes "
+                    "must use Backtrader ServiceExecutionSession with ServiceHost and "
+                    "service.order_entry"
+                ),
             )
         if forwarding_config is not None:
             raise LegacyForwardingRetiredError(
@@ -1003,11 +1000,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self.event_bus.on("ws.connected", self._on_websocket_connected)
         self.transport_mode = requested_transport_mode
         settings = deepcopy(exchange_kwargs or {})
-        if isinstance(gateway_wire_config, dict):
-            gateway_wire_config = GatewayWireConfig(**gateway_wire_config)
-        self._backend = self._build_backend(
-            self.transport_mode, forwarding_config, gateway_wire_config
-        )
+        self._backend = self._build_backend(self.transport_mode, forwarding_config)
         try:
             self.configure_execution(execution_config, _exchange_names=settings)
             _ensure_plugins_loaded()
@@ -3669,15 +3662,18 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self,
         transport_mode: TransportMode,
         forwarding_config: ForwardingConfig | None,
-        gateway_wire_config: GatewayWireConfig | None = None,
     ) -> Any:
-        if transport_mode is TransportMode.ZMQ and gateway_wire_config is None:
+        if transport_mode is not TransportMode.DIRECT:
             # Retired entry point: fail closed before any socket/thread is
             # created.  Keep the typed error so callers can distinguish the
             # retirement from ordinary validation errors.
             raise LegacyForwardingRetiredError(
                 "transport_mode=ZMQ",
-                detail="the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT",
+                detail=(
+                    "the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT "
+                    "for ordinary direct/backtest calls or Backtrader "
+                    "ServiceExecutionSession for managed service writes"
+                ),
             )
         if forwarding_config is not None:
             raise LegacyForwardingRetiredError(
@@ -3691,12 +3687,10 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
         from ._direct_backend import DirectBackend
 
-        client = GatewayWireClient(gateway_wire_config) if gateway_wire_config is not None else None
         return DirectBackend(
             self._get_feed,
             self.exchange_feeds,
             execution_capability=lambda: getattr(self, "_ctp_execution_capability", None),
-            client=client,
         )
 
     def _configure_ctp_execution_gate(

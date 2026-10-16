@@ -61,11 +61,12 @@ def test_is_loopback_or_ipc_endpoint_classification() -> None:
     assert not is_loopback_or_ipc("tcp://192.168.1.10:7001")
 
 
-def test_zmq_runtime_rejects_write_without_explicit_policy() -> None:
+def test_retired_zmq_runtime_reports_migration_before_gateway_configuration() -> None:
     from bt_api_py.brokers.mock import MockBrokerAdapter
+    from bt_api_py._contracts.errors import LegacyForwardingRetiredError
     from bt_api_py.forwarding.service import ZmqForwardingRuntime
 
-    with pytest.raises(GatewaySafetyError):
+    with pytest.raises(LegacyForwardingRetiredError, match="ServiceExecutionSession"):
         ZmqForwardingRuntime(
             MockBrokerAdapter(),
             market_endpoint="tcp://127.0.0.1:7001",

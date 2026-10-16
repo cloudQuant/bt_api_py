@@ -226,7 +226,10 @@ def __getattr__(name: str):
     if name in _RETIRED_FORWARDING_EXPORTS or name == "GatewayClient":
         raise LegacyForwardingRetiredError(
             name,
-            detail="use BtApi with the direct transport",
+            detail=(
+                "ordinary backtest calls use BtApi with the direct transport; managed writes "
+                "use Backtrader ServiceExecutionSession with ServiceHost and service.order_entry"
+            ),
         )
     if name == "BtApi":
         from bt_api_py.bt_api import BtApi as _BtApi

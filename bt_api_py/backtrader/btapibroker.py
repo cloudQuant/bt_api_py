@@ -1,7 +1,8 @@
 """@deprecated: 占位 broker 包装，非 backtrader 集成。
 
 本模块仅提供 ``load_adapter`` 的薄包装，不是 backtrader 官方 BrokerBase/Store
-集成。推荐通过 ``bt_api_py.forwarding.ForwardingClient`` 接入 backtrader。
+集成。普通直接/回测调用使用 ``BtApi`` 的 direct transport；托管写入由
+Backtrader ``ServiceExecutionSession`` 通过 ServiceHost ``service.order_entry`` 提供。
 真正的 backtrader store 集成另立 backlog（见 docs/decisions/2026-08-16-placeholder-modules.md）。
 """
 
@@ -22,7 +23,9 @@ class BtApiBroker:
     def create_adapter(self) -> BrokerAdapter:
         """create_adapter method"""
         warnings.warn(
-            "BtApiBroker is deprecated; use bt_api_py.forwarding.ForwardingClient instead",
+            "BtApiBroker is deprecated; use BtApi direct transport for ordinary calls or "
+            "Backtrader ServiceExecutionSession with ServiceHost service.order_entry "
+            "for managed writes",
             DeprecationWarning,
             stacklevel=2,
         )

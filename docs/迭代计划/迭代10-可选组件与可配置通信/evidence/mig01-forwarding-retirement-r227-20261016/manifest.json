@@ -1,0 +1,609 @@
+{
+  "schema": "iteration10-mig01-forwarding-retirement-r227-parent-evidence-v1",
+  "round": "R227",
+  "status": "READY_FOR_ROOT_ORDERED_SUBPACKAGE_AND_PARENT_DELIVERY",
+  "captured_utc": "2026-10-16T12:39:20.659571+00:00",
+  "progressRoot": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/开发与验收进度.md",
+    "sha256_after_r227_append": "cf176caa5668789ff15eeee275a065cda2362650d191e852b996ec4c72fb7f33",
+    "formal_status_edited": false,
+    "formal_pass_count": "39/68 (unchanged)"
+  },
+  "formal_mig01_pass": false,
+  "parent_repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "root_r5_qa_head": "77b86e2139708455722a3f11955cce18b14647fe",
+    "parent_commit_sha": null,
+    "parent_commit_status": "PENDING_ROOT_AFTER_CHILD_SUBPACKAGE_COMMITS"
+  },
+  "overlay_inventory": {
+    "path_in_archive": "source/67-overlay-inventory-r227.json",
+    "overlay_count": 67,
+    "sdk_parent_file_count": 35,
+    "base_file_count": 9,
+    "provider_repository_count": 14,
+    "provider_file_count": 23,
+    "all_current_checkout_pins_match": true,
+    "commit_status": "Base and provider subpackage commits pending Root's ordered delivery; SDK parent commit pending afterward."
+  },
+  "root_executed_qa": {
+    "R3": {
+      "round": "R3",
+      "output_path": "D:\\temp\\iteration10-mig01-forwarding-retirement-root-20261016-r3-final2",
+      "pytest_exit": 1,
+      "junit": {
+        "tests": 98,
+        "failures": 23,
+        "errors": 0,
+        "skipped": 1,
+        "passed": 74
+      },
+      "pytest_summary_warnings": 21,
+      "pytest_summary_elapsed_seconds": 15.68,
+      "source_count": 4603,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "00cd647b57defb533d43eeb8cca16be195d6489e",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+        "D:\\bt_api_py\\bt_api\\bt_api_bitget": "2a555344b8826a8707e653f4181e79c12f33bb41",
+        "D:\\bt_api_py\\bt_api\\bt_api_bybit": "2bfa8402fb6b6f506f1f356716dce315f68fde12",
+        "D:\\bt_api_py\\bt_api\\bt_api_coinbase": "a41008fdbc0dc636c9acf532ad8ccefdf67c83c2",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+        "D:\\bt_api_py\\bt_api\\bt_api_dydx": "0323b9c1c3de0f197a1ac06016fa531e5d727efe",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateio": "1c629bfedd3c8e40c1cbdb57a0872bf224316a79",
+        "D:\\bt_api_py\\bt_api\\bt_api_htx": "f63a1d990f2d2afbd12b131c9af5e51a6951247f",
+        "D:\\bt_api_py\\bt_api\\bt_api_hyperliquid": "a745909fe1cb861fe4127c2a55db1fc594a35134",
+        "D:\\bt_api_py\\bt_api\\bt_api_ib_web": "6ae25e92486301fafd2b0b458a35e890ec1042c3",
+        "D:\\bt_api_py\\bt_api\\bt_api_kraken": "48a9ecc5b26bb160fd3d4b695b059727baa401a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_mexc": "f0a310ada3773cbade4c28b9694b704e42d96fde",
+        "D:\\bt_api_py\\bt_api\\bt_api_mt5": "6bf2ec03d66c02f7bf0661888f0d6b3e84804415",
+        "D:\\bt_api_py\\bt_api\\bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "00cd647b57defb533d43eeb8cca16be195d6489e",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+        "D:\\bt_api_py\\bt_api\\bt_api_bitget": "2a555344b8826a8707e653f4181e79c12f33bb41",
+        "D:\\bt_api_py\\bt_api\\bt_api_bybit": "2bfa8402fb6b6f506f1f356716dce315f68fde12",
+        "D:\\bt_api_py\\bt_api\\bt_api_coinbase": "a41008fdbc0dc636c9acf532ad8ccefdf67c83c2",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+        "D:\\bt_api_py\\bt_api\\bt_api_dydx": "0323b9c1c3de0f197a1ac06016fa531e5d727efe",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateio": "1c629bfedd3c8e40c1cbdb57a0872bf224316a79",
+        "D:\\bt_api_py\\bt_api\\bt_api_htx": "f63a1d990f2d2afbd12b131c9af5e51a6951247f",
+        "D:\\bt_api_py\\bt_api\\bt_api_hyperliquid": "a745909fe1cb861fe4127c2a55db1fc594a35134",
+        "D:\\bt_api_py\\bt_api\\bt_api_ib_web": "6ae25e92486301fafd2b0b458a35e890ec1042c3",
+        "D:\\bt_api_py\\bt_api\\bt_api_kraken": "48a9ecc5b26bb160fd3d4b695b059727baa401a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_mexc": "f0a310ada3773cbade4c28b9694b704e42d96fde",
+        "D:\\bt_api_py\\bt_api\\bt_api_mt5": "6bf2ec03d66c02f7bf0661888f0d6b3e84804415",
+        "D:\\bt_api_py\\bt_api\\bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f"
+      },
+      "source_before": {
+        "size_bytes": 907469,
+        "sha256": "25f92a686f9c3f05c82713299e9de35075da96106f09ad69dbb02533fd80de0d"
+      },
+      "source_after": {
+        "size_bytes": 907469,
+        "sha256": "25f92a686f9c3f05c82713299e9de35075da96106f09ad69dbb02533fd80de0d"
+      },
+      "stdout_sha256": "4b2def50b4fd69e4de9f15d1b822ccd71b5c589b2d77ea21c977cd9cb42c8295",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_files": {
+        "command.json": {
+          "size_bytes": 8484,
+          "sha256": "29a25a958513c1c6693ad191e9beb401b596e48bb7ac6816a04cf9bbed0142f2"
+        },
+        "exit.txt": {
+          "size_bytes": 3,
+          "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+        },
+        "junit.xml": {
+          "size_bytes": 54077,
+          "sha256": "3e64b9c1ded90b4609a9c28b71b5b0a05cdd9d6bcbd6a80bab1b20826d0b7430"
+        },
+        "result.json": {
+          "size_bytes": 3265,
+          "sha256": "fe2dfa86a579e90279533e68d1001a73ae1ba53f410b98b03167ee7d3dca6fd3"
+        },
+        "runner.py": {
+          "size_bytes": 3204,
+          "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+        },
+        "running.json": {
+          "size_bytes": 76,
+          "sha256": "e11991dd65d92bd7e894a3189500c5b2a36d0e6006fd6ece3bab62633901d0da"
+        },
+        "source-after.json": {
+          "size_bytes": 907469,
+          "sha256": "25f92a686f9c3f05c82713299e9de35075da96106f09ad69dbb02533fd80de0d"
+        },
+        "source-before.json": {
+          "size_bytes": 907469,
+          "sha256": "25f92a686f9c3f05c82713299e9de35075da96106f09ad69dbb02533fd80de0d"
+        },
+        "spec.json": {
+          "size_bytes": 930644,
+          "sha256": "085a69e95c81d741091105add692968c97d9c26cc8e700943bc81f5b9d2bc808"
+        },
+        "stderr.log": {
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.log": {
+          "size_bytes": 47232,
+          "sha256": "4b2def50b4fd69e4de9f15d1b822ccd71b5c589b2d77ea21c977cd9cb42c8295"
+        }
+      }
+    },
+    "R4": {
+      "round": "R4",
+      "output_path": "D:\\temp\\iteration10-mig01-forwarding-retirement-root-20261016-r4",
+      "pytest_exit": 1,
+      "junit": {
+        "tests": 24,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 23
+      },
+      "pytest_summary_warnings": 2,
+      "pytest_summary_elapsed_seconds": 5.39,
+      "source_count": 4606,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "ac12f7c3ba3d642ee9e105c442c6987c78bae5d9",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+        "D:\\bt_api_py\\bt_api\\bt_api_bitget": "2a555344b8826a8707e653f4181e79c12f33bb41",
+        "D:\\bt_api_py\\bt_api\\bt_api_bybit": "2bfa8402fb6b6f506f1f356716dce315f68fde12",
+        "D:\\bt_api_py\\bt_api\\bt_api_coinbase": "a41008fdbc0dc636c9acf532ad8ccefdf67c83c2",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+        "D:\\bt_api_py\\bt_api\\bt_api_dydx": "0323b9c1c3de0f197a1ac06016fa531e5d727efe",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateio": "1c629bfedd3c8e40c1cbdb57a0872bf224316a79",
+        "D:\\bt_api_py\\bt_api\\bt_api_htx": "f63a1d990f2d2afbd12b131c9af5e51a6951247f",
+        "D:\\bt_api_py\\bt_api\\bt_api_hyperliquid": "a745909fe1cb861fe4127c2a55db1fc594a35134",
+        "D:\\bt_api_py\\bt_api\\bt_api_ib_web": "6ae25e92486301fafd2b0b458a35e890ec1042c3",
+        "D:\\bt_api_py\\bt_api\\bt_api_kraken": "48a9ecc5b26bb160fd3d4b695b059727baa401a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_mexc": "f0a310ada3773cbade4c28b9694b704e42d96fde",
+        "D:\\bt_api_py\\bt_api\\bt_api_mt5": "6bf2ec03d66c02f7bf0661888f0d6b3e84804415",
+        "D:\\bt_api_py\\bt_api\\bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "ac12f7c3ba3d642ee9e105c442c6987c78bae5d9",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+        "D:\\bt_api_py\\bt_api\\bt_api_bitget": "2a555344b8826a8707e653f4181e79c12f33bb41",
+        "D:\\bt_api_py\\bt_api\\bt_api_bybit": "2bfa8402fb6b6f506f1f356716dce315f68fde12",
+        "D:\\bt_api_py\\bt_api\\bt_api_coinbase": "a41008fdbc0dc636c9acf532ad8ccefdf67c83c2",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+        "D:\\bt_api_py\\bt_api\\bt_api_dydx": "0323b9c1c3de0f197a1ac06016fa531e5d727efe",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateio": "1c629bfedd3c8e40c1cbdb57a0872bf224316a79",
+        "D:\\bt_api_py\\bt_api\\bt_api_htx": "f63a1d990f2d2afbd12b131c9af5e51a6951247f",
+        "D:\\bt_api_py\\bt_api\\bt_api_hyperliquid": "a745909fe1cb861fe4127c2a55db1fc594a35134",
+        "D:\\bt_api_py\\bt_api\\bt_api_ib_web": "6ae25e92486301fafd2b0b458a35e890ec1042c3",
+        "D:\\bt_api_py\\bt_api\\bt_api_kraken": "48a9ecc5b26bb160fd3d4b695b059727baa401a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_mexc": "f0a310ada3773cbade4c28b9694b704e42d96fde",
+        "D:\\bt_api_py\\bt_api\\bt_api_mt5": "6bf2ec03d66c02f7bf0661888f0d6b3e84804415",
+        "D:\\bt_api_py\\bt_api\\bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f"
+      },
+      "source_before": {
+        "size_bytes": 875936,
+        "sha256": "ada82f27e02ce6dfc41fcd6093f78636c65c5369a05a3d5a9366ebbc06a1a0ee"
+      },
+      "source_after": {
+        "size_bytes": 875936,
+        "sha256": "ada82f27e02ce6dfc41fcd6093f78636c65c5369a05a3d5a9366ebbc06a1a0ee"
+      },
+      "stdout_sha256": "55c880dfe6b4ab5fb13c8356d0803a5f82b089a758bfcc42ef32e96e62e477a9",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_files": {
+        "command.json": {
+          "size_bytes": 4567,
+          "sha256": "d6ba28282d67ff7079356e683e762a59efbef479be9b9faaf6deb7f2bb1ccf93"
+        },
+        "exit.txt": {
+          "size_bytes": 3,
+          "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+        },
+        "junit.xml": {
+          "size_bytes": 6268,
+          "sha256": "5be3ae53d9d9ef0852baf2e4e07b3291c86eb0842890032daa32abd00aed40e9"
+        },
+        "result.json": {
+          "size_bytes": 3265,
+          "sha256": "42f2d5bd38340b3065be2b552f631c3c6827cc334629b039bc99d2a23ca9bb9a"
+        },
+        "runner.py": {
+          "size_bytes": 3204,
+          "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+        },
+        "running.json": {
+          "size_bytes": 76,
+          "sha256": "ed57d2f0fb8a83620b7e2d28e2b2734a2259dc7ace83fc1613a6419c74853acd"
+        },
+        "source-after.json": {
+          "size_bytes": 875936,
+          "sha256": "ada82f27e02ce6dfc41fcd6093f78636c65c5369a05a3d5a9366ebbc06a1a0ee"
+        },
+        "source-before.json": {
+          "size_bytes": 875936,
+          "sha256": "ada82f27e02ce6dfc41fcd6093f78636c65c5369a05a3d5a9366ebbc06a1a0ee"
+        },
+        "spec.json": {
+          "size_bytes": 896241,
+          "sha256": "30664d8bc70902ed548521ffd117976a2658ad8a252d1aae96cfbd78439c61e4"
+        },
+        "stderr.log": {
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.log": {
+          "size_bytes": 3277,
+          "sha256": "55c880dfe6b4ab5fb13c8356d0803a5f82b089a758bfcc42ef32e96e62e477a9"
+        }
+      }
+    },
+    "R5": {
+      "round": "R5",
+      "output_path": "D:\\temp\\iteration10-mig01-forwarding-retirement-root-20261016-r5-single-node",
+      "pytest_exit": 0,
+      "junit": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1
+      },
+      "pytest_summary_warnings": 0,
+      "pytest_summary_elapsed_seconds": 3.92,
+      "source_count": 4607,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "77b86e2139708455722a3f11955cce18b14647fe",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+        "D:\\bt_api_py\\bt_api\\bt_api_bitget": "2a555344b8826a8707e653f4181e79c12f33bb41",
+        "D:\\bt_api_py\\bt_api\\bt_api_bybit": "2bfa8402fb6b6f506f1f356716dce315f68fde12",
+        "D:\\bt_api_py\\bt_api\\bt_api_coinbase": "a41008fdbc0dc636c9acf532ad8ccefdf67c83c2",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+        "D:\\bt_api_py\\bt_api\\bt_api_dydx": "0323b9c1c3de0f197a1ac06016fa531e5d727efe",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateio": "1c629bfedd3c8e40c1cbdb57a0872bf224316a79",
+        "D:\\bt_api_py\\bt_api\\bt_api_htx": "f63a1d990f2d2afbd12b131c9af5e51a6951247f",
+        "D:\\bt_api_py\\bt_api\\bt_api_hyperliquid": "a745909fe1cb861fe4127c2a55db1fc594a35134",
+        "D:\\bt_api_py\\bt_api\\bt_api_ib_web": "6ae25e92486301fafd2b0b458a35e890ec1042c3",
+        "D:\\bt_api_py\\bt_api\\bt_api_kraken": "48a9ecc5b26bb160fd3d4b695b059727baa401a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_mexc": "f0a310ada3773cbade4c28b9694b704e42d96fde",
+        "D:\\bt_api_py\\bt_api\\bt_api_mt5": "6bf2ec03d66c02f7bf0661888f0d6b3e84804415",
+        "D:\\bt_api_py\\bt_api\\bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "77b86e2139708455722a3f11955cce18b14647fe",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b",
+        "D:\\bt_api_py\\bt_api\\bt_api_bitget": "2a555344b8826a8707e653f4181e79c12f33bb41",
+        "D:\\bt_api_py\\bt_api\\bt_api_bybit": "2bfa8402fb6b6f506f1f356716dce315f68fde12",
+        "D:\\bt_api_py\\bt_api\\bt_api_coinbase": "a41008fdbc0dc636c9acf532ad8ccefdf67c83c2",
+        "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+        "D:\\bt_api_py\\bt_api\\bt_api_dydx": "0323b9c1c3de0f197a1ac06016fa531e5d727efe",
+        "D:\\bt_api_py\\bt_api\\bt_api_gateio": "1c629bfedd3c8e40c1cbdb57a0872bf224316a79",
+        "D:\\bt_api_py\\bt_api\\bt_api_htx": "f63a1d990f2d2afbd12b131c9af5e51a6951247f",
+        "D:\\bt_api_py\\bt_api\\bt_api_hyperliquid": "a745909fe1cb861fe4127c2a55db1fc594a35134",
+        "D:\\bt_api_py\\bt_api\\bt_api_ib_web": "6ae25e92486301fafd2b0b458a35e890ec1042c3",
+        "D:\\bt_api_py\\bt_api\\bt_api_kraken": "48a9ecc5b26bb160fd3d4b695b059727baa401a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_mexc": "f0a310ada3773cbade4c28b9694b704e42d96fde",
+        "D:\\bt_api_py\\bt_api\\bt_api_mt5": "6bf2ec03d66c02f7bf0661888f0d6b3e84804415",
+        "D:\\bt_api_py\\bt_api\\bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f"
+      },
+      "source_before": {
+        "size_bytes": 945143,
+        "sha256": "14f8046f8d2db12ddf4782486ce77f1d3110aa590eee26a16d0d2729052444bc"
+      },
+      "source_after": {
+        "size_bytes": 945143,
+        "sha256": "14f8046f8d2db12ddf4782486ce77f1d3110aa590eee26a16d0d2729052444bc"
+      },
+      "stdout_sha256": "607378d6c0c5a97b0645dad69115624cb2ba4c30635c2cb0ca2b7fd36e521c39",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_files": {
+        "command.json": {
+          "size_bytes": 2115,
+          "sha256": "a0dab6fe8f179b1d2e132e4c83383e16cb055a8a508eecec920a1a2f9cf7c7b5"
+        },
+        "exit.txt": {
+          "size_bytes": 3,
+          "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+        },
+        "junit.xml": {
+          "size_bytes": 369,
+          "sha256": "f08adbd13c6d499075c5656a30c08b9ae85613bf7b7202d42c567dba4a541e42"
+        },
+        "result.json": {
+          "size_bytes": 3265,
+          "sha256": "a1f9c80447120d4c3b5a93a6c747fc5a2597374f3dca2e0fb20bf7c05903ca2e"
+        },
+        "runner.py": {
+          "size_bytes": 3204,
+          "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+        },
+        "running.json": {
+          "size_bytes": 75,
+          "sha256": "871beda56e72e303b7b4f9d3dfc65553c2940190efb06f48d469ffca9e071b7b"
+        },
+        "source-after.json": {
+          "size_bytes": 945143,
+          "sha256": "14f8046f8d2db12ddf4782486ce77f1d3110aa590eee26a16d0d2729052444bc"
+        },
+        "source-before.json": {
+          "size_bytes": 945143,
+          "sha256": "14f8046f8d2db12ddf4782486ce77f1d3110aa590eee26a16d0d2729052444bc"
+        },
+        "spec.json": {
+          "size_bytes": 960424,
+          "sha256": "51aa555285c83c21fb9cfb5f63a23f75fbb5deff059d22b56048823e5069407e"
+        },
+        "stderr.log": {
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.log": {
+          "size_bytes": 212,
+          "sha256": "607378d6c0c5a97b0645dad69115624cb2ba4c30635c2cb0ca2b7fd36e521c39"
+        }
+      }
+    }
+  },
+  "cross_run_case_reconciliation": {
+    "unique_passed_cases": 98,
+    "preserved_skipped_cases": 1,
+    "single_98_case_all_green_run": false,
+    "r3_r4_prior_passed_function_ast_matches_final_export": 97,
+    "ast_missing_or_changed": 0,
+    "ast_result_path_in_archive": "source/accepted-node-ast-reuse-result.json"
+  },
+  "candidate_source_manifest": {
+    "original_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-mig01-forwarding-retirement-source-manifest-r5-single-node.json",
+    "size_bytes": 808728,
+    "sha256": "bf2580bac2ea253b0b3283e28508f866b1bd1960585a16702754f9b2bbba93ec",
+    "archive_path": "source/candidate-source-manifest-r5.json"
+  },
+  "root_r5_executed_spec": {
+    "original_path": "D:\\temp\\iteration10-mig01-forwarding-retirement-root-20261016-r5-single-node\\spec.json",
+    "size_bytes": 960424,
+    "sha256": "51aa555285c83c21fb9cfb5f63a23f75fbb5deff059d22b56048823e5069407e",
+    "reviewed_external_spec_copy_sha256": "51aa555285c83c21fb9cfb5f63a23f75fbb5deff059d22b56048823e5069407e"
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "size_bytes": 1876820,
+    "sha256": "873c360c2479a8dd6327be8211590cb809cab231a88ba6143cc24f89107ce92c",
+    "entry_count": 38,
+    "raw_root_output_count": 33,
+    "raw_files_per_run": 11,
+    "entries": [
+      {
+        "path": "raw/R3/command.json",
+        "size_bytes": 8484,
+        "sha256": "29a25a958513c1c6693ad191e9beb401b596e48bb7ac6816a04cf9bbed0142f2"
+      },
+      {
+        "path": "raw/R3/exit.txt",
+        "size_bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/R3/junit.xml",
+        "size_bytes": 54077,
+        "sha256": "3e64b9c1ded90b4609a9c28b71b5b0a05cdd9d6bcbd6a80bab1b20826d0b7430"
+      },
+      {
+        "path": "raw/R3/result.json",
+        "size_bytes": 3265,
+        "sha256": "fe2dfa86a579e90279533e68d1001a73ae1ba53f410b98b03167ee7d3dca6fd3"
+      },
+      {
+        "path": "raw/R3/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/R3/running.json",
+        "size_bytes": 76,
+        "sha256": "e11991dd65d92bd7e894a3189500c5b2a36d0e6006fd6ece3bab62633901d0da"
+      },
+      {
+        "path": "raw/R3/source-after.json",
+        "size_bytes": 907469,
+        "sha256": "25f92a686f9c3f05c82713299e9de35075da96106f09ad69dbb02533fd80de0d"
+      },
+      {
+        "path": "raw/R3/source-before.json",
+        "size_bytes": 907469,
+        "sha256": "25f92a686f9c3f05c82713299e9de35075da96106f09ad69dbb02533fd80de0d"
+      },
+      {
+        "path": "raw/R3/spec.json",
+        "size_bytes": 930644,
+        "sha256": "085a69e95c81d741091105add692968c97d9c26cc8e700943bc81f5b9d2bc808"
+      },
+      {
+        "path": "raw/R3/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/R3/stdout.log",
+        "size_bytes": 47232,
+        "sha256": "4b2def50b4fd69e4de9f15d1b822ccd71b5c589b2d77ea21c977cd9cb42c8295"
+      },
+      {
+        "path": "raw/R4/command.json",
+        "size_bytes": 4567,
+        "sha256": "d6ba28282d67ff7079356e683e762a59efbef479be9b9faaf6deb7f2bb1ccf93"
+      },
+      {
+        "path": "raw/R4/exit.txt",
+        "size_bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/R4/junit.xml",
+        "size_bytes": 6268,
+        "sha256": "5be3ae53d9d9ef0852baf2e4e07b3291c86eb0842890032daa32abd00aed40e9"
+      },
+      {
+        "path": "raw/R4/result.json",
+        "size_bytes": 3265,
+        "sha256": "42f2d5bd38340b3065be2b552f631c3c6827cc334629b039bc99d2a23ca9bb9a"
+      },
+      {
+        "path": "raw/R4/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/R4/running.json",
+        "size_bytes": 76,
+        "sha256": "ed57d2f0fb8a83620b7e2d28e2b2734a2259dc7ace83fc1613a6419c74853acd"
+      },
+      {
+        "path": "raw/R4/source-after.json",
+        "size_bytes": 875936,
+        "sha256": "ada82f27e02ce6dfc41fcd6093f78636c65c5369a05a3d5a9366ebbc06a1a0ee"
+      },
+      {
+        "path": "raw/R4/source-before.json",
+        "size_bytes": 875936,
+        "sha256": "ada82f27e02ce6dfc41fcd6093f78636c65c5369a05a3d5a9366ebbc06a1a0ee"
+      },
+      {
+        "path": "raw/R4/spec.json",
+        "size_bytes": 896241,
+        "sha256": "30664d8bc70902ed548521ffd117976a2658ad8a252d1aae96cfbd78439c61e4"
+      },
+      {
+        "path": "raw/R4/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/R4/stdout.log",
+        "size_bytes": 3277,
+        "sha256": "55c880dfe6b4ab5fb13c8356d0803a5f82b089a758bfcc42ef32e96e62e477a9"
+      },
+      {
+        "path": "raw/R5/command.json",
+        "size_bytes": 2115,
+        "sha256": "a0dab6fe8f179b1d2e132e4c83383e16cb055a8a508eecec920a1a2f9cf7c7b5"
+      },
+      {
+        "path": "raw/R5/exit.txt",
+        "size_bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "raw/R5/junit.xml",
+        "size_bytes": 369,
+        "sha256": "f08adbd13c6d499075c5656a30c08b9ae85613bf7b7202d42c567dba4a541e42"
+      },
+      {
+        "path": "raw/R5/result.json",
+        "size_bytes": 3265,
+        "sha256": "a1f9c80447120d4c3b5a93a6c747fc5a2597374f3dca2e0fb20bf7c05903ca2e"
+      },
+      {
+        "path": "raw/R5/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/R5/running.json",
+        "size_bytes": 75,
+        "sha256": "871beda56e72e303b7b4f9d3dfc65553c2940190efb06f48d469ffca9e071b7b"
+      },
+      {
+        "path": "raw/R5/source-after.json",
+        "size_bytes": 945143,
+        "sha256": "14f8046f8d2db12ddf4782486ce77f1d3110aa590eee26a16d0d2729052444bc"
+      },
+      {
+        "path": "raw/R5/source-before.json",
+        "size_bytes": 945143,
+        "sha256": "14f8046f8d2db12ddf4782486ce77f1d3110aa590eee26a16d0d2729052444bc"
+      },
+      {
+        "path": "raw/R5/spec.json",
+        "size_bytes": 960424,
+        "sha256": "51aa555285c83c21fb9cfb5f63a23f75fbb5deff059d22b56048823e5069407e"
+      },
+      {
+        "path": "raw/R5/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/R5/stdout.log",
+        "size_bytes": 212,
+        "sha256": "607378d6c0c5a97b0645dad69115624cb2ba4c30635c2cb0ca2b7fd36e521c39"
+      },
+      {
+        "path": "source/67-overlay-inventory-r227.json",
+        "size_bytes": 26159,
+        "sha256": "b5bdd2896186029118d06e55aab7b212ba489752f42236804c34533ca7f5f87c"
+      },
+      {
+        "path": "source/accepted-node-ast-reuse-check.py",
+        "size_bytes": 4480,
+        "sha256": "ad04c89f9675026c0c4edf3f2f8f1eb2d8bc091beca2f6af769c3dc00cb89025"
+      },
+      {
+        "path": "source/accepted-node-ast-reuse-result.json",
+        "size_bytes": 719,
+        "sha256": "7f77714f58c53b15a3ab6442464c1370f9a78a1779455af351319b96f6c57976"
+      },
+      {
+        "path": "source/candidate-source-manifest-r5.json",
+        "size_bytes": 808728,
+        "sha256": "bf2580bac2ea253b0b3283e28508f866b1bd1960585a16702754f9b2bbba93ec"
+      },
+      {
+        "path": "source/r5-delivery-inventory-author-snapshot.json",
+        "size_bytes": 26480,
+        "sha256": "f7818c4efd4ead71eed2c4f015c7789cfe6ed8f3de104820478a81bbc2bd83d6"
+      }
+    ]
+  },
+  "round_record": {
+    "path": "round-record.md",
+    "size_bytes": 2555,
+    "sha256": "5989a5335aadd8cbfc0ea0ed875d158aef39a8c9ae08c9edfebcb57ee178e0b7"
+  },
+  "evidence_boundary": "MIG01 source/fake retirement and plugin loader checks only. No Host, account, or real provider acceptance. MIG01 remains incomplete; second writer/runtime/package distribution closure is deferred.",
+  "root_delivery_verification": {
+    "archive_members": 38,
+    "original_qa_bytes_verified": true,
+    "child_commits": {
+      "bt_api/bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "bt_api/bt_api_binance": "43657617525267cc6103d2cfb7ce4c85663c7176",
+      "bt_api/bt_api_bitget": "9e47a64b746a79cd61476d632297f6d0f790bdca",
+      "bt_api/bt_api_bybit": "fc252ed4664facaf352910dc75e2635b22812274",
+      "bt_api/bt_api_coinbase": "d1a22aa2f4ae9f6262019d692739a2cf631a43c3",
+      "bt_api/bt_api_ctp": "d747213b67037c41ea55944980ff54e908808db6",
+      "bt_api/bt_api_dydx": "01e6dbe886f61859d6194c35dc04bc4870bafcf2",
+      "bt_api/bt_api_gateio": "e00aa01649638000cc92c8138d29b2889a2db16f",
+      "bt_api/bt_api_htx": "426f47234ee19e0630a9d5ae3a0cbb9f6e4fe4ea",
+      "bt_api/bt_api_hyperliquid": "895900fda2f30a83732380198ffe5ef939179f2f",
+      "bt_api/bt_api_ib_web": "bf898064425cc4467cefaf7a7d9a4a7e1d54631f",
+      "bt_api/bt_api_kraken": "e739ff32e1e75511babc3e7ba7f9a74c1b503763",
+      "bt_api/bt_api_mexc": "adc5479da497f5ddb9edcefdf84aa726246576e4",
+      "bt_api/bt_api_mt5": "d9eb21926b5256e93f1c50166b7e10ece5f7cdd4",
+      "bt_api/bt_api_okx": "6ba2cead8704b708cd902685602272a581b444d4"
+    },
+    "sdk_source_files_verified": 35,
+    "accepted_qa_not_repeated": true,
+    "parent_before_commit": "77b86e2139708455722a3f11955cce18b14647fe"
+  }
+}

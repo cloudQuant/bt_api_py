@@ -5,25 +5,22 @@ from typing import Any, cast
 import pytest
 
 import bt_api_py.forwarding.client as client_module
-import bt_api_py.forwarding.router as router_module
-from bt_api_py.brokers.errors import BrokerError, BrokerErrorCode
+from bt_api_py._contracts.errors import LegacyForwardingRetiredError
 from bt_api_py.brokers.mock import MockBrokerAdapter
 from bt_api_py.brokers.types import OrderRequest
 from bt_api_py.forwarding import (
-    BtApiForwardingAdapter,
     CommandAck,
-    ForwardingClient,
     ForwardingError,
-    ForwardingRuntime,
-    InMemoryForwardingBus,
-    MarketDataHub,
     MarketEvent,
     OrderCommand,
-    OrderRouter,
     PrivateEvent,
-    RiskRuleSet,
-    SQLiteStateStore,
 )
+from bt_api_py.forwarding.btapi_adapter import BtApiForwardingAdapter
+from bt_api_py.forwarding.client import ForwardingClient
+from bt_api_py.forwarding.hub import MarketDataHub
+from bt_api_py.forwarding.memory import InMemoryForwardingBus
+from bt_api_py.forwarding.service import ForwardingRuntime
+from bt_api_py.forwarding.state import SQLiteStateStore
 
 
 class FakeBtApi:
@@ -41,20 +38,6 @@ class FakeBtApi:
         return self.queue
 
 
-def _scoped_mock_router(
-    adapter: MockBrokerAdapter,
-    *,
-    exchange: str = "SIM",
-    market_type: str = "SPOT",
-    **kwargs,
-) -> OrderRouter:
-    adapter.exchange_name = f"{exchange}___{market_type}"
-    return OrderRouter(
-        adapter,
-        write_enabled=True,
-        write_scope=(exchange, market_type, adapter.account_id),
-        **kwargs,
-    )
 
 
 def test_market_data_hub_fans_out_to_multiple_consumers_and_replays() -> None:
@@ -318,259 +301,18 @@ def test_in_memory_bus_rejects_negative_sync_command_timeout() -> None:
         bus.send_command_sync(command, timeout=-0.01)
 
 
-@pytest.mark.asyncio
-async def test_order_router_enforces_idempotency_and_publishes_private_events() -> None:
-    bus = InMemoryForwardingBus()
-    router = _scoped_mock_router(MockBrokerAdapter(), bus=bus)
-    await router.connect()
-    strategy_events = bus.subscribe_private("strategy.s1.")
-    command = OrderCommand(
-        strategy_id="s1",
-        account_id="paper",
-        exchange="SIM",
-        market_type="SPOT",
-        symbol="RB2510",
-        side="buy",
-        size=1,
-        order_type="limit",
-        price=3500.0,
-        idempotency_key="s1-order-1",
-    )
-
-    first = await router.handle_command(command)
-    second = await router.handle_command(command)
-
-    assert first.accepted is True
-    assert second.order_id == first.order_id
-    mock_adapter = cast("MockBrokerAdapter", router.adapter)
-    assert len(mock_adapter.orders) == 1
-    updates = []
-    while True:
-        event = strategy_events.poll()
-        if event is None:
-            break
-        updates.append(event.payload["kind"])
-    assert "order" in updates
-    assert "trade" in updates
-    assert "account" in updates
-    assert "position" in updates
 
 
-@pytest.mark.asyncio
-async def test_order_router_logs_account_state_refresh_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class AccountStateFailingAdapter(MockBrokerAdapter):
-        def __init__(self) -> None:
-            super().__init__()
-            self.get_account_calls = 0
-
-        async def get_account(self, account_id: str):
-            self.get_account_calls += 1
-            if self.get_account_calls == 1:
-                return await super().get_account(account_id)
-            raise RuntimeError(f"account unavailable: {account_id}")
-
-    warnings: list[str] = []
-    monkeypatch.setattr(router_module.logger, "warning", lambda message: warnings.append(message))
-    router = _scoped_mock_router(AccountStateFailingAdapter(), bus=InMemoryForwardingBus())
-    await router.connect()
-
-    ack = await router.handle_command(
-        OrderCommand(
-            strategy_id="s1",
-            account_id="paper",
-            exchange="SIM",
-            market_type="SPOT",
-            symbol="RB2510",
-            side="buy",
-            size=1,
-            order_type="limit",
-            price=3500.0,
-            idempotency_key="state-refresh-fails",
-        )
-    )
-
-    assert ack.accepted is True
-    assert warnings == [
-        "Failed to publish account state after order command: "
-        "account_id=paper, strategy_id=s1, "
-        "error_type=RuntimeError, error=account unavailable: paper"
-    ]
 
 
-@pytest.mark.asyncio
-async def test_order_router_rejects_disallowed_symbol_before_adapter_call() -> None:
-    bus = InMemoryForwardingBus()
-    adapter = MockBrokerAdapter()
-    router = _scoped_mock_router(
-        adapter,
-        bus=bus,
-        risk_rules=RiskRuleSet(allowed_symbols={"IF2510"}, max_order_size=10),
-    )
-    await router.connect()
-
-    ack = await router.handle_command(
-        OrderCommand(
-            strategy_id="s1",
-            account_id="paper",
-            exchange="SIM",
-            market_type="SPOT",
-            symbol="RB2510",
-            side="buy",
-            size=1,
-            idempotency_key="blocked",
-        )
-    )
-
-    assert ack.accepted is False
-    assert "symbol is not allowed" in ack.reason
-    assert adapter.orders == {}
 
 
-@pytest.mark.asyncio
-async def test_order_router_rejects_invalid_side_instead_of_market_buy() -> None:
-    adapter = MockBrokerAdapter(account_id="a")
-    placed: list[OrderRequest] = []
-    original = adapter.place_order
-
-    async def spy(request: OrderRequest):
-        placed.append(request)
-        return await original(request)
-
-    adapter.place_order = spy  # type: ignore[method-assign]
-    router = _scoped_mock_router(adapter, exchange="E")
-    cmd = OrderCommand(
-        strategy_id="s",
-        account_id="a",
-        exchange="E",
-        market_type="SPOT",
-        symbol="BTCUSDT",
-        side="sdie",
-        size=1.0,
-        order_type="limit",
-        price=10.0,
-        client_order_id="c1",
-        idempotency_key="k-invalid-side",
-    )
-    ack = await router.handle_command(cmd)
-    assert ack.accepted is False
-    assert "invalid side" in str(ack.reason).lower()
-    assert placed == []  # never reaches the adapter
 
 
-@pytest.mark.asyncio
-async def test_order_router_rejects_invalid_order_type_instead_of_market() -> None:
-    adapter = MockBrokerAdapter(account_id="a")
-    placed: list[OrderRequest] = []
-    original = adapter.place_order
-
-    async def spy(request: OrderRequest):
-        placed.append(request)
-        return await original(request)
-
-    adapter.place_order = spy  # type: ignore[method-assign]
-    router = _scoped_mock_router(adapter, exchange="E")
-    cmd = OrderCommand(
-        strategy_id="s",
-        account_id="a",
-        exchange="E",
-        market_type="SPOT",
-        symbol="BTCUSDT",
-        side="buy",
-        size=1.0,
-        order_type="LIMT",
-        price=10.0,
-        client_order_id="c1",
-        idempotency_key="k-invalid-order-type",
-    )
-    ack = await router.handle_command(cmd)
-    assert ack.accepted is False
-    assert "invalid order_type" in str(ack.reason).lower()
-    assert placed == []  # never reaches the adapter
 
 
-@pytest.mark.asyncio
-async def test_order_router_health_reports_adapter_risk_and_state_store(tmp_path) -> None:
-    state_store = SQLiteStateStore(tmp_path / "forwarding.sqlite3")
-    bus = InMemoryForwardingBus()
-    router = _scoped_mock_router(
-        MockBrokerAdapter(),
-        bus=bus,
-        risk_rules=RiskRuleSet(
-            allowed_accounts={"paper"},
-            allowed_symbols={"RB2510"},
-            max_order_size=2,
-        ),
-        state_store=state_store,
-    )
-    await router.connect()
-
-    try:
-        command = OrderCommand(
-            strategy_id="s1",
-            account_id="paper",
-            exchange="SIM",
-            market_type="SPOT",
-            symbol="RB2510",
-            side="buy",
-            size=1,
-            order_type="limit",
-            price=3500.0,
-            idempotency_key="health-order",
-        )
-        ack = await router.handle_command(command)
-        health = await router.health()
-
-        assert ack.accepted is True
-        assert health["adapter"]["connected"] is True
-        assert health["adapter"]["adapter"] == "mock"
-        assert health["cached_ack_count"] == 1
-        assert health["state_store_enabled"] is True
-        assert health["bus_attached"] is True
-        assert health["risk"]["allowed_account_count"] == 1
-        assert health["risk"]["allowed_symbol_count"] == 1
-        assert health["risk"]["max_order_size"] == 2
-        assert health["risk"]["kill_switch"] is False
-        assert bus.stats()["command_handler_registered"] is True
-    finally:
-        await router.disconnect()
-        state_store.close()
 
 
-@pytest.mark.asyncio
-async def test_order_router_recovers_idempotent_ack_from_sqlite_state(tmp_path) -> None:
-    db_path = tmp_path / "forwarding.sqlite3"
-    state_store = SQLiteStateStore(db_path)
-    first_adapter = MockBrokerAdapter()
-    first_router = _scoped_mock_router(first_adapter, state_store=state_store)
-    command = OrderCommand(
-        strategy_id="s1",
-        account_id="paper",
-        exchange="SIM",
-        market_type="SPOT",
-        symbol="RB2510",
-        side="buy",
-        size=1,
-        order_type="limit",
-        price=3500.0,
-        idempotency_key="persisted-order",
-    )
-
-    first_ack = await first_router.handle_command(command)
-    state_store.close()
-
-    second_state_store = SQLiteStateStore(db_path)
-    second_adapter = MockBrokerAdapter()
-    second_router = _scoped_mock_router(second_adapter, state_store=second_state_store)
-    second_ack = await second_router.handle_command(command)
-    events = second_state_store.list_private_events("strategy.s1.")
-    second_state_store.close()
-
-    assert first_ack.accepted is True
-    assert second_ack.order_id == first_ack.order_id
-    assert second_adapter.orders == {}
-    assert [event.payload["kind"] for event in events] == ["order", "trade", "account", "position"]
 
 
 def test_sqlite_state_store_treats_topic_prefix_as_literal(tmp_path) -> None:
@@ -664,28 +406,14 @@ def test_sqlite_state_store_private_event_limit_boundaries(tmp_path) -> None:
             state_store.list_private_events("strategy.s1.", limit=-1)
 
 
-@pytest.mark.asyncio
-async def test_forwarding_runtime_health_includes_market_and_router_state() -> None:
-    runtime = ForwardingRuntime(MockBrokerAdapter())
-    await runtime.start()
-
-    try:
-        runtime.market_data.subscribe("SIM", "SPOT", "RB2510")
-        health = await runtime.health()
-
-        assert health["runtime"] == "ForwardingRuntime"
-        assert health["market_data"]["active_subscription_count"] == 1
-        assert health["market_data"]["bus"]["command_handler_registered"] is True
-        assert health["order_router"]["adapter"]["connected"] is True
-        assert health["order_router"]["bus_attached"] is True
-    finally:
-        await runtime.stop()
+def test_forwarding_runtime_entrypoint_is_retired() -> None:
+    with pytest.raises(LegacyForwardingRetiredError, match="ServiceExecutionSession"):
+        ForwardingRuntime(MockBrokerAdapter())
 
 
-def test_forwarding_client_exposes_backtrader_style_market_and_order_api() -> None:
+def test_forwarding_client_keeps_market_reads_and_retires_order_writes() -> None:
     bus = InMemoryForwardingBus()
     hub = MarketDataHub(bus)
-    router = _scoped_mock_router(MockBrokerAdapter(), bus=bus)
     client = ForwardingClient(
         bus=bus,
         exchange="SIM",
@@ -697,60 +425,23 @@ def test_forwarding_client_exposes_backtrader_style_market_and_order_api() -> No
     client.subscribe("RB2510")
 
     hub.publish_tick(exchange="SIM", market_type="SPOT", symbol="RB2510", price=3500.0)
-    hub.publish_orderbook(
-        exchange="SIM",
-        market_type="SPOT",
-        symbol="RB2510",
-        bids=[(3499.0, 3.0)],
-        asks=[(3501.0, 4.0)],
-    )
-
     tick = client.poll_tick("RB2510")
-    orderbook = client.poll_orderbook("RB2510")
-    response = client.submit_order(
-        {
-            "bt_order_ref": 1,
-            "symbol": "RB2510",
-            "side": "buy",
-            "size": 1,
-            "order_type": "limit",
-            "price": 3500.0,
-        }
-    )
-    broker_updates = []
-    while True:
-        update = client.poll_broker_update()
-        if update is None:
-            break
-        broker_updates.append(update["kind"])
-
-    assert router is not None
     assert tick.price == 3500.0
-    assert orderbook.bids[0][0] == 3499.0
-    assert response["order_id"]
-    assert "order" in broker_updates
-    assert "trade" in broker_updates
-    assert client.get_balance()["account_id"] == "paper"
-    assert client.get_positions()[0]["symbol"] == "RB2510"
+
+    with pytest.raises(LegacyForwardingRetiredError, match="service.order_entry"):
+        client.submit_order(
+            {
+                "bt_order_ref": 1,
+                "symbol": "RB2510",
+                "side": "buy",
+                "size": 1,
+                "order_type": "limit",
+                "price": 3500.0,
+            }
+        )
+    assert bus.stats()["command_handler_registered"] is False
 
 
-def test_forwarding_client_requires_explicit_side_and_order_type() -> None:
-    bus = InMemoryForwardingBus()
-    _hub = MarketDataHub(bus)
-    _router = _scoped_mock_router(MockBrokerAdapter(), bus=bus)
-    client = ForwardingClient(
-        bus=bus,
-        exchange="SIM",
-        market_type="SPOT",
-        account_id="paper",
-        strategy_id="s1",
-    )
-    client.connect()
-
-    with pytest.raises(ValueError, match="side is required"):
-        client.submit_order({"symbol": "RB2510", "size": 1.0, "order_type": "market"})
-    with pytest.raises(ValueError, match="order_type is required"):
-        client.submit_order({"symbol": "RB2510", "side": "buy", "size": 1.0})
 
 
 def test_forwarding_client_normalizes_market_symbol_keys_like_topics() -> None:
@@ -812,11 +503,12 @@ def test_forwarding_client_disconnect_clears_event_caches_but_keeps_query_snapsh
     assert client.poll_tick("RB2510") is None
     assert client.poll_orderbook("RB2510") is None
     assert client.poll_bar("RB2510") is None
-    assert client.poll_broker_update() is None
-    assert client.get_balance() == {"cash": 100.0, "value": 120.0}
+    with pytest.raises(LegacyForwardingRetiredError, match="service.account_read"):
+        client.poll_broker_update()
+    assert client._account_cache == {"cash": 100.0, "value": 120.0}
 
 
-def test_forwarding_client_bounds_realtime_event_caches_for_slow_consumers() -> None:
+def test_forwarding_client_bounds_market_event_caches_for_slow_consumers() -> None:
     bus = InMemoryForwardingBus()
     hub = MarketDataHub(bus)
     client = ForwardingClient(
@@ -876,28 +568,11 @@ def test_forwarding_client_bounds_realtime_event_caches_for_slow_consumers() -> 
     assert client.poll_bar("RB2510")["close"] == 3505.0
     assert client.poll_bar("RB2510") is None
 
-    bus.publish_private(
-        PrivateEvent(
-            event_type="orders",
-            account_id="paper",
-            strategy_id="s1",
-            payload={"kind": "order", "order_id": "old"},
-        )
-    )
-    bus.publish_private(
-        PrivateEvent(
-            event_type="orders",
-            account_id="paper",
-            strategy_id="s1",
-            payload={"kind": "order", "order_id": "new"},
-        )
-    )
-
-    assert client.poll_broker_update()["order_id"] == "new"
-    assert client.poll_broker_update() is None
+    assert client.stats(refresh=False)["private_subscription_count"] == 0
+    assert bus.stats()["private_subscription_count"] == 0
 
 
-def test_forwarding_client_stats_reports_event_cache_pressure() -> None:
+def test_forwarding_client_stats_reports_market_event_cache_pressure() -> None:
     bus = InMemoryForwardingBus()
     hub = MarketDataHub(bus)
     client = ForwardingClient(
@@ -945,28 +620,11 @@ def test_forwarding_client_stats_reports_event_cache_pressure() -> None:
         low=3490.0,
         close=3505.0,
     )
-    bus.publish_private(
-        PrivateEvent(
-            event_type="orders",
-            account_id="paper",
-            strategy_id="s1",
-            payload={"kind": "order", "order_id": "old"},
-        )
-    )
-    bus.publish_private(
-        PrivateEvent(
-            event_type="orders",
-            account_id="paper",
-            strategy_id="s1",
-            payload={"kind": "order", "order_id": "new"},
-        )
-    )
-
     assert client.stats(refresh=False) == {
         "connected": True,
         "event_cache_size": 1,
         "market_subscription_count": 1,
-        "private_subscription_count": 2,
+        "private_subscription_count": 0,
         "pending_event_counts": {
             "tick": 0,
             "orderbook": 0,
@@ -984,32 +642,32 @@ def test_forwarding_client_stats_reports_event_cache_pressure() -> None:
         "connected": True,
         "event_cache_size": 1,
         "market_subscription_count": 1,
-        "private_subscription_count": 2,
+        "private_subscription_count": 0,
         "pending_event_counts": {
             "tick": 1,
             "orderbook": 1,
             "bar": 1,
-            "broker_update": 1,
+            "broker_update": 0,
         },
         "dropped_event_counts": {
             "tick": 1,
             "orderbook": 1,
             "bar": 1,
-            "broker_update": 1,
+            "broker_update": 0,
         },
     }
 
 
-def test_forwarding_client_passes_configured_command_timeout() -> None:
+def test_forwarding_client_retires_query_before_command_timeout_dispatch() -> None:
     class RecordingBus(InMemoryForwardingBus):
         def __init__(self) -> None:
             super().__init__()
-            self.recorded_timeout: float | None = None
+            self.command_calls = 0
 
         def send_command_sync(
             self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
-            self.recorded_timeout = timeout
+            self.command_calls += 1
             return CommandAck(
                 command_id=command.command_id,
                 idempotency_key=str(command.idempotency_key),
@@ -1023,10 +681,10 @@ def test_forwarding_client_passes_configured_command_timeout() -> None:
     bus = RecordingBus()
     client = ForwardingClient(bus=bus, command_timeout=0.25)
 
-    balance = client.get_balance()
+    with pytest.raises(LegacyForwardingRetiredError, match="service.account_read"):
+        client.get_balance()
 
-    assert balance["account_id"] == "paper"
-    assert bus.recorded_timeout == 0.25
+    assert bus.command_calls == 0
 
 
 def test_forwarding_client_rejects_negative_command_timeout() -> None:
@@ -1047,11 +705,16 @@ def test_forwarding_client_rejects_negative_event_cache_size() -> None:
         ForwardingClient(event_cache_size=-1)
 
 
-def test_forwarding_client_returns_cached_query_snapshots_when_command_times_out() -> None:
+def test_forwarding_client_does_not_use_cached_snapshots_for_retired_queries() -> None:
     class TimeoutBus(InMemoryForwardingBus):
+        def __init__(self) -> None:
+            super().__init__()
+            self.command_calls = 0
+
         def send_command_sync(
             self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
+            self.command_calls += 1
             raise TimeoutError("query timed out")
 
     client = ForwardingClient(bus=TimeoutBus())
@@ -1059,66 +722,26 @@ def test_forwarding_client_returns_cached_query_snapshots_when_command_times_out
     client._positions_cache = [{"symbol": "RB2510", "size": 1}]
     client._orders_cache = [{"order_id": "order-1", "status": "submitted"}]
 
-    assert client.get_balance() == {"cash": 100.0, "value": 120.0}
-    assert client.get_positions() == [{"symbol": "RB2510", "size": 1}]
-    assert client.fetch_open_orders() == [{"order_id": "order-1", "status": "submitted"}]
+    for query in (client.get_balance, client.get_positions, client.fetch_open_orders):
+        with pytest.raises(LegacyForwardingRetiredError, match="service.account_read"):
+            query()
+    assert client._account_cache == {"cash": 100.0, "value": 120.0}
+    assert client._positions_cache == [{"symbol": "RB2510", "size": 1}]
+    assert client._orders_cache == [{"order_id": "order-1", "status": "submitted"}]
+    assert client.bus.command_calls == 0
 
 
-@pytest.mark.asyncio
-async def test_router_does_not_cache_retryable_errors() -> None:
-    calls = 0
-
-    class FlakyAdapter(MockBrokerAdapter):
-        async def place_order(self, request: OrderRequest):
-            nonlocal calls
-            calls += 1
-            raise BrokerError(
-                BrokerErrorCode.NETWORK_ERROR,
-                "timeout",
-                retryable=True,
-            )
-
-    router = _scoped_mock_router(FlakyAdapter())
-    cmd = OrderCommand(
-        strategy_id="s1",
-        account_id="paper",
-        exchange="SIM",
-        market_type="SPOT",
-        symbol="RB2510",
-        side="buy",
-        size=1,
-        order_type="limit",
-        price=3500.0,
-        idempotency_key="k-retry",
-    )
-    ack1 = await router.handle_command(cmd)
-    ack2 = await router.handle_command(cmd)
-    assert ack1.accepted is False and ack2.accepted is False
-    assert calls == 2  # retry must reach the adapter again, not return the stale cached rejection
 
 
-def test_cancel_order_idempotency_key_is_deterministic() -> None:
-    """cancel_order 幂等 key 必须确定：相同参数重试产生相同 key。"""
-
+def test_forwarding_client_cancel_entrypoints_fail_closed_before_dispatch() -> None:
     class RecordingBus(InMemoryForwardingBus):
         def __init__(self) -> None:
             super().__init__()
-            self.commands: list[OrderCommand] = []
+            self.command_count = 0
 
-        def send_command_sync(
-            self, command: OrderCommand, *, timeout: float | None = None
-        ) -> CommandAck:
-            self.commands.append(command)
-            return CommandAck(
-                command_id=command.command_id,
-                idempotency_key=str(command.idempotency_key),
-                accepted=True,
-                status="cancelled",
-                account_id=command.account_id,
-                strategy_id=command.strategy_id,
-                order_id=str(command.order_id),
-                payload={"order_id": str(command.order_id), "order_ref": command.order_id},
-            )
+        def send_command_sync(self, command: OrderCommand, *, timeout: float | None = None):
+            self.command_count += 1
+            raise AssertionError("retired cancel must not dispatch")
 
     bus = RecordingBus()
     client = ForwardingClient(
@@ -1129,46 +752,14 @@ def test_cancel_order_idempotency_key_is_deterministic() -> None:
         strategy_id="s1",
     )
 
-    client.cancel_order(order_ref="ref-1")
-    client.cancel_order(order_ref="ref-1")
+    with pytest.raises(LegacyForwardingRetiredError, match="service.order_entry"):
+        client.cancel_order(order_ref="ref-1")
+    with pytest.raises(LegacyForwardingRetiredError, match="service.order_entry"):
+        client.cancel_all("RB2510")
 
-    assert len(bus.commands) == 2
-    key1 = bus.commands[0].idempotency_key
-    key2 = bus.commands[1].idempotency_key
-    assert key1 == key2, f"idempotency keys must match: {key1!r} != {key2!r}"
-    assert "cancel:" in str(key1)
+    assert bus.command_count == 0
 
 
-@pytest.mark.asyncio
-async def test_router_caches_terminal_rejects() -> None:
-    calls = 0
-
-    class TerminalAdapter(MockBrokerAdapter):
-        async def place_order(self, request: OrderRequest):
-            nonlocal calls
-            calls += 1
-            raise BrokerError(
-                BrokerErrorCode.INSUFFICIENT_FUNDS,
-                "no money",
-                retryable=False,
-            )
-
-    router = _scoped_mock_router(TerminalAdapter())
-    cmd = OrderCommand(
-        strategy_id="s1",
-        account_id="paper",
-        exchange="SIM",
-        market_type="SPOT",
-        symbol="RB2510",
-        side="buy",
-        size=1,
-        order_type="limit",
-        price=3500.0,
-        idempotency_key="k-terminal",
-    )
-    await router.handle_command(cmd)
-    await router.handle_command(cmd)
-    assert calls == 1  # terminal rejection hits the cache
 
 
 # ── Task 1.9: A-14 / A-15 / A-19 / A-20 ────────────────────────────────
@@ -1185,24 +776,20 @@ def test_sqlite_state_store_memory_uri_uses_in_memory_db(tmp_path, monkeypatch) 
     assert list(tmp_path.iterdir()) == []
 
 
-def test_order_router_ack_cache_is_bounded() -> None:
-    """幂等 ack 缓存应有 LRU 上限，最旧的 ack 被逐出。"""
-    router = OrderRouter(MockBrokerAdapter())
-    for i in range(10_001):
-        ack = CommandAck(command_id=f"c{i}", idempotency_key=f"k{i}", accepted=True, status="ok")
-        router._remember_ack(ack)
-    assert len(router._acks_by_idempotency_key) == 10_000
-    assert "k0" not in router._acks_by_idempotency_key
-    assert "k10000" in router._acks_by_idempotency_key
 
 
-def test_fetch_open_orders_includes_new_status() -> None:
-    """fetch_open_orders 应包含 status == "new" 的订单，而不仅是 "submitted"。"""
+def test_fetch_open_orders_uses_the_service_account_read_route() -> None:
+    """The retired forwarding command bus cannot serve account snapshots."""
 
     class StubBus(InMemoryForwardingBus):
+        def __init__(self) -> None:
+            super().__init__()
+            self.command_calls = 0
+
         def send_command_sync(
             self, command: OrderCommand, *, timeout: float | None = None
         ) -> CommandAck:
+            self.command_calls += 1
             return CommandAck(
                 command_id=command.command_id,
                 idempotency_key=str(command.idempotency_key),
@@ -1218,8 +805,9 @@ def test_fetch_open_orders_includes_new_status() -> None:
             )
 
     client = ForwardingClient(bus=StubBus())
-    result = client.fetch_open_orders()
-    assert {order["order_id"] for order in result} == {"o1", "o2"}
+    with pytest.raises(LegacyForwardingRetiredError, match="service.account_read"):
+        client.fetch_open_orders()
+    assert client.bus.command_calls == 0
 
 
 def test_market_event_timestamp_normalized_to_ms() -> None:
@@ -1257,17 +845,19 @@ def test_market_event_timestamp_normalized_to_ms() -> None:
 # ── Task 1.10: A-04 幽灵订单 / pending 可查询 ───────────────────────────
 
 
-def test_forwarding_client_tracks_pending_commands_on_timeout() -> None:
-    """超时后命令 key 进入 pending_commands() 可查询，不允许静默。"""
+def test_forwarding_client_does_not_track_or_dispatch_retired_order_writes() -> None:
+    class RecordingBus(InMemoryForwardingBus):
+        def __init__(self) -> None:
+            super().__init__()
+            self.command_count = 0
 
-    class TimeoutBus(InMemoryForwardingBus):
-        def send_command_sync(
-            self, command: OrderCommand, *, timeout: float | None = None
-        ) -> CommandAck:
-            raise TimeoutError("forwarding command result unknown after timeout")
+        def send_command_sync(self, command: OrderCommand, *, timeout: float | None = None):
+            self.command_count += 1
+            raise AssertionError("retired order must not dispatch")
 
-    client = ForwardingClient(bus=TimeoutBus(), command_timeout=0.01)
-    with pytest.raises(TimeoutError):
+    bus = RecordingBus()
+    client = ForwardingClient(bus=bus, command_timeout=0.01)
+    with pytest.raises(LegacyForwardingRetiredError, match="service.order_entry"):
         client.submit_order(
             {
                 "bt_order_ref": 7,
@@ -1278,58 +868,5 @@ def test_forwarding_client_tracks_pending_commands_on_timeout() -> None:
                 "price": 3500.0,
             }
         )
-    pending = client.pending_commands()
-    assert len(pending) == 1
-    assert ":7" in pending[0]
-
-
-@pytest.mark.asyncio
-async def test_sync_command_timeout_does_not_leave_ghost_order() -> None:
-    """超时后命令最终可经幂等重试取回，不得静默已下单。"""
-    released = asyncio.Event()
-    placed: list[OrderRequest] = []
-
-    class BlockingAdapter(MockBrokerAdapter):
-        async def place_order(self, request: OrderRequest):
-            await released.wait()
-            result = await super().place_order(request)
-            placed.append(request)
-            return result
-
-    adapter = BlockingAdapter()
-    router = _scoped_mock_router(adapter)
-    bus = InMemoryForwardingBus()
-    bus.set_command_handler(router.handle_command)
-    client = ForwardingClient(
-        bus=bus,
-        exchange="SIM",
-        market_type="SPOT",
-        account_id="paper",
-        command_timeout=0.05,
-    )
-
-    payload = {
-        "bt_order_ref": 7,
-        "symbol": "RB2510",
-        "side": "buy",
-        "size": 1,
-        "order_type": "limit",
-        "price": 3500.0,
-    }
-    with pytest.raises(TimeoutError):
-        client.submit_order(payload)
-
-    pending = client.pending_commands()
-    assert len(pending) == 1
-
-    released.set()
-    for _ in range(100):
-        if placed:
-            break
-        await asyncio.sleep(0.01)
-
-    # 重试同 key：幂等缓存命中，不重复下单
-    result = client.submit_order(payload)
-    assert result.get("order_id")
-    assert len(placed) == 1
+    assert bus.command_count == 0
     assert client.pending_commands() == []

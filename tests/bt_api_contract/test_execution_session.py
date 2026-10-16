@@ -3668,83 +3668,56 @@ def test_pre_dispatch_unsupported_is_explicit_but_later_same_class_is_unknown(fa
         journal.unlink()
 
 
-@pytest.mark.parametrize(
-    "result,unknown",
-    [
-        (TimeoutError("signed URL should never escape"), True),
-        ({"status": "rejected"}, False),
-        ({"status": "accepted", "order_id": "MT5-ticket-7"}, False),
-    ],
-)
-def test_session_uses_real_gateway_command_roundtrip_with_native_mt5_intent(
-    monkeypatch, tmp_path, result, unknown
-):
-    from bt_api_base.gateway.config import GatewayConfig
-    from bt_api_base.gateway.runtime import GatewayRuntime
+def test_service_order_entry_preserves_mt5_generic_close_intent_and_rejects_native_fields():
+    """Map close/reduce-only through the service DTO; never hide ticket data in tags."""
 
-    from bt_api_py._gateway_wire import CommandAck, GatewayWireConfig, OrderCommand
+    from tests.unit.test_service_execution import _client
 
-    monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    runtime = GatewayRuntime(
-        GatewayConfig(exchange_type="MT5", asset_type="FX", account_id="demo", enable_trading=True)
-    )
-    method = (
-        Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
-    )
-    runtime.adapter = SimpleNamespace(place_order=method)
-
-    class Client:
-        def _send_command_sync(self, command):
-            restored = OrderCommand.from_dict(command.to_dict())
-            assert restored.extra["quantity_unit"] == "lots"
-            assert restored.extra["position_id"] == "987"
-            ack = runtime._handle_command(restored)
-            return CommandAck.from_dict(ack.to_dict())
-
-        def disconnect(self):
-            pass
-
-        def poll_broker_update(self):
-            return None
-
-    api = BtApi(
-        {"MT5___FX": {}},
-        debug=False,
-        transport_mode="zmq",
-        gateway_wire_config=GatewayWireConfig(
-            command_endpoint="inproc://c",
-            market_endpoint="inproc://m",
-            private_endpoint="inproc://p",
-            account_id="demo",
-            strategy_id="test",
-        ),
-        execution_config={
-            "order_journal": tmp_path / "mt5.jsonl",
-            "account_currency": "USD",
-        },
-    )
-    api._backend._client = Client()
+    runtime, leaf, client = _client()
+    service_intent = {
+        "intent_id": "intent-1",
+        "signal_id": "signal-1",
+        "instrument": "EURUSD",
+        "side": "SELL",
+        "position_effect": "CLOSE",
+        "order_type": "MARKET",
+        "quantity": Decimal("0.01"),
+        "reduce_only": True,
+    }
     try:
-        req = request(
-            symbol="EURUSD",
-            account_id="demo",
-            order_type=OrderType.MARKET,
-            price=None,
-            quantity=Decimal(".01"),
-            quantity_unit="native",
-            position_id="987",
-            position_mode=None,
-            position_side="long",
-            offset="close",
-            side=Side.SELL,
-        )
-        update = api.make_order("MT5___FX", req, normalized=True)
-        assert update["execution_unknown"] is unknown
-        assert method.call_count == 1 and api.exchange_feeds == {}
-        assert method.call_args.args[0]["position_id"] == "987"
-        if unknown:
-            due(api)
-            assert api.poll_event("MT5___FX") is None
-            assert api.get_execution_summary()["trading_blocked"]
+        view = client.submit(**service_intent)
+
+        assert view.state == "ACKED"
+        assert leaf.operations == ["orders.submit"]
+        assert leaf.arguments == [
+            {
+                "intent_id": "intent-1",
+                "signal_id": "signal-1",
+                "instrument": "EURUSD",
+                "side": "SELL",
+                "position_effect": "CLOSE",
+                "order_type": "MARKET",
+                "quantity": "0.01",
+                "price": None,
+                "time_in_force": "GTC",
+                "reduce_only": True,
+                "metadata_version": "unknown",
+                "deadline_ns": None,
+                "tags": {},
+            }
+        ]
+
+        before_requests = len(leaf.requests)
+        before_dispatches = len(leaf.arguments)
+        for native_field, value in (
+            ("quantity_unit", "lots"),
+            ("position_id", "987"),
+            ("position_side", "long"),
+            ("offset", "close"),
+        ):
+            with pytest.raises(TypeError):
+                client.submit(**service_intent, **{native_field: value})
+        assert len(leaf.requests) == before_requests
+        assert len(leaf.arguments) == before_dispatches
     finally:
-        api.close()
+        runtime.close()
