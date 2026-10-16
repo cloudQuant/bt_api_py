@@ -900,7 +900,7 @@ def test_market_epoch_change_requires_explicit_incomplete_resync(tmp_path):
         )
         client_record = {"process": client_process, "pipe": client_pipe}
         ready = _receive(client_pipe)
-        assert ready[0] == "ready" and ready[2:5] == ("latest_event", False, False), ready
+        assert ready[0] == "ready" and ready[3:6] == ("latest_event", False, False), ready
 
         time.sleep(0.35)
         _host_command(service_pipe, "publish", "epoch-warmup")
@@ -912,7 +912,7 @@ def test_market_epoch_change_requires_explicit_incomplete_resync(tmp_path):
             (0,),
         )
         prior_epoch = first[0][1]
-        assert prior_epoch == ready[5]
+        assert prior_epoch == ready[6]
         assert first[0][2] == 2
 
         paused = _client_command(client_record, "pause-market", True)
