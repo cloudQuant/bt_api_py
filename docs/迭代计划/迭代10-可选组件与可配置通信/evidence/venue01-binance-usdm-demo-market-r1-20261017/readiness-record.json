@@ -1,0 +1,92 @@
+{
+  "record": "Iteration 10 VENUE01 Binance USD-M Demo market preparation",
+  "status": "SOURCE_AND_LOCAL_SYNTHETIC_READY_REAL_VENUE_ACCEPTANCE_PENDING",
+  "created_at": "2026-10-17",
+  "parent_repository": {
+    "branch": "dev",
+    "base_head": "d062656f5f293aa5229e984074baf0961e043bc9",
+    "index_empty": true,
+    "baseline_binance_gitlink": "8a5a575a242402e6000f296d2b0128df42c3f9a1",
+    "proposed_binance_gitlink": "e4c96e1e1265936e9abd746e69120f7a9d85043c",
+    "candidate_paths": [
+      {
+        "path": "bt_api_py/gateway_operator.py",
+        "bytes": 33500,
+        "sha256": "5459a74c243c2a98371a41555f8ebf8f611628bcdee5454d0cd55fefd5dd78ea"
+      },
+      {
+        "path": "bt_api_py/gateway_operator_market.py",
+        "bytes": 3161,
+        "sha256": "ad0ab1bccacf1ffdf318b1e777d3bd5f2d87b223916db22e6dda95f68978f5a9"
+      },
+      {
+        "path": "tests/integration/test_gateway_operator_binance_market.py",
+        "bytes": 8289,
+        "sha256": "3b01993800afa75a775fe4ec5522945cc9b28ac7547915ae5b867a2309119f5a"
+      }
+    ]
+  },
+  "binance_package": {
+    "branch": "dev",
+    "commit": "e4c96e1e1265936e9abd746e69120f7a9d85043c",
+    "parent": "e115f498cfa35a45a86f9ce15e0c68f2485b66f8",
+    "files": [
+      {
+        "path": "src/bt_api_binance/market_provider.py",
+        "bytes": 13265,
+        "sha256": "930003f8c42800a0f3c6a47d4087cedbb53c7683c96d97e0cc5b37d4e0daf700"
+      },
+      {
+        "path": "tests/test_market_provider.py",
+        "bytes": 8060,
+        "sha256": "9096975cd849fe691a8446fe58b1d7ff1eb9f5f8b5eb7644eef753b1fbacf22f"
+      }
+    ]
+  },
+  "implementation": [
+    "Reuses the existing Binance market ticker feed through a bounded, typed USD-M Demo ticker MarketProvider adapter.",
+    "Adds a generic server-trusted GatewayMarketBinding for key allowlist, principal ACL, and lazy provider factory; clients do not supply endpoints or credential values.",
+    "The normal GatewayOperatorDeployment market role and ServiceHost integration are exercised with a synthetic stream. No account, order, REST or write provider path is added."
+  ],
+  "verification": {
+    "prior_to_child_delta": [
+      "Binance package tests: 4 passed at child e115.",
+      "Binance market ServiceHost plus existing deployment integration: 4 passed at parent candidate source before e4c96.",
+      "Light-import check: 2 passed."
+    ],
+    "child_delta": {
+      "review": "GO_STATIC, exact pins, by resume_bt_acceptance; reviewer did not run tests",
+      "command": "python -m pytest -q -p no:asyncio tests/test_market_provider.py -k \"baseexception_start or successfully_unsubscribed\"",
+      "result": "2 passed, 4 deselected, one existing pytest asyncio configuration warning",
+      "ruff": "passed",
+      "diff_check": "passed"
+    },
+    "evidence_level": "SOURCE_FAKE_AND_LOCAL_SYNTHETIC_SERVICEHOST_ONLY",
+    "real_exchange_network_attempted": false,
+    "credentials_read": false,
+    "account_reads_performed": false,
+    "writes_invoked": false
+  },
+  "cleanup_custody": [
+    "GatewayMarketHub retains failed provider handles for a later close retry.",
+    "ComponentResources records release only after the owner close callback returns successfully.",
+    "The operator close callback attempts provider cleanup after Hub-close failure and propagates uncertainty. Binance provider retains the exact stream when start is interrupted and stop is uncertain; successful stop removes the inactive handle while duplicate unsubscribe stays idempotent."
+  ],
+  "official_endpoint": {
+    "checked_at": "2026-10-17",
+    "sources": [
+      "https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/general-info",
+      "https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/websocket-market-streams/Connect",
+      "https://developers.binance.com/en/docs/products/derivatives-trading-usds-futures/websocket-market-streams/Important-WebSocket-Change-Notice"
+    ],
+    "facts": "Official docs identify demo-fstream.binance.com as the USD-M Demo/Testnet WebSocket base and map ordinary ticker to the regular market route; JSON SUBSCRIBE is supported.",
+    "source_constructed_route": "wss://demo-fstream.binance.com/market/ws",
+    "route_status": "Inferred by combining the documented Demo base and routed market path; not live-verified."
+  },
+  "minimum_profile_inputs": [
+    "Non-sensitive server profile_ref / Demo test-profile or credential-reference alias.",
+    "Permission-set alias confirming USER_DATA reads and explicitly excluding TRADE."
+  ],
+  "venue02": "Write lifecycle not implemented or accepted.",
+  "staging_boundary": "The approved gateway_operator.py blob is staged by selected hunks and matches the recorded 33,500-byte SHA256 pin; the disjoint quota-admission hunk remains unstaged and excluded."
+}

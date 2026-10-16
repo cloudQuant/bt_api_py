@@ -25,6 +25,7 @@ from typing import Any, Optional
 
 from bt_api_base.service_protocol import WireScope
 
+from .gateway_operator_market import GatewayMarketBinding
 from .service_components import ComponentResources, ServiceResourceProvider
 from .service_config import ServiceConfig
 from .service_host import ServiceHost, TrustedServiceAuthority, TrustedServiceClients
@@ -63,6 +64,7 @@ class GatewayOperatorDeploymentError(RuntimeError):
             "UNCLAIMED_PROVIDER_CLOSE_UNCONFIRMED",
             "ACCOUNT_RESOURCE_WIRING_FAILED",
             "MARKET_HUB_BUILD_FAILED",
+            "MARKET_PROVIDER_CLOSE_UNCONFIRMED",
             "INVALID_STOP_EVENT",
             "INVALID_POLL_INTERVAL",
         }
@@ -266,6 +268,7 @@ class GatewayOperatorDeployment:
         session_owner: object | None = None,
         account_session: GatewayAccountSessionBinding | None = None,
         okx_market: GatewayOkxMarketBinding | None = None,
+        market_binding: GatewayMarketBinding | None = None,
         service_directory: Mapping[str, ServiceConfig] | None = None,
         trusted_clients: TrustedServiceClients | None = None,
         migration_deployment_epoch: str | None = None,
@@ -306,7 +309,7 @@ class GatewayOperatorDeployment:
                 raise GatewayOperatorDeploymentError("ACCOUNT_SESSION_REFERENCE_MISMATCH")
             if not callable(getattr(session_owner, "create_provider", None)):
                 raise GatewayOperatorDeploymentError("ACCOUNT_SESSION_OWNER_REQUIRED")
-            if okx_market is not None:
+            if okx_market is not None or market_binding is not None:
                 raise GatewayOperatorDeploymentError("UNUSED_MARKET_BINDING")
             if "service.account_read" in ports:
                 principal_refs = frozenset(authority.principals.values())
@@ -325,18 +328,28 @@ class GatewayOperatorDeployment:
             self._session_owner = session_owner
             self._account_session = account_session
             self._okx_market = None
+            self._market_binding = None
         elif role == "market_hub":
             if account_session is not None or session_owner is not None:
                 raise GatewayOperatorDeploymentError("UNUSED_ACCOUNT_SESSION_BINDING")
-            if type(okx_market) is not GatewayOkxMarketBinding:
-                raise GatewayOperatorDeploymentError("MARKET_BINDING_REQUIRED")
-            if frozenset(okx_market.principal_allowed_keys) != frozenset(
-                authority.principals.values()
-            ):
+            if market_binding is not None:
+                if okx_market is not None:
+                    raise GatewayOperatorDeploymentError("UNUSED_MARKET_BINDING")
+                if type(market_binding) is not GatewayMarketBinding:
+                    raise GatewayOperatorDeploymentError("INVALID_MARKET_BINDING")
+                allowed_principals = market_binding.principal_allowed_keys
+                self._okx_market = None
+                self._market_binding = market_binding
+            else:
+                if type(okx_market) is not GatewayOkxMarketBinding:
+                    raise GatewayOperatorDeploymentError("MARKET_BINDING_REQUIRED")
+                allowed_principals = okx_market.principal_allowed_keys
+                self._okx_market = okx_market
+                self._market_binding = None
+            if frozenset(allowed_principals) != frozenset(authority.principals.values()):
                 raise GatewayOperatorDeploymentError("MARKET_AUDIENCE_MISMATCH")
             self._session_owner = None
             self._account_session = None
-            self._okx_market = okx_market
         else:
             raise GatewayOperatorDeploymentError("UNSUPPORTED_GATEWAY_ROLE")
 
@@ -561,30 +574,59 @@ class GatewayOperatorDeployment:
         return self._build_account_resources(options)
 
     def _build_market_resources(self, scope: WireScope) -> ComponentResources:
-        binding = self._okx_market
-        if type(binding) is not GatewayOkxMarketBinding or type(scope) is not WireScope:
+        binding = self._market_binding
+        okx_binding = self._okx_market
+        if (
+            (binding is None and type(okx_binding) is not GatewayOkxMarketBinding)
+            or (binding is not None and type(binding) is not GatewayMarketBinding)
+            or type(scope) is not WireScope
+        ):
             raise GatewayOperatorDeploymentError("INVALID_MARKET_BINDING")
         try:
             from bt_api_gateway.market_hub import GatewayMarketHub
-            from bt_api_okx.market_provider import OkxTickerQueueMarketProvider
 
-            provider = OkxTickerQueueMarketProvider(
-                stream_factory=binding.stream_factory,
-                queue_capacity=binding.queue_capacity,
-                connect_timeout=binding.connect_timeout_seconds,
-            )
+            if binding is not None:
+                provider = binding.provider_factory()
+                if not callable(getattr(provider, "subscribe", None)) or not callable(
+                    getattr(provider, "unsubscribe", None)
+                ):
+                    raise TypeError("market provider does not implement the Gateway provider port")
+                key_universe = frozenset(binding.key_universe)
+                principal_allowed_keys = binding.principal_allowed_keys
+                max_provider_events = binding.max_provider_events_per_maintain
+            else:
+                assert okx_binding is not None
+                from bt_api_okx.market_provider import OkxTickerQueueMarketProvider
+
+                provider = OkxTickerQueueMarketProvider(
+                    stream_factory=okx_binding.stream_factory,
+                    queue_capacity=okx_binding.queue_capacity,
+                    connect_timeout=okx_binding.connect_timeout_seconds,
+                )
+                key_universe = frozenset(okx_binding.key_universe)
+                principal_allowed_keys = okx_binding.principal_allowed_keys
+                max_provider_events = okx_binding.max_provider_events_per_maintain
             hub = GatewayMarketHub(
                 provider,
-                key_universe=frozenset(binding.key_universe),
-                principal_allowed_keys=binding.principal_allowed_keys,
+                key_universe=key_universe,
+                principal_allowed_keys=principal_allowed_keys,
                 service_identity=self._authority.identity,
                 service_scope=self._authority.scope,
-                max_provider_events_per_maintain=binding.max_provider_events_per_maintain,
+                max_provider_events_per_maintain=max_provider_events,
             )
+
+            def close_market_resources() -> None:
+                try:
+                    hub.close()
+                except Exception:
+                    _close_market_provider(provider)
+                    raise
+                _close_market_provider(provider)
+
             return ComponentResources.owned(
                 {"hub": hub},
                 ready=lambda: hub.ready is True,
-                close=hub.close,
+                close=close_market_resources,
             )
         except BaseException as exc:
             if isinstance(exc, Exception):
@@ -716,8 +758,22 @@ def _is_okx_ticker_key(key: object) -> bool:
         return False
 
 
+def _close_market_provider(provider: object) -> None:
+    """Retry provider-owned partial-start cleanup after Hub handle release."""
+    close = getattr(provider, "close", None)
+    if not callable(close):
+        return
+    try:
+        result = close()
+    except Exception:
+        raise GatewayOperatorDeploymentError("MARKET_PROVIDER_CLOSE_UNCONFIRMED") from None
+    if result is False:
+        raise GatewayOperatorDeploymentError("MARKET_PROVIDER_CLOSE_UNCONFIRMED")
+
+
 __all__ = [
     "GatewayAccountSessionBinding",
+    "GatewayMarketBinding",
     "GatewayOkxMarketBinding",
     "GatewayOperatorDeployment",
     "GatewayOperatorDeploymentError",
