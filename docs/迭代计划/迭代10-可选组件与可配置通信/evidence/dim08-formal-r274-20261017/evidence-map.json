@@ -1,0 +1,498 @@
+{
+  "schema": "dim08-final-evidence-map-v1",
+  "purpose": "Read-only clause-to-evidence index for Root adjudication. This file does not alter the formal tracker or count.",
+  "formal_status_in_preserved_R266_packet": {
+    "accepted_before": "40/68",
+    "accepted_after": "40/68",
+    "dim08": "OPEN_PARTIAL",
+    "case_increment": 0,
+    "instruction": "Historical packet status remains byte-preserved; Root adjudicates any later increment separately."
+  },
+  "repository_heads_at_map_creation": {
+    "sdk": {
+      "path": "D:\\bt_api_py",
+      "branch": "dev",
+      "head": "eeb1c4c8a08795ddf8a5a39519c5824905dfe117"
+    },
+    "monitor": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor",
+      "branch": "dev",
+      "head": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8"
+    },
+    "execution": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "branch": "dev",
+      "head": "55ce1942d5760b2f79a0929c57d9ba0b34f18ec2"
+    }
+  },
+  "accepted_commits": [
+    {
+      "repo": "bt_api_monitor",
+      "commit": "cdf67d0b111ce97b8103dcfc0eb79117727bdaf2",
+      "parent": "7c407634c092ba59383bd870a0b0b19c588ae451",
+      "subject": "Add durable scoped monitor threshold rules",
+      "paths": [
+        "src/bt_api_monitor/threshold_rules.py",
+        "tests/test_threshold_rules.py"
+      ],
+      "threshold_rules_sha256_at_commit": "e372aaa92be602e96df27f72505aad20e8a9c3aa5e8e52a24ace15893f3c94cd",
+      "threshold_rules_bytes": 53364,
+      "test_threshold_rules_sha256": "115e75627d8667b6542c4338be27ef72c7f0f6a5c487a2229f47a85244fe1c54",
+      "threshold_rules_path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\threshold_rules.py",
+      "test_threshold_rules_path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_threshold_rules.py"
+    },
+    {
+      "repo": "bt_api_monitor",
+      "commit": "ab09c2d7d27b81752bad33d7694285d3d8ef28fb",
+      "parent": "3b1bda746cdde99b173a3426590a3557c144bd3a",
+      "subject": "Add durable monitor threshold consumer",
+      "paths": [
+        "src/bt_api_monitor/__init__.py",
+        "src/bt_api_monitor/durable.py",
+        "src/bt_api_monitor/threshold_rules.py",
+        "src/bt_api_monitor/threshold_service.py",
+        "tests/test_threshold_service.py"
+      ],
+      "threshold_rules_sha256_after_commit": "a7617408630e9b629b4147ee1ea3b0eb39e55177df727950637373829598783e",
+      "threshold_rules_bytes": 62868
+    },
+    {
+      "repo": "bt_api_monitor",
+      "commit": "5abea74d90eba7715f7ded7e587d39e039449d80",
+      "parent": "ab09c2d7d27b81752bad33d7694285d3d8ef28fb",
+      "subject": "Test monitor alert table capacity",
+      "paths": [
+        "tests/test_threshold_service.py"
+      ]
+    },
+    {
+      "repo": "bt_api_monitor",
+      "commit": "e5343ba8e1f2dd9f3be725cd3b929c3b4d4ba3c3",
+      "parent": "5abea74d90eba7715f7ded7e587d39e039449d80",
+      "subject": "Test global monitor threshold budgets",
+      "paths": [
+        "tests/test_threshold_service.py"
+      ],
+      "threshold_rules_sha256": "a7617408630e9b629b4147ee1ea3b0eb39e55177df727950637373829598783e"
+    },
+    {
+      "repo": "bt_api_monitor",
+      "commit": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+      "parent": "e5343ba8e1f2dd9f3be725cd3b929c3b4d4ba3c3",
+      "subject": "Bind execution threshold rules to source scope",
+      "paths": [
+        "src/bt_api_monitor/threshold_rules.py",
+        "src/bt_api_monitor/threshold_service.py",
+        "tests/test_threshold_service.py"
+      ],
+      "current_source_pins": [
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\threshold_rules.py",
+          "bytes": 72157,
+          "sha256": "31f73e0f70bd2e16d40ddff2c325ff21495cefff400a6a6c9d5760fa8c92d60f"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\threshold_service.py",
+          "bytes": 42885,
+          "sha256": "e8563b0e00e26b57bc2869ed1c381bd6c755e621ee716f5b07992585ba1cfe05"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_threshold_rules.py",
+          "bytes": 29452,
+          "sha256": "115e75627d8667b6542c4338be27ef72c7f0f6a5c487a2229f47a85244fe1c54"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_threshold_service.py",
+          "bytes": 24114,
+          "sha256": "4ed2aab1f5ea51ae92c47f38d152067542cb2256c8ace4f14d63d8e6104e3941"
+        }
+      ],
+      "static_delta": "Against e534 R266 implementation: rules adds trusted execution-event selectors and persisted selector config, and routes matching through _matches_rule_event; threshold_service adds selector resource/config flow and its tests. Static diff does not alter existing threshold window/rearm/late-event/counter persistence machinery; test_threshold_rules.py remains byte-identical at 115e. This is a static delta assessment, not a rerun."
+    },
+    {
+      "repo": "bt_api_py",
+      "commit": "2140c0d87f2e06bfd6a1094f56de3dc5fde52ed4",
+      "parent": "3b8025b7f81ad664d7da80796497fcb7419eedb3",
+      "subject": "DIM08: archive local Monitor restart evidence",
+      "paths": [
+        "bt_api/bt_api_monitor gitlink -> e5343ba8e1f2dd9f3be725cd3b929c3b4d4ba3c3",
+        "tests/integration/test_dim08_market_expiry_monitor_service.py",
+        "tests/integration/test_dim08_monitor_threshold_service_restart.py",
+        "R266 manifest/raw-evidence.zip/round-record"
+      ]
+    },
+    {
+      "repo": "bt_api_py",
+      "commit": "f8c544338fdb8c2d1823f72f482637550c1d6003",
+      "parent": "eeae55f1b5c638c6b1673038c860cdd7419241b8",
+      "subject": "Bind execution monitor thresholds to exact source scope",
+      "paths": [
+        "bt_api/bt_api_monitor gitlink -> 02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+        "tests/unit/test_service_execution_monitor_integration.py"
+      ]
+    }
+  ],
+  "clause_to_evidence": [
+    {
+      "clause": "Expiry/roll subscriptions; old holding remains on original full contract key while new contract is subscribed",
+      "evidence": [
+        "root_r11_historical_fixed_export",
+        "current_test_static_delta"
+      ],
+      "scope": "local ServiceHost/CURVE and real Gateway/Monitor service wiring with synthetic market/account providers; no external venue/account."
+    },
+    {
+      "clause": "Threshold windows and duplicate/replay behavior, persistent alert delivery after ACK loss/restart, operator scope and bounded labels/capacity",
+      "evidence": [
+        "monitor_unit_summary_cdf_pin",
+        "r266_local_restart_current_a761_pin"
+      ],
+      "scope": "The 13-unit item is a transcript summary on the earlier cdf source pin; the restart node is direct local pytest with explicit current R266 source pins and real spawned consumer; neither is external-provider acceptance."
+    },
+    {
+      "clause": "Execution submit/cancel event selection only for authenticated producer and exact provider/environment/account/strategy source scope; relay replay does not double count",
+      "evidence": [
+        "selector_integration_author_run"
+      ],
+      "scope": "One direct local integration node; synthetic local source facts/Host, real ExecutionJournal reader/relay and Monitor durable consumer; no Root fixed-export run."
+    }
+  ],
+  "evidence": {
+    "r266_packet": {
+      "directory": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim08-market-expiry-monitor-r266-20261017",
+      "artifacts": [
+        {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim08-market-expiry-monitor-r266-20261017\\manifest.json",
+          "bytes": 11391,
+          "sha256": "c8cf81f9a6df7088247df64b0670af7323dd6f4ba339b10ff1bb71d295f37de4"
+        },
+        {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim08-market-expiry-monitor-r266-20261017\\raw-evidence.zip",
+          "bytes": 373648,
+          "sha256": "096e78b5e43b8a2c6201e08f5308d98c208955f076cfca95aeabdc97cd8b86d4"
+        },
+        {
+          "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim08-market-expiry-monitor-r266-20261017\\round-record.md",
+          "bytes": 4052,
+          "sha256": "45c8f5d7b351004f673c71392acfb392c69549c3e4f874257737005392969890"
+        }
+      ],
+      "current_R266_source_pins": [
+        {
+          "path": "D:\\bt_api_py\\tests\\integration\\test_dim08_market_expiry_monitor_service.py",
+          "bytes": 41865,
+          "sha256": "2fed522a76aa2f7835f752770e9f6631646e3db54badd1aff70decc00cfcc8c3"
+        },
+        {
+          "path": "D:\\bt_api_py\\tests\\integration\\test_dim08_monitor_threshold_service_restart.py",
+          "bytes": 29209,
+          "sha256": "d720a896b4cd86cc53a6b4c209bb8d480ec82ff212f765fdb69a216936805e51"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\__init__.py",
+          "bytes": 10667,
+          "sha256": "e914c8e03709f5572ecb4721636151e7471f9e9d47b3fb28003b66f60f4e8629"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\durable.py",
+          "bytes": 29824,
+          "sha256": "8ea958088904948b2601af2ecf3417925df3a0132cdb0c9a88aeb21ae34de286"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\threshold_rules.py",
+          "bytes": 62868,
+          "sha256": "a7617408630e9b629b4147ee1ea3b0eb39e55177df727950637373829598783e"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\threshold_service.py",
+          "bytes": 39292,
+          "sha256": "0531c19ca097c01dd7f99504c9d1ec561036e82bf2bfb14c3907982671647aec"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_threshold_rules.py",
+          "bytes": 29452,
+          "sha256": "115e75627d8667b6542c4338be27ef72c7f0f6a5c487a2229f47a85244fe1c54"
+        },
+        {
+          "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_threshold_service.py",
+          "bytes": 18954,
+          "sha256": "db9e5793540f6d44825ef98a30c0488477c5bccfb1704d0a4e1cd69a7791083a"
+        }
+      ],
+      "status_note": "Packet itself preserves 40/68 OPEN_PARTIAL; all current candidate source files/pins and historical R11 mappings are in manifest and raw zip."
+    },
+    "root_r11_historical_fixed_export": {
+      "output_directory": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11",
+      "node": "tests/integration/test_dim08_market_expiry_monitor_service.py::test_expiry_roll_keeps_account_position_on_old_key_and_replays_monitor_outbox",
+      "result": "1 passed; Root fixed export; 3929 source pins unchanged; old frozen test/monitor overlays only.",
+      "test_pin": {
+        "bytes": 41088,
+        "sha256": "aaa5103b565c223fda9feaa946edb66c0dd489c7c2044fcbcccd600c39ccce21"
+      },
+      "monitor_threshold_rules_pin": {
+        "bytes": 13897,
+        "sha256": "617722e269dbcf634ab7370fb3e9e46162bf22c9c254dcb59e38a591ee4f92a8"
+      },
+      "monitor_test_threshold_rules_pin": {
+        "bytes": 22041,
+        "sha256": "6f7351cc46fce954bba0a5c3781246557d4bce4c44d30ae5759fffaed37f5887"
+      },
+      "spec": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim08-market-expiry-monitor-root-spec-r11-20261016.json",
+        "sha256": "e850eeef90b1db902a8d9f4b51cfef7a073c0a05530fa7c5116c1932b6ec87f1",
+        "bytes": 855426
+      },
+      "source_manifest": {
+        "archive_member": "root-r11/source-manifest.json",
+        "bytes": 859160,
+        "sha256": "d1e5c7ed939a4e170c8d15a29fefa3e3df4fb77d6fa7f698e15d41e027402d45"
+      },
+      "outputs": [
+        {
+          "path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\result.json",
+          "bytes": 1746,
+          "sha256": "7d1c01051998ab67e6749323ff0a3d4dc6bc906f8d60c7f3ceeef30ae99e1df5"
+        },
+        {
+          "path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\stdout.log",
+          "bytes": 204,
+          "sha256": "132c1c7990c6269368d7cd486973c6e7ea81b5a18da5019a9c05eab44bacd11e"
+        },
+        {
+          "path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\stderr.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\junit.xml",
+          "bytes": 394,
+          "sha256": "5ad9efaaf816a7f546fb76b4c52eb1e6c5a6931a38c5f41db0dc064054bfbfc0"
+        },
+        {
+          "path": "D:\\temp\\iteration10-dim08-market-expiry-monitor-root-qa-20261016-r11\\command.json",
+          "bytes": 1475,
+          "sha256": "db0e43e2a3ff90b682af16839802146f7a882037e6eeac0981d6113891cd7f78"
+        }
+      ],
+      "claim_boundary": "Historical result applies only to the pinned old test and old threshold_rules overlay; not current persisted-threshold or current test bytes."
+    },
+    "r11_to_current_market_test_static_delta": {
+      "current_test_path": "D:\\bt_api_py\\tests\\integration\\test_dim08_market_expiry_monitor_service.py",
+      "current_test_pin": {
+        "bytes": 41865,
+        "sha256": "2fed522a76aa2f7835f752770e9f6631646e3db54badd1aff70decc00cfcc8c3"
+      },
+      "old_test_pin": {
+        "bytes": 41088,
+        "sha256": "aaa5103b565c223fda9feaa946edb66c0dd489c7c2044fcbcccd600c39ccce21"
+      },
+      "diff_member": {
+        "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim08-market-expiry-monitor-r266-20261017\\raw-evidence.zip#current/market-test-r11-delta.diff",
+        "bytes": 2020,
+        "sha256": "ea4b3a225c5fa6b44992052ebad50ef47391bd87f65fc08b676ac8fa15864b95"
+      },
+      "exact_hunks": [
+        {
+          "old_line": 32,
+          "new_line": 32,
+          "change": "Imports MarketProviderEvent (multiline import formatting)."
+        },
+        {
+          "old_line": 378,
+          "new_line": 378,
+          "change": "Adds _RollProvider.poll(handle, *, limit): verifies exact active tuple handle and exact int limit==1, returns empty tuple; no quote is fabricated."
+        },
+        {
+          "old_line": 955,
+          "new_line": 970,
+          "change": "Adds four lineage assertions: alert.source_event_id == new_projection[\"event_id\"], source_stream_epoch == relay frame epoch, source_sequence == frame sequence == 1, source_completeness == \"received_event_only\"."
+        }
+      ],
+      "no_weakened_assertions": "No threshold, scope-denial, rollover, old full MarketInstrumentKey position/quantity, replay, or cleanup assertion removed or loosened.",
+      "execution_status": "The current 2fed test hash is static-only in R266. R11 was not rerun against this pin."
+    },
+    "monitor_rule_units_summary_only": {
+      "draft_source_record": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim08-r266-threshold-20261017\\manifest.json",
+        "bytes": 7817,
+        "sha256": "2c0e0a1db6c4d5565dad7a4c3090bcd69f27a10cabf45ce7b0cc93227e0f4d10"
+      },
+      "summary_archive": {
+        "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim08-r266-threshold-20261017\\raw.zip",
+        "bytes": 30492,
+        "sha256": "cd02822f54e1e67e5558270cd547a4ffca05a5c013174f7987a2088f85ba720e",
+        "member": "qa/current-local-terminal-summary.txt",
+        "member_bytes": 1276,
+        "member_sha256": "3d34f5ae559e7cb7b968a96b87c174a13497986e4229326416db600c6d1a4ce2"
+      },
+      "result": "13 passed, one existing unknown pytest asyncio config warning, 3.29s; author session summary only, original stdout not retained.",
+      "command": "python -m pytest -q tests/test_threshold_rules.py",
+      "run_source_binding": {
+        "monitor_threshold_rules_commit": "cdf67d0b111ce97b8103dcfc0eb79117727bdaf2",
+        "threshold_rules_bytes": 53364,
+        "threshold_rules_sha256": "e372aaa92be602e96df27f72505aad20e8a9c3aa5e8e52a24ace15893f3c94cd",
+        "test_threshold_rules_bytes": 29452,
+        "test_threshold_rules_sha256": "115e75627d8667b6542c4338be27ef72c7f0f6a5c487a2229f47a85244fe1c54",
+        "threshold_rules_path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\src\\bt_api_monitor\\threshold_rules.py",
+        "test_threshold_rules_path": "D:\\bt_api_py\\bt_api\\bt_api_monitor\\tests\\test_threshold_rules.py"
+      },
+      "version_reconciliation": "This summary is NOT bound to R266 manifest source a761. ab09 added the durable consumer and advanced threshold_rules to a761; e534 (R266 Monitor target) still has a761. Current selector commit advances to 31f73. Do not attribute these 13 unit passes to either a761 or 31f73."
+    },
+    "r266_local_restart_raw": {
+      "output_directory": "D:\\temp\\dim08-r266-root-local-restart-20261017",
+      "node": "tests/integration/test_dim08_monitor_threshold_service_restart.py::test_servicehost_threshold_consumer_restarts_idempotently_with_quota_and_scope_isolation",
+      "command": "python -m pytest -p no:asyncio -q tests/integration/test_dim08_monitor_threshold_service_restart.py::test_servicehost_threshold_consumer_restarts_idempotently_with_quota_and_scope_isolation",
+      "result": "1 passed in 12.91s, exit 0; one expected non-fatal unknown-ini warning because unused pytest-asyncio was disabled after its collection hook failed before test import.",
+      "evidence_classification": "Author/local direct pytest, not Root fixed-export wrapper. Real local ServiceHost/CURVE/Registry/Runtime, production Monitor threshold provider and spawned Windows consumer; synthetic provider/account facts only.",
+      "test_pin": {
+        "path": "D:\\bt_api_py\\tests\\integration\\test_dim08_monitor_threshold_service_restart.py",
+        "bytes": 29209,
+        "sha256": "d720a896b4cd86cc53a6b4c209bb8d480ec82ff212f765fdb69a216936805e51"
+      },
+      "output_files": [
+        {
+          "path": "D:\\temp\\dim08-r266-root-local-restart-20261017\\result.json",
+          "bytes": 1088,
+          "sha256": "c0c9e41b02c9e7bf3d40d0cd3048f558dbb8187690f0ba3af40ef21ab1fdc6db"
+        },
+        {
+          "path": "D:\\temp\\dim08-r266-root-local-restart-20261017\\command.json",
+          "bytes": 1856,
+          "sha256": "4e7f7ac648391fb7ea5398a01f13dd147d7b0860ec7d8251df3c3872c5934ebf"
+        },
+        {
+          "path": "D:\\temp\\dim08-r266-root-local-restart-20261017\\source-pins.json",
+          "bytes": 3342,
+          "sha256": "5bcc7043231f48b42c44882a47204dad4f9272daaf9da5a0945e1d0918995757"
+        },
+        {
+          "path": "D:\\temp\\dim08-r266-root-local-restart-20261017\\captured-output.txt",
+          "bytes": 549,
+          "sha256": "1dbe5f3c33a867658c0794221239aeb7838357aba5da522b8ae3a21dcfba940a"
+        }
+      ],
+      "key_source_pins": [
+        {
+          "path": "tests/integration/test_dim08_monitor_threshold_service_restart.py",
+          "bytes": 29209,
+          "sha256": "d720a896b4cd86cc53a6b4c209bb8d480ec82ff212f765fdb69a216936805e51"
+        },
+        {
+          "path": "bt_api/bt_api_monitor/src/bt_api_monitor/threshold_rules.py",
+          "bytes": 62868,
+          "sha256": "a7617408630e9b629b4147ee1ea3b0eb39e55177df727950637373829598783e"
+        },
+        {
+          "path": "bt_api/bt_api_monitor/src/bt_api_monitor/threshold_service.py",
+          "bytes": 39292,
+          "sha256": "0531c19ca097c01dd7f99504c9d1ec561036e82bf2bfb14c3907982671647aec"
+        },
+        {
+          "path": "bt_api/bt_api_monitor/src/bt_api_monitor/durable.py",
+          "bytes": 29824,
+          "sha256": "8ea958088904948b2601af2ecf3417925df3a0132cdb0c9a88aeb21ae34de286"
+        },
+        {
+          "path": "bt_api/bt_api_monitor/src/bt_api_monitor/service_ingress.py",
+          "bytes": 16141,
+          "sha256": "0b65d791cd92ddd8d05e33a17e0b9b0ead1033340fcdd71719fa5f91eb7b3bd3"
+        },
+        {
+          "path": "bt_api/bt_api_monitor/src/bt_api_monitor/__init__.py",
+          "bytes": 10667,
+          "sha256": "e914c8e03709f5572ecb4721636151e7471f9e9d47b3fb28003b66f60f4e8629"
+        },
+        {
+          "path": "bt_api/bt_api_base/src/bt_api_base/service_protocol.py",
+          "bytes": 26174,
+          "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+        },
+        {
+          "path": "bt_api_py/service_components.py",
+          "bytes": 136835,
+          "sha256": "c0f6858bdb2e2104661992bdb32b70d1fe9350452dfecd15dae02273bf54af23"
+        },
+        {
+          "path": "bt_api_py/service_config.py",
+          "bytes": 50868,
+          "sha256": "41c904939602911ece79689ab7e83d5aae7a8459cd67090be3698aa84b79c445"
+        },
+        {
+          "path": "bt_api_py/service_deployment.py",
+          "bytes": 22779,
+          "sha256": "c063022a2e30655c6b23d1ed74cdebf6418342b05daf368257c251201d7b3ace"
+        },
+        {
+          "path": "bt_api_py/service_host.py",
+          "bytes": 103121,
+          "sha256": "25a07d5c6b14108ba699d2b86a59c99acacbd77e1a2c4f411f6f7e0d7350ab7e"
+        },
+        {
+          "path": "bt_api_py/service_registry.py",
+          "bytes": 136807,
+          "sha256": "260127e4d947364b627ce46be75f53e66a1e7bde1723811b422826141030a9d2"
+        },
+        {
+          "path": "bt_api_py/service_runtime.py",
+          "bytes": 81784,
+          "sha256": "accdc95943a44738ec4dd9f763b50e3319bed19e7dc998e7644119ea3ef64db7"
+        },
+        {
+          "path": "tests/unit/_spawned_process_helpers.py",
+          "bytes": 3909,
+          "sha256": "1bd9e26d379c646d4c328b8103ac9bef16cefc3d765fb31be003177b066a318c"
+        }
+      ],
+      "covers": "Append-success/DELIVERED-ack failure/restart/deduplicated alert recovery; independent scopes; persisted instrument_key plus group_ref/resource_pool_ref dimensions; group capacity overflow leaves source pending and emits no over-cap alert; cleanup assertions.",
+      "source_binding": "source-pins.json records live SDK HEAD 3b8025 and Monitor HEAD e534; direct module pins and post-run import origins. This binds current R266 source a761, not selector source 31f73."
+    },
+    "selector_execution_journal_relay_author_run": {
+      "node": "tests/unit/test_service_execution_monitor_integration.py::test_spawned_execution_journal_relay_replays_after_local_checkpoint_failure",
+      "test_pin": {
+        "path": "D:\\bt_api_py\\tests\\unit\\test_service_execution_monitor_integration.py",
+        "bytes": 41803,
+        "sha256": "a640a248eae060d48a823d79cad0adb57d8c5199d151f19b7eed41b02ece5c98"
+      },
+      "sdk_commit_with_test": "f8c544338fdb8c2d1823f72f482637550c1d6003",
+      "monitor_gitlink": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+      "command_file": {
+        "path": "D:\\temp\\dim08-m5-selector-final-20261017-r2\\command.json",
+        "bytes": 1525,
+        "sha256": "040fe3324e71932b536b2a2bf06b099228a3f0a3e5d6521c89805b3800d21433"
+      },
+      "output_files": [
+        {
+          "path": "D:\\temp\\dim08-m5-selector-final-20261017-r2\\stdout.log",
+          "bytes": 1801,
+          "sha256": "3e65715020c669a57c3f8b3c64b6009cdb57fb388acf01e5c3a6109a3167c794"
+        },
+        {
+          "path": "D:\\temp\\dim08-m5-selector-final-20261017-r2\\stderr.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "D:\\temp\\dim08-m5-selector-final-20261017-r2\\junit.xml",
+          "bytes": 389,
+          "sha256": "9e6144d21d639782d3a542c839f9a763abf10e001fd2d782e73b0e1cec875892"
+        },
+        {
+          "path": "D:\\temp\\dim08-m5-selector-final-20261017-r2\\exit.txt",
+          "bytes": 1,
+          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        }
+      ],
+      "result": "1 passed in 14.55s, exit 0, one non-fatal unknown asyncio ini warning; author direct pytest on live checkout, no Root fixed-export wrapper.",
+      "coverage": "ExecutionJournalReader/relay emits Monitor ingress facts; a forced local monitor-checkpoint failure replays; exact trusted provider/environment/account/strategy source bindings select two intent_recorded submits and one cancel_intent_recorded fact; the test asserts durable alert counts/dimensions and bounded cleanup. Synthetic local scope facts; no external exchange/provider.",
+      "source_binding_limit": "command.json fixes executable, argv, cwd and PYTHONPATH roots but contains no source-pins.json. The committed final test pin is supplied here; run artifact is author output, not independently source-attested Root QA."
+    }
+  },
+  "evidence_limits": [
+    "No external venue, production market/account provider or real account data.",
+    "R11 fixed-export pass is bound to its old test and threshold source pins only.",
+    "The 13 threshold unit result is a textual author-session summary with no original stdout; it binds cdf/e372 and test 115e only.",
+    "The R266 restart pass is a direct local live-checkout result with complete exact relevant source pins, not Root fixed-export QA.",
+    "Latest selector node is an author direct live-checkout run with command/stdout/JUnit/exit artifacts; command file does not include a source-pins manifest.",
+    "No formal progress count is changed by this evidence map."
+  ]
+}
