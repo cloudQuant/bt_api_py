@@ -25,6 +25,7 @@ from bt_api_py.service_registry import (
     ServiceOperationDeniedError,
     ServiceRegistry,
     ServiceRegistryBusyError,
+    TrustedPaperOwnerWritePolicy,
 )
 
 _SENT_AT = "2026-10-13T12:00:00Z"
@@ -504,6 +505,325 @@ def test_approved_target_write_uses_only_its_exact_application_grant(tmp_path: P
         assert ordinary_strategy_write["code"] == "SCOPE_DENIED"
         assert ordinary_operation_on_approved_registration["code"] == "SCOPE_DENIED"
         assert len(calls) == 1
+    finally:
+        registry.close()
+
+
+def test_paper_owner_submit_requires_exact_typed_owner_and_application_grant(
+    tmp_path: Path,
+) -> None:
+    from decimal import Decimal
+
+    from bt_api_execution import (
+        PAPER_ENVIRONMENT,
+        PAPER_MODEL_REF,
+        PAPER_PROVIDER,
+        ExecutionScope,
+        PaperInstrumentV1,
+        PaperOwnerDomainV1,
+    )
+
+    owner_principal = "paper-owner-principal"
+    reader_principal = "paper-reader-principal"
+    owner_identity = _identity(
+        WireRole.APPLICATION_CLIENT,
+        principal_ref=owner_principal,
+        actor_ref="paper-owner-actor",
+        delegate_ref="paper-owner-delegate",
+    )
+    reader_identity = _identity(
+        WireRole.APPLICATION_CLIENT,
+        principal_ref=reader_principal,
+        actor_ref="paper-reader-actor",
+    )
+    paper_scope = WireScope(
+        execution_domain_ref="paper-domain-a",
+        account_ref="simulation-account-a",
+        strategy_ref="strategy-a",
+    )
+    live_scope = WireScope(
+        execution_domain_ref="live-venue-a",
+        account_ref="live-account-a",
+        strategy_ref="strategy-a",
+    )
+    reader_scope = WireScope(
+        execution_domain_ref="paper-domain-reader",
+        account_ref="simulation-account-reader",
+        strategy_ref="strategy-reader",
+    )
+    domain = PaperOwnerDomainV1(
+        execution_domain_ref=paper_scope.execution_domain_ref,
+        simulation_account_ref=paper_scope.account_ref,
+        experiment_ref="paper-experiment-a",
+        strategy_ref=paper_scope.strategy_ref,
+        model_ref=PAPER_MODEL_REF,
+        model_version="1",
+        quote_source_ref="synthetic-quotes-a",
+        cash_currency="USDT",
+        initial_cash=Decimal("100"),
+        initial_fees=Decimal("0"),
+        fee_rate=Decimal("0.001"),
+        fee_quantum=Decimal("0.0001"),
+        max_quote_age_ns=30_000_000_000,
+        instruments=(
+            PaperInstrumentV1(
+                "BTC-USDT",
+                "instrument-v1",
+                "BTC",
+                "USDT",
+                Decimal("0.01"),
+                Decimal("0.01"),
+            ),
+        ),
+        opening_positions=(),
+    )
+    paper_execution_scope = ExecutionScope(
+        PAPER_PROVIDER,
+        PAPER_ENVIRONMENT,
+        paper_scope.account_ref,
+        paper_scope.strategy_ref,
+        "paper-day-a",
+    )
+    paper_grant = ResourceGrant(
+        "execution-owner",
+        "service.order_entry",
+        "paper-submit-selector",
+        paper_scope,
+        frozenset({"orders.submit"}),
+    )
+    live_grant = ResourceGrant(
+        "execution-owner",
+        "service.order_entry",
+        "live-selector",
+        live_scope,
+        frozenset({"orders.submit"}),
+    )
+    reader_grant = ResourceGrant(
+        "execution-owner",
+        "service.order_query",
+        "reader-selector",
+        reader_scope,
+        frozenset({"orders.query"}),
+    )
+    capabilities = (
+        ServiceCapability(
+            "execution-owner",
+            "service.order_entry",
+            frozenset({"orders.submit", "orders.cancel"}),
+            frozenset({"orders.submit", "orders.cancel"}),
+        ),
+        ServiceCapability(
+            "execution-owner",
+            "service.order_query",
+            frozenset({"orders.query"}),
+        ),
+    )
+    grants = {
+        owner_principal: (
+            PrincipalGrant(owner_identity, (paper_grant, live_grant)),
+        ),
+        reader_principal: (PrincipalGrant(reader_identity, (reader_grant,)),),
+    }
+    policy = TrustedPaperOwnerWritePolicy(
+        instance_id="execution-owner",
+        principal_ref=owner_principal,
+        identity=owner_identity,
+        scope_ref=paper_grant.scope_ref,
+        scope=paper_scope,
+        paper_owner_domain=domain,
+        execution_scope=paper_execution_scope,
+    )
+
+    # A matching ResourceGrant alone still cannot bypass the application
+    # strategy-write guard.
+    unbound = ServiceRegistry(
+        tmp_path / "paper-unbound.sqlite",
+        service_id="execution-service",
+        capabilities=capabilities,
+        grants=grants,
+        policy_version="policy-v1",
+        requirements_version="requirements-v1",
+    )
+    try:
+        no_owner_proof = _register(
+            unbound,
+            identity=owner_identity,
+            scope=paper_scope,
+            principal=owner_principal,
+            key="paper-without-owner-proof",
+            client_session_id="paper-session-unbound",
+            operations=("orders.submit",),
+            instance_id="execution-owner",
+            port="service.order_entry",
+            scope_ref=paper_grant.scope_ref,
+        )
+        assert no_owner_proof["code"] == "SCOPE_DENIED"
+    finally:
+        unbound.close()
+
+    registry = ServiceRegistry(
+        tmp_path / "paper-bound.sqlite",
+        service_id="execution-service",
+        capabilities=capabilities,
+        grants=grants,
+        policy_version="policy-v1",
+        requirements_version="requirements-v1",
+        trusted_paper_owner_write_policies=(policy,),
+    )
+    calls: list[ServiceCallContext] = []
+    registry.register_handler(
+        "execution-owner",
+        "orders.submit",
+        lambda context, _arguments: calls.append(context) or {"accepted": True},
+    )
+    try:
+        owner_registration = _register(
+            registry,
+            identity=owner_identity,
+            scope=paper_scope,
+            principal=owner_principal,
+            key="paper-owner-registration",
+            client_session_id="paper-owner-session",
+            operations=("orders.submit",),
+            instance_id="execution-owner",
+            port="service.order_entry",
+            scope_ref=paper_grant.scope_ref,
+        )
+        assert owner_registration["ok"] is True
+        submitted = _business(
+            registry,
+            owner_registration["result"],
+            identity=owner_identity,
+            scope=paper_scope,
+            principal=owner_principal,
+            operation="orders.submit",
+            instance_id="execution-owner",
+        )
+        assert submitted == {"ok": True, "code": "OK", "result": {"accepted": True}}
+        assert len(calls) == 1 and calls[0].scope == paper_scope
+
+        wrong_selector = _register(
+            registry,
+            identity=owner_identity,
+            scope=paper_scope,
+            principal=owner_principal,
+            key="paper-owner-wrong-selector",
+            client_session_id="paper-owner-session-wrong-selector",
+            operations=("orders.submit",),
+            instance_id="execution-owner",
+            port="service.order_entry",
+            scope_ref="other-paper-selector",
+        )
+        cross_account = _register(
+            registry,
+            identity=owner_identity,
+            scope=replace(paper_scope, account_ref="another-paper-account"),
+            principal=owner_principal,
+            key="paper-owner-cross-account",
+            client_session_id="paper-owner-session-cross-account",
+            operations=("orders.submit",),
+            instance_id="execution-owner",
+            port="service.order_entry",
+            scope_ref=paper_grant.scope_ref,
+        )
+        live_write = _register(
+            registry,
+            identity=owner_identity,
+            scope=live_scope,
+            principal=owner_principal,
+            key="paper-owner-live-scope",
+            client_session_id="paper-owner-session-live-scope",
+            operations=("orders.submit",),
+            instance_id="execution-owner",
+            port="service.order_entry",
+            scope_ref="live-selector",
+        )
+        reader_submit = _register(
+            registry,
+            identity=reader_identity,
+            scope=reader_scope,
+            principal=reader_principal,
+            key="paper-reader-submit",
+            client_session_id="paper-reader-session-submit",
+            operations=("orders.submit",),
+            instance_id="execution-owner",
+            port="service.order_entry",
+            scope_ref="reader-selector",
+        )
+        reader_query = _register(
+            registry,
+            identity=reader_identity,
+            scope=reader_scope,
+            principal=reader_principal,
+            key="paper-reader-query",
+            client_session_id="paper-reader-session-query",
+            operations=("orders.query",),
+            instance_id="execution-owner",
+            port="service.order_query",
+            scope_ref="reader-selector",
+        )
+        extra_operation = _register(
+            registry,
+            identity=owner_identity,
+            scope=paper_scope,
+            principal=owner_principal,
+            key="paper-owner-extra-operation",
+            client_session_id="paper-owner-session-extra-operation",
+            operations=("orders.submit", "orders.cancel"),
+            instance_id="execution-owner",
+            port="service.order_entry",
+            scope_ref=paper_grant.scope_ref,
+        )
+        forged_paper_field = registry.handle(
+            owner_principal,
+            _next_request(
+                "service.register",
+                {
+                    "registration_key": "paper-owner-forged-field",
+                    "client_session_id": "paper-owner-session-forged-field",
+                    "instance_id": "execution-owner",
+                    "port": "service.order_entry",
+                    "scope_ref": paper_grant.scope_ref,
+                    "operations": ("orders.submit",),
+                    "paper_owner_domain": "paper-domain-a",
+                },
+                identity=owner_identity,
+                scope=paper_scope,
+            ),
+        )
+        assert wrong_selector["code"] == "SCOPE_DENIED"
+        assert cross_account["code"] == "SCOPE_DENIED"
+        assert live_write["code"] == "SCOPE_DENIED"
+        assert reader_submit["code"] == "SCOPE_DENIED"
+        assert reader_query["ok"] is True
+        assert extra_operation["code"] == "SCOPE_DENIED"
+        assert forged_paper_field["code"] == "INVALID_REQUEST"
+
+        with pytest.raises(ValueError, match="typed paper domain"):
+            TrustedPaperOwnerWritePolicy(
+                instance_id="execution-owner",
+                principal_ref=owner_principal,
+                identity=owner_identity,
+                scope_ref=paper_grant.scope_ref,
+                scope=paper_scope,
+                paper_owner_domain=domain,
+                execution_scope=ExecutionScope(
+                    "exchange-live",
+                    "live",
+                    paper_scope.account_ref,
+                    paper_scope.strategy_ref,
+                ),
+            )
+        with pytest.raises(ValueError, match="typed paper domain"):
+            TrustedPaperOwnerWritePolicy(
+                instance_id="execution-owner",
+                principal_ref=owner_principal,
+                identity=owner_identity,
+                scope_ref=paper_grant.scope_ref,
+                scope=paper_scope,
+                paper_owner_domain=object(),
+                execution_scope=paper_execution_scope,
+            )
     finally:
         registry.close()
 
