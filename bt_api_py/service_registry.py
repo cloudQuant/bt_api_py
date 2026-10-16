@@ -53,6 +53,19 @@ _MAX_OPERATIONS_PER_REQUEST = 64
 _MAX_RESULT_BYTES = 900 * 1024
 _APPROVED_TARGET_OPERATION = ("service.order_entry", "orders.submit_approved_target")
 _PAPER_OWNER_OPERATION = ("service.order_entry", "orders.submit")
+_PAPER_LEGACY_IMPORT_PORT = "service.paper_legacy_import"
+_PAPER_LEGACY_IMPORT_OPERATIONS = frozenset(
+    {
+        "paper.import.status",
+        "paper.import.inspect_source",
+        "paper.import.prepare",
+        "paper.import.activate",
+        "paper.import.abort",
+    }
+)
+_PAPER_LEGACY_IMPORT_WRITE_OPERATIONS = frozenset(
+    {"paper.import.prepare", "paper.import.activate", "paper.import.abort"}
+)
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _CONTROL_OPERATIONS = frozenset(
     {"service.discover", "service.register", "service.renew", "service.unregister"}
@@ -384,6 +397,72 @@ class TrustedPaperOwnerWritePolicy:
             raise ValueError("paper owner policy target binding is invalid") from error
 
 
+@dataclass(frozen=True, slots=True)
+class TrustedPaperLegacyImportPolicy:
+    """Exact application grant for one Host-owned legacy Paper import target."""
+
+    instance_id: str
+    principal_ref: str
+    identity: WireIdentity
+    scope_ref: str
+    scope: WireScope
+    paper_owner_domain: object = field(repr=False, compare=False)
+    execution_scope: object = field(repr=False, compare=False)
+    port: str = _PAPER_LEGACY_IMPORT_PORT
+
+    def __post_init__(self) -> None:
+        if not all(
+            _text(value) for value in (self.instance_id, self.principal_ref, self.scope_ref)
+        ):
+            raise ValueError("paper legacy import policy identifiers are invalid")
+        if (
+            type(self.identity) is not WireIdentity
+            or self.identity.role is not WireRole.APPLICATION_CLIENT
+            or self.principal_ref != self.identity.principal_ref
+        ):
+            raise ValueError("paper legacy import policy requires its exact application identity")
+        if type(self.scope) is not WireScope:
+            raise TypeError("paper legacy import policy scope must be WireScope")
+        if self.port != _PAPER_LEGACY_IMPORT_PORT:
+            raise ValueError("paper legacy import policy route is fixed")
+        if (
+            self.scope.account_ref is None
+            or self.scope.account_refs
+            or self.scope.strategy_ref is None
+            or self.scope.run_id is not None
+            or self.scope.manual_book_ref is not None
+            or self.scope.portfolio_ref is not None
+            or self.scope.group_id is not None
+            or self.scope.leg_id is not None
+        ):
+            raise ValueError("paper legacy import policy scope is invalid")
+        # Import Execution only when an operator actually selects this role.
+        try:
+            from bt_api_execution import ExecutionScope, PaperOwnerDomainV1
+        except Exception as error:
+            raise ValueError("paper legacy import runtime types are unavailable") from error
+        if (
+            type(self.paper_owner_domain) is not PaperOwnerDomainV1
+            or type(self.execution_scope) is not ExecutionScope
+            or self.scope.execution_domain_ref != self.paper_owner_domain.execution_domain_ref
+            or self.scope.account_ref != self.paper_owner_domain.simulation_account_ref
+            or self.scope.strategy_ref != self.paper_owner_domain.strategy_ref
+        ):
+            raise ValueError("paper legacy import policy does not match its typed target")
+        try:
+            self.paper_owner_domain.validate_binding(self.scope, self.execution_scope)
+        except Exception as error:
+            raise ValueError("paper legacy import policy target binding is invalid") from error
+
+    @property
+    def operations(self) -> frozenset[str]:
+        return _PAPER_LEGACY_IMPORT_OPERATIONS
+
+    @property
+    def write_operations(self) -> frozenset[str]:
+        return _PAPER_LEGACY_IMPORT_WRITE_OPERATIONS
+
+
 _GROUP_RESERVATION_OPERATIONS = frozenset(
     {"reservations.reserve", "reservations.query", "reservations.release"}
 )
@@ -621,6 +700,7 @@ class ServiceRegistry:
         trusted_group_reservation_policies: tuple[TrustedGroupReservationPolicy, ...] = (),
         trusted_group_resolution_policies: tuple[TrustedGroupResolutionPolicy, ...] = (),
         trusted_paper_owner_write_policies: tuple[TrustedPaperOwnerWritePolicy, ...] = (),
+        trusted_paper_legacy_import_policies: tuple[TrustedPaperLegacyImportPolicy, ...] = (),
         access_policy_ref: str | None = None,
         requirements_ref: str | None = None,
         account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = (),
@@ -709,6 +789,13 @@ class ServiceRegistry:
             for policy in trusted_paper_owner_write_policies
         ):
             raise TypeError("trusted_paper_owner_write_policies must be a tuple of trusted policies")
+        if type(trusted_paper_legacy_import_policies) is not tuple or any(
+            type(policy) is not TrustedPaperLegacyImportPolicy
+            for policy in trusted_paper_legacy_import_policies
+        ):
+            raise TypeError(
+                "trusted_paper_legacy_import_policies must be a tuple of trusted policies"
+            )
         policy_keys: set[tuple[object, ...]] = set()
         logical_runs: dict[tuple[str, str, str], str] = {}
         policy_routes: list[tuple[object, frozenset[str], frozenset[str], str]] = [
@@ -821,6 +908,39 @@ class ServiceRegistry:
             if len(matching_grants) != 1:
                 raise ValueError("trusted paper owner policy does not match one exact grant")
 
+        paper_legacy_import_policy_keys: set[tuple[object, ...]] = set()
+        for policy in trusted_paper_legacy_import_policies:
+            key = (
+                policy.instance_id,
+                policy.principal_ref,
+                policy.identity,
+                policy.scope_ref,
+                policy.scope,
+            )
+            if key in paper_legacy_import_policy_keys:
+                raise ValueError("duplicate trusted paper legacy import policy")
+            paper_legacy_import_policy_keys.add(key)
+            capability = capability_map.get((policy.instance_id, policy.port))
+            if (
+                capability is None
+                or capability.operations != policy.operations
+                or capability.write_operations != policy.write_operations
+            ):
+                raise ValueError("trusted paper legacy import policy is outside the capability")
+            matching_grants = [
+                resource
+                for principal_grant in trusted_grants.get(policy.principal_ref, ())
+                if principal_grant.identity == policy.identity
+                for resource in principal_grant.resources
+                if resource.instance_id == policy.instance_id
+                and resource.port == policy.port
+                and resource.scope_ref == policy.scope_ref
+                and resource.scope == policy.scope
+                and resource.operations == policy.operations
+            ]
+            if len(matching_grants) != 1:
+                raise ValueError("trusted paper legacy import policy does not match one exact grant")
+
         self.service_id = service_id
         self.policy_version = policy_version
         self.requirements_version = requirements_version
@@ -840,6 +960,7 @@ class ServiceRegistry:
         self._trusted_group_reservation_policies = trusted_group_reservation_policies
         self._trusted_group_resolution_policies = trusted_group_resolution_policies
         self._trusted_paper_owner_write_policies = trusted_paper_owner_write_policies
+        self._trusted_paper_legacy_import_policies = trusted_paper_legacy_import_policies
         self._handlers: dict[
             tuple[str, str], Callable[[ServiceCallContext, Mapping[str, Any]], Mapping[str, Any]]
         ] = {}
@@ -1813,6 +1934,30 @@ class ServiceRegistry:
             for policy in self._trusted_paper_owner_write_policies
         )
 
+    def _trusted_paper_legacy_import_write(
+        self,
+        principal: str,
+        identity: WireIdentity,
+        *,
+        instance_id: str,
+        port: str,
+        scope_ref: str,
+        scope: WireScope,
+        operation: str,
+    ) -> bool:
+        if identity.role is not WireRole.APPLICATION_CLIENT or port != _PAPER_LEGACY_IMPORT_PORT:
+            return False
+        return any(
+            policy.principal_ref == principal
+            and policy.identity == identity
+            and policy.instance_id == instance_id
+            and policy.port == port
+            and policy.scope_ref == scope_ref
+            and policy.scope == scope
+            and operation in policy.write_operations
+            for policy in self._trusted_paper_legacy_import_policies
+        )
+
     def _trusted_group_write_run_matches(
         self,
         principal: str,
@@ -1932,6 +2077,15 @@ class ServiceRegistry:
                         operation=operation,
                     ) is None
                     and not self._trusted_paper_owner_write(
+                        principal,
+                        identity,
+                        instance_id=instance_id,
+                        port=port,
+                        scope_ref=scope_ref,
+                        scope=scope,
+                        operation=operation,
+                    )
+                    and not self._trusted_paper_legacy_import_write(
                         principal,
                         identity,
                         instance_id=instance_id,
@@ -2527,6 +2681,14 @@ class ServiceRegistry:
                     scope=scope,
                     operation=operation,
                 ) is None and not self._trusted_paper_owner_write(
+                    principal,
+                    identity,
+                    instance_id=instance_id,
+                    port=port,
+                    scope_ref=scope_ref,
+                    scope=scope,
+                    operation=operation,
+                ) and not self._trusted_paper_legacy_import_write(
                     principal,
                     identity,
                     instance_id=instance_id,

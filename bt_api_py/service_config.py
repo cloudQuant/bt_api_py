@@ -42,6 +42,7 @@ _APPLICATION_MOUNTS: Final[frozenset[str]] = frozenset(
         "application.market",
         "application.account",
         "application.orders",
+        "application.paper_legacy_import",
         "application.order_query",
         "application.order_groups",
         "application.risk_read",
@@ -78,6 +79,7 @@ _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
         "risk.read_model",
         "application.account",
         "application.orders",
+        "application.paper_legacy_import",
         "application.order_query",
         "application.risk_read",
         "upstream.account",
@@ -138,6 +140,7 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
             "broker.order_query",
             "broker.order_groups",
             "application.orders",
+            "application.paper_legacy_import",
             "application.order_query",
             "application.order_groups",
             "upstream.orders",
@@ -191,6 +194,7 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
             }
         ),
         "group_coordinator": frozenset({"service.order_group_entry"}),
+        "legacy_import_owner": frozenset({"service.paper_legacy_import"}),
     },
     "risk": {
         "account_owner": frozenset({"service.order_entry", "service.order_query"}),
@@ -960,6 +964,9 @@ def _validate_component_options(
             result["account_session_ref"] = _required_ref(raw, "account_session_ref", options_path)
         return result
     if component == "execution":
+        if role == "legacy_import_owner":
+            _check_keys(raw, {"role"}, options_path)
+            return {"role": role}
         if role == "account_owner":
             fields = {"role", "provider_session_ref", "approved_target_required"}
             _check_keys(raw, fields, options_path)

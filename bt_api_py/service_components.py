@@ -628,6 +628,36 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {"service.order_group_entry": frozenset({"groups.submit"})}
             ),
         ),
+        ("execution", "legacy_import_owner"): _Builtin(
+            module_name="bt_api_execution.service_paper_legacy_import",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"store", "targets", "legacy_import_domain"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.paper_legacy_import": frozenset(
+                        {
+                            "paper.import.status",
+                            "paper.import.inspect_source",
+                            "paper.import.prepare",
+                            "paper.import.activate",
+                            "paper.import.abort",
+                        }
+                    )
+                }
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {
+                    "service.paper_legacy_import": frozenset(
+                        {
+                            "paper.import.prepare",
+                            "paper.import.activate",
+                            "paper.import.abort",
+                        }
+                    )
+                }
+            ),
+        ),
         ("risk", "group_reservations"): _Builtin(
             module_name="bt_api_py.service_group_reservations",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -1642,6 +1672,22 @@ def build_component(
                     instance_id=spec.instance_id,
                 )
             elif (
+                spec.component == "execution"
+                and spec.options.get("role") == "legacy_import_owner"
+            ):
+                constructor = getattr(module, "PaperLegacyImportService", None)
+                if not callable(constructor):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                try:
+                    adapter = constructor(
+                        values["store"],
+                        values["targets"],
+                        values["legacy_import_domain"],
+                        writer_id=spec.instance_id,
+                    )
+                except Exception:
+                    raise ServiceComponentError("LEGACY_IMPORT_OWNER_INVALID") from None
+            elif (
                 spec.component == "execution" and spec.options.get("role") == "group_account_owner"
             ):
                 if (
@@ -1904,6 +1950,18 @@ def build_component(
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
+            if (
+                spec.component == "execution"
+                and spec.options.get("role") == "legacy_import_owner"
+            ):
+                configured_operations = getattr(adapter, "supported_operations", None)
+                expected_operations = frozenset(prepared.module.SUPPORTED_OPERATIONS)
+                if (
+                    type(configured_operations) is not frozenset
+                    or configured_operations != expected_operations
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured_operations)
             if spec.component == "gateway" and spec.options.get("role") == "market_hub":
                 configured_operations = getattr(adapter, "supported_operations", None)
                 if type(configured_operations) is not frozenset or configured_operations not in (
@@ -2074,6 +2132,117 @@ def build_component(
                         ):
                             raise ServiceResultTooLargeError() from None
                         raise
+                if (
+                    spec.component == "execution"
+                    and spec.options.get("role") == "legacy_import_owner"
+                ):
+                    principal_ref = context.identity.principal_ref
+                    if _operation == prepared.module.PREPARE_OPERATION:
+                        imported = (
+                            arguments.get("imported")
+                            if isinstance(arguments, Mapping)
+                            else None
+                        )
+                        if (
+                            not isinstance(imported, Mapping)
+                            or imported.get("source_owner_id") != principal_ref
+                        ):
+                            return {
+                                "ok": False,
+                                "code": "SOURCE_OWNER_MISMATCH",
+                                "result": {},
+                            }
+                    if _operation in {
+                        prepared.module.ACTIVATE_OPERATION,
+                        prepared.module.ABORT_OPERATION,
+                    }:
+                        try:
+                            existing = _adapter.handle(  # type: ignore[attr-defined]
+                                prepared.module.STATUS_OPERATION,
+                                scope=context.scope,
+                                arguments={},
+                            )
+                        except Exception:
+                            return {
+                                "ok": False,
+                                "code": "IMPORT_STORE_UNAVAILABLE",
+                                "result": {},
+                            }
+                        existing_result = (
+                            existing.get("result")
+                            if isinstance(existing, Mapping)
+                            and isinstance(existing.get("result"), Mapping)
+                            else {}
+                        )
+                        receipt = existing_result.get("receipt")
+                        if not isinstance(existing, Mapping) or existing.get("ok") is not True:
+                            return {
+                                "ok": False,
+                                "code": "IMPORT_STORE_UNAVAILABLE",
+                                "result": {},
+                            }
+                        if (
+                            isinstance(receipt, Mapping)
+                            and receipt.get("source_owner_id") != principal_ref
+                        ):
+                            return {
+                                "ok": False,
+                                "code": "SOURCE_OWNER_MISMATCH",
+                                "result": {},
+                            }
+                    try:
+                        reply = _adapter.handle(  # type: ignore[attr-defined]
+                            _operation,
+                            scope=context.scope,
+                            arguments=arguments,
+                        )
+                    except Exception:
+                        return {
+                            "ok": False,
+                            "code": "IMPORT_STORE_UNAVAILABLE",
+                            "result": {},
+                        }
+                    result = (
+                        reply.get("result")
+                        if isinstance(reply, Mapping)
+                        and isinstance(reply.get("result"), Mapping)
+                        else {}
+                    )
+                    receipt = result.get("receipt")
+                    if _operation == prepared.module.STATUS_OPERATION and isinstance(
+                        receipt, Mapping
+                    ):
+                        if receipt.get("source_owner_id") != principal_ref:
+                            return {
+                                "ok": False,
+                                "code": "SOURCE_OWNER_MISMATCH",
+                                "result": {},
+                            }
+                    if _operation == prepared.module.INSPECT_SOURCE_OPERATION:
+                        source_receipt = result.get("source_receipt")
+                        if isinstance(source_receipt, Mapping):
+                            if source_receipt.get("source_owner_id") != principal_ref:
+                                return {
+                                    "ok": False,
+                                    "code": "SOURCE_OWNER_MISMATCH",
+                                    "result": {},
+                                }
+                    if (
+                        _operation in {
+                            prepared.module.PREPARE_OPERATION,
+                            prepared.module.ACTIVATE_OPERATION,
+                            prepared.module.ABORT_OPERATION,
+                        }
+                        and isinstance(reply, Mapping)
+                        and reply.get("ok") is True
+                        and result.get("source_owner_id") != principal_ref
+                    ):
+                        return {
+                            "ok": False,
+                            "code": "SOURCE_OWNER_MISMATCH",
+                            "result": {},
+                        }
+                    return reply
                 if spec.component == "risk" and spec.options.get("role") == "group_reservations":
                     return _adapter.handle(  # type: ignore[attr-defined]
                         _operation,

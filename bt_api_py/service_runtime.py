@@ -108,6 +108,15 @@ PORT_OPERATIONS = MappingProxyType(
         "service.group_reservations": frozenset(
             {"reservations.reserve", "reservations.query", "reservations.release"}
         ),
+        "service.paper_legacy_import": frozenset(
+            {
+                "paper.import.status",
+                "paper.import.inspect_source",
+                "paper.import.prepare",
+                "paper.import.activate",
+                "paper.import.abort",
+            }
+        ),
     }
 )
 

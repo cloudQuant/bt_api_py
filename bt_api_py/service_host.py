@@ -56,6 +56,7 @@ from .service_registry import (
     TrustedGroupReservationPolicy,
     TrustedGroupResolutionPolicy,
     TrustedGroupWritePolicy,
+    TrustedPaperLegacyImportPolicy,
     TrustedPaperOwnerWritePolicy,
     validate_capabilities_and_grants,
 )
@@ -523,6 +524,9 @@ class ServiceHost:
 
             built_by_instance: dict[str, ServiceComponent] = {}
             trusted_paper_owner_write_policies: list[TrustedPaperOwnerWritePolicy] = []
+            trusted_paper_legacy_import_policies: list[
+                TrustedPaperLegacyImportPolicy
+            ] = []
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -583,6 +587,9 @@ class ServiceHost:
                 pending_resources = self._pending_resources[-1][2]
                 trusted_paper_owner_write_policies.extend(
                     self._paper_owner_write_policies(item, pending_resources)
+                )
+                trusted_paper_legacy_import_policies.extend(
+                    self._paper_legacy_import_policies(item, pending_resources)
                 )
                 self._pending_resources.pop()
                 built_by_instance[component.instance_id] = component
@@ -677,6 +684,9 @@ class ServiceHost:
                     account_risk_policy_required_routes=account_risk_policy_required_routes,
                     trusted_paper_owner_write_policies=tuple(
                         trusted_paper_owner_write_policies
+                    ),
+                    trusted_paper_legacy_import_policies=tuple(
+                        trusted_paper_legacy_import_policies
                     ),
                     migration_deployment_epoch=self._migration_deployment_epoch,
                 )
@@ -1354,6 +1364,75 @@ class ServiceHost:
             )
         except Exception:
             raise ServiceHostError("PAPER_OWNER_POLICY_INVALID") from None
+        return (policy,)
+
+    def _paper_legacy_import_policies(
+        self,
+        item: PreparedComponent,
+        resources: ComponentResources,
+    ) -> tuple[TrustedPaperLegacyImportPolicy, ...]:
+        """Bind a Host-owned import adapter to one exact application grant."""
+
+        values = resources.values
+        if "legacy_import_domain" not in values:
+            return ()
+        port = "service.paper_legacy_import"
+        if (
+            item.spec.component != "execution"
+            or item.spec.options.get("role") != "legacy_import_owner"
+            or item.spec.bind_ports != (port,)
+            or set(values) != {"store", "targets", "legacy_import_domain"}
+        ):
+            raise ServiceHostError("LEGACY_IMPORT_COMPONENT_INVALID")
+        targets = values.get("targets")
+        if not isinstance(targets, Mapping) or len(targets) != 1:
+            raise ServiceHostError("LEGACY_IMPORT_TARGET_INVALID")
+        wire_scope, execution_scope = next(iter(targets.items()))
+        if type(wire_scope) is not WireScope:
+            raise ServiceHostError("LEGACY_IMPORT_TARGET_INVALID")
+
+        operations = frozenset(
+            {
+                "paper.import.status",
+                "paper.import.inspect_source",
+                "paper.import.prepare",
+                "paper.import.activate",
+                "paper.import.abort",
+            }
+        )
+        candidates: list[tuple[str, WireIdentity, Any]] = []
+        for principal_ref, principal_grants in self._authority.grants.items():
+            for principal_grant in principal_grants:
+                identity = principal_grant.identity
+                if (
+                    identity.role is not WireRole.APPLICATION_CLIENT
+                    or identity.principal_ref != principal_ref
+                ):
+                    continue
+                candidates.extend(
+                    (principal_ref, identity, grant)
+                    for grant in principal_grant.resources
+                    if grant.instance_id == item.spec.instance_id
+                    and grant.port == port
+                    and grant.scope_ref
+                    and grant.scope == wire_scope
+                    and grant.operations == operations
+                )
+        if len(candidates) != 1:
+            raise ServiceHostError("LEGACY_IMPORT_GRANT_INVALID")
+        principal_ref, identity, grant = candidates[0]
+        try:
+            policy = TrustedPaperLegacyImportPolicy(
+                instance_id=item.spec.instance_id,
+                principal_ref=principal_ref,
+                identity=identity,
+                scope_ref=grant.scope_ref,
+                scope=wire_scope,
+                paper_owner_domain=values["legacy_import_domain"],
+                execution_scope=execution_scope,
+            )
+        except Exception:
+            raise ServiceHostError("LEGACY_IMPORT_POLICY_INVALID") from None
         return (policy,)
 
     def _track_resources(self, item: PreparedComponent, resources: ComponentResources) -> None:
