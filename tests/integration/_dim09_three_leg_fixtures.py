@@ -25,17 +25,15 @@ Wire contract implemented by this harness (DIM09 step 2):
   handler to completion (durable write committed) and only then raises, so
   the coordinator models a lost reply, never a lost write.
 
-Known composition gap exercised here: the production trusted quote builder
+This harness quotes through the real production trusted quote builder
 ``bt_api_execution.group_budget.build_instrument_risk_group_budget_quote``
-still rejects ``request.version != 1`` (a v1-only gate predating DIM09), so a
-v3 unquoted request cannot yet be quoted by it and the coordinator fails
-closed with ``GROUP_BUDGET_QUOTE_INVALID``.  ``_replicated_v3_quote`` below is
-the byte-faithful replication of that exact algorithm (same trusted
-``InstrumentRiskRegistry.assess`` calls, unit checks, and quote binding) with
-only that version gate lifted, so these host nodes can prove the DIM09 wire
-gates and coordinator chain end to end.  Legacy requests keep using the
-production function unchanged.  The production builder widening is step-1
-follow-up work, not part of this slice.
+for every group version: the execution-side widening (worktree bytes, sha256
+``0c7c7981375eaca3b5982db11afef500a58c48158933ad9df84c951a60ac90de``)
+accepts unquoted requests with ``version in {1, 3}``, so the legacy two-leg
+and the v3 three-leg flows both take the same trusted
+``InstrumentRiskRegistry.assess`` path with no test-side replication.  The
+execution widening is uncommitted in its submodule worktree and is evaluated
+here as the artifact under review.
 """
 
 from __future__ import annotations
@@ -53,10 +51,6 @@ from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     AccountScopedGroupAdmissionAdapter,
     ExecutionScope,
-    GroupBudgetLegQuote,
-    GroupBudgetQuote,
-    GroupBudgetUnsupportedOrderError,
-    GroupOrderIntent,
     OrderIntent,
     OrderType,
     PortfolioGroupBudgetPolicy,
@@ -68,7 +62,6 @@ from bt_api_execution import (
     group_leg_intent_id,
     risk_account_scope_fingerprint,
 )
-from bt_api_execution.errors import ContractValidationError
 from bt_api_risk import (
     INSTRUMENT_METADATA_DIGEST_TAG,
     AccountScope,
@@ -77,9 +70,7 @@ from bt_api_risk import (
     DurableRiskGate,
     ExposureAccountingMode,
     InstrumentRiskAdmissionMapper,
-    InstrumentRiskAssessment,
     InstrumentRiskMetadata,
-    InstrumentRiskOrder,
     InstrumentRiskRegistry,
     RiskPolicy,
 )
@@ -334,93 +325,6 @@ def _registration(
     )
 
 
-def _replicated_v3_quote(
-    request: GroupOrderIntent,
-    policy: PortfolioGroupBudgetPolicy,
-    *,
-    registry: InstrumentRiskRegistry,
-    now_ns: int,
-) -> GroupBudgetQuote:
-    """Byte-faithful v3 replication of the production quote builder.
-
-    This is ``build_instrument_risk_group_budget_quote`` with only its
-    ``request.version != 1`` gate lifted: same trusted
-    ``InstrumentRiskRegistry.assess`` calls, same metadata/unit/validity
-    checks, same quote leg binding, exact Decimal sum.  It exists because the
-    production builder still refuses non-v1 unquoted requests; remove once
-    that gate widens to v3.
-    """
-
-    if type(request) is not GroupOrderIntent:
-        raise ContractValidationError("group budget quote source must be an unquoted request")
-    if type(policy) is not PortfolioGroupBudgetPolicy:
-        raise ContractValidationError("trusted portfolio group budget policy is required")
-    if policy.portfolio_ref != request.portfolio_ref:
-        raise ContractValidationError("group budget policy portfolio mismatch")
-    if type(now_ns) is not int or now_ns <= 0 or now_ns >= request.deadline_ns:
-        raise ContractValidationError("group budget assessment time is outside the request window")
-    if any(plan.maximum_intent.order_type is OrderType.MARKET for plan in request.legs):
-        raise GroupBudgetUnsupportedOrderError(
-            "the built-in group budget estimator has no trusted market-price bound"
-        )
-    if type(registry) is not InstrumentRiskRegistry:
-        raise ContractValidationError("exact trusted InstrumentRiskRegistry is required")
-    quotes: list[GroupBudgetLegQuote] = []
-    for plan in request.legs:
-        intent = plan.maximum_intent
-        metadata_digest = intent.tags.get("instrument_metadata_digest")
-        metadata_version = intent.metadata_version
-        if type(metadata_digest) is not str or type(metadata_version) is not str:
-            raise ContractValidationError("group leg lacks trusted instrument metadata binding")
-        risk_order = InstrumentRiskOrder(
-            instrument=intent.instrument,
-            quantity=intent.quantity,
-            limit_price=intent.price,
-            metadata_version=metadata_version,
-            metadata_digest=metadata_digest,
-        )
-        assessment = registry.assess(risk_order, now_ns)
-        if type(assessment) is not InstrumentRiskAssessment:
-            raise ContractValidationError("Risk registry returned an untyped assessment")
-        metadata = assessment.metadata
-        if (
-            metadata.instrument != intent.instrument
-            or metadata.metadata_version != metadata_version
-            or metadata.digest != metadata_digest
-            or metadata.quantity_unit is None
-            or metadata.valuation_unit != policy.valuation_unit
-            or metadata.quantity_step != plan.quantity_step
-            or metadata.expires_at_ns < request.deadline_ns
-        ):
-            raise ContractValidationError(
-                "group leg metadata units or validity do not match policy"
-            )
-        if assessment.order != risk_order:
-            raise ContractValidationError("Risk assessment changed the exact group order")
-        quotes.append(
-            GroupBudgetLegQuote(
-                leg_id=plan.leg_id,
-                account_ref=plan.account_ref,
-                intent_fingerprint=intent.fingerprint,
-                metadata_digest=metadata.digest,
-                assessment_fingerprint=assessment.bound_payload_fingerprint(
-                    intent.fingerprint
-                ),
-                valuation_unit=metadata.valuation_unit,
-                gross_notional=assessment.gross_notional,
-                assessed_at_ns=now_ns,
-                valid_until_ns=min(metadata.expires_at_ns, plan.metadata_valid_until_ns),
-            )
-        )
-    gross_notional = sum((item.gross_notional for item in quotes), Decimal("0"))
-    return GroupBudgetQuote(
-        policy_fingerprint=policy.fingerprint,
-        valuation_unit=policy.valuation_unit,
-        gross_notional=gross_notional,
-        legs=tuple(quotes),
-    )
-
-
 def _budget_binding(
     metadata: InstrumentRiskMetadata,
     *,
@@ -436,19 +340,10 @@ def _budget_binding(
         max_active_groups=100,
     )
     registry = InstrumentRiskRegistry((metadata,))
-    production_builder = partial(
+    return policy, partial(
         build_instrument_risk_group_budget_quote,
         registry=registry,
     )
-
-    def trusted_builder(request, package_policy, *, now_ns: int):
-        if request.version == 3:
-            return _replicated_v3_quote(
-                request, package_policy, registry=registry, now_ns=now_ns
-            )
-        return production_builder(request, package_policy, now_ns=now_ns)
-
-    return policy, trusted_builder
 
 
 class Dim09ThreeLegCluster:
