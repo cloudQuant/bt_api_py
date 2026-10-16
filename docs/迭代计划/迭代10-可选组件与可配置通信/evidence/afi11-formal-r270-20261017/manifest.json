@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "packet_id": "afi11-formal-r270-20261017",
+  "proposal_status": "PROPOSED_GO_FOR_ROOT_FORMAL_DECISION",
+  "formal_case": "AFI11",
+  "formal_plan": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md",
+    "line": 803,
+    "requirements": "AFI, analytics worker and Monitor failure isolation; authorized strategies continue under owner policy; missing required account facts/admission prevents new work; real process failure/recovery; app outage does not open another connection, bypass owner or waive risk; undeployed functions remain unavailable."
+  },
+  "decision_boundary": {
+    "root_decision_required": true,
+    "formal_tracker_modified": false,
+    "shared_matrix_or_progress_modified": false,
+    "real_account_or_production_provider_evidence": false,
+    "overall_evidence_level": "LOCAL_SYNTHETIC_PROCESS_AND_WORKER_INTEGRATION_ONLY"
+  },
+  "afi_source_commit": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "commit": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+    "parent": "1955309201c1ac812ab8c5904aa0a105f860679e",
+    "path": "src/backend/tests/test_afi11_monitor_process_failure.py",
+    "bytes": 45365,
+    "sha256": "d82126a5d1d3e7327a600d4a695111fa68075c17978cd3aaf0c147c62b24d4e5",
+    "production_source_changed": false
+  },
+  "rounds": [
+    {
+      "round": "R240",
+      "clause": "AFI app process failure/recovery",
+      "evidence_level": "AUTHOR_LOCAL_FIXED_EXPORT_SYNTHETIC_PROVIDER_ONLY",
+      "node": "test_afi11_app_process_failure_recovery_keeps_strategy_on_same_owner",
+      "result": "1 passed; exit 0; 43.722 seconds; one pre-existing Quandl deprecation warning",
+      "source": {
+        "repository": "bt_api_py",
+        "commit": "4b9c5e916edaf9da69d53e596ac436ab46f164a0",
+        "path": "tests/integration/test_afi11_service_failure_isolation.py",
+        "bytes": 56055,
+        "sha256": "b4f22c31a11bcea1f86c354c796715a4bad5e89e3b8a24599c92b573c20d7cf7"
+      },
+      "evidence": {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi11-app-failure-r240-20261016",
+        "record_sha256": "d78efc6f77cb81e395d566f62a34e36a3d9399b2abb3c3d06ea67287d3a6de45",
+        "manifest_sha256": "058e05bd22f73fe5144319dd80392d98ee1a90f5403bdc3e3855552e5789a9ac",
+        "archive": {
+          "file": "raw-r5.zip",
+          "bytes": 408940,
+          "sha256": "65ffe000a949d93fd60026d92c419a544eb23328193a3ec5ecdd0492ad7bd704"
+        }
+      },
+      "facts": [
+        "app A exact test-owned PID terminated/reaped; app B recovered HTTP read with different PID",
+        "same Strategy owner/session/policy/transport; missing risk facts rejected before dispatch",
+        "valid synthetic intent ACKed through existing owner while app was down",
+        "synthetic provider construction/session-open count stayed 1"
+      ],
+      "formal_afi11_in_original_record": false
+    },
+    {
+      "round": "R263 R6",
+      "clause": "Analytics worker startup-timeout isolation",
+      "evidence_level": "AUTHOR_QA_LOCAL_SYNTHETIC_PROCESS_CHAIN_ONLY",
+      "node": "test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_owner",
+      "result": "1 passed; exit 0; 21.92 seconds in stdout; JUnit testcase time 21.033 seconds",
+      "source": {
+        "repository": "ai-for-investor",
+        "commit": "d1719aa980c22910c43b556a1c1e5ed10900c8e5",
+        "path": "src/backend/tests/test_afi11_analytics_worker_failure.py",
+        "bytes": 53949,
+        "sha256": "306959bea86723a148d855d4818005e93112df274919e27db1f27b06fd358669"
+      },
+      "worker_source": {
+        "repository": "Risk R236 fixed export",
+        "path": "src/bt_api_risk/service_analytics.py",
+        "bytes": 80802,
+        "sha256": "1b148a4a923081302e507829d540aa9e45fc8ae3aac37eeb8f7f8dd3f1bda9c8"
+      },
+      "evidence_folder": "r263-r6-reference/",
+      "observations": {
+        "first_task": "TASK_WORKER_START_TIMEOUT after worker entry marker",
+        "worker_pid": 62536,
+        "parent_and_host_pid": 46440,
+        "worker_cleanup": [
+          "terminate",
+          "join",
+          "join",
+          "close"
+        ],
+        "second_task": "succeeded / AVAILABLE",
+        "same_owner_and_policy": true,
+        "missing_facts_denied_before_provider": true,
+        "valid_order_acked_after_fault": true,
+        "provider_construction_count": 1
+      },
+      "formal_afi11_in_original_result": false
+    },
+    {
+      "round": "R218",
+      "clause": "Accepted bounded worker lifecycle underpinning R263",
+      "evidence_level": "ACCEPTED_OFFLINE_WORKER_LIFECYCLE_AND_SDK_HOST_INTEGRATION",
+      "risk_commit": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+      "risk_parent": "71be56e29f867a5a5aaac60331f9eca46c7e09f0",
+      "sdk_parent": "47f43e1ffb6db33bd8e6045b608e34b44920d43a",
+      "sources": [
+        {
+          "path": "src/bt_api_risk/service_analytics.py",
+          "bytes": 78824,
+          "sha256": "3310eb1bd5def260f2e9e40624525b972594f79e8c7ca567b6e74e6a93148470"
+        },
+        {
+          "path": "tests/test_service_analytics_worker_lifecycle.py",
+          "bytes": 35296,
+          "sha256": "bc3dffe6fbdd7352b52d638fdf6a55a002a97baf395ba847073c37c0685f4aa7"
+        }
+      ],
+      "accepted_counts": [
+        6,
+        1
+      ],
+      "evidence": {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-worker-lifecycle-20261016",
+        "round_record_sha256": "86ba3d3461f5da291c1bb835ccd2fb034bb2edf1495cc8838071775f8f1b2cd0",
+        "manifest_sha256": "a429c71b46f779a2b84d3b397fd0323a11ccd4ee4085825afbc1b1f2c31f8521",
+        "archive_sha256": "51e5c1ec0350a2cc85d568dc80365576486c5ad557839249d7d41ba80e12fb5f"
+      },
+      "scope": "offline spawned worker quotas, cancellation, start/execution deadlines, termination/reap, terminal CAS, late results and uncertain cleanup; not AFI11 or account acceptance"
+    },
+    {
+      "round": "R11",
+      "clause": "Independent Monitor process outage/recovery and same-owner policy continuity",
+      "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_PROCESS_INTEGRATION_ONLY",
+      "node": "tests.test_afi11_monitor_process_failure::test_monitor_process_failure_recovers_same_owner_policy_and_strategy_session",
+      "result": "1 passed; exit 0; 14.15 seconds; JUnit 1 test, 0 failures/errors/skips",
+      "source": {
+        "repository": "ai-for-investor",
+        "branch": "dev",
+        "commit": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+        "parent": "1955309201c1ac812ab8c5904aa0a105f860679e",
+        "path": "src/backend/tests/test_afi11_monitor_process_failure.py",
+        "bytes": 45365,
+        "sha256": "d82126a5d1d3e7327a600d4a695111fa68075c17978cd3aaf0c147c62b24d4e5",
+        "git_blob_sha1": "ae44f88dd941201c90c0f82ffa4a5596c6f0b2d2"
+      },
+      "runtime_commits": {
+        "sdk": "e6cd356c2c281543202ccf5f5f2433aeebfc6d65",
+        "monitor": "7c407634c092ba59383bd870a0b0b19c588ae451"
+      },
+      "evidence_folder": "r11/",
+      "observations": [
+        "test-owned Monitor process stopped/reaped and restarted on same service identity, endpoint and durable stores",
+        "Strategy owner PID/session/transport/policy preserved",
+        "Monitor outage returned bounded unavailable through HTTP control/status; persisted FREEZE later yielded applied receipt and Risk freeze snapshot",
+        "one synthetic reduce-only CLOSE ACKed/dispatched once during outage",
+        "missing facts rejected; post-recovery OPEN rejected without additional dispatch"
+      ],
+      "numeric_process_pids_in_stdout_or_junit": false,
+      "formal_afi11_in_author_result": false
+    }
+  ],
+  "cross_cutting_conclusion": "R240/R263/R11 exercise distinct test-owned process failure paths with local synthetic services/providers; missing required facts stop dispatch; approved work uses the same owner/policy/session, with no second provider session evidenced by the selected assertions. R218 supplies accepted bounded spawned-worker lifecycle behavior used by R263.",
+  "pid_provenance": {
+    "r11": "Test assertions check exact test-owned Monitor process PID cleanup and stable Strategy owner PID; numeric PIDs are absent from stdout/JUnit and are intentionally not supplied.",
+    "r263": "Worker PID 62536 and parent/Host PID 46440 are included because they are explicit in the SHA-pinned copied R263 R6 author-result.json."
+  },
+  "evidence_label_note": "R240, R263 R6 and R11 author-result artifacts retain their local-author evidence classification and formal_afi11_pass=false or equivalent. This packet proposes Root adjudication; it does not upgrade the underlying run labels.",
+  "packet_files": [
+    {
+      "path": "r11/author-result.json",
+      "bytes": 691,
+      "sha256": "9e024156710ae3f7477ac24bf3abf523eb5e0e042aad103959a23e46cc06f5da"
+    },
+    {
+      "path": "r11/junit.xml",
+      "bytes": 403,
+      "sha256": "f085c13dbe9debe6dca661d086b75e3f6fabee523e6a7c18bdfaa7292d514ee1"
+    },
+    {
+      "path": "r11/manifest.json",
+      "bytes": 13362,
+      "sha256": "cac87a6cc88bb69145670e072c04594d6110aeead75c147ea7623d4617382f01"
+    },
+    {
+      "path": "r11/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "r11/stdout.log",
+      "bytes": 1043,
+      "sha256": "f648005485526ce0baa9a5f69a5acb04e5a01a17510f2848c61a969107238d4f"
+    },
+    {
+      "path": "r11/test_afi11_monitor_process_failure.py",
+      "bytes": 45365,
+      "sha256": "d82126a5d1d3e7327a600d4a695111fa68075c17978cd3aaf0c147c62b24d4e5"
+    },
+    {
+      "path": "r263-r6-reference/author-result.json",
+      "bytes": 4546,
+      "sha256": "142e2eed7fe2ef319a8a1fb8f993cf44866dbad07cb5edf9e82165f933d5d8f9"
+    },
+    {
+      "path": "r263-r6-reference/imported-source-pins.json",
+      "bytes": 3332,
+      "sha256": "4a395d2ba117f1d2ca8d91d4a22a5e61f10090114097d717ec09153e7b415710"
+    },
+    {
+      "path": "r263-r6-reference/junit.xml",
+      "bytes": 360,
+      "sha256": "567bc92d6713b85088305f13f7c4c40d2a35653802c6ddc2a28baad155cb7f81"
+    },
+    {
+      "path": "r263-r6-reference/result-artifact-pins.json",
+      "bytes": 1512,
+      "sha256": "69e5609f80112d0d3755b88b2683b1f926fa43d9ff882f694bd014432dcb7680"
+    },
+    {
+      "path": "r263-r6-reference/source-pins.json",
+      "bytes": 2907,
+      "sha256": "06be0bdc7cb9354d4abe5aae561fe7c528a95ea128c63eda193d42418904e213"
+    },
+    {
+      "path": "r263-r6-reference/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "r263-r6-reference/stdout.log",
+      "bytes": 1037,
+      "sha256": "d6f6f7f1f1b9e71f0d40df99837e3069da24961275ad111a6dbc379ee0e3639f"
+    },
+    {
+      "path": "round-record.md",
+      "bytes": 5505,
+      "sha256": "0584dc7280c669682062a56ab5d4eb477f8e220de9b2729d1814ded739d8f7d5"
+    }
+  ],
+  "manifest_excludes_self": true,
+  "round_record_sha256": "0584dc7280c669682062a56ab5d4eb477f8e220de9b2729d1814ded739d8f7d5",
+  "no_qa_run_for_r270": true,
+  "no_git_index_or_commit_touched": true
+}

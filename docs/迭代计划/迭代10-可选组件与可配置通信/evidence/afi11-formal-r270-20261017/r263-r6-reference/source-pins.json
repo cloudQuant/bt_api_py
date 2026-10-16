@@ -1,0 +1,57 @@
+{
+  "cwd": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\work",
+  "candidate_mirror": {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\tests\\test_afi11_analytics_worker_failure.py",
+    "Bytes": 53949,
+    "Sha256": "306959bea86723a148d855d4818005e93112df274919e27db1f27b06fd358669"
+  },
+  "afi_route": {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\app\\api\\portfolio\\analytics_tasks.py",
+    "Bytes": 5923,
+    "Sha256": "eaded05887df8cc25986f114c0b75c4ba58b47e7846cce6d6c3af299a160347e"
+  },
+  "dotenv_relative_cwd_exists": false,
+  "schema": "afi11-author-one-node-qa-v1",
+  "afi_main": {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\app\\main.py",
+    "Bytes": 8784,
+    "Sha256": "1b68af1c2e3326daf45e214aad438a45d97f57b01ea4c128fd1c62372ce455a9"
+  },
+  "afi_service": {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\app\\services\\portfolio_analytics_tasks.py",
+    "Bytes": 16698,
+    "Sha256": "bd55fc3ceaf25c60ee46f075e72293a87504504f6d5b7ff74bb9bd41dd921459"
+  },
+  "pytest_basetemp": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\pytest-tmp",
+  "risk_worker": {
+    "Path": "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk\\src\\bt_api_risk\\service_analytics.py",
+    "Bytes": 80802,
+    "Sha256": "1b148a4a923081302e507829d540aa9e45fc8ae3aac37eeb8f7f8dd3f1bda9c8"
+  },
+  "config": {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\pytest.ini",
+    "Bytes": 926,
+    "Sha256": "c4a785907837db768a4a27bec657c993972438043910e00085bb9b4e41758d9e"
+  },
+  "candidate": {
+    "Path": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_afi11_analytics_worker_failure.py",
+    "Bytes": 53949,
+    "Sha256": "306959bea86723a148d855d4818005e93112df274919e27db1f27b06fd358669"
+  },
+  "source_roots": [
+    "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\base\\src",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\execution\\src",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\root",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\transport\\src",
+    "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk\\src"
+  ],
+  "dotenv_fixed_export_root_exists": false,
+  "copied_fixed_conftest": {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\tests\\conftest.py",
+    "Bytes": 9506,
+    "Sha256": "446e544f67dc9c50898ee687815006f8b568d8aeae63a3619483f77d3682a60c"
+  },
+  "python_version": "3.12.10",
+  "python": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe"
+}

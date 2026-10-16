@@ -1,0 +1,37 @@
+[
+  {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\junit.xml",
+    "Bytes": 360,
+    "Sha256": "567bc92d6713b85088305f13f7c4c40d2a35653802c6ddc2a28baad155cb7f81"
+  },
+  {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\stdout.log",
+    "Bytes": 1037,
+    "Sha256": "d6f6f7f1f1b9e71f0d40df99837e3069da24961275ad111a6dbc379ee0e3639f"
+  },
+  {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\stderr.log",
+    "Bytes": 0,
+    "Sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\source-pins.json",
+    "Bytes": 2907,
+    "Sha256": "06be0bdc7cb9354d4abe5aae561fe7c528a95ea128c63eda193d42418904e213"
+  },
+  {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\imported-source-pins.json",
+    "Bytes": 3332,
+    "Sha256": "4a395d2ba117f1d2ca8d91d4a22a5e61f10090114097d717ec09153e7b415710"
+  },
+  {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\pytest-tmp\\test_http_analytics_startup_ti0\\afi11-v2-worker-events.json",
+    "Bytes": 335,
+    "Sha256": "0eac0a1dc5ca0d0f3246dc59d9916bf9569120820c98372f71f1c319ef83be37"
+  },
+  {
+    "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\pytest-tmp\\test_http_analytics_startup_ti0\\afi11-risk-host-pid.marker",
+    "Bytes": 5,
+    "Sha256": "8554824a013395b1121eeda716f7525940a7789e7c59a7eface63892f6314c54"
+  }
+]

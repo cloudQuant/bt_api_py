@@ -1,0 +1,118 @@
+{
+  "schema": "afi11-analytics-worker-failure-author-qa-v1",
+  "classification": "AUTHOR_QA_LOCAL_SYNTHETIC_PROCESS_CHAIN_ONLY",
+  "formal_afi11_pass": false,
+  "node": "test_http_analytics_startup_timeout_reaps_only_worker_and_preserves_owner",
+  "pytest": {
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 21.033,
+    "python": "3.12.10",
+    "exit_code": 0
+  },
+  "candidate": {
+    "Path": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\test_afi11_analytics_worker_failure.py",
+    "Bytes": 53949,
+    "Sha256": "306959bea86723a148d855d4818005e93112df274919e27db1f27b06fd358669"
+  },
+  "accepted_source_roots": [
+    "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\base\\src",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\execution\\src",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\root",
+    "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\transport\\src",
+    "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk\\src"
+  ],
+  "support_test": {
+    "path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\tests\\test_service_read_portfolio_analytics_process.py",
+    "bytes": 43115,
+    "sha256": "f2680d4db91331cac35d77fad37e88144d51876255f3c3198d1ddfc8455321f1"
+  },
+  "risk_worker": {
+    "path": "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk\\src\\bt_api_risk\\service_analytics.py",
+    "bytes": 80802,
+    "sha256": "1b148a4a923081302e507829d540aa9e45fc8ae3aac37eeb8f7f8dd3f1bda9c8"
+  },
+  "observations": {
+    "http_task": {
+      "first": "failed",
+      "detail_code": "TASK_WORKER_START_TIMEOUT",
+      "worker_entry_marker": "entered",
+      "second": "succeeded",
+      "result_status": "AVAILABLE"
+    },
+    "worker": {
+      "pid": 62536,
+      "parent_pid": 46440,
+      "host_pid": "46440",
+      "events": [
+        "start",
+        "terminate",
+        "join",
+        "join",
+        "close"
+      ],
+      "exit_code": -15,
+      "alive_after_join": false,
+      "closed": true
+    },
+    "owner": {
+      "authorized_strategy_runtime_started": true,
+      "same_session_policy_after_fault": true,
+      "missing_instrument_denied_before_provider": true,
+      "valid_order_acked_after_fault": true,
+      "provider_construction_count": 1,
+      "close_clean": true
+    },
+    "host": {
+      "ready_marker": true,
+      "closed_marker": true,
+      "failure_marker": false,
+      "shutdown_exit_zero_asserted": true
+    }
+  },
+  "limitations": [
+    "local synthetic provider and loopback service processes only",
+    "does not cover Monitor failure or other analytics-worker failure phases",
+    "does not establish AFI11 formal acceptance or real-account evidence"
+  ],
+  "artifact_pins": [
+    {
+      "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\junit.xml",
+      "Bytes": 360,
+      "Sha256": "567bc92d6713b85088305f13f7c4c40d2a35653802c6ddc2a28baad155cb7f81"
+    },
+    {
+      "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\stdout.log",
+      "Bytes": 1037,
+      "Sha256": "d6f6f7f1f1b9e71f0d40df99837e3069da24961275ad111a6dbc379ee0e3639f"
+    },
+    {
+      "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\stderr.log",
+      "Bytes": 0,
+      "Sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\source-pins.json",
+      "Bytes": 2907,
+      "Sha256": "06be0bdc7cb9354d4abe5aae561fe7c528a95ea128c63eda193d42418904e213"
+    },
+    {
+      "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\imported-source-pins.json",
+      "Bytes": 3332,
+      "Sha256": "4a395d2ba117f1d2ca8d91d4a22a5e61f10090114097d717ec09153e7b415710"
+    },
+    {
+      "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\pytest-tmp\\test_http_analytics_startup_ti0\\afi11-v2-worker-events.json",
+      "Bytes": 335,
+      "Sha256": "0eac0a1dc5ca0d0f3246dc59d9916bf9569120820c98372f71f1c319ef83be37"
+    },
+    {
+      "Path": "D:\\temp\\afi11-analytics-worker-author-qa-r6-20261016\\pytest-tmp\\test_http_analytics_startup_ti0\\afi11-risk-host-pid.marker",
+      "Bytes": 5,
+      "Sha256": "8554824a013395b1121eeda716f7525940a7789e7c59a7eface63892f6314c54"
+    }
+  ]
+}

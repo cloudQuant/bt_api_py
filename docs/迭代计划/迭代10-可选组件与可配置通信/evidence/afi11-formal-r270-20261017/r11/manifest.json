@@ -1,0 +1,300 @@
+{
+  "schema": "afi11-monitor-process-author-evidence-v1",
+  "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_PROCESS_INTEGRATION_ONLY",
+  "candidate": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "observed_head": "1955309201c1ac812ab8c5904aa0a105f860679e",
+    "path": "src/backend/tests/test_afi11_monitor_process_failure.py",
+    "status_at_freeze": "untracked",
+    "bytes": 45365,
+    "sha256": "d82126a5d1d3e7327a600d4a695111fa68075c17978cd3aaf0c147c62b24d4e5",
+    "source_export": "D:\\temp\\iteration10-afi11-monitor-process-author-20261017-r3\\backend"
+  },
+  "run": {
+    "node": "tests.test_afi11_monitor_process_failure::test_monitor_process_failure_recovers_same_owner_policy_and_strategy_session",
+    "source_export": "D:\\temp\\iteration10-afi11-monitor-process-author-20261017-r3",
+    "output_directory": "D:\\temp\\iteration10-afi11-monitor-process-author-qa-20261017-r11",
+    "python": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "exit_code": 0,
+    "junit_summary": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pytest_stdout_summary": "1 passed in 14.15s",
+    "fixed_sdk_commit": "e6cd356c2c281543202ccf5f5f2433aeebfc6d65",
+    "monitor_commit": "7c407634c092ba59383bd870a0b0b19c588ae451"
+  },
+  "previous_setup_failure": {
+    "output_directory": "D:\\temp\\iteration10-afi11-monitor-process-author-qa-20261017-r10",
+    "classification": "author harness environment setup failure before business scenario",
+    "disposition": "preserved separately, not included as an R11 test result",
+    "stdout_bytes": 2521,
+    "stdout_sha256": "21e8717cbd6cea41c07659da3bec36bfbbc72bc5d3876a310814c060d46021b7",
+    "junit_bytes": 1498,
+    "junit_sha256": "1be893a624e6700fb97023e8f990d6fef2978bb4e1c3481e6d6e3cbc8923ba63",
+    "author_result_sha256": "b630bd6ca9805d426fa6b0ddb7255725cfae8e3445b7f9dbac6f6a844ff1d36a",
+    "observed_reason": "AFI11_SDK_EXPORT_ROOT pointed inside backend\\sdk instead of fixed export sibling sdk; failure at source-closure precheck before process scenario."
+  },
+  "scope": {
+    "claims": [
+      "Test-owned spawned Monitor ServiceHost process is stopped and reaped by its exact PID, then restarted on same service identity, endpoint and durable stores.",
+      "A separately spawned Strategy ServiceHost/owner keeps its PID, authenticated session, transport and policy across Monitor outage/restart.",
+      "Real AFI HTTP Monitor control/status calls observe unavailable and durable applied status; valid reduce-only CLOSE dispatches once during outage; missing facts rejects independently; subsequent OPEN rejects without another dispatch."
+    ],
+    "limits": [
+      "Synthetic account/provider and local integration only; no real operator account, provider, or external production host.",
+      "The passing JUnit and test assertions establish the process/PID checks; raw PID values are not printed or persisted in stdout/junit.",
+      "No formal AFI11 case status or acceptance claim."
+    ],
+    "pid_capture": "Test assertions verify exact test-owned Monitor PID termination/reap and stable Strategy owner PID; R11 stdout/JUnit do not serialize numeric PID values."
+  },
+  "assertion_locations": [
+    "candidate lines 319-597: spawned Monitor process and bounded exact-PID terminate/reap helpers",
+    "candidate lines 762-915: spawned Strategy owner and process identity recorded",
+    "candidate lines 946-1026: pending freeze, intentional Monitor process termination, 503 and outage orders/counts",
+    "candidate lines 1028-1062: Monitor restart, HTTP status receipt and Risk snapshot",
+    "candidate lines 1076-1125: post-restart order rejection and scoped cleanup"
+  ],
+  "dependencies": [
+    {
+      "commit": "d1719aa980c22910c43b556a1c1e5ed10900c8e5",
+      "sha256": "306959bea86723a148d855d4818005e93112df274919e27db1f27b06fd358669",
+      "name": "AFI R263 worker owner support test",
+      "export_path": "backend/tests/test_afi11_analytics_worker_failure.py",
+      "bytes": 53949
+    },
+    {
+      "commit": "056d40f5df7702a1d6d8a14cf0238d3303ce2f6d",
+      "sha256": "f2680d4db91331cac35d77fad37e88144d51876255f3c3198d1ddfc8455321f1",
+      "name": "AFI R236 HTTP process support test",
+      "export_path": "backend/tests/test_service_read_portfolio_analytics_process.py",
+      "bytes": 43115
+    },
+    {
+      "commit": "AFI08 committed source",
+      "sha256": "f3a2d39868a53c4c6720c94297ea91eeaaaab4cf6873a77e03efea992186c5fd",
+      "name": "AFI config",
+      "export_path": "backend/app/config.py",
+      "bytes": 61019
+    },
+    {
+      "commit": "AFI08 committed source",
+      "sha256": "84c25dec1d669d5025305fe9e08c48412ed0ca6b790af720b7ea327e3f9ae543",
+      "name": "AFI Monitor API",
+      "export_path": "backend/app/api/monitoring.py",
+      "bytes": 22365
+    },
+    {
+      "commit": "AFI08 committed source",
+      "sha256": "c47927a19b32ce50db56920eb55be69845e9553101e2458093bed1381d5d5ea3",
+      "name": "AFI Monitor control application service",
+      "export_path": "backend/app/services/monitoring_control.py",
+      "bytes": 35973
+    },
+    {
+      "commit": "AFI R3 fixed export",
+      "sha256": "1b68af1c2e3326daf45e214aad438a45d97f57b01ea4c128fd1c62372ce455a9",
+      "name": "AFI application entry",
+      "export_path": "backend/app/main.py",
+      "bytes": 8784
+    },
+    {
+      "commit": "AFI R3 fixed export",
+      "sha256": "d6d544fc1c9ac6704c3d8b26175547212978d82be8af5112b2e26364d3881530",
+      "name": "AFI standardized HTTP error envelope",
+      "export_path": "backend/app/middleware/exception_handling.py",
+      "bytes": 13000
+    },
+    {
+      "commit": "AFI R3 fixed export",
+      "sha256": "446e544f67dc9c50898ee687815006f8b568d8aeae63a3619483f77d3682a60c",
+      "name": "AFI pytest fixtures",
+      "export_path": "backend/tests/conftest.py",
+      "bytes": 9506
+    },
+    {
+      "commit": "fixed R218 source export",
+      "sha256": "8f2507ef32ecfa3bf4406ed50e60fcc3ff8fe2141143b5e21e2bcf48ae13c234",
+      "name": "Risk runtime admission",
+      "export_path": "risk/src/bt_api_risk/core/admission.py",
+      "bytes": 501765
+    },
+    {
+      "commit": "fixed R218 source export",
+      "sha256": "57cfabf8d84b98028e59c558ebfdf8ad6e06f1c64aca8f94c2fb00600f6f689e",
+      "name": "Risk runtime instrument registry",
+      "export_path": "risk/src/bt_api_risk/core/instrument.py",
+      "bytes": 54791
+    },
+    {
+      "commit": "fixed R218 source export",
+      "sha256": "1828460401a001cc14da4494a9576752cdbb4e7912659193894c27ab3a6ff95b",
+      "name": "Risk order admission",
+      "export_path": "risk/src/bt_api_risk/order_admission.py",
+      "bytes": 19436
+    },
+    {
+      "commit": "fixed R218 source export",
+      "sha256": "3310eb1bd5def260f2e9e40624525b972594f79e8c7ca567b6e74e6a93148470",
+      "name": "Risk runtime analytics lifecycle dependency",
+      "export_path": "risk/src/bt_api_risk/service_analytics.py",
+      "bytes": 78824
+    },
+    {
+      "commit": "R236 accepted Risk source export",
+      "sha256": "1b148a4a923081302e507829d540aa9e45fc8ae3aac37eeb8f7f8dd3f1bda9c8",
+      "name": "Risk R236 analytics worker dependency",
+      "export_path": "risk-r236/src/bt_api_risk/service_analytics.py",
+      "bytes": 80802
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f5f2433aeebfc6d65",
+      "sha256": "ae9ce9505fbef25d038ca6b319e30f31506dfda21ad14563456d17d802520dbf",
+      "name": "SDK components",
+      "export_path": "sdk/root/bt_api_py/service_components.py",
+      "bytes": 107129
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "7f428465e14a1aaa0fba0afe0e9ed6705979d85ae9a8af0ce9f3fa44aa36a816",
+      "name": "SDK Monitor control client",
+      "export_path": "sdk/root/bt_api_py/service_monitor_control.py",
+      "bytes": 19771
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "abecddd3dc1a826cd7e7d9d8c4560c45f897580840d2ffa3c51346b5802c91b4",
+      "name": "SDK registry",
+      "export_path": "sdk/root/bt_api_py/service_registry.py",
+      "bytes": 102618
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "ca8f09f248f773ba92f2df281bc920124ec7bf1f30a92aeaf956d28a3babf309",
+      "name": "SDK runtime",
+      "export_path": "sdk/root/bt_api_py/service_runtime.py",
+      "bytes": 78462
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "fbf42e25fded252840da3d4631338749f7fcfe75531bd87c5e799d6a33544a30",
+      "name": "SDK service config",
+      "export_path": "sdk/root/bt_api_py/service_config.py",
+      "bytes": 47179
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "a2e9a99459182ba82eb95d9df389ad8e29c9815ee7bf0425108b75fb614f568a",
+      "name": "SDK ServiceHost",
+      "export_path": "sdk/root/bt_api_py/service_host.py",
+      "bytes": 66673
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+      "name": "Base wire protocol",
+      "export_path": "sdk/base/src/bt_api_base/service_protocol.py",
+      "bytes": 26174
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477",
+      "name": "Execution contracts",
+      "export_path": "sdk/execution/src/bt_api_execution/contracts.py",
+      "bytes": 59198
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "51ba6a71d18bd8c213d2ede1af3023087889d3e07425561502bf82b3a4fed180",
+      "name": "Execution store",
+      "export_path": "sdk/execution/src/bt_api_execution/store.py",
+      "bytes": 864265
+    },
+    {
+      "commit": "e6cd356c2c281543202ccf5f2433aeebfc6d65",
+      "sha256": "f2a1eb3664962a322a8df8d2f36f32fd482390b994511d873aa4faf80c7166a0",
+      "name": "Execution order-entry service",
+      "export_path": "sdk/execution/src/bt_api_execution/service_order_entry.py",
+      "bytes": 43599
+    },
+    {
+      "commit": "7c407634c092ba59383bd870a0b0b19c588ae451",
+      "sha256": "15571dcfc5eb873e85989eee5f74ac9802c4a875b80839fb7eec3154a2013e4c",
+      "name": "Monitor control store and owner",
+      "export_path": "monitor/src/bt_api_monitor/control.py",
+      "bytes": 49351
+    },
+    {
+      "commit": "7c407634c092ba59383bd870a0b0b19c588ae451",
+      "sha256": "38b9065b0fd44e0eb6bd0cb454eb82472e7bffb47e380e45da9d00e814a20e26",
+      "name": "Monitor ingress",
+      "export_path": "monitor/src/bt_api_monitor/ingress.py",
+      "bytes": 22374
+    },
+    {
+      "commit": "7c407634c092ba59383bd870a0b0b19c588ae451",
+      "sha256": "f21a5256c60e759f24e305a1f78a360df332544bab36551fbd95d7a81a696247",
+      "name": "Monitor service component",
+      "export_path": "monitor/src/bt_api_monitor/service_component.py",
+      "bytes": 12286
+    },
+    {
+      "commit": "7c407634c092ba59383bd870a0b0b19c588ae451",
+      "sha256": "f2ef7ab640feb81db7f63c7586699e8d7ac39759fd9f69cfb8aee9fd477f3b81",
+      "name": "Monitor service control",
+      "export_path": "monitor/src/bt_api_monitor/service_control.py",
+      "bytes": 32670
+    }
+  ],
+  "packet_files": [
+    {
+      "path": "test_afi11_monitor_process_failure.py",
+      "sha256": "d82126a5d1d3e7327a600d4a695111fa68075c17978cd3aaf0c147c62b24d4e5",
+      "bytes": 45365
+    },
+    {
+      "path": "stdout.log",
+      "sha256": "f648005485526ce0baa9a5f69a5acb04e5a01a17510f2848c61a969107238d4f",
+      "bytes": 1043
+    },
+    {
+      "path": "stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "junit.xml",
+      "sha256": "f085c13dbe9debe6dca661d086b75e3f6fabee523e6a7c18bdfaa7292d514ee1",
+      "bytes": 403
+    },
+    {
+      "path": "author-result.json",
+      "sha256": "9e024156710ae3f7477ac24bf3abf523eb5e0e042aad103959a23e46cc06f5da",
+      "bytes": 691
+    }
+  ],
+  "fixed_export_roots": {
+    "afi_sdk": "D:\\temp\\iteration10-afi11-monitor-process-author-20261017-r3\\sdk",
+    "afi_backend": "D:\\temp\\iteration10-afi11-monitor-process-author-20261017-r3\\backend",
+    "monitor": "D:\\temp\\iteration10-afi11-monitor-process-author-20261017-r3\\monitor",
+    "risk_runtime": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\risk",
+    "risk_r236": "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk"
+  },
+  "source_commit": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "commit": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+    "parent": "1955309201c1ac812ab8c5904aa0a105f860679e",
+    "paths": [
+      "src/backend/tests/test_afi11_monitor_process_failure.py"
+    ],
+    "git_blob_sha1": "ae44f88dd941201c90c0f82ffa4a5596c6f0b2d2",
+    "blob_bytes": 45365,
+    "blob_sha256": "d82126a5d1d3e7327a600d4a695111fa68075c17978cd3aaf0c147c62b24d4e5",
+    "index_empty_after_commit": true,
+    "target_worktree_clean_after_commit": true
+  }
+}

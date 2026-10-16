@@ -1,0 +1,12 @@
+{
+  "schema": "afi11-monitor-process-author-qa-v1",
+  "exit_code": 0,
+  "python": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+  "test_sha256": "d82126a5d1d3e7327a600d4a695111fa68075c17978cd3aaf0c147c62b24d4e5",
+  "test_bytes": 45365,
+  "stdout": "D:\\temp\\iteration10-afi11-monitor-process-author-qa-20261017-r11\\stdout.log",
+  "stderr": "D:\\temp\\iteration10-afi11-monitor-process-author-qa-20261017-r11\\stderr.log",
+  "junit": "D:\\temp\\iteration10-afi11-monitor-process-author-qa-20261017-r11\\junit.xml",
+  "fixed_sdk_commit": "e6cd356c2c281543202ccf5f5f2433aeebfc6d65",
+  "monitor_commit": "7c407634c092ba59383bd870a0b0b19c588ae451"
+}

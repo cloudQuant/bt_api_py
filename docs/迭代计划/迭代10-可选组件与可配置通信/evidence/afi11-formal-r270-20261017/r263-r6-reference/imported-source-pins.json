@@ -1,0 +1,72 @@
+[
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\base\\src\\bt_api_base\\service_protocol.py",
+    "Bytes": 26174,
+    "Sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\execution\\src\\bt_api_execution\\contracts.py",
+    "Bytes": 59198,
+    "Sha256": "95a36b917fdb0ba07f2e4c6bdc0c959812e7bdab269e06f531a10e05ae59e477"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\execution\\src\\bt_api_execution\\store.py",
+    "Bytes": 864265,
+    "Sha256": "51ba6a71d18bd8c213d2ede1af3023087889d3e07425561502bf82b3a4fed180"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\execution\\src\\bt_api_execution\\service_order_entry.py",
+    "Bytes": 43599,
+    "Sha256": "f2a1eb3664962a322a8df8d2f36f32fd482390b994511d873aa4faf80c7166a0"
+  },
+  {
+    "Path": "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk\\src\\bt_api_risk\\core\\admission.py",
+    "Bytes": 512200,
+    "Sha256": "7ca89deb1ac2b6dc9339ccd680e15df6dbc1b943e1dd5ddd715536d0f4cef4a6"
+  },
+  {
+    "Path": "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk\\src\\bt_api_risk\\core\\instrument.py",
+    "Bytes": 56027,
+    "Sha256": "d4d31088e77db2a3fea8c8b210d5c97b7aaa1ad23f9c8703737587382f4f8f44"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\root\\bt_api_py\\service_components.py",
+    "Bytes": 99728,
+    "Sha256": "9625f9ce73189e1c8ed8a2d220fa29ddba7f3c151246556a6def01e6c3effbc3"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\root\\bt_api_py\\service_host.py",
+    "Bytes": 66673,
+    "Sha256": "a2e9a99459182ba82eb95d9df389ad8e29c9815ee7bf0425108b75fb614f568a"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\root\\bt_api_py\\service_registry.py",
+    "Bytes": 102547,
+    "Sha256": "3f02ab77313c7ef3318bcb15128c9e84695b7c701ccb79de5b764f3ea1110166"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\root\\bt_api_py\\service_runtime.py",
+    "Bytes": 78027,
+    "Sha256": "ed6f99024db017e97c3106bcacf9037a566d3e053dfcc0646ac27471ae3aa5f3"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\sdk\\root\\bt_api_py\\service_config.py",
+    "Bytes": 47179,
+    "Sha256": "fbf42e25fded252840da3d4631338749f7fcfe75531bd87c5e799d6a33544a30"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\app\\services\\service_read\\deployment.py",
+    "Bytes": 46100,
+    "Sha256": "41a5e48cc8686dbf1318b7eb39084fe31a4c4d735df86f0989bbd8ba87b0b254"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\app\\services\\service_read\\worker.py",
+    "Bytes": 22530,
+    "Sha256": "f49ee0975c1d6139d727db2d65fd9b0a01932c5b2ed0093eee0310ba08b2631e"
+  },
+  {
+    "Path": "D:\\temp\\iteration10-afi04-r236-fixed-source-4d11cffa-20261016\\src\\backend\\tests\\test_service_read_portfolio_analytics_process.py",
+    "Bytes": 43115,
+    "Sha256": "f2680d4db91331cac35d77fad37e88144d51876255f3c3198d1ddfc8455321f1"
+  }
+]
