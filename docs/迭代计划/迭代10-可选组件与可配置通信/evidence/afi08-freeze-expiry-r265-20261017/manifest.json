@@ -2,7 +2,7 @@
   "schema": "iteration10-afi08-freeze-expiry-r265-v1",
   "round": "AFI08 authenticated FREEZE, exact status and EXPIRED terminal no-effect repair",
   "created_at": "2026-10-17",
-  "packet_state": "AUTHOR_EVIDENCE; SDK source commit pending final pin record",
+  "packet_state": "SOURCE_AUTHOR_EVIDENCE_AND_SCOPED_IMPLEMENTATION_COMMITTED",
   "formal_acceptance": false,
   "author_qa_rerun": false,
   "repositories": {
@@ -10,7 +10,8 @@
       "branch": "dev",
       "base_head": "4f5ae610b21ac635cc97099209690f8e16995d6c",
       "staged_gitlink": "160000 commit 7c407634c092ba59383bd870a0b0b19c588ae451 bt_api/bt_api_monitor",
-      "source_commit": null
+      "source_commit": "9b7d109b3eeb729c1be03002c1524b681b2c7402",
+      "source_commit_parent": "4f5ae610b21ac635cc97099209690f8e16995d6c"
     },
     "bt_api_monitor": {
       "branch": "dev",
@@ -268,5 +269,50 @@
     "round-record.md",
     "raw-evidence.zip"
   ],
-  "implementation_commit_hash_finalization_required": true
+  "implementation_commit_hash_finalization_required": false,
+  "implementation_commit": {
+    "hash": "9b7d109b3eeb729c1be03002c1524b681b2c7402",
+    "parent": "4f5ae610b21ac635cc97099209690f8e16995d6c",
+    "paths": [
+      "bt_api/bt_api_monitor",
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_monitor_control.py",
+      "bt_api_py/service_registry.py",
+      "bt_api_py/service_runtime.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi08-freeze-expiry-r265-20261017/manifest.json",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi08-freeze-expiry-r265-20261017/raw-evidence.zip",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi08-freeze-expiry-r265-20261017/round-record.md"
+    ],
+    "implementation_paths": [
+      "bt_api_py/service_components.py",
+      "bt_api_py/service_monitor_control.py",
+      "bt_api_py/service_registry.py",
+      "bt_api_py/service_runtime.py",
+      "bt_api/bt_api_monitor"
+    ],
+    "implementation_file_pins": [
+      {
+        "path": "bt_api_py/service_components.py",
+        "bytes": 107129,
+        "sha256": "ae9ce9505fbef25d038ca6b319e30f31506dfda21ad14563456d17d802520dbf"
+      },
+      {
+        "path": "bt_api_py/service_monitor_control.py",
+        "bytes": 19771,
+        "sha256": "7f428465e14a1aaa0fba0afe0e9ed6705979d85ae9a8af0ce9f3fa44aa36a816"
+      },
+      {
+        "path": "bt_api_py/service_registry.py",
+        "bytes": 102618,
+        "sha256": "abecddd3dc1a826cd7e7d9d8c4560c45f897580840d2ffa3c51346b5802c91b4"
+      },
+      {
+        "path": "bt_api_py/service_runtime.py",
+        "bytes": 78462,
+        "sha256": "ca8f09f248f773ba92f2df281bc920124ec7bf1f30a92aeaf956d28a3babf309"
+      }
+    ],
+    "monitor_gitlink": "7c407634c092ba59383bd870a0b0b19c588ae451",
+    "packet_files_finalized_in_followup": true
+  }
 }

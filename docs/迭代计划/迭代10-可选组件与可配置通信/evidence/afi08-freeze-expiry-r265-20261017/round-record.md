@@ -2,7 +2,7 @@
 
 This round delivers owner-authenticated FREEZE and exact status projection, including the terminal no-effect EXPIRED repair. It does not implement STOP, DRAIN, CANCEL, REDUCE, CLOSE, or account management.
 
-At packet creation, the exact SDK partials and Monitor gitlink are staged against parent `dev` HEAD `4f5ae610b21ac635cc97099209690f8e16995d6c`. Full staged-file pins are in `manifest.json`. The four patches are reviewed R6 filtered hunks replayed onto the current parent; committed R261 `account.configuration` and `account.server_time_probe` remain present. R250, Paper, DIM04, MIG03, and other shared-file WIP are excluded. The SDK source commit ID will be finalized in a follow-up evidence-record commit because a Git commit cannot encode its own final hash.
+The SDK source scope is committed on parent `dev`: `9b7d109b3eeb729c1be03002c1524b681b2c7402` (parent `4f5ae610b21ac635cc97099209690f8e16995d6c`). The commit contains exactly eight paths: four SDK partials, Monitor gitlink `7c407634c092ba59383bd870a0b0b19c588ae451`, and the three R265 packet files. Postcommit index is empty. Full committed-file pins are in `manifest.json`. The four patches are reviewed R6 filtered hunks replayed onto the current parent; committed R261 `account.configuration` and `account.server_time_probe` remain present. R250, Paper, DIM04, MIG03, and other shared-file WIP are excluded.
 
 Committed dependencies: AFI `86ed9dbbe6293b71d7279aafb0f93b1e0c36aa3e` (parent `318608a29997fe9e37db9a8053542375eabf286b`), exactly four AFI08 files; Monitor `7c407634c092ba59383bd870a0b0b19c588ae451` (parent `536a4f04747182749fabdac5e28624f80465bc53`), exactly two Monitor files. Exact committed blob pins and the R6 patch bodies are in `raw-evidence.zip`.
 
