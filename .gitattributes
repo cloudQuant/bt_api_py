@@ -54,3 +54,6 @@ docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typ
 docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-runtime.log -text
 docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-selected-hunks.patch -text
 docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/source-delta.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb05-two-account-async-recovery-r12-20261017/source-patches/arb05-r12-selected.patch -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb05-two-account-async-recovery-r12-20261017/round-record.md -text
+tests/integration/test_arb05_two_account_async_recovery.py -text

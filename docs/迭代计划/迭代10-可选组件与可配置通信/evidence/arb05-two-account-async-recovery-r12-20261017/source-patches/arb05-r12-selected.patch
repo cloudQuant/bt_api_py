@@ -1,0 +1,2179 @@
+diff --git a/.gitattributes b/.gitattributes
+index be291ac7..8216b3df 100644
+--- a/.gitattributes
++++ b/.gitattributes
+@@ -54,3 +54,6 @@ docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typ
+ docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-runtime.log -text
+ docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-selected-hunks.patch -text
+ docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/source-delta.json -text
++docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb05-two-account-async-recovery-r12-20261017/source-patches/arb05-r12-selected.patch -text
++docs/迭代计划/迭代10-可选组件与可配置通信/evidence/arb05-two-account-async-recovery-r12-20261017/round-record.md -text
++tests/integration/test_arb05_two_account_async_recovery.py -text
+diff --git a/tests/integration/test_arb05_two_account_async_recovery.py b/tests/integration/test_arb05_two_account_async_recovery.py
+new file mode 100644
+index 00000000..b1941bab
+--- /dev/null
++++ b/tests/integration/test_arb05_two_account_async_recovery.py
+@@ -0,0 +1,2162 @@
++"""Two account owners recover in separate local process generations."""
++
++from __future__ import annotations
++
++import json
++import multiprocessing
++import queue
++import sqlite3
++import sys
++import time
++from pathlib import Path
++from typing import Any
++
++import pytest
++import zmq
++
++from bt_api_py.service_execution_group import GroupCoordinatorService
++from tests.integration import test_arb02_group_budget_service as arb02
++
++_GROUP_ID = "arb05-two-account-async-recovery"
++_STRATEGY = arb02._STRATEGIES[0]
++# One accepted group can trigger at most two reservation queries per one-second
++# owner-recovery tick; each traced RPC contributes a start and a terminal
++# control message.  The per-phase ceiling allows substantial headroom over the
++# bounded waits below while preventing an unbounded control-channel drain.
++_MAX_COORDINATOR_CONTROL_MESSAGES_PER_PHASE = 256
++_RETAINED_ARB05_CHILDREN: list[tuple[str, Any, tuple[Any, ...]]] = []
++
++
++def _retain_unconfirmed_child(
++    phase: str, process: Any, controls: tuple[Any, ...]
++) -> None:
++    """Keep test-owned process and control references if exit is not proven."""
++
++    for index, (existing_phase, existing_process, existing_controls) in enumerate(
++        _RETAINED_ARB05_CHILDREN
++    ):
++        if existing_process is process:
++            merged = existing_controls + tuple(
++                control
++                for control in controls
++                if all(control is not current for current in existing_controls)
++            )
++            _RETAINED_ARB05_CHILDREN[index] = (
++                f"{existing_phase}; {phase}",
++                process,
++                merged,
++            )
++            return
++    _RETAINED_ARB05_CHILDREN.append((phase, process, controls))
++
++
++def _forget_unconfirmed_child(process: Any) -> None:
++    _RETAINED_ARB05_CHILDREN[:] = [
++        item for item in _RETAINED_ARB05_CHILDREN if item[1] is not process
++    ]
++
++
++def _close_confirmed_child_handles(
++    phase: str, process: Any, controls: tuple[Any, ...]
++) -> BaseException | None:
++    """Close owned handles only after the child is known to have exited."""
++
++    try:
++        if process.is_alive():
++            _retain_unconfirmed_child(phase, process, controls)
++            return RuntimeError(f"{phase}: child is still alive; handles retained")
++    except BaseException as error:
++        _retain_unconfirmed_child(phase, process, controls)
++        failure = RuntimeError(
++            f"{phase}: child exit could not be confirmed; handles retained"
++        )
++        failure.__cause__ = error
++        return failure
++
++    failures: list[BaseException] = []
++    for control in controls:
++        try:
++            control.close()
++        except BaseException as error:
++            failures.append(error)
++    try:
++        process.close()
++    except BaseException as error:
++        failures.append(error)
++    if failures:
++        failure = RuntimeError(
++            f"{phase}: failed to close {len(failures)} stopped-child handle(s)"
++        )
++        failure.__cause__ = failures[0]
++        return failure
++    _forget_unconfirmed_child(process)
++    return None
++
++
++def _receive_owned_host_message(
++    control: Any, process: Any, deadline: float, phase: str
++) -> tuple[Any, ...] | None:
++    """Receive one message without treating a short poll interval as a timeout."""
++
++    while True:
++        remaining = deadline - time.monotonic()
++        if remaining <= 0:
++            return None
++        try:
++            if control.poll(min(0.1, remaining)):
++                return control.recv()
++        except EOFError:
++            return None
++        except (OSError, ValueError):
++            return None
++        try:
++            alive = process.is_alive()
++        except BaseException:
++            return None
++        if not alive:
++            try:
++                if control.poll(0):
++                    return control.recv()
++            except BaseException:
++                pass
++            return None
++
++
++def _stop_owned_host_process(
++    process: Any,
++    control: Any,
++    *,
++    phase: str,
++    normal_timeout: float = 20.0,
++    terminate_timeout: float = 5.0,
++    kill_timeout: float = 5.0,
++) -> tuple[bool, BaseException | None]:
++    """Boundedly close this test's Host, retaining handles unless exit is proven."""
++
++    failures: list[BaseException] = []
++    forced = False
++    started_at = time.monotonic()
++    try:
++        alive = bool(process.is_alive())
++    except BaseException as error:
++        _retain_unconfirmed_child(phase, process, (control,))
++        failure = RuntimeError(f"{phase}: cannot inspect child liveness")
++        failure.__cause__ = error
++        return False, failure
++
++    if not alive:
++        failure = RuntimeError(f"{phase}: child exited before normal close")
++        close_error = _close_confirmed_child_handles(phase, process, (control,))
++        if close_error is not None:
++            failure.__cause__ = close_error
++        return True, failure
++
++    if alive:
++        try:
++            control.send("close")
++        except BaseException as error:
++            failures.append(error)
++        else:
++            deadline = started_at + max(0.0, normal_timeout)
++            while True:
++                message = _receive_owned_host_message(control, process, deadline, phase)
++                if message is None:
++                    failures.append(TimeoutError(f"{phase}: normal close was not acknowledged"))
++                    break
++                if isinstance(message, tuple) and message and message[0] == "closed":
++                    break
++                if isinstance(message, tuple) and message and message[0] == "error":
++                    failures.append(RuntimeError(f"{phase}: child reported {message!r}"))
++                    break
++                failures.append(RuntimeError(f"{phase}: unexpected close response {message!r}"))
++                break
++        try:
++            remaining = max(0.0, started_at + max(0.0, normal_timeout) - time.monotonic())
++            process.join(remaining)
++        except BaseException as error:
++            failures.append(error)
++
++    try:
++        alive = bool(process.is_alive())
++    except BaseException as error:
++        _retain_unconfirmed_child(phase, process, (control,))
++        failures.append(RuntimeError(f"{phase}: child exit could not be confirmed"))
++        failures[-1].__cause__ = error
++        return False, failures[0]
++
++    if alive:
++        forced = True
++        try:
++            process.terminate()
++        except BaseException as error:
++            failures.append(error)
++        try:
++            process.join(max(0.0, terminate_timeout))
++        except BaseException as error:
++            failures.append(error)
++        try:
++            alive = bool(process.is_alive())
++        except BaseException as error:
++            alive = True
++            failures.append(error)
++
++    if alive:
++        forced = True
++        kill = getattr(process, "kill", None)
++        if callable(kill):
++            try:
++                kill()
++            except BaseException as error:
++                failures.append(error)
++            try:
++                process.join(max(0.0, kill_timeout))
++            except BaseException as error:
++                failures.append(error)
++        try:
++            alive = bool(process.is_alive())
++        except BaseException as error:
++            alive = True
++            failures.append(error)
++
++    if alive:
++        _retain_unconfirmed_child(phase, process, (control,))
++        failure = RuntimeError(f"{phase}: child remains alive; handles retained")
++        if failures:
++            failure.__cause__ = failures[0]
++        return False, failure
++
++    try:
++        exitcode = process.exitcode
++    except BaseException as error:
++        exitcode = None
++        failures.append(error)
++    close_error = _close_confirmed_child_handles(phase, process, (control,))
++    if close_error is not None:
++        failures.append(close_error)
++    if forced:
++        failure = RuntimeError(f"{phase}: normal close failed; forced cleanup was required")
++        if failures:
++            failure.__cause__ = failures[0]
++        return True, failure
++    elif exitcode != 0:
++        failures.append(RuntimeError(f"{phase}: child exited with code {exitcode!r}"))
++    return True, failures[0] if failures else None
++
++
++def _stop_registered_owner(
++    account_ref: str,
++    process: Any,
++    control: Any,
++    process_registry: dict[str, Any],
++    control_registry: dict[str, Any],
++) -> None:
++    exited, failure = _stop_owned_host_process(
++        process, control, phase=f"account-{account_ref} normal close"
++    )
++    if exited:
++        if process_registry.get(account_ref) is process:
++            process_registry.pop(account_ref)
++        if control_registry.get(account_ref) is control:
++            control_registry.pop(account_ref)
++    if failure is not None:
++        raise failure
++
++
++def _stop_owned_host_or_raise(process: Any, control: Any, *, phase: str) -> None:
++    _exited, failure = _stop_owned_host_process(process, control, phase=phase)
++    if failure is not None:
++        raise failure
++
++
++def _release_retained_owner_if_exited(account_ref: str) -> BaseException | None:
++    expected_name = f"arb05-account-owner-{account_ref}"
++    for phase, process, controls in tuple(_RETAINED_ARB05_CHILDREN):
++        if getattr(process, "name", None) != expected_name:
++            continue
++        try:
++            alive = bool(process.is_alive())
++        except BaseException as error:
++            failure = RuntimeError(
++                f"retained account-{account_ref} owner exit remains unconfirmed"
++            )
++            failure.__cause__ = error
++            return failure
++        if alive:
++            return RuntimeError(
++                f"retained account-{account_ref} owner is still alive; refusing a duplicate Host"
++            )
++        return _close_confirmed_child_handles(phase, process, controls)
++    return None
++
++
++def test_owned_host_stop_keeps_control_until_exit_and_continues_cleanup() -> None:
++    events: list[str] = []
++
++    class FakeProcess:
++        def __init__(self) -> None:
++            self.alive = True
++            self.exitcode = None
++            self.closed = False
++            self.control: FakeControl | None = None
++
++        def is_alive(self) -> bool:
++            return self.alive
++
++        def join(self, _timeout: float) -> None:
++            events.append("join")
++
++        def terminate(self) -> None:
++            assert self.alive
++            assert self.control is not None and not self.control.closed
++            events.append("terminate")
++
++        def kill(self) -> None:
++            assert self.alive
++            assert self.control is not None and not self.control.closed
++            events.append("kill")
++
++        def close(self) -> None:
++            assert not self.alive
++            events.append("process-close")
++            self.closed = True
++
++    class FakeControl:
++        def __init__(self, process: FakeProcess) -> None:
++            self.process = process
++            self.closed = False
++            process.control = self
++
++        def send(self, message: str) -> None:
++            assert message == "close"
++            assert self.process.alive and not self.closed
++            events.append("send-close")
++
++        def poll(self, _timeout: float) -> bool:
++            return False
++
++        def close(self) -> None:
++            assert not self.process.alive
++            events.append("control-close")
++            self.closed = True
++
++    process = FakeProcess()
++    control = FakeControl(process)
++    def stop_owned_child() -> None:
++        exited, failure = _stop_owned_host_process(
++            process,
++            control,
++            phase="fake bounded cleanup",
++            normal_timeout=0,
++            terminate_timeout=0,
++            kill_timeout=0,
++        )
++        assert not exited
++        assert failure is not None and "handles retained" in str(failure)
++        assert process.alive
++        assert not control.closed and not process.closed
++        raise failure
++
++    cleanup_error = arb02._attempt_cleanup(
++        (stop_owned_child, lambda: events.append("later-cleanup"))
++    )
++
++    assert isinstance(cleanup_error, RuntimeError)
++    assert "later-cleanup" in events
++    assert events.index("terminate") < events.index("kill")
++    assert "control-close" not in events and "process-close" not in events
++    assert any(item[1] is process and control in item[2] for item in _RETAINED_ARB05_CHILDREN)
++
++    # Once a later observer can confirm exit, it may close the retained handles.
++    process.alive = False
++    process.exitcode = -9
++    assert _close_confirmed_child_handles("fake delayed exit", process, (control,)) is None
++    assert control.closed and process.closed
++    assert all(item[1] is not process for item in _RETAINED_ARB05_CHILDREN)
++
++
++def _start_account_owner(
++    context: Any,
++    *,
++    account_ref: str,
++    raw_config: dict[str, Any],
++    registry_path: str,
++    paths: dict[str, str],
++    endpoint: str,
++    server_keys: tuple[bytes, bytes],
++    coordinator_client_public: bytes,
++    metadata_reference_ns: int,
++    provider_entered: Any,
++    provider_release: Any,
++    reservation_events: Any,
++    reservation_committed: Any | None = None,
++    reservation_reply_entered: Any | None = None,
++    reservation_reply_release: Any | None = None,
++) -> tuple[Any, Any]:
++    parent_control, child_control = context.Pipe(duplex=True)
++    process = None
++    process_started = False
++    child_control_open = True
++    try:
++        process = context.Process(
++            name=f"arb05-account-owner-{account_ref}",
++            target=arb02._account_host_process,
++            args=(
++                child_control,
++                raw_config,
++                registry_path,
++                paths,
++                account_ref,
++                server_keys[0],
++                server_keys[1],
++                coordinator_client_public,
++                metadata_reference_ns,
++                ("filled",),
++                provider_entered,
++                provider_release,
++                _GROUP_ID if reservation_committed is not None else None,
++                reservation_committed,
++                reservation_reply_entered,
++                reservation_reply_release,
++                reservation_events,
++            ),
++        )
++        process.start()
++        process_started = True
++        child_control.close()
++        child_control_open = False
++        ready = arb02._receive(parent_control)
++        assert ready == ("ready", endpoint)
++        return process, parent_control
++    except BaseException as startup_error:
++        cleanup_error = _cleanup_failed_account_owner_start(
++            process,
++            parent_control,
++            child_control,
++            process_started=process_started,
++            child_control_open=child_control_open,
++            account_ref=account_ref,
++        )
++        if cleanup_error is not None:
++            add_note = getattr(startup_error, "add_note", None)
++            if callable(add_note):
++                add_note(f"account Host startup cleanup failed: {type(cleanup_error).__name__}")
++        raise
++
++
++def _cleanup_failed_account_owner_start(
++    process: Any | None,
++    parent_control: Any,
++    child_control: Any,
++    *,
++    process_started: bool,
++    child_control_open: bool,
++    account_ref: str,
++) -> BaseException | None:
++    """Stop a failed test-owned owner start without closing live child handles."""
++
++    started = process_started
++    if process is None:
++        started = False
++    elif not started:
++        try:
++            started = process.pid is not None
++        except BaseException:
++            started = True
++
++    controls = (parent_control, child_control) if child_control_open else (parent_control,)
++    if not started:
++        failures: list[BaseException] = []
++        if process is not None:
++            try:
++                process.close()
++            except BaseException as error:
++                failures.append(error)
++        for control in controls:
++            try:
++                control.close()
++            except BaseException as error:
++                failures.append(error)
++        return failures[0] if failures else None
++
++    try:
++        alive = bool(process.is_alive())
++    except BaseException as error:
++        _retain_unconfirmed_child(
++            f"account-{account_ref} failed startup", process, controls
++        )
++        failure = RuntimeError(
++            f"account-{account_ref} startup cleanup could not confirm child exit"
++        )
++        failure.__cause__ = error
++        return failure
++
++    if alive:
++        # A ready Host can still follow its normal close protocol.  If startup
++        # never reaches ready, the bounded wait falls through to terminate/kill.
++        startup_deadline = time.monotonic() + 2.0
++        ready = False
++        while time.monotonic() < startup_deadline:
++            message = _receive_owned_host_message(
++                parent_control,
++                process,
++                startup_deadline,
++                f"account-{account_ref} failed-start readiness",
++            )
++            if message is None:
++                break
++            if isinstance(message, tuple) and message and message[0] == "ready":
++                ready = True
++                break
++            if isinstance(message, tuple) and message and message[0] == "error":
++                break
++
++        if ready:
++            exited, stop_error = _stop_owned_host_process(
++                process,
++                parent_control,
++                phase=f"account-{account_ref} failed-start normal close",
++                normal_timeout=2.0,
++                terminate_timeout=2.0,
++                kill_timeout=2.0,
++            )
++        else:
++            exited, stop_error = _stop_owned_host_process(
++                process,
++                parent_control,
++                phase=f"account-{account_ref} failed-start cleanup",
++                normal_timeout=0.5,
++                terminate_timeout=2.0,
++                kill_timeout=2.0,
++            )
++    else:
++        exited, stop_error = True, None
++        close_error = _close_confirmed_child_handles(
++            f"account-{account_ref} failed startup", process, (parent_control,)
++        )
++        if close_error is not None:
++            stop_error = close_error
++
++    if not exited:
++        _retain_unconfirmed_child(
++            f"account-{account_ref} failed startup", process, controls
++        )
++        return stop_error or RuntimeError(
++            f"account-{account_ref} failed-start child remains alive; handles retained"
++        )
++
++    if child_control_open:
++        try:
++            child_control.close()
++        except BaseException as error:
++            stop_error = stop_error or error
++    return stop_error
++
++
++def _start_initial_coordinator_with_owned_cleanup(*args: Any, **kwargs: Any) -> Any:
++    """Use the shared coordinator setup while retaining this test's child on failure."""
++
++    original_cleanup = arb02._cleanup_failed_host_start
++
++    def cleanup_failed_start(
++        process: Any | None,
++        parent_control: Any,
++        child_control: Any,
++        *,
++        process_started: bool,
++    ) -> BaseException | None:
++        child_control_open = not bool(getattr(child_control, "closed", False))
++        return _cleanup_failed_account_owner_start(
++            process,
++            parent_control,
++            child_control,
++            process_started=process_started,
++            child_control_open=child_control_open,
++            account_ref="group-coordinator",
++        )
++
++    arb02._cleanup_failed_host_start = cleanup_failed_start
++    try:
++        return arb02._start_coordinator(*args, **kwargs)
++    finally:
++        arb02._cleanup_failed_host_start = original_cleanup
++
++
++def _activate_order_session(
++    account_controls: dict[str, Any], bindings: tuple[Any, ...], account_ref: str
++) -> tuple[str, int]:
++    matches = tuple(
++        item
++        for item in bindings
++        if item[0] == "upstream.orders" and item[1] == account_ref and item[2] == _STRATEGY
++    )
++    assert len(matches) == 1, (account_ref, matches)
++    mount, _, strategy_ref, _scope_ref, registration_id, operations = matches[0]
++    assert mount == "upstream.orders"
++    assert operations == tuple(sorted({"orders.submit_group_leg", "orders.resolve_group_leg"}))
++    control = account_controls[account_ref]
++    control.send(("activate", registration_id))
++    activated = arb02._receive(control)
++    assert activated[0:2] == ("activated", registration_id), activated
++    assert activated[3] == strategy_ref
++    assert type(activated[2]) is int and activated[2] > 0
++    return registration_id, activated[2]
++
++
++def _assert_no_child_records(
++    account_paths: dict[str, dict[str, str]], request: dict[str, Any]
++) -> None:
++    for account_ref, leg in zip(arb02._ACCOUNTS, request["legs"], strict=True):
++        execution = arb02.SqliteExecutionStore(account_paths[account_ref]["execution"])
++        try:
++            intent_id = arb02.group_leg_intent_id(request["group_id"], leg["leg_id"])
++            assert execution.get(
++                intent_id,
++                scope=arb02._execution_scope(account_ref, _STRATEGY),
++            ) is None
++        finally:
++            execution.close()
++
++
++def _coordinator_host_process_with_recovery_barriers(
++    control: Any,
++    raw_config: dict[str, Any],
++    raw_account_configs: dict[str, dict[str, Any]],
++    registry_path: str,
++    group_store_path: str,
++    run_bindings_path: str,
++    account_endpoints: dict[str, str],
++    account_server_public: dict[str, bytes],
++    coordinator_server_public: bytes,
++    coordinator_server_secret: bytes,
++    coordinator_client_public: bytes,
++    coordinator_client_secret: bytes,
++    strategy_client_public: dict[str, bytes],
++    strategy_client_secret: dict[str, bytes],
++    metadata_reference_ns: int,
++    startup_recovery_release: Any,
++    freeze_owner_recovery: Any,
++) -> None:
++    """Use the real coordinator Host with a barrier before startup recovery."""
++
++    original_maintain_components = arb02.ServiceHost._maintain_components
++    original_maintain_registrations = GroupCoordinatorService.maintain_registrations
++    original_runtime_call = arb02.ServiceClientRuntime.call
++    startup_barrier_used = False
++    freeze_reported = False
++
++    def registration_summary(runtime: Any) -> tuple[Any, ...]:
++        return tuple(
++            (
++                item.mount,
++                item.scope.account_ref,
++                item.scope.strategy_ref,
++                item.scope_ref,
++                item.registration_id,
++                tuple(sorted(item.operations)),
++            )
++            for item in runtime.bindings
++            if item.active
++        )
++
++    def request_id(mount: str, operation: str, arguments: Any) -> str | None:
++        if not isinstance(arguments, dict):
++            return None
++        candidate = arguments.get("intent_id")
++        intent = arguments.get("intent")
++        if candidate is None and isinstance(intent, dict):
++            candidate = intent.get("intent_id")
++        if candidate is None:
++            candidate = arguments.get("group_id")
++        return candidate if type(candidate) is str else None
++
++    def traced_call(runtime: Any, mount: str, operation: str, arguments: Any, *args: Any, **kwargs: Any):
++        if operation not in {
++            "reservations.query",
++            "orders.query_group_leg",
++            "orders.submit_group_leg",
++        }:
++            return original_runtime_call(runtime, mount, operation, arguments, *args, **kwargs)
++        account_ref = kwargs.get("account_ref")
++        scope_ref = kwargs.get("scope_ref")
++        business_id = request_id(mount, operation, arguments)
++        matches = tuple(
++            binding
++            for binding in runtime.bindings
++            if binding.active
++            and binding.mount == mount
++            and operation in binding.operations
++            and (account_ref is None or binding.scope.account_ref == account_ref)
++            and (scope_ref is None or binding.scope_ref == scope_ref)
++        )
++        registration_id = matches[0].registration_id if len(matches) == 1 else None
++        facts = (mount, operation, account_ref, scope_ref, business_id, registration_id)
++        control.send(("rpc", "start", *facts))
++        try:
++            reply = original_runtime_call(runtime, mount, operation, arguments, *args, **kwargs)
++        except BaseException as error:
++            control.send(
++                (
++                    "rpc",
++                    "error",
++                    *facts,
++                    type(error).__name__,
++                    getattr(error, "code", None),
++                )
++            )
++            raise
++        result = reply.get("result") if hasattr(reply, "get") else None
++        control.send(
++            (
++                "rpc",
++                "reply",
++                *facts,
++                reply.get("ok") if hasattr(reply, "get") else None,
++                reply.get("code") if hasattr(reply, "get") else None,
++                result is None,
++            )
++        )
++        return reply
++
++    def gated_maintain_components(
++        host: Any, *, registrations_only: bool = False
++    ) -> None:
++        nonlocal startup_barrier_used
++        if registrations_only and not startup_barrier_used:
++            upstream = host.upstream
++            if upstream is None or not upstream.healthy:
++                raise AssertionError("coordinator upstream bindings are not ready at barrier")
++            control.send(("recovery_barrier", registration_summary(upstream)))
++            if not startup_recovery_release.wait(60):
++                raise TimeoutError("startup recovery barrier was not released")
++            startup_barrier_used = True
++        original_maintain_components(host, registrations_only=registrations_only)
++
++    def bounded_maintain_registrations(
++        service: Any, contexts: tuple[Any, ...], *, recover: bool = True
++    ) -> None:
++        nonlocal freeze_reported
++        if freeze_owner_recovery.is_set() and recover:
++            if not freeze_reported:
++                control.send(("recovery_frozen",))
++                freeze_reported = True
++            return
++        original_maintain_registrations(service, contexts, recover=recover)
++
++    arb02.ServiceHost._maintain_components = gated_maintain_components
++    GroupCoordinatorService.maintain_registrations = bounded_maintain_registrations
++    arb02.ServiceClientRuntime.call = traced_call
++    try:
++        arb02._coordinator_host_process(
++            control,
++            raw_config,
++            raw_account_configs,
++            registry_path,
++            group_store_path,
++            run_bindings_path,
++            account_endpoints,
++            account_server_public,
++            coordinator_server_public,
++            coordinator_server_secret,
++            coordinator_client_public,
++            coordinator_client_secret,
++            strategy_client_public,
++            strategy_client_secret,
++            metadata_reference_ns,
++        )
++    finally:
++        arb02.ServiceHost._maintain_components = original_maintain_components
++        GroupCoordinatorService.maintain_registrations = original_maintain_registrations
++        arb02.ServiceClientRuntime.call = original_runtime_call
++
++
++def _cleanup_failed_coordinator_barrier_start(
++    process: Any | None,
++    parent_control: Any,
++    child_control: Any,
++    startup_recovery_release: Any,
++    freeze_owner_recovery: Any,
++    *,
++    process_started: bool,
++    child_control_open: bool,
++    observed: list[tuple[Any, ...]],
++) -> BaseException | None:
++    """Release the startup barrier before closing only its test-owned child."""
++
++    failure: BaseException | None = None
++    try:
++        freeze_owner_recovery.set()
++        startup_recovery_release.set()
++    except BaseException as error:
++        failure = error
++    started = process_started
++    if process is None:
++        started = False
++    elif not started:
++        try:
++            started = process.pid is not None
++        except BaseException:
++            started = True
++
++    if not started:
++        if process is not None:
++            try:
++                process.close()
++            except BaseException as error:
++                failure = failure or error
++        for endpoint in (parent_control, child_control if child_control_open else None):
++            if endpoint is not None:
++                try:
++                    endpoint.close()
++                except BaseException as error:
++                    failure = failure or error
++        return failure
++
++    ready = False
++    try:
++        deadline = time.monotonic() + 8.0
++        messages_seen = 0
++        while not ready:
++            message = _receive_coordinator_control(
++                parent_control, process, deadline, "failed-start cleanup readiness"
++            )
++            if message is None:
++                continue
++            messages_seen += 1
++            if messages_seen > _MAX_COORDINATOR_CONTROL_MESSAGES_PER_PHASE:
++                raise AssertionError("coordinator cleanup readiness message budget exceeded")
++            observed.append(message)
++            if message[0] == "ready":
++                ready = True
++                break
++            if message[0] == "error":
++                break
++
++        if ready:
++            if not process.is_alive():
++                raise AssertionError("coordinator exited before failed-start close request")
++            parent_control.send("close")
++            close_deadline = time.monotonic() + 5.0
++            closed = False
++            messages_seen = 0
++            while not closed:
++                message = _receive_coordinator_control(
++                    parent_control, process, close_deadline, "failed-start cleanup close"
++                )
++                if message is None:
++                    continue
++                messages_seen += 1
++                if messages_seen > _MAX_COORDINATOR_CONTROL_MESSAGES_PER_PHASE:
++                    raise AssertionError("coordinator cleanup close message budget exceeded")
++                observed.append(message)
++                if message[0] == "closed":
++                    closed = True
++                    break
++                if message[0] == "error":
++                    break
++            if not closed and process.is_alive():
++                failure = TimeoutError("coordinator did not acknowledge normal close")
++    except BaseException as error:
++        failure = failure or error
++    finally:
++        try:
++            alive = bool(process.is_alive())
++        except BaseException as error:
++            alive = True
++            failure = failure or RuntimeError(
++                "coordinator failed-start cleanup could not confirm child exit"
++            )
++            failure.__cause__ = error
++        if alive:
++            try:
++                process.terminate()
++            except BaseException as error:
++                failure = failure or error
++            try:
++                process.join(5)
++            except BaseException as error:
++                failure = failure or error
++            try:
++                alive = bool(process.is_alive())
++            except BaseException as error:
++                alive = True
++                failure = failure or error
++            if alive:
++                kill = getattr(process, "kill", None)
++                if callable(kill):
++                    try:
++                        kill()
++                    except BaseException as error:
++                        failure = failure or error
++                    try:
++                        process.join(5)
++                    except BaseException as error:
++                        failure = failure or error
++                try:
++                    alive = bool(process.is_alive())
++                except BaseException as error:
++                    alive = True
++                    failure = failure or error
++            if not alive:
++                failure = failure or RuntimeError(
++                    "test-owned coordinator required forced cleanup"
++                )
++        if alive:
++            controls = (parent_control, child_control) if child_control_open else (parent_control,)
++            _retain_unconfirmed_child(
++                "coordinator failed startup", process, controls
++            )
++            failure = failure or RuntimeError(
++                "coordinator failed-start child remains alive; controls retained"
++            )
++        else:
++            for endpoint in (parent_control, child_control if child_control_open else None):
++                if endpoint is not None:
++                    try:
++                        endpoint.close()
++                    except BaseException as error:
++                        failure = failure or error
++        try:
++            if not alive:
++                process.join(0)
++                process.close()
++        except BaseException as error:
++            failure = failure or error
++    return failure
++
++
++def _receive_coordinator_control(
++    control: Any,
++    process: Any,
++    deadline: float,
++    phase: str,
++) -> tuple[Any, ...] | None:
++    remaining = deadline - time.monotonic()
++    if remaining <= 0:
++        raise AssertionError(f"coordinator {phase} timed out")
++    if not control.poll(min(0.1, remaining)):
++        if process.is_alive():
++            return None
++        if not control.poll(0):
++            raise AssertionError(
++                f"coordinator exited during {phase}; exitcode={process.exitcode}"
++            )
++    try:
++        return control.recv()
++    except EOFError as error:
++        raise AssertionError(
++            f"coordinator control channel closed during {phase}; "
++            f"exitcode={process.exitcode}"
++        ) from error
++
++
++def _stop_traced_coordinator_process(
++    process: Any,
++    control: Any,
++    observed: list[tuple[Any, ...]],
++) -> None:
++    failures: list[str] = []
++    closed = False
++    messages_seen = 0
++    try:
++        if process.is_alive():
++            control.send("close")
++        deadline = time.monotonic() + 20
++        while not closed:
++            try:
++                message = _receive_coordinator_control(
++                    control, process, deadline, "normal close"
++                )
++            except AssertionError as error:
++                failures.append(str(error))
++                break
++            if message is None:
++                continue
++            messages_seen += 1
++            if messages_seen > _MAX_COORDINATOR_CONTROL_MESSAGES_PER_PHASE:
++                failures.append("coordinator normal-close message budget exceeded")
++                break
++            if message[0] == "rpc":
++                observed.append(message)
++                continue
++            if message[0] in {"ready", "recovery_frozen"}:
++                continue
++            if message[0] == "closed":
++                closed = True
++                continue
++            if message[0] == "error":
++                failures.append(f"coordinator close returned error: {message!r}")
++                break
++            failures.append(f"unexpected coordinator close message: {message!r}")
++
++        process.join(5)
++        if process.is_alive():
++            failures.append("coordinator remained alive after normal-close wait")
++            process.terminate()
++            process.join(5)
++            if process.is_alive():
++                kill = getattr(process, "kill", None)
++                if callable(kill):
++                    kill()
++                    process.join(5)
++            if process.is_alive():
++                failures.append("coordinator remained alive after forced cleanup")
++            else:
++                failures.append("coordinator required forced cleanup")
++        elif process.exitcode != 0:
++            failures.append(f"coordinator exited with code {process.exitcode}")
++        if not closed:
++            failures.append("coordinator did not acknowledge normal close")
++    except BaseException as error:
++        failures.append(f"coordinator cleanup raised {type(error).__name__}")
++        try:
++            if process.is_alive():
++                process.terminate()
++                process.join(5)
++                if process.is_alive():
++                    kill = getattr(process, "kill", None)
++                    if callable(kill):
++                        kill()
++                        process.join(5)
++                if process.is_alive():
++                    failures.append("coordinator remained alive after forced cleanup")
++                else:
++                    failures.append("coordinator required forced cleanup")
++        except BaseException as cleanup_error:
++            failures.append(f"coordinator forced cleanup raised {type(cleanup_error).__name__}")
++    finally:
++        try:
++            alive = bool(process.is_alive())
++        except BaseException as error:
++            alive = True
++            failures.append(
++                f"coordinator exit could not be confirmed: {type(error).__name__}"
++            )
++        if alive:
++            _retain_unconfirmed_child("coordinator normal close", process, (control,))
++            failures.append("coordinator remains alive; control and process retained")
++        else:
++            try:
++                control.close()
++            except BaseException as error:
++                failures.append(f"coordinator control close raised {type(error).__name__}")
++            try:
++                process.close()
++            except BaseException as error:
++                failures.append(f"coordinator process close raised {type(error).__name__}")
++    if failures:
++        raise AssertionError("; ".join(failures))
++
++
++def _validate_coordinator_bindings(bindings: tuple[Any, ...]) -> None:
++    expected_operations = {
++        "upstream.orders": tuple(
++            sorted({"orders.submit_group_leg", "orders.resolve_group_leg"})
++        ),
++        "upstream.order_query": ("orders.query_group_leg",),
++        "upstream.account_reservations": tuple(
++            sorted({"reservations.reserve", "reservations.query", "reservations.release"})
++        ),
++    }
++    expected = {
++        (mount, account, strategy, scope_ref)
++        for strategy in arb02._STRATEGIES
++        for account in arb02._ACCOUNTS
++        for mount, scope_ref in (
++            ("upstream.orders", arb02._route_refs(account, strategy)[1]),
++            ("upstream.order_query", arb02._route_refs(account, strategy)[2]),
++            ("upstream.account_reservations", arb02._route_refs(account, strategy)[0]),
++        )
++    }
++    assert len(bindings) == len(expected) == 12
++    assert {
++        (mount, account, strategy, scope_ref)
++        for mount, account, strategy, scope_ref, _registration_id, _operations in bindings
++    } == expected
++    assert all(registration_id for *_, registration_id, _operations in bindings)
++    assert all(
++        operations == expected_operations[mount]
++        for mount, _account, _strategy, _scope_ref, _registration_id, operations in bindings
++    )
++
++
++def _start_coordinator_at_recovery_barrier(
++    context: Any,
++    account_configs: dict[str, dict[str, Any]],
++    paths: dict[str, str],
++    account_endpoints: dict[str, str],
++    account_server_public: dict[str, bytes],
++    coordinator_keys: tuple[bytes, bytes],
++    coordinator_client_keys: tuple[bytes, bytes],
++    strategy_keys: dict[str, tuple[bytes, bytes]],
++    metadata_reference_ns: int,
++) -> tuple[Any, Any, str, tuple[Any, ...], Any, Any, list[tuple[Any, ...]]]:
++    endpoint = arb02._endpoint()
++    raw_config = arb02._coordinator_service_config(endpoint, account_configs, account_endpoints)
++    parent_control, child_control = context.Pipe(duplex=True)
++    startup_recovery_release = context.Event()
++    freeze_owner_recovery = context.Event()
++    server_public, server_secret = coordinator_keys
++    client_public, client_secret = coordinator_client_keys
++    process = None
++    process_started = False
++    child_control_open = True
++    observed: list[tuple[Any, ...]] = []
++    messages_seen = 0
++    try:
++        process = context.Process(
++            name="arb05-group-coordinator-recovery-barrier",
++            target=_coordinator_host_process_with_recovery_barriers,
++            args=(
++                child_control,
++                raw_config,
++                account_configs,
++                paths["registry"],
++                paths["groups"],
++                paths["run_bindings"],
++                account_endpoints,
++                account_server_public,
++                server_public,
++                server_secret,
++                client_public,
++                client_secret,
++                {strategy: strategy_keys[strategy][0] for strategy in arb02._STRATEGIES},
++                {strategy: strategy_keys[strategy][1] for strategy in arb02._STRATEGIES},
++                metadata_reference_ns,
++                startup_recovery_release,
++                freeze_owner_recovery,
++            ),
++        )
++        process.start()
++        process_started = True
++        child_control.close()
++        child_control_open = False
++        deadline = time.monotonic() + 30
++        while True:
++            message = _receive_coordinator_control(
++                parent_control, process, deadline, "startup recovery barrier"
++            )
++            if message is None:
++                continue
++            messages_seen += 1
++            if messages_seen > _MAX_COORDINATOR_CONTROL_MESSAGES_PER_PHASE:
++                raise AssertionError("coordinator startup message budget exceeded")
++            if message[0] == "rpc":
++                observed.append(message)
++                continue
++            if message[0] == "error":
++                raise AssertionError(
++                    f"coordinator startup failed: {message!r}; observed={observed!r}"
++                )
++            assert message[0] == "recovery_barrier", message
++            bindings = message[1]
++            _validate_coordinator_bindings(bindings)
++            return (
++                process,
++                parent_control,
++                endpoint,
++                bindings,
++                startup_recovery_release,
++                freeze_owner_recovery,
++                observed,
++            )
++    except BaseException as startup_error:
++        cleanup_error = _cleanup_failed_coordinator_barrier_start(
++            process,
++            parent_control,
++            child_control,
++            startup_recovery_release,
++            freeze_owner_recovery,
++            process_started=process_started,
++            child_control_open=child_control_open,
++            observed=observed,
++        )
++        if cleanup_error is not None:
++            add_note = getattr(startup_error, "add_note", None)
++            if callable(add_note):
++                add_note(f"coordinator barrier cleanup failed: {type(cleanup_error).__name__}")
++        raise
++
++
++def _wait_coordinator_message(
++    control: Any,
++    process: Any,
++    observed: list[tuple[Any, ...]],
++    expected_kind: str,
++    *,
++    timeout: float = 30,
++) -> tuple[Any, ...]:
++    deadline = time.monotonic() + timeout
++    messages_seen = 0
++    while True:
++        message = _receive_coordinator_control(
++            control, process, deadline, f"message {expected_kind!r}"
++        )
++        if message is None:
++            continue
++        messages_seen += 1
++        if messages_seen > _MAX_COORDINATOR_CONTROL_MESSAGES_PER_PHASE:
++            raise AssertionError(
++                f"coordinator message budget exceeded while waiting for {expected_kind!r}"
++            )
++        if message[0] == "rpc":
++            observed.append(message)
++            continue
++        if message[0] == "error":
++            raise AssertionError(f"coordinator failed: {message!r}")
++        if message[0] == expected_kind:
++            return message
++        raise AssertionError(f"unexpected coordinator control message: {message!r}")
++
++
++def _wait_for_rpc(
++    control: Any,
++    process: Any,
++    observed: list[tuple[Any, ...]],
++    predicate: Any,
++    *,
++    timeout: float = 20,
++) -> tuple[Any, ...]:
++    deadline = time.monotonic() + timeout
++    messages_seen = 0
++    while True:
++        for message in observed:
++            if predicate(message):
++                return message
++        message = _receive_coordinator_control(
++            control, process, deadline, "the expected upstream RPC"
++        )
++        if message is None:
++            continue
++        messages_seen += 1
++        if messages_seen > _MAX_COORDINATOR_CONTROL_MESSAGES_PER_PHASE:
++            raise AssertionError("coordinator RPC message budget exceeded")
++        if message[0] == "rpc":
++            observed.append(message)
++            if predicate(message):
++                return message
++        elif message[0] == "error":
++            raise AssertionError(f"coordinator failed while tracing RPCs: {message!r}")
++        else:
++            observed.append(message)
++
++
++def _authority_facts(path: str, account_ref: str) -> tuple[dict[str, Any], tuple[dict[str, Any], ...]]:
++    with sqlite3.connect(path) as connection:
++        connection.row_factory = sqlite3.Row
++        rows = connection.execute(
++            "SELECT * FROM execution_group_coordinators WHERE account_ref=? AND strategy_id=?",
++            (account_ref, _STRATEGY),
++        ).fetchall()
++        hold_rows = connection.execute(
++            "SELECT hold_json FROM group_dispatch_holds ORDER BY hold_id"
++        ).fetchall()
++    assert len(rows) == 1, (account_ref, len(rows))
++    return dict(rows[0]), tuple(json.loads(row["hold_json"]) for row in hold_rows)
++
++
++def _read_risk_legs(
++    account_paths: dict[str, dict[str, str]], group_id: str, deadline_ns: int
++) -> dict[str, tuple[Any, ...]]:
++    facts: dict[str, tuple[Any, ...]] = {}
++    for account_ref in arb02._ACCOUNTS:
++        gate = arb02.DurableRiskGate(
++            account_paths[account_ref]["risk_gate"], arb02._risk_policy()
++        )
++        try:
++            receipt = gate.read_group_vector_snapshot(
++                arb02.AccountScope("fixture", f"provider-{account_ref}", "simulation"),
++                group_id,
++            )
++            assert receipt.deadline_ns == deadline_ns
++            assert len(receipt.legs) == 1
++            leg = receipt.legs[0]
++            facts[account_ref] = (leg.state.value, leg.claimed, leg.resolved)
++        finally:
++            gate.close()
++    return facts
++
++
++def _execution_record(
++    account_paths: dict[str, dict[str, str]], request: dict[str, Any], account_ref: str
++) -> Any:
++    execution = arb02.SqliteExecutionStore(account_paths[account_ref]["execution"])
++    try:
++        leg = next(leg for leg in request["legs"] if leg["account_ref"] == account_ref)
++        intent_id = arb02.group_leg_intent_id(request["group_id"], leg["leg_id"])
++        return execution.get(intent_id, scope=arb02._execution_scope(account_ref, _STRATEGY))
++    finally:
++        execution.close()
++
++
++def _group_attempt_payload(path: str, intent_id: str) -> dict[str, Any]:
++    """Read the durable dispatch identity that joins business and provider IDs."""
++
++    database_uri = f"file:{Path(path).as_posix()}?mode=ro"
++    with sqlite3.connect(database_uri, uri=True) as connection:
++        rows = connection.execute(
++            "SELECT group_id, leg_id, payload_json FROM group_proof_events "
++            "WHERE intent_id=? AND event_type='ATTEMPT_STARTED' ORDER BY revision",
++            (intent_id,),
++        ).fetchall()
++    assert len(rows) == 1, (intent_id, len(rows))
++    group_id, leg_id, payload_json = rows[0]
++    payload = json.loads(payload_json)
++    provider_request = payload.get("provider_request")
++    client_order_id = payload.get("client_order_id")
++    assert payload.get("intent_id") == intent_id
++    assert payload.get("group_id") == group_id
++    assert payload.get("leg_id") == leg_id
++    assert type(client_order_id) is str and client_order_id
++    assert isinstance(provider_request, dict)
++    assert provider_request.get("client_order_id") == client_order_id
++    assert provider_request.get("idempotency_key") == client_order_id
++    return payload
++
++
++def _provider_order_payload(path: str, client_order_id: str) -> dict[str, Any]:
++    """Read the synthetic provider order row for one exact client order ID."""
++
++    database_uri = f"file:{Path(path).as_posix()}?mode=ro"
++    with sqlite3.connect(database_uri, uri=True) as connection:
++        rows = connection.execute(
++            "SELECT order_json FROM provider_orders WHERE client_order_id=?",
++            (client_order_id,),
++        ).fetchall()
++    assert len(rows) == 1, (client_order_id, len(rows))
++    payload = json.loads(rows[0][0])
++    assert payload.get("client_order_id") == client_order_id
++    return payload
++
++
++def _risk_dispatch_resolution(path: str, intent_id: str) -> dict[str, Any]:
++    """Read the terminal Risk resolution linking the business and provider IDs."""
++
++    database_uri = f"file:{Path(path).as_posix()}?mode=ro"
++    with sqlite3.connect(database_uri, uri=True) as connection:
++        connection.row_factory = sqlite3.Row
++        rows = connection.execute(
++            "SELECT intent_id, provider_order_id, dispatch_attempt_count, terminal_state "
++            "FROM risk_dispatch_resolutions WHERE intent_id=?",
++            (intent_id,),
++        ).fetchall()
++    assert len(rows) == 1, (intent_id, len(rows))
++    return dict(rows[0])
++
++
++@pytest.mark.integration
++def test_two_account_recovery_fences_second_owner_until_its_generation_is_authorized(
++    tmp_path: Path,
++) -> None:
++    """A real B Host outage preserves the group until B's writer generation is authorized."""
++
++    metadata_reference_ns = time.time_ns()
++    account_paths = {
++        account: {
++            name: str(tmp_path / f"{account}-{name}.sqlite3")
++            for name in (
++                "registry",
++                "provider",
++                "execution",
++                "risk_order_journal",
++                "proof",
++                "risk_gate",
++                "accepted",
++                "group_authority",
++            )
++        }
++        for account in arb02._ACCOUNTS
++    }
++    coordinator_paths = {
++        "registry": str(tmp_path / "coordinator-registry.sqlite3"),
++        "groups": str(tmp_path / "coordinator-groups.sqlite3"),
++        "run_bindings": str(tmp_path / "coordinator-run-bindings.sqlite3"),
++    }
++    account_endpoints = {account: arb02._endpoint() for account in arb02._ACCOUNTS}
++    account_keys = {account: zmq.curve_keypair() for account in arb02._ACCOUNTS}
++    coordinator_keys = zmq.curve_keypair()
++    coordinator_client_keys = zmq.curve_keypair()
++    strategy_keys = {strategy: zmq.curve_keypair() for strategy in arb02._STRATEGIES}
++    account_configs = {
++        account: arb02._account_service_config(
++            account, account_endpoints[account], f"arb02-account-server-{account}"
++        )
++        for account in arb02._ACCOUNTS
++    }
++
++    context = multiprocessing.get_context("spawn")
++    provider_entered = context.Event()
++    provider_release = context.Event()
++    reservation_committed = {account: context.Event() for account in arb02._ACCOUNTS}
++    reservation_reply_entered = context.Event()
++    reservation_reply_release = context.Event()
++    reservation_events = context.Queue()
++    reservation_events_closed = False
++    account_processes: dict[str, Any] = {}
++    account_controls: dict[str, Any] = {}
++    coordinator_hosts: list[tuple[Any, Any, Any, Any, list[tuple[Any, ...]]]] = []
++    client_threads: dict[str, Any] = {}
++    client_commands: dict[str, Any] = {}
++    client_results: dict[str, Any] = {}
++    initial_coordinator_process: Any | None = None
++    initial_coordinator_control: Any | None = None
++    request: dict[str, Any] | None = None
++    recovered_snapshot = None
++    original_owner_sessions: dict[str, tuple[str, int]] = {}
++    a_client_order_id: str | None = None
++
++    try:
++        for account_ref in arb02._ACCOUNTS:
++            process, control = _start_account_owner(
++                context,
++                account_ref=account_ref,
++                raw_config=account_configs[account_ref],
++                registry_path=account_paths[account_ref]["registry"],
++                paths=account_paths[account_ref],
++                endpoint=account_endpoints[account_ref],
++                server_keys=account_keys[account_ref],
++                coordinator_client_public=coordinator_client_keys[0],
++                metadata_reference_ns=metadata_reference_ns,
++                provider_entered=provider_entered,
++                provider_release=provider_release,
++                reservation_events=reservation_events,
++                reservation_committed=reservation_committed[account_ref],
++                reservation_reply_entered=(
++                    reservation_reply_entered if account_ref == "account-b" else None
++                ),
++                reservation_reply_release=(
++                    reservation_reply_release if account_ref == "account-b" else None
++                ),
++            )
++            account_processes[account_ref] = process
++            account_controls[account_ref] = control
++
++        (
++            initial_coordinator_process,
++            initial_coordinator_control,
++            coordinator_endpoint,
++            initial_bindings,
++        ) = _start_initial_coordinator_with_owned_cleanup(
++            context,
++            account_configs,
++            coordinator_paths,
++            account_endpoints,
++            {account: account_keys[account][0] for account in arb02._ACCOUNTS},
++            coordinator_keys,
++            coordinator_client_keys,
++            strategy_keys,
++            metadata_reference_ns,
++        )
++        original_owner_sessions = {
++            account: _activate_order_session(account_controls, initial_bindings, account)
++            for account in arb02._ACCOUNTS
++        }
++        assert original_owner_sessions == {
++            account: (registration_id, 1)
++            for account, (registration_id, _generation) in original_owner_sessions.items()
++        }
++        original_b_owner_projection = (
++            original_owner_sessions["account-b"][1],
++            original_owner_sessions["account-b"][0],
++        )
++        client_threads, client_commands, client_results = arb02._new_client_threads(
++            coordinator_endpoint, coordinator_keys[0], strategy_keys
++        )
++
++        request = arb02._group_request(
++            _GROUP_ID,
++            _STRATEGY,
++            metadata_reference_ns,
++            lifetime_ns=120_000_000_000,
++        )
++        original_deadline_ns = request["deadline_ns"]
++        client_commands[_STRATEGY].put(("submit", _GROUP_ID, request))
++        started = arb02._next_client_message(client_results[_STRATEGY], "started")
++        assert started[1:3] == ("submit", _GROUP_ID)
++        assert all(event.wait(5) for event in reservation_committed.values())
++        assert reservation_reply_entered.wait(5)
++        assert original_deadline_ns > time.time_ns()
++        assert not provider_entered.is_set()
++
++        # Both Risk vectors and accepted receipts are durable, but the
++        # coordinator dies before returning the accepted submit.
++        assert arb02._terminate_test_coordinator(
++            initial_coordinator_process, initial_coordinator_control
++        ) != 0
++        initial_coordinator_process = None
++        initial_coordinator_control = None
++        reservation_reply_release.set()
++        for account_ref in arb02._ACCOUNTS:
++            account_controls[account_ref].send(("status",))
++            assert arb02._receive(account_controls[account_ref]) == (
++                "status",
++                (),
++                {"order_queries": 0, "fill_queries": 0},
++            )
++        lost_reply = arb02._next_client_call_outcome(client_results[_STRATEGY])
++        assert lost_reply == (
++            "call_error",
++            "submit",
++            _GROUP_ID,
++            "RequestOutcomeUnknownError",
++            None,
++        )
++        arb02._close_client_threads(client_threads, client_commands, client_results)
++        client_threads, client_commands, client_results = {}, {}, {}
++
++        group_store = arb02.SqliteOrderGroupStore(coordinator_paths["groups"])
++        try:
++            before_owner_restart = group_store.get(arb02._PORTFOLIO, _GROUP_ID)
++        finally:
++            group_store.close()
++        assert before_owner_restart is not None
++        assert before_owner_restart.state is arb02.GroupOrderState.PREPARING
++        assert before_owner_restart.budget_reservation is not None
++        assert before_owner_restart.budget_reservation.state is (
++            arb02.GroupBudgetReservationState.RESERVED
++        )
++        assert before_owner_restart.request.deadline_ns == original_deadline_ns
++
++        # Register all routes while B is live, then stop its actual Host before
++        # releasing the new coordinator's startup-maintenance barrier.
++        (
++            stage1_process,
++            stage1_control,
++            stage1_endpoint,
++            stage1_bindings,
++            stage1_release,
++            stage1_freeze,
++            stage1_trace,
++        ) = _start_coordinator_at_recovery_barrier(
++            context,
++            account_configs,
++            coordinator_paths,
++            account_endpoints,
++            {account: account_keys[account][0] for account in arb02._ACCOUNTS},
++            coordinator_keys,
++            coordinator_client_keys,
++            strategy_keys,
++            metadata_reference_ns,
++        )
++        coordinator_hosts.append(
++            (stage1_process, stage1_control, stage1_release, stage1_freeze, stage1_trace)
++        )
++        recovered_a_registration, recovered_a_generation = _activate_order_session(
++            account_controls, stage1_bindings, "account-a"
++        )
++        assert recovered_a_generation == 2
++        assert recovered_a_registration != original_owner_sessions["account-a"][0]
++
++        account_b_process = account_processes["account-b"]
++        account_b_control = account_controls["account-b"]
++        _stop_registered_owner(
++            "account-b",
++            account_b_process,
++            account_b_control,
++            account_processes,
++            account_controls,
++        )
++        stage1_release.set()
++        stage1_ready = _wait_coordinator_message(
++            stage1_control, stage1_process, stage1_trace, "ready", timeout=30
++        )
++        assert stage1_ready[1] == stage1_endpoint
++        _validate_coordinator_bindings(stage1_ready[2])
++        stage1_freeze.set()
++        _wait_coordinator_message(
++            stage1_control,
++            stage1_process,
++            stage1_trace,
++            "recovery_frozen",
++            timeout=10,
++        )
++
++        # B is genuinely stopped while the coordinator's startup recovery
++        # queries A and then persists B as UNKNOWN. Inspect that durable result
++        # before B returns; the service query path is exercised after B's Host
++        # restarts in stage two.
++        group_store = arb02.SqliteOrderGroupStore(coordinator_paths["groups"])
++        try:
++            staggered_snapshot = group_store.get(arb02._PORTFOLIO, _GROUP_ID)
++        finally:
++            group_store.close()
++        assert staggered_snapshot is not None
++        assert staggered_snapshot.state is arb02.GroupOrderState.RECOVERY_REQUIRED
++        assert staggered_snapshot.request.group_id == before_owner_restart.request.group_id
++        assert staggered_snapshot.request.fingerprint == before_owner_restart.request.fingerprint
++        assert staggered_snapshot.request.deadline_ns == original_deadline_ns
++        assert staggered_snapshot.budget_reservation is not None
++        assert before_owner_restart.budget_reservation is not None
++        assert staggered_snapshot.budget_reservation.deadline_ns == original_deadline_ns
++        assert staggered_snapshot.budget_reservation.policy_fingerprint == (
++            before_owner_restart.budget_reservation.policy_fingerprint
++        )
++        assert staggered_snapshot.budget_reservation.quote_fingerprint == (
++            before_owner_restart.budget_reservation.quote_fingerprint
++        )
++        assert staggered_snapshot.budget_reservation.state is (
++            arb02.GroupBudgetReservationState.RESERVED
++        )
++        reservations_by_account = {
++            item.account_ref: item for item in staggered_snapshot.reservations
++        }
++        assert reservations_by_account["account-a"].phase is arb02.GroupReservationPhase.ACTIVE
++        assert reservations_by_account["account-b"].phase is arb02.GroupReservationPhase.UNKNOWN
++        assert all(
++            not leg.claimed and not leg.resolved
++            for item in staggered_snapshot.reservations
++            for leg in item.legs
++        )
++        assert all(
++            leg.submitted_intent is None and leg.child_status is None
++            for leg in staggered_snapshot.legs
++        )
++        assert original_deadline_ns > time.time_ns()
++        _assert_no_child_records(account_paths, request)
++        stage1_risk = _read_risk_legs(account_paths, _GROUP_ID, original_deadline_ns)
++        assert all(facts[1:] == (False, False) for facts in stage1_risk.values())
++        for account_ref in arb02._ACCOUNTS:
++            assert arb02._provider_snapshot(Path(account_paths[account_ref]["provider"])) == (
++                (),
++                {"order_queries": 0, "fill_queries": 0},
++            )
++
++        stage1_owner_a, stage1_holds_a = _authority_facts(
++            account_paths["account-a"]["group_authority"], "account-a"
++        )
++        stage1_owner_b, stage1_holds_b = _authority_facts(
++            account_paths["account-b"]["group_authority"], "account-b"
++        )
++        assert (stage1_owner_a["generation"], stage1_owner_a["registration_id"]) == (
++            2,
++            recovered_a_registration,
++        )
++        assert (stage1_owner_b["generation"], stage1_owner_b["registration_id"]) == (
++            *original_b_owner_projection,
++        )
++        assert stage1_holds_a == stage1_holds_b == ()
++        assert any(
++            item[0:2] == ("rpc", "reply")
++            and item[2:5]
++            == ("upstream.account_reservations", "reservations.query", "account-a")
++            and item[6] == _GROUP_ID
++            and item[8:10] == (True, "OK")
++            for item in stage1_trace
++        ), stage1_trace
++        assert any(
++            item[0:2] == ("rpc", "error")
++            and item[2:5]
++            == ("upstream.account_reservations", "reservations.query", "account-b")
++            and item[6] == _GROUP_ID
++            for item in stage1_trace
++        ), stage1_trace
++
++        # Restart and verify B's Host, then stop this coordinator cleanly.
++        restarted_b, restarted_b_control = _start_account_owner(
++            context,
++            account_ref="account-b",
++            raw_config=account_configs["account-b"],
++            registry_path=account_paths["account-b"]["registry"],
++            paths=account_paths["account-b"],
++            endpoint=account_endpoints["account-b"],
++            server_keys=account_keys["account-b"],
++            coordinator_client_public=coordinator_client_keys[0],
++            metadata_reference_ns=metadata_reference_ns,
++            provider_entered=provider_entered,
++            provider_release=provider_release,
++            reservation_events=reservation_events,
++        )
++        account_processes["account-b"] = restarted_b
++        account_controls["account-b"] = restarted_b_control
++        account_controls["account-b"].send(("status",))
++        assert arb02._receive(account_controls["account-b"]) == (
++            "status",
++            (),
++            {"order_queries": 0, "fill_queries": 0},
++        )
++        _stop_traced_coordinator_process(stage1_process, stage1_control, stage1_trace)
++        coordinator_hosts.pop()
++
++        # A's fresh writer generation is authorized in stage two. B is live
++        # and query-capable, while its new writer registration remains fenced.
++        (
++            stage2_process,
++            stage2_control,
++            stage2_endpoint,
++            stage2_bindings,
++            stage2_release,
++            stage2_freeze,
++            stage2_trace,
++        ) = _start_coordinator_at_recovery_barrier(
++            context,
++            account_configs,
++            coordinator_paths,
++            account_endpoints,
++            {account: account_keys[account][0] for account in arb02._ACCOUNTS},
++            coordinator_keys,
++            coordinator_client_keys,
++            strategy_keys,
++            metadata_reference_ns,
++        )
++        coordinator_hosts.append(
++            (stage2_process, stage2_control, stage2_release, stage2_freeze, stage2_trace)
++        )
++        recovered_a_registration, recovered_a_generation = _activate_order_session(
++            account_controls, stage2_bindings, "account-a"
++        )
++        assert recovered_a_generation == 3
++        assert recovered_a_registration != stage1_owner_a["registration_id"]
++        recovered_b_registration = next(
++            item[4]
++            for item in stage2_bindings
++            if item[0] == "upstream.orders"
++            and item[1] == "account-b"
++            and item[2] == _STRATEGY
++        )
++        assert recovered_b_registration != original_owner_sessions["account-b"][0]
++        stage2_owner_a, stage2_holds_a = _authority_facts(
++            account_paths["account-a"]["group_authority"], "account-a"
++        )
++        stage2_owner_b, stage2_holds_b = _authority_facts(
++            account_paths["account-b"]["group_authority"], "account-b"
++        )
++        assert (stage2_owner_a["generation"], stage2_owner_a["registration_id"]) == (
++            3,
++            recovered_a_registration,
++        )
++        assert (stage2_owner_b["generation"], stage2_owner_b["registration_id"]) == (
++            *original_b_owner_projection,
++        )
++        assert stage2_holds_a == stage2_holds_b == ()
++
++        # Pause at A's real synthetic provider boundary after its SQLite write.
++        stage2_release.set()
++        assert provider_entered.wait(30), "A did not reach its synthetic provider boundary"
++        intent_ids = {
++            leg["account_ref"]: arb02.group_leg_intent_id(_GROUP_ID, leg["leg_id"])
++            for leg in request["legs"]
++        }
++        in_flight_store = arb02.SqliteOrderGroupStore(coordinator_paths["groups"])
++        try:
++            in_flight_snapshot = in_flight_store.get(arb02._PORTFOLIO, _GROUP_ID)
++            in_flight_events = in_flight_store.events(arb02._PORTFOLIO, _GROUP_ID)
++        finally:
++            in_flight_store.close()
++        assert in_flight_snapshot is not None
++        assert in_flight_snapshot.request.deadline_ns == original_deadline_ns
++        assert in_flight_snapshot.request.group_id == _GROUP_ID
++        assert in_flight_snapshot.budget_reservation is not None
++        assert in_flight_snapshot.budget_reservation.deadline_ns == original_deadline_ns
++        assert in_flight_snapshot.budget_reservation.policy_fingerprint == (
++            before_owner_restart.budget_reservation.policy_fingerprint
++        )
++        assert in_flight_snapshot.budget_reservation.quote_fingerprint == (
++            before_owner_restart.budget_reservation.quote_fingerprint
++        )
++        assert in_flight_snapshot.budget_reservation.state is (
++            arb02.GroupBudgetReservationState.HELD
++        )
++        in_flight_legs = {leg.leg_id: leg for leg in in_flight_snapshot.legs}
++        assert in_flight_legs["leg-a"].submitted_intent is not None
++        assert in_flight_legs["leg-a"].submitted_intent.intent_id == intent_ids["account-a"]
++        assert in_flight_legs["leg-a"].phase.value == "REQUESTING"
++        assert in_flight_legs["leg-b"].submitted_intent is None
++        assert tuple(event.event_type for event in in_flight_events).count(
++            "FIRST_LEG_SUBMIT_STARTED"
++        ) == 1
++        a_record = _execution_record(account_paths, request, "account-a")
++        assert a_record is not None
++        assert a_record.intent_id == intent_ids["account-a"]
++        assert a_record.state is arb02.ExecutionState.DISPATCHING
++        assert a_record.dispatch_attempts == 1
++        assert _execution_record(account_paths, request, "account-b") is None
++        a_attempt_payload = _group_attempt_payload(
++            account_paths["account-a"]["proof"], intent_ids["account-a"]
++        )
++        a_client_order_id = a_attempt_payload["client_order_id"]
++        writes_a_in_flight, _counters_a_in_flight = arb02._provider_snapshot(
++            Path(account_paths["account-a"]["provider"])
++        )
++        assert writes_a_in_flight == (a_client_order_id,)
++        provider_order_in_flight = _provider_order_payload(
++            account_paths["account-a"]["provider"], a_client_order_id
++        )
++        assert provider_order_in_flight["order_id"] == f"provider-{a_client_order_id}"
++        in_flight_risk = _read_risk_legs(account_paths, _GROUP_ID, original_deadline_ns)
++        assert in_flight_risk["account-a"][1:] == (True, False)
++        assert in_flight_risk["account-b"][1:] == (False, False)
++
++        a_owner_facts, a_holds = _authority_facts(
++            account_paths["account-a"]["group_authority"], "account-a"
++        )
++        b_owner_facts, b_holds = _authority_facts(
++            account_paths["account-b"]["group_authority"], "account-b"
++        )
++        assert (a_owner_facts["generation"], a_owner_facts["registration_id"]) == (
++            3,
++            recovered_a_registration,
++        )
++        assert (b_owner_facts["generation"], b_owner_facts["registration_id"]) == (
++            *original_b_owner_projection,
++        )
++        assert len(a_holds) == 1
++        assert a_holds[0]["intent_id"] == intent_ids["account-a"]
++        assert a_holds[0]["registration_id"] == recovered_a_registration
++        assert a_holds[0]["coordinator_generation"] == 3
++        assert b_holds == ()
++        assert len(
++            arb02._provider_snapshot(Path(account_paths["account-a"]["provider"]))[0]
++        ) == 1
++        assert arb02._provider_snapshot(Path(account_paths["account-b"]["provider"]))[0] == ()
++
++        provider_release.set()
++        stage2_ready = _wait_coordinator_message(
++            stage2_control, stage2_process, stage2_trace, "ready", timeout=30
++        )
++        assert stage2_ready[1] == stage2_endpoint
++        _validate_coordinator_bindings(stage2_ready[2])
++
++        # B can query the original ID as absent. Its single submit attempt uses
++        # a new unactivated registration and is refused by the persisted fence.
++        b_query = next(
++            (
++                item
++                for item in stage2_trace
++                if item[0:2] == ("rpc", "reply")
++                and item[2:5]
++                == ("upstream.order_query", "orders.query_group_leg", "account-b")
++                and item[6] == intent_ids["account-b"]
++                and item[8:11] == (True, "OK", True)
++            ),
++            None,
++        )
++        assert b_query is not None, stage2_trace
++        b_submit_outcome = next(
++            (
++                item
++                for item in stage2_trace
++                if item[0] == "rpc"
++                and item[2:5]
++                == ("upstream.orders", "orders.submit_group_leg", "account-b")
++                and item[6] == intent_ids["account-b"]
++                and item[1] in {"reply", "error"}
++            ),
++            None,
++        )
++        assert b_submit_outcome is not None, stage2_trace
++        assert b_submit_outcome[7] == recovered_b_registration
++        assert b_submit_outcome[1] == "reply", b_submit_outcome
++        assert b_submit_outcome[8] is False, b_submit_outcome
++        assert b_submit_outcome[9] == "GROUP_ORDER_RECORD_MISSING", b_submit_outcome
++
++        # One later owner tick queries the same B ID. UNKNOWN is query-only.
++        prior_b_query_count = sum(
++            item[0:2] == ("rpc", "reply")
++            and item[2:5]
++            == ("upstream.order_query", "orders.query_group_leg", "account-b")
++            and item[6] == intent_ids["account-b"]
++            and item[8:11] == (True, "OK", True)
++            for item in stage2_trace
++        )
++        _wait_for_rpc(
++            stage2_control,
++            stage2_process,
++            stage2_trace,
++            lambda item: item[0:2] == ("rpc", "reply")
++            and item[2:5]
++            == ("upstream.order_query", "orders.query_group_leg", "account-b")
++            and item[6] == intent_ids["account-b"]
++            and item[8:11] == (True, "OK", True)
++            and sum(
++                candidate[0:2] == ("rpc", "reply")
++                and candidate[2:5]
++                == ("upstream.order_query", "orders.query_group_leg", "account-b")
++                and candidate[6] == intent_ids["account-b"]
++                and candidate[8:11] == (True, "OK", True)
++                for candidate in stage2_trace
++            )
++            > prior_b_query_count,
++            timeout=8,
++        )
++        assert sum(
++            item[0:2] == ("rpc", "start")
++            and item[2:5]
++            == ("upstream.orders", "orders.submit_group_leg", "account-b")
++            and item[6] == intent_ids["account-b"]
++            for item in stage2_trace
++        ) == 1
++
++        client_threads, client_commands, client_results = arb02._new_client_threads(
++            stage2_endpoint, coordinator_keys[0], strategy_keys
++        )
++        client_commands[_STRATEGY].put(("query", _GROUP_ID, None))
++        arb02._next_client_message(client_results[_STRATEGY], "started")
++        final_query = arb02._next_client_message(
++            client_results[_STRATEGY], "done", timeout=30
++        )
++        recovered_snapshot = arb02._query_reply_snapshot(final_query[5])
++        assert recovered_snapshot.state is arb02.GroupOrderState.RECOVERY_REQUIRED
++        assert recovered_snapshot.request.group_id == _GROUP_ID
++        assert recovered_snapshot.request.deadline_ns == original_deadline_ns
++        assert recovered_snapshot.budget_reservation is not None
++        assert recovered_snapshot.budget_reservation.deadline_ns == original_deadline_ns
++        assert recovered_snapshot.budget_reservation.state is (
++            arb02.GroupBudgetReservationState.HELD
++        )
++        assert recovered_snapshot.budget_reservation.policy_fingerprint == (
++            before_owner_restart.budget_reservation.policy_fingerprint
++        )
++        assert recovered_snapshot.budget_reservation.quote_fingerprint == (
++            before_owner_restart.budget_reservation.quote_fingerprint
++        )
++        final_legs = {leg.leg_id: leg for leg in recovered_snapshot.legs}
++        assert final_legs["leg-a"].submitted_intent is not None
++        assert final_legs["leg-a"].submitted_intent.intent_id == intent_ids["account-a"]
++        assert final_legs["leg-a"].child_status is not None
++        assert final_legs["leg-a"].child_status.state is arb02.ExecutionState.FILLED
++        assert a_client_order_id is not None
++        assert final_legs["leg-a"].child_status.provider_order_id == (
++            f"provider-{a_client_order_id}"
++        )
++        assert final_legs["leg-a"].claim_receipt is not None
++        assert final_legs["leg-a"].resolution_receipt is not None
++        assert final_legs["leg-b"].submitted_intent is not None
++        assert final_legs["leg-b"].submitted_intent.intent_id == intent_ids["account-b"]
++        assert final_legs["leg-b"].phase.value == "UNKNOWN"
++        assert final_legs["leg-b"].child_status is None
++        assert final_legs["leg-b"].claim_receipt is None
++        assert final_legs["leg-b"].resolution_receipt is None
++
++        a_record = _execution_record(account_paths, request, "account-a")
++        assert a_record is not None
++        assert a_record.state is arb02.ExecutionState.FILLED
++        assert a_record.dispatch_attempts == 1
++        assert a_record.provider_order_id == f"provider-{a_client_order_id}"
++        assert _execution_record(account_paths, request, "account-b") is None
++        final_risk = _read_risk_legs(account_paths, _GROUP_ID, original_deadline_ns)
++        assert final_risk["account-a"][1:] == (True, True)
++        assert final_risk["account-b"][1:] == (False, False)
++        assert len(
++            arb02._provider_snapshot(Path(account_paths["account-a"]["provider"]))[0]
++        ) == 1
++        assert arb02._provider_snapshot(Path(account_paths["account-b"]["provider"]))[0] == ()
++
++        final_owner_a, final_holds_a = _authority_facts(
++            account_paths["account-a"]["group_authority"], "account-a"
++        )
++        final_owner_b, final_holds_b = _authority_facts(
++            account_paths["account-b"]["group_authority"], "account-b"
++        )
++        assert (final_owner_a["generation"], final_owner_a["registration_id"]) == (
++            3,
++            recovered_a_registration,
++        )
++        assert (final_owner_b["generation"], final_owner_b["registration_id"]) == (
++            *original_b_owner_projection,
++        )
++        assert final_holds_a == final_holds_b == ()
++
++        arb02._close_client_threads(client_threads, client_commands, client_results)
++        client_threads, client_commands, client_results = {}, {}, {}
++        _stop_traced_coordinator_process(stage2_process, stage2_control, stage2_trace)
++        coordinator_hosts.pop()
++    finally:
++        reservation_reply_release.set()
++        provider_release.set()
++        for _process, _control, startup_release, freeze_recovery, _trace in coordinator_hosts:
++            freeze_recovery.set()
++            startup_release.set()
++
++        primary_error = sys.exc_info()[1]
++        cleanup_error: BaseException | None = None
++        # Recreate B before closing a still-running coordinator so client
++        # unregister has a live destination even on a failing assertion. A
++        # failed restart must not skip cleanup of the coordinator or A.
++        if "account-b" not in account_processes:
++            retained_b_error = _release_retained_owner_if_exited("account-b")
++            if retained_b_error is not None:
++                cleanup_error = cleanup_error or retained_b_error
++        if "account-b" not in account_processes and cleanup_error is None:
++            try:
++                restarted_b, restarted_b_control = _start_account_owner(
++                    context,
++                    account_ref="account-b",
++                    raw_config=account_configs["account-b"],
++                    registry_path=account_paths["account-b"]["registry"],
++                    paths=account_paths["account-b"],
++                    endpoint=account_endpoints["account-b"],
++                    server_keys=account_keys["account-b"],
++                    coordinator_client_public=coordinator_client_keys[0],
++                    metadata_reference_ns=metadata_reference_ns,
++                    provider_entered=provider_entered,
++                    provider_release=provider_release,
++                    reservation_events=reservation_events,
++                )
++                account_processes["account-b"] = restarted_b
++                account_controls["account-b"] = restarted_b_control
++            except BaseException as error:
++                cleanup_error = error
++
++        actions: list[Any] = []
++        if client_threads:
++            actions.append(
++                lambda: arb02._close_client_threads(
++                    client_threads,
++                    client_commands,
++                    client_results,
++                    allowed_call_errors={
++                        _STRATEGY: (
++                            "submit",
++                            _GROUP_ID,
++                            "RequestOutcomeUnknownError",
++                            None,
++                        )
++                    },
++                    allowed_pending_completions={
++                        _STRATEGY: (("submit", _GROUP_ID), ("query", _GROUP_ID))
++                    },
++                )
++            )
++        if initial_coordinator_process is not None and initial_coordinator_control is not None:
++            actions.append(
++                lambda process=initial_coordinator_process,
++                control=initial_coordinator_control: _stop_owned_host_or_raise(
++                    process,
++                    control,
++                    phase="initial coordinator normal close",
++                )
++            )
++        for process, control, _release, _freeze, trace in reversed(coordinator_hosts):
++            actions.append(
++                lambda process=process, control=control, trace=trace: (
++                    _stop_traced_coordinator_process(process, control, trace)
++                )
++            )
++        for account_ref in reversed(arb02._ACCOUNTS):
++            process = account_processes.get(account_ref)
++            control = account_controls.get(account_ref)
++            if process is not None and control is not None:
++                actions.append(
++                    lambda account_ref=account_ref, process=process, control=control: (
++                        _stop_registered_owner(
++                            account_ref,
++                            process,
++                            control,
++                            account_processes,
++                            account_controls,
++                        )
++                    )
++                )
++        action_cleanup_error = arb02._attempt_cleanup(tuple(actions))
++        if action_cleanup_error is not None:
++            if cleanup_error is None:
++                cleanup_error = action_cleanup_error
++            else:
++                add_note = getattr(cleanup_error, "add_note", None)
++                if callable(add_note):
++                    add_note(
++                        "remaining Host cleanup also failed: "
++                        f"{type(action_cleanup_error).__name__}: {action_cleanup_error}"
++                    )
++        if primary_error is not None or cleanup_error is not None:
++            # The reservation event queue is only asserted on the success
++            # path.  If setup, a Host, or cleanup fails earlier, release its
++            # parent-side pipe without waiting for more events from stopped
++            # children or a feeder flush that cannot affect the test result.
++            queue_cleanup_error: BaseException | None = None
++            try:
++                reservation_events.cancel_join_thread()
++            except BaseException as error:
++                queue_cleanup_error = error
++            try:
++                reservation_events.close()
++                reservation_events_closed = True
++            except BaseException as error:
++                if queue_cleanup_error is None:
++                    queue_cleanup_error = error
++                else:
++                    add_note = getattr(queue_cleanup_error, "add_note", None)
++                    if callable(add_note):
++                        add_note(
++                            "reservation event queue close also failed: "
++                            f"{type(error).__name__}: {error}"
++                        )
++            if queue_cleanup_error is not None:
++                if cleanup_error is None:
++                    cleanup_error = queue_cleanup_error
++                else:
++                    add_note = getattr(cleanup_error, "add_note", None)
++                    if callable(add_note):
++                        add_note(
++                            "reservation event queue cleanup also failed: "
++                            f"{type(queue_cleanup_error).__name__}: {queue_cleanup_error}"
++                        )
++        if cleanup_error is not None:
++            if primary_error is None:
++                raise cleanup_error
++            add_note = getattr(primary_error, "add_note", None)
++            if callable(add_note):
++                add_note(
++                    "test-owned cleanup also failed: "
++                    f"{type(cleanup_error).__name__}: {cleanup_error}"
++                )
++
++    try:
++        observed_reservations = [reservation_events.get(timeout=5) for _ in range(2)]
++        assert sorted(observed_reservations) == sorted(
++            (account, _GROUP_ID) for account in arb02._ACCOUNTS
++        )
++        with pytest.raises(queue.Empty):
++            reservation_events.get(timeout=0.1)
++    finally:
++        if not reservation_events_closed:
++            try:
++                reservation_events.close()
++            finally:
++                reservation_events.join_thread()
++                reservation_events_closed = True
++
++    assert request is not None
++    events_store = arb02.SqliteOrderGroupStore(coordinator_paths["groups"])
++    try:
++        persisted = events_store.get(arb02._PORTFOLIO, _GROUP_ID)
++        events = events_store.events(arb02._PORTFOLIO, _GROUP_ID)
++    finally:
++        events_store.close()
++    assert recovered_snapshot is not None
++    assert persisted is not None
++    assert persisted.request.fingerprint == recovered_snapshot.request.fingerprint
++    assert persisted.request.deadline_ns == original_deadline_ns
++    assert persisted.state is arb02.GroupOrderState.RECOVERY_REQUIRED
++    event_types = tuple(event.event_type for event in events)
++    assert event_types.count("FIRST_LEG_SUBMIT_STARTED") == 1
++    assert event_types.count("HEDGE_LEG_SUBMIT_STARTED") == 1
++    assert event_types.count("GROUP_PAIRED") == 0
++
++    a_record = _execution_record(account_paths, request, "account-a")
++    assert a_record is not None
++    assert a_record.state is arb02.ExecutionState.FILLED
++    assert a_record.dispatch_attempts == 1
++    assert _execution_record(account_paths, request, "account-b") is None
++    for account_ref in arb02._ACCOUNTS:
++        _owner_facts, holds = _authority_facts(
++            account_paths[account_ref]["group_authority"], account_ref
++        )
++        assert holds == ()
++    writes_a, counters_a = arb02._provider_snapshot(Path(account_paths["account-a"]["provider"]))
++    writes_b, _counters_b = arb02._provider_snapshot(Path(account_paths["account-b"]["provider"]))
++    assert a_client_order_id is not None
++    assert writes_a == (a_client_order_id,)
++    assert writes_b == ()
++    provider_order = _provider_order_payload(
++        account_paths["account-a"]["provider"], a_client_order_id
++    )
++    assert provider_order["order_id"] == a_record.provider_order_id
++    risk_resolution = _risk_dispatch_resolution(
++        account_paths["account-a"]["risk_gate"],
++        arb02.group_leg_intent_id(_GROUP_ID, "leg-a"),
++    )
++    assert risk_resolution["intent_id"] == arb02.group_leg_intent_id(_GROUP_ID, "leg-a")
++    assert risk_resolution["provider_order_id"] == provider_order["order_id"]
++    assert risk_resolution["dispatch_attempt_count"] == 1
++    assert risk_resolution["terminal_state"] == arb02.ExecutionState.FILLED.value
++    assert counters_a == {"order_queries": 1, "fill_queries": 1}
