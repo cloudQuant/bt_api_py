@@ -1,0 +1,27 @@
+{
+  "schema": "iteration10-independent-static-review-v1",
+  "round": 147,
+  "reviewer": "afi_lifespan_review",
+  "review_mode": "read-only static review",
+  "result": "GO",
+  "reviewed_files": [
+    {
+      "path": "bt_api_py/service_registry.py",
+      "accepted_candidate_size_bytes": 99255,
+      "accepted_candidate_sha256": "025d4dba580e7a976b7295ccbaebda67f781d03b0a3c4e438b748a4a27595fc1",
+      "accepted_git_blob": "86575cfe18e904f03c8ea1f070f5c1dc8ac54e82"
+    },
+    {
+      "path": "tests/unit/test_service_registry.py",
+      "size_bytes": 46051,
+      "sha256": "265c0469edd3b448b21adf962c0e9e08f1513896e55d9c8ec56728fe795eaec1"
+    }
+  ],
+  "findings": [
+    "The exception is limited to APPLICATION_CLIENT + service.order_entry + orders.submit_approved_target.",
+    "Registration and dispatch still require the exact trusted PrincipalGrant identity and ResourceGrant instance, port, scope_ref, full WireScope, and operation.",
+    "Every other strategy-scoped write continues to require its existing trusted group policy.",
+    "The focused regression covers forged actor and delegate, cross-account, wrong selector, ordinary orders.submit registration denial, and ordinary orders.submit invocation denial on the approved registration."
+  ],
+  "review_limit": "This review and the fixed-source unit node do not establish AFI HTTP/Execution Host integration, real Risk admission, real provider/account behavior, or full AFI07 acceptance."
+}

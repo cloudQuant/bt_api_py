@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\qa-harness\\pytest.ini",
+    "--rootdir",
+    "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\sdk",
+    "-q",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\afi_iter10_approved_target_registry_auth_root_20261016_r1\\junit.xml",
+    "--basetemp=D:\\temp\\afi_iter10_approved_target_registry_auth_root_20261016_r1\\pytest-tmp",
+    "tests/unit/test_service_registry.py::test_approved_target_write_uses_only_its_exact_application_grant"
+  ],
+  "cwd": "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\sdk",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\sdk;D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T00:15:54.228106+00:00"
+}

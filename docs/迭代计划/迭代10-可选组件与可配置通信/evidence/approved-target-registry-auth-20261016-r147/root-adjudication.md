@@ -1,0 +1,11 @@
+# Root record: approved-target registry authorization source round
+
+SDK repository `D:/bt_api_py`, branch `dev`, parent `24e24c760aa1b9428d20e27a05d4ffe57b2a05e8`. The only production source path in this round is `bt_api_py/service_registry.py`, staged from the accepted-only 99,255-byte candidate (`025d4dba580e7a976b7295ccbaebda67f781d03b0a3c4e438b748a4a27595fc1`, Git blob `86575cfe18e904f03c8ea1f070f5c1dc8ac54e82`). This excludes the pre-existing `_dispatch` formatting-only hunk in the shared checkout. The only test path is `tests/unit/test_service_registry.py`, whose 46,051-byte checkout matches the fixed candidate bytes. No SDK package or parent gitlink is changed.
+
+The fixed-source Root node `tests/unit/test_service_registry.py::test_approved_target_write_uses_only_its_exact_application_grant` passed once: 1 passed, 0.66 seconds, exit 0, zero warnings, empty stderr. All ten pinned inputs were unchanged before and after. Raw command, runner, spec, source manifest, result, stdout/stderr, JUnit and exit record are archived with explicit hashes. Independent read-only static review returned GO for the two exact source pins.
+
+The implementation recognizes only `APPLICATION_CLIENT` + `service.order_entry` + `orders.submit_approved_target` as the narrow strategy-scoped write exception. Existing exact PrincipalGrant/ResourceGrant checks remain mandatory at registration and dispatch; all other strategy writes retain their trusted group-policy checks. The regression covers forged actor/delegate, cross-account, wrong selector and ordinary `orders.submit` rejection.
+
+Evidence is `UNIT_FIXED_SOURCE_NO_HOST`. No ServiceHost, AFI HTTP/Execution integration, real Risk admission, provider/account behavior or concurrency/restart case was run. This is a registry authorization support component and does not complete AFI07 or add a formal Iteration 10 pass; the formal count remains 25/68. Existing uncommitted SDK and parent WIP is outside this scoped candidate and must remain untouched.
+
+The component QA used a pinned minimal test-only SDK package initializer shim, the real Registry module, and the four listed Base dependency files. It does not establish normal SDK package initialization, installed distribution behavior, or host-wide import isolation.

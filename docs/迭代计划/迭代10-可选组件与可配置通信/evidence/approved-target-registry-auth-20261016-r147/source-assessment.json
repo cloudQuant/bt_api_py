@@ -1,0 +1,44 @@
+{
+  "schema": "iteration10-source-round-assessment-v1",
+  "round": 147,
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent": "24e24c760aa1b9428d20e27a05d4ffe57b2a05e8",
+  "acceptance_level": "UNIT_FIXED_SOURCE_NO_HOST",
+  "formal_pass_count": 25,
+  "formal_total": 68,
+  "source_paths": [
+    {
+      "path": "bt_api_py/service_registry.py",
+      "base_head_blob": "898654cbaf9f914e60f04a8f462fa510e974b836",
+      "accepted_blob": "86575cfe18e904f03c8ea1f070f5c1dc8ac54e82",
+      "accepted_sha256": "025d4dba580e7a976b7295ccbaebda67f781d03b0a3c4e438b748a4a27595fc1",
+      "accepted_size_bytes": 99255,
+      "accepted_source": "D:/temp/afi_approved_target_service_registry_accepted.py",
+      "exclusion": "The live checkout also contains a pre-existing _dispatch formatting-only change. The accepted blob is the reviewed authorization delta over HEAD and excludes that unrelated formatting hunk."
+    },
+    {
+      "path": "tests/unit/test_service_registry.py",
+      "head_blob": "4c053a894d21babbe6cdca7392f8955dd194cf0e",
+      "accepted_sha256": "265c0469edd3b448b21adf962c0e9e08f1513896e55d9c8ec56728fe795eaec1",
+      "accepted_size_bytes": 46051,
+      "candidate_source": "D:/bt_api_py/.codex-tmp/approved-target-registry-auth-root-20261016-r1/candidate/sdk/tests/unit/test_service_registry.py",
+      "checkout_matches_candidate": true
+    }
+  ],
+  "root_qa": {
+    "artifact_id": "approved-target-registry-auth-root-20261016-r1",
+    "output": "D:/temp/afi_iter10_approved_target_registry_auth_root_20261016_r1",
+    "node": "tests/unit/test_service_registry.py::test_approved_target_write_uses_only_its_exact_application_grant",
+    "pytest_passed": 1,
+    "pytest_exit": 0,
+    "elapsed_seconds": 0.66,
+    "warnings": 0,
+    "stderr_bytes": 0,
+    "source_count": 10,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "stdout_sha256": "6d0946747f2e27b015c1261423a1f5507c6c6c236926f70fabdb4fd109e23f1b"
+  },
+  "scope_limit": "Fixed-source unit authorization evidence only. No ServiceHost, AFI HTTP, provider, real account, or complete AFI07 acceptance is established."
+}

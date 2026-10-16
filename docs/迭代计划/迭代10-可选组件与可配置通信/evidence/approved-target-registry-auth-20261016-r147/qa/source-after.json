@@ -1,0 +1,12 @@
+{
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\base\\src\\bt_api_base\\__init__.py": "6b2a075e68d4c1663d28fd7110fae84d780ddec39de4654774f9395151261590",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\base\\src\\bt_api_base\\_version.py": "567f790afd9549fbf5eb4eb5202c8e95cd68e55f91bd13df2240e820e9cee32a",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\base\\src\\bt_api_base\\deployment_evidence.py": "78a87b1d8ad1463cd631dba29c0d9010738e78abad9a118eb5013b4e9f20b256",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\base\\src\\bt_api_base\\service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\sdk\\bt_api_py\\__init__.py": "f5f403b280fbfd14771339a22f79a2a7ec082dd88c0347286aa067d2203703f2",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\sdk\\bt_api_py\\service_registry.py": "025d4dba580e7a976b7295ccbaebda67f781d03b0a3c4e438b748a4a27595fc1",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\candidate\\sdk\\tests\\unit\\test_service_registry.py": "265c0469edd3b448b21adf962c0e9e08f1513896e55d9c8ec56728fe795eaec1",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\qa-harness\\pytest.ini": "8250d20f42b419af40706490ead78aabab9feba93eab09a3f626e3de5256e1f4",
+  "D:\\bt_api_py\\.codex-tmp\\approved-target-registry-auth-root-20261016-r1\\source-manifest.json": "ca002f00b07b92fefd13000c986e04698b1203c512550961edf6d13c2602e7a4",
+  "D:\\bt_api_py\\.codex-tmp\\iteration10-focused-qa.py": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+}

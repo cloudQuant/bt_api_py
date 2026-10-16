@@ -47,6 +47,7 @@ _MAX_OPERATIONS_PER_REQUEST = 64
 # Keep room for the result wrapper and the transport envelope's header under
 # the wire protocol's 1 MiB message limit.
 _MAX_RESULT_BYTES = 900 * 1024
+_APPROVED_TARGET_OPERATION = ("service.order_entry", "orders.submit_approved_target")
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _CONTROL_OPERATIONS = frozenset(
     {"service.discover", "service.register", "service.renew", "service.unregister"}
@@ -1619,6 +1620,26 @@ class ServiceRegistry:
             )
         )
 
+    @staticmethod
+    def _is_approved_target_write(
+        identity: WireIdentity, *, port: str, operation: str
+    ) -> bool:
+        """Recognize only the code-owned application approved-target route.
+
+        This predicate is only one part of authorization. The caller must also
+        enforce the exact trusted PrincipalGrant and ResourceGrant, including
+        principal, identity, instance, scope_ref, WireScope and operation.
+        ServiceHost only exposes this capability when its code-owned Execution
+        adapter is wired with an approved-target authority. The Execution
+        operation still validates and consumes that authority; this predicate
+        never authorizes ordinary strategy writes.
+        """
+
+        return identity.role is WireRole.APPLICATION_CLIENT and (
+            port,
+            operation,
+        ) == _APPROVED_TARGET_OPERATION
+
     def _trusted_group_write_run_matches(
         self,
         principal: str,
@@ -1720,11 +1741,15 @@ class ServiceRegistry:
                 if scope.strategy_ref is None or scope.run_id is None:
                     return "SCOPE_DENIED", capability, frozenset()
             elif scope.strategy_ref is not None:
-                # Service group writes are the sole narrow exception. The
-                # exact operator policy is checked again at dispatch and the
-                # persistent strategy run must still match before effects.
+                # Service group writes require their exact operator policy.
+                # The separately code-owned approved-target application route
+                # is admitted only by its exact trusted ResourceGrant; its
+                # Execution adapter rechecks the approval authority at dispatch.
                 if any(
-                    self._trusted_group_policy(
+                    not self._is_approved_target_write(
+                        identity, port=port, operation=operation
+                    )
+                    and self._trusted_group_policy(
                         principal,
                         identity,
                         instance_id=instance_id,
@@ -1732,8 +1757,7 @@ class ServiceRegistry:
                         scope_ref=scope_ref,
                         scope=scope,
                         operation=operation,
-                    )
-                    is None
+                    ) is None
                     for operation in granted_write_operations
                 ):
                     return "SCOPE_DENIED", capability, frozenset()
@@ -2272,18 +2296,17 @@ class ServiceRegistry:
                 if scope.strategy_ref is None or scope.run_id is None:
                     return False
             elif scope.strategy_ref is not None:
-                if (
-                    self._trusted_group_policy(
-                        principal,
-                        identity,
-                        instance_id=instance_id,
-                        port=port,
-                        scope_ref=scope_ref,
-                        scope=scope,
-                        operation=operation,
-                    )
-                    is None
-                ):
+                if not self._is_approved_target_write(
+                    identity, port=port, operation=operation
+                ) and self._trusted_group_policy(
+                    principal,
+                    identity,
+                    instance_id=instance_id,
+                    port=port,
+                    scope_ref=scope_ref,
+                    scope=scope,
+                    operation=operation,
+                ) is None:
                     return False
             elif (identity.role is WireRole.SERVICE and scope.portfolio_ref is not None) or (
                 scope.manual_book_ref is None and scope.portfolio_ref is None

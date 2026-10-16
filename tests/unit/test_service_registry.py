@@ -368,6 +368,146 @@ def test_discovery_and_dispatch_bind_authenticated_identity_scope_and_operations
         registry.close()
 
 
+def test_approved_target_write_uses_only_its_exact_application_grant(tmp_path: Path) -> None:
+    principal = "approved-principal"
+    identity = _identity(
+        WireRole.APPLICATION_CLIENT,
+        principal_ref=principal,
+        actor_ref="approved-actor",
+        delegate_ref="approved-delegate",
+    )
+    scope = _strategy_scope(run_id=None)
+    operations = frozenset({"orders.submit_approved_target", "orders.submit"})
+    capability = ServiceCapability(
+        "approved-instance",
+        "service.order_entry",
+        operations,
+        write_operations=operations,
+    )
+    resource = ResourceGrant(
+        "approved-instance",
+        "service.order_entry",
+        "approved-scope-selector",
+        scope,
+        operations,
+    )
+    registry = ServiceRegistry(
+        tmp_path / "approved-target-registry.sqlite",
+        service_id="execution-service",
+        capabilities=(capability,),
+        grants={principal: (PrincipalGrant(identity, (resource,)),)},
+        policy_version="policy-v1",
+        requirements_version="requirements-v1",
+    )
+    calls: list[ServiceCallContext] = []
+    registry.register_handler(
+        "approved-instance",
+        "orders.submit_approved_target",
+        lambda context, arguments: calls.append(context) or {"accepted": True},
+    )
+    try:
+        # A strategy-scoped application write is admitted only for this exact
+        # code-owned operation and exact trusted ResourceGrant tuple.
+        registration = _register(
+            registry,
+            identity=identity,
+            scope=scope,
+            principal=principal,
+            key="approved-registration",
+            client_session_id="approved-session",
+            operations=("orders.submit_approved_target",),
+            instance_id="approved-instance",
+            port="service.order_entry",
+            scope_ref="approved-scope-selector",
+        )
+        assert registration["ok"] is True
+
+        approval_call = _business(
+            registry,
+            registration["result"],
+            identity=identity,
+            scope=scope,
+            principal=principal,
+            operation="orders.submit_approved_target",
+            instance_id="approved-instance",
+        )
+        assert approval_call == {"ok": True, "code": "OK", "result": {"accepted": True}}
+        assert len(calls) == 1
+        assert calls[0].identity == identity
+        assert calls[0].scope == scope
+        assert calls[0].principal_ref == principal
+
+        forged_actor = _business(
+            registry,
+            registration["result"],
+            identity=replace(identity, actor_ref="forged-actor"),
+            scope=scope,
+            principal=principal,
+            operation="orders.submit_approved_target",
+            instance_id="approved-instance",
+        )
+        wrong_delegate = _business(
+            registry,
+            registration["result"],
+            identity=replace(identity, delegate_ref="forged-delegate"),
+            scope=scope,
+            principal=principal,
+            operation="orders.submit_approved_target",
+            instance_id="approved-instance",
+        )
+        cross_account = _business(
+            registry,
+            registration["result"],
+            identity=identity,
+            scope=_strategy_scope(account="account-b", run_id=None),
+            principal=principal,
+            operation="orders.submit_approved_target",
+            instance_id="approved-instance",
+        )
+        wrong_selector = _register(
+            registry,
+            identity=identity,
+            scope=scope,
+            principal=principal,
+            key="wrong-selector-registration",
+            client_session_id="wrong-selector-session",
+            operations=("orders.submit_approved_target",),
+            instance_id="approved-instance",
+            port="service.order_entry",
+            scope_ref="other-selector",
+        )
+        ordinary_strategy_write = _register(
+            registry,
+            identity=identity,
+            scope=scope,
+            principal=principal,
+            key="ordinary-write-registration",
+            client_session_id="ordinary-write-session",
+            operations=("orders.submit",),
+            instance_id="approved-instance",
+            port="service.order_entry",
+            scope_ref="approved-scope-selector",
+        )
+        ordinary_operation_on_approved_registration = _business(
+            registry,
+            registration["result"],
+            identity=identity,
+            scope=scope,
+            principal=principal,
+            operation="orders.submit",
+            instance_id="approved-instance",
+        )
+        assert forged_actor["code"] == "DENIED"
+        assert wrong_delegate["code"] == "DENIED"
+        assert cross_account["code"] == "SCOPE_DENIED"
+        assert wrong_selector["code"] == "SCOPE_DENIED"
+        assert ordinary_strategy_write["code"] == "SCOPE_DENIED"
+        assert ordinary_operation_on_approved_registration["code"] == "SCOPE_DENIED"
+        assert len(calls) == 1
+    finally:
+        registry.close()
+
+
 def test_pre_dispatch_market_denial_is_explicit_and_other_failures_are_not_denied(
     tmp_path: Path,
 ) -> None:
