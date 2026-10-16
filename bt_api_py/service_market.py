@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import threading
 import time
 from collections import deque
@@ -116,7 +117,7 @@ class MarketBootstrap:
 
 
 class ZmqMarketTransportFactory:
-    """Create a CURVE-authenticated market subscriber from trusted SDK wiring."""
+    """Create CURVE-authenticated subscribers sharing one owned ZMQ context."""
 
     def __init__(self, security_profiles: Mapping[str, ClientCurveKeys]) -> None:
         if not isinstance(security_profiles, Mapping):
@@ -127,6 +128,9 @@ class ZmqMarketTransportFactory:
                 raise ServiceMarketError("INVALID_SECURITY_PROFILES")
             copied[reference] = keys
         self._profiles = copied
+        self._owner_pid = os.getpid()
+        self._context_pool_init_lock = threading.Lock()
+        self._context_pool = None
 
     def __call__(
         self, binding: ServiceMarketBindingView, stream_scope: WireScope
@@ -174,16 +178,28 @@ class ZmqMarketTransportFactory:
         wire_version: int,
         subscription_key: MarketSubscriptionKey | None,
     ) -> EventSubscriber:
+        if os.getpid() != self._owner_pid:
+            raise ServiceMarketError("PROCESS_BOUNDARY")
         keys = self._profiles.get(binding.security_profile_ref)
         if type(keys) is not ClientCurveKeys:
             raise ServiceMarketError("SECURITY_PROFILE_UNAVAILABLE")
 
         # Import the optional transport only when the market facade is started.
-        from bt_api_transport_zmq.market_v2 import ZmqMarketSubscriber
+        from bt_api_transport_zmq.market_v2 import ZmqMarketContextPool, ZmqMarketSubscriber
         from bt_api_transport_zmq.server import CurveClientCredentials
         from bt_api_transport_zmq.service_v2 import (
             ServiceTransportStartupCleanupError,
         )
+
+        context_pool = self._context_pool
+        if context_pool is None:
+            with self._context_pool_init_lock:
+                if os.getpid() != self._owner_pid:
+                    raise ServiceMarketError("PROCESS_BOUNDARY")
+                context_pool = self._context_pool
+                if context_pool is None:
+                    context_pool = ZmqMarketContextPool()
+                    self._context_pool = context_pool
 
         try:
             transport_options = {
@@ -200,6 +216,7 @@ class ZmqMarketTransportFactory:
                 binding.market_endpoint,
                 binding.peer,
                 stream_scope,
+                context_pool=context_pool,
                 **transport_options,
             )
         except ServiceTransportStartupCleanupError as error:

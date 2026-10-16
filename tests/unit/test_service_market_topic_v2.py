@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import sys
 from dataclasses import replace
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
+from bt_api_py import service_market
 from bt_api_py.service_market import (
     MARKET_WIRE_VERSION_LEGACY,
     MARKET_WIRE_VERSION_TOPIC_FILTERED,
@@ -183,7 +184,11 @@ def test_zmq_factory_forwards_v2_version_and_subscription_key(monkeypatch):
         created.append((args, kwargs, result))
         return result
 
+    class ContextPool:
+        pass
+
     market_module = ModuleType("bt_api_transport_zmq.market_v2")
+    market_module.ZmqMarketContextPool = ContextPool
     market_module.ZmqMarketSubscriber = construct
     server_module = ModuleType("bt_api_transport_zmq.server")
     server_module.CurveClientCredentials = Credentials
@@ -209,10 +214,17 @@ def test_zmq_factory_forwards_v2_version_and_subscription_key(monkeypatch):
     assert kwargs["wire_version"] == MARKET_WIRE_VERSION_TOPIC_FILTERED
     assert kwargs["subscription_key"] is _KEY
     assert kwargs["credentials"].server_key == b"server"
+    assert type(kwargs["context_pool"]) is ContextPool
 
     legacy_subscriber = factory(_binding(), _SCOPE)
     assert legacy_subscriber is created[1][2]
-    assert set(created[1][1]) == {"credentials", "high_water_mark", "max_message_bytes"}
+    assert set(created[1][1]) == {
+        "credentials",
+        "high_water_mark",
+        "max_message_bytes",
+        "context_pool",
+    }
+    assert created[1][1]["context_pool"] is kwargs["context_pool"]
     with pytest.raises(ServiceMarketError) as error:
         factory(binding, _SCOPE)
     assert error.value.code == "TOPIC_V2_FACTORY_METHOD_REQUIRED"
@@ -229,3 +241,31 @@ def test_zmq_factory_forwards_v2_version_and_subscription_key(monkeypatch):
     with pytest.raises(ServiceMarketError) as error:
         legacy_only_factory.create_topic_v2(binding, _SCOPE, _KEY)
     assert error.value.code == "TOPIC_V2_TRANSPORT_UNSUPPORTED"
+
+
+def test_zmq_factory_rejects_inherited_lock_before_acquiring_it(monkeypatch):
+    factory = ZmqMarketTransportFactory({})
+    owner_pid = factory._owner_pid
+
+    class InheritedLockedLock:
+        def __enter__(self):
+            raise AssertionError("forked factory blocked on an inherited init lock")
+
+        def __exit__(self, *_args):
+            return None
+
+    factory._context_pool_init_lock = InheritedLockedLock()
+    monkeypatch.setattr(
+        service_market,
+        "os",
+        SimpleNamespace(getpid=lambda: owner_pid + 1),
+    )
+    with pytest.raises(ServiceMarketError) as error:
+        factory._create_subscriber(
+            _binding(),
+            _SCOPE,
+            wire_version=MARKET_WIRE_VERSION_LEGACY,
+            subscription_key=None,
+        )
+
+    assert error.value.code == "PROCESS_BOUNDARY"
