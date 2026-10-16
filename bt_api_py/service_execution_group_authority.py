@@ -48,7 +48,7 @@ from bt_api_execution import (
     writer_lease_fingerprint,
 )
 
-from .service_registry import ServiceCallContext
+from .service_registry import ActiveRegistrationContext, ServiceCallContext
 
 _SCHEMA_VERSION = 1
 _SQLITE_MAX_INT = (1 << 63) - 1
@@ -953,6 +953,7 @@ class ExecutionGroupAuthority:
         self._path = Path(raw_path).resolve()
         self._completion_verifier = completion_verifier
         self._verifier = reconciliation_verifier
+        self._reconciliation_source: object | None = None
         self._monotonic_clock_ns = monotonic_clock_ns
         self._state_lock = threading.RLock()
         self._key_locks_lock = threading.Lock()
@@ -963,6 +964,16 @@ class ExecutionGroupAuthority:
         self._unresolved_hold_ids: set[str] = set()
         self._call_context: contextvars.ContextVar[ServiceCallContext | None] = (
             contextvars.ContextVar(f"execution_group_authority_call_{id(self)}", default=None)
+        )
+        self._reconciliation_reader_pair: contextvars.ContextVar[
+            tuple[ActiveRegistrationContext, ActiveRegistrationContext, ExecutionScope] | None
+        ] = contextvars.ContextVar(
+            f"execution_group_authority_reconciliation_reader_{id(self)}", default=None
+        )
+        self._reconciliation_call: contextvars.ContextVar[
+            tuple[ServiceCallContext, ExecutionScope] | None
+        ] = contextvars.ContextVar(
+            f"execution_group_authority_reconciliation_{id(self)}", default=None
         )
         self.control = ExecutionGroupAuthorityControl(self)
         self.guard = ExecutionGroupAuthorityGuard(self)
@@ -1061,6 +1072,12 @@ class ExecutionGroupAuthority:
                     );
                     CREATE INDEX IF NOT EXISTS group_dispatch_holds_authority
                         ON group_dispatch_holds(authority_key);
+                    CREATE TABLE IF NOT EXISTS group_dispatch_reconciliations (
+                        hold_id TEXT PRIMARY KEY,
+                        authority_key TEXT NOT NULL,
+                        hold_json TEXT NOT NULL,
+                        proof_sha256 TEXT NOT NULL
+                    );
                     """
                 )
                 connection.execute("BEGIN IMMEDIATE")
@@ -1193,6 +1210,26 @@ class ExecutionGroupAuthority:
                 ).fetchone()
                 if row is None or _hold_from_json(row["hold_json"]) != hold:
                     raise GroupAuthorityUnavailableError("dispatch hold changed before release")
+                connection.execute(
+                    "DELETE FROM group_dispatch_holds WHERE hold_id=?", (hold.hold_id,)
+                )
+
+    def _release_reconciled_hold(self, hold: GroupDispatchHold, proof_sha256: str) -> None:
+        """Atomically retain the exact verified reconciliation before release."""
+
+        with self._operation(), self._key_lock(hold.authority_key):  # noqa: SIM117
+            with self._transaction() as connection:
+                row = connection.execute(
+                    "SELECT hold_json FROM group_dispatch_holds WHERE hold_id=?",
+                    (hold.hold_id,),
+                ).fetchone()
+                if row is None or _hold_from_json(row["hold_json"]) != hold:
+                    raise GroupAuthorityUnavailableError("dispatch hold changed before release")
+                connection.execute(
+                    "INSERT INTO group_dispatch_reconciliations"
+                    "(hold_id, authority_key, hold_json, proof_sha256) VALUES (?, ?, ?, ?)",
+                    (hold.hold_id, hold.authority_key, _json(_hold_payload(hold)), proof_sha256),
+                )
                 connection.execute(
                     "DELETE FROM group_dispatch_holds WHERE hold_id=?", (hold.hold_id,)
                 )
@@ -1368,6 +1405,7 @@ class ExecutionGroupAuthorityControl:
         owner = self._owner
         if type(hold_id) is not str or not hold_id:
             raise GroupAuthorityReconciliationRejected("hold id is invalid")
+        proof_sha256 = _reconciliation_proof_sha256(proof)
         with owner._operation():
             with owner._state_lock:
                 if hold_id in owner._active_hold_ids:
@@ -1376,8 +1414,42 @@ class ExecutionGroupAuthorityControl:
                 row = connection.execute(
                     "SELECT hold_json FROM group_dispatch_holds WHERE hold_id=?", (hold_id,)
                 ).fetchone()
+                reconciliation = connection.execute(
+                    "SELECT hold_json, proof_sha256 FROM group_dispatch_reconciliations "
+                    "WHERE hold_id=?",
+                    (hold_id,),
+                ).fetchone()
             if row is None:
-                raise GroupAuthorityReconciliationRejected("dispatch hold does not exist")
+                if reconciliation is None:
+                    raise GroupAuthorityReconciliationRejected("dispatch hold does not exist")
+                hold = _hold_from_json(reconciliation["hold_json"])
+                if (
+                    _json(_hold_payload(hold)) != reconciliation["hold_json"]
+                    or reconciliation["proof_sha256"] != proof_sha256
+                ):
+                    raise GroupAuthorityReconciliationRejected(
+                        "reconciled dispatch proof does not match"
+                    )
+                with owner._key_lock(hold.authority_key):
+                    with owner._state_lock:
+                        if hold.hold_id in owner._active_hold_ids:
+                            raise GroupAuthorityBusyError("live dispatch hold cannot be reconciled")
+                    verifier = owner._verifier
+                    if verifier is None:
+                        raise GroupAuthorityReconciliationRejected(
+                            "no reconciliation verifier is configured"
+                        )
+                    try:
+                        verified = verifier(hold, proof)
+                    except Exception as error:
+                        raise GroupAuthorityReconciliationRejected(
+                            "reconciliation verifier failed"
+                        ) from error
+                    if verified is not True:
+                        raise GroupAuthorityReconciliationRejected(
+                            "execution outcome is not proven safe to release"
+                        )
+                return
             hold = _hold_from_json(row["hold_json"])
             with owner._key_lock(hold.authority_key):
                 with owner._state_lock:
@@ -1397,7 +1469,7 @@ class ExecutionGroupAuthorityControl:
                     raise GroupAuthorityReconciliationRejected(
                         "execution outcome is not proven safe to release"
                     )
-                owner._release_hold(hold)
+                owner._release_reconciled_hold(hold, proof_sha256)
                 owner._mark_hold_released(hold.hold_id)
 
 
@@ -1407,12 +1479,317 @@ class ExecutionGroupAuthorityGuard:
     def __init__(self, owner: ExecutionGroupAuthority) -> None:
         self._owner = owner
 
+    def bind_reconciliation_source(self, source: object) -> None:
+        """Bind the service's exact proof source without weakening configured checks."""
+
+        owner = self._owner
+        verifier = getattr(source, "verify_authority_reconciliation", None)
+        if not callable(verifier):
+            raise GroupAuthorityReconciliationRejected(
+                "a source-bound reconciliation verifier is required"
+            )
+        with owner._state_lock:
+            if owner._reconciliation_source is source:
+                return
+            if owner._reconciliation_source is not None:
+                raise GroupAuthorityReconciliationRejected(
+                    "a different reconciliation source is already bound"
+                )
+            previous = owner._verifier
+
+            def verify(hold: GroupDispatchHold, proof: object) -> bool:
+                if previous is not None and previous(hold, proof) is not True:
+                    return False
+                call = owner._reconciliation_call.get()
+                if call is None:
+                    return False
+                context, execution_scope = call
+                try:
+                    return (
+                        verifier(
+                            hold,
+                            proof,
+                            active_authority=self,
+                            context=context,
+                            execution_scope=execution_scope,
+                        )
+                        is True
+                    )
+                except Exception:
+                    return False
+
+            owner._verifier = verify
+            owner._reconciliation_source = source
+
+    def _reconciliation_owner_context(
+        self,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+    ) -> ServiceCallContext:
+        """Resolve a read-only query registration to its paired entry identity.
+
+        The query registration remains the authenticated handler context.  A
+        paired entry context is used only to read and reconcile the hold that
+        was created under that exact registration; the original registration
+        and coordinator generation are never rewritten.
+        """
+
+        owner = self._owner
+        pair = owner._reconciliation_reader_pair.get()
+        if pair is None:
+            return context
+        query_registration, entry_registration, bound_scope = pair
+        if owner._call_context.get() != context or bound_scope != execution_scope:
+            raise GroupAuthorityReconciliationRejected(
+                "reconciliation reader is not bound to this service call"
+            )
+        self._validate_reconciliation_reader_pair(
+            query_registration,
+            entry_registration,
+            context,
+            execution_scope,
+        )
+        return entry_registration.context
+
+    def _validate_reconciliation_reader_pair(
+        self,
+        query_registration: ActiveRegistrationContext,
+        entry_registration: ActiveRegistrationContext,
+        query_context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+    ) -> None:
+        """Check a same-snapshot read route and its existing owner route."""
+
+        owner = self._owner
+        # Registry leases use its wall-clock ``expires_at`` values.  The
+        # authority's monotonic clock is reserved for elapsed-time budgets
+        # and cannot be compared with those persisted timestamps.
+        now = time.time()
+        if (
+            type(query_registration) is not ActiveRegistrationContext
+            or type(entry_registration) is not ActiveRegistrationContext
+            or type(query_context) is not ServiceCallContext
+            or type(execution_scope) is not ExecutionScope
+            # ServiceRegistry stores the authenticated identity fields in its
+            # immutable registration snapshot, while each dispatch adds a
+            # request-specific result_fits callback. The callback is transport
+            # metadata, not part of the principal/registration authorization.
+            or query_registration.context.identity != query_context.identity
+            or query_registration.context.scope != query_context.scope
+            or query_registration.context.registration_id != query_context.registration_id
+            or query_registration.context.principal_ref != query_context.principal_ref
+            or query_registration.port != "service.order_query"
+            or entry_registration.port != "service.order_entry"
+            or query_registration.context.registration_id
+            == entry_registration.context.registration_id
+            or query_registration.instance_id != entry_registration.instance_id
+            or query_registration.service_epoch != entry_registration.service_epoch
+            or query_registration.policy_version != entry_registration.policy_version
+            or query_registration.requirements_version
+            != entry_registration.requirements_version
+            or query_registration.strategy_write_run_id is None
+            or query_registration.strategy_write_run_id
+            != entry_registration.strategy_write_run_id
+            or query_registration.context.identity != entry_registration.context.identity
+            or query_registration.context.principal_ref
+            != entry_registration.context.principal_ref
+            or query_registration.context.scope != entry_registration.context.scope
+            or query_registration.operations != frozenset({"orders.query_group_leg"})
+            or query_registration.write_operations
+            or entry_registration.operations
+            != frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"})
+            or entry_registration.write_operations
+            != entry_registration.operations
+            or query_registration.expires_at <= now
+            or entry_registration.expires_at <= now
+        ):
+            raise GroupAuthorityReconciliationRejected(
+                "query and owner registrations are not one active Registry generation"
+            )
+        owner._validate_registered_scope(query_context, execution_scope)
+        owner._validate_registered_scope(entry_registration.context, execution_scope)
+
+    def reconciliation_hold_state(self, hold_id: str) -> str:
+        """Return the durable hold state for exact recovery routing."""
+
+        owner = self._owner
+        if type(hold_id) is not str or not hold_id:
+            raise GroupAuthorityReconciliationRejected("hold id is invalid")
+        with owner._operation():
+            with owner._state_lock:
+                active = hold_id in owner._active_hold_ids
+            with owner._connection() as connection:
+                hold = connection.execute(
+                    "SELECT 1 FROM group_dispatch_holds WHERE hold_id=?", (hold_id,)
+                ).fetchone()
+                reconciled = connection.execute(
+                    "SELECT 1 FROM group_dispatch_reconciliations WHERE hold_id=?", (hold_id,)
+                ).fetchone()
+            if hold is not None:
+                return "active" if active else "pending"
+            return "reconciled" if reconciled is not None else "absent"
+
+    def read_reconciliation_hold(
+        self,
+        hold_id: str,
+        *,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+    ) -> GroupDispatchHold:
+        """Read one exact orphan hold under the current registered owner context."""
+
+        owner = self._owner
+        if type(hold_id) is not str or not hold_id or type(execution_scope) is not ExecutionScope:
+            raise GroupAuthorityReconciliationRejected("hold binding is invalid")
+        try:
+            authority_context = self._reconciliation_owner_context(context, execution_scope)
+            owner._validate_registered_scope(authority_context, execution_scope)
+            authority_key = owner._authority_key(authority_context)
+            with owner._operation():
+                with owner._state_lock:
+                    if hold_id in owner._active_hold_ids:
+                        raise GroupAuthorityBusyError("live dispatch hold cannot be reconciled")
+                    if hold_id not in owner._unresolved_hold_ids:
+                        raise GroupAuthorityUnavailableError("hold is not marked unresolved")
+                with owner._connection() as connection:
+                    connection.execute("PRAGMA query_only=ON")
+                    connection.execute("BEGIN")
+                    row = connection.execute(
+                        "SELECT hold_json FROM group_dispatch_holds WHERE hold_id=?",
+                        (hold_id,),
+                    ).fetchone()
+                    coordinator = owner._stored_coordinator(connection, authority_key)
+                    connection.commit()
+                if row is None or coordinator is None or not coordinator["active"]:
+                    raise GroupAuthorityUnavailableError("current orphan hold is unavailable")
+                hold = _hold_from_json(row["hold_json"])
+                if (
+                    hold.hold_id != hold_id
+                    or hold.authority_key != authority_key
+                    or hold.principal_ref != authority_context.principal_ref
+                    or hold.registration_id != authority_context.registration_id
+                    or hold.execution_scope_key != execution_scope.key
+                    or hold.account_ref != execution_scope.account_ref
+                    or hold.strategy_id != execution_scope.strategy_id
+                    or coordinator["principal_ref"] != authority_context.principal_ref
+                    or coordinator["registration_id"] != authority_context.registration_id
+                    or coordinator["identity_json"]
+                    != _json(_identity_payload(authority_context.identity))
+                    or coordinator["wire_scope_json"]
+                    != _json(_wire_scope_payload(authority_context.scope))
+                    or coordinator["execution_scope_key"] != execution_scope.key
+                    or coordinator["execution_scope_json"] != _json(execution_scope.to_payload())
+                    or int(coordinator["generation"]) != hold.coordinator_generation
+                ):
+                    raise GroupAuthorityUnavailableError("orphan hold differs from current authority")
+                return hold
+        except ExecutionGroupAuthorityError:
+            raise
+        except Exception as error:
+            raise GroupAuthorityUnavailableError("orphan hold could not be verified") from error
+
+    def read_reconciled_hold(
+        self,
+        hold_id: str,
+        *,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+    ) -> GroupDispatchHold:
+        """Read one durable reconciliation tombstone under current authority."""
+
+        owner = self._owner
+        if type(hold_id) is not str or not hold_id or type(execution_scope) is not ExecutionScope:
+            raise GroupAuthorityReconciliationRejected("hold binding is invalid")
+        try:
+            authority_context = self._reconciliation_owner_context(context, execution_scope)
+            owner._validate_registered_scope(authority_context, execution_scope)
+            authority_key = owner._authority_key(authority_context)
+            with owner._operation(), owner._connection() as connection:
+                connection.execute("PRAGMA query_only=ON")
+                connection.execute("BEGIN")
+                row = connection.execute(
+                    "SELECT hold_json FROM group_dispatch_reconciliations WHERE hold_id=?",
+                    (hold_id,),
+                ).fetchone()
+                coordinator = owner._stored_coordinator(connection, authority_key)
+                connection.commit()
+            if row is None or coordinator is None or not coordinator["active"]:
+                raise GroupAuthorityUnavailableError("current reconciliation is unavailable")
+            hold = _hold_from_json(row["hold_json"])
+            if (
+                hold.hold_id != hold_id
+                or hold.authority_key != authority_key
+                or hold.principal_ref != authority_context.principal_ref
+                or hold.registration_id != authority_context.registration_id
+                or hold.execution_scope_key != execution_scope.key
+                or hold.account_ref != execution_scope.account_ref
+                or hold.strategy_id != execution_scope.strategy_id
+                or coordinator["principal_ref"] != authority_context.principal_ref
+                or coordinator["registration_id"] != authority_context.registration_id
+                or coordinator["identity_json"]
+                != _json(_identity_payload(authority_context.identity))
+                or coordinator["wire_scope_json"]
+                != _json(_wire_scope_payload(authority_context.scope))
+                or coordinator["execution_scope_key"] != execution_scope.key
+                or coordinator["execution_scope_json"] != _json(execution_scope.to_payload())
+                or int(coordinator["generation"]) != hold.coordinator_generation
+            ):
+                raise GroupAuthorityUnavailableError("reconciliation differs from current authority")
+            return hold
+        except ExecutionGroupAuthorityError:
+            raise
+        except Exception as error:
+            raise GroupAuthorityUnavailableError("reconciliation could not be verified") from error
+
+    def reconcile_hold(
+        self,
+        hold_id: str,
+        proof: object,
+        *,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+    ) -> None:
+        owner = self._owner
+        if owner._call_context.get() != context:
+            raise GroupAuthorityReconciliationRejected(
+                "reconciliation requires the bound service call context"
+            )
+        authority_context = self._reconciliation_owner_context(context, execution_scope)
+        owner._validate_registered_scope(authority_context, execution_scope)
+        state = self.reconciliation_hold_state(hold_id)
+        if state == "pending":
+            self.read_reconciliation_hold(
+                hold_id, context=context, execution_scope=execution_scope
+            )
+        elif state == "reconciled":
+            self.read_reconciled_hold(
+                hold_id, context=context, execution_scope=execution_scope
+            )
+        else:
+            raise GroupAuthorityReconciliationRejected("dispatch hold is not recoverable")
+        if owner._reconciliation_call.get() is not None:
+            raise GroupAuthorityReconciliationRejected("nested hold reconciliation")
+        token = owner._reconciliation_call.set((authority_context, execution_scope))
+        try:
+            # Durable hold reconciliation is implemented by the trusted
+            # control API. The Guard establishes the live Registry call,
+            # paired owner registration, and source-bound verifier context;
+            # it then delegates only that verified proof to the real control
+            # operation. ExecutionGroupAuthority itself owns storage and has
+            # no reconcile_hold method.
+            owner.control.reconcile_hold(hold_id, proof)
+        finally:
+            owner._reconciliation_call.reset(token)
+
     @contextmanager
     def bind_service_call(
         self,
         context: ServiceCallContext,
         *,
         execution_scope: ExecutionScope,
+        reconciliation_registrations: tuple[
+            ActiveRegistrationContext, ActiveRegistrationContext
+        ] | None = None,
     ) -> Iterator[None]:
         """Bind the actual Registry context around one trusted SDK handler call.
 
@@ -1421,14 +1798,36 @@ class ExecutionGroupAuthorityGuard:
         invoking ``submit_group_leg``; the RPC payload must never supply it.
         """
 
-        self._owner._validate_registered_scope(context, execution_scope)
-        if self._owner._call_context.get() is not None:
+        owner = self._owner
+        owner._validate_registered_scope(context, execution_scope)
+        if owner._call_context.get() is not None:
             raise GroupCoordinatorDenied("nested coordinator service call context")
-        token = self._owner._call_context.set(context)
+        pair_token = None
+        if reconciliation_registrations is not None:
+            if (
+                type(reconciliation_registrations) is not tuple
+                or len(reconciliation_registrations) != 2
+            ):
+                raise GroupAuthorityReconciliationRejected(
+                    "exact query and owner registrations are required"
+                )
+            query_registration, entry_registration = reconciliation_registrations
+            self._validate_reconciliation_reader_pair(
+                query_registration,
+                entry_registration,
+                context,
+                execution_scope,
+            )
+            pair_token = owner._reconciliation_reader_pair.set(
+                (query_registration, entry_registration, execution_scope)
+            )
+        token = owner._call_context.set(context)
         try:
             yield
         finally:
-            self._owner._call_context.reset(token)
+            owner._call_context.reset(token)
+            if pair_token is not None:
+                owner._reconciliation_reader_pair.reset(pair_token)
 
     def assert_current_group_leg_authorization(
         self,
@@ -1933,6 +2332,21 @@ class ExecutionGroupAuthorityGuard:
 
 def _json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _reconciliation_proof_sha256(proof: object) -> str:
+    to_payload = getattr(proof, "to_payload", None)
+    if not callable(to_payload):
+        raise GroupAuthorityReconciliationRejected("typed reconciliation proof is required")
+    try:
+        payload = to_payload()
+        if type(payload) is not dict:
+            raise TypeError
+        return hashlib.sha256(_json(payload).encode("utf-8")).hexdigest()
+    except Exception as error:
+        raise GroupAuthorityReconciliationRejected(
+            "reconciliation proof cannot be fingerprinted"
+        ) from error
 
 
 def _identity_payload(identity: WireIdentity) -> dict[str, object]:

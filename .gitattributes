@@ -12,3 +12,23 @@ bt_api_py/ctp/**/thosttraderapi_se filter=lfs diff=lfs merge=lfs -text
 # files that contain multi-line `if (...)` blocks. Blobs stay LF (git's default),
 # so this no longer depends on each machine's core.autocrlf setting.
 *.bat text eol=crlf
+bt_api_py/service_execution_group.py -text
+bt_api_py/service_execution_group_authority.py -text
+bt_api_py/service_execution_group_proofs.py -text
+tests/integration/__init__.py -text
+tests/integration/test_service_execution_group_owner_recovery.py -text
+tests/unit/test_service_execution_group_authority_guard_reconciliation.py -text
+tests/unit/test_service_execution_group_owner_recovery_receipt.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/command.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/exit.txt -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/junit.xml -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/result.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/running.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/runner.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/source-after.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/source-before.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/spec.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/stderr.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/stdout.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/round-record.md -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/manifest.json -text

@@ -41,6 +41,8 @@ from bt_api_execution import (
     GroupOrderCoordinator,
     GroupOrderIntent,
     GroupOrderLegPlan,
+    GroupOrderSnapshot,
+    GroupOrderState,
     GroupPermitBinding,
     GroupReservationDeniedError,
     GroupRiskLegSnapshot,
@@ -95,6 +97,7 @@ _MAX_SQLITE_INTEGER = (1 << 63) - 1
 _REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _DEFAULT_LEASE_TTL_NS = 5_000_000_000
+_OWNER_RECOVERY_INTERVAL_NS = 1_000_000_000
 _LEGACY_SUBMIT_KEYS = frozenset({"group_id", "deadline_ns", "first_leg_id", "legs"})
 _VERSIONED_SUBMIT_KEYS = _LEGACY_SUBMIT_KEYS | {"version"}
 _LEGACY_SUBMIT_LEG_KEYS = frozenset({"leg_id", "account_ref", "intent"})
@@ -246,7 +249,7 @@ def validate_service_options(
 
 @dataclass(frozen=True, slots=True)
 class _CoordinatorCall:
-    registration: ActiveRegistrationContext
+    registration: ActiveRegistrationContext | None
     target_scope: WireScope
     target: GroupCoordinatorTarget
     binding: GroupOriginRunBinding
@@ -466,6 +469,9 @@ class GroupCoordinatorService:
         self._lock = threading.RLock()
         self._closed = False
         self._registrations: Mapping[str, ActiveRegistrationContext] = MappingProxyType({})
+        self._owner_recovery_cursor: tuple[int, str, str] | None = None
+        self._owner_recovery_last_tick_ns = 0
+        self._owner_recovery_lock = threading.Lock()
         fingerprints: dict[str, str] = {}
         for target in target_copy.values():
             for account, route in target.accounts.items():
@@ -530,6 +536,127 @@ class GroupCoordinatorService:
             # An empty view is valid at Host startup and never mutates or
             # revokes persistent accepted groups or authority records.
             self._registrations = MappingProxyType(retained)
+        self._maintain_one_recoverable_group()
+
+    def _maintain_one_recoverable_group(self) -> None:
+        """Advance at most one durably accepted group from the Host owner loop."""
+
+        if not self._owner_recovery_lock.acquire(blocking=False):
+            return
+        try:
+            now_ns = time.monotonic_ns()
+            with self._lock:
+                if self._closed or now_ns - self._owner_recovery_last_tick_ns < (
+                    _OWNER_RECOVERY_INTERVAL_NS
+                ):
+                    return
+                self._owner_recovery_last_tick_ns = now_ns
+                after = self._owner_recovery_cursor
+
+            page = self._store.list_recoverable_page(after=after, limit=1)
+            if type(page) is not tuple or len(page) > 1:
+                raise ServiceExecutionGroupError("GROUP_RECOVERY_PAGE_INVALID")
+            if not page:
+                # An earlier key may become UNWINDING after this cursor passed
+                # it. Wrap on the next throttled owner tick so that transition
+                # is eventually discovered without scanning the full table.
+                with self._lock:
+                    self._owner_recovery_cursor = None
+                return
+
+            listed = page[0]
+            if type(listed) is not GroupOrderSnapshot:
+                raise ServiceExecutionGroupError("GROUP_RECOVERY_PAGE_INVALID")
+            request = listed.request
+            key = (listed.created_at_ns, request.portfolio_ref, request.group_id)
+            with self._lock:
+                self._owner_recovery_cursor = key
+
+            # Re-read the one selected row after paging. State can change
+            # between the bounded list and this point; terminal rows need no
+            # work, while every other state still uses the stored group id.
+            snapshot = self._store.get(request.portfolio_ref, request.group_id)
+            if type(snapshot) is not GroupOrderSnapshot or snapshot.created_at_ns != key[0]:
+                return
+            if snapshot.state in {
+                GroupOrderState.PAIRED,
+                GroupOrderState.CLOSED,
+                GroupOrderState.REJECTED_BEFORE_DISPATCH,
+            }:
+                return
+
+            binding = self._run_bindings.get(request.portfolio_ref, request.group_id)
+            if type(binding) is not GroupOriginRunBinding:
+                # A pre-accept or corrupt/incomplete row cannot create service
+                # authority. Leave its durable state for diagnosis/retry.
+                return
+            target_scope = self._target_scope_for(binding.strategy_scope)
+            if target_scope is None:
+                return
+            target = self._targets.get(target_scope)
+            if target is None or not self._recovery_binding_matches(
+                binding, snapshot, target_scope, target
+            ):
+                return
+
+            # This is continuation of an accepted snapshot under its stored
+            # origin binding. Stored Registry policy/requirements versions and
+            # its lease epoch are provenance; expiry does not revoke this
+            # accepted obligation or create a new write authorization.
+            call = _CoordinatorCall(None, target_scope, target, binding)
+            token = _CURRENT_COORDINATOR_CALL.set(call)
+            try:
+                self._coordinator.advance_group(request.portfolio_ref, request.group_id)
+            finally:
+                _CURRENT_COORDINATOR_CALL.reset(token)
+        finally:
+            self._owner_recovery_lock.release()
+
+    def _recovery_binding_matches(
+        self,
+        binding: GroupOriginRunBinding,
+        snapshot: GroupOrderSnapshot,
+        target_scope: WireScope,
+        target: GroupCoordinatorTarget,
+    ) -> bool:
+        request = binding.request
+        scope = binding.strategy_scope
+        identity = binding.strategy_identity
+        return (
+            type(binding) is GroupOriginRunBinding
+            and type(snapshot) is GroupOrderSnapshot
+            and type(request) is GroupOrderIntent
+            and type(scope) is WireScope
+            and self._target_scope_for(scope) == target_scope
+            and _coordinator_call_scope(scope)
+            and snapshot.request.unquoted_fingerprint == binding.request_fingerprint
+            and request.unquoted_fingerprint == binding.request_fingerprint
+            and snapshot.request.portfolio_ref == request.portfolio_ref
+            and snapshot.request.group_id == request.group_id
+            and snapshot.request.coordinator_principal_ref == self._identity.principal_ref
+            and binding.coordinator_principal_ref == self._identity.principal_ref
+            and binding.instance_id == self._instance_id
+            and binding.scope_ref == target.scope_ref
+            and binding.origin_run_id == scope.run_id
+            and scope.run_id is not None
+            and scope.portfolio_ref == request.portfolio_ref
+            and scope.strategy_ref == request.strategy_id
+            and tuple(scope.account_refs) == request.account_refs
+            and all(account_ref in target.accounts for account_ref in request.account_refs)
+            and all(leg.account_ref in target.accounts for leg in request.legs)
+            and target.portfolio_budget_policy is not None
+            and target.budget_quote_builder is not None
+            and identity.get("role") == WireRole.STRATEGY_CLIENT.value
+            and identity.get("principal_ref") == binding.strategy_principal_ref
+            and identity.get("actor_ref") == request.strategy_id
+            and (
+                identity.get("delegate_ref") is None
+                or (
+                    type(identity.get("delegate_ref")) is str
+                    and _REFERENCE.fullmatch(identity["delegate_ref"]) is not None
+                )
+            )
+        )
 
     def handle(
         self, operation: str, *, context: ServiceCallContext, arguments: Mapping[str, Any]
@@ -984,6 +1111,10 @@ class ExecutionGroupOrderEntryService:
             not _has_method(group_authority, "bind_service_call")
             or not _has_method(group_authority, "hold_group_leg_authorization")
             or not _has_method(group_authority, "assert_current_group_leg_authorization")
+            or not _has_method(group_authority, "bind_reconciliation_source")
+            or not _has_method(group_authority, "read_reconciliation_hold")
+            or not _has_method(group_authority, "reconciliation_hold_state")
+            or not _has_method(group_authority, "reconcile_hold")
         ):
             raise ServiceExecutionGroupError("GROUP_AUTHORITY_INVALID")
         if (
@@ -1012,7 +1143,14 @@ class ExecutionGroupOrderEntryService:
                 type(proof_source) is not proof_source_type
                 or not all(
                     callable(getattr(proof_source, name, None))
-                    for name in ("bind_permit", "bind_dispatch", "read_receipt", "resolve_receipt")
+                    for name in (
+                        "bind_permit",
+                        "bind_dispatch",
+                        "read_receipt",
+                        "resolve_receipt",
+                        "reconcile_unknown",
+                        "verify_authority_reconciliation",
+                    )
                 )
             ):
                 raise TypeError
@@ -1122,6 +1260,10 @@ class ExecutionGroupOrderEntryService:
             )
         except Exception:
             raise ServiceExecutionGroupError("EXECUTION_ORDER_ENTRY_INVALID") from None
+        try:
+            group_authority.bind_reconciliation_source(proof_source)
+        except Exception:
+            raise ServiceExecutionGroupError("GROUP_AUTHORITY_INVALID") from None
 
     @property
     def supported_operations(self) -> frozenset[str]:
@@ -1553,7 +1695,113 @@ class ExecutionGroupOrderEntryService:
             if record is None:
                 return _success_value(None)
             raise ServiceExecutionGroupError("GROUP_EVIDENCE_UNAVAILABLE")
+        try:
+            reconciliation_registrations = self._reconciliation_registration_pair(
+                registration,
+                context,
+                execution_scope,
+                origin_run_id=origin_run_id,
+            )
+            with self._authority.bind_service_call(
+                context,
+                execution_scope=execution_scope,
+                reconciliation_registrations=reconciliation_registrations,
+            ):
+                wire_scope = replace(
+                    context.scope, group_id=permit.group_id, leg_id=permit.leg_id
+                )
+                permit_binding = self._proof_source.bind_permit(
+                    permit=permit,
+                    intent=intent,
+                    principal_ref=context.principal_ref,
+                    identity=context.identity,
+                    wire_scope=wire_scope,
+                    service_context=context,
+                )
+                receipt = self._proof_source.reconcile_unknown(
+                    binding=permit_binding,
+                    intent=intent,
+                    permit=permit,
+                    principal_ref=context.principal_ref,
+                    identity=context.identity,
+                    wire_scope=wire_scope,
+                    service_context=context,
+                    active_authority=self._authority,
+                    acquire_writer_lease=lambda: self._order_entry._facade_pair(
+                        execution_scope
+                    )[0].acquire_writer_lease(),
+                )
+        except Exception:
+            raise ServiceExecutionGroupError("GROUP_EVIDENCE_UNAVAILABLE") from None
         return _success_value(receipt.to_payload())
+
+    def _reconciliation_registration_pair(
+        self,
+        query_registration: ActiveRegistrationContext,
+        query_context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+        *,
+        origin_run_id: str,
+    ) -> tuple[ActiveRegistrationContext, ActiveRegistrationContext]:
+        """Pair the current Registry read route with its exact owner entry route.
+
+        A query registration has a distinct Registry registration ID.  The
+        pair is accepted only from one current Registry snapshot and one
+        service epoch; the durable coordinator still requires the original
+        entry registration ID and generation when it reads the hold.
+        """
+
+        if (
+            type(query_registration) is not ActiveRegistrationContext
+            or type(query_context) is not ServiceCallContext
+            # The live Registry dispatch context includes the transport-only
+            # result_fits callback; the immutable registration snapshot does
+            # not. Match the authenticated identity fields exactly, as
+            # _authorize already does, rather than comparing that callback.
+            or not _same_call(query_registration.context, query_context)
+            or query_registration.port != GROUP_ORDER_QUERY_PORT
+            or query_registration.strategy_write_run_id != origin_run_id
+        ):
+            raise ServiceExecutionGroupError("GROUP_QUERY_REGISTRATION_INVALID")
+        now = self._clock_ns() / 1_000_000_000
+        with self._lock:
+            current_query = self._registrations.get(
+                (query_context.registration_id, GROUP_ORDER_QUERY_PORT)
+            )
+            registrations = tuple(self._registrations.values())
+        if current_query != query_registration or query_registration.expires_at <= now:
+            raise ServiceExecutionGroupError("GROUP_QUERY_REGISTRATION_STALE")
+        candidates = tuple(
+            candidate
+            for candidate in registrations
+            if candidate.port == GROUP_ORDER_ENTRY_PORT
+            and candidate.instance_id == query_registration.instance_id
+            and candidate.context.identity == query_context.identity
+            and candidate.context.principal_ref == query_context.principal_ref
+            and candidate.context.scope == query_context.scope
+            and candidate.service_epoch == query_registration.service_epoch
+            and candidate.policy_version == query_registration.policy_version
+            and candidate.requirements_version
+            == query_registration.requirements_version
+            and candidate.strategy_write_run_id == origin_run_id
+            and candidate.context.registration_id != query_context.registration_id
+            and candidate.expires_at > now
+            and candidate.operations
+            == frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"})
+            and candidate.write_operations == candidate.operations
+            and self._policy_matches(candidate, "orders.submit_group_leg")
+            and self._policy_matches(candidate, "orders.resolve_group_leg")
+            and self._targets.get(candidate.context.scope) == execution_scope
+        )
+        if len(candidates) != 1:
+            raise ServiceExecutionGroupError("GROUP_OWNER_REGISTRATION_UNAVAILABLE")
+        if (
+            query_registration.operations != frozenset({"orders.query_group_leg"})
+            or query_registration.write_operations
+            or not self._policy_matches(query_registration, "orders.query_group_leg")
+        ):
+            raise ServiceExecutionGroupError("GROUP_QUERY_REGISTRATION_INVALID")
+        return query_registration, candidates[0]
 
     def _resolve(
         self,

@@ -1,0 +1,244 @@
+{
+  "schema": "dim09-owner-recovery-r229-evidence-manifest-v2",
+  "status": "EXACT_SCOPED_PATHS_STAGED_NOT_COMMITTED",
+  "date": "2026-10-16",
+  "repository": {
+    "path": "D:/bt_api_py",
+    "branch": "dev",
+    "head_before_stage": "9e4ab501158cbd87730faa964ae487e6136ffc4a",
+    "parent": "5ae3f6af29c1cd6c08e5bbd0c9b9b38fddd95a35",
+    "formal_progress_tracker_edited": false
+  },
+  "evidence_level": "SOURCE_FAKE_DIM09_OWNER_RECOVERY_AUTHORITY_REGRESSION_AND_LOCAL_HOST_INTEGRATION_ONLY",
+  "root_qa": {
+    "output": "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r229-corrected",
+    "spec_path": ".codex-tmp/iteration10-dim09-root-spec-r230head-20261016.json",
+    "spec_sha256": "c92f6a565bcd1fa07b36dc71ebe7a25c32b04c7ff86018aac3701e571161dcdf",
+    "pytest_exit": 0,
+    "passed_nodes": 2,
+    "junit_seconds": 29.953,
+    "root_reported_seconds": 30.34,
+    "warnings": 0,
+    "source_count": 85,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "heads_before": {
+      "D:\\bt_api_py": "9e4ab501158cbd87730faa964ae487e6136ffc4a",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+      "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "heads_after": {
+      "D:\\bt_api_py": "9e4ab501158cbd87730faa964ae487e6136ffc4a",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+      "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "stdout_sha256": "6722fd21fcdce9f48c058d99a8e6be856cc58b22457158fda908d47d748b928a",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "exact_nodes": [
+    "tests.unit.test_service_execution_group_authority_guard_reconciliation::test_guard_reconciles_exact_orphan_hold_through_real_control_api",
+    "tests.integration.test_service_execution_group_owner_recovery::test_owner_recovers_through_distinct_query_registration_after_strategy_exit"
+  ],
+  "source_authority": {
+    "fixed_export_root": "D:/temp/iteration10-dim09-owner-recovery-source-r229-corrected-20261016",
+    "authority_sha256": "4dfe3357ce1b3a9f423a74d233a4b6d3841f785ef2148b9a6210d63ce15476de",
+    "authority_git_blob": "fe14446c30fbe60ad7e4eff11e71e88942deed15",
+    "worktree_authority_sha256": "8a62d36eaf3b5207e4dbb8e001fb7d63055e7dc54ba2f8b295ba9a1d474731b3",
+    "worktree_cancellation_wip_preserved": true,
+    "excluded_change": "ExecutionStoreGroupCompletionVerifier CANCELLED completion changes"
+  },
+  "staged_payloads": [
+    {
+      "path": "bt_api_py/service_execution_group.py",
+      "bytes": 102443,
+      "sha256": "90e9f4e8c61efd43af1db033b28bbd186813599b2e88591e1b9b191b5f8b34ff",
+      "source": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016\\bt_api_py\\service_execution_group.py"
+    },
+    {
+      "path": "bt_api_py/service_execution_group_authority.py",
+      "bytes": 112847,
+      "sha256": "4dfe3357ce1b3a9f423a74d233a4b6d3841f785ef2148b9a6210d63ce15476de",
+      "source": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016\\bt_api_py\\service_execution_group_authority.py"
+    },
+    {
+      "path": "bt_api_py/service_execution_group_proofs.py",
+      "bytes": 229597,
+      "sha256": "311cd9050ec3685729d63f8786fd194502bd5c47675299f3ba595566add6bff0",
+      "source": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016\\bt_api_py\\service_execution_group_proofs.py"
+    },
+    {
+      "path": "tests/integration/__init__.py",
+      "bytes": 68,
+      "sha256": "12e0fbccb521257bcbee12ac880d61f0359165838aa94bed23168e5fffccb526",
+      "source": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016\\tests\\integration\\__init__.py"
+    },
+    {
+      "path": "tests/integration/test_service_execution_group_owner_recovery.py",
+      "bytes": 50928,
+      "sha256": "503035d2da0f361fbf262a149464573eae6dad0d4c467b50e05e9f1837ef84a5",
+      "source": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016\\tests\\integration\\test_service_execution_group_owner_recovery.py"
+    },
+    {
+      "path": "tests/unit/test_service_execution_group_authority_guard_reconciliation.py",
+      "bytes": 9298,
+      "sha256": "d079d7e42b0ad7811af54eaa4f6ceb44f862dfb5d42158cd6c64cd9561251166",
+      "source": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016\\tests\\unit\\test_service_execution_group_authority_guard_reconciliation.py"
+    },
+    {
+      "path": "tests/unit/test_service_execution_group_owner_recovery_receipt.py",
+      "bytes": 25284,
+      "sha256": "207e0f7f6be7236808f1564602dad12e60c97e03e43fb4496539e056e056cf98",
+      "source": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016\\tests\\unit\\test_service_execution_group_owner_recovery_receipt.py"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/command.json",
+      "bytes": 1854,
+      "sha256": "c3d789e6bf88a53f3487be16bfc080bfa87e89106d145e31cb583099f3ddea27",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\command.json"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/exit.txt",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\exit.txt"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/junit.xml",
+      "bytes": 577,
+      "sha256": "4c753b11722f30e0c14f92fc628f899613212471ea3a0c3490f0dd11f3ccaef4",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\junit.xml"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/result.json",
+      "bytes": 1535,
+      "sha256": "9d166e796875a9628953f57d6e65cab54e91b9ecebeb5f84f8e5ad8aa8310829",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\result.json"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/running.json",
+      "bytes": 76,
+      "sha256": "77f7ae8005aafc3ad370ba4d77046d55ecbc9c4371d94225838aed283f6f4269",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\running.json"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/runner.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\runner.py"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/source-after.json",
+      "bytes": 15034,
+      "sha256": "940a60005cf65dbd4b9a8c841032cdc30a5049932cd6d4ba62fea7048a3d1d97",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\source-after.json"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/source-before.json",
+      "bytes": 15034,
+      "sha256": "940a60005cf65dbd4b9a8c841032cdc30a5049932cd6d4ba62fea7048a3d1d97",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\source-before.json"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/spec.json",
+      "bytes": 21457,
+      "sha256": "c92f6a565bcd1fa07b36dc71ebe7a25c32b04c7ff86018aac3701e571161dcdf",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\spec.json"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\stderr.log"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/stdout.log",
+      "bytes": 206,
+      "sha256": "6722fd21fcdce9f48c058d99a8e6be856cc58b22457158fda908d47d748b928a",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\qa\\r229-corrected-root-pass\\stdout.log"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/round-record.md",
+      "bytes": 5424,
+      "sha256": "6e54f81e0da3a46bb437542f9f659015461039b43556fd41630476fe5d86c749",
+      "source": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim09-owner-recovery-r229-20261016\\round-record.md"
+    },
+    {
+      "path": ".gitattributes",
+      "bytes": 3149,
+      "sha256": "9470cec1ae07b2a6e7765fe217c61c986e27aa04ca4d85d253973d405094a65e",
+      "source": "D:\\bt_api_py\\.gitattributes"
+    }
+  ],
+  "manifest_path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/manifest.json",
+  "staged_path_count": 21,
+  "attribute_rules": {
+    "path": ".gitattributes",
+    "rule_count": 20,
+    "rules": [
+      "bt_api_py/service_execution_group.py -text",
+      "bt_api_py/service_execution_group_authority.py -text",
+      "bt_api_py/service_execution_group_proofs.py -text",
+      "tests/integration/__init__.py -text",
+      "tests/integration/test_service_execution_group_owner_recovery.py -text",
+      "tests/unit/test_service_execution_group_authority_guard_reconciliation.py -text",
+      "tests/unit/test_service_execution_group_owner_recovery_receipt.py -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/command.json -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/exit.txt -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/junit.xml -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/result.json -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/running.json -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/runner.py -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/source-after.json -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/source-before.json -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/spec.json -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/stderr.log -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/stdout.log -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/round-record.md -text",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/manifest.json -text"
+    ]
+  },
+  "excluded_from_stage": [
+    "other agent and repository WIP",
+    "historical failed QA outputs R1-R12",
+    "obsolete malformed zero-context Authority projection",
+    "progress tracker / formal count",
+    "current Authority cancellation WIP"
+  ],
+  "preserved_history": {
+    "failed_output_roots": [
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r1",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r2",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r3",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r4",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r5",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r6",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r7",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r8",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r10",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r11",
+      "D:/temp/iteration10-dim09-owner-recovery-root-20261016-r12"
+    ],
+    "invalid_projection_sha256": "13c164419297821c49f3d7adc7af1a2e7ec2a2d595ee0c3becb45e39b47396f1",
+    "invalid_projection_output_absent": true
+  },
+  "formal_dim09": {
+    "status": "PARTIAL_HOLD",
+    "official_row": "正式迭代计划.md:781",
+    "normative_clause": "正式迭代计划.md:1044",
+    "accepted_evidence": [
+      "R174 Step-1: three-leg coordinator contract, ratios/multipliers, staged partial/zero fills, residual vector and budget conservation",
+      "R183 Step-2: service/Host + synthetic provider; paired, second-leg reject, third-leg UNKNOWN and owner/coordinator restart using original ID",
+      "R187: accepted production v3 three-leg budget quote builder and fixture wiring",
+      "R229: service-owned recovery after strategy exit, persisted original authorization/hold, separately authorized read-only original-ID query, UNKNOWN hold retained then receipt-backed reconciliation"
+    ],
+    "remaining_clause": "No accepted lifecycle demonstrates successful three-leg compensation selected from a nonzero residual using closable quantity and risk budget, stable compensation action ID across restart, persisted source/Risk acknowledgement, and terminal closure only after all disposition obligations are confirmed.",
+    "actual_option_trade": "separately counted by formal row; not claimed",
+    "progress_or_tracker_changed": false
+  }
+}

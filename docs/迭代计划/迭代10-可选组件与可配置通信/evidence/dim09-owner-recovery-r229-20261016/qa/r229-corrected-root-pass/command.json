@@ -1,0 +1,41 @@
+{
+  "argv": [
+    "C:\\Anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+    "--rootdir",
+    "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016",
+    "-q",
+    "--no-header",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\iteration10-dim09-owner-recovery-root-20261016-r229-corrected\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-dim09-owner-recovery-root-20261016-r229-corrected\\pytest-tmp",
+    "tests/unit/test_service_execution_group_authority_guard_reconciliation.py::test_guard_reconciles_exact_orphan_hold_through_real_control_api",
+    "tests/integration/test_service_execution_group_owner_recovery.py::test_owner_recovers_through_distinct_query_registration_after_strategy_exit"
+  ],
+  "cwd": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\iteration10-dim09-owner-recovery-source-r229-corrected-20261016;D:\\temp\\iteration10-afi04-sdk-f29-risk-overlay-root-20261016-r1\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src;D:\\temp\\iteration10-dim09-risk-source-ae907-root-20261016-r4\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1",
+    "BT_API_PY_LIGHT_IMPORT": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE",
+    "PYTHONSTARTUP"
+  ],
+  "started_utc": "2026-10-16T13:21:05.385552+00:00"
+}
