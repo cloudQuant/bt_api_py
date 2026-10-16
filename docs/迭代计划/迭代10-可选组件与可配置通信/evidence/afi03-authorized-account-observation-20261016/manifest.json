@@ -1,0 +1,393 @@
+{
+  "round_id": "AFI03-R222-authorized-account-observation-projection",
+  "status": "READY_FOR_ROOT_SCOPED_ACCEPTANCE_AND_COMMIT",
+  "scope": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "candidate_head": "5be2e26c9cbb558187ed4ba7cce622989cb50c0e",
+    "accepted_source_base": "0c8aa93c1ca83363f13bd2128d40808b481e9e61",
+    "files": [
+      {
+        "path": "src/backend/app/services/portfolio_composition.py",
+        "bytes": 56938,
+        "sha256": "0823d8fd680d2d889a217ec58115694a7d585c2e166b97f434049e581bd1ab7a",
+        "accepted_source_bindings": [
+          "api-r1",
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/backend/app/services/service_read/client.py",
+        "bytes": 32084,
+        "sha256": "37da10449d64806bc4e751c0ecd6a83fcf3bc96001f824082883a5d55efdd780",
+        "accepted_source_bindings": [
+          "client-r1",
+          "api-r1",
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/backend/app/services/service_read/contracts.py",
+        "bytes": 39975,
+        "sha256": "006f0d1f8da68b805845b65232cd09e1620104de471bd4989a634c73dae76bf6",
+        "accepted_source_bindings": [
+          "client-r1",
+          "api-r1",
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/backend/tests/test_portfolio_compositions_api.py",
+        "bytes": 61548,
+        "sha256": "72281e9d7a292605509257b10cd008539ac401369e0af356af5972e0aa8debdc",
+        "accepted_source_bindings": [
+          "api-r1",
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/backend/tests/test_service_read_client.py",
+        "bytes": 28707,
+        "sha256": "3011e44c7f01304de14bb91e25c78048811a404d90ed0d44b12ce37d8c5f67b6",
+        "accepted_source_bindings": [
+          "client-r1",
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/backend/tests/test_portfolio_account_observation_authorized_http_integration.py",
+        "bytes": 81948,
+        "sha256": "ca78603686d372f722c87ee9f79d648c018582c25d610851f8d0d9fb4a63c39c",
+        "accepted_source_bindings": [
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/frontend/src/api/portfolio.ts",
+        "bytes": 15204,
+        "sha256": "f9499fc53582d4b26f423821549c4a56e9bbc2db4b662e6bd313420ef8c2fea3",
+        "accepted_source_bindings": [
+          "ui-r2",
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/frontend/src/views/PortfolioPage.vue",
+        "bytes": 127518,
+        "sha256": "56d632adfc964d7d91abb6519f3f32e13a71f0f43f1c22c6ea8f484f2be12edd",
+        "accepted_source_bindings": [
+          "ui-r2",
+          "http-r13"
+        ]
+      },
+      {
+        "path": "src/frontend/src/__tests__/views/PortfolioPage.test.ts",
+        "bytes": 77726,
+        "sha256": "5330179250473daafc1ac119ed2596bbffbaf0eb2753c4119a9ab81048b631bb",
+        "accepted_source_bindings": [
+          "ui-r2",
+          "http-r13"
+        ]
+      }
+    ],
+    "staging_instruction": "Stage exactly these nine AFI files; leave all other modified/untracked AFI files untouched."
+  },
+  "accepted_verification": [
+    {
+      "node_id": "client-r1",
+      "output_dir": "D:\\temp\\iteration10-afi03-client-root-20261016-r1",
+      "source_binding": "source-before.json == source-after.json; 2,101 source pins unchanged; AFI 0c8aa93 and SDK d400f0f runtime source at run time.",
+      "test": "tests/test_service_read_client.py::test_account_read_projects_authorized_provider_observation_without_filling_missing_facts",
+      "result": "1 passed, pytest exit 0, no warning; JUnit test time 0.021s, run output reported 0.96s.",
+      "evidence_level": "AFI03_SERVICE_READ_CLIENT_PROVIDER_OBSERVATION_PROJECTION_SYNTHETIC_ONLY"
+    },
+    {
+      "node_id": "api-r1",
+      "output_dir": "D:\\temp\\iteration10-afi03-api-root-20261016-r1",
+      "source_binding": "source-before.json == source-after.json; 2,101 source pins unchanged; AFI 0c8aa93 and SDK d400f0f runtime source at run time.",
+      "test": "tests/test_portfolio_compositions_api.py::test_provider_observations_reach_live_composition_http_without_fx_or_account_key",
+      "result": "1 passed, pytest exit 0, 1 inherited Quandl DeprecationWarning; JUnit test time 0.448s, run output 5.96s.",
+      "evidence_level": "AFI03_PORTFOLIO_API_PROVIDER_OBSERVATION_HTTP_SYNTHETIC_ONLY"
+    },
+    {
+      "node_id": "ui-r2",
+      "output_dir": "D:\\temp\\iteration10-afi03-ui-root-20261016-r2",
+      "source_binding": "446 frontend source pins unchanged; AFI source HEAD 0c8aa93 unchanged.",
+      "test": "PortfolioPage selects provider observations, missing inputs, stale cuts, and currencies without revaluing totals (one selected Vitest test).",
+      "result": "Vitest exit 0: 1 passed, 37 filtered/skipped; vue-tsc --noEmit exit 0; stdout/stderr for typecheck empty.",
+      "evidence_level": "AFI03_SYNTHETIC_VUE_COMPONENT_AND_TYPES_ONLY"
+    },
+    {
+      "node_id": "http-r13",
+      "output_dir": "D:\\temp\\iteration10-afi03-http-root-20261016-r13-sdk-f29-afibase-r1",
+      "spec": "D:\\bt_api_py\\.codex-tmp\\iteration10-afi03-http-root-spec-r13-sdk-f29-afibase-20261016.json",
+      "spec_sha256": "ab2b517030d46f3be4058500ecf322d8ffcb20f98164029b5bda3fca490568c2",
+      "test": "tests/test_portfolio_account_observation_authorized_http_integration.py::test_authorized_gateway_observation_reaches_portfolio_projection_http",
+      "result": "1 passed, pytest exit 0, 1 inherited Quandl DeprecationWarning; JUnit suite time 4.752s and test time 2.751s.",
+      "root_source_bindings": {
+        "AFI": "5be2e26c9cbb558187ed4ba7cce622989cb50c0e",
+        "bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+        "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "source_binding_note": "R13 full source map is archived; its command.json/spec.json record the exact runtime source roots. Five repository HEADs and all 2,772 source pins were unchanged. AFI staging scope remains the nine listed AFI files; no SDK paths are part of this AFI commit.",
+      "cleanup_evidence": "cleanup-assertions.json records invariants whose assertions passed in this node. It is not an independently captured close-ack receipt; raw stdout contains no separate cleanup receipt.",
+      "evidence_level": "AFI03_SYNTHETIC_AUTHORIZED_GATEWAY_HTTP_CHAIN_DIAGNOSTIC_ONLY"
+    }
+  ],
+  "runtime_repository_heads_r13": {
+    "afi": "5be2e26c9cbb558187ed4ba7cce622989cb50c0e",
+    "bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+    "bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 1072384,
+    "sha256": "4dd5be533a372c9f72c8fcc70d478eb688d2fc78cc8c81d0e358a2bfce7e8bfa",
+    "entry_count": 43,
+    "entries": [
+      {
+        "path": "client-r1/command.json",
+        "bytes": 1318,
+        "sha256": "64c6320416b488a5b07aa10e8d966597151d7e826de772b2a2f804b68e7b63b5"
+      },
+      {
+        "path": "client-r1/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "client-r1/junit.xml",
+        "bytes": 373,
+        "sha256": "4eee5f6c39a3149ca1c837a8c278f03386d0f690670de2a837e8f49bf061cb5f"
+      },
+      {
+        "path": "client-r1/result.json",
+        "bytes": 1336,
+        "sha256": "9262563d6c513ca6e6be1722796d0a5c264b7d14c8d58f2d4b43658b4e97a747"
+      },
+      {
+        "path": "client-r1/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "client-r1/running.json",
+        "bytes": 76,
+        "sha256": "06883be5ae1b6fb31ee267c6c283b971b6b3b9ac130f4dc920e013a39847b94c"
+      },
+      {
+        "path": "client-r1/source-after.json",
+        "bytes": 362512,
+        "sha256": "84e925aedb164ab4c5c68b8162e1cf30be57a4f4aefb35dc230e095a8aa5f62a"
+      },
+      {
+        "path": "client-r1/source-before.json",
+        "bytes": 362512,
+        "sha256": "84e925aedb164ab4c5c68b8162e1cf30be57a4f4aefb35dc230e095a8aa5f62a"
+      },
+      {
+        "path": "client-r1/spec.json",
+        "bytes": 370619,
+        "sha256": "270b0ce2499d1a68ae991a78164f31f37d5356bea455f30b71c4ec1203bce505"
+      },
+      {
+        "path": "client-r1/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "client-r1/stdout.log",
+        "bytes": 100,
+        "sha256": "eefab76c7aae9c8e22a6e70490130abb733b51020d0fbb9781262348894e9202"
+      },
+      {
+        "path": "api-r1/command.json",
+        "bytes": 1311,
+        "sha256": "66d71d8a9992eb2614bd8066a0f3a34784ccc663c8ea62c6144e3dd253586d1c"
+      },
+      {
+        "path": "api-r1/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "api-r1/junit.xml",
+        "bytes": 365,
+        "sha256": "0d2931e394be8f14cd2f8197281dcf7a52e5a8c021ebc775b49cb19c6afebba6"
+      },
+      {
+        "path": "api-r1/result.json",
+        "bytes": 1324,
+        "sha256": "77d8a992a9259e4d718602d6c6b37bc255c7b9d6d2ea70d030496248f738ca5c"
+      },
+      {
+        "path": "api-r1/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "api-r1/running.json",
+        "bytes": 76,
+        "sha256": "560dbab0a407eb50f3b512d6c0c9faacd930f131cc800c6be9bfe1763c1d6851"
+      },
+      {
+        "path": "api-r1/source-after.json",
+        "bytes": 362512,
+        "sha256": "84e925aedb164ab4c5c68b8162e1cf30be57a4f4aefb35dc230e095a8aa5f62a"
+      },
+      {
+        "path": "api-r1/source-before.json",
+        "bytes": 362512,
+        "sha256": "84e925aedb164ab4c5c68b8162e1cf30be57a4f4aefb35dc230e095a8aa5f62a"
+      },
+      {
+        "path": "api-r1/spec.json",
+        "bytes": 370595,
+        "sha256": "fd2706727258e947676257c349107afb41110956c75e6c61bd7c6d0b15f416a2"
+      },
+      {
+        "path": "api-r1/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "api-r1/stdout.log",
+        "bytes": 599,
+        "sha256": "cd0fcc6981f6adc41f9930208683c1d86ac0aca137d43fe2c80918078aa1140f"
+      },
+      {
+        "path": "ui-r2/result.json",
+        "bytes": 273,
+        "sha256": "e33374aa72031d8c5bba0f7a4fb950231232d5ecd294067f19ef35e038e8344e"
+      },
+      {
+        "path": "ui-r2/runner.py",
+        "bytes": 1917,
+        "sha256": "4ed134e59b0274e456d96c4450895fa7066147fd48394389cac850faf88f892d"
+      },
+      {
+        "path": "ui-r2/source-after.json",
+        "bytes": 74464,
+        "sha256": "b0c2583539355ed72ca41b1745b2e4d17e3d89e420580ae8ca79e558c07bc6b7"
+      },
+      {
+        "path": "ui-r2/spec.json",
+        "bytes": 77186,
+        "sha256": "5a16da18db2df30582193add9130401a501e73c97e04b94fffb14fec7d542705"
+      },
+      {
+        "path": "ui-r2/typecheck.stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "ui-r2/typecheck.stdout.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "ui-r2/vitest.json",
+        "bytes": 10221,
+        "sha256": "d5ef7aa4405fdf731bd637a19a7738c7add373a2fe505164591ba73229893777"
+      },
+      {
+        "path": "ui-r2/vitest.stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "ui-r2/vitest.stdout.log",
+        "bytes": 402,
+        "sha256": "cff3ffc76c61673cd2b05e552f4a76b69fd2fcd9a6329ab1d718fc0b761eebfb"
+      },
+      {
+        "path": "http-r13/command.json",
+        "bytes": 1771,
+        "sha256": "bff3e4c2ff86861ff9f31e3458e5a9cda32e5900251f58adf0fef504df5c5f12"
+      },
+      {
+        "path": "http-r13/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "http-r13/junit.xml",
+        "bytes": 422,
+        "sha256": "fa52e855e65ade1df1deba56a14dc0fb522b854a3cad158309479d30d494017d"
+      },
+      {
+        "path": "http-r13/result.json",
+        "bytes": 1325,
+        "sha256": "f4f6af42a02e3f962a361be940b6d6c8f018f26c903f7f5c754b116318d42d45"
+      },
+      {
+        "path": "http-r13/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "http-r13/running.json",
+        "bytes": 76,
+        "sha256": "69872ad8fe9367697ab775180da8f506bc0d1e53986f32e643a687add069080f"
+      },
+      {
+        "path": "http-r13/source-after.json",
+        "bytes": 557738,
+        "sha256": "206f578c2b0ed10876103cc3366a3371bd7560525a23c2207302e35ddcdb5f26"
+      },
+      {
+        "path": "http-r13/source-before.json",
+        "bytes": 557738,
+        "sha256": "206f578c2b0ed10876103cc3366a3371bd7560525a23c2207302e35ddcdb5f26"
+      },
+      {
+        "path": "http-r13/spec.json",
+        "bytes": 568753,
+        "sha256": "ab2b517030d46f3be4058500ecf322d8ffcb20f98164029b5bda3fca490568c2"
+      },
+      {
+        "path": "http-r13/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "http-r13/stdout.log",
+        "bytes": 651,
+        "sha256": "ea1b473c6dd33607c077e814276cba733b42b4ec9b42165c49e534763258d217"
+      },
+      {
+        "path": "http-r13/cleanup-assertions.json",
+        "bytes": 1847,
+        "sha256": "118c7eb36a7bbdadc3dc29bdf9592944fd3068d79c24f87e3adff564799db839"
+      }
+    ],
+    "contents_summary": {
+      "client_r1_original_top_level_files": 11,
+      "api_r1_original_top_level_files": 11,
+      "ui_r2_original_top_level_files": 9,
+      "http_r13_original_top_level_files": 11,
+      "http_r13_generated_cleanup_assertion_summary": 1,
+      "pytest_temporary_scratch_included": false
+    }
+  },
+  "retained_failure_history": {
+    "directories": [
+      "D:\\temp\\iteration10-afi03-http-root-20261016-r7-sdk-f29-r1",
+      "D:\\temp\\iteration10-afi03-http-root-20261016-r9-sdk-f29-fixed-afibase-r1",
+      "D:\\temp\\iteration10-afi03-http-root-20261016-r10-sdk-f29-fixed-afibase-r1",
+      "D:\\temp\\iteration10-afi03-http-root-20261016-r11-sdk-f29-afibase-r1",
+      "D:\\temp\\iteration10-afi03-http-root-20261016-r12-sdk-f29-afibase-r1"
+    ],
+    "r8": "preflight-only; no output directory was created.",
+    "instruction": "Preserve the original failure directories as-is; they are not duplicated in this archive."
+  },
+  "known_limits": [
+    "All accepted evidence in this packet is synthetic-only; it does not establish real account/provider acceptance or formal AFI03 completion.",
+    "This projection preserves source currencies and does not perform FX valuation or change account totals.",
+    "AFI03 requirements for complete FX/mark timing and provenance, contract multipliers, cross-account snapshot skew, and full missing/stale/unreconciled/coverage-incomplete valuation handling remain open."
+  ]
+}
