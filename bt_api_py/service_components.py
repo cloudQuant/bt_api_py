@@ -762,13 +762,15 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             resource_keys=frozenset(
                 {"bt_api", "targets", "admission", "journal", "gate", "provider_contracts"}
             ),
+            optional_resource_keys=frozenset({"position_valuation_resolver"}),
             public_ports=MappingProxyType(
                 {
                     "service.order_entry": frozenset({"orders.submit"}),
                     "service.order_query": frozenset({"orders.query"}),
                 }
             ),
-            internal_ports=frozenset(),
+            internal_ports=frozenset({"service.provider_session"}),
+            validator_module_name="bt_api_py.service_risk_position_snapshot",
             write_operations_by_port=MappingProxyType(
                 {"service.order_entry": frozenset({"orders.submit"})}
             ),
@@ -1068,7 +1070,10 @@ def order_components(prepared: Sequence[PreparedComponent]) -> tuple[PreparedCom
         raise ServiceComponentError("DUPLICATE_COMPONENT_INSTANCE")
     dependencies: dict[str, set[str]] = {instance: set() for instance in by_instance}
     for item in prepared:
-        if item.spec.component != "execution":
+        if item.spec.component not in {"execution", "risk"} or (
+            item.spec.component == "risk"
+            and item.spec.options.get("role") != "account_owner"
+        ):
             continue
         dependency = item.options.get("provider_session_ref")
         if dependency is None:
@@ -1327,6 +1332,7 @@ def build_component(
     trusted_group_write_policies: tuple[TrustedGroupWritePolicy, ...] = (),
     trusted_group_reservation_policies: tuple[TrustedGroupReservationPolicy, ...] = (),
     trusted_group_resolution_policies: tuple[TrustedGroupResolutionPolicy, ...] = (),
+    trusted_internal_ports: Mapping[str, object] | None = None,
 ) -> ServiceComponent:
     """Resolve trusted resources and construct one fixed adapter."""
 
@@ -1352,6 +1358,8 @@ def build_component(
         for policy in trusted_group_resolution_policies
     ):
         raise ServiceComponentError("INVALID_GROUP_RESOLUTION_POLICIES")
+    if trusted_internal_ports is not None and not isinstance(trusted_internal_ports, Mapping):
+        raise ServiceComponentError("INVALID_TRUSTED_INTERNAL_PORTS")
     spec = prepared.spec
     builtin = _builtin_for_spec(spec)
     if builtin is None:
@@ -1376,6 +1384,61 @@ def build_component(
         raise ServiceComponentError("RESOURCE_RESOLUTION_FAILED") from None
     if type(resources) is not ComponentResources:
         raise ServiceComponentError("INVALID_COMPONENT_RESOURCES")
+    injected_internal_ports = (
+        {} if trusted_internal_ports is None else dict(trusted_internal_ports)
+    )
+    if injected_internal_ports:
+        if (
+            spec.component != "risk"
+            or spec.options.get("role") != "account_owner"
+            or spec.options.get("provider_session_ref") is None
+            or "service.provider_session" not in spec.bind_ports
+            or set(injected_internal_ports) != {"service.provider_session"}
+            or "service.provider_session" in resources.internal_ports
+        ):
+            if on_resources is not None:
+                on_resources(resources)
+            else:
+                try:
+                    resources.close()
+                except Exception:
+                    pass
+            raise ServiceComponentError("TRUSTED_PROVIDER_SESSION_INJECTION_INVALID")
+        try:
+            worker_module = importlib.import_module("bt_api_gateway.account_session_worker")
+            worker_type = getattr(worker_module, "GatewayAccountSessionWorker", None)
+            worker = injected_internal_ports["service.provider_session"]
+            if not isinstance(worker_type, type) or type(worker) is not worker_type:
+                raise TypeError
+            merged_internal_ports = dict(resources.internal_ports)
+            merged_internal_ports.update(injected_internal_ports)
+            if resources.ownership is ResourceOwnership.BORROWED:
+                resources = ComponentResources.borrowed(
+                    resources.values,
+                    ready=resources.ready,
+                    internal_ports=merged_internal_ports,
+                    risk_policy_bindings=resources.risk_policy_bindings,
+                    shared_collateral_domains=resources.shared_collateral_domains,
+                )
+            else:
+                original_resources = resources
+                resources = ComponentResources.owned(
+                    original_resources.values,
+                    ready=original_resources.ready,
+                    close=original_resources.close,
+                    internal_ports=merged_internal_ports,
+                    risk_policy_bindings=original_resources.risk_policy_bindings,
+                    shared_collateral_domains=original_resources.shared_collateral_domains,
+                )
+        except Exception:
+            if on_resources is not None:
+                on_resources(resources)
+            else:
+                try:
+                    resources.close()
+                except Exception:
+                    pass
+            raise ServiceComponentError("TRUSTED_PROVIDER_SESSION_INJECTION_INVALID") from None
     try:
         if on_resources is not None and not defer_resource_tracking:
             # Track before validation or adapter construction can fail.
@@ -1446,6 +1509,7 @@ def build_component(
 
         adapter: object | None = None
         account_worker: object | None = None
+        risk_position_owner: object | None = None
         account_worker_selected = (
             spec.component == "gateway"
             and spec.options.get("role") == "account_session_worker"
@@ -1531,6 +1595,37 @@ def build_component(
                     values["gate"],
                     values["provider_contracts"],
                 )
+                if (
+                    "service.order_entry" in spec.bind_ports
+                    and getattr(values["gate"].policy, "exposure_dimension_limits", ())
+                ):
+                    if (
+                        spec.options.get("provider_session_ref") is None
+                        or "service.provider_session" not in resources.internal_ports
+                    ):
+                        raise ServiceComponentError("RISK_POSITION_SOURCE_REQUIRED")
+                    try:
+                        bridge_module = importlib.import_module(
+                            "bt_api_py.service_risk_position_snapshot"
+                        )
+                        owner_factory = getattr(
+                            bridge_module, "build_risk_position_snapshot_owner", None
+                        )
+                        if not callable(owner_factory):
+                            raise TypeError
+                        risk_position_owner = owner_factory(
+                            worker=resources.internal_ports["service.provider_session"],
+                            journal=values["journal"],
+                            gate=values["gate"],
+                            targets=values["targets"],
+                            notional_unit=values["gate"].policy.notional_unit,
+                            valuation_resolver=values.get("position_valuation_resolver"),
+                        )
+                        risk_position_owner.prime()
+                    except Exception:
+                        raise ServiceComponentError(
+                            "RISK_POSITION_BASELINE_UNAVAILABLE"
+                        ) from None
                 if "service.order_entry" in spec.bind_ports:
                     targets = values["targets"]
                     capability_state = getattr(adapter, "capability_state", None)
@@ -2367,6 +2462,37 @@ def build_component(
                     return False
 
             readiness = group_component_readiness
+
+        if risk_position_owner is not None:
+            prior_maintain = maintain
+
+            def maintain_risk_position_baseline(
+                active_ids: frozenset[str],
+                *,
+                position_owner: object = risk_position_owner,
+                existing_maintain: Callable[[frozenset[str]], object] | None = prior_maintain,
+            ) -> None:
+                if existing_maintain is not None:
+                    existing_maintain(active_ids)
+                position_owner.maintain(active_ids)  # type: ignore[attr-defined]
+
+            prior_readiness = readiness
+
+            def risk_position_readiness(
+                *,
+                resource_readiness: Callable[[], bool] = prior_readiness,
+                position_owner: object = risk_position_owner,
+            ) -> bool:
+                try:
+                    return (
+                        resource_readiness() is True
+                        and position_owner.ready is True  # type: ignore[attr-defined]
+                    )
+                except Exception:
+                    return False
+
+            maintain = maintain_risk_position_baseline
+            readiness = risk_position_readiness
 
         component_resources = _resources_with_execution_owner_lock(resources, execution_owner_lock)
         risk_owner_gate: object | None = None

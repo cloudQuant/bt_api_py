@@ -542,9 +542,10 @@ class ServiceHost:
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
-                    if item.spec.component == "execution"
+                    if item.spec.component in {"execution", "risk"}
                     else None
                 )
+                trusted_internal_ports: Mapping[str, object] | None = None
                 if dependency_ref is not None:
                     dependency = built_by_instance.get(dependency_ref)
                     if (
@@ -552,6 +553,16 @@ class ServiceHost:
                         or "service.provider_session" not in dependency.internal_ports
                     ):
                         raise ServiceHostError("PROVIDER_SESSION_UNAVAILABLE")
+                    if (
+                        item.spec.component == "risk"
+                        and item.spec.options.get("role") == "account_owner"
+                    ):
+                        worker = dependency.internal_ports.get("service.provider_session")
+                        if worker is None:
+                            raise ServiceHostError("PROVIDER_SESSION_UNAVAILABLE")
+                        trusted_internal_ports = {
+                            "service.provider_session": worker
+                        }
 
                 borrowed_upstream = None
                 if (
@@ -588,6 +599,7 @@ class ServiceHost:
                         for policy in self._authority.group_resolution_policies
                         if policy.instance_id == item.spec.instance_id
                     ),
+                    trusted_internal_ports=trusted_internal_ports,
                 )
                 self._components.append(component)
                 if (
@@ -1850,7 +1862,20 @@ class ServiceHost:
                 if maintain is not None and not (
                     analytics_task_writer and not migration_writes_enabled
                 ):
-                    active_ids = registry.active_registration_ids(instance_id=component.instance_id)
+                    if (
+                        spec is not None
+                        and spec.component == "gateway"
+                        and role == "account_session_worker"
+                        and not component.capabilities
+                    ):
+                        # An internal-only provider owner has no registry
+                        # registration namespace. Its service-owned lifecycle
+                        # still runs with the truthful empty client projection.
+                        active_ids = frozenset()
+                    else:
+                        active_ids = registry.active_registration_ids(
+                            instance_id=component.instance_id
+                        )
                     if type(active_ids) is not frozenset or any(
                         type(registration_id) is not str for registration_id in active_ids
                     ):

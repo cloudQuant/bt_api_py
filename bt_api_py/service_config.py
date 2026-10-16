@@ -197,7 +197,13 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
         "legacy_import_owner": frozenset({"service.paper_legacy_import"}),
     },
     "risk": {
-        "account_owner": frozenset({"service.order_entry", "service.order_query"}),
+        "account_owner": frozenset(
+            {
+                "service.order_entry",
+                "service.order_query",
+                "service.provider_session",
+            }
+        ),
         "group_reservations": frozenset({"service.group_reservations"}),
         "account_admission": frozenset(
             {
@@ -484,7 +490,7 @@ def parse_service_config(raw: object) -> ServiceConfig:
         _fail("EMPTY_COMPONENTS", "$.components")
     components: dict[str, dict[str, Any]] = {}
     instance_roles: dict[str, tuple[str, str | None]] = {}
-    bound_ports: dict[str, str] = {}
+    bound_ports: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
     for component_name, component_raw in components_raw.items():
         if component_name not in _COMPONENT_PORTS:
             _fail("UNKNOWN_COMPONENT", "$.components")
@@ -494,12 +500,14 @@ def parse_service_config(raw: object) -> ServiceConfig:
             _fail("DUPLICATE_INSTANCE", f"$.components.{component_name}.settings.instance_id")
         instance_roles[instance_id] = (component_name, role)
         for port in parsed["settings"]["bind_ports"]:
-            if port in bound_ports:
-                _fail("PORT_CONFLICT", f"$.components.{component_name}.settings.bind_ports")
-            bound_ports[port] = component_name
+            bound_ports.setdefault(port, []).append((component_name, parsed))
         components[component_name] = parsed
 
     _validate_component_references(components, instance_roles)
+    for port, owners in bound_ports.items():
+        if len(owners) > 1 and not _shared_provider_session_binding(port, owners):
+            component_name = owners[1][0]
+            _fail("PORT_CONFLICT", f"$.components.{component_name}.settings.bind_ports")
 
     clients_raw = raw.get("clients", {})
     _require_dict(clients_raw, "$.clients")
@@ -991,7 +999,18 @@ def _validate_component_options(
             "portfolio_ref": _required_ref(raw, "portfolio_ref", options_path),
         }
     if component == "risk":
-        if role in {"account_admission", "account_owner"}:
+        if role == "account_owner":
+            _check_keys(raw, {"role", "account_policy_ref", "provider_session_ref"}, options_path)
+            result = {
+                "role": role,
+                "account_policy_ref": _versioned_ref(raw, "account_policy_ref", options_path),
+            }
+            if "provider_session_ref" in raw:
+                result["provider_session_ref"] = _required_ref(
+                    raw, "provider_session_ref", options_path
+                )
+            return result
+        if role == "account_admission":
             _check_keys(raw, {"role", "account_policy_ref"}, options_path)
             return {
                 "role": role,
@@ -1046,25 +1065,47 @@ def _validate_component_references(
     components: Mapping[str, Mapping[str, Any]],
     instance_roles: Mapping[str, tuple[str, str | None]],
 ) -> None:
-    execution = components.get("execution")
-    if execution is None:
-        return
-    options = execution["settings"].get("options", {})
-    provider_ref = options.get("provider_session_ref")
-    if provider_ref is None:
-        return
     gateway_instances = {
         instance_id: role
         for instance_id, (component, role) in instance_roles.items()
         if component == "gateway"
     }
-    if not gateway_instances or provider_ref not in gateway_instances:
-        _fail("UNKNOWN_REFERENCE", "$.components.execution.settings.options.provider_session_ref")
-    if gateway_instances[provider_ref] != "account_session_worker":
-        _fail(
-            "REFERENCE_TYPE_MISMATCH",
-            "$.components.execution.settings.options.provider_session_ref",
-        )
+    for component_name in ("execution", "risk"):
+        selected = components.get(component_name)
+        if selected is None:
+            continue
+        options = selected["settings"].get("options", {})
+        provider_ref = options.get("provider_session_ref")
+        if provider_ref is None:
+            continue
+        path = f"$.components.{component_name}.settings.options.provider_session_ref"
+        if not gateway_instances or provider_ref not in gateway_instances:
+            _fail("UNKNOWN_REFERENCE", path)
+        if gateway_instances[provider_ref] != "account_session_worker":
+            _fail("REFERENCE_TYPE_MISMATCH", path)
+
+
+
+def _shared_provider_session_binding(
+    port: str,
+    owners: list[tuple[str, Mapping[str, Any]]],
+) -> bool:
+    """Allow one Risk owner to consume its exact Gateway worker's internal port."""
+
+    if port != "service.provider_session" or len(owners) != 2:
+        return False
+    gateway = next((row for row in owners if row[0] == "gateway"), None)
+    risk = next((row for row in owners if row[0] == "risk"), None)
+    if gateway is None or risk is None:
+        return False
+    gateway_options = gateway[1]["settings"].get("options", {})
+    risk_options = risk[1]["settings"].get("options", {})
+    return (
+        gateway_options.get("role") == "account_session_worker"
+        and risk_options.get("role") == "account_owner"
+        and risk_options.get("provider_session_ref")
+        == gateway[1]["settings"].get("instance_id")
+    )
 
 
 def _source_modes(raw: dict[str, Any], path: str) -> list[str]:

@@ -20,11 +20,13 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
 from bt_api_risk import (
+    AccountPositionRiskFact,
     AccountScope,
     DispatchClaimBinding,
     DispatchEvidenceClass,
@@ -37,9 +39,12 @@ from bt_api_risk import (
     DispatchTrackedOrderProof,
     GrossExposureBaselineProof,
     InstrumentRiskFxRate,
+    InstrumentRiskGreeks,
+    InstrumentRiskMetadata,
     OrderExposureObservationProof,
     OrderExposureState,
     OrderFillFact,
+    PositionSnapshotCoverage,
     VerifiedDispatchExposureResolution,
     VerifiedDispatchRecoveryResolution,
     VerifiedDispatchResolution,
@@ -180,6 +185,294 @@ def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8", errors="strict")).hexdigest()
 
 
+def _position_metadata_from_payload(value: object) -> InstrumentRiskMetadata:
+    if not isinstance(value, Mapping):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_METADATA_INVALID")
+    data = dict(value)
+    if data.pop("schema", None) != "bt_api_risk.instrument-admission.v1":
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_METADATA_INVALID")
+    allowed = {
+        "as_of_ns", "contract_multiplier", "expires_at_ns", "fixed_fee", "fixed_fee_unit",
+        "fx_source_ref", "instrument", "max_gross_notional", "max_quantity",
+        "max_slippage_bps", "metadata_version", "min_quantity", "quantity_step",
+        "quantity_unit", "quote_currency", "taker_fee_bps", "tick_size",
+        "underlying_ref", "valuation_unit",
+    }
+    required = {
+        "as_of_ns", "contract_multiplier", "expires_at_ns", "fixed_fee", "instrument",
+        "max_gross_notional", "max_slippage_bps", "metadata_version", "quantity_step",
+        "taker_fee_bps", "tick_size",
+    }
+    if not required <= set(data) or not set(data) <= allowed:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_METADATA_INVALID")
+    try:
+        return InstrumentRiskMetadata(**data)
+    except (TypeError, ValueError):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_METADATA_INVALID") from None
+
+
+def _position_fx_from_payload(value: object) -> InstrumentRiskFxRate:
+    if not isinstance(value, Mapping):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FX_INVALID")
+    data = dict(value)
+    if data.pop("schema", None) != "bt_api_risk.instrument-fx-rate.v1":
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FX_INVALID")
+    pair = data.pop("fx_pair", None)
+    if set(data) != {
+        "instrument", "observed_at_ns", "quote_currency", "rate", "source_record_sha256",
+        "source_ref", "source_revision", "valid_until_ns", "valuation_unit",
+    }:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FX_INVALID")
+    try:
+        result = InstrumentRiskFxRate(**data)
+    except (TypeError, ValueError):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FX_INVALID") from None
+    if pair != result.fx_pair:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FX_INVALID")
+    return result
+
+
+def _position_greeks_from_payload(value: object) -> InstrumentRiskGreeks:
+    if not isinstance(value, Mapping):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_GREEKS_INVALID")
+    data = dict(value)
+    if data.pop("schema", None) != "bt_api_risk.instrument-greeks.v1" or set(data) != {
+        "delta_per_contract", "delta_unit", "gamma_per_contract", "gamma_unit", "instrument",
+        "observed_at_ns", "source_record_sha256", "source_ref", "source_revision",
+        "underlying_ref", "valid_until_ns", "vega_per_contract", "vega_unit",
+    }:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_GREEKS_INVALID")
+    try:
+        return InstrumentRiskGreeks(**data)
+    except (TypeError, ValueError):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_GREEKS_INVALID") from None
+
+
+def _position_risk_fact_from_payload(value: object) -> AccountPositionRiskFact:
+    if not isinstance(value, Mapping):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_INVALID")
+    data = dict(value)
+    if data.pop("schema", None) != "bt_api_risk.account-position-risk-fact.v1" or set(data) != {
+        "fx_rate", "greeks", "instrument", "mark_observed_at_ns", "mark_price",
+        "mark_source_record_sha256", "mark_source_ref", "mark_source_revision",
+        "mark_valid_until_ns", "metadata", "position_id", "position_side",
+        "position_source_record_sha256", "quantity", "quantity_unit", "strategy_id",
+    }:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_INVALID")
+    try:
+        result = AccountPositionRiskFact(
+            position_id=data["position_id"],
+            strategy_id=data["strategy_id"],
+            instrument=data["instrument"],
+            position_side=data["position_side"],
+            quantity=data["quantity"],
+            quantity_unit=data["quantity_unit"],
+            mark_price=data["mark_price"],
+            mark_observed_at_ns=data["mark_observed_at_ns"],
+            mark_valid_until_ns=data["mark_valid_until_ns"],
+            mark_source_ref=data["mark_source_ref"],
+            mark_source_revision=data["mark_source_revision"],
+            mark_source_record_sha256=data["mark_source_record_sha256"],
+            position_source_record_sha256=data["position_source_record_sha256"],
+            metadata=_position_metadata_from_payload(data["metadata"]),
+            fx_rate=None if data["fx_rate"] is None else _position_fx_from_payload(data["fx_rate"]),
+            greeks=None if data["greeks"] is None else _position_greeks_from_payload(data["greeks"]),
+        )
+    except RiskOrderJournalError:
+        raise
+    except (TypeError, ValueError):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_INVALID") from None
+    if dict(value) != result.to_payload():
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_INVALID")
+    return result
+
+
+def _position_coverage_from_payload(
+    value: object, *, scope: AccountScope
+) -> PositionSnapshotCoverage:
+    if not isinstance(value, Mapping):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_INVALID")
+    data = dict(value)
+    if data.pop("schema", None) != "bt_api_risk.position-snapshot-coverage.v1":
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_INVALID")
+    expected = {
+        "account_revision", "account_scope", "filters", "observed_at_ns", "page_count",
+        "pagination_exhausted", "permission_revision", "permission_scope", "query_scope",
+        "snapshot_version", "source_schema_version", "valid_until_ns",
+    }
+    if set(data) != expected or not isinstance(data.get("account_scope"), Mapping):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_INVALID")
+    if dict(data["account_scope"]) != {
+        "account_id": scope.account_id,
+        "environment": scope.environment,
+        "provider": scope.provider,
+    }:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_INVALID")
+    filters = data.get("filters")
+    if type(filters) is not list or any(type(item) is not str for item in filters):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_INVALID")
+    try:
+        result = PositionSnapshotCoverage(
+            scope=scope,
+            account_revision=data["account_revision"],
+            source_schema_version=data["source_schema_version"],
+            query_scope=data["query_scope"],
+            filters=tuple(filters),
+            permission_scope=data["permission_scope"],
+            permission_revision=data["permission_revision"],
+            pagination_exhausted=data["pagination_exhausted"],
+            page_count=data["page_count"],
+            snapshot_version=data["snapshot_version"],
+            observed_at_ns=data["observed_at_ns"],
+            valid_until_ns=data["valid_until_ns"],
+        )
+    except (TypeError, ValueError):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_INVALID") from None
+    if dict(value) != result.to_payload():
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_INVALID")
+    return result
+
+
+def _verify_gateway_position_source_receipt(
+    receipt: object,
+    *,
+    scope: AccountScope,
+    snapshot: Mapping[str, Any],
+    coverage: PositionSnapshotCoverage,
+    facts: tuple[AccountPositionRiskFact, ...],
+    summary_counts: Mapping[str, int],
+) -> None:
+    """Revalidate the exact live owner snapshot before accepting detail rows."""
+
+    try:
+        from bt_api_base.account_protocol import AccountObservation
+        from bt_api_gateway.account_position_snapshot import (
+            GatewayFullPositionSnapshot,
+            GatewayFullPositionSnapshotReceipt,
+        )
+    except ImportError:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_UNAVAILABLE") from None
+    if type(receipt) is not GatewayFullPositionSnapshotReceipt:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_REQUIRED")
+    try:
+        receipt.assert_current()
+    except Exception:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_STALE") from None
+    source = receipt.coverage
+    observation = receipt.observation
+    if (
+        type(source) is not GatewayFullPositionSnapshot
+        or type(observation) is not AccountObservation
+        or source.observation is not observation
+        or source.account_key_id != receipt.account_key.account_key_id
+        or snapshot.get("position_account_key_id")
+        != receipt.account_key.account_key_id
+        or source.session_generation != receipt.session_generation
+        or receipt.account_key.provider != scope.provider
+        or receipt.account_key.environment != scope.environment
+        or observation.account_key != receipt.account_key
+        or not observation.positions_complete
+        or observation.open_orders is None
+        or not observation.open_orders_complete
+        or observation.open_orders
+    ):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_MISMATCH")
+    expected_coverage = PositionSnapshotCoverage(
+        scope=scope,
+        account_revision=source.account_revision,
+        source_schema_version=source.source_schema_version,
+        query_scope=source.query_scope,
+        filters=source.filters,
+        permission_scope=source.permission_scope,
+        permission_revision=source.permission_revision,
+        pagination_exhausted=source.pagination_exhausted,
+        page_count=source.page_count,
+        snapshot_version=source.snapshot_version,
+        observed_at_ns=source.observed_at_ns,
+        valid_until_ns=receipt.valid_until_ns,
+    )
+    if coverage != expected_coverage:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_MISMATCH")
+    expected_rows = [item.to_dict() for item in observation.positions]
+    if (
+        snapshot.get("provider_positions") != expected_rows
+        or snapshot.get("position_source_receipt_sha256") != receipt.fingerprint
+    ):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_MISMATCH")
+
+    rows_by_digest: dict[str, Mapping[str, Any]] = {}
+    for position in observation.positions:
+        instrument = position.instrument
+        if (
+            instrument.provider != receipt.account_key.provider
+            or instrument.venue != receipt.account_key.venue
+            or instrument.environment != receipt.account_key.environment
+            or instrument.product_type != position.resource.product_type
+        ):
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_ACCOUNT_IDENTITY_MISMATCH")
+        row = position.to_dict()
+        digest = sha256_text(canonical_json(row))
+        if digest in rows_by_digest:
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_DUPLICATE")
+        rows_by_digest[digest] = row
+    nonzero_rows = {
+        digest: row
+        for digest, row in rows_by_digest.items()
+        if Decimal(str(row["quantity"])) != 0
+    }
+    facts_by_source: dict[str, AccountPositionRiskFact] = {}
+    for fact in facts:
+        if fact.position_source_record_sha256 in facts_by_source:
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_DUPLICATE")
+        facts_by_source[fact.position_source_record_sha256] = fact
+    if set(facts_by_source) != set(nonzero_rows):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACTS_INCOMPLETE")
+
+    facts_by_strategy: dict[str, list[AccountPositionRiskFact]] = {}
+    for row_digest, row in nonzero_rows.items():
+        fact = facts_by_source[row_digest]
+        raw_quantity = Decimal(str(row["quantity"]))
+        raw_side = str(row["side"])
+        expected_side = (
+            ("SHORT" if raw_quantity < 0 else "LONG")
+            if raw_side == "net"
+            else ("SHORT" if raw_side == "short" else "LONG")
+        )
+        instrument = row["instrument"]
+        if not isinstance(instrument, Mapping) or (
+            fact.instrument != instrument.get("instrument_id")
+            or fact.quantity != abs(raw_quantity)
+            or fact.quantity_unit != row.get("qty_unit")
+            or fact.position_side != expected_side
+        ):
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_SOURCE_MISMATCH")
+        facts_by_strategy.setdefault(fact.strategy_id, []).append(fact)
+
+    if summary_counts != {
+        strategy_id: len(strategy_facts)
+        for strategy_id, strategy_facts in facts_by_strategy.items()
+    }:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SUMMARY_MISMATCH")
+    summary_by_strategy = {
+        row["strategy_id"]: row for row in snapshot["positions"]
+    }
+    if set(summary_by_strategy) != set(facts_by_strategy):
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SUMMARY_MISMATCH")
+    for strategy_id, strategy_facts in facts_by_strategy.items():
+        ordered_facts = sorted(strategy_facts, key=lambda item: item.position_id)
+        source_rows = [
+            rows_by_digest[fact.position_source_record_sha256]
+            for fact in ordered_facts
+        ]
+        summary = summary_by_strategy[strategy_id]
+        if (
+            summary["source_record_sha256"] != sha256_text(canonical_json(source_rows))
+            or summary["valuation_facts_sha256"]
+            != sha256_text(canonical_json([fact.to_payload() for fact in ordered_facts]))
+        ):
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SUMMARY_MISMATCH")
+
+
 def _require_sha256(value: object, label: str) -> str:
     if (
         type(value) is not str
@@ -306,13 +599,17 @@ class RiskOrderJournal:
         fence: RiskOrderWriterFence,
         *,
         source_snapshot: Mapping[str, Any],
+        position_source_receipt: object | None = None,
     ) -> GrossExposureBaselineProof:
         """Persist a complete, source-shaped account baseline under the account fence.
 
-        The caller supplies the provider adapter's normalized account snapshot.
-        This method derives the Risk proof from its explicit revision, scope,
-        completeness, strategy-attributed position rows and valuation facts;
-        it never accepts caller-computed aggregate totals.
+        The server-side producer supplies its normalized account snapshot.
+        Dimension-enabled baselines also require the canonical full-query
+        coverage receipt and every position's typed mark, metadata, FX, and
+        optional Greek facts. Their strategy gross values are revalued here and
+        must exactly match the producer's attributed summary. A legacy
+        completeness boolean remains readable for policies without dimension
+        caps; Risk refuses it when those caps are configured.
         """
 
         self._assert_current(fence)
@@ -332,8 +629,19 @@ class RiskOrderJournal:
             "valid_until_ns",
             "valuation_facts",
         }
-        if set(snapshot) != required:
+        position_detail_keys = {"position_coverage", "position_risk_facts"}
+        position_source_keys = {
+            "position_account_key_id",
+            "position_source_receipt_sha256",
+            "provider_positions",
+        }
+        if set(snapshot) not in (
+            required,
+            required | position_detail_keys,
+            required | position_detail_keys | position_source_keys,
+        ):
             raise RiskOrderJournalError("GROSS_BASELINE_SOURCE_INVALID")
+        has_position_details = position_detail_keys <= set(snapshot)
         account_scope = snapshot.get("account_scope")
         if (
             not isinstance(account_scope, Mapping)
@@ -359,9 +667,48 @@ class RiskOrderJournal:
         ):
             raise RiskOrderJournalError("GROSS_BASELINE_SOURCE_INCOMPLETE")
 
+        position_coverage = None
+        position_facts: tuple[AccountPositionRiskFact, ...] = ()
+        source_gross_by_strategy: dict[str, Fraction] = {}
+        if has_position_details:
+            raw_facts = snapshot.get("position_risk_facts")
+            if type(raw_facts) is not list:
+                raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACTS_INCOMPLETE")
+            position_coverage = _position_coverage_from_payload(
+                snapshot.get("position_coverage"), scope=fence.scope
+            )
+            if (
+                position_coverage.account_revision != snapshot["account_revision"]
+                or position_coverage.source_schema_version != snapshot["source_schema_version"]
+                or position_coverage.observed_at_ns != snapshot["observed_at_ns"]
+                or position_coverage.valid_until_ns > snapshot["valid_until_ns"]
+            ):
+                raise RiskOrderJournalError("GROSS_BASELINE_POSITION_COVERAGE_MISMATCH")
+            parsed_facts = tuple(_position_risk_fact_from_payload(item) for item in raw_facts)
+            if len({item.position_id for item in parsed_facts}) != len(parsed_facts):
+                raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_DUPLICATE")
+            if snapshot["valuation_facts"] != [item.to_payload() for item in parsed_facts]:
+                raise RiskOrderJournalError("GROSS_BASELINE_POSITION_VALUATION_MISMATCH")
+            for fact in parsed_facts:
+                if fact.metadata.valuation_unit != snapshot["notional_unit"]:
+                    raise RiskOrderJournalError("GROSS_BASELINE_POSITION_UNIT_MISMATCH")
+                try:
+                    gross_notional, _ = fact.exposure_dimensions(
+                        (),
+                        now_ns=position_coverage.observed_at_ns,
+                        max_age_ns=position_coverage.observed_at_ns,
+                    )
+                except (TypeError, ValueError, InvalidOperation):
+                    raise RiskOrderJournalError("GROSS_BASELINE_POSITION_FACT_INVALID") from None
+                source_gross_by_strategy[fact.strategy_id] = (
+                    source_gross_by_strategy.get(fact.strategy_id, Fraction(0))
+                    + Fraction(gross_notional)
+                )
+            position_facts = parsed_facts
+
         from bt_api_risk import StrategyGrossBaseline
 
-        by_strategy: dict[str, tuple[Decimal, int]] = {}
+        by_strategy: dict[str, tuple[Fraction, int]] = {}
         for row in snapshot["positions"]:
             if not isinstance(row, Mapping) or set(row) != {
                 "active_increase_intent_count",
@@ -393,14 +740,41 @@ class RiskOrderJournal:
                 raise RiskOrderJournalError("GROSS_BASELINE_POSITION_INVALID") from None
             if not gross.is_finite() or gross < 0:
                 raise RiskOrderJournalError("GROSS_BASELINE_POSITION_INVALID")
-            prior_gross, prior_count = by_strategy.get(strategy_id, (Decimal(0), 0))
-            by_strategy[strategy_id] = (prior_gross + gross, prior_count + count)
+            prior_gross, prior_count = by_strategy.get(strategy_id, (Fraction(0), 0))
+            by_strategy[strategy_id] = (prior_gross + Fraction(gross), prior_count + count)
+
+        if has_position_details and any(
+            by_strategy.get(strategy_id, (Fraction(0), 0))[0]
+            != source_gross_by_strategy.get(strategy_id, Fraction(0))
+            for strategy_id in set(by_strategy) | set(source_gross_by_strategy)
+        ):
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_REVALUATION_MISMATCH")
+
+        has_position_source = position_source_receipt is not None
+        if has_position_source:
+            if not has_position_details or not position_source_keys <= set(snapshot):
+                raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_MISMATCH")
+            _verify_gateway_position_source_receipt(
+                position_source_receipt,
+                scope=fence.scope,
+                snapshot=snapshot,
+                coverage=position_coverage,
+                facts=position_facts,
+                summary_counts={
+                    strategy_id: count
+                    for strategy_id, (_, count) in by_strategy.items()
+                },
+            )
+        elif position_source_keys & set(snapshot):
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_REQUIRED")
 
         strategies = tuple(
-            StrategyGrossBaseline(strategy_id, gross, count)
+            StrategyGrossBaseline(strategy_id, _decimal_from_fraction_exact(gross), count)
             for strategy_id, (gross, count) in sorted(by_strategy.items())
         )
-        account_gross = sum((item.gross_notional for item in strategies), Decimal(0))
+        account_gross = _decimal_from_fraction_exact(
+            sum((gross for gross, _ in by_strategy.values()), Fraction(0))
+        )
         account_count = sum(item.active_increase_intent_count for item in strategies)
         positions_sha = sha256_text(canonical_json(snapshot["positions"]))
         orders_sha = sha256_text(canonical_json(snapshot["open_orders"]))
@@ -426,10 +800,58 @@ class RiskOrderJournal:
             writer_owner_id=fence.owner_id,
             writer_fencing_token=fence.fencing_token,
             writer_fence_sha256=fence.fence_sha256,
+            # Shape-only legacy mappings remain readable for policies without
+            # dimensions, but their coverage/facts never become admission
+            # evidence. Only a current Gateway owner receipt gets projected
+            # into the typed Risk proof.
+            position_coverage=position_coverage if has_position_source else None,
+            position_risk_facts=position_facts if has_position_source else (),
         )
         snapshot_json = canonical_json(snapshot)
         with self._transaction() as connection:
             self._assert_current_in(connection, fence)
+            prior_scope_rows = connection.execute(
+                """SELECT source_snapshot_json FROM risk_order_gross_baselines
+                   WHERE scope_key=? ORDER BY account_revision""",
+                (fence.scope.key,),
+            ).fetchall()
+            if has_position_source:
+                account_key_id = position_source_receipt.account_key.account_key_id
+                for prior_scope_row in prior_scope_rows:
+                    try:
+                        prior_snapshot = json.loads(prior_scope_row["source_snapshot_json"])
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        raise RiskOrderJournalError(
+                            "GROSS_BASELINE_POSITION_ACCOUNT_IDENTITY_UNKNOWN"
+                        ) from None
+                    prior_account_key_id = (
+                        prior_snapshot.get("position_account_key_id")
+                        if isinstance(prior_snapshot, Mapping)
+                        else None
+                    )
+                    if type(prior_account_key_id) is not str:
+                        raise RiskOrderJournalError(
+                            "GROSS_BASELINE_POSITION_ACCOUNT_IDENTITY_UNKNOWN"
+                        )
+                    if prior_account_key_id != account_key_id:
+                        raise RiskOrderJournalError(
+                            "GROSS_BASELINE_POSITION_ACCOUNT_IDENTITY_MISMATCH"
+                        )
+            else:
+                for prior_scope_row in prior_scope_rows:
+                    try:
+                        prior_snapshot = json.loads(prior_scope_row["source_snapshot_json"])
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        raise RiskOrderJournalError(
+                            "GROSS_BASELINE_POSITION_ACCOUNT_IDENTITY_UNKNOWN"
+                        ) from None
+                    if (
+                        isinstance(prior_snapshot, Mapping)
+                        and "position_account_key_id" in prior_snapshot
+                    ):
+                        raise RiskOrderJournalError(
+                            "GROSS_BASELINE_POSITION_SOURCE_REQUIRED"
+                        )
             prior = connection.execute(
                 "SELECT * FROM risk_order_gross_baselines WHERE scope_key=? AND account_revision=?",
                 (fence.scope.key, proof.account_revision),
@@ -462,6 +884,117 @@ class RiskOrderJournal:
             )
         return proof
 
+    def has_matching_gateway_position_baseline(
+        self,
+        fence: RiskOrderWriterFence,
+        *,
+        source_snapshot: Mapping[str, Any],
+    ) -> bool:
+        """Check an immutable prior full-source row for exact baseline replay.
+
+        The receipt digest itself is generation/cursor bound and naturally
+        changes after a Gateway worker restart.  This read-only check accepts
+        a same-revision replay only when the persisted row was originally
+        inserted through the typed Gateway receipt path and every stable
+        source, coverage, valuation and summary field is identical.
+        """
+
+        self._assert_current(fence)
+        if not isinstance(source_snapshot, Mapping):
+            raise RiskOrderJournalError("GROSS_BASELINE_SOURCE_INVALID")
+        expected = dict(source_snapshot)
+        revision = expected.get("account_revision")
+        if (
+            type(revision) is not int
+            or revision <= 0
+            or not {
+                "position_account_key_id",
+                "position_coverage",
+                "position_risk_facts",
+                "position_source_receipt_sha256",
+                "provider_positions",
+            }.issubset(expected)
+        ):
+            raise RiskOrderJournalError("GROSS_BASELINE_POSITION_SOURCE_REQUIRED")
+        try:
+            _require_sha256(
+                expected.get("position_source_receipt_sha256"),
+                "baseline position source receipt",
+            )
+            with self._connection() as connection:
+                self._assert_current_in(connection, fence)
+                row = connection.execute(
+                    "SELECT * FROM risk_order_gross_baselines "
+                    "WHERE scope_key=? AND account_revision=?",
+                    (fence.scope.key, revision),
+                ).fetchone()
+            if row is None:
+                return False
+            stored_text = row["source_snapshot_json"]
+            stored = json.loads(stored_text)
+            if (
+                type(stored) is not dict
+                or canonical_json(stored) != stored_text
+                or row["source_snapshot_sha256"]
+                != sha256_text(stored_text)
+                or type(row["proof_sha256"]) is not str
+                or len(row["proof_sha256"]) != 64
+            ):
+                raise RiskOrderJournalError("GROSS_BASELINE_PRIOR_SOURCE_INVALID")
+            stored_receipt_sha = stored.get("position_source_receipt_sha256")
+            _require_sha256(stored_receipt_sha, "persisted position source receipt")
+            stored_coverage = _position_coverage_from_payload(
+                stored.get("position_coverage"), scope=fence.scope
+            )
+            stored_facts_raw = stored.get("position_risk_facts")
+            stored_provider_positions = stored.get("provider_positions")
+            if (
+                type(stored_facts_raw) is not list
+                or type(stored_provider_positions) is not list
+                or stored_coverage.account_revision != revision
+                or stored.get("complete_positions") is not True
+                or stored.get("complete_open_orders") is not True
+                or stored.get("open_orders") != []
+            ):
+                raise RiskOrderJournalError("GROSS_BASELINE_PRIOR_SOURCE_INVALID")
+            stored_facts = tuple(
+                _position_risk_fact_from_payload(item) for item in stored_facts_raw
+            )
+            if (
+                stored.get("valuation_facts") != [fact.to_payload() for fact in stored_facts]
+                or len({fact.position_id for fact in stored_facts}) != len(stored_facts)
+            ):
+                raise RiskOrderJournalError("GROSS_BASELINE_PRIOR_SOURCE_INVALID")
+            for name in (
+                "account_scope",
+                "complete_open_orders",
+                "complete_positions",
+                "notional_unit",
+                "observed_at_ns",
+                "open_orders",
+                "position_account_key_id",
+                "position_coverage",
+                "position_risk_facts",
+                "positions",
+                "provider_positions",
+                "source_schema_version",
+                "valid_until_ns",
+                "valuation_facts",
+            ):
+                if name not in stored or name not in expected:
+                    raise RiskOrderJournalError("GROSS_BASELINE_PRIOR_SOURCE_INVALID")
+            # A new Gateway generation changes only the receipt fingerprint.
+            # All provider rows and trusted valuation bindings remain exact.
+            stored.pop("position_source_receipt_sha256", None)
+            expected.pop("position_source_receipt_sha256", None)
+            if canonical_json(stored) != canonical_json(expected):
+                raise RiskOrderJournalError("GROSS_BASELINE_REVISION_CONFLICT")
+        except RiskOrderJournalError:
+            raise
+        except Exception:
+            raise RiskOrderJournalError("GROSS_BASELINE_PRIOR_SOURCE_INVALID") from None
+        self._assert_current(fence)
+        return True
     @contextmanager
     def baseline_guard(self, proof: GrossExposureBaselineProof) -> Iterator[VerifiedGrossExposureBaseline | None]:
         """Bind Risk's baseline commit to the exact ingested source snapshot."""
@@ -4062,6 +4595,27 @@ def _decimal_text(value: Decimal) -> str:
     if "." in result:
         result = result.rstrip("0").rstrip(".")
     return result
+
+def _decimal_from_fraction_exact(value: Fraction) -> Decimal:
+    """Convert a rational made from finite Decimals without context rounding."""
+
+    numerator = value.numerator
+    denominator = value.denominator
+    twos = 0
+    fives = 0
+    while denominator % 2 == 0:
+        twos += 1
+        denominator //= 2
+    while denominator % 5 == 0:
+        fives += 1
+        denominator //= 5
+    if denominator != 1:
+        raise RiskOrderJournalError("GROSS_BASELINE_POSITION_ARITHMETIC_INVALID")
+    places = max(twos, fives)
+    scaled = abs(numerator) * (2 ** (places - twos)) * (5 ** (places - fives))
+    digits = tuple(int(character) for character in str(scaled))
+    sign = 1 if numerator < 0 else 0
+    return Decimal((sign, digits, -places))
 
 
 _FINITE_DECIMAL_TEXT = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)\Z")
