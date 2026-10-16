@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "D:\temp\it10scn02-r5-20261016-r1\02b-007-legacy-entries\in-process-main\driver.py", line 27, in <module>
+    spec.loader.exec_module(module)
+  File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+  File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+  File "D:\source_code\backtrader\examples\unified\007_ctp\ctp_bbroker_5s_examples\live\run.py", line 53, in <module>
+    from ctp_bar_examples_common import format_summary, get_strategy_class
+  File "D:\source_code\backtrader\examples\unified\007_ctp\ctp_bar_examples_common.py", line 19, in <module>
+    from backtrader.channel import StreamingEventQueue
+ModuleNotFoundError: No module named 'backtrader.channel'

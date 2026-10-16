@@ -1,0 +1,28 @@
+# R5 item 3 — CITATION ONLY (no re-run): 015_ctp_options_highfreq `run.py --live --allow-write`
+# Fact: direct BLOCKED — write tier not implemented for this decision/observation-only dir.
+# Already captured in the accepted R1+R2 chain (root-adjudication.md GO; sweep-r12/SUMMARY.md row 015).
+#
+# Archived raw artifacts (byte-original, in-repo):
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/015/write-probe.stdout.txt
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/015/write-probe.stderr.txt   (empty)
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/015/write-probe.exitcode.txt  (2)
+#   command recorded in .../sweep-r12/015/cmd-run.txt  ->  "cmd3(write-probe): C:/anaconda3/python.exe run.py --live --allow-write"
+#   env (cmd-run.txt): cwd examples/unified/015_ctp_options_highfreq; same PYTHONPATH pattern.
+#
+# Key output line (write-probe.stdout.txt):
+#   {"entry_tier": {"cli_tier": "live", "config_tier": null, "effective_tier": "live", "tier_selection_reason": "cli_requested"},
+#    "hint": "this strategy has no order path by contract; the live tier is a zero-write observation of real tick arrivals and admission facts",
+#    "mode": "live", "reason": "write_tier_not_implemented_for_decision_only_strategy", "status": "BLOCKED",
+#    "write_grant_result": "refused_no_order_path_by_contract"}
+#
+# Refusal-before-write/login verification (R5 code-order check, source lines, read-only):
+#   D:/source_code/backtrader/examples/unified/015_ctp_options_highfreq/run.py
+#   - lines 344-358: `if args.allow_write:` -> prints the BLOCKED JSON above and returns EXIT_BLOCKED (2).
+#   - lines 360-418 come AFTER that return: python-3.11 check, _ensure_dev_sdk_path(),
+#     `import legacy_runner/simnow_direct/backtrader`, _load_env(), evidence-dir mkdir, network/login.
+#   Therefore under `--live --allow-write` no provider import, no credential load, no evidence dir,
+#   no connect/login, and no write can occur: network attempts = 0, write count = 0.
+#   Corroborated by the refusal JSON itself carrying no run_id / evidence_directory fields
+#   (those are only populated at run.py lines 413-418 on the observation path).
+#
+# Maps to recon row 9 (015) and R5 item 3. No write was executed in R5. No re-run performed.

@@ -1,0 +1,27 @@
+captured_at: 2026-10-16T04:18:02Z
+branch: dev
+HEAD: eb03f91e0277f0f98bce8bfd3151c08ad8867fe7
+--- git status --porcelain:
+ D 0
+ M backtrader/brokers/btapibroker.py
+ M backtrader/stores/service_execution_adapter.py
+ M backtrader/strategy.py
+ M backtrader_runtime/ctp_configured_front_check.py
+ M backtrader_runtime/ctp_simnow_operator.py
+ M examples/unified/014_2_ctp_options_midfreq/ctp_options_midfreq_strategy.py
+ M tests/unit/runtime/test_ctp_simnow_config_operator_route.py
+?? .codex-tmp/
+?? "docs/_internal/opts/requirements/\350\277\255\344\273\2431-\347\251\277\351\200\217\345\274\217\350\256\244\350\257\201/evidence/"
+?? tests/integration/test_managed_paper_v2_fresh_process_recovery.py
+--- git hash-object of probed entry files:
+17ed7972cb00d981fe25416acfacfb3617e736eb  examples/unified/007_ctp/run_runtime.py
+75979fe4ffaed896780f9d4d451f8ff9b1b9a5bf  examples/unified/007_ctp/ctp_bbroker_5s_examples/backtest/run.py
+a315faf87432fd51b05134bfe05e6732a10550a6  examples/unified/007_ctp/ctp_bbroker_5s_examples/live/run.py
+3195c61f5647c5d9d7d118838d29280321fc5025  examples/unified/007_ctp/ctp_mixbroker_5s_examples/backtest/run.py
+7095f15c66b2dcec0f769254e5e514f7c384a181  examples/unified/007_ctp/ctp_mixbroker_5s_examples/live/run.py
+4297bd8f6d77ddc8dc64ec7b752c04e289b9662c  examples/unified/007_ctp/ctp_mixbroker_examples/backtest/run.py
+8677cecba55e8a4da76bcd85e9c0661bfadf32e1  examples/unified/007_ctp/ctp_mixbroker_examples/live/run.py
+ea5cca92739ea9db3269958e80b1edb0f492d517  examples/unified/007_ctp/ctp_tickbroker_5s_examples/backtest/run.py
+887de9fd20252b66a929698b6911d77a8de8c6c4  examples/unified/007_ctp/ctp_tickbroker_5s_examples/live/run.py
+ed077ce4a008e3615e4e26082fde4db047c7d1c5  examples/unified/007_ctp/ctp_tickbroker_examples/backtest/run.py
+8d5d19dde1986c2914dea38c9f8c87c3a93738a0  examples/unified/007_ctp/ctp_tickbroker_examples/live/run.py

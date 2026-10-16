@@ -1,0 +1,40 @@
+ctp_bbroker_5s_examples/backtest/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_bbroker_5s_examples/live/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_mixbroker_5s_examples/backtest/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_mixbroker_5s_examples/live/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_mixbroker_examples/backtest/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_mixbroker_examples/live/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_tickbroker_5s_examples/backtest/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_tickbroker_5s_examples/live/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_tickbroker_examples/backtest/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True
+ctp_tickbroker_examples/live/run.py:
+  fence runtime_dir = D:\source_code\backtrader\examples\unified\runtime  exists=False
+  fence sys.path.insert(repo_root) = D:\source_code  has_backtrader_runtime=False
+  correct runtime_dir would be      D:\source_code\backtrader\examples\unified\007_ctp\runtime  exists=True

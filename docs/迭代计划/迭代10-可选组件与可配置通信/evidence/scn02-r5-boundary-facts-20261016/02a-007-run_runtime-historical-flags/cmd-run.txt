@@ -1,0 +1,22 @@
+# R5 item 2a — 007_ctp run_runtime.py historical-flag rejection (FRESH capture)
+
+interpreter: C:/anaconda3/python.exe  (Python 3.11.5)
+cwd: D:/source_code/backtrader/examples/unified/007_ctp
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+env additions: none (no write flag; no credentials read; no network)
+
+cmd1(help):            C:/anaconda3/python.exe run_runtime.py --help
+cmd2(flag-config):     C:/anaconda3/python.exe run_runtime.py --config runtime/config.yaml
+cmd3(flag-mode-all):   C:/anaconda3/python.exe run_runtime.py --mode live --all
+cmd4(flag-dry-run):    C:/anaconda3/python.exe run_runtime.py --dry-run
+
+Observed (raw files beside this cmd-run.txt):
+- help: exit 0; usage lists ONLY "[-h] [--runtime-dir RUNTIME_DIR]" (README's historical
+  flags --config/--dry-run/--mode/--all are not accepted by this route).
+- flag-config / flag-mode-all / flag-dry-run: exit 2 each; stdout empty; stderr:
+  "usage: run_runtime.py [-h] [--runtime-dir RUNTIME_DIR]" +
+  "run_runtime.py: error: unrecognized arguments: ..." -> argparse rejects the historical
+  flags before the runtime profile is even resolved.
+
+Context: no-arg `run_runtime.py` (zero-I/O LOCAL_REPLAY_PASS) is already captured in the
+accepted R2 chain (sweep-r12/007_ctp/replay-route.*) and is NOT re-run here.

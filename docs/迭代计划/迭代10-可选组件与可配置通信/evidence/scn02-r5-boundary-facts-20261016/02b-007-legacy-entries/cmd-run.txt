@@ -1,0 +1,72 @@
+# R5 item 2b — 007_ctp legacy fail-closed entries (FRESH capture)
+
+interpreter: C:/anaconda3/python.exe  (Python 3.11.5)
+cwd: D:/source_code/backtrader/examples/unified/007_ctp
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+env additions: none in flag-reject/ variants/ no-arg-alias/ (mission-exact pattern);
+supplementary-repo-root/ and in-process-main/ APPEND D:/source_code/backtrader to PYTHONPATH
+(clearly-labeled diagnostic variant, see below).
+
+## A. flag-reject/  — historical flag `--config single_symbol.yaml` on all 10 entries
+cmd per entry: C:/anaconda3/python.exe ctp_<family>_examples/<backtest|live>/run.py --config single_symbol.yaml
+entries: ctp_bbroker_5s_examples/backtest, ctp_bbroker_5s_examples/live,
+         ctp_mixbroker_5s_examples/backtest, ctp_mixbroker_5s_examples/live,
+         ctp_mixbroker_examples/backtest, ctp_mixbroker_examples/live,
+         ctp_tickbroker_5s_examples/backtest, ctp_tickbroker_5s_examples/live,
+         ctp_tickbroker_examples/backtest, ctp_tickbroker_examples/live
+Observed: ALL 10 -> exit 1, stdout empty, stderr traceback ending in
+  "ModuleNotFoundError: No module named 'backtrader_runtime'" (run.py line 17).
+  NOT the documented rejection JSON: the file's own fence computes a wrong repository root
+  (see fence-path-math.txt) so the module-level `from backtrader_runtime.legacy import ...`
+  cannot resolve under the documented invocation. Still fail-closed: nothing executed.
+
+## B. variants/ — other historical flag classes on ctp_bbroker_5s_examples/live/run.py
+cmd: same interpreter/cwd/env, flags: --dry-run / --mode live / --all / --subprocess-child
+Observed: all exit 1, same ModuleNotFoundError (documented flags are unreachable).
+
+## C. no-arg-alias/ — README claims no-arg invocation routes to the registered runtime
+cmd: C:/anaconda3/python.exe ctp_bbroker_5s_examples/{backtest|live}/run.py   (no args)
+Observed: both exit 1, same ModuleNotFoundError (alias does NOT reach the runtime).
+
+## D. fence-path-math.txt — diagnostic (read-only Python probe)
+Shows for all 10 run.py files: committed fence `parents[3] / "runtime"` resolves to
+  D:\source_code\backtrader\examples\unified\runtime  (does not exist)
+and inserts repo root D:\source_code on sys.path (no backtrader_runtime there),
+while the correct dir (parents[2] / "runtime" = 007_ctp\runtime) exists. Uniform off-by-one
+introduced/left by the iteration43 relocation (git: file added in commit db5ad2b21
+"refactor(iteration43): relocate dual-channel examples under examples/unified").
+
+## E. supplementary-repo-root/ — designed rejection path, with checkout root importable
+env: mission PYTHONPATH + ";D:/source_code/backtrader" appended (label: .reporoot.)
+cmd1: C:/anaconda3/python.exe ctp_bbroker_5s_examples/live/run.py --config single_symbol.yaml
+      -> exit 2; stderr JSON: {"error_code": "PRESET_POLICY_VIOLATION", "field_path": "argv",
+         "reason": "legacy_cli_arguments_not_supported", "message": "legacy CLI arguments cannot
+         select or override an Iteration 41 runtime; supplied values are redacted (***)"}
+cmd2: same for ctp_bbroker_5s_examples/backtest/run.py --config single_symbol.yaml -> exit 2.
+cmd3: C:/anaconda3/python.exe ctp_bbroker_5s_examples/live/run.py   (no args)
+      -> exit 2; stderr JSON: {"error_code": "PRESET_POLICY_VIOLATION", "field_path": "strategy_dir",
+         "reason": "runtime_not_registered", "message": "strategy runtime directory is not registered",
+         "diagnostic": {"offline": true, "provider_preflight_started": false, ...}}
+      (the alias targets the miscomputed examples/unified/runtime -> runtime_not_registered;
+       it does NOT reach 007_ctp/runtime as the README claims.)
+
+## F. in-process-main/ — designed legacy_direct_execution_error guard
+driver.py (v1) : importlib exec of .../ctp_bbroker_5s_examples/live/run.py with repo root inserted;
+  raw failure kept (driver.stderr.txt): the fence's D:/source_code insertion makes `import backtrader`
+  resolve to the checkout dir as a PEP-420 namespace package, so ctp_bar_examples_common.py's
+  `from backtrader.channel import StreamingEventQueue` fails (shadow, not a missing file).
+driver-v2.py (v2, final): pre-imports the real backtrader package, then execs the module and calls
+  run.py's module-level main().
+cmd: C:/anaconda3/python.exe <this dir>/driver-v2.py   (mission PYTHONPATH)
+Observed: exit 0; stdout:
+  {"main_defined": true, "module_import_failure": null,
+   "main_raised_type": "RuntimeConfigError",
+   "main_raised_error": {"error_code": "PRESET_POLICY_VIOLATION", "field_path": "legacy_entrypoint",
+     "reason": "legacy_direct_execution_not_supported",
+     "message": "the historical direct execution entrypoint is not supported by the Iteration 41 runtime;
+      use the registered configuration-first migration route"}}
+  -> the designed fail-closed guard exists and is intact; the CLI paths above cannot reach it
+     under the documented invocation because of the fence path defect.
+
+NOTE: no write flag, no credential read, no network, no repo file modified by any run here
+(git-post.txt vs git-baseline.txt).

@@ -1,0 +1,14 @@
+usage: run_runtime.py [-h] [--runtime-dir RUNTIME_DIR]
+
+Fail-closed Iteration 41 migration route for the historical CTP examples. The
+old 007 runners include direct SimNow/CTP wiring and locally owned order,
+timer, and cancellation flows. They are retained for source review, but they
+are not an execution route in this iteration. This registered profile only
+validates a mandatory schema-v4 ``config.yaml`` and emits a local no-action
+report. It never imports Backtrader, a CTP extension, an SDK provider, or
+legacy YAML/credential files.
+
+options:
+  -h, --help            show this help message and exit
+  --runtime-dir RUNTIME_DIR
+                        registered runtime directory; must contain config.yaml

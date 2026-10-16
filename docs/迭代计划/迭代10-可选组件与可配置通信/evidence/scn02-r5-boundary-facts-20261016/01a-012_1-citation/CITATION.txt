@@ -1,0 +1,21 @@
+# R5 item 1a — CITATION ONLY (no re-run): 012_1 `run.py --live` without --allow-write
+# Fact: explicit observe-gap BLOCKED fact. Already captured in the accepted R1+R2 chain
+# (root-adjudication.md: "GO (增量归档级)"; sweep-r12/SUMMARY.md row 012_1).
+#
+# Archived raw artifacts (byte-original, in-repo):
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/012_1/live-probe.stdout.txt
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/012_1/live-probe.stderr.txt   (empty)
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/012_1/live-probe.exitcode.txt  (2)
+#   command recorded in .../sweep-r12/012_1/cmd-dry.txt  ->  "cmd3(observe-probe): C:/anaconda3/python.exe run.py --live"
+#   env (cmd-dry.txt): cwd examples/unified/012_1_midfreq_cross_exchange;
+#   PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+#
+# Key output line (live-probe.stdout.txt):
+#   {"channel": "observe", ..., "gap": "this example has no standalone zero-write observation path; ...",
+#    "hint": "add --allow-write to run the admitted demo path; nothing was connected or ordered",
+#    "mode": "live", "reason": "live_observation_unavailable", "status": "BLOCKED", "write_grant_result": "not_requested"}
+#   (entry_tier: cli_tier=live, effective_tier=live, tier_selection_reason=cli_requested)
+#
+# Maps to recon row 2 (012_1) and R5 item 1: `run.py --live` WITHOUT --allow-write returns
+# BLOCKED/live_observation_unavailable on channel=observe; no write grant requested, nothing connected.
+# No write flag was used. No re-run performed in R5.

@@ -1,0 +1,19 @@
+# R5 item 1b — CITATION ONLY (no re-run): 012_2 `run.py --live` without --allow-write
+# Fact: explicit observe-gap BLOCKED fact. Already captured in the accepted R1+R2 chain
+# (root-adjudication.md: "GO (增量归档级)"; sweep-r12/SUMMARY.md row 012_2).
+#
+# Archived raw artifacts (byte-original, in-repo):
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/012_2/live-probe.stdout.txt
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/012_2/live-probe.stderr.txt   (empty)
+#   D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn02-r12-r34-evidence-20261016/sweep-r12/012_2/live-probe.exitcode.txt  (2)
+#   command recorded in .../sweep-r12/012_2/cmd-run.txt  ->  "cmd3(observe-probe): C:/anaconda3/python.exe run.py --live"
+#   env (cmd-run.txt): cwd examples/unified/012_2_event_driven_cross_exchange; same PYTHONPATH pattern as 012_1.
+#
+# Key output line (live-probe.stdout.txt): byte-identical BLOCKED payload to 012_1:
+#   {"channel": "observe", ..., "reason": "live_observation_unavailable", "status": "BLOCKED",
+#    "write_grant_result": "not_requested", "mode": "live"}
+#   (HFT label boundary: event-driven dir keeps hft_label=event_driven / HFT_FAILED NOT_ADMITTED per SUMMARY.)
+#
+# Maps to recon row 3 (012_2) and R5 item 1: `run.py --live` WITHOUT --allow-write returns
+# BLOCKED/live_observation_unavailable on channel=observe; nothing connected or ordered.
+# No write flag was used. No re-run performed in R5.
