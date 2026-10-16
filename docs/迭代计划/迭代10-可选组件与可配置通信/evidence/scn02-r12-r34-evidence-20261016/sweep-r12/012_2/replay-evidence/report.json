@@ -1,0 +1,1011 @@
+{
+  "business_summary": {
+    "candidate_sha256": "593a7f3ef8fa9221d6c7607cc722eaddf038e88792f10d7b56c9cf0b0494e2cf",
+    "config_sha256": "e57da86e9367ec445fccc1675fb23ea7fa91b53147ebe62b1329bdc61eb54397",
+    "configuration": {
+      "entry": {
+        "credentials": {
+          "binance_api_key_env": "BINANCE_DEMO_API_KEY",
+          "binance_secret_env": "BINANCE_DEMO_SECRET",
+          "okx_api_key_env": "OKX_DEMO_API_KEY",
+          "okx_passphrase_env": "OKX_DEMO_PASSPHRASE",
+          "okx_secret_env": "OKX_DEMO_SECRET"
+        },
+        "evidence_boundary": "MECHANICAL_DEMO_SMOKE_NOT_RESEARCH",
+        "policy": {
+          "max_actions": 40,
+          "max_order_notional_usdt": "100",
+          "max_round_trips": 1
+        },
+        "timeouts": {
+          "run_seconds": 180,
+          "stop_seconds": 30
+        },
+        "venue": [
+          "okx",
+          "binance"
+        ]
+      },
+      "funding": {
+        "max_age_seconds": "30.0",
+        "refresh_interval_seconds": "5.0"
+      },
+      "observation": {
+        "minimum_statistical_seconds": 60,
+        "require_funding_settlement": false,
+        "shutdown_buffer_seconds": 15
+      },
+      "okx_api_region": "global",
+      "run_timeout_seconds": 180,
+      "schema_version": 2,
+      "strategy_id": "012_2_event_driven_cross_exchange",
+      "strategy_params": {
+        "account_maximum_loss_bps": "50.0",
+        "cancel_deadline_seconds": "0.5",
+        "depth_fraction": "0.20",
+        "entry_deadline_seconds": "1.0",
+        "exit_reserve_bps": "1.0",
+        "failure_reserve_bps": "3.0",
+        "flatten_deadline_seconds": "2.5",
+        "hedge_deadline_seconds": "1.0",
+        "latency_reserve_bps": "2.0",
+        "markout_tail_probability": "0.95",
+        "markout_tolerance_seconds": "0.010",
+        "maximum_adverse_markout_bps": "1.0",
+        "maximum_holding_seconds": "2.5",
+        "maximum_loss_bps": "100.0",
+        "maximum_markout_miss_ratio": "0.25",
+        "maximum_quote_age_seconds": "0.50",
+        "maximum_venue_skew_seconds": "0.25",
+        "minimum_markout_samples": 21,
+        "minimum_net_edge_bps": "1.0",
+        "minimum_opportunity_lifetime_seconds": "0.500",
+        "model_buffer_bps": "2.0",
+        "pair_deadline_seconds": "2.5",
+        "path_p99_seconds": "0.005",
+        "quantity_base": "0.01"
+      },
+      "venues": {
+        "binance": "BTCUSDT",
+        "okx": "BTC-USDT-SWAP"
+      }
+    },
+    "cost_breakdown": null,
+    "cost_to_gross_ratio": null,
+    "engine": {
+      "active_pair": false,
+      "admission": {
+        "configured_path_p99_is_evidence": false,
+        "models": [],
+        "status": "FAIL_CLOSED"
+      },
+      "cost_breakdowns": [
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "4.000",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "4.000",
+          "expected_net": "2.0636000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "-4.020",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "-4.020",
+          "expected_net": "-5.9564000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "4.000",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "4.000",
+          "expected_net": "2.0636000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "-4.020",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "-4.020",
+          "expected_net": "-5.9564000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "4.000",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "4.000",
+          "expected_net": "2.0636000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "-4.020",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "-4.020",
+          "expected_net": "-5.9564000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "4.000",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "4.000",
+          "expected_net": "2.0636000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "-4.020",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "-4.020",
+          "expected_net": "-5.9564000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "4.000",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "4.000",
+          "expected_net": "2.0636000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "-4.020",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "-4.020",
+          "expected_net": "-5.9564000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "4.000",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "4.000",
+          "expected_net": "2.0636000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        },
+        {
+          "entry_buy_depth_impact_audit": "0.000",
+          "entry_executable_edge": "-4.020",
+          "entry_fees": "0.7224000",
+          "entry_sell_depth_impact_audit": "0.000",
+          "expected_exit_basis": "0",
+          "expected_exit_basis_notional": "0.000",
+          "expected_exit_execution_cost": "0.0702",
+          "expected_gross_convergence": "-4.020",
+          "expected_net": "-5.9564000",
+          "failure_leg_reserve": "0.1806",
+          "latency_adverse_selection_reserve": "0.1204",
+          "model_error_buffer": "0.1204",
+          "predicted_exit_fees": "0.7224000",
+          "quantity_base": "0.010",
+          "signed_funding_cashflow": "0.0000",
+          "total_cost": "1.9364000"
+        }
+      ],
+      "intents": [],
+      "last_exit_economics": null,
+      "markout_gate": {
+        "adverse_reserve_quote": "0",
+        "current_500ms_samples": {
+          "okx->binance|first=okx": 1
+        },
+        "minimum_samples": "21",
+        "tail_metric": "upper_cvar",
+        "tail_probability": "0.95"
+      },
+      "markout_observations": {
+        "10": {
+          "okx->binance|first=okx": [
+            {
+              "actual_elapsed_ms": "250.00",
+              "direction": [
+                "okx",
+                "binance"
+              ],
+              "first_venue": "okx",
+              "status": "missed"
+            },
+            {
+              "actual_elapsed_ms": "250.00",
+              "direction": [
+                "okx",
+                "binance"
+              ],
+              "first_venue": "okx",
+              "status": "missed"
+            }
+          ]
+        },
+        "100": {
+          "okx->binance|first=okx": [
+            {
+              "actual_elapsed_ms": "250.00",
+              "direction": [
+                "okx",
+                "binance"
+              ],
+              "first_venue": "okx",
+              "status": "missed"
+            },
+            {
+              "actual_elapsed_ms": "250.00",
+              "direction": [
+                "okx",
+                "binance"
+              ],
+              "first_venue": "okx",
+              "status": "missed"
+            }
+          ]
+        },
+        "50": {
+          "okx->binance|first=okx": [
+            {
+              "actual_elapsed_ms": "250.00",
+              "direction": [
+                "okx",
+                "binance"
+              ],
+              "first_venue": "okx",
+              "status": "missed"
+            },
+            {
+              "actual_elapsed_ms": "250.00",
+              "direction": [
+                "okx",
+                "binance"
+              ],
+              "first_venue": "okx",
+              "status": "missed"
+            }
+          ]
+        },
+        "500": {
+          "okx->binance|first=okx": [
+            {
+              "actual_elapsed_ms": "500.0",
+              "adverse_loss_quote": "0.000",
+              "direction": [
+                "okx",
+                "binance"
+              ],
+              "first_venue": "okx",
+              "status": "observed",
+              "tolerance_ms": "10.000"
+            }
+          ]
+        }
+      },
+      "markouts_quote": {
+        "10": {},
+        "100": {},
+        "50": {},
+        "500": {
+          "okx->binance|first=okx": [
+            "0.000"
+          ]
+        }
+      },
+      "mechanical_demo_smoke": {
+        "boundary": "MECHANICAL_DEMO_SMOKE_NOT_RESEARCH",
+        "bypassed_gates": [],
+        "enabled": false,
+        "entry_committed": false,
+        "intents_emitted": 0
+      },
+      "model": "independent_taker_taker_event_driven_arbitrage",
+      "reject_reasons": {
+        "event_model_missing": 4,
+        "markout_missed_tolerance": 6,
+        "opportunity_too_short": 2
+      },
+      "risk": {
+        "account_maximum_loss_bps": "50.0",
+        "cancel_deadline_seconds": "0.5",
+        "depth_fraction": "0.20",
+        "entry_deadline_seconds": "1.0",
+        "exit_reserve_bps": "1.0",
+        "failure_reserve_bps": "3.0",
+        "flatten_deadline_seconds": "2.5",
+        "hedge_deadline_seconds": "1.0",
+        "latency_reserve_bps": "2.0",
+        "markout_tail_probability": "0.95",
+        "markout_tolerance_seconds": "0.010",
+        "maximum_adverse_markout_bps": "1.0",
+        "maximum_holding_seconds": "2.5",
+        "maximum_loss_bps": "100.0",
+        "maximum_markout_miss_ratio": "0.25",
+        "maximum_quote_age_seconds": "0.50",
+        "maximum_venue_skew_seconds": "0.25",
+        "minimum_markout_samples": "21",
+        "minimum_net_edge_bps": "1.0",
+        "minimum_opportunity_lifetime_seconds": "0.500",
+        "model_buffer_bps": "2.0",
+        "pair_deadline_seconds": "2.5",
+        "path_p99_seconds": "0.005",
+        "quantity_base": "0.01"
+      },
+      "strategy_id": "012_2_event_driven_cross_exchange",
+      "unknown_execution": false
+    },
+    "event_path_model_count": 0,
+    "evidence_level": "R0_FORMULA_FIXTURE",
+    "execution_status": "NOT_RUN",
+    "expectancy_per_trade": null,
+    "fee_rate_per_fill": {
+      "binance": "0.0006",
+      "okx": "0.0006"
+    },
+    "fee_source": {
+      "binance": "conservative_bound",
+      "okx": "conservative_bound"
+    },
+    "fills": 0,
+    "final_state": "NO_EXECUTION",
+    "gross_pnl": null,
+    "latency_ms": {
+      "p50": null,
+      "p95": null,
+      "p99": null,
+      "samples": 0
+    },
+    "markouts_quote": {
+      "10": {},
+      "100": {},
+      "50": {},
+      "500": {
+        "okx->binance|first=okx": [
+          "0.000"
+        ]
+      }
+    },
+    "maximum_drawdown": null,
+    "mode": "replay",
+    "net_pnl": null,
+    "normalized_config_sha256": "da96f367eaa18be8384e8d069c42cfd5aa29c86e9a3352d3f16ff307eb4cbf8f",
+    "orders_submitted": 0,
+    "partial_fill_ratio": null,
+    "profitability_claim": "NONE_SYNTHETIC_FIXTURE_ONLY",
+    "reject_reasons": {
+      "event_model_missing": 4,
+      "markout_missed_tolerance": 6,
+      "opportunity_too_short": 2
+    },
+    "research_status": "RESEARCH_REJECTED",
+    "return_drawdown_ratio": null,
+    "scenario": "profitable",
+    "status": "FORMULA_CHECK_PASS",
+    "strategy_id": "012_2_event_driven_cross_exchange",
+    "strategy_sha256": "e0363508bf6bffa06b73eccb72b52b4a4da7cd5396ef54646503744d1fe7bd28",
+    "synthetic_branch": "profitable",
+    "total_cost": null,
+    "trade_count": 0,
+    "unhedged_duration_seconds": {
+      "max": null,
+      "p50": null,
+      "p95": null,
+      "p99": null
+    },
+    "unknown_execution": false,
+    "win_rate": null
+  },
+  "business_summary_hash": "c80fd74bdebbc98c6765dec9e9ae3c48939c0b0082006b80d455085872548455",
+  "candidate_sha256": "593a7f3ef8fa9221d6c7607cc722eaddf038e88792f10d7b56c9cf0b0494e2cf",
+  "config_sha256": "e57da86e9367ec445fccc1675fb23ea7fa91b53147ebe62b1329bdc61eb54397",
+  "configuration": {
+    "entry": {
+      "credentials": {
+        "binance_api_key_env": "BINANCE_DEMO_API_KEY",
+        "binance_secret_env": "BINANCE_DEMO_SECRET",
+        "okx_api_key_env": "OKX_DEMO_API_KEY",
+        "okx_passphrase_env": "OKX_DEMO_PASSPHRASE",
+        "okx_secret_env": "OKX_DEMO_SECRET"
+      },
+      "evidence_boundary": "MECHANICAL_DEMO_SMOKE_NOT_RESEARCH",
+      "policy": {
+        "max_actions": 40,
+        "max_order_notional_usdt": "100",
+        "max_round_trips": 1
+      },
+      "timeouts": {
+        "run_seconds": 180,
+        "stop_seconds": 30
+      },
+      "venue": [
+        "okx",
+        "binance"
+      ]
+    },
+    "funding": {
+      "max_age_seconds": "30.0",
+      "refresh_interval_seconds": "5.0"
+    },
+    "observation": {
+      "minimum_statistical_seconds": 60,
+      "require_funding_settlement": false,
+      "shutdown_buffer_seconds": 15
+    },
+    "okx_api_region": "global",
+    "run_timeout_seconds": 180,
+    "schema_version": 2,
+    "strategy_id": "012_2_event_driven_cross_exchange",
+    "strategy_params": {
+      "account_maximum_loss_bps": "50.0",
+      "cancel_deadline_seconds": "0.5",
+      "depth_fraction": "0.20",
+      "entry_deadline_seconds": "1.0",
+      "exit_reserve_bps": "1.0",
+      "failure_reserve_bps": "3.0",
+      "flatten_deadline_seconds": "2.5",
+      "hedge_deadline_seconds": "1.0",
+      "latency_reserve_bps": "2.0",
+      "markout_tail_probability": "0.95",
+      "markout_tolerance_seconds": "0.010",
+      "maximum_adverse_markout_bps": "1.0",
+      "maximum_holding_seconds": "2.5",
+      "maximum_loss_bps": "100.0",
+      "maximum_markout_miss_ratio": "0.25",
+      "maximum_quote_age_seconds": "0.50",
+      "maximum_venue_skew_seconds": "0.25",
+      "minimum_markout_samples": 21,
+      "minimum_net_edge_bps": "1.0",
+      "minimum_opportunity_lifetime_seconds": "0.500",
+      "model_buffer_bps": "2.0",
+      "pair_deadline_seconds": "2.5",
+      "path_p99_seconds": "0.005",
+      "quantity_base": "0.01"
+    },
+    "venues": {
+      "binance": "BTCUSDT",
+      "okx": "BTC-USDT-SWAP"
+    }
+  },
+  "cost_breakdown": null,
+  "cost_to_gross_ratio": null,
+  "engine": {
+    "active_pair": false,
+    "admission": {
+      "configured_path_p99_is_evidence": false,
+      "models": [],
+      "status": "FAIL_CLOSED"
+    },
+    "cost_breakdowns": [
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "4.000",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "4.000",
+        "expected_net": "2.0636000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "-4.020",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "-4.020",
+        "expected_net": "-5.9564000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "4.000",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "4.000",
+        "expected_net": "2.0636000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "-4.020",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "-4.020",
+        "expected_net": "-5.9564000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "4.000",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "4.000",
+        "expected_net": "2.0636000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "-4.020",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "-4.020",
+        "expected_net": "-5.9564000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "4.000",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "4.000",
+        "expected_net": "2.0636000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "-4.020",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "-4.020",
+        "expected_net": "-5.9564000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "4.000",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "4.000",
+        "expected_net": "2.0636000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "-4.020",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "-4.020",
+        "expected_net": "-5.9564000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "4.000",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "4.000",
+        "expected_net": "2.0636000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      },
+      {
+        "entry_buy_depth_impact_audit": "0.000",
+        "entry_executable_edge": "-4.020",
+        "entry_fees": "0.7224000",
+        "entry_sell_depth_impact_audit": "0.000",
+        "expected_exit_basis": "0",
+        "expected_exit_basis_notional": "0.000",
+        "expected_exit_execution_cost": "0.0702",
+        "expected_gross_convergence": "-4.020",
+        "expected_net": "-5.9564000",
+        "failure_leg_reserve": "0.1806",
+        "latency_adverse_selection_reserve": "0.1204",
+        "model_error_buffer": "0.1204",
+        "predicted_exit_fees": "0.7224000",
+        "quantity_base": "0.010",
+        "signed_funding_cashflow": "0.0000",
+        "total_cost": "1.9364000"
+      }
+    ],
+    "intents": [],
+    "last_exit_economics": null,
+    "markout_gate": {
+      "adverse_reserve_quote": "0",
+      "current_500ms_samples": {
+        "okx->binance|first=okx": 1
+      },
+      "minimum_samples": "21",
+      "tail_metric": "upper_cvar",
+      "tail_probability": "0.95"
+    },
+    "markout_observations": {
+      "10": {
+        "okx->binance|first=okx": [
+          {
+            "actual_elapsed_ms": "250.00",
+            "direction": [
+              "okx",
+              "binance"
+            ],
+            "first_venue": "okx",
+            "status": "missed"
+          },
+          {
+            "actual_elapsed_ms": "250.00",
+            "direction": [
+              "okx",
+              "binance"
+            ],
+            "first_venue": "okx",
+            "status": "missed"
+          }
+        ]
+      },
+      "100": {
+        "okx->binance|first=okx": [
+          {
+            "actual_elapsed_ms": "250.00",
+            "direction": [
+              "okx",
+              "binance"
+            ],
+            "first_venue": "okx",
+            "status": "missed"
+          },
+          {
+            "actual_elapsed_ms": "250.00",
+            "direction": [
+              "okx",
+              "binance"
+            ],
+            "first_venue": "okx",
+            "status": "missed"
+          }
+        ]
+      },
+      "50": {
+        "okx->binance|first=okx": [
+          {
+            "actual_elapsed_ms": "250.00",
+            "direction": [
+              "okx",
+              "binance"
+            ],
+            "first_venue": "okx",
+            "status": "missed"
+          },
+          {
+            "actual_elapsed_ms": "250.00",
+            "direction": [
+              "okx",
+              "binance"
+            ],
+            "first_venue": "okx",
+            "status": "missed"
+          }
+        ]
+      },
+      "500": {
+        "okx->binance|first=okx": [
+          {
+            "actual_elapsed_ms": "500.0",
+            "adverse_loss_quote": "0.000",
+            "direction": [
+              "okx",
+              "binance"
+            ],
+            "first_venue": "okx",
+            "status": "observed",
+            "tolerance_ms": "10.000"
+          }
+        ]
+      }
+    },
+    "markouts_quote": {
+      "10": {},
+      "100": {},
+      "50": {},
+      "500": {
+        "okx->binance|first=okx": [
+          "0.000"
+        ]
+      }
+    },
+    "mechanical_demo_smoke": {
+      "boundary": "MECHANICAL_DEMO_SMOKE_NOT_RESEARCH",
+      "bypassed_gates": [],
+      "enabled": false,
+      "entry_committed": false,
+      "intents_emitted": 0
+    },
+    "model": "independent_taker_taker_event_driven_arbitrage",
+    "reject_reasons": {
+      "event_model_missing": 4,
+      "markout_missed_tolerance": 6,
+      "opportunity_too_short": 2
+    },
+    "risk": {
+      "account_maximum_loss_bps": "50.0",
+      "cancel_deadline_seconds": "0.5",
+      "depth_fraction": "0.20",
+      "entry_deadline_seconds": "1.0",
+      "exit_reserve_bps": "1.0",
+      "failure_reserve_bps": "3.0",
+      "flatten_deadline_seconds": "2.5",
+      "hedge_deadline_seconds": "1.0",
+      "latency_reserve_bps": "2.0",
+      "markout_tail_probability": "0.95",
+      "markout_tolerance_seconds": "0.010",
+      "maximum_adverse_markout_bps": "1.0",
+      "maximum_holding_seconds": "2.5",
+      "maximum_loss_bps": "100.0",
+      "maximum_markout_miss_ratio": "0.25",
+      "maximum_quote_age_seconds": "0.50",
+      "maximum_venue_skew_seconds": "0.25",
+      "minimum_markout_samples": "21",
+      "minimum_net_edge_bps": "1.0",
+      "minimum_opportunity_lifetime_seconds": "0.500",
+      "model_buffer_bps": "2.0",
+      "pair_deadline_seconds": "2.5",
+      "path_p99_seconds": "0.005",
+      "quantity_base": "0.01"
+    },
+    "strategy_id": "012_2_event_driven_cross_exchange",
+    "unknown_execution": false
+  },
+  "event_path_model_count": 0,
+  "evidence_level": "R0_FORMULA_FIXTURE",
+  "execution_status": "NOT_RUN",
+  "expectancy_per_trade": null,
+  "fee_rate_per_fill": {
+    "binance": "0.0006",
+    "okx": "0.0006"
+  },
+  "fee_source": {
+    "binance": "conservative_bound",
+    "okx": "conservative_bound"
+  },
+  "fills": 0,
+  "final_state": "NO_EXECUTION",
+  "gross_pnl": null,
+  "latency_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "samples": 0
+  },
+  "markouts_quote": {
+    "10": {},
+    "100": {},
+    "50": {},
+    "500": {
+      "okx->binance|first=okx": [
+        "0.000"
+      ]
+    }
+  },
+  "maximum_drawdown": null,
+  "mode": "replay",
+  "net_pnl": null,
+  "normalized_config_sha256": "da96f367eaa18be8384e8d069c42cfd5aa29c86e9a3352d3f16ff307eb4cbf8f",
+  "orders_submitted": 0,
+  "partial_fill_ratio": null,
+  "profitability_claim": "NONE_SYNTHETIC_FIXTURE_ONLY",
+  "reject_reasons": {
+    "event_model_missing": 4,
+    "markout_missed_tolerance": 6,
+    "opportunity_too_short": 2
+  },
+  "research_status": "RESEARCH_REJECTED",
+  "return_drawdown_ratio": null,
+  "scenario": "profitable",
+  "status": "FORMULA_CHECK_PASS",
+  "strategy_id": "012_2_event_driven_cross_exchange",
+  "strategy_sha256": "e0363508bf6bffa06b73eccb72b52b4a4da7cd5396ef54646503744d1fe7bd28",
+  "synthetic_branch": "profitable",
+  "total_cost": null,
+  "trade_count": 0,
+  "unhedged_duration_seconds": {
+    "max": null,
+    "p50": null,
+    "p95": null,
+    "p99": null
+  },
+  "unknown_execution": false,
+  "win_rate": null
+}

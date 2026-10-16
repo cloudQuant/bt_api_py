@@ -1,0 +1,15 @@
+014_2_ctp_options_midfreq — SCN02 R4 observation-only layer (2026-10-16)
+cmd: C:/anaconda3/python.exe run.py --live --run-seconds 240 --evidence-dir <this>/run-evidence   (NO --allow-write; would be refused)
+exit: 3 | status: UNKNOWN (deterministic, 2/2 runs)
+run_error: "ValueError: exchange must be an exact non-empty string"
+run#1: run_id live-20261016T023342Z-a646a8b2, seconds 81.015
+run#2 (retry): run_id live-20261016T023758Z-e0e9906e, seconds 66.188
+common facts: selected pair index 2 standard whitelisted (score 156ms); preflight trading_day 20261016, account_rows 1, position_rows 0, metadata ok (SA701 tick1.0/mult20, SA701C1080+SA701P1080 tick0.5/mult20);
+clock: live non-synthetic mapping registered (session_segment czce-live-observe:20261016); order_write 0; feed_evidence_fault null; feature_minutes 0; cleanup closed.
+classification: the run starts the real direct registered-sim observation chain, then the feed-sealed-bar evidence path raises on an empty exchange
+(barrier.py _text field "exchange"; provider builds BarEvidence(symbol, exchange=bar.exchange, ...)); strategy_report.json is {} (no minute events reached the strategy).
+This is a genuine runtime gap at backtrader b002afa2d, NOT the stale-clock path: live_event_clock_outside_run_mapping did NOT reproduce this session
+(historical stale-clock fact for reference only: 2026-10-09 evidence/live-20261009T210412Z-cd972471 → BLOCKED live_event_clock_outside_run_mapping,
+available_age_seconds 172354.185 ≈ 47.9h, symbol SA701C1080).
+stderr: empty | zero order writes (order_write 0; no order path by contract: write_tier_not_implemented_for_decision_only_strategy).
+History: 4 prior live observations UNKNOWN×2/BLOCKED×2 (2026-10-09), no PASS — consistent: 014_2 observation layer currently has no PASS.

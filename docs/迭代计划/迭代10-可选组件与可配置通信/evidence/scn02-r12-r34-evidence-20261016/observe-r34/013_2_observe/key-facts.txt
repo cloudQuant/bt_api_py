@@ -1,0 +1,11 @@
+013_2_highfreq_calendar_arbitrage — SCN02 R3 SimNow zero-write observe (2026-10-16)
+cmd: C:/anaconda3/python.exe run.py --live --evidence-dir <this>/run-evidence   (NO --allow-write)
+exit: 0 | status: LIVE_OBSERVE_PASS | run_id: observe-20261016T023039Z-9922baa8
+channel: observe | write_grant_result: not_required_observation_only
+write_health: {armed: false, frozen: false, active_orders: 0}
+selected pair: index 1, kind standard, whitelisted true, score 141ms
+login: trading_day 20261016, connection_generation 1, read_only_ready true, trading_ready false
+readings: account_rows 1, position_rows 0, order_rows 0, trade_rows 0
+instruments: rb2701 (SHFE, price_tick 1.0, volume_multiple 10.0), rb2705 (SHFE, tick 1.0, mult 10.0)
+cleanup: closed | boundary: SESSION_AND_QUERY_OBSERVATION_ONLY_NOT_MARKET_OR_PROFITABILITY_EVIDENCE
+stderr: empty | zero order writes. NOTE: "highfreq" name is not HFT evidence (README/recon); no latency claim made.

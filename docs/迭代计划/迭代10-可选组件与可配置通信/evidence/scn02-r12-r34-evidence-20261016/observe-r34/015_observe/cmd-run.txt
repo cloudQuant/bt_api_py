@@ -1,0 +1,4 @@
+cwd: /d/source_code/backtrader/examples/unified/015_ctp_options_highfreq
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd(observe): C:/anaconda3/python.exe run.py --live --run-seconds 150 --evidence-dir D:/temp/it10scn02-r34-20261016-r1/015_observe/run-evidence
+note: NO --allow-write (would be refused: decision-only strategy has no order path); run window bounded to 150s (default 600s); interpreter 3.11.5

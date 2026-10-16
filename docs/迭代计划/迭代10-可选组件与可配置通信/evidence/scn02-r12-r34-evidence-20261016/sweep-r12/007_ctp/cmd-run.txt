@@ -1,0 +1,6 @@
+cwd: /d/source_code/backtrader/examples/unified/007_ctp
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd1(replay-route): C:/anaconda3/python.exe run_runtime.py
+cwd: /d/source_code/backtrader
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd2(doctor): C:/anaconda3/python.exe -m backtrader_runtime.cli doctor --strategy-dir examples/unified/007_ctp/runtime

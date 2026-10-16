@@ -1,0 +1,11 @@
+013_1_midfreq_cross_arbitrage — SCN02 R3 SimNow zero-write observe (2026-10-16)
+cmd: C:/anaconda3/python.exe run.py --live --evidence-dir <this>/run-evidence   (NO --allow-write)
+exit: 0 | status: LIVE_OBSERVE_PASS | run_id: observe-20261016T022932Z-72b5afed
+channel: observe | write_grant_result: not_required_observation_only
+write_health: {armed: false, frozen: false, active_orders: 0}   (store-local gate counters; no arm/submit/cancel calls)
+selected pair: index 3, kind standard, whitelisted true, score 164ms
+login: trading_day 20261016, connection_generation 1, read_only_ready true, trading_ready false
+readings: account_rows 1, position_rows 0, order_rows 0, trade_rows 0
+instruments: m2612 (DCE, price_tick 1.0, volume_multiple 10.0), RM701 (CZCE, tick 1.0, mult 10.0)
+cleanup: closed | boundary: SESSION_AND_QUERY_OBSERVATION_ONLY_NOT_MARKET_OR_PROFITABILITY_EVIDENCE
+stderr: empty | zero order writes; session closed with Store.stop health PASS

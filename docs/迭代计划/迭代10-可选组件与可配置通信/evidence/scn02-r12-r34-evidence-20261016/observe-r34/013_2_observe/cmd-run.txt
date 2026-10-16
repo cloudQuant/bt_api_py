@@ -1,0 +1,4 @@
+cwd: /d/source_code/backtrader/examples/unified/013_2_highfreq_calendar_arbitrage
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd(observe): C:/anaconda3/python.exe run.py --live --evidence-dir D:/temp/it10scn02-r34-20261016-r1/013_2_observe/run-evidence
+note: NO --allow-write (zero-write observation channel); interpreter 3.11.5

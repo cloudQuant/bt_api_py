@@ -1,0 +1,11 @@
+014_1_ctp_options_lowfreq — SCN02 R4 SimNow zero-write observe (2026-10-16)
+cmd: C:/anaconda3/python.exe run.py --live --evidence-dir <this>/run-evidence   (NO --allow-write)
+exit: 0 | status: LIVE_OBSERVE_PASS | run_id: observe-20261016T023223Z-30fcf45e
+channel: observe | write_grant_result: not_required_observation_only
+write_health: {armed: false, frozen: false, active_orders: 0}
+selected pair: index 0, kind standard, whitelisted true, score 219ms
+login: trading_day 20261016, connection_generation 1, read_only_ready true, trading_ready false
+legs (three distinct C/P/F): CZCE.SA701, CZCE.SA701C1080, CZCE.SA701P1080
+readings: account_rows 1, active_order_rows 0, open_position_rows 0, order_rows 0, position_rows 0, trade_rows 0
+cleanup: closed | boundary: SESSION_AND_QUERY_OBSERVATION_ONLY_NOT_MARKET_OR_PROFITABILITY_EVIDENCE
+stderr: empty | zero order writes. Three-leg write drill (first FILL round trip) remains R6/open (needs trading window + admission).

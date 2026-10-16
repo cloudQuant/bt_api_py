@@ -1,0 +1,11 @@
+013_3_sa_midfreq_simnow — SCN02 R3 SimNow zero-write observe (2026-10-16)
+cmd: C:/anaconda3/python.exe run.py --live --evidence-dir <this>/run-evidence   (NO --allow-write; --drill NOT used)
+exit: 0 | status: LIVE_OBSERVE_PASS | run_id: observe-20261016T023130Z-89df2049
+channel: observe | write_grant_result: not_required_observation_only
+write_health: {armed: false, frozen: false, active_orders: 0}
+selected pair: index 3, kind standard, whitelisted true, score 218ms
+login: trading_day 20261016, connection_generation 1, read_only_ready true, trading_ready false
+readings: account_rows 1, active_order_rows 0, open_position_rows 0, instrument_rows 93, order_rows 0, position_rows 0, trade_rows 0
+instrument: SA701 (CZCE) | cleanup: closed
+boundary: SESSION_AND_QUERY_OBSERVATION_ONLY_NOT_MARKET_OR_PROFITABILITY_EVIDENCE
+stderr: empty | zero order writes. Single-contract zero-write observation channel; admitted drill remains R6/open.

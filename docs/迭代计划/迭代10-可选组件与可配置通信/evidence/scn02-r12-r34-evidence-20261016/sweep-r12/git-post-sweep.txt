@@ -1,0 +1,17 @@
+== backtrader HEAD ==
+b002afa2da66ca6d14f1623280109be8e653a1b6
+
+== git status --porcelain (post-sweep) ==
+ D 0
+ M backtrader_runtime/ctp_configured_front_check.py
+ M backtrader_runtime/ctp_simnow_operator.py
+ M tests/unit/runtime/test_ctp_simnow_config_operator_route.py
+?? .codex-tmp/
+?? "docs/_internal/opts/requirements/\350\277\255\344\273\2431-\347\251\277\351\200\217\345\274\217\350\256\244\350\257\201/evidence/"
+== other-agent modified files: hash+mtime at sweep end ==
+2ae4f03cdf72b438994ad981122d345fab5b98101cc8ea78809034748ffad51b *backtrader_runtime/ctp_configured_front_check.py
+e069174d261ea9a28f56e5b038ca9966a056694233a6131bf1007c85a9560612 *backtrader_runtime/ctp_simnow_operator.py
+0f410c01a2197cc26e671f540d18ea1a52d708a64ca284b145925d5632cd6610 *tests/unit/runtime/test_ctp_simnow_config_operator_route.py
+2026-10-11 16:11:38.658907900 backtrader_runtime/ctp_configured_front_check.py
+2026-10-11 16:11:38.659942200 backtrader_runtime/ctp_simnow_operator.py
+2026-10-11 16:11:38.661947000 tests/unit/runtime/test_ctp_simnow_config_operator_route.py

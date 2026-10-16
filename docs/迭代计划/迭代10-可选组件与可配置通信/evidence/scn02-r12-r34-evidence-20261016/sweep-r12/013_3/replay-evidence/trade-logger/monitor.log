@@ -1,0 +1,1 @@
+{"log_time": "2026-10-16T10:09:17.172+08:00", "event_time": "2026-10-16T10:09:17.172+08:00", "event_type": "monitoring_summary", "level": "INFO", "run_id": "trade-log-20261016100912-93319834", "session_id": "", "provider": "", "strategy_name": "SAMidFrequencyStrategy", "details": {}}

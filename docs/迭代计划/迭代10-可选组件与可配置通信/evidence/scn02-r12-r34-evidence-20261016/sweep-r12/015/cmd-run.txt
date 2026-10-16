@@ -1,0 +1,5 @@
+cwd: /d/source_code/backtrader/examples/unified/015_ctp_options_highfreq
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd1(dry): C:/anaconda3/python.exe run.py
+cmd2(replay): C:/anaconda3/python.exe run.py --replay --evidence-dir D:/temp/it10scn02-r12-20261016-r1/015/replay-evidence
+cmd3(write-probe): C:/anaconda3/python.exe run.py --live --allow-write

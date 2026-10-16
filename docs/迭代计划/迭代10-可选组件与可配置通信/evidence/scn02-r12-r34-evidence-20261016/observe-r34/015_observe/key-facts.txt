@@ -1,0 +1,12 @@
+015_ctp_options_highfreq — SCN02 R4 observation-only tick layer (2026-10-16)
+cmd: C:/anaconda3/python.exe run.py --live --run-seconds 150 --evidence-dir <this>/run-evidence   (NO --allow-write; would be refused)
+exit: 0 | status: OBSERVATION_PASS | run_id: live-20261016T023924Z-6ca5e6cc | tier: observation_only_tick_arrival
+selected pair: index 3, kind standard, whitelisted true, score 156ms; preflight trading_day 20261016, account_rows 1, position_rows 0
+ticks_by_leg (real ticks into the cohort strategy, min_ticks_per_leg 1): CZCE.FG701 222, CZCE.FG701C970 8, CZCE.FG701P970 1
+callback_counts: tick 231, next 0, bar 0, idle 9864; window_seconds 150
+reject_counts: {"TRUSTED_NOW_INVALID": 231}  (all ticks rejected for cohort trust: direct CTP tick source carries no ctp.quote.v2 attestation / decision-boundary clock — archived honestly, nothing fabricated)
+cohort_decisions 0 | execution_eligible_ticks 0 | clock_rejection: latched false
+hft_status: FAIL/NOT_ADMITTED (top-level and observation; unchanged — no HFT latency conclusion this iteration)
+external_request_counts: order_write 0, network NOT_PROVEN | write_tier: NOT_IMPLEMENTED_DECISION_ONLY_STRATEGY
+admission_boundary: "real ticks crossed the standard entry into the cohort strategy; cohort qualification stays FAIL/NOT_ADMITTED ...; this iteration fabricates none"
+stderr: empty | cleanup: closed | history: prior OBSERVATION_PASS 2026-10-09 (live-20261009T213253Z)

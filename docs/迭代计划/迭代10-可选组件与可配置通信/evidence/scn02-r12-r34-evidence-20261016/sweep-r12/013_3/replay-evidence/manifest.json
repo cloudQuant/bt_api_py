@@ -1,0 +1,146 @@
+{
+  "account_fingerprint": "acct_replay_fixture",
+  "candidate_id": "iter22-sa-v0",
+  "code_hash": "e2ef56516d75515af455d8ed39cdaa296378b1266980c2351b29357c8763782b",
+  "config_hash": "25fd73a7e0cb9daf0f5feca51d4f6760ab9506a4232e021af042d089c1e2a664",
+  "data_hash": "6809517706d02d104dd6609e5f433a12b102ee30e82f3ee6a8aa6dfba4e3387d",
+  "ended_at_utc": "2026-10-16T02:09:19.509456+00:00",
+  "environment": "local_fixture",
+  "evidence_counts": {
+    "bars": 106,
+    "orders": 0,
+    "quotes": 7500,
+    "risk_events": 1,
+    "signals": 7500,
+    "trades": 0
+  },
+  "evidence_dropped_counts": {
+    "bars": 0,
+    "orders": 0,
+    "quotes": 0,
+    "risk_events": 0,
+    "signals": 0,
+    "trades": 0
+  },
+  "evidence_enqueued_counts": {
+    "bars": 106,
+    "orders": 0,
+    "quotes": 7500,
+    "risk_events": 1,
+    "signals": 7500,
+    "trades": 0
+  },
+  "evidence_health": {
+    "complete": true,
+    "failure_reason": null,
+    "queue_limit": 23500
+  },
+  "evidence_max_pending_counts": {
+    "bars": 106,
+    "orders": 0,
+    "quotes": 7344,
+    "risk_events": 0,
+    "signals": 7344,
+    "trades": 0
+  },
+  "evidence_max_pending_total": 14794,
+  "evidence_pending_counts": {
+    "bars": 0,
+    "orders": 0,
+    "quotes": 0,
+    "risk_events": 0,
+    "signals": 0,
+    "trades": 0
+  },
+  "evidence_rotations": {
+    "bars": 0,
+    "orders": 0,
+    "quotes": 0,
+    "risk_events": 0,
+    "signals": 0,
+    "trades": 0
+  },
+  "execution_basis": "none",
+  "exit_status": "PASS_REPLAY_PATH",
+  "fee_source": "synthetic_formula_fixture",
+  "g4_gate_status": "NOT_RUN",
+  "hypothetical_fills": false,
+  "instrument_id": "SA701",
+  "iteration": 22,
+  "mode": "replay",
+  "purpose": "engineering_fixture",
+  "replay_audit_queue_limit": 23500,
+  "research_status": "RESEARCH_NOT_ESTABLISHED",
+  "retention": {
+    "retain_trading_days": 20,
+    "status": "NOT_APPLICABLE_EXPLICIT_OUTPUT_DIRECTORY"
+  },
+  "run_id": "iter22-replay-20261016T020912Z-74a50f23",
+  "runtime": {
+    "architecture": "AMD64",
+    "executable": "C:\\anaconda3\\python.exe",
+    "platform": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.5"
+  },
+  "schema_version": "iter22.manifest.v1",
+  "source_components": {
+    "backtrader": {
+      "found": true,
+      "module": "backtrader",
+      "path": "D:/source_code/backtrader/backtrader/__init__.py",
+      "sha256": "a410a7181f1c4758fab76a929437a5629d137bebf78b87b5547949af908579f8",
+      "version": "1.4.0"
+    },
+    "backtrader_broker": {
+      "found": true,
+      "module": "backtrader.brokers.btapibroker",
+      "path": "D:/source_code/backtrader/backtrader/brokers/btapibroker.py",
+      "sha256": "364d5ce6f36fe3017c2ee523a7b7b83562a595f280f43601e0a496c76e344a95",
+      "version": "1.4.0"
+    },
+    "backtrader_feed": {
+      "found": true,
+      "module": "backtrader.feeds.btapifeed",
+      "path": "D:/source_code/backtrader/backtrader/feeds/btapifeed.py",
+      "sha256": "960e023cc1c3b7f6671b8af3b50a775b1dd7de5e9213509d207a15070001a0e2",
+      "version": "1.4.0"
+    },
+    "backtrader_store": {
+      "found": true,
+      "module": "backtrader.stores.btapistore",
+      "path": "D:/source_code/backtrader/backtrader/stores/btapistore.py",
+      "sha256": "9670cca751932c19241ac1a694513afd47a4514b1258bbbd73a88a07972a5ee1",
+      "version": "1.4.0"
+    },
+    "backtrader_trade_logger": {
+      "found": true,
+      "module": "backtrader.observers.trade_logger",
+      "path": "D:/source_code/backtrader/backtrader/observers/trade_logger.py",
+      "sha256": "9700bf8ab0de0a1b36786cd2ba5c085b387378f597fe64b085d022ee33187a3c",
+      "version": "1.4.0"
+    },
+    "bt_api_py": {
+      "found": false,
+      "module": "bt_api_py",
+      "path": null,
+      "sha256": null,
+      "version": "0.15.3"
+    },
+    "bt_api_py_execution_session": {
+      "found": false,
+      "module": "bt_api_py._execution_session",
+      "path": null,
+      "sha256": null,
+      "version": "0.15.3"
+    },
+    "bt_api_py_facade": {
+      "found": false,
+      "module": "bt_api_py.bt_api",
+      "path": null,
+      "sha256": null,
+      "version": "0.15.3"
+    }
+  },
+  "started_at_utc": "2026-10-16T02:09:12.504365+00:00",
+  "trading_day": "20260909"
+}

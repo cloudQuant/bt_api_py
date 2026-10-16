@@ -1,0 +1,4 @@
+cwd: /d/source_code/backtrader/examples/unified/012_1_midfreq_cross_exchange
+PYTHONPATH=D:/bt_api_py/bt_api_py;D:/bt_api/bt_api_base/src;D:/bt_api/bt_api_execution/src;D:/bt_api/bt_api_transport_zmq/src
+cmd: C:/anaconda3/python.exe run.py
+cmd3(observe-probe): C:/anaconda3/python.exe run.py --live
