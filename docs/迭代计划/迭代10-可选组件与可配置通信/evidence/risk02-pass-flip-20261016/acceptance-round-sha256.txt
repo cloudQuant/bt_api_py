@@ -1,0 +1,5 @@
+14ac2eba4f11d0494c48d921d7dc9ad1f61ce2b3fe31f4b82ead0eaa8990bca9  acceptance-audit-r1/audit.md
+c1f2b86954b5334fa7bb535ac70578d6c38917ff44e1ed76558b282815fe4290  root-adjudication.md
+
+# 审计副本来源: D:/temp/it10risk02-audit-20261016-r1/audit.md (同哈希 14ac2eba…)
+# 审计方式: 只读（未运行被测系统）；裁定追记见 root-adjudication.md
