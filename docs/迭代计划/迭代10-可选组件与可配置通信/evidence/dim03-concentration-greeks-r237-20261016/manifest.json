@@ -1,0 +1,234 @@
+{
+  "schema": "iteration10-dim03-concentration-greeks-r237-evidence-manifest-v1",
+  "round": "R237",
+  "title": "DIM03 Risk concentration and source-bound Greeks reservation dimensions",
+  "evidence_level": "DIM03_RISK_CORE_CONCENTRATION_AND_SOURCE_BOUND_GREEKS_SYNTHETIC_SQLITE_ONLY",
+  "formal_dim03_pass": false,
+  "formal_progress_updated": false,
+  "archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 161811,
+    "sha256": "65e7236b2d1773d9e113873c4e3af6882d797c3324419ed3ef1fda4ea6e3bc03",
+    "members": {
+      "source/r3-source-export-manifest.json": {
+        "bytes": 31139,
+        "sha256": "e3460fa8ea803233dde04d8dfce2a902510d6661a9997e62f6a88a524786ab1b"
+      },
+      "source/r3-focused-qa.json": {
+        "bytes": 31882,
+        "sha256": "1ad24c23828d05e0c25bf21dab4b7dd606debac164dc9edfb5d14428ce147977"
+      },
+      "source/focused-qa-runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "source/pytest.ini": {
+        "bytes": 77,
+        "sha256": "2776f7735f9bd3e011f0eb4c7ab2a81d293cf88aa427dc8d95e80cf8b706b3d3"
+      },
+      "source/dim03-r237-scoped.patch": {
+        "bytes": 75639,
+        "sha256": "71d271e2fcf7546924095e78df7eb5626da72520de0a6698a1bb1a98d2f00c92"
+      },
+      "source/risk/src/bt_api_risk/__init__.py": {
+        "bytes": 8597,
+        "sha256": "0af5b237687c95ff96127d170e57bcef5cfd8943da83b6e972521e606d778313"
+      },
+      "source/risk/src/bt_api_risk/core/__init__.py": {
+        "bytes": 5215,
+        "sha256": "6029316e1f9ae2d29963db5df88b2b012e18fc8fa5a1466836cc5f1b09d0d9bd"
+      },
+      "source/risk/src/bt_api_risk/core/admission.py": {
+        "bytes": 522415,
+        "sha256": "b150d4f8db1760532643f7fbc285948f32d4f660142146cbfacd528cad2b0ed1"
+      },
+      "source/risk/src/bt_api_risk/core/instrument.py": {
+        "bytes": 72626,
+        "sha256": "db306a7d6180100c38a8a605c2bc822e4c7a80f68c0837f56473298c70f3a0af"
+      },
+      "source/risk/tests/test_exposure_dimension_reservations.py": {
+        "bytes": 23823,
+        "sha256": "8c994c63188c0e14b7bf0a704185f641a357a35ddccbb553f3d18648b8b68827"
+      },
+      "qa/r3/command.json": {
+        "bytes": 1353,
+        "sha256": "ed30ffb9f49d5109a0d348efd6700f0e004b503dc7deafe8b9b1972ec4232012"
+      },
+      "qa/r3/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "qa/r3/junit.xml": {
+        "bytes": 1191,
+        "sha256": "e770c1831242e531a4548f5e5c8ce56a211f38417eca092af9098db1ad4ce480"
+      },
+      "qa/r3/result.json": {
+        "bytes": 970,
+        "sha256": "a52079308851321af132ad969d6f5cc7c08a7ec5495afa447ae2e41b9d7f33ae"
+      },
+      "qa/r3/running.json": {
+        "bytes": 76,
+        "sha256": "fa49c3dfbce63080dd9e372e6ec9565d74a2887949cb12bc6386752344bbbbad"
+      },
+      "qa/r3/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "qa/r3/source-after.json": {
+        "bytes": 29743,
+        "sha256": "63044e70fc31739dc3815fc2e83b60366179072d939b76f6afa051809096511d"
+      },
+      "qa/r3/source-before.json": {
+        "bytes": 29743,
+        "sha256": "63044e70fc31739dc3815fc2e83b60366179072d939b76f6afa051809096511d"
+      },
+      "qa/r3/spec.json": {
+        "bytes": 31882,
+        "sha256": "1ad24c23828d05e0c25bf21dab4b7dd606debac164dc9edfb5d14428ce147977"
+      },
+      "qa/r3/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "qa/r3/stdout.log": {
+        "bytes": 181,
+        "sha256": "713dcfeef3ecdd5d5a0e7e08b732fab847e818c992e104549c82d9998f2166a3"
+      }
+    }
+  },
+  "accepted_author_qa": {
+    "output_directory": "D:\\temp\\it10dim03-risk-dimensions-20261016-r3",
+    "pytest_exit": 0,
+    "passed": 6,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "duration_stdout": "2.61s",
+    "stderr_bytes": 0,
+    "result_json": {
+      "path": "D:\\temp\\it10dim03-risk-dimensions-20261016-r3\\result.json",
+      "bytes": 970,
+      "sha256": "a52079308851321af132ad969d6f5cc7c08a7ec5495afa447ae2e41b9d7f33ae"
+    },
+    "junit_xml": {
+      "path": "D:\\temp\\it10dim03-risk-dimensions-20261016-r3\\junit.xml",
+      "bytes": 1191,
+      "sha256": "e770c1831242e531a4548f5e5c8ce56a211f38417eca092af9098db1ad4ce480"
+    },
+    "stdout_sha256": "713dcfeef3ecdd5d5a0e7e08b732fab847e818c992e104549c82d9998f2166a3",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source_count": 142,
+    "sources_unchanged": true,
+    "heads_unchanged": true
+  },
+  "qa_heads": {
+    "sdk": "53f33158429f89fd9b4dce83c068056c99d6778f",
+    "base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+    "risk": "ccac8818312c1474077c00bfe9d8f12521af39c9"
+  },
+  "candidate_scope": [
+    {
+      "path": "src/bt_api_risk/__init__.py",
+      "candidate_working_copy_bytes": 8597,
+      "candidate_working_copy_sha256": "0af5b237687c95ff96127d170e57bcef5cfd8943da83b6e972521e606d778313",
+      "candidate_clean_bytes": 8597,
+      "candidate_clean_sha256": "0af5b237687c95ff96127d170e57bcef5cfd8943da83b6e972521e606d778313",
+      "candidate_git_blob_oid": "24da35ac3a7b684385b30191b06a6c1ff98adc8b",
+      "baseline_exists": true,
+      "baseline_git_blob_oid": "0119afd36c795230775e29fac15c0a4cf2579217",
+      "mode": "100644"
+    },
+    {
+      "path": "src/bt_api_risk/core/__init__.py",
+      "candidate_working_copy_bytes": 5215,
+      "candidate_working_copy_sha256": "6029316e1f9ae2d29963db5df88b2b012e18fc8fa5a1466836cc5f1b09d0d9bd",
+      "candidate_clean_bytes": 5215,
+      "candidate_clean_sha256": "6029316e1f9ae2d29963db5df88b2b012e18fc8fa5a1466836cc5f1b09d0d9bd",
+      "candidate_git_blob_oid": "ba220fd980e11371856e744caa0c707ffb71be20",
+      "baseline_exists": true,
+      "baseline_git_blob_oid": "5d63cb23bcadb380b2a735cf86cd2698c0f24905",
+      "mode": "100644"
+    },
+    {
+      "path": "src/bt_api_risk/core/admission.py",
+      "candidate_working_copy_bytes": 522415,
+      "candidate_working_copy_sha256": "b150d4f8db1760532643f7fbc285948f32d4f660142146cbfacd528cad2b0ed1",
+      "candidate_clean_bytes": 522415,
+      "candidate_clean_sha256": "b150d4f8db1760532643f7fbc285948f32d4f660142146cbfacd528cad2b0ed1",
+      "candidate_git_blob_oid": "59e1a7e821aac937715173a756ecdc054e0ac543",
+      "baseline_exists": true,
+      "baseline_git_blob_oid": "19a4ecf4e8efe1ed36f9ffc60529d008d341de2c",
+      "mode": "100644"
+    },
+    {
+      "path": "src/bt_api_risk/core/instrument.py",
+      "candidate_working_copy_bytes": 72626,
+      "candidate_working_copy_sha256": "db306a7d6180100c38a8a605c2bc822e4c7a80f68c0837f56473298c70f3a0af",
+      "candidate_clean_bytes": 72626,
+      "candidate_clean_sha256": "db306a7d6180100c38a8a605c2bc822e4c7a80f68c0837f56473298c70f3a0af",
+      "candidate_git_blob_oid": "d70849ea62946b06c265ed7d2333895b12b2bed2",
+      "baseline_exists": true,
+      "baseline_git_blob_oid": "708906fbed84426c76360f5b3ec501e5b8ccc255",
+      "mode": "100644"
+    },
+    {
+      "path": "tests/test_exposure_dimension_reservations.py",
+      "candidate_working_copy_bytes": 23823,
+      "candidate_working_copy_sha256": "8c994c63188c0e14b7bf0a704185f641a357a35ddccbb553f3d18648b8b68827",
+      "candidate_clean_bytes": 23823,
+      "candidate_clean_sha256": "8c994c63188c0e14b7bf0a704185f641a357a35ddccbb553f3d18648b8b68827",
+      "candidate_git_blob_oid": "0bb77b5092c9f7d54404bc51db3a8bfd388a5c6c",
+      "baseline_exists": false,
+      "baseline_git_blob_oid": "0000000000000000000000000000000000000000",
+      "mode": "100644"
+    }
+  ],
+  "candidate_export": {
+    "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-concentration-greeks-source-r3",
+    "manifest_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-concentration-greeks-source-r3\\source-export-manifest.json",
+    "manifest_bytes": 31139,
+    "manifest_sha256": "e3460fa8ea803233dde04d8dfce2a902510d6661a9997e62f6a88a524786ab1b",
+    "focused_spec_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-concentration-greeks-source-r3\\focused-qa.json",
+    "focused_spec_bytes": 31882,
+    "focused_spec_sha256": "1ad24c23828d05e0c25bf21dab4b7dd606debac164dc9edfb5d14428ce147977",
+    "changed_risk_paths": [
+      "src/bt_api_risk/__init__.py",
+      "src/bt_api_risk/core/__init__.py",
+      "src/bt_api_risk/core/admission.py",
+      "src/bt_api_risk/core/instrument.py",
+      "tests/test_exposure_dimension_reservations.py"
+    ],
+    "excluded_wip": [
+      "Risk budget policy binding and bind_policy changes",
+      "DIM04 CLOSE mapper, resolution/proof, schema and terminal changes"
+    ]
+  },
+  "scoped_partial_index_patch": {
+    "path": "D:\\bt_api_py\\.codex-tmp\\dim03-r237-dimensions-risk-source.patch",
+    "bytes": 75639,
+    "sha256": "71d271e2fcf7546924095e78df7eb5626da72520de0a6698a1bb1a98d2f00c92",
+    "apply_cached_check_exit": 0,
+    "staged": false,
+    "applied": false
+  },
+  "prior_accepted_support": {
+    "r223_sdk_commit": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+    "r223_risk_commit": "647840a75b2071fcb5b4395f554190afe2fae082",
+    "r232_packet": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-fx-shared-pool-host-r232-20261016",
+    "r232_manifest_sha256": "723f8c386cc0e3a257fb2dea2f59317599f7f1ddba1b0eebcf7ff6101cc33494",
+    "r232_archive_sha256": "212e8afaa4ad780ff4bab9b61d20ec3ec0b7efef7dc0246a8456fc0a94d32c7e"
+  },
+  "scope_note": [
+    "The new source QA accepts Risk core reservation dimensions and source-bound Greeks behavior using synthetic facts and SQLite only.",
+    "This packet does not establish external provider behavior, account acceptance, current-position revaluation, filtered-snapshot completeness, or DIM04 close-driven dimension release.",
+    "The complete DIM03 formal clause remains open; the official progress tracker is unchanged.",
+    "The R3 candidate is reconstructed from the pinned Risk HEAD and only the explicit DIM03 overlay. Live budget/CLOSE work is excluded.",
+    "Historical R1/R2 failures remain preserved in their original .codex-tmp output directories; they were not overwritten or rerun."
+  ],
+  "round_record": "round-record.md",
+  "review_status": {
+    "default_no_limit_compatibility": "GO_STATIC",
+    "legacy_missing_dimension_rows": "covered by the new legacy active-reservation upgrade regression",
+    "root_final_test_diff_review": "accepted separately; not rerun for this packaging step"
+  }
+}
