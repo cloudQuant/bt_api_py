@@ -1344,6 +1344,10 @@ class ServiceRegistry:
         return {"ok": False, "code": code, "result": {}}
 
     @staticmethod
+    def _failure_with_result(code: str, result: Mapping[str, Any]) -> Mapping[str, Any]:
+        return {"ok": False, "code": code, "result": dict(result)}
+
+    @staticmethod
     def _payload_fields(
         request: WireEnvelope, expected: frozenset[str]
     ) -> Mapping[str, Any] | None:
@@ -1879,6 +1883,8 @@ class ServiceRegistry:
                         request.header.scope, now, registration_id
                     )
                     if claim_error is not None:
+                        if isinstance(claim_error, tuple):
+                            return self._failure_with_result(claim_error[0], claim_error[1])
                         return self._failure(claim_error)
 
             identity_json = json.dumps(
@@ -1929,23 +1935,39 @@ class ServiceRegistry:
 
     def _claim_strategy_write(
         self, scope: WireScope, now: float, registration_id: str
-    ) -> str | None:
+    ) -> str | tuple[str, Mapping[str, Any]] | None:
         if scope.strategy_ref is None or scope.run_id is None:
             return "SCOPE_DENIED"
         accounts = (scope.account_ref,) if scope.account_ref is not None else scope.account_refs
         if not accounts:
             return "SCOPE_DENIED"
-        for account_ref in accounts:
-            row = self._db.execute(
+        rows = tuple(
+            self._db.execute(
                 "SELECT run_id, active_registration_id FROM strategy_write_claims "
                 "WHERE execution_domain_ref=? "
                 "AND strategy_ref=? AND account_ref=?",
                 (scope.execution_domain_ref, scope.strategy_ref, account_ref),
             ).fetchone()
-            if row is not None and row["run_id"] != scope.run_id:
-                return "DUPLICATE_ACTIVE_RUN"
-            if row is not None and row["active_registration_id"] is not None:
-                return "DUPLICATE_ACTIVE_RUN"
+            for account_ref in accounts
+        )
+        if any(row is not None and row["active_registration_id"] is not None for row in rows):
+            return "DUPLICATE_ACTIVE_RUN"
+        durable_runs = {row["run_id"] for row in rows if row is not None}
+        if len(durable_runs) > 1:
+            return "DUPLICATE_ACTIVE_RUN"
+        if durable_runs and scope.run_id not in durable_runs:
+            # Every claim for this exact scope is released: the previous
+            # session unregistered, its lease expired, or its process died
+            # with an earlier service epoch. All released claims name one
+            # other logical run; report it so a fresh client session can
+            # adopt that durable run instead of minting a competing one.
+            # Registration still requires the exact matching run id, so two
+            # simultaneously-live runs can never share the scope, and active
+            # or conflicting claim vectors stay a plain refusal.
+            return (
+                "DUPLICATE_ACTIVE_RUN",
+                {"strategy_write_run_id": next(iter(durable_runs))},
+            )
         for account_ref in accounts:
             self._db.execute(
                 "INSERT OR IGNORE INTO strategy_write_claims "

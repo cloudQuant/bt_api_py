@@ -127,6 +127,10 @@ class ServiceRuntimeError(RuntimeError):
 
     def __init__(self, code: str) -> None:
         self.code = code
+        # Optional exact rejection detail from a control reply (for example
+        # the released durable strategy-write run a registration may adopt).
+        # Never carries remote error text or configuration values.
+        self.result: Mapping[str, Any] = {}
         super().__init__(code)
 
 
@@ -1238,33 +1242,56 @@ class ServiceClientRuntime:
         registration_key = hashlib.sha256(
             (self.client_session_id + ":" + digest + ":" + port).encode()
         ).hexdigest()
-        timing: dict[str, Any] = {}
-        try:
-            result, request_started = self._rpc(
-                binding["service_id"],
-                binding["transport_ref"],
-                scope,
-                "service.register",
-                {
-                    "registration_key": registration_key,
-                    "client_session_id": self.client_session_id,
-                    "instance_id": binding["instance_id"],
-                    "port": port,
-                    "scope_ref": binding["scope_ref"],
-                    "operations": sorted(operations),
-                },
-                timeout=timeout,
-                include_started_at=True,
-                timing=timing,
-            )
-        except BaseException:
-            if (
-                timing.get("request_started") is not None
-                and not timing.get("server_rejected", False)
-                and not timing.get("request_not_sent", False)
-            ):
-                self._record_unknown_registration(registration_key)
-            raise
+        payload = {
+            "registration_key": registration_key,
+            "client_session_id": self.client_session_id,
+            "instance_id": binding["instance_id"],
+            "port": port,
+            "scope_ref": binding["scope_ref"],
+            "operations": sorted(operations),
+        }
+        attempt_scope = scope
+        for attempt in ("initial", "adopted"):
+            timing: dict[str, Any] = {}
+            try:
+                result, request_started = self._rpc(
+                    binding["service_id"],
+                    binding["transport_ref"],
+                    attempt_scope,
+                    "service.register",
+                    payload,
+                    timeout=timeout,
+                    include_started_at=True,
+                    timing=timing,
+                )
+            except ServiceRuntimeError as error:
+                adopted_run_id = self._released_run_adoption_run_id(error, attempt_scope)
+                if attempt == "initial" and adopted_run_id is not None:
+                    # The exact scope's durable strategy-write claim is
+                    # released (previous session unregistered, expired, or
+                    # died with an earlier service epoch) and names one other
+                    # logical run. Adopt that durable run instead of minting a
+                    # competing one; a live claim never yields this signal, so
+                    # two simultaneously-live runs stay impossible.
+                    attempt_scope = replace(scope, run_id=adopted_run_id)
+                    continue
+                if (
+                    timing.get("request_started") is not None
+                    and not timing.get("server_rejected", False)
+                    and not timing.get("request_not_sent", False)
+                ):
+                    self._record_unknown_registration(registration_key)
+                raise
+            except BaseException:
+                if (
+                    timing.get("request_started") is not None
+                    and not timing.get("server_rejected", False)
+                    and not timing.get("request_not_sent", False)
+                ):
+                    self._record_unknown_registration(registration_key)
+                raise
+            scope = attempt_scope
+            break
         registration_id = None
         service_epoch = None
         placeholder = None
@@ -1610,11 +1637,15 @@ class ServiceClientRuntime:
                 or code == "HANDLER_FAILED"
             ):
                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
-            raise ServiceRuntimeError(
+            failure = ServiceRuntimeError(
                 code
                 if isinstance(code, str) and code in SERVICE_ERROR_CODES
                 else "REMOTE_REQUEST_REJECTED"
             )
+            details = body.get("result")
+            if isinstance(details, Mapping) and details:
+                failure.result = dict(details)
+            raise failure
         result = body.get("result")
         if not isinstance(result, Mapping):
             if not control:
@@ -1669,6 +1700,27 @@ class ServiceClientRuntime:
             "STALE_EPOCH",
             "UNKNOWN_OPERATION",
         }
+
+    def _released_run_adoption_run_id(
+        self, error: ServiceRuntimeError, scope: WireScope
+    ) -> str | None:
+        """Return the released durable run this registration may adopt.
+
+        Only a strategy client, only an exact DUPLICATE_ACTIVE_RUN rejection,
+        and only a server-proved released claim (the registry reports the
+        durable run id exclusively after the previous session unregistered,
+        expired, or lost its epoch) may adopt another logical run.
+        """
+
+        if (
+            error.code != "DUPLICATE_ACTIVE_RUN"
+            or self.identity.role is not WireRole.STRATEGY_CLIENT
+        ):
+            return None
+        run_id = error.result.get("strategy_write_run_id")
+        if type(run_id) is not str or not run_id or run_id == scope.run_id:
+            return None
+        return run_id
 
     def _unregister_binding(self, binding: RegisteredBinding) -> bool:
         if binding.remote_lease_inactive:
