@@ -1,0 +1,191 @@
+{
+  "schema": "iteration10-dim06-closure-proposal-manifest-v1",
+  "artifact_id": "iteration10-dim06-contract-closure-20261016-r1",
+  "status": "ROOT_FORMAL_DIM06_PASS",
+  "formal_pass_count_changed": true,
+  "evidence_level": "SOURCE_FAKE_ADAPTER_CONTRACT_AND_ROOT_FOCUSED_TEST_ONLY",
+  "created_date": "2026-10-16",
+  "tested_root_head": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+  "repository_heads_at_spec_binding": {
+    "D:\\bt_api_py": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+    "D:\\bt_api_py\\bt_api\\bt_api_ctp": "a497bab6bb1b904891461aead1857093078226f0",
+    "D:\\bt_api_py\\bt_api\\bt_api_okx": "fb24657f4b7aa4834935c3dd0c819c1c51f9358f",
+    "D:\\bt_api_py\\bt_api\\bt_api_binance": "7d2270ceac3fa6ff2c41e5b8776bdd47ae01526b"
+  },
+  "repository_heads_after_snapshot": null,
+  "head_stability_claim": false,
+  "root_run": {
+    "output_directory": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1",
+    "nodes": [
+      "tests/bt_api_contract/test_readonly_futures_metadata.py::test_binance_readiness_uses_account_mode_symbol_rules_and_leverage",
+      "tests/bt_api_contract/test_readonly_futures_metadata.py::test_binance_readiness_keeps_missing_symbol_config_unproven",
+      "tests/bt_api_contract/test_readonly_futures_metadata.py::test_binance_readiness_marks_margin_mismatch_and_zero_leverage_as_failures",
+      "tests/bt_api_contract/test_readonly_futures_metadata.py::test_okx_readiness_combines_only_read_operations",
+      "tests/bt_api_contract/test_readonly_futures_metadata.py::test_readiness_is_explicitly_unsupported_for_other_venues_and_zmq",
+      "tests/bt_api_contract/test_dim06_readiness_margin_modes.py::test_binance_isolated_margin_mode_is_ready_from_symbol_configuration",
+      "tests/bt_api_contract/test_dim06_readiness_margin_modes.py::test_okx_isolated_margin_mode_is_ready_from_matching_leverage_rows",
+      "tests/bt_api_contract/test_dim06_readiness_margin_modes.py::test_okx_cross_request_rejects_isolated_leverage_rows",
+      "tests/bt_api_contract/test_dim06_readiness_margin_modes.py::test_okx_missing_position_mode_and_leverage_remain_unproven"
+    ],
+    "pytest_exit": 0,
+    "passed": 9,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "warnings_from_stdout": 1,
+    "stderr_empty": true,
+    "runner_exit": 1,
+    "runner_failure": "KeyError: evidence_level while constructing final report after pytest, source-after.json and exit.txt were written",
+    "result_json_present": false,
+    "reconciliation_sha256": "691a1f50f76f0d3947afbf92b6213bce3f6dbe462ae6216b6a8e1ea7f8659325",
+    "reconciliation_bytes": 2997,
+    "source_pins_before_after_equal": true,
+    "current_sources_match_persisted_after": true,
+    "source_sha256": {
+      "D:\\bt_api_py\\bt_api_py\\__init__.py": "6ee02d42704adf1a64462ffec9133f2ed23ac9c69fabf14772e88db0066f9afd",
+      "D:\\bt_api_py\\bt_api_py\\bt_api.py": "91363d1ced5b032a61152a8c9af7c7a26e73a9ab2f7990dd7a69d7ba202caab4",
+      "D:\\bt_api_py\\bt_api_py\\_direct_backend.py": "8e28ff14ad1644c8bd272aa7740b54906cc7af2fac2cbb3284d3735944d4e26d",
+      "D:\\bt_api_py\\bt_api_py\\_normalization.py": "90bde31374395e49eef13886c1b6c345cd002e85974798c91fbc19c2aaf37a25",
+      "D:\\bt_api_py\\bt_api_py\\_contracts\\__init__.py": "d8c2dd9514dcaade49243d97fcb3b208ab6252a3c69d03fd0a6105617aa1e038",
+      "D:\\bt_api_py\\bt_api_py\\_contracts\\errors.py": "7bf21144930e4f940b8c6bb34371ab690d8e932036357deb91d8fb4cf106a9f1",
+      "D:\\bt_api_py\\bt_api_py\\_contracts\\models.py": "5299c383a63e1c1d82e163ddf7cde6be648da252d0bcd6351124774f0a2b2221",
+      "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\__init__.py": "650d3af5a789920e614ecbdc7d81045d184746c12109b328adac5a3cd4921df4",
+      "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\binance.py": "78fd7b3078472eac2d9f0b75c11d048409b350e15a5b8bd86df51c6739beac56",
+      "D:\\bt_api_py\\bt_api_py\\_venue_mappers\\okx.py": "59c6150a6d22fe1dc757c289d224f98fab29f152f018eeef28d68fe6d9c051f9",
+      "D:\\bt_api_py\\bt_api_py\\exceptions.py": "eed1d3b9cf7d2953cde1d2b979eefe917bcfad896b22bb1e6444451d3dc368cc",
+      "D:\\bt_api_py\\tests\\bt_api_contract\\test_readonly_futures_metadata.py": "242b5fbcff8e4ec387b30a261464503b6a9a7ec39622d28f3837fc5143dcd497",
+      "D:\\bt_api_py\\tests\\bt_api_contract\\test_dim06_readiness_margin_modes.py": "e23093ca5247ceb7be313aa56221aeeac726f107553b158b09bcd524cb115b0d",
+      "D:\\bt_api_py\\tests\\__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "D:\\bt_api_py\\tests\\conftest.py": "cdc3adbda6c2938da5be3cb1e452973cba1ddee9484a124470fa6a2bc3eb9dc3",
+      "D:\\bt_api_py\\conftest.py": "3e49ff8cb61ff04038e05fbacf907b40693cb539856eb5795b391dcf245a3e9c",
+      "D:\\bt_api_py\\pyproject.toml": "818f6ed45279478496ebd6d4e953ccb2c5eee93efc6e18cc700c92da3bc24df7"
+    },
+    "review": "GO_TO_ROOT_FOCUSED_QA_ONLY; independent static review was a reviewer task message, not a separately archived review payload.",
+    "junit": {
+      "path": "root-run/junit.xml",
+      "bytes": 1665,
+      "sha256": "dba689fa0011dc5b2d11b779a18291483f64e916875a8a7e13ba8d2213bfad6f"
+    }
+  },
+  "new_test": {
+    "path": "tests\\bt_api_contract\\test_dim06_readiness_margin_modes.py",
+    "bytes": 7834,
+    "sha256": "e23093ca5247ceb7be313aa56221aeeac726f107553b158b09bcd524cb115b0d"
+  },
+  "raw_evidence_zip": {
+    "path": "docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim06-readiness-margin-mode-20261016\\raw-evidence.zip",
+    "bytes": 11503,
+    "sha256": "16e6fb73eb8c8a03ff80ead7e0a1db613a41fb6eacd16d84ebd8c740761ae5e1",
+    "entries": {
+      "root-run/command.json": {
+        "bytes": 2208,
+        "sha256": "ba7ae43eada828f898034b6a53e4ef2e7d875c6b9f89c10803f7e4f7556d0a52",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\command.json"
+      },
+      "root-run/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\exit.txt"
+      },
+      "root-run/junit.xml": {
+        "bytes": 1665,
+        "sha256": "dba689fa0011dc5b2d11b779a18291483f64e916875a8a7e13ba8d2213bfad6f",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\junit.xml"
+      },
+      "root-run/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\runner.py"
+      },
+      "root-run/running.json": {
+        "bytes": 76,
+        "sha256": "6bc3da93caa1487f438199ac9d1cd0298b1d8e2247952dcad023bcd0486d0361",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\running.json"
+      },
+      "root-run/source-after.json": {
+        "bytes": 2042,
+        "sha256": "6efbe39090b097bb5db9cf614d5f59a1103d0d45c64a35e901a7f753e5247f63",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\source-after.json"
+      },
+      "root-run/source-before.json": {
+        "bytes": 2042,
+        "sha256": "6efbe39090b097bb5db9cf614d5f59a1103d0d45c64a35e901a7f753e5247f63",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\source-before.json"
+      },
+      "root-run/spec.json": {
+        "bytes": 5446,
+        "sha256": "d4f0275001ee7ab8c863c75b36513fdf9f03a0a59cd91e65364da142d2c13709",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\spec.json"
+      },
+      "root-run/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\stderr.log"
+      },
+      "root-run/stdout.log": {
+        "bytes": 650,
+        "sha256": "340481b4ee5189c5568a6d89976f8bc19baf0176494a42399a26a9d682f94c30",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\stdout.log"
+      },
+      "root-run/root-report-reconciliation.json": {
+        "bytes": 2997,
+        "sha256": "691a1f50f76f0d3947afbf92b6213bce3f6dbe462ae6216b6a8e1ea7f8659325",
+        "source_path": "D:\\temp\\iteration10-dim06-readiness-margin-mode-root-20261016-r1\\root-report-reconciliation.json"
+      },
+      "source/tests/bt_api_contract/test_dim06_readiness_margin_modes.py": {
+        "bytes": 7834,
+        "sha256": "e23093ca5247ceb7be313aa56221aeeac726f107553b158b09bcd524cb115b0d",
+        "source_path": "D:\\bt_api_py\\tests\\bt_api_contract\\test_dim06_readiness_margin_modes.py"
+      }
+    }
+  },
+  "root_adjudication_record": {
+    "path": "docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim06-readiness-margin-mode-20261016\\root-adjudication.md",
+    "bytes": 5190,
+    "sha256": "6a96039656db581b6f32f895e29e8a0761ddcc28fee0f85e06cd3955b514ff1b"
+  },
+  "prior_accepted_evidence": [
+    {
+      "round": "R163 DIM06 CTP contract QA",
+      "evidence_path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim06-ctp-contract-qa-20261016/root-adjudication.md",
+      "bytes": 2107,
+      "sha256": "ce42db40b11a08ba29b8ca1ff4ff5ea55d655d45c489af01f6ffe6a68ccabc43",
+      "accepted_facts": "513 passed, 3 skipped, 3 deselected in fixed-source r2; DIM06 crosswalk and three session-node disposition recorded there."
+    },
+    {
+      "round": "R189 MIG01 R3 wire (DIM06 session-path context only)",
+      "evidence_path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-r3-wire-20261016/root-adjudication.md",
+      "bytes": 4986,
+      "sha256": "bd6e8f9a52f5a1e402f9deae17235ae12a90e708a9c1bdc7d8dea0f7e34f0f43",
+      "accepted_facts": "T3 3 passed and combined 17 passed; context evidence for the session-path nodes previously deselected in R163, not a DIM06 provider/router acceptance."
+    },
+    {
+      "round": "R191 DIM06 TIF matrix",
+      "evidence_path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim06-tif-matrix-20261016/root-adjudication.md",
+      "bytes": 2787,
+      "sha256": "d68989f58316ac75a8af547f07a10e29a709fda04bd1e104ba2f5f1f4216d71c",
+      "accepted_facts": "43 fixed-source tests passed; local synthetic matrix only. Its own adjudication explicitly left Binance LIMIT TIF and OKX market/post-only guards unasserted."
+    },
+    {
+      "round": "R209 DIM06 TIF guards",
+      "evidence_path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim06-tif-guards-20261016/root-adjudication.md",
+      "bytes": 3895,
+      "sha256": "f25f5b261ed41fc38101cac2dcb4798f9404cb79ba3532e4f787dfe45c221013",
+      "accepted_facts": "Binance and OKX narrow production guards committed in their child dev repositories; Root fixed-source QA 21 passed with zero warnings and stderr empty. Does not itself declare formal DIM06 PASS."
+    }
+  ],
+  "scope_disclosures": [
+    "This package contains no result.json because the frozen runner failed after pytest during report construction; no replacement is manufactured.",
+    "R189 is cited only to resolve the three session-path nodes deselected by R163 after the MIG01 wire blocker; it is not real router/provider evidence.",
+    "R191 did not assert the two narrow guards later accepted in R209; the record keeps this provenance explicit.",
+    "No provider, account, network, Host, or DIM03 collateral-pool behavior was tested in this round.",
+    "Packet author performed no QA or commits; Root finalized the formal adjudication and tracker/progress in R212 without repeating accepted QA."
+  ],
+  "round": "R212",
+  "formal_before": "38/68",
+  "formal_after": "39/68",
+  "delivery_parent": "ebd6c1feb64dbabecfa401f128696349de7c7541"
+}
