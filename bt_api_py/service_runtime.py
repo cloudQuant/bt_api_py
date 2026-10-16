@@ -99,7 +99,9 @@ PORT_OPERATIONS = MappingProxyType(
         "service.monitor_query": frozenset(
             {"monitor.query", "monitor.read_after", "telemetry.snapshot"}
         ),
-        "service.monitor_control": frozenset({"monitor.control"}),
+        "service.monitor_control": frozenset(
+            {"monitor.control", "monitor.control_status"}
+        ),
         "service.owner_control": frozenset(
             {"owner.session", "owner.stop_new", "owner.cancel", "owner.reduce"}
         ),

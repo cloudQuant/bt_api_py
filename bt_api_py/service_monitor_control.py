@@ -24,7 +24,9 @@ from bt_api_monitor.control import (
 )
 from bt_api_monitor.service_control import (
     MONITOR_CONTROL_PUBLIC_PORT,
+    MONITOR_CONTROL_PUBLIC_OPERATIONS,
     MONITOR_CONTROL_SUBMIT_OPERATIONS,
+    MONITOR_CONTROL_STATUS_OPERATIONS,
     MonitorControlService,
     MonitorControlServiceError,
     MonitorControlTarget,
@@ -36,6 +38,7 @@ if TYPE_CHECKING:
 
 _MONITOR_FREEZE_CAUSE_RE = re.compile(r"^monitor-freeze-v1:[0-9a-f]{64}$")
 _MONITOR_CONTROL_OPERATION = "monitor.control"
+_MONITOR_CONTROL_STATUS_OPERATION = "monitor.control_status"
 _OWNER_CLAIM_OPERATION = "monitor.claim"
 _OWNER_ACK_OPERATION = "monitor.acknowledge"
 _MAX_BACKLOG_DRAIN = 256
@@ -341,9 +344,10 @@ class MonitorRiskControlOwner:
 
 
 class MonitorControlRuntime:
-    """Application handler that synchronously dispatches to fixed route owners."""
+    """Submit public controls and maintain their fixed owners on the host thread."""
 
     OPERATIONS = MONITOR_CONTROL_OPERATIONS
+    PUBLIC_OPERATIONS = MONITOR_CONTROL_PUBLIC_OPERATIONS
     PUBLIC_PORT = MONITOR_CONTROL_PUBLIC_PORT
 
     def __init__(
@@ -380,55 +384,52 @@ class MonitorControlRuntime:
         scope: WireScope,
         arguments: Mapping[str, Any],
     ) -> Mapping[str, object]:
-        """Submit one application request, run its exact route, return ledger state."""
+        """Submit one authorized application request or read its exact status."""
 
-        if type(operation) is not str or operation not in self.OPERATIONS:
+        if type(operation) is not str or operation not in self.PUBLIC_OPERATIONS:
             raise MonitorControlRuntimeError("UNSUPPORTED_OPERATION")
+        if operation in MONITOR_CONTROL_STATUS_OPERATIONS:
+            return self._service.handle(
+                operation,
+                principal_ref=principal_ref,
+                identity=identity,
+                scope=scope,
+                arguments=arguments,
+            )
         target = self._service.target_for_scope(scope)
         owner = self._owner_by_target.get(id(target))
         if owner is None:
             raise MonitorControlRuntimeError("CONTROL_OWNER_ROUTE_UNAVAILABLE")
         with self._route_locks[id(owner)]:
-            submitted = self._service.handle(
+            # Admission is synchronous; the Risk effect is deliberately left
+            # for maintain(), which ServiceHost invokes on its owner thread.
+            return self._service.handle(
                 _MONITOR_CONTROL_OPERATION,
                 principal_ref=principal_ref,
                 identity=identity,
                 scope=scope,
                 arguments=arguments,
             )
-            command_id = submitted.get("command_id")
-            if type(command_id) is not str:
-                raise MonitorControlRuntimeError("SUBMISSION_RESULT_INVALID")
-            if submitted.get("status") not in (
-                ControlStatus.PENDING.value,
-                ControlStatus.UNKNOWN.value,
-            ):
-                if submitted.get("status") == ControlStatus.CLAIMED.value:
-                    raise MonitorControlRuntimeError("CONTROL_ORDER_UNRESOLVED")
-                return submitted
-            result: Mapping[str, object] | None = None
-            # Always claim from the ordered queue first. This makes the ledger
-            # sequence guard effective before any exact-command retry, so an
-            # unresolved earlier FREEZE cannot be replayed after a later
-            # RESUME.
-            for _ in range(_MAX_BACKLOG_DRAIN):
-                next_result = owner.run_next()
-                if next_result is None:
-                    result = owner.run_command(command_id)
-                    break
-                if next_result.get("command_id") == command_id:
-                    result = next_result
-                    break
-                if next_result.get("status") == ControlStatus.UNKNOWN.value:
-                    raise MonitorControlRuntimeError("CONTROL_ORDER_UNRESOLVED")
-            if result is None:
-                raise MonitorControlRuntimeError("CONTROL_ORDER_UNRESOLVED")
-            if result.get("status") in (
-                ControlStatus.PENDING.value,
-                ControlStatus.CLAIMED.value,
-            ):
-                raise MonitorControlRuntimeError("CONTROL_ORDER_UNRESOLVED")
-            return result
+
+    def maintain(self, _active_registration_ids: frozenset[str]) -> None:
+        """Run durable owner actions only through the ServiceHost maintenance hook."""
+
+        if type(_active_registration_ids) is not frozenset or any(
+            type(value) is not str for value in _active_registration_ids
+        ):
+            raise MonitorControlRuntimeError("INVALID_ACTIVE_REGISTRATIONS")
+        for owner in self._owners.values():
+            with self._route_locks[id(owner)]:
+                for _ in range(_MAX_BACKLOG_DRAIN):
+                    result = owner.run_next()
+                    if result is None:
+                        break
+                    if result.get("status") in (
+                        ControlStatus.CLAIMED.value,
+                        ControlStatus.UNKNOWN.value,
+                    ):
+                        # The earlier sequence is unresolved. Do not overtake it.
+                        break
 
     def handle_context(self, context: object, arguments: Mapping[str, Any]) -> Mapping[str, object]:
         """Convenience bridge from ServiceCallContext for in-process tests."""

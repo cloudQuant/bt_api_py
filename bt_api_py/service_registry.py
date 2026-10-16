@@ -2278,6 +2278,7 @@ class ServiceRegistry:
             if type(error) is ServiceOperationDeniedError and (capability.port, operation) in {
                 ("service.market_source", "market.subscribe"),
                 ("service.monitor_control", "monitor.control"),
+                ("service.monitor_control", "monitor.control_status"),
             }:
                 return self._failure("SCOPE_DENIED")
             return self._failure("HANDLER_FAILED")

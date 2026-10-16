@@ -1,0 +1,272 @@
+{
+  "schema": "iteration10-afi08-freeze-expiry-r265-v1",
+  "round": "AFI08 authenticated FREEZE, exact status and EXPIRED terminal no-effect repair",
+  "created_at": "2026-10-17",
+  "packet_state": "AUTHOR_EVIDENCE; SDK source commit pending final pin record",
+  "formal_acceptance": false,
+  "author_qa_rerun": false,
+  "repositories": {
+    "bt_api_py": {
+      "branch": "dev",
+      "base_head": "4f5ae610b21ac635cc97099209690f8e16995d6c",
+      "staged_gitlink": "160000 commit 7c407634c092ba59383bd870a0b0b19c588ae451 bt_api/bt_api_monitor",
+      "source_commit": null
+    },
+    "bt_api_monitor": {
+      "branch": "dev",
+      "commit": "7c407634c092ba59383bd870a0b0b19c588ae451",
+      "parent": "536a4f04747182749fabdac5e28624f80465bc53"
+    },
+    "ai_for_investor": {
+      "branch": "dev at commit",
+      "commit": "86ed9dbbe6293b71d7279aafb0f93b1e0c36aa3e",
+      "parent": "318608a29997fe9e37db9a8053542375eabf286b"
+    }
+  },
+  "preserved_R261_operations": [
+    "account.configuration",
+    "account.server_time_probe"
+  ],
+  "SDK_R6_filtered_partials": [
+    {
+      "path": "bt_api_py/service_monitor_control.py",
+      "base_sha256": "d2f3ac6abc804632778d612a8944f0195da6798d5275ad696802f62c6a9e3c45",
+      "patch_bytes": 5720,
+      "patch_sha256": "c617a24636b57e5a5073b9483bfb472e27eb2e91eb6e4b162ab36b288c24087e",
+      "reconstructed_old_base_bytes": 20227,
+      "reconstructed_old_base_sha256": "920461a3bb4dc0d964efed060d873c8d781d84943bee7b1be408b9b44db3bd32"
+    },
+    {
+      "path": "bt_api_py/service_components.py",
+      "base_sha256": "36eb79206462ca2850c2259f155a7b94dbafbd5cb548c2eed32ba77bc1bedc6f",
+      "patch_bytes": 2226,
+      "patch_sha256": "f56691a734fb622e44fe35ccbc76cb9785c4d5eae5d7016051b8944f042cf6de",
+      "reconstructed_old_base_bytes": 109319,
+      "reconstructed_old_base_sha256": "5183d548a1c670ef209032f5dfe200af3bf1681dea7686eaa7dc4ad5903d915d",
+      "excluded_R250_delta_sha256": "729617fb3fd791eff1cc3daaf8ba13a5acb818dc0f8fd30fb39375a672f7605e"
+    },
+    {
+      "path": "bt_api_py/service_runtime.py",
+      "base_sha256": "112b3bed29964708e1af7f868b4afb5fe85145000a0a7a30aa51a11d98711f0b",
+      "patch_bytes": 653,
+      "patch_sha256": "b3fcb531c20b0fc756822c031b6b6f8abe91385055898305859a2554778f1308",
+      "reconstructed_old_base_bytes": 80240,
+      "reconstructed_old_base_sha256": "e1df1a3961e0806b2efacffd5aff3e099b01e73128a49291b083c1207f2675d5"
+    },
+    {
+      "path": "bt_api_py/service_registry.py",
+      "base_sha256": "3f02ab77313c7ef3318bcb15128c9e84695b7c701ccb79de5b764f3ea1110166",
+      "patch_bytes": 612,
+      "patch_sha256": "3efc1666f2e10e98362ee77a7d4573317b7dccac8760fcc4c81f9effb6bee992",
+      "reconstructed_old_base_bytes": 105028,
+      "reconstructed_old_base_sha256": "3838e1b502501215ed8bf15f68abcbc5a28a0ddcd1c4c2b62719f4135fcb1fb6"
+    }
+  ],
+  "current_staged_sdk_pins": [
+    {
+      "path": "bt_api_py/service_components.py",
+      "bytes": 107129,
+      "sha256": "ae9ce9505fbef25d038ca6b319e30f31506dfda21ad14563456d17d802520dbf"
+    },
+    {
+      "path": "bt_api_py/service_monitor_control.py",
+      "bytes": 19771,
+      "sha256": "7f428465e14a1aaa0fba0afe0e9ed6705979d85ae9a8af0ce9f3fa44aa36a816"
+    },
+    {
+      "path": "bt_api_py/service_registry.py",
+      "bytes": 102618,
+      "sha256": "abecddd3dc1a826cd7e7d9d8c4560c45f897580840d2ffa3c51346b5802c91b4"
+    },
+    {
+      "path": "bt_api_py/service_runtime.py",
+      "bytes": 78462,
+      "sha256": "ca8f09f248f773ba92f2df281bc920124ec7bf1f30a92aeaf956d28a3babf309"
+    }
+  ],
+  "excluded_shared_WIP": [
+    "R250 Risk-validator delta",
+    "Paper",
+    "DIM04",
+    "MIG03",
+    "other unaccepted shared-file hunks"
+  ],
+  "AFI_committed_blob_pins": [
+    {
+      "path": "src/backend/app/config.py",
+      "bytes": 61019,
+      "sha256": "f3a2d39868a53c4c6720c94297ea91eeaaaab4cf6873a77e03efea992186c5fd"
+    },
+    {
+      "path": "src/backend/app/api/monitoring.py",
+      "bytes": 22365,
+      "sha256": "84c25dec1d669d5025305fe9e08c48412ed0ca6b790af720b7ea327e3f9ae543"
+    },
+    {
+      "path": "src/backend/app/services/monitoring_control.py",
+      "bytes": 35973,
+      "sha256": "c47927a19b32ce50db56920eb55be69845e9553101e2458093bed1381d5d5ea3"
+    },
+    {
+      "path": "src/backend/tests/test_afi08_owner_freeze_control_http.py",
+      "bytes": 31060,
+      "sha256": "3c5196e95de67a4107c27beb34ddadd9dc32055437092af81f584ce8fadf1e2e"
+    }
+  ],
+  "AFI_author_execution_file_pins": [
+    {
+      "path": "src/backend/app/config.py",
+      "bytes": 61019,
+      "sha256": "f3a2d39868a53c4c6720c94297ea91eeaaaab4cf6873a77e03efea992186c5fd"
+    },
+    {
+      "path": "src/backend/app/api/monitoring.py",
+      "bytes": 23050,
+      "sha256": "79c097228bbcf68499eb93932a70542b5e74e055722f0c784fd904d76dc6a959"
+    },
+    {
+      "path": "src/backend/app/services/monitoring_control.py",
+      "bytes": 35973,
+      "sha256": "c47927a19b32ce50db56920eb55be69845e9553101e2458093bed1381d5d5ea3"
+    },
+    {
+      "path": "src/backend/tests/test_afi08_owner_freeze_control_http.py",
+      "bytes": 31060,
+      "sha256": "3c5196e95de67a4107c27beb34ddadd9dc32055437092af81f584ce8fadf1e2e"
+    }
+  ],
+  "AFI_author_vs_commit_differences": [
+    "monitoring.py: author 23050 B / 79c097..., commit blob 22365 B / 84c25..."
+  ],
+  "Monitor_committed_blob_pins": [
+    {
+      "path": "src/bt_api_monitor/service_control.py",
+      "bytes": 32670,
+      "sha256": "f2ef7ab640feb81db7f63c7586699e8d7ac39759fd9f69cfb8aee9fd477f3b81"
+    },
+    {
+      "path": "tests/test_service_control.py",
+      "bytes": 25529,
+      "sha256": "b268bb27bd85d1f36732976359791d0830ebdac579c4c7bdf83895146e3a11d9"
+    }
+  ],
+  "Monitor_candidate_checkout_pins": [
+    {
+      "path": "src/bt_api_monitor/service_control.py",
+      "bytes": 32670,
+      "sha256": "f2ef7ab640feb81db7f63c7586699e8d7ac39759fd9f69cfb8aee9fd477f3b81"
+    },
+    {
+      "path": "tests/test_service_control.py",
+      "bytes": 25530,
+      "sha256": "c6d6c2a7dda68cb02c64b7b2dff099367544c7d1bcef9bc4b14a671f59f53bc7"
+    }
+  ],
+  "author_qa": {
+    "original_2pass": {
+      "result": "2 passed, 3 warnings, exit 0",
+      "rerun": false,
+      "record_sha256": "8ac1bc0d42ed69d96ead729ba9a9e69e61ae056e2a700d9faf3ad5aac837ef76"
+    },
+    "expired_node": {
+      "name": "test_unclaimed_expired_freeze_resolves_issuer_and_allows_next_command",
+      "result": "1 passed, 2 warnings, exit 0",
+      "junit_xml": {
+        "bytes": 396,
+        "sha256": "5f12a410e2d9aed66b4a557fdbaea12bc64617efd15c6a5c06d2d6282afbb093"
+      },
+      "record_sha256": "40e96ebdf35fac24ed003120c3cfd0319a2434c36247e55844a63d78b8f3ad6e"
+    },
+    "level": "AUTHOR_LOCAL_SYNTHETIC_SDK_HOST_AND_RISKGATE_HTTP_ONLY",
+    "root_qa": false,
+    "formal_acceptance": false
+  },
+  "independent_review": {
+    "result": "GO_STATIC",
+    "reviewers": [
+      "resume_afi_remaining",
+      "review_afi_financial"
+    ],
+    "reviewer_tests_run": false
+  },
+  "limits": [
+    "No real account/provider operation",
+    "No process restart/failure acceptance",
+    "DRAIN/CLOSE unsupported",
+    "UNKNOWN/claimed work remain unresolved",
+    "No formal AFI08 row PASS"
+  ],
+  "raw_evidence_zip": {
+    "path": "raw-evidence.zip",
+    "bytes": 11811,
+    "sha256": "d1b536d3cd34201c3f359117846bf4026cdf1d7bc964cf2162cb8e14cc262149",
+    "members": [
+      {
+        "path": "author/r1-original-2pass.json",
+        "bytes": 4899,
+        "sha256": "8ac1bc0d42ed69d96ead729ba9a9e69e61ae056e2a700d9faf3ad5aac837ef76"
+      },
+      {
+        "path": "author/r1-original-transcript.txt",
+        "bytes": 326,
+        "sha256": "432980c06ab4249c3e589c1cdf1018c1fb4f4b6b6c1f6a4993502bc1b2014bfc"
+      },
+      {
+        "path": "author/r2-expired-1pass-junit.xml",
+        "bytes": 396,
+        "sha256": "5f12a410e2d9aed66b4a557fdbaea12bc64617efd15c6a5c06d2d6282afbb093"
+      },
+      {
+        "path": "author/r2-expired-1pass-record.json",
+        "bytes": 3964,
+        "sha256": "40e96ebdf35fac24ed003120c3cfd0319a2434c36247e55844a63d78b8f3ad6e"
+      },
+      {
+        "path": "author/r2-expired-1pass-transcript.txt",
+        "bytes": 350,
+        "sha256": "737e1458320c2f107250d61a2ae9a005ff3be86ae8f12b886be0b66747a55b9b"
+      },
+      {
+        "path": "patches/service_components.patch",
+        "bytes": 2226,
+        "sha256": "f56691a734fb622e44fe35ccbc76cb9785c4d5eae5d7016051b8944f042cf6de"
+      },
+      {
+        "path": "patches/service_monitor_control.patch",
+        "bytes": 5720,
+        "sha256": "c617a24636b57e5a5073b9483bfb472e27eb2e91eb6e4b162ab36b288c24087e"
+      },
+      {
+        "path": "patches/service_registry.patch",
+        "bytes": 612,
+        "sha256": "3efc1666f2e10e98362ee77a7d4573317b7dccac8760fcc4c81f9effb6bee992"
+      },
+      {
+        "path": "patches/service_runtime.patch",
+        "bytes": 653,
+        "sha256": "b3fcb531c20b0fc756822c031b6b6f8abe91385055898305859a2554778f1308"
+      },
+      {
+        "path": "receipts/afi-commit.json",
+        "bytes": 2183,
+        "sha256": "1a43b6c2532c37b1ce1473da70b5286d72082a0ad613d6987284a8acb2f46806"
+      },
+      {
+        "path": "receipts/monitor-commit.json",
+        "bytes": 1144,
+        "sha256": "f5a1f27ca5dbbbf33e95bf2eac0e6549176930e7d5d5572eb16c619a803172a8"
+      },
+      {
+        "path": "review/expired-static-review-summary.md",
+        "bytes": 1368,
+        "sha256": "6cae07c09ff67b6246f44bb1eecbc6ee705d98391b3e83087e59d00a4435b9ce"
+      }
+    ]
+  },
+  "packet_files": [
+    "manifest.json",
+    "round-record.md",
+    "raw-evidence.zip"
+  ],
+  "implementation_commit_hash_finalization_required": true
+}

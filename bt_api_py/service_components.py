@@ -543,10 +543,14 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
         ),
         ("monitor", "control"): _Builtin(
             module_name="bt_api_py.service_monitor_control",
-            operations_attribute=("MonitorControlRuntime", "OPERATIONS"),
+            operations_attribute=("MonitorControlRuntime", "PUBLIC_OPERATIONS"),
             resource_keys=frozenset({"service", "owners"}),
             public_ports=MappingProxyType(
-                {"service.monitor_control": frozenset({"monitor.control"})}
+                {
+                    "service.monitor_control": frozenset(
+                        {"monitor.control", "monitor.control_status"}
+                    )
+                }
             ),
             internal_ports=frozenset(),
             validator_module_name="bt_api_monitor.service_control",
@@ -2038,6 +2042,7 @@ def build_component(
                             "INVALID_SCOPE",
                             "UNSUPPORTED_SCOPE",
                             "SCOPE_NOT_GRANTED",
+                            "COMMAND_NOT_FOUND",
                         }:
                             # These failures precede ledger admission/effects.
                             # Owner, storage and ACK failures stay UNKNOWN.
@@ -2147,6 +2152,15 @@ def build_component(
                     return False
 
             readiness = account_worker_readiness
+
+        if spec.component == "monitor" and spec.options.get("role") == "control":
+            # Signed commands are admitted by the request handler, but their
+            # Risk effects belong to the existing host-owned RiskGate. Run the
+            # durable monitor owner only from this normal ServiceHost hook.
+            candidate_maintain = getattr(adapter, "maintain", None)
+            if not callable(candidate_maintain):
+                raise ServiceComponentError("MONITOR_CONTROL_OWNER_UNAVAILABLE")
+            maintain = candidate_maintain
 
         if (
             spec.component == "risk"
