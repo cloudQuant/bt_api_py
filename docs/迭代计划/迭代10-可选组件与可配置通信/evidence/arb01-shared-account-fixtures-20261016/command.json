@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\it10arb01-20261016-r3\\junit.xml",
+    "--basetemp=D:\\temp\\it10arb01-20261016-r3\\pytest-tmp",
+    "tests/unit/test_service_account_integration.py"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T02:43:37.165944+00:00"
+}

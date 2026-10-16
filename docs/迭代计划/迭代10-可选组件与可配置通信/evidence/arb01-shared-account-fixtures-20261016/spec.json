@@ -1,0 +1,79 @@
+{
+  "schema": "iteration10-focused-qa-spec-v1",
+  "artifact_id": "it10arb01-20261016-r3",
+  "python": "C:\\anaconda3\\python.exe",
+  "cwd": "D:\\bt_api_py",
+  "nodes": [
+    "tests/unit/test_service_account_integration.py"
+  ],
+  "pytest_options": [
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_gateway\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "repositories": {
+    "D:\\bt_api_py": "466977392985ef1d7fa9b282a220096c8d19dff8",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "source_sha256": {
+    "D:\\bt_api_py\\tests\\unit\\test_service_account_integration.py": "0138ca016e7caf77260fcc155e3d266b0799a160a356eec639fbacaab785fc61",
+    "D:\\bt_api_py\\bt_api_py\\__init__.py": "6ee02d42704adf1a64462ffec9133f2ed23ac9c69fabf14772e88db0066f9afd",
+    "D:\\bt_api_py\\bt_api_py\\service_account.py": "d7aee3c00d1d9fe2bd8219f8e35898d0f7620df2999ca4de6082a23544e8008f",
+    "D:\\bt_api_py\\bt_api_py\\service_components.py": "77d61c3f61177735663355f07f37d77391f2bef09b4df85818f8084162a8e161",
+    "D:\\bt_api_py\\bt_api_py\\service_config.py": "5d436d933e9b0367eddd29c41d011e68338ce90762fe635865274195e7fa78af",
+    "D:\\bt_api_py\\bt_api_py\\service_deployment.py": "997be1908ec15e567800a5ecc8a76eca473c08fcb7677f3cbfa3ac3beaa25865",
+    "D:\\bt_api_py\\bt_api_py\\service_host.py": "1c0f1cc5921bec3bcc119f82ca1139b5efd9eaccde84208fc76fb7b5ca2cac92",
+    "D:\\bt_api_py\\bt_api_py\\service_registry.py": "cea39dacbe2b9965745191995e6dd41ce9fc14406153f9eae95afd63eddcfcac",
+    "D:\\bt_api_py\\bt_api_py\\service_runtime.py": "e5b8ba128d58a6730e8e5a019392062cd153bca6772c1a04ec854bc0f7ac7640",
+    "D:\\bt_api_py\\pyproject.toml": "818f6ed45279478496ebd6d4e953ccb2c5eee93efc6e18cc700c92da3bc24df7",
+    "D:\\bt_api_py\\tests\\conftest.py": "cdc3adbda6c2938da5be3cb1e452973cba1ddee9484a124470fa6a2bc3eb9dc3",
+    "D:\\bt_api_py\\tests\\conftest_test_data.py": "b8d8ac4f456a5a233745c75803194d23411c51a33cf789823ba1e67cdcef960d",
+    "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\__init__.py": "6b2a075e68d4c1663d28fd7110fae84d780ddec39de4654774f9395151261590",
+    "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\_version.py": "567f790afd9549fbf5eb4eb5202c8e95cd68e55f91bd13df2240e820e9cee32a",
+    "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\deployment_evidence.py": "78a87b1d8ad1463cd631dba29c0d9010738e78abad9a118eb5013b4e9f20b256",
+    "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\account_protocol.py": "dc25caae8cb3a7e2ac8851958a60a15a2a6c264f4b3419a3d5f50a5d76fa116c",
+    "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\market_protocol.py": "9ad1a16842dfee03587a815ecf4a9915559287c9ce995f6cff8df15c00309108",
+    "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\__init__.py": "d807f831efed22e4f041cbdb1d87fe767ebe7c6c2fba8a64460db05c4fe0ac7c",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\account_session_worker.py": "0006b8a9cfe014d881e8bd8efabebe943ae301af2d5f167211d29cf4cc8545e1",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\account_view_projection.py": "a038cde6e32f8597d2a111a9ee3f63a6143590d35ba5ed691d5bce99b3075f09",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\database_identity.py": "4247ca03ff5d7cf5a9e7c90303a9ec3fd55db50526f5970492e5146adf4184d4",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\event_journal.py": "69c97df8b49b19c96b5819fbe06170e19509b2c50cd47ab2513c3c1bf2998c4d",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\market_hub.py": "68066602191877afc24c72623eb8f81d4defe7f093fbdb53d104cc68153675d3",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\resolution.py": "ed6ed311a9b7824ae48f5e56a338e162db4199db26d85389453de0fe914861f1",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\router.py": "8e923b0228f9dcbf2e782a43835a7be286620664a9835e6ec862843588fef96d",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\service_component.py": "d5e3d4e7814413885672484a11c666dd1603ebfeeb39e412916bab430821fc0c",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\session_guard.py": "8910462b67ace265577b8ab6fb2ac3c68d9d841e0c5499cf652f4c74f75ad682",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\wire_mapping.py": "67227d1e81c20da9c6231b39e27c51b329eeaecd1c0235d87c06669a846f6b58",
+    "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\writer_authority.py": "a399da18987f6743bc6d1661ac2c2dc8a41b3fb5edb5242b813d54bbb3cdecca",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\__init__.py": "bd0a9854d01062f77a032d2b3af3923ac609dc61d50d88860641b92aa7426227",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\client.py": "3c42842494bb5a28245aebcce0afdd500943cc6a8d7677f080c69551377ec354",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\events.py": "5e8fb7c9f4481b2f1386c5f197e3b563a079acf84d47ba8f0c90c694bb56e999",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\market_v2.py": "051cb114a41300d9f94630f95ee9a773ce252f36a9f01d94e0d99561db36ac91",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\server.py": "b536d34b2d1e15dc2135b1c5f5e504491c612ce60c19ef24673596117f2ac1df",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\service_v2.py": "bc17344835fcd80409cdcfd8037345ccf92b5ece5f57817aeb1eda33af17b280",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src\\bt_api_transport_zmq\\wire.py": "60ef5ea0ea89ff11d1e62c65865a39256cf91c31981553a301f7687394f6372b"
+  },
+  "output": "D:\\temp\\it10arb01-20261016-r3",
+  "evidence_level": "FIXED_SOURCE_TWO_ACCOUNT_FIXTURE_VARIANTS_CURVE_SYNTHETIC_PROVIDER_NO_ACCOUNT",
+  "author_evidence": "ARB01 increment: GW01-era account-sharing fixture extended with (a) cross-exchange and (b) same-venue-same-symbol account variants; all three nodes share one parameterized spawn/CURVE scenario body (per-account connect/read-once, one active provider session per account key, wrong-account/ambiguity rejection, close-once). Synthetic providers only; no real account; not a formal ARB01 PASS."
+}

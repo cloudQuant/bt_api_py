@@ -49,6 +49,12 @@ _ACCOUNT_KEYS = {
     "account-a": AccountKey("synthetic", "loopback", "paper", "owner-a"),
     "account-b": AccountKey("synthetic", "loopback", "paper", "owner-b"),
 }
+_CROSS_EXCHANGE_ACCOUNT_KEYS = {
+    "account-a": AccountKey("synthetic", "exchange-alpha", "paper", "owner-a"),
+    "account-b": AccountKey("synthetic", "exchange-beta", "paper", "owner-b"),
+}
+_SHARED_INSTRUMENT_ID = "instrument-shared"
+_SHARED_NATIVE_SYMBOL = "SYNTH-SHARED"
 _RESOURCE = AccountResourceKey("spot", "cash")
 _REQUIRED_COVERAGE = (_RESOURCE,)
 _REQUESTED_OPERATIONS = frozenset({"account.snapshot"})
@@ -197,12 +203,44 @@ def _resource_grant(
     )
 
 
+def _account_instrument(account_ref: str, account_key: AccountKey) -> MarketInstrumentKey:
+    """Default fixture instrument on the account's own synthetic venue."""
+
+    return MarketInstrumentKey(
+        provider=account_key.provider,
+        venue=account_key.venue,
+        environment=account_key.environment,
+        product_type=_RESOURCE.product_type,
+        instrument_id=f"instrument-{account_ref}",
+        native_symbol=f"SYNTH-{account_ref.upper()}",
+    )
+
+
+def _shared_instrument(account_key: AccountKey) -> MarketInstrumentKey:
+    """Variant instrument whose identity is deliberately shared by both accounts."""
+
+    return MarketInstrumentKey(
+        provider=account_key.provider,
+        venue=account_key.venue,
+        environment=account_key.environment,
+        product_type=_RESOURCE.product_type,
+        instrument_id=_SHARED_INSTRUMENT_ID,
+        native_symbol=_SHARED_NATIVE_SYMBOL,
+    )
+
+
 class _SyntheticAccountProvider:
     """Counted local provider fixture with only connect, full-read, and close."""
 
-    def __init__(self, account_ref: str) -> None:
+    def __init__(
+        self,
+        account_ref: str,
+        account_key: AccountKey,
+        instrument: MarketInstrumentKey,
+    ) -> None:
         self.account_ref = account_ref
-        self.account_key = _ACCOUNT_KEYS[account_ref]
+        self.account_key = account_key
+        self.instrument = instrument
         self.connect_calls = 0
         self.read_calls = 0
         self.close_calls = 0
@@ -220,7 +258,7 @@ class _SyntheticAccountProvider:
         if generation != self.generation or timeout <= 0:
             raise AssertionError("provider read did not use its active synthetic generation")
         self.read_calls += 1
-        return _observation(self.account_ref, self.read_calls)
+        return _observation(self.account_ref, self.read_calls, self.account_key, self.instrument)
 
     def close(self) -> bool:
         self.close_calls += 1
@@ -232,8 +270,12 @@ def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _observation(account_ref: str, sequence: int) -> AccountObservation:
-    account_key = _ACCOUNT_KEYS[account_ref]
+def _observation(
+    account_ref: str,
+    sequence: int,
+    account_key: AccountKey,
+    instrument: MarketInstrumentKey,
+) -> AccountObservation:
     observed_at = _utc_now()
     if account_ref == "account-a":
         total, available, locked = (
@@ -253,14 +295,6 @@ def _observation(account_ref: str, sequence: int) -> AccountObservation:
     )
     positions: tuple[AccountPosition, ...] = ()
     if account_ref == "account-b" or sequence == 1:
-        instrument = MarketInstrumentKey(
-            provider=account_key.provider,
-            venue=account_key.venue,
-            environment=account_key.environment,
-            product_type=_RESOURCE.product_type,
-            instrument_id=f"instrument-{account_ref}",
-            native_symbol=f"SYNTH-{account_ref.upper()}",
-        )
         positions = (
             AccountPosition(
                 resource=_RESOURCE,
@@ -312,6 +346,8 @@ def _host_status(host, worker, provider) -> dict[str, Any]:
 def _service_host_process(
     control,
     account_ref: str,
+    account_key: AccountKey,
+    instrument: MarketInstrumentKey,
     raw_config: dict[str, Any],
     registry_path: str,
     database_path: str,
@@ -323,7 +359,7 @@ def _service_host_process(
 
     host = None
     worker = None
-    provider = _SyntheticAccountProvider(account_ref)
+    provider = _SyntheticAccountProvider(account_ref, account_key, instrument)
     try:
         config = parse_service_config(raw_config)
         service = {
@@ -365,13 +401,13 @@ def _service_host_process(
             journal = GatewayEventJournal(database_path)
             session_guard = LocalAccountSessionGuard(
                 Path(guard_directory),
-                _ACCOUNT_KEYS[account_ref].account_key_id,
+                account_key.account_key_id,
                 owner_ref=f"host-{account_ref}",
             )
             session_worker = GatewayAccountSessionWorker(
                 provider,
                 journal,
-                account_key=_ACCOUNT_KEYS[account_ref],
+                account_key=account_key,
                 journal_account_scope=journal_scope,
                 state_scope=state_scope,
                 guard=session_guard,
@@ -491,6 +527,7 @@ def _strategy_client_process(
     client_keys: dict[str, tuple[bytes, bytes, bytes]],
     services: dict[str, dict[str, Any]],
     account_refs: tuple[str, ...],
+    account_keys: Mapping[str, AccountKey],
 ) -> None:
     """Spawn target: one strategy runtime with account-specific read facades."""
 
@@ -529,7 +566,7 @@ def _strategy_client_process(
                 runtime,
                 "store.account",
                 account_ref=account_ref,
-                expected_account=_ACCOUNT_KEYS[account_ref],
+                expected_account=account_keys[account_ref],
                 required_coverage=_REQUIRED_COVERAGE,
             )
         registered = tuple(
@@ -578,6 +615,13 @@ def _strategy_client_process(
                     control.send(("route-denied", exc.code, runtime.healthy))
                 else:
                     control.send(("route-allowed",))
+            elif action == "route-ambiguous":
+                try:
+                    runtime.call("store.account", "account.snapshot", {"limit": 1})
+                except ServiceRuntimeError as exc:
+                    control.send(("route-ambiguous-denied", exc.code, runtime.healthy))
+                else:
+                    control.send(("route-ambiguous-accepted",))
             elif action == "close":
                 for facade in facades.values():
                     facade.close()
@@ -762,10 +806,15 @@ def _summary(view: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_sessions(
+def _exercise_shared_account_variant(
     tmp_path,
-):
-    """Two real account hosts serve shared full replacements over CURVE RPC."""
+    *,
+    account_keys: Mapping[str, AccountKey],
+    instruments: Mapping[str, MarketInstrumentKey],
+    expect_cross_exchange: bool,
+    expect_shared_instrument: bool,
+) -> None:
+    """Shared GW01 scenario body: two real account hosts and two strategies."""
 
     context = multiprocessing.get_context("spawn")
     endpoints = _free_endpoints(2)
@@ -804,6 +853,8 @@ def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_
                 _service_host_process,
                 (
                     account_ref,
+                    account_keys[account_ref],
+                    instruments[account_ref],
                     service_raw[account_ref],
                     str(tmp_path / f"{account_ref}-registry.sqlite"),
                     str(tmp_path / f"{account_ref}-journal.sqlite"),
@@ -853,6 +904,7 @@ def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_
                     },
                     account_services,
                     account_refs,
+                    {ref: account_keys[ref] for ref in account_refs},
                 ),
                 f"strategy-client-{key_name}",
             )
@@ -872,8 +924,8 @@ def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_
         one_a, one_b, two_a = first_one_a[2], first_one_b[2], first_two_a[2]
         assert one_a["fresh"] and one_b["fresh"] and two_a["fresh"]
         assert _summary(one_a) == _summary(two_a)
-        assert one_a["account_key"] == two_a["account_key"] == _ACCOUNT_KEYS["account-a"].to_dict()
-        assert one_b["account_key"] == _ACCOUNT_KEYS["account-b"].to_dict()
+        assert one_a["account_key"] == two_a["account_key"] == account_keys["account-a"].to_dict()
+        assert one_b["account_key"] == account_keys["account-b"].to_dict()
         assert one_a["account_key"] != one_b["account_key"]
         assert one_a["session_generation"] != one_b["session_generation"]
         assert one_a["observation"]["balances"][0]["total"] == "100.00"
@@ -883,8 +935,31 @@ def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_
         assert type(one_a["observation"]["balances"][0]["total"]) is str
         assert first_one_a[2]["same_as_previous"] is False
 
+        # Fixture-dimension checks: both providers stay synthetic; the accounts
+        # either live on different venues or share one venue and one instrument
+        # identity, while account facts stay keyed by the full account key only.
+        assert (
+            account_keys["account-a"].provider == account_keys["account-b"].provider == "synthetic"
+        )
+        first_instrument_a = one_a["observation"]["positions"][0]["instrument"]
+        first_instrument_b = one_b["observation"]["positions"][0]["instrument"]
+        if expect_cross_exchange:
+            assert account_keys["account-a"].venue != account_keys["account-b"].venue
+            assert one_a["account_key"]["venue"] != one_b["account_key"]["venue"]
+        else:
+            assert account_keys["account-a"].venue == account_keys["account-b"].venue
+        if expect_shared_instrument:
+            assert first_instrument_a == first_instrument_b
+        else:
+            assert first_instrument_a != first_instrument_b
+
         route_denied = _client_command(client_records["client-two"], "route-b")
         assert route_denied == ("route-denied", "AMBIGUOUS_OR_MISSING_ROUTE", True)
+
+        # Strategy one owns two same-mount bindings; an unqualified call cannot
+        # pick a route and is rejected before any wire or provider activity.
+        ambiguous = _client_command(client_records["client-one"], "route-ambiguous")
+        assert ambiguous == ("route-ambiguous-denied", "AMBIGUOUS_OR_MISSING_ROUTE", True)
 
         denied_b_config = _client_config(_STRATEGY_TWO, account_services, ("account-b",))
         denied_b_runtime = _direct_runtime(
@@ -926,6 +1001,17 @@ def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_
         assert status_a[2]["connect_calls"] == status_a[2]["read_calls"] == 1
         assert status_b[2]["connect_calls"] == status_b[2]["read_calls"] == 1
         assert status_a[2]["close_calls"] == status_b[2]["close_calls"] == 0
+
+        # Upstream sharing unchanged: two readers on account-a (strategies one
+        # and two) and one reader on account-b still leave exactly one active
+        # provider session for each account key; every rejected call above
+        # added no provider read.
+        active_upstreams = {
+            account_keys[account_ref]: status[2]["connect_calls"] - status[2]["close_calls"]
+            for account_ref, status in (("account-a", status_a), ("account-b", status_b))
+        }
+        assert len(active_upstreams) == len(_ACCOUNT_REFS), active_upstreams
+        assert all(count == 1 for count in active_upstreams.values()), active_upstreams
 
         refreshed = _host_command(host_records["account-a"], "refresh")
         assert refreshed[0] == "refreshed" and refreshed[1] == "account-a", refreshed
@@ -984,7 +1070,49 @@ def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_
             assert host_status["connect_calls"] == 1
             assert host_status["read_calls"] == (2 if account_ref == "account-a" else 1)
             assert host_status["close_calls"] == 1
+            assert host_status["connect_calls"] - host_status["close_calls"] == 0
     finally:
         for record in reversed(records):
             _bounded_reap_spawned_process(record, forced_cleanup, cleanup_failures)
         _assert_no_fallback_cleanup(forced_cleanup, cleanup_failures)
+
+
+def test_two_account_hosts_share_full_readonly_snapshots_without_strategy_owned_sessions(tmp_path):
+    """Two real account hosts serve shared full replacements over CURVE RPC."""
+
+    _exercise_shared_account_variant(
+        tmp_path,
+        account_keys=_ACCOUNT_KEYS,
+        instruments={ref: _account_instrument(ref, _ACCOUNT_KEYS[ref]) for ref in _ACCOUNT_REFS},
+        expect_cross_exchange=False,
+        expect_shared_instrument=False,
+    )
+
+
+def test_cross_exchange_accounts_share_readonly_snapshots_without_strategy_owned_sessions(tmp_path):
+    """Variant (a): the two accounts live on different synthetic exchanges."""
+
+    _exercise_shared_account_variant(
+        tmp_path,
+        account_keys=_CROSS_EXCHANGE_ACCOUNT_KEYS,
+        instruments={
+            ref: _account_instrument(ref, _CROSS_EXCHANGE_ACCOUNT_KEYS[ref])
+            for ref in _ACCOUNT_REFS
+        },
+        expect_cross_exchange=True,
+        expect_shared_instrument=False,
+    )
+
+
+def test_same_venue_same_symbol_accounts_share_readonly_snapshots_without_strategy_owned_sessions(
+    tmp_path,
+):
+    """Variant (b): two accounts on one venue sharing one instrument identity."""
+
+    _exercise_shared_account_variant(
+        tmp_path,
+        account_keys=_ACCOUNT_KEYS,
+        instruments={ref: _shared_instrument(_ACCOUNT_KEYS[ref]) for ref in _ACCOUNT_REFS},
+        expect_cross_exchange=False,
+        expect_shared_instrument=True,
+    )
