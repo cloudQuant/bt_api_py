@@ -1,0 +1,29 @@
+{
+  "argv": [
+    "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--noconftest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+    "--junitxml=D:\\temp\\iteration10-afi-financial-http-root-20261016\\junit.xml",
+    "--basetemp=D:\\temp\\iteration10-afi-financial-http-root-20261016\\pytest-tmp",
+    "tests/test_portfolio_compositions_api.py::test_public_account_book_projection_preserves_financial_states_and_hides_internal_keys",
+    "tests/test_portfolio_compositions_api.py::test_financial_projection_reaches_composition_http_response"
+  ],
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "environment": {
+    "PYTHONPATH": "D:\\source_code\\ai-for-investor\\src\\backend;D:\\bt_api_py\\bt_api\\bt_api_base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1",
+    "DATABASE_URL": "sqlite+aiosqlite://",
+    "DEBUG": "true",
+    "SECRET_KEY": "synthetic-financial-http-acceptance-secret-20261016"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS"
+  ],
+  "started_utc": "2026-10-16T07:04:25.363748+00:00"
+}

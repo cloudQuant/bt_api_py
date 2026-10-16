@@ -1,0 +1,32 @@
+{
+  "checks": [
+    {
+      "check": "vitest",
+      "argv": [
+        "C:/Program Files/nodejs/node.exe",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "src/__tests__/views/PortfolioPage.test.ts",
+        "-t",
+        "shows live unallocated books separately from provider changes and incremental residuals|keeps older live projections usable when the unallocated-book field is absent",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile.json=D:\\temp\\iteration10-afi-financial-frontend-root-20261016\\vitest.json"
+      ],
+      "exit": 0
+    },
+    {
+      "check": "typecheck",
+      "argv": [
+        "C:/Program Files/nodejs/node.exe",
+        "node_modules/vue-tsc/bin/vue-tsc.js",
+        "--noEmit"
+      ],
+      "exit": 2
+    }
+  ],
+  "sources_unchanged": true,
+  "head_before": "e9c7ca1d6149ddae176f090f98dba4cee52dfe58",
+  "head_after": "e9c7ca1d6149ddae176f090f98dba4cee52dfe58",
+  "evidence_level": "MOCKED_VUE_COMPONENT_AND_TYPES_ONLY"
+}

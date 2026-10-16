@@ -1,0 +1,11 @@
+
+ RUN  v4.1.11 D:/source_code/ai-for-investor/src/frontend
+
+ ✓ src/__tests__/views/PortfolioPage.test.ts (37 tests | 35 skipped) 81ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 35 skipped (37)
+   Start at  15:04:26
+   Duration  2.26s (transform 517ms, setup 305ms, import 1.01s, tests 81ms, environment 636ms)
+
+JSON report written to D:/temp/iteration10-afi-financial-frontend-root-20261016/vitest.json

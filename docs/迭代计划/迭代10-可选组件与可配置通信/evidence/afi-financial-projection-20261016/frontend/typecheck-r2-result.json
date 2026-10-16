@@ -1,0 +1,6 @@
+{
+  "exit": 0,
+  "change": "Narrow test fixture code literal with as const; no runtime change",
+  "test_sha256": "e55ab72800bc8a751ea6bcc07c2afe61104cac7d9c4052b002d95d0da07a2b4f",
+  "accepted_backend_and_vitest_not_repeated": true
+}

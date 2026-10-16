@@ -1,0 +1,18 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T07:04:33.657092+00:00",
+  "source_count": 1912,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "e9c7ca1d6149ddae176f090f98dba4cee52dfe58",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "e9c7ca1d6149ddae176f090f98dba4cee52dfe58",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "0853de832f834c0b93d560f3673dfc54e3fdd5bc75d01c6ff52658765c401c32",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "AFI_FINANCIAL_PROJECTION_SYNTHETIC_HTTP_AND_HELPER_ONLY"
+}
