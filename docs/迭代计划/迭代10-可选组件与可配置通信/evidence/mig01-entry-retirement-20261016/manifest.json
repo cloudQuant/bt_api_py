@@ -1,0 +1,486 @@
+{
+  "schema": "iteration10-mig01-entry-retirement-parent-evidence-v1",
+  "status": "READY_FOR_ROOT_NUMBERING_AND_SCOPED_PARENT_DELIVERY",
+  "formal_mig01_pass": false,
+  "round_number": "pending Root assignment after MIG04 R211",
+  "progress_tracker_modified": false,
+  "parent_repository": {
+    "path": "D:\\bt_api_py",
+    "branch_at_capture": "dev",
+    "head_at_capture": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+    "gitlink_to_backtrader_changed": false,
+    "current_base_submodule_head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "accepted_sdk_source_files": [
+    {
+      "path": "bt_api_py/gateway/__init__.py",
+      "size_bytes": 406,
+      "sha256": "246b2589669f22d9a2719efed0ffa18718d33c089e3325447f5cf4f9ea4676b1",
+      "root_sdk_r1_source_pin_match": true
+    },
+    {
+      "path": "bt_api_py/gateway/client.py",
+      "size_bytes": 1117,
+      "sha256": "e0d5f442d3c90fd132503eb5ecd02008bb354a115941ce4cdf72e3f72cfe3583",
+      "root_sdk_r1_source_pin_match": true
+    },
+    {
+      "path": "tests/test_gateway_client_and_certification.py",
+      "size_bytes": 2265,
+      "sha256": "34de2f317c23deae474e57c023a34bdbcae16c5d57ab6ebe46a4ffa520110cc2",
+      "root_sdk_r1_source_pin_match": true
+    },
+    {
+      "path": "tests/test_mig01_gateway_entrypoints_retired.py",
+      "size_bytes": 2550,
+      "sha256": "039498436bf9d660b2883163f608d0ec787bd6ed47832352d9ae10c1cb465254",
+      "root_sdk_r1_source_pin_match": true
+    }
+  ],
+  "sdk_root_qa": {
+    "output_dir": "D:\\temp\\iteration10-mig01-entry-retirement-sdk-root-20261016-r1",
+    "r1_fixed_qa_parent_head": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+    "base_submodule_head_during_qa": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "source_count": 49,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "case_count": 2,
+    "passed": 2,
+    "pytest_exit": 0,
+    "reported_elapsed_seconds": 1.41,
+    "current_four_sdk_file_pins_match_root_source_before": true
+  },
+  "backtrader_delivery_reference": {
+    "repo": "D:\\source_code\\backtrader",
+    "branch": "dev",
+    "commit": "38f764dbf2d51adcba4c6a0901734639096365a3",
+    "parent": "edfb4ddb64ee42e0d1f90d7a111def63447ccd67",
+    "receipt_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-mig01-bt-entry-retirement-postcommit-r1.json",
+    "receipt_sha256": "c4a79a1a499699f87100b8eee4d92ea8e726456bf807c6c967f438f53464e1d9",
+    "scope_count": 6,
+    "index_empty": true,
+    "production_source_path": "D:\\source_code\\backtrader\\backtrader\\stores\\btapistore.py",
+    "production_source_sha256": "22ac42be89f8ea7f72a2b26de6ec35f7c427617eb264faf8174f0fb5543987d0",
+    "no_parent_gitlink_change": true
+  },
+  "backtrader_old_test_source_pin": {
+    "path": "D:\\source_code\\backtrader\\tests\\unit\\stores\\test_btapistore.py",
+    "r2_source_before_sha256": "960a3960553ab93ba983e943c0ecf93f27c033edcfcbbadbde00a8627b8264f2",
+    "r2_source_content_saved": false,
+    "r3_final_sha256": "5d59d4cf2e5b82128aa021fcf88f0d3908296ee1e4463029740bd730bbe3d341",
+    "reconstructed": false,
+    "r3_target_function_outside_byte_sha256": "114f244282b19b7a9c664a2e6f3f4fc24b868bc86c1fbdbec109ed5460b674c4"
+  },
+  "backtrader_root_runs": [
+    {
+      "id": "sdk-root-r1",
+      "output_dir": "D:\\temp\\iteration10-mig01-entry-retirement-sdk-root-20261016-r1",
+      "pytest_exit": 0,
+      "junit": {
+        "tests": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "time_seconds": 1.147
+      },
+      "warnings": [],
+      "failure_cases": [],
+      "error_cases": [],
+      "source_count": 49,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "d400f0f98724554c0aed3f41ebfaffcff4d9e774",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+      },
+      "heads_unchanged": true,
+      "result_sha256": "ddc142a1aa8d03ae3f4b4ed0ce2c270812de9d41e614d00f1a9bf1bedf8dd0a5",
+      "junit_sha256": "a91978cf4d08635d17c05b54db5f5e52f70bdb8eb9fc65d12947c584f919f1fc"
+    },
+    {
+      "id": "bt-root-r1",
+      "output_dir": "D:\\temp\\iteration10-mig01-entry-retirement-bt-root-20261016-r1",
+      "pytest_exit": 4,
+      "junit": {
+        "tests": 2,
+        "passed": 0,
+        "failures": 0,
+        "errors": 2,
+        "skipped": 0,
+        "time_seconds": 1.17
+      },
+      "warnings": [],
+      "failure_cases": [],
+      "error_cases": [
+        "tests.unit.stores.test_btapistore",
+        "tests.unit.stores.test_btapistore_iteration22"
+      ],
+      "source_count": 54,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\source_code\\backtrader": "edfb4ddb64ee42e0d1f90d7a111def63447ccd67"
+      },
+      "heads_after": {
+        "D:\\source_code\\backtrader": "edfb4ddb64ee42e0d1f90d7a111def63447ccd67"
+      },
+      "heads_unchanged": true,
+      "result_sha256": "3fba44430380fc5f1ef886a142e58d705ab212fa7242427da6a599e9bf38ac00",
+      "junit_sha256": "78985bcb14bfb1589b11b019a8136fe17603543912246541ff9acdec3e5aec5e"
+    },
+    {
+      "id": "bt-root-r2",
+      "output_dir": "D:\\temp\\iteration10-mig01-entry-retirement-bt-root-20261016-r2",
+      "pytest_exit": 1,
+      "junit": {
+        "tests": 90,
+        "passed": 88,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "time_seconds": 7.523
+      },
+      "warnings": [
+        "Deprecation",
+        "PytestUnknownMark"
+      ],
+      "failure_cases": [
+        "test_ctp_forwarding_store_direct_writes_fail_closed_before_api[btapi-CTP___FUTURE]",
+        "test_ctp_forwarding_store_direct_writes_fail_closed_before_api[ctp-CTP]"
+      ],
+      "error_cases": [],
+      "source_count": 58,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\source_code\\backtrader": "edfb4ddb64ee42e0d1f90d7a111def63447ccd67"
+      },
+      "heads_after": {
+        "D:\\source_code\\backtrader": "edfb4ddb64ee42e0d1f90d7a111def63447ccd67"
+      },
+      "heads_unchanged": true,
+      "result_sha256": "54417ce6b8a614b2cf0484aa9a743d1c7f17da37b88b9ca569fcdde51c355f98",
+      "junit_sha256": "18999fef9e468ce154a7dbb3aba6bc1705dc938e099579c7c4082dafcc3c535e"
+    },
+    {
+      "id": "bt-root-r3",
+      "output_dir": "D:\\temp\\iteration10-mig01-entry-retirement-bt-root-20261016-r3",
+      "pytest_exit": 0,
+      "junit": {
+        "tests": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "time_seconds": 3.847
+      },
+      "warnings": [
+        "Deprecation"
+      ],
+      "failure_cases": [],
+      "error_cases": [],
+      "source_count": 58,
+      "sources_unchanged": true,
+      "heads_before": {
+        "D:\\source_code\\backtrader": "edfb4ddb64ee42e0d1f90d7a111def63447ccd67"
+      },
+      "heads_after": {
+        "D:\\source_code\\backtrader": "edfb4ddb64ee42e0d1f90d7a111def63447ccd67"
+      },
+      "heads_unchanged": true,
+      "result_sha256": "9434f23a70d7f432e23386e3cc8d0e538afef3ae2ead11080fa903627a632553",
+      "junit_sha256": "1b56539cc0ffa2fdb866a01e45eada0a0ecce0d6cae2931f6f60db2db1a66dfe"
+    }
+  ],
+  "backtrader_unique_case_coverage": {
+    "unique_case_count": 90,
+    "r2_unchanged_cases_passed": 88,
+    "r2_parameter_cases_failed_fixture_setup": 2,
+    "r3_repaired_parameter_cases_passed": 2,
+    "single_90_case_all_green_invocation": false,
+    "r2_failure_reason": "The test used object.__new__(BtApiStore) and lacked _service_read_only, so AttributeError occurred before the existing CTP write guard. R3 uses normal direct Store/API initialization, then mutates backend to forwarding."
+  },
+  "archive": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-entry-retirement-20261016/root-qa-raw.zip",
+    "size_bytes": 63518,
+    "sha256": "4fb5fe01125686b2ab99c5b6cb1ec2c7265b13bbc5c8def4a30b347995404fe9",
+    "entry_count": 44,
+    "runs": [
+      "sdk-root-r1",
+      "bt-root-r1",
+      "bt-root-r2",
+      "bt-root-r3"
+    ],
+    "raw_files_per_run": 11,
+    "entries": [
+      {
+        "path": "raw/sdk-root-r1/command.json",
+        "size_bytes": 1341,
+        "sha256": "411b9b184934592f9812f3ff935f4f2831485d63a02a6ac0b99789e200a66a71"
+      },
+      {
+        "path": "raw/sdk-root-r1/exit.txt",
+        "size_bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "raw/sdk-root-r1/junit.xml",
+        "size_bytes": 502,
+        "sha256": "a91978cf4d08635d17c05b54db5f5e52f70bdb8eb9fc65d12947c584f919f1fc"
+      },
+      {
+        "path": "raw/sdk-root-r1/result.json",
+        "size_bytes": 781,
+        "sha256": "ddc142a1aa8d03ae3f4b4ed0ce2c270812de9d41e614d00f1a9bf1bedf8dd0a5"
+      },
+      {
+        "path": "raw/sdk-root-r1/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/sdk-root-r1/running.json",
+        "size_bytes": 76,
+        "sha256": "3ba4214987eb8d0fa5d1cde921b384fd9eca9cb351116bd53362de37b954dfec"
+      },
+      {
+        "path": "raw/sdk-root-r1/source-after.json",
+        "size_bytes": 6257,
+        "sha256": "4c7b9dfc69edb1d9d2b3480a4b61db39e98655dffa9e68ac4ae7f16cb37b8d62"
+      },
+      {
+        "path": "raw/sdk-root-r1/source-before.json",
+        "size_bytes": 6257,
+        "sha256": "4c7b9dfc69edb1d9d2b3480a4b61db39e98655dffa9e68ac4ae7f16cb37b8d62"
+      },
+      {
+        "path": "raw/sdk-root-r1/spec.json",
+        "size_bytes": 7953,
+        "sha256": "f24d7abef83f28105ab452d7b3981f149bbc595c363e1668bf9ddc7261768604"
+      },
+      {
+        "path": "raw/sdk-root-r1/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/sdk-root-r1/stdout.log",
+        "size_bytes": 199,
+        "sha256": "5a67ffa2e37ae04c50cd2eafa8afd93199df8de3a5ef28889a8ddbcb51408996"
+      },
+      {
+        "path": "raw/bt-root-r1/command.json",
+        "size_bytes": 8423,
+        "sha256": "a571e243a9ed074fa8cef3b44d9b6d19c720137ac684f9a03fc560c932e9ee54"
+      },
+      {
+        "path": "raw/bt-root-r1/exit.txt",
+        "size_bytes": 3,
+        "sha256": "7c468f5e59f2871b946e051445493bbcace531d597edbbcc9935e7d02d025114"
+      },
+      {
+        "path": "raw/bt-root-r1/junit.xml",
+        "size_bytes": 1255,
+        "sha256": "78985bcb14bfb1589b11b019a8136fe17603543912246541ff9acdec3e5aec5e"
+      },
+      {
+        "path": "raw/bt-root-r1/result.json",
+        "size_bytes": 651,
+        "sha256": "3fba44430380fc5f1ef886a142e58d705ab212fa7242427da6a599e9bf38ac00"
+      },
+      {
+        "path": "raw/bt-root-r1/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/bt-root-r1/running.json",
+        "size_bytes": 76,
+        "sha256": "37ee6cf26d29eff044aa348746753145dee09b60f03d77d32f9d1913bd08b031"
+      },
+      {
+        "path": "raw/bt-root-r1/source-after.json",
+        "size_bytes": 7374,
+        "sha256": "8b12315221ad5122a6c5bb4cbbcf746e32288b95b44a4cbd3c240a95e72d30c9"
+      },
+      {
+        "path": "raw/bt-root-r1/source-before.json",
+        "size_bytes": 7374,
+        "sha256": "8b12315221ad5122a6c5bb4cbbcf746e32288b95b44a4cbd3c240a95e72d30c9"
+      },
+      {
+        "path": "raw/bt-root-r1/spec.json",
+        "size_bytes": 16105,
+        "sha256": "159b6b27186933b6c8ed70360bad8a326ec4820314fbdb4fd5f2406bea4753ce"
+      },
+      {
+        "path": "raw/bt-root-r1/stderr.log",
+        "size_bytes": 9260,
+        "sha256": "e0b56ecce25bcdd1a077c494d92e9a9bb3c8337d5ff67a47335db6cee117e8b2"
+      },
+      {
+        "path": "raw/bt-root-r1/stdout.log",
+        "size_bytes": 1335,
+        "sha256": "7b2f8a931a0f3f1ecf45661a6ca2f2385a96a08b9c4a8a5c52cd31e831629f85"
+      },
+      {
+        "path": "raw/bt-root-r2/command.json",
+        "size_bytes": 8386,
+        "sha256": "e6840e68e2065768c2273227427d6b7627b94ba3539e96fc88f0f729a13b7f45"
+      },
+      {
+        "path": "raw/bt-root-r2/exit.txt",
+        "size_bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "path": "raw/bt-root-r2/junit.xml",
+        "size_bytes": 20396,
+        "sha256": "18999fef9e468ce154a7dbb3aba6bc1705dc938e099579c7c4082dafcc3c535e"
+      },
+      {
+        "path": "raw/bt-root-r2/result.json",
+        "size_bytes": 651,
+        "sha256": "54417ce6b8a614b2cf0484aa9a743d1c7f17da37b88b9ca569fcdde51c355f98"
+      },
+      {
+        "path": "raw/bt-root-r2/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/bt-root-r2/running.json",
+        "size_bytes": 76,
+        "sha256": "830fb5bb655402c64f9179d3603b0e50fc14eb6150b37e6ddd70e2df11acf3bd"
+      },
+      {
+        "path": "raw/bt-root-r2/source-after.json",
+        "size_bytes": 7872,
+        "sha256": "ad2560cbef5d17e5db8f60d74010cb7153d6146bd4b57484166b616e4dce5278"
+      },
+      {
+        "path": "raw/bt-root-r2/source-before.json",
+        "size_bytes": 7872,
+        "sha256": "ad2560cbef5d17e5db8f60d74010cb7153d6146bd4b57484166b616e4dce5278"
+      },
+      {
+        "path": "raw/bt-root-r2/spec.json",
+        "size_bytes": 16574,
+        "sha256": "d305fe06b7cf11e21d6388410cf7041cc6e0c59634bf371980a73735543a2890"
+      },
+      {
+        "path": "raw/bt-root-r2/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/bt-root-r2/stdout.log",
+        "size_bytes": 6740,
+        "sha256": "55ffcea38f6f89ac5ea00a3d2c065982081145d420c5696f574521d223653c0b"
+      },
+      {
+        "path": "raw/bt-root-r3/command.json",
+        "size_bytes": 1257,
+        "sha256": "8a010e22e1757c789d0da97135bb14ee85dc7eda30859cde6983b4c4395951d3"
+      },
+      {
+        "path": "raw/bt-root-r3/exit.txt",
+        "size_bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "raw/bt-root-r3/junit.xml",
+        "size_bytes": 524,
+        "sha256": "1b56539cc0ffa2fdb866a01e45eada0a0ecce0d6cae2931f6f60db2db1a66dfe"
+      },
+      {
+        "path": "raw/bt-root-r3/result.json",
+        "size_bytes": 651,
+        "sha256": "9434f23a70d7f432e23386e3cc8d0e538afef3ae2ead11080fa903627a632553"
+      },
+      {
+        "path": "raw/bt-root-r3/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/bt-root-r3/running.json",
+        "size_bytes": 76,
+        "sha256": "d0a0c58c84ee69d316169c203979fc47a3c1ce79a9bdd56c51b59c98cfac6a88"
+      },
+      {
+        "path": "raw/bt-root-r3/source-after.json",
+        "size_bytes": 7872,
+        "sha256": "f5221ab7d73a572965ec6aa95439b85260c56dbf6e93e5e08d79c945cbe8dba2"
+      },
+      {
+        "path": "raw/bt-root-r3/source-before.json",
+        "size_bytes": 7872,
+        "sha256": "f5221ab7d73a572965ec6aa95439b85260c56dbf6e93e5e08d79c945cbe8dba2"
+      },
+      {
+        "path": "raw/bt-root-r3/spec.json",
+        "size_bytes": 9340,
+        "sha256": "7df48bb9791a855cf499048b9a5c566f86fef991d11834c4f034d71f1f0774df"
+      },
+      {
+        "path": "raw/bt-root-r3/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/bt-root-r3/stdout.log",
+        "size_bytes": 632,
+        "sha256": "5c630c9c93c7c16e07cf1c43f89d9658de157fbf8b78c58df53a73f33e9d3208"
+      }
+    ]
+  },
+  "evidence_boundary": "Source/fake tests only. No Host/provider/account acceptance. MIG01 remains incomplete; legacy directories/base interfaces and historical fixtures remain, with SDK/runtime/build/wheel/isolation closure still outstanding.",
+  "delivery_scope": {
+    "parent_file_count": 7,
+    "parent_files": [
+      {
+        "path": "bt_api_py/gateway/__init__.py",
+        "role": "accepted-sdk-entry-source",
+        "sha256": "246b2589669f22d9a2719efed0ffa18718d33c089e3325447f5cf4f9ea4676b1",
+        "size_bytes": 406
+      },
+      {
+        "path": "bt_api_py/gateway/client.py",
+        "role": "accepted-sdk-entry-source",
+        "sha256": "e0d5f442d3c90fd132503eb5ecd02008bb354a115941ce4cdf72e3f72cfe3583",
+        "size_bytes": 1117
+      },
+      {
+        "path": "tests/test_gateway_client_and_certification.py",
+        "role": "accepted-sdk-entry-source",
+        "sha256": "34de2f317c23deae474e57c023a34bdbcae16c5d57ab6ebe46a4ffa520110cc2",
+        "size_bytes": 2265
+      },
+      {
+        "path": "tests/test_mig01_gateway_entrypoints_retired.py",
+        "role": "accepted-sdk-entry-source",
+        "sha256": "039498436bf9d660b2883163f608d0ec787bd6ed47832352d9ae10c1cb465254",
+        "size_bytes": 2550
+      },
+      {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-entry-retirement-20261016/root-qa-raw.zip",
+        "role": "root-raw-qa-archive",
+        "sha256": "4fb5fe01125686b2ab99c5b6cb1ec2c7265b13bbc5c8def4a30b347995404fe9",
+        "size_bytes": 63518
+      },
+      {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-entry-retirement-20261016/manifest.json",
+        "role": "manifest",
+        "sha256": "self-hash-recorded-by-round-record"
+      },
+      {
+        "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-entry-retirement-20261016/round-record.md",
+        "role": "round-record",
+        "sha256": "recorded-by-root-scoped-commit-packet"
+      }
+    ]
+  }
+}

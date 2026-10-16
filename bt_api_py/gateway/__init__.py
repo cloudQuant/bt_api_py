@@ -1,4 +1,4 @@
-"""Gateway client compatibility exports and safe-by-default configuration."""
+"""Safe gateway configuration with a retired client import path."""
 
 from __future__ import annotations
 
