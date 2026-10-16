@@ -1,0 +1,20 @@
+{
+  "head": "c6fcacda5efb5153d8c3e2be7b17f335f2732a9e",
+  "source_pins": [
+    {
+      "path": "src\\bt_api_risk\\portfolio_analytics.py",
+      "size_bytes": 51705,
+      "sha256": "D7A21738C84DF660BB6F7C422FD880BB42050F3E22213B2273CF782DD1963BB8"
+    },
+    {
+      "path": "tests\\test_portfolio_analytics.py",
+      "size_bytes": 16136,
+      "sha256": "00A8A149C5F2195C8475A676BABF08DEE6D405A7815A13C07824C1DA0FB0D7D3"
+    }
+  ],
+  "status": [
+    "?? .codex-tmp/",
+    "?? src/bt_api_risk/portfolio_analytics.py",
+    "?? tests/test_portfolio_analytics.py"
+  ]
+}

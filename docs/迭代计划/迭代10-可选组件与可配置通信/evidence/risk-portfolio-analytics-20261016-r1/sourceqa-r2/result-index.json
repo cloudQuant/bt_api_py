@@ -1,0 +1,40 @@
+{
+  "pytest_exit_code": 0,
+  "artifacts": [
+    {
+      "path": "stdout.txt",
+      "size_bytes": 565,
+      "sha256": "7FFE159E60304FDD734A409160779F3C479C677165543327C96A7DA710FD02FD"
+    },
+    {
+      "path": "stderr.txt",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "junit.xml",
+      "size_bytes": 2226,
+      "sha256": "5F92B25DF4B59E7EA6246E079F66BDBE42A46EB027F381D8F7321CD1D1AD8E23"
+    },
+    {
+      "path": "command.txt",
+      "size_bytes": 309,
+      "sha256": "72001B0F01A1C7249EFF7CA2DDBD258DDA2AFD4E0F1884167A60B29A9EA2642E"
+    },
+    {
+      "path": "source-pre.json",
+      "size_bytes": 589,
+      "sha256": "32E4FEC817967084363CB1B056E301392EA9FD49D2DE8F39A3F33C0E09C4EBC8"
+    },
+    {
+      "path": "source-post.json",
+      "size_bytes": 589,
+      "sha256": "32E4FEC817967084363CB1B056E301392EA9FD49D2DE8F39A3F33C0E09C4EBC8"
+    },
+    {
+      "path": "pytest-exit-code.txt",
+      "size_bytes": 3,
+      "sha256": "13BF7B3039C63BF5A50491FA3CFD8EB4E699D1BA1436315AEF9CBE5711530354"
+    }
+  ]
+}

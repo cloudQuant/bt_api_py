@@ -1,0 +1,36 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0
+rootdir: D:\bt_api_py\bt_api\bt_api_risk\.codex-tmp\portfolio-analytics-sourceqa-20261016-r1
+configfile: pytest.ini
+collected 15 items
+
+.codex-tmp\portfolio-analytics-sourceqa-20261016-r1 .F.............      [100%]
+
+================================== FAILURES ===================================
+____ test_digest_is_recomputed_from_facts_and_stable_for_reordered_fx_rows ____
+
+    def test_digest_is_recomputed_from_facts_and_stable_for_reordered_fx_rows():
+        facts = _facts()
+        reordered = replace(facts, fx_observations=tuple(reversed(facts.fx_observations)))
+        service_a, _ = _service(facts)
+        service_b, _ = _service(reordered)
+        report_a = service_a.analyze_snapshot_v1(_request(), principal_ref="principal-a")
+        report_b = service_b.analyze_snapshot_v1(_request(), principal_ref="principal-a")
+        assert report_a.input_sha256 == report_b.input_sha256
+    
+        altered = replace(
+            facts,
+            ending=replace(facts.ending, spot_positions=(_position(_END, price="11"),)),
+        )
+        service_c, _ = _service(altered)
+        report_c = service_c.analyze_snapshot_v1(_request(), principal_ref="principal-a")
+>       assert report_c.input_sha256 != report_a.input_sha256
+E       AssertionError: assert 'c572dd82b42126d4b77210650b1cb5a30902ce23d872d3d9ac68b414a0846f99' != 'c572dd82b42126d4b77210650b1cb5a30902ce23d872d3d9ac68b414a0846f99'
+E        +  where 'c572dd82b42126d4b77210650b1cb5a30902ce23d872d3d9ac68b414a0846f99' = PortfolioAnalyticsReportV1(status='AVAILABLE', reason_codes=(), model_profile_ref='spot-valuation-v1', calculation_ref...000'))), ending_native_values=(('EUR', Decimal('110.000000000000000000')), ('USD', Decimal('186.000000000000000000')))).input_sha256
+E        +  and   'c572dd82b42126d4b77210650b1cb5a30902ce23d872d3d9ac68b414a0846f99' = PortfolioAnalyticsReportV1(status='AVAILABLE', reason_codes=(), model_profile_ref='spot-valuation-v1', calculation_ref...000'))), ending_native_values=(('EUR', Decimal('100.000000000000000000')), ('USD', Decimal('186.000000000000000000')))).input_sha256
+
+tests\test_portfolio_analytics.py:264: AssertionError
+- generated xml file: D:\bt_api_py\bt_api\bt_api_risk\.codex-tmp\portfolio-analytics-sourceqa-20261016-r1\junit.xml -
+=========================== short test summary info ===========================
+FAILED ::test_digest_is_recomputed_from_facts_and_stable_for_reordered_fx_rows
+======================== 1 failed, 14 passed in 0.56s =========================

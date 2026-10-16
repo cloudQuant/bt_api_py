@@ -1,0 +1,7 @@
+{
+  "python": "C:\\anaconda3\\python.exe",
+  "pytest_disable_plugin_autoload": "1",
+  "pythonpath": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src",
+  "noconftest": true,
+  "config": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r1\\pytest.ini"
+}

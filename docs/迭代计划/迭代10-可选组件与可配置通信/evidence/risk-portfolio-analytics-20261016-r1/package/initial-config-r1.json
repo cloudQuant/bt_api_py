@@ -1,0 +1,29 @@
+{
+  "repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "parent": "c6fcacda5efb5153d8c3e2be7b17f335f2732a9e",
+  "scope": "SOURCE_PACKAGE_COMPONENT_ONLY",
+  "source_sha256": {
+    "src/bt_api_risk/portfolio_analytics.py": "93C746350D09AD6E403634092A1504F5BFC655625726B15714AF2B945DAD0AAD",
+    "tests/test_portfolio_analytics.py": "A1C80F726BD75234396FD0FE601E5AF3F14A337519C43143F9FA74164D45A754"
+  },
+  "evidence_sha256": {
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\command.txt": "72001B0F01A1C7249EFF7CA2DDBD258DDA2AFD4E0F1884167A60B29A9EA2642E",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\environment.json": "8CCF1C3708188CA0010AE7326795422FA9A9349C7CD4A327136004F1F6E1FA6D",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\result-index.json": "D93C88D6CB6471144816BBA6B45AF6FD9DD7A5037128A0356B780A2015C55FB8",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\source-pre.json": "32E4FEC817967084363CB1B056E301392EA9FD49D2DE8F39A3F33C0E09C4EBC8",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\source-post.json": "32E4FEC817967084363CB1B056E301392EA9FD49D2DE8F39A3F33C0E09C4EBC8",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\stdout.txt": "7FFE159E60304FDD734A409160779F3C479C677165543327C96A7DA710FD02FD",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\stderr.txt": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\junit.xml": "5F92B25DF4B59E7EA6246E079F66BDBE42A46EB027F381D8F7321CD1D1AD8E23",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\pytest-exit-code.txt": "13BF7B3039C63BF5A50491FA3CFD8EB4E699D1BA1436315AEF9CBE5711530354",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\pytest.ini": "578FC1CD12D8D642DF8EFF41D71D5119626E9F88F21FAFADBA6B1092AC840A93",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-risk-portfolio-analytics-package-assessment.json": "8D7BDEC5FE9344FE9C49F94B6D0634B0040EC416EE0AF9538169F4A156237619"
+  },
+  "independent_static_review": "GO",
+  "evidence_level": "AUTHOR_FOCUSED_PACKAGE_QA_AND_INDEPENDENT_STATIC_SOURCE_REVIEW",
+  "formal_case_credit": [],
+  "junit": "D:\\bt_api_py\\bt_api\\bt_api_risk\\.codex-tmp\\portfolio-analytics-sourceqa-20261016-r2\\junit.xml",
+  "tests_passed": 17,
+  "post_path": "D:\\bt_api_py\\.codex-tmp\\iteration10-risk-portfolio-analytics-package-r1-postcommit-20261016.json",
+  "message": "Add portfolio analytics snapshot primitive"
+}

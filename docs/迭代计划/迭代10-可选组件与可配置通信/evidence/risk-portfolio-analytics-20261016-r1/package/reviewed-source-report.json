@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "scope": "RISK_PACKAGE_ANALYTICS_SOURCE_COMPONENT_ONLY",
+  "acceptance_level": "AUTHOR_WORKTREE_QA_AND_STATIC_SOURCE_REVIEW_ONLY",
+  "source_repository": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+  "source_branch": "dev",
+  "source_parent": "c6fcacda5efb5153d8c3e2be7b17f335f2732a9e",
+  "source_commit": "756ffbd42caac1618f286239dedecce278d781d2",
+  "independent_review": {
+    "result": "GO",
+    "reviewer_role": "independent source reviewer",
+    "tests_run": false,
+    "imports_run": false,
+    "host_started": false,
+    "summary": "Static review of the exact two-file Risk package change only. The new package-local snapshot calculation uses a trusted injected facts source, explicit cash+spot coverage, freshness/availability checks, a disclosed Modified Dietz estimate, flow-date FX facts, a fixed Decimal context, and a canonical input digest. It is not a registered analysis worker or an SDK/Host service."
+  },
+  "author_qa": {
+    "r1": {
+      "collected": 15,
+      "passed": 14,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 1,
+      "status": "preserved diagnostic history; not accepted as the passing run"
+    },
+    "r2": {
+      "collected": 17,
+      "passed": 17,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "stderr_empty": true,
+      "status": "author focused package QA; raw artifacts copied below"
+    },
+    "r2_junit_sha256": "5F92B25DF4B59E7EA6246E079F66BDBE42A46EB027F381D8F7321CD1D1AD8E23",
+    "r2_stdout_sha256": "7FFE159E60304FDD734A409160779F3C479C677165543327C96A7DA710FD02FD"
+  },
+  "files": [
+    {
+      "path": "bt_api/bt_api_risk/src/bt_api_risk/portfolio_analytics.py",
+      "sha256": "93C746350D09AD6E403634092A1504F5BFC655625726B15714AF2B945DAD0AAD",
+      "size_bytes": 52236
+    },
+    {
+      "path": "bt_api/bt_api_risk/tests/test_portfolio_analytics.py",
+      "sha256": "A1C80F726BD75234396FD0FE601E5AF3F14A337519C43143F9FA74164D45A754",
+      "size_bytes": 18008
+    }
+  ],
+  "formal_case_credit": [],
+  "limitations": [
+    "No analysis worker/task adapter or normal SDK/ServiceHost chain.",
+    "Cash and spot positions only; derivatives, margin, short inventory, and unsupported asset classes are unavailable.",
+    "No policy catalog, limits/cancel integration, or full portfolio analytics metric suite.",
+    "Does not satisfy CFG06 or AFI04 and adds no formal PASS."
+  ]
+}
