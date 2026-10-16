@@ -17,3 +17,10 @@ The test does not assert how grants are distributed by process or strategy, does
 - Independent static review of the final pin returned `GO_SOURCE_SUPPORT_ONLY` and confirmed the metric definition and evidence limits. No Root QA or Host run was performed.
 
 Earlier 10- and 20-concurrent candidate runs exceeded their then-current latency assertion. Their measured summaries were 0.988 seconds and 1.137 seconds, respectively, but no separate stdout/JUnit artifacts were retained; these are development history, not acceptance evidence. The final candidate bounds concurrency at 10 and makes no fairness claim.
+
+## Existing cross-process 429 node follow-up
+
+The prior session-owner round record reported five focused passes but did not identify their selectors, and no matching `.codex-tmp` stdout/JUnit artifact was found for `test_provider_429_backoff_blocks_spawned_process_dispatch`. This existing node was therefore run once as a focused follow-up on 2026-10-17: Python 3.14, `1 passed in 4.25s`, exit code 0. It uses four test-owned spawned readers on one local SQLite domain; the parent provider receives one synthetic `RateLimitError(retry_after=0.8)`, persists backoff, then releases the readers. Each reader returns `DEADLINE_EXCEEDED` with zero provider reads; the parent observes the single grant. This is local synthetic cross-process backoff evidence only, not a real provider/account or cross-machine result. The output is the command's console result; no separate JUnit/stdout file was created.
+
+- Test source: `tests/integration/test_gateway_quota_admission.py`, 37,057 bytes / SHA-256 `0192a1d8c3150e7a6579d0ce10b2023d47a6dbd2898805ce7f61f8e91a37d007`.
+- Gateway quota implementation at execution: `bt_api/bt_api_gateway/src/bt_api_gateway/quota_admission.py`, 48,541 bytes / SHA-256 `844b1b955ec17125bd9bca42815421ce31d5272ba3b517b15c9fc2cfd53ad37d`; the containing Gateway child was `c2886f60b72544c5690248c450bb2bddb6660c61`.
