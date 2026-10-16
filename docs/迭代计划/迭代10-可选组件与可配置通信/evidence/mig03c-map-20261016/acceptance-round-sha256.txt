@@ -1,0 +1,11 @@
+9267adac485d28d160a01944696aacc15b2fb5d44df527426ba6fe5a655ddb32 *bt_api_py/service_migration_map.py
+0836aac67065a52747c467eab437c3e7a3b4a624d1f4433abf919bd776fa055c *tests/unit/test_service_migration_map.py
+4fd4bfe7cc57823b1f5c49ea4ac50b2514d27d6f69fdd9fa142e5bfc67d1f440 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/root-adjudication.md
+5c4aa56c186248051c3c89e678d1b94d6c8a117dbfe93ba24a65c8d0b81f49f5 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/00-INDEX.md
+7cd842d9a33ba10726e2ca53a6ec464891bffd5beadd4211b1c39c7803645220 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/review/mig03c-review.md
+f5de620250a5631e5006c2dc850e49fc6d251d711c962f6da48d1d2fe907fc83 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/junit/producer.xml
+e571b9c1c5d537845e10360de69d8b75e0e89d1f8d45207fb53fb295cae69331 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/junit/review.xml
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/exit-producer.txt
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/exit-review.txt
+94fb54b2a58f9d1619117e7faad0191699aa3dfd0f2759db1da36a173cbdfc09 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/stdout-producer.log
+533f7f2b38d2d80a1bb8ce711048f29f965d8ee05cd24172c938e99a59d47aa7 *docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/stdout-review.log
