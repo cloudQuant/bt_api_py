@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "round_id": "iteration10-scn01-simnow-certlib-fail-closed-r1-2026-10-16",
+  "evidence_level": "SOURCE_FAKE_SIMNOW_NORMAL_FACTORY_FAIL_CLOSED_ONLY",
+  "root_qa": {"output":"D:\\temp\\iteration10-scn01-certlib-root-20261016-r1","pytest_exit":0,"collected":4,"passed":4,"failed":0,"duration_seconds":0.4,"warning_count":1,"warning":"Existing asyncio_default_fixture_loop_scope pytest config warning with unrelated asyncio plugin disabled.","source_pins_verified":4,"source_unchanged":true,"bt_head_before_after":"438b127fcff2c0619b13835248ee3ef210cc0728"},
+  "bt_commit_candidate": {
+    "repository": "D:/source_code/backtrader",
+    "branch": "dev",
+    "parent": "438b127fcff2c0619b13835248ee3ef210cc0728",
+    "scope": [
+      {"path":"examples/live/000_live_certification/simnow_penetration/certlib/__init__.py","role":"Reject unsupported transport and unavailable component backends before CTP import and SDK-root resolution; supported direct path remains unchanged.","sha256":"abb476fd2d0b5f6ad87809dbfbde25eab5f88f5a7c7ae5de5e060803fe0da64f","size_bytes":2088},
+      {"path":"tests/unit/test_scn01_simnow_certlib_fail_closed.py","role":"Four real-factory source tests covering unsupported transport and missing execution/risk/monitor backends.","sha256":"992a9fb555a0fffc112c452c202613792b19f555e62d502ba4f39d66ac73ea48","size_bytes":2097}
+    ]
+  },
+  "root_source_pins": [
+    {"path":"D:\\source_code\\backtrader\\examples\\live\\000_live_certification\\simnow_penetration\\certlib\\__init__.py","sha256":"abb476fd2d0b5f6ad87809dbfbde25eab5f88f5a7c7ae5de5e060803fe0da64f"},
+    {"path":"D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\scn01-simnow-certlib-fail-closed-20261016-r1\\root-qa-spec.json","sha256":"063967ae360fdf4cfb1f68dbd5feea02b5df38b275b74ef20d32495b937b9f2b"},
+    {"path":"D:\\bt_api_py\\.codex-tmp\\iteration10-focused-qa.py","sha256":"8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"},
+    {"path":"D:\\source_code\\backtrader\\tests\\unit\\test_scn01_simnow_certlib_fail_closed.py","sha256":"992a9fb555a0fffc112c452c202613792b19f555e62d502ba4f39d66ac73ea48"}
+  ],
+  "raw_evidence": {
+    "path": "raw-evidence.zip",
+    "size_bytes": 5569,
+    "sha256": "b2ec06d724e5525d5841c5ea01ded7fdf971c3da31102cd0b20fa6cd1ad65b53",
+    "member_count": 11,
+    "members": [
+      {"path":"command.json","size_bytes":659,"sha256":"2ba46b752dfcf104bfca4b65ed49f43746bf91bcbf3de4c9fee6e4504212c854"},
+      {"path":"exit.txt","size_bytes":3,"sha256":"13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"},
+      {"path":"junit.xml","size_bytes":1000,"sha256":"f4d8fe3167ee8ad880a96e86bb8283c84e8f8ac1f30cdae5ee055a371ecadd11"},
+      {"path":"result.json","size_bytes":623,"sha256":"c4a1d81b589caeaa65273d6d0af97d1655b28a6df758ca037d9abcfe8db0c09b"},
+      {"path":"runner.py","size_bytes":3204,"sha256":"8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"},
+      {"path":"running.json","size_bytes":76,"sha256":"570cd6edb8d43cd9275965a4b5b2bd9410e23514f58bd436df70bfed09862888"},
+      {"path":"source-after.json","size_bytes":697,"sha256":"3d0e64caae0efc449206da7d2874f3b873b26c0ec1c35468d1976a5e662c6f61"},
+      {"path":"source-before.json","size_bytes":697,"sha256":"3d0e64caae0efc449206da7d2874f3b873b26c0ec1c35468d1976a5e662c6f61"},
+      {"path":"spec.json","size_bytes":1396,"sha256":"45e859639803dbd257216b93c9da81958b261fc96c8ded684b7c6eca0c7f1b4f"},
+      {"path":"stderr.log","size_bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+      {"path":"stdout.log","size_bytes":636,"sha256":"d279f5272c0e15b4bf26e4bf01f65f10ae8d8d095371488cc676d9c4fa4b860a"}
+    ]
+  },
+  "sdk_commit_scope": ["raw-evidence.zip", "manifest.json", "round-record.md"],
+  "formal_status": {"scn01_formal_pass":false,"formal_pass_before":"39/68","formal_pass_after":"39/68"}
+}
