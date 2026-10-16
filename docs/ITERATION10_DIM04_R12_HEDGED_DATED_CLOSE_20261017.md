@@ -1,0 +1,7 @@
+# DIM04 R12 hedged and dated close slice
+
+SDK `dev` base: `647ac2f219405a4357512289a219df997225668a`. This round delivers the reviewed R12 CLOSE slice, the accepted CTP close-position projection child (`da4f7badc36ca4a8b7b1020048fb0b3598021f32`), the Risk close-receipt dimension/replay child (`66144a30f06ceda8c06e7fae28b70bce9ccace11`), and a focused multi-fill regression. It changes the CTP/Risk gitlinks and `bt_api_py/_normalization.py`, `service_execution.py`, `service_risk_order_entry.py`, `service_risk_order_journal.py`, plus `tests/integration/test_dim04_hedged_dated_close_isolation.py` and `tests/unit/test_dim04_v2_multi_fill_facts.py`.
+
+R12 evidence is author tool output only: one local synthetic Host test reported passed in 7.15 seconds with one existing pytest configuration warning; no raw result or JUnit was persisted. The static CTP review was GO_STATIC. The Risk close-receipt focused test reported one pass and has its own static GO. The added multi-fill unit cases cover accumulation, duplicate trade IDs, and total mismatch; they were not executed in this delivery. No QA or Host was run for this commit.
+
+This slice does not establish formal DIM04 completion. Late fill after UNKNOWN/restart, strategy multi-order `owner.cancel`, and the other exclusions in the selected-patch manifest remain separate work. Evidence packet and exact selected patch are retained under `.codex-tmp/dim04-r12-selected-current-head-647ac2f-risk66144a3-20261017/`.

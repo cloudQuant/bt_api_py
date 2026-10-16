@@ -84,6 +84,17 @@ _ORDER_FIELDS = frozenset(
         "tags",
     }
 )
+
+_ORDER_POSITION_FIELDS = frozenset({"position_side", "position_bucket"})
+_DEFAULT_POSITION_DIMENSION = ("NET", "ALL")
+_POSITION_SIDE_RANK = {"NET": 0, "LONG": 1, "SHORT": 2}
+_POSITION_BUCKET_RANK = {"ALL": 0, "TODAY": 1, "YESTERDAY": 2}
+_SUPPORTED_POSITION_DIMENSIONS = frozenset(
+    (side, bucket)
+    for side in _POSITION_SIDE_RANK
+    for bucket in _POSITION_BUCKET_RANK
+    if side != "NET" or bucket == "ALL"
+)
 _REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _VERSIONED_POLICY_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*-v[1-9][0-9]*$")
 _ORDER_OWNER_PORTS = frozenset({"service.order_entry", "service.order_query"})
@@ -226,6 +237,8 @@ _SOURCE_ALIASES = {
     ),
     "side": ("side", "order_side", "trade_side", "S"),
     "price": ("price", "limit_price", "order_price", "Price"),
+    "position_side": ("position_side", "positionSide", "posSide", "ps"),
+    "offset": ("offset", "order_offset", "trade_offset"),
 }
 _PERMITTED_ROLES = frozenset(
     {WireRole.STRATEGY_CLIENT, WireRole.APPLICATION_CLIENT, WireRole.SERVICE}
@@ -360,6 +373,10 @@ class RiskBtApiProviderContract:
     # keeps the legacy semantics and the legacy fingerprint byte for byte.
     trade_id_domain_ref: str | None = None
     trade_id_scope: str | None = None
+    # Explicitly attested provider position modes. The default preserves the
+    # established net/aggregate-only contract; hedge sides and dated buckets
+    # require a server-owned profile to list each supported pair.
+    supported_position_dimensions: tuple[tuple[str, str], ...] = (_DEFAULT_POSITION_DIMENSION,)
 
     def __post_init__(self) -> None:
         for name in ("exchange_name", "profile_id", "order_schema", "fill_schema"):
@@ -482,6 +499,31 @@ class RiskBtApiProviderContract:
                 # complete normalized observation contract, and ACCOUNT vs
                 # INSTRUMENT is a fixed fail-closed choice.
                 raise RiskOrderEntryError("PROVIDER_TRADE_IDENTITY_CONTRACT_INVALID")
+        dimensions = self.supported_position_dimensions
+        if (
+            type(dimensions) is not tuple
+            or not dimensions
+            or any(
+                type(item) is not tuple
+                or len(item) != 2
+                or type(item[0]) is not str
+                or type(item[1]) is not str
+                or (item[0], item[1]) not in _SUPPORTED_POSITION_DIMENSIONS
+                for item in dimensions
+            )
+            or len(set(dimensions)) != len(dimensions)
+            or dimensions
+            != tuple(
+                sorted(
+                    dimensions,
+                    key=lambda item: (
+                        _POSITION_SIDE_RANK[item[0]],
+                        _POSITION_BUCKET_RANK[item[1]],
+                    ),
+                )
+            )
+        ):
+            raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_INVALID")
 
     @property
     def write_ready(self) -> bool:
@@ -564,6 +606,10 @@ class RiskBtApiProviderContract:
             # identity domain is part of the trusted contract version.
             payload["trade_id_domain_ref"] = self.trade_id_domain_ref
             payload["trade_id_scope"] = self.trade_id_scope
+        if self.supported_position_dimensions != (_DEFAULT_POSITION_DIMENSION,):
+            payload["supported_position_dimensions"] = [
+                list(item) for item in self.supported_position_dimensions
+            ]
         return payload
 
     @property
@@ -574,6 +620,10 @@ class RiskBtApiProviderContract:
 class _PositionEffect(StrEnum):
     OPEN = "OPEN"
     CLOSE = "CLOSE"
+
+class _AdmissionSide(StrEnum):
+    BUY = "BUY"
+    SELL = "SELL"
 
 
 @dataclass(frozen=True, slots=True)
@@ -593,11 +643,14 @@ class _AdmissionOrder:
     instrument: str
     quantity: Decimal
     price: Decimal
+    side: _AdmissionSide
     position_effect: _PositionEffect
     metadata_version: str
     tags: Mapping[str, str]
     payload_sha256: str
     fx_rate: InstrumentRiskFxRate | None = None
+    position_side: str = "NET"
+    position_bucket: str = "ALL"
 
     @property
     def fingerprint(self) -> str:
@@ -609,6 +662,7 @@ class _AdmissionOrder:
             "position_effect": self.position_effect.value,
             "price": format(self.price, "f"),
             "quantity": format(self.quantity, "f"),
+            "side": self.side.value,
             "scope": {
                 "account_ref": self.scope.account_ref,
                 "environment": self.scope.environment,
@@ -617,6 +671,10 @@ class _AdmissionOrder:
             },
             "tags": dict(self.tags),
         }
+        if self.position_side != "NET":
+            payload["position_side"] = self.position_side
+        if self.position_bucket != "ALL":
+            payload["position_bucket"] = self.position_bucket
         if self.fx_rate is not None:
             payload["fx_rate"] = self.fx_rate.to_payload()
             payload["fx_rate_sha256"] = self.fx_rate.digest
@@ -885,7 +943,7 @@ class RiskOrderEntryService:
     ) -> Mapping[str, Any]:
         if contract is None or not contract.risk_only_write_ready:
             return _reply(False, "CAPABILITY_UNAVAILABLE", {"found": False, "record": None})
-        if not _has_exact_argument_fields(arguments, _ORDER_FIELDS):
+        if not _has_order_argument_fields(arguments):
             return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
         try:
             parsed = _parse_order(
@@ -951,7 +1009,10 @@ class RiskOrderEntryService:
             time_in_force="GTC",
             reduce_only=bool(parsed["reduce_only"]),
             idempotency_key=parsed["client_order_id"],
-            **({} if parsed["quantity_unit"] is None else {"quantity_unit": parsed["quantity_unit"]}),
+            quantity_unit=parsed["quantity_unit"],
+            position_side=parsed["request_position_side"],
+            position_mode=parsed["request_position_mode"],
+            offset=parsed["request_offset"],
         )
         order_request = request.to_dict()
         order_request_sha256 = sha256_text(
@@ -2315,6 +2376,7 @@ class RiskOrderEntryService:
             instrument=request.symbol,
             quantity=request.quantity,
             price=request.price or Decimal(0),
+            side=_AdmissionSide(request.side.value.upper()),
             position_effect=_PositionEffect(
                 str(command.canonical_payload.get("position_effect", ""))
             ),
@@ -2322,6 +2384,8 @@ class RiskOrderEntryService:
             tags=MappingProxyType({INSTRUMENT_METADATA_DIGEST_TAG: metadata.digest}),
             payload_sha256=payload_sha256,
             fx_rate=fx_rate,
+            position_side=str(command.canonical_payload.get("position_side", "NET")),
+            position_bucket=str(command.canonical_payload.get("position_bucket", "ALL")),
         )
 
     def _provider_contract_for_target(
@@ -2410,34 +2474,75 @@ def _parse_order(
     for name in ("intent_id", "signal_id", "instrument", "metadata_version"):
         if type(arguments.get(name)) is not str or not _REFERENCE.fullmatch(arguments[name]):
             raise RiskOrderEntryError("INVALID_REQUEST")
-    effect = arguments.get("position_effect")
+    raw_position_effect = arguments["position_effect"]
+    position_side = arguments.get("position_side", "NET")
+    position_bucket = arguments.get("position_bucket", "ALL")
     if (
-        type(effect) is not str
-        or effect not in {"OPEN", "CLOSE"}
-        or effect not in contract.supported_position_effects
+        type(position_side) is not str
+        or position_side not in _POSITION_SIDE_RANK
+        or type(position_bucket) is not str
+        or position_bucket not in _POSITION_BUCKET_RANK
+    ):
+        raise RiskOrderEntryError("POSITION_DIMENSIONS_INVALID")
+    if raw_position_effect == "CLOSE_TODAY":
+        if position_bucket not in {"ALL", "TODAY"}:
+            raise RiskOrderEntryError("POSITION_BUCKET_MISMATCH")
+        position_bucket = "TODAY"
+        position_effect = "CLOSE"
+    elif raw_position_effect == "CLOSE_YESTERDAY":
+        if position_bucket not in {"ALL", "YESTERDAY"}:
+            raise RiskOrderEntryError("POSITION_BUCKET_MISMATCH")
+        position_bucket = "YESTERDAY"
+        position_effect = "CLOSE"
+    else:
+        position_effect = raw_position_effect
+    if (
+        type(position_effect) is not str
+        or position_effect not in {"OPEN", "CLOSE"}
+        or position_effect
+        not in contract.supported_position_effects
     ):
         raise RiskOrderEntryError("POSITION_EFFECT_UNSUPPORTED")
     if (
-        type(arguments.get("order_type")) is not str
-        or type(arguments.get("time_in_force")) is not str
+        type(arguments["order_type"]) is not str
+        or type(arguments["time_in_force"]) is not str
         or arguments["order_type"] != "LIMIT"
         or arguments["time_in_force"] != "GTC"
     ):
         raise RiskOrderEntryError("LIMIT_GTC_ONLY")
-    if type(arguments.get("side")) is not str or arguments["side"] not in {"BUY", "SELL"}:
+    if type(arguments["side"]) is not str or arguments["side"] not in {"BUY", "SELL"}:
         raise RiskOrderEntryError("INVALID_REQUEST")
-    reduce_only = effect == "CLOSE"
-    if arguments.get("reduce_only") is not reduce_only:
+    if (
+        (position_side == "NET" and position_bucket != "ALL")
+        or (position_effect == "OPEN" and position_bucket != "ALL")
+        or (
+            (position_side, position_bucket)
+            not in (
+                contract.supported_position_dimensions
+            )
+        )
+    ):
+        raise RiskOrderEntryError("POSITION_DIMENSIONS_UNSUPPORTED")
+    expected_reduce_only = raw_position_effect != "OPEN"
+    if arguments["reduce_only"] is not expected_reduce_only:
         raise RiskOrderEntryError("POSITION_EFFECT_REDUCE_ONLY_MISMATCH")
-    if not isinstance(arguments.get("tags"), Mapping) or arguments["tags"]:
+    expected_side = None
+    if position_side != "NET":
+        if position_effect == "OPEN":
+            expected_side = "BUY" if position_side == "LONG" else "SELL"
+        elif position_effect == "CLOSE":
+            expected_side = "SELL" if position_side == "LONG" else "BUY"
+    if expected_side is not None and arguments["side"] != expected_side:
+        raise RiskOrderEntryError("POSITION_SIDE_MISMATCH")
+    if not isinstance(arguments["tags"], Mapping) or arguments["tags"]:
         raise RiskOrderEntryError("CLIENT_TAGS_UNSUPPORTED")
-    deadline = arguments.get("deadline_ns")
+    deadline = arguments["deadline_ns"]
     if deadline is not None and (type(deadline) is not int or deadline <= 0):
         raise RiskOrderEntryError("INVALID_REQUEST")
     if deadline is not None and time.time_ns() >= deadline:
         raise RiskOrderEntryError("DEADLINE_EXPIRED")
-    quantity = _positive_decimal(arguments.get("quantity"), "INVALID_REQUEST")
-    price = _positive_decimal(arguments.get("price"), "INVALID_REQUEST")
+    quantity = _positive_decimal(arguments["quantity"], "INVALID_REQUEST")
+    price = _positive_decimal(arguments["price"], "INVALID_REQUEST")
     metadata = target.registry.get(arguments["instrument"])
     if metadata is None:
         raise RiskOrderEntryError("INSTRUMENT_METADATA_UNREGISTERED")
@@ -2465,33 +2570,135 @@ def _parse_order(
         "intent_id": arguments["intent_id"],
         "metadata_version": arguments["metadata_version"],
         "order_type": "LIMIT",
-        "position_effect": effect,
+        "position_effect": position_effect,
         "price": _decimal_text(price),
         "quantity": _decimal_text(quantity),
-        "reduce_only": reduce_only,
+        "reduce_only": expected_reduce_only,
         "side": arguments["side"],
         "signal_id": arguments["signal_id"],
         "tags": {},
         "time_in_force": "GTC",
     }
-    # Close quantity is transported in base units; Risk independently binds
-    # the trusted instrument quantity unit and closable allocation.
-    quantity_unit = "base" if reduce_only else None
-    if quantity_unit is not None:
-        canonical_payload["quantity_unit"] = quantity_unit
+    if position_side != "NET":
+        canonical_payload["position_side"] = position_side
+    if position_bucket != "ALL":
+        canonical_payload["position_bucket"] = position_bucket
+    # OrderRequest uses its finite transport unit vocabulary (base/contracts/
+    # lots/native). The instrument's provider-specific unit (for example
+    # ``BTC``) remains bound by Risk metadata and close authorization instead.
+    request_quantity_unit = "base"
+    if position_effect == "CLOSE":
+        canonical_payload["quantity_unit"] = request_quantity_unit
     return {
         "canonical_payload": canonical_payload,
         "client_order_id": client_order_id,
         "intent_id": arguments["intent_id"],
         "instrument": arguments["instrument"],
         "metadata_version": arguments["metadata_version"],
-        "position_effect": effect,
+        "position_effect": position_effect,
         "price": price,
         "quantity": quantity,
-        "quantity_unit": quantity_unit,
-        "reduce_only": reduce_only,
+        "quantity_unit": request_quantity_unit,
+        "request_position_side": position_side.lower() if position_side != "NET" else None,
+        "request_position_mode": "dual_side" if position_side != "NET" else None,
+        "request_offset": (
+            None
+            if position_side == "NET" and position_bucket == "ALL"
+            else (
+                "open"
+                if position_effect == "OPEN"
+                else {
+                    "ALL": "close",
+                    "TODAY": "close_today",
+                    "YESTERDAY": "close_yesterday",
+                }[position_bucket]
+            )
+        ),
+        "position_side": position_side,
+        "position_bucket": position_bucket,
+        "reduce_only": expected_reduce_only,
         "side": arguments["side"],
     }
+
+def _has_order_argument_fields(arguments: object) -> bool:
+    if not isinstance(arguments, Mapping):
+        return False
+    fields = frozenset(arguments)
+    return fields in {_ORDER_FIELDS, _ORDER_FIELDS | _ORDER_POSITION_FIELDS}
+
+def _canonical_source_position_side(value: object) -> str | None:
+    if type(value) is not str:
+        return None
+    normalized = value.strip().lower()
+    return {
+        "both": "NET",
+        "net": "NET",
+        "long": "LONG",
+        "short": "SHORT",
+        "buy": "LONG",
+        "sell": "SHORT",
+    }.get(normalized)
+
+def _canonical_source_offset(value: object) -> str | None:
+    if type(value) is not str:
+        return None
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "closetoday": "close_today",
+        "closeyesterday": "close_yesterday",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized in {"open", "close", "close_today", "close_yesterday"}:
+        return normalized
+    return None
+
+def _validate_source_position_dimensions(
+    provenance: Mapping[str, Any],
+    normalized_record: Mapping[str, Any],
+    *,
+    position_side: str,
+    position_bucket: str,
+    position_effect: object,
+    require_nondefault: bool,
+) -> None:
+    """Require source echoes for qualifiers that change position ownership."""
+
+    if (
+        type(position_side) is not str
+        or position_side not in _POSITION_SIDE_RANK
+        or type(position_bucket) is not str
+        or position_bucket not in _POSITION_BUCKET_RANK
+    ):
+        raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_INVALID")
+    raw_side = _field_value(provenance, "position_side")
+    canonical_side = _canonical_source_position_side(raw_side)
+    if raw_side is not None and canonical_side != position_side:
+        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_MISMATCH")
+    normalized_side = normalized_record.get("position_side")
+    canonical_normalized_side = _canonical_source_position_side(
+        normalized_side if type(normalized_side) is str else None
+    )
+    if normalized_side is not None and canonical_normalized_side != position_side:
+        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_MISMATCH")
+    if (
+        require_nondefault
+        and position_side != "NET"
+        and (raw_side is None or normalized_side is None)
+    ):
+        raise RiskOrderEntryError("PROVIDER_POSITION_SIDE_UNPROVEN")
+
+    raw_offset = _field_value(provenance, "offset")
+    if position_bucket in {"TODAY", "YESTERDAY"}:
+        expected_offset = {
+            "TODAY": "close_today",
+            "YESTERDAY": "close_yesterday",
+        }[position_bucket]
+        normalized_offset = _canonical_source_offset(normalized_record.get("offset"))
+        if (
+            _canonical_source_offset(raw_offset) != expected_offset
+            or normalized_offset != expected_offset
+        ):
+            raise RiskOrderEntryError("PROVIDER_POSITION_BUCKET_MISMATCH")
 
 
 def _positive_decimal(value: object, code: str) -> Decimal:
@@ -2755,20 +2962,46 @@ def _verify_observation_digest(value: Mapping[str, Any]) -> None:
 def _validate_recovery_observation_fields(
     order: Mapping[str, Any], fills: Mapping[str, Any]
 ) -> None:
-    order_keys=frozenset(order)
-    fill_keys=frozenset(fills)
-    close_order=_RECOVERY_ORDER_OBSERVATION_FIELDS | {"position_effect", "reduce_only"}
-    close_fill=_RECOVERY_FILL_OBSERVATION_FIELDS | {"position_effect"}
+    order_keys = frozenset(order)
+    fill_keys = frozenset(fills)
+    order_dimensions = _ORDER_POSITION_FIELDS.issubset(order_keys)
+    fill_dimensions = _ORDER_POSITION_FIELDS.issubset(fill_keys)
+    order_close = "position_effect" in order_keys or "reduce_only" in order_keys
+    fill_close = "position_effect" in fill_keys
+    order_base = _RECOVERY_ORDER_OBSERVATION_FIELDS
+    fill_base = _RECOVERY_FILL_OBSERVATION_FIELDS
+    expected_order = order_base | (_ORDER_POSITION_FIELDS if order_dimensions else frozenset())
+    expected_fill = fill_base | (_ORDER_POSITION_FIELDS if fill_dimensions else frozenset())
+    if order_close:
+        expected_order |= {"position_effect", "reduce_only"}
+    if fill_close:
+        expected_fill |= {"position_effect"}
     if (
-        not (
-            (order_keys == _RECOVERY_ORDER_OBSERVATION_FIELDS and fill_keys == _RECOVERY_FILL_OBSERVATION_FIELDS)
-            or (order_keys == close_order and fill_keys == close_fill
-                and order.get("position_effect") == "CLOSE"
-                and order.get("reduce_only") is True
-                and fills.get("position_effect") == "CLOSE")
+        order_keys != expected_order
+        or fill_keys != expected_fill
+        or order_dimensions is not fill_dimensions
+        or order_close is not fill_close
+        or (
+            order_dimensions
+            and (
+                order.get("position_side") != fills.get("position_side")
+                or order.get("position_bucket") != fills.get("position_bucket")
+                or order.get("position_side") not in {"LONG", "SHORT"}
+                or order.get("position_bucket") not in {"ALL", "TODAY", "YESTERDAY"}
+            )
         )
-        or type(order.get("updated_at_ns")) is not int or order["updated_at_ns"] <= 0
-        or type(fills.get("updated_at_ns")) is not int or fills["updated_at_ns"] <= 0
+        or (
+            order_close
+            and (
+                order.get("position_effect") != "CLOSE"
+                or order.get("reduce_only") is not True
+                or fills.get("position_effect") != "CLOSE"
+            )
+        )
+        or type(order.get("updated_at_ns")) is not int
+        or order["updated_at_ns"] <= 0
+        or type(fills.get("updated_at_ns")) is not int
+        or fills["updated_at_ns"] <= 0
     ):
         raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_INVALID")
 
@@ -2832,6 +3065,31 @@ def _validate_recovery_observation_source(
     except (KeyError, TypeError, ValueError, InvalidOperation):
         raise RiskOrderEntryError("RECOVERY_REQUEST_INVALID") from None
     position_effect = command.canonical_payload.get("position_effect")
+    position_side = command.canonical_payload.get("position_side", "NET")
+    position_bucket = command.canonical_payload.get("position_bucket", "ALL")
+    if (
+        type(position_side) is not str
+        or type(position_bucket) is not str
+        or (position_side, position_bucket) not in contract.supported_position_dimensions
+    ):
+        raise RiskOrderEntryError("RECOVERY_POSITION_DIMENSIONS_UNSUPPORTED")
+    expected_request_position_side = (
+        position_side.lower() if position_side != "NET" else None
+    )
+    expected_request_position_mode = "dual_side" if position_side != "NET" else None
+    expected_request_offset = (
+        None
+        if position_side == "NET" and position_bucket == "ALL"
+        else (
+            "open"
+            if position_effect == "OPEN"
+            else {
+                "ALL": "close",
+                "TODAY": "close_today",
+                "YESTERDAY": "close_yesterday",
+            }[position_bucket]
+        )
+    )
     expected_reduce_only = position_effect == "CLOSE"
     if (
         request.symbol != metadata.instrument
@@ -2841,6 +3099,9 @@ def _validate_recovery_observation_source(
         or request.side.value.upper() != command.canonical_payload.get("side")
         or request.order_type.value != "limit"
         or request.time_in_force != "GTC"
+        or request.position_side != expected_request_position_side
+        or request.position_mode != expected_request_position_mode
+        or request.offset != expected_request_offset
         or position_effect not in {"OPEN", "CLOSE"}
         or position_effect not in contract.supported_position_effects
         or request.reduce_only is not expected_reduce_only
@@ -2901,6 +3162,22 @@ def _validate_recovery_observation_source(
             raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
     elif any(key in order or key in fills for key in ("position_effect", "reduce_only")):
         raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
+    expected_position_dimensions = (position_side, position_bucket)
+    has_nondefault_position_dimensions = expected_position_dimensions != ("NET", "ALL")
+    if (
+        has_nondefault_position_dimensions
+        != _ORDER_POSITION_FIELDS.issubset(order)
+        or (
+            has_nondefault_position_dimensions
+            and (
+                (order.get("position_side"), order.get("position_bucket"))
+                != expected_position_dimensions
+                or (fills.get("position_side"), fills.get("position_bucket"))
+                != expected_position_dimensions
+            )
+        )
+    ):
+        raise RiskOrderEntryError("RECOVERY_POSITION_DIMENSIONS_MISMATCH")
     _verify_observation_digest(order)
     _verify_observation_digest(fills)
     if (
@@ -3102,6 +3379,14 @@ def _v2_order_facts(
     )
     order_values = order_prov["source_values"]
     fill_envelope = fill_prov["envelope_values"]
+    position_side = command.canonical_payload.get("position_side", "NET")
+    position_bucket = command.canonical_payload.get("position_bucket", "ALL")
+    if (
+        type(position_side) is not str
+        or type(position_bucket) is not str
+        or (position_side, position_bucket) not in contract.supported_position_dimensions
+    ):
+        raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_UNSUPPORTED")
     order_revision = order_values.get(contract.order_revision_field)
     fill_watermark = fill_envelope.get(contract.fill_watermark_field)
     if (
@@ -3128,6 +3413,14 @@ def _v2_order_facts(
     }
     exposure_state = states.get(status or "", OrderExposureState.UNKNOWN)
     position_effect = command.canonical_payload.get("position_effect", "OPEN")
+    _validate_source_position_dimensions(
+        order_prov,
+        order,
+        position_side=position_side,
+        position_bucket=position_bucket,
+        position_effect=position_effect,
+        require_nondefault=True,
+    )
     if (
         order.get("execution_unknown") is not False
         or str(order.get("status")) != status
@@ -3173,13 +3466,133 @@ def _v2_order_facts(
     ):
         raw_prov = _validate_provenance_snapshot(raw_prov_value, "get_deals")
         values = raw_prov["source_values"]
-        return {
+        _validate_source_position_dimensions(
+            raw_prov,
+            normalized,
+            position_side=position_side,
+            position_bucket=position_bucket,
+            position_effect=position_effect,
+            require_nondefault=True,
+        )
+        trade_id = _first_source_value(values, ("trade_id", "fill_id", "deal_id", "tradeId", "id", "TradeID"))
+        provider_order_id = _first_source_value(
+            values, ("order_id", "external_order_id", "orderId", "ordId", "OrderSysID")
+        )
+        client_order_id = _first_source_value(
+            values, ("client_order_id", "clOrdId", "OrderRef")
+        )
+        account_id = _first_source_value(values, ("account_id", "AccountID", "InvestorID"))
+        instrument = _first_source_value(
+            values,
+            ("symbol", "symbol_name", "instrument", "instrument_id", "data_name", "instId", "InstrumentID", "trade_symbol"),
+        )
+        side_raw = _first_source_value(values, ("side", "order_side", "trade_side", "S"))
+        quantity_raw = _first_source_value(
+            values, ("quantity", "size", "trade_volume", "qty", "fillSz", "volume", "Volume")
+        )
+        price_raw = _first_source_value(
+            values, ("trade_price", "price", "fillPx", "Price")
+        )
+        revision = values.get(contract.fill_revision_field)
+        fee_raw = values.get(contract.fee_amount_field)
+        fee_currency = values.get(contract.fee_currency_field)
+        if (
+            type(trade_id) is not str
+            or not trade_id
+            or type(revision) is not int
+            or revision <= 0
+            or revision > fill_watermark
+            or str(provider_order_id) != str(order.get("order_id"))
+            or str(client_order_id) != command.client_order_id
+            or str(account_id) != command.provider_account_id
+            or str(instrument) != request.symbol
+            or str(side_raw).upper() != request.side.value.upper()
+            or type(fee_currency) is not str
+            or not fee_currency
+        ):
+            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_UNVERIFIED")
+        try:
+            fill_quantity = Decimal(str(quantity_raw))
+            fill_price = Decimal(str(price_raw))
+            fee_amount = Decimal(str(fee_raw))
+            normalized_fee = Decimal(str(normalized.get("fee")))
+        except (InvalidOperation, TypeError, ValueError):
+            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_INVALID") from None
+        if (
+            not fill_quantity.is_finite()
+            or fill_quantity <= 0
+            or not fill_price.is_finite()
+            or fill_price <= 0
+            or not fee_amount.is_finite()
+            or not normalized_fee.is_finite()
+            or normalized_fee != fee_amount
+            or str(normalized.get("trade_id")) != trade_id
+            or str(normalized.get("order_id")) != str(provider_order_id)
+            or str(normalized.get("client_order_id")) != command.client_order_id
+            or str(normalized.get("account_id")) != command.provider_account_id
+            or str(normalized.get("symbol")) != request.symbol
+            or str(normalized.get("side")).upper() != request.side.value.upper()
+            or str(normalized.get("fee_currency")).upper() != fee_currency.upper()
+        ):
+            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_MISMATCH")
+        # The row identity must survive a later observation with a newer
+        # envelope watermark.  The full provider-observation digest below
+        # continues to bind each envelope; this digest binds the immutable
+        # explicit source row only, so previously observed fills remain the
+        # same facts when another fill is appended.
+        digest = _fill_source_record_sha256(raw_prov)
+        fill_facts.append(
+            OrderFillFact(
+                trade_id=trade_id,
+                quantity=fill_quantity,
+                price=fill_price,
+                side=request.side.value.upper(),
+                position_effect=position_effect,
+                fee_amount=fee_amount,
+                fee_currency=fee_currency.upper(),
+                source_record_sha256=digest,
+                source_revision=revision,
+            )
+        )
+        fill_rows.append(
+            {
+                "normalization_provenance": raw_prov,
+                "record": {
+                    **_safe_normalized_fill(normalized),
+                    "source_record_sha256": digest,
+                    "source_revision": revision,
+                },
+                "source_revision": revision,
+            }
+        )
+    fill_tuple = tuple(sorted(fill_facts, key=lambda item: item.trade_id))
+    fill_qty = sum((item.quantity for item in fill_tuple), Decimal(0))
+    if fill_qty != filled or len({item.trade_id for item in fill_tuple}) != len(fill_tuple):
+        raise RiskOrderEntryError("PROVIDER_FILL_HISTORY_MISMATCH")
+    if exposure_state is OrderExposureState.ACKED and filled != 0:
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    if exposure_state is OrderExposureState.PARTIALLY_FILLED and not (
+        0 < filled < quantity
+    ):
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    if exposure_state is OrderExposureState.FILLED and filled != quantity:
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    if exposure_state is OrderExposureState.CANCELLED and filled > quantity:
+        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
+    leaves = (
+        quantity - filled
+        if exposure_state in {OrderExposureState.ACKED, OrderExposureState.PARTIALLY_FILLED}
+        else Decimal(0)
+    )
+    return {
         "fill_facts": fill_tuple,
         "fill_rows": fill_rows,
         "fill_watermark_revision": fill_watermark,
         "filled_quantity": filled,
         "leaves_quantity": leaves,
         "order_revision": order_revision,
+        "position_side": position_side,
+        "position_bucket": position_bucket,
         "position_effect": position_effect,
         "valuation_price": source_price,
         "state": exposure_state,
@@ -3252,6 +3665,23 @@ def _verify_order_source_fields(
         or collection_provenance["envelope_values"] != provenance["envelope_values"]
     ):
         raise RiskOrderEntryError("PROVIDER_COLLECTION_PROVENANCE_MISMATCH")
+    position_side = command.canonical_payload.get("position_side", "NET")
+    position_bucket = command.canonical_payload.get("position_bucket", "ALL")
+    position_effect = command.canonical_payload.get("position_effect", "OPEN")
+    if (
+        type(position_side) is not str
+        or type(position_bucket) is not str
+        or (position_side, position_bucket) not in contract.supported_position_dimensions
+    ):
+        raise RiskOrderEntryError("PROVIDER_POSITION_DIMENSIONS_UNSUPPORTED")
+    _validate_source_position_dimensions(
+        provenance,
+        order,
+        position_side=position_side,
+        position_bucket=position_bucket,
+        position_effect=position_effect,
+        require_nondefault=True,
+    )
     expected_values = {
         "provider_order_id": order.get("order_id"),
         "client_order_id": command.client_order_id,
@@ -3371,6 +3801,8 @@ def _observation_payloads(
     }
     order_observation = {
         **order_values,
+        "position_effect": str(command.canonical_payload.get("position_effect", "OPEN")),
+        "reduce_only": bool(command.canonical_payload.get("reduce_only", False)),
         "normalization_provenance": order_provenance,
         "operation": "query_order",
         "source_fields": order_provenance["source_fields"],
@@ -3403,6 +3835,7 @@ def _observation_payloads(
             else []
         ),
         "provider_contract_sha256": contract.fingerprint,
+        "position_effect": str(command.canonical_payload.get("position_effect", "OPEN")),
         "schema": fill_schema,
         "source_alignment_valid": fills.source_alignment_valid,
         "source_row_count": len(fills),
@@ -3418,10 +3851,13 @@ def _observation_payloads(
         ),
         "trade_count": len(fills) if v2_facts is not None else 0,
     }
-    if command.canonical_payload.get("position_effect", "OPEN") == "CLOSE":
-        order_observation["position_effect"] = "CLOSE"
-        order_observation["reduce_only"] = True
-        fill_observation["position_effect"] = "CLOSE"
+    position_side = str(command.canonical_payload.get("position_side", "NET"))
+    position_bucket = str(command.canonical_payload.get("position_bucket", "ALL"))
+    if position_side != "NET" or position_bucket != "ALL":
+        order_observation["position_side"] = position_side
+        order_observation["position_bucket"] = position_bucket
+        fill_observation["position_side"] = position_side
+        fill_observation["position_bucket"] = position_bucket
     if v2_facts is not None:
         fill_observation["fill_row_provenance"] = [
             item["normalization_provenance"] for item in v2_facts["fill_rows"]
@@ -3493,6 +3929,8 @@ def _followup_observation(
         "collection_provenance": order.collection_provenance.to_dict(),
         "complete": True,
         "filled_quantity": str(order.get("filled", 0)),
+        "position_effect": str(command.canonical_payload.get("position_effect", "OPEN")),
+        "reduce_only": command.canonical_payload.get("reduce_only", False),
         "normalization_provenance": {"order": order_prov, "fills": fill_prov},
         "operation": "orders.query",
         "provider_contract_sha256": contract.fingerprint,
@@ -3540,6 +3978,11 @@ def _followup_observation(
         "side": str(order.get("side") or ""),
         "trade_count": len(fills),
     }
+    position_side = str(command.canonical_payload.get("position_side", "NET"))
+    position_bucket = str(command.canonical_payload.get("position_bucket", "ALL"))
+    if position_side != "NET" or position_bucket != "ALL":
+        record["position_side"] = position_side
+        record["position_bucket"] = position_bucket
     if v2_facts is not None:
         record["fill_row_provenance"] = [
             item["normalization_provenance"] for item in v2_facts["fill_rows"]
@@ -3766,6 +4209,8 @@ def _order_exposure_proof(
         normalizer_schema_version=contract.normalizer_schema,
         order_side=request.side.value.upper(),
         position_effect=str(facts.get("position_effect", "OPEN")),
+        position_side=str(facts.get("position_side", command.canonical_payload.get("position_side", "NET"))),
+        position_bucket=str(facts.get("position_bucket", command.canonical_payload.get("position_bucket", "ALL"))),
         fills=tuple(facts["fill_facts"]),
         fill_trade_count=len(facts["fill_facts"]),
         fill_ids_sha256=fill_ids_sha256(tuple(facts["fill_facts"])),

@@ -248,6 +248,8 @@ class ServiceExecutionClient:
         metadata_version: str = "unknown",
         deadline_ns: int | None = None,
         tags: Mapping[str, str] | None = None,
+        position_side: str = "NET",
+        position_bucket: str = "ALL",
     ) -> OrderRecordView:
         """Submit one intent and return its durable record.
 
@@ -270,6 +272,8 @@ class ServiceExecutionClient:
             metadata_version=metadata_version,
             deadline_ns=deadline_ns,
             tags=tags,
+            position_side=position_side,
+            position_bucket=position_bucket,
         )
         result = self._call(SUBMIT_OPERATION, arguments, identifier=intent_id)
         return _order_record(result, identifier=intent_id)
@@ -489,6 +493,8 @@ def _submit_arguments(
     metadata_version: object,
     deadline_ns: object,
     tags: object,
+    position_side: object = "NET",
+    position_bucket: object = "ALL",
 ) -> Mapping[str, Any]:
     if not _reference(intent_id):
         raise ServiceExecutionError("INVALID_INTENT_ID")
@@ -500,6 +506,27 @@ def _submit_arguments(
         raise ServiceExecutionError("INVALID_SIDE")
     if position_effect not in _POSITION_EFFECTS:
         raise ServiceExecutionError("INVALID_POSITION_EFFECT")
+    if (
+        type(position_side) is not str
+        or position_side not in {"NET", "LONG", "SHORT"}
+        or type(position_bucket) is not str
+        or position_bucket not in {"ALL", "TODAY", "YESTERDAY"}
+    ):
+        raise ServiceExecutionError("INVALID_POSITION_DIMENSIONS")
+    if position_effect == "CLOSE_TODAY":
+        if position_bucket not in {"ALL", "TODAY"}:
+            raise ServiceExecutionError("POSITION_BUCKET_MISMATCH")
+        position_bucket = "TODAY"
+    elif position_effect == "CLOSE_YESTERDAY":
+        if position_bucket not in {"ALL", "YESTERDAY"}:
+            raise ServiceExecutionError("POSITION_BUCKET_MISMATCH")
+        position_bucket = "YESTERDAY"
+    if position_side == "NET" and position_bucket != "ALL":
+        raise ServiceExecutionError("POSITION_BUCKET_UNPROVEN")
+    if position_effect == "OPEN" and position_bucket != "ALL":
+        raise ServiceExecutionError("INVALID_POSITION_BUCKET_FOR_OPEN")
+    if reduce_only is not (position_effect != "OPEN"):
+        raise ServiceExecutionError("INVALID_REDUCE_ONLY")
     if order_type not in _ORDER_TYPES:
         raise ServiceExecutionError("INVALID_ORDER_TYPE")
     if time_in_force not in _TIME_IN_FORCE:
@@ -517,23 +544,28 @@ def _submit_arguments(
         if price is not None:
             raise ServiceExecutionError("MARKET_INTENT_MUST_NOT_CARRY_PRICE")
         normalized_price = None
-    return MappingProxyType(
-        {
-            "intent_id": intent_id,
-            "signal_id": signal_id,
-            "instrument": instrument,
-            "side": side,
-            "position_effect": position_effect,
-            "order_type": order_type,
-            "quantity": normalized_quantity,
-            "price": normalized_price,
-            "time_in_force": time_in_force,
-            "reduce_only": reduce_only,
-            "metadata_version": metadata_version,
-            "deadline_ns": deadline_ns,
-            "tags": _tags(tags),
-        }
-    )
+    payload: dict[str, Any] = {
+        "intent_id": intent_id,
+        "signal_id": signal_id,
+        "instrument": instrument,
+        "side": side,
+        "position_effect": position_effect,
+        "order_type": order_type,
+        "quantity": normalized_quantity,
+        "price": normalized_price,
+        "time_in_force": time_in_force,
+        "reduce_only": reduce_only,
+        "metadata_version": metadata_version,
+        "deadline_ns": deadline_ns,
+        "tags": _tags(tags),
+    }
+    # Omit the legacy NET/ALL pair so existing client payloads and intent
+    # fingerprints keep their exact v1 representation.
+    if position_side != "NET":
+        payload["position_side"] = position_side
+    if position_bucket != "ALL":
+        payload["position_bucket"] = position_bucket
+    return MappingProxyType(payload)
 
 
 def _cancel_arguments(

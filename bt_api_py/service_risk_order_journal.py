@@ -6942,6 +6942,8 @@ def _bounded_observation(value: Mapping[str, Any]) -> dict[str, Any]:
         "trade_count",
         "provider_observation_sha256",
         "position_effect",
+        "position_side",
+        "position_bucket",
         "reduce_only",
         "public_state",
         "reason_code",
