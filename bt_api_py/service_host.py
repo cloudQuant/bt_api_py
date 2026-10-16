@@ -689,6 +689,24 @@ class ServiceHost:
                         and actual.write_operations
                         == planned.write_operations - {"orders.submit_approved_target"}
                     )
+                    or (
+                        planned.port == "service.order_entry"
+                        and actual.operations
+                        == planned.operations - {"orders.submit_group_compensation_close"}
+                        and actual.write_operations
+                        == planned.write_operations
+                        - {"orders.submit_group_compensation_close"}
+                    )
+                    or (
+                        planned.port == "service.order_query"
+                        and actual.operations
+                        == planned.operations
+                        - {
+                            "orders.prepare_group_compensation_close",
+                            "orders.query_group_compensation_close",
+                        }
+                        and actual.write_operations == planned.write_operations
+                    )
                 )
                 or actual.market_wire_version != planned.market_wire_version
                 for actual, planned in zip(capabilities, planned_capabilities, strict=True)

@@ -357,12 +357,22 @@ class Dim09ThreeLegCluster:
         initial_states: tuple[str, ...] = ("filled", "filled", "filled"),
         group_admission: Any = None,
         drop_submit_replies_for: tuple[str, ...] = (),
+        supports_close: bool = False,
     ) -> None:
+        if type(supports_close) is not bool:
+            raise TypeError("supports_close must be bool")
         self.tmp_path = tmp_path
+        self.supports_close = supports_close
         self._stack = ExitStack()
         self._extra_closers: list[Any] = []
         try:
-            self._build(monkeypatch, initial_states, group_admission, drop_submit_replies_for)
+            self._build(
+                monkeypatch,
+                initial_states,
+                group_admission,
+                drop_submit_replies_for,
+                supports_close,
+            )
         except BaseException:
             self.close()
             raise
@@ -375,6 +385,7 @@ class Dim09ThreeLegCluster:
         initial_states: tuple[str, ...],
         group_admission: Any,
         drop_submit_replies_for: tuple[str, ...],
+        supports_close: bool,
     ) -> None:
         tmp_path = self.tmp_path
         now_ns = time.time_ns()
@@ -411,6 +422,7 @@ class Dim09ThreeLegCluster:
             max_slippage_bps=Decimal("0"),
             quantity_unit="base",
             valuation_unit="USD",
+            quote_currency="USD",
         )
         self.metadata = metadata
         registry = InstrumentRiskRegistry((metadata,))
@@ -502,8 +514,8 @@ class Dim09ThreeLegCluster:
                 ("rejected", "rejected"),
             ),
             supported_order_types=("LIMIT",),
-            supported_time_in_force=("IOC",),
-            supported_position_effects=("OPEN",),
+            supported_time_in_force=("GTC", "IOC") if supports_close else ("IOC",),
+            supported_position_effects=("OPEN", "CLOSE") if supports_close else ("OPEN",),
             normalizer_schema="bt-api-order-source-provenance-v2",
             order_revision_field="order_revision",
             fill_revision_field="fill_revision",

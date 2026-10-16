@@ -9,11 +9,13 @@ and settled reservation occupancy.
 from __future__ import annotations
 
 import re
+import threading
 import time
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
@@ -51,6 +53,12 @@ from bt_api_py._normalization import (
 )
 from bt_api_py.bt_api import BtApi
 
+from .service_registry import (
+    ActiveRegistrationContext,
+    ServiceCallContext,
+    TrustedGroupWritePolicy,
+)
+
 from .service_risk_order_journal import (
     DispatchProofRecoverySource,
     RiskOrderCommand,
@@ -65,7 +73,38 @@ from .service_risk_order_journal import (
 SUBMIT_OPERATION = "orders.submit"
 QUERY_OPERATION = "orders.query"
 CANCEL_OPERATION = "orders.cancel"
-SUPPORTED_OPERATIONS = frozenset({SUBMIT_OPERATION, QUERY_OPERATION})
+GROUP_COMPENSATION_PREPARE_OPERATION = "orders.prepare_group_compensation_close"
+GROUP_COMPENSATION_SUBMIT_OPERATION = "orders.submit_group_compensation_close"
+GROUP_COMPENSATION_QUERY_OPERATION = "orders.query_group_compensation_close"
+GROUP_COMPENSATION_OPERATIONS = frozenset(
+    {
+        GROUP_COMPENSATION_PREPARE_OPERATION,
+        GROUP_COMPENSATION_SUBMIT_OPERATION,
+        GROUP_COMPENSATION_QUERY_OPERATION,
+    }
+)
+SUPPORTED_OPERATIONS = frozenset(
+    {SUBMIT_OPERATION, QUERY_OPERATION, *GROUP_COMPENSATION_OPERATIONS}
+)
+_GROUP_COMPENSATION_WRITE_OPERATIONS = frozenset(
+    {GROUP_COMPENSATION_SUBMIT_OPERATION}
+)
+_GROUP_COMPENSATION_PORT_BY_OPERATION = MappingProxyType(
+    {
+        GROUP_COMPENSATION_PREPARE_OPERATION: "service.order_query",
+        GROUP_COMPENSATION_SUBMIT_OPERATION: "service.order_entry",
+        GROUP_COMPENSATION_QUERY_OPERATION: "service.order_query",
+    }
+)
+_GROUP_COMPENSATION_OPERATIONS_BY_PORT = MappingProxyType(
+    {
+        "service.order_entry": frozenset({GROUP_COMPENSATION_SUBMIT_OPERATION}),
+        "service.order_query": frozenset(
+            {GROUP_COMPENSATION_PREPARE_OPERATION, GROUP_COMPENSATION_QUERY_OPERATION}
+        ),
+    }
+)
+_GROUP_COMPENSATION_BUDGET_METRIC = "LIMIT_CLOSE_NOTIONAL_V1"
 
 _ORDER_FIELDS = frozenset(
     {
@@ -694,6 +733,9 @@ class RiskOrderEntryService:
         journal: RiskOrderJournal,
         gate: DurableRiskGate,
         provider_contracts: Mapping[WireScope, RiskBtApiProviderContract],
+        *,
+        group_compensation_source: object | None = None,
+        group_compensation_policy: TrustedGroupWritePolicy | None = None,
     ) -> None:
         if type(bt_api) is not BtApi:
             raise RiskOrderEntryError("BT_API_REQUIRED")
@@ -743,17 +785,1093 @@ class RiskOrderEntryService:
         self._provider_contracts = MappingProxyType(contract_copy)
         self._journal = journal
         self._gate = gate
+        self._group_compensation_lock = threading.RLock()
+        self._group_compensation_source = group_compensation_source
+        self._group_compensation_policy = group_compensation_policy
+        self._group_compensation_registrations: Mapping[
+            tuple[str, str], ActiveRegistrationContext
+        ] = MappingProxyType({})
+        if group_compensation_source is None:
+            if group_compensation_policy is not None:
+                raise RiskOrderEntryError("GROUP_COMPENSATION_POLICY_WITHOUT_SOURCE")
+        else:
+            _validate_group_compensation_composition(
+                group_compensation_source,
+                group_compensation_policy,
+                target_copy,
+                contract_copy,
+            )
+
+    @property
+    def ready(self) -> bool:
+        """Report exact static composition readiness for the optional bridge."""
+
+        source = self._group_compensation_source
+        if source is None:
+            return True
+        try:
+            return source.ready is True
+        except Exception:
+            return False
+
+    def maintain_registrations(
+        self, contexts: tuple[ActiveRegistrationContext, ...]
+    ) -> None:
+        """Replace the live compensation-call view from one Registry snapshot."""
+
+        if type(contexts) is not tuple:
+            raise RiskOrderEntryError("GROUP_COMPENSATION_REGISTRATION_SNAPSHOT_INVALID")
+        source = self._group_compensation_source
+        policy = self._group_compensation_policy
+        if source is None or policy is None:
+            if contexts:
+                # This adapter has no group-write source, so it must not retain
+                # or accidentally serve a coordinator registration.
+                with self._group_compensation_lock:
+                    self._group_compensation_registrations = MappingProxyType({})
+            return
+        retained: dict[tuple[str, str], ActiveRegistrationContext] = {}
+        for registration in contexts:
+            if type(registration) is not ActiveRegistrationContext:
+                raise RiskOrderEntryError("GROUP_COMPENSATION_REGISTRATION_SNAPSHOT_INVALID")
+            if registration.instance_id != policy.instance_id:
+                continue
+            expected_operations = _GROUP_COMPENSATION_OPERATIONS_BY_PORT.get(
+                registration.port
+            )
+            if expected_operations is None:
+                continue
+            expected_writes = (
+                _GROUP_COMPENSATION_WRITE_OPERATIONS
+                if registration.port == "service.order_entry"
+                else frozenset()
+            )
+            context = registration.context
+            if not (
+                registration.operations == expected_operations
+                and registration.write_operations == expected_writes
+                and registration.strategy_write_run_id == policy.run_id
+                and registration.scope_ref == policy.scope_ref
+                and context.identity == policy.identity
+                and context.identity.role is WireRole.SERVICE
+                and context.principal_ref == policy.principal_ref
+                and context.identity.principal_ref == policy.principal_ref
+                and context.scope == policy.scope
+                and policy.operation == GROUP_COMPENSATION_SUBMIT_OPERATION
+                and registration.expires_at > time.time()
+            ):
+                # The Registry remains the outer authorization boundary. A
+                # malformed or unrelated active row is simply not promoted
+                # into the Risk owner's trusted coordinator snapshot.
+                continue
+            key = (context.registration_id, registration.port)
+            previous = retained.get(key)
+            if previous is not None and previous != registration:
+                raise RiskOrderEntryError("GROUP_COMPENSATION_REGISTRATION_CONFLICT")
+            retained[key] = registration
+        with self._group_compensation_lock:
+            self._group_compensation_registrations = MappingProxyType(retained)
+
+    def _active_group_compensation_registration(
+        self, operation: str, context: ServiceCallContext
+    ) -> ActiveRegistrationContext:
+        """Bind a bridge call to the current exact active SERVICE lease."""
+
+        source = self._group_compensation_source
+        policy = self._group_compensation_policy
+        port = _GROUP_COMPENSATION_PORT_BY_OPERATION.get(operation)
+        if source is None or policy is None or port is None:
+            raise RiskOrderEntryError("GROUP_COMPENSATION_UNAVAILABLE")
+        if (
+            type(context) is not ServiceCallContext
+            or type(context.identity) is not WireIdentity
+            or context.identity.role is not WireRole.SERVICE
+            or context.identity != policy.identity
+            or context.principal_ref != policy.principal_ref
+            or context.scope != policy.scope
+            or context.registration_id == ""
+        ):
+            raise RiskOrderEntryError("GROUP_COMPENSATION_REGISTRATION_DENIED")
+        with self._group_compensation_lock:
+            registration = self._group_compensation_registrations.get(
+                (context.registration_id, port)
+            )
+        expected_operations = _GROUP_COMPENSATION_OPERATIONS_BY_PORT[port]
+        expected_writes = (
+            _GROUP_COMPENSATION_WRITE_OPERATIONS
+            if port == "service.order_entry"
+            else frozenset()
+        )
+        if (
+            type(registration) is not ActiveRegistrationContext
+            or registration.context.registration_id != context.registration_id
+            or registration.context.principal_ref != context.principal_ref
+            or registration.context.identity != context.identity
+            or registration.context.scope != context.scope
+            or registration.instance_id != policy.instance_id
+            or registration.port != port
+            or registration.scope_ref != policy.scope_ref
+            or registration.operations != expected_operations
+            or registration.write_operations != expected_writes
+            or registration.strategy_write_run_id != policy.run_id
+            or registration.context.identity.role is not WireRole.SERVICE
+            or registration.context.identity.principal_ref != policy.principal_ref
+            or registration.expires_at <= time.time()
+        ):
+            raise RiskOrderEntryError("GROUP_COMPENSATION_REGISTRATION_DENIED")
+        return registration
+
+    def _handle_group_compensation(
+        self,
+        operation: str,
+        context: ServiceCallContext,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Prepare, submit once, or query one source-proven group CLOSE."""
+
+        phase = "UNSTARTED"
+        try:
+            registration = self._active_group_compensation_registration(
+                operation, context
+            )
+            source = self._group_compensation_source
+            policy = self._group_compensation_policy
+            if source is None or policy is None:
+                raise RiskOrderEntryError("GROUP_COMPENSATION_UNAVAILABLE")
+            from bt_api_execution import ExecutionState, GroupChildOrderStatus, Side as ExecutionSide
+
+            from .service_group_compensation_contracts import (
+                GroupCompensationActionPhase,
+                GroupCompensationActionRef,
+                GroupCompensationCloseAuthorization,
+            )
+
+            binding = self._resolve_scope_binding(policy.scope)
+            if binding is None:
+                raise RiskOrderEntryError("GROUP_COMPENSATION_SCOPE_UNAVAILABLE")
+            _template, target, admission, contract = binding
+            if (
+                type(contract) is not RiskBtApiProviderContract
+                or target.account_scope is not source.account_scope
+                or target.strategy_id != source.execution_scope.strategy_id
+                or source.execution_scope.provider.casefold()
+                != target.account_scope.provider.casefold()
+                or source.execution_scope.environment != target.account_scope.environment
+                or source.execution_scope.account_ref != policy.scope.account_ref
+                or source.execution_scope.strategy_id != policy.scope.strategy_ref
+            ):
+                raise RiskOrderEntryError("GROUP_COMPENSATION_SCOPE_UNAVAILABLE")
+
+            if operation == GROUP_COMPENSATION_PREPARE_OPERATION:
+                if not _has_exact_argument_fields(
+                    arguments, frozenset({"group_id", "source_leg_id"})
+                ):
+                    raise RiskOrderEntryError("INVALID_REQUEST")
+                action_ref = GroupCompensationActionRef(
+                    group_id=arguments.get("group_id"),
+                    source_leg_id=arguments.get("source_leg_id"),
+                )
+                facts = source.resolve_action(
+                    registration, action_ref, operation=operation
+                )
+                if (
+                    type(facts) is not _group_compensation_runtime_types()[0]
+                    or facts.phase is not GroupCompensationActionPhase.UNSTARTED
+                ):
+                    raise RiskOrderEntryError("GROUP_COMPENSATION_ACTION_NOT_PREPARED")
+                prior_deltas = self._verify_group_compensation_prior_actions(
+                    facts,
+                    target=target,
+                    principal_ref=policy.principal_ref,
+                    scope=policy.scope,
+                    require_current_metadata=True,
+                )
+                _assert_group_compensation_source_exposure(facts, prior_deltas)
+                authorization = _build_group_compensation_authorization(
+                    facts,
+                    target=target,
+                    contract=contract,
+                    gate=self._gate,
+                    account_ref=policy.scope.account_ref,
+                    principal_ref=policy.principal_ref,
+                    scope=policy.scope,
+                )
+                return _reply(
+                    True,
+                    "OK",
+                    {
+                        "phase": "PREPARED",
+                        "authorization": authorization.to_payload(),
+                        "status": None,
+                        "close_receipt": None,
+                    },
+                )
+
+            if (
+                operation == GROUP_COMPENSATION_QUERY_OPERATION
+                and _has_exact_argument_fields(arguments, frozenset({"group_id"}))
+            ):
+                from .service_group_compensation_contracts import (
+                    GroupCompensationClosureFacts,
+                )
+
+                facts = source.resolve_close(
+                    registration,
+                    arguments.get("group_id"),
+                    operation=operation,
+                )
+                if (
+                    type(facts) is not GroupCompensationClosureFacts
+                    or facts.execution_scope_key != source.execution_scope.key
+                    or facts.account_ref != policy.scope.account_ref
+                    or GroupCompensationClosureFacts.from_payload(
+                        facts.to_payload()
+                    ).digest
+                    != facts.digest
+                ):
+                    raise RiskOrderEntryError(
+                        "GROUP_COMPENSATION_CLOSURE_FACTS_INVALID"
+                    )
+                phase = "CLOSURE_VERIFYING"
+                receipt_hashes = self._verify_group_compensation_closure_actions(
+                    facts,
+                    target=target,
+                    account_ref=policy.scope.account_ref,
+                    principal_ref=policy.principal_ref,
+                    scope=policy.scope,
+                    contract=contract,
+                )
+                closure_receipt = _group_compensation_closure_receipt_payload(
+                    facts, receipt_hashes
+                )
+                from bt_api_execution.contracts import payload_sha256
+
+                closure_receipt_sha256 = payload_sha256(closure_receipt)
+                phase = "CLOSED"
+                return _reply(
+                    True,
+                    "OK",
+                    {
+                        "phase": phase,
+                        "closure_facts_digest": facts.digest,
+                        "closure_receipt": closure_receipt,
+                        "closure_receipt_sha256": closure_receipt_sha256,
+                    },
+                )
+
+            if not _has_exact_argument_fields(arguments, frozenset({"authorization"})):
+                raise RiskOrderEntryError("INVALID_REQUEST")
+            authorization = GroupCompensationCloseAuthorization.from_payload(
+                arguments.get("authorization")
+            )
+            facts = source.assert_authorization(
+                registration, authorization, operation=operation
+            )
+            if type(facts) is not _group_compensation_runtime_types()[0]:
+                raise RiskOrderEntryError("GROUP_COMPENSATION_SOURCE_FACTS_INVALID")
+            phase = facts.phase.value
+            prior_deltas = self._verify_group_compensation_prior_actions(
+                facts,
+                target=target,
+                principal_ref=policy.principal_ref,
+                scope=policy.scope,
+                require_current_metadata=operation != GROUP_COMPENSATION_QUERY_OPERATION,
+            )
+            _assert_group_compensation_source_exposure(facts, prior_deltas)
+            _assert_group_compensation_authorization(
+                authorization,
+                facts,
+                target=target,
+                contract=contract,
+                principal_ref=policy.principal_ref,
+                scope=policy.scope,
+                require_current_metadata=operation != GROUP_COMPENSATION_QUERY_OPERATION,
+            )
+            if operation == GROUP_COMPENSATION_SUBMIT_OPERATION:
+                if facts.phase is not GroupCompensationActionPhase.SUBMIT_STARTED:
+                    raise RiskOrderEntryError("GROUP_COMPENSATION_SUBMIT_PHASE_INVALID")
+                position = self._gate.get_closable_position(
+                    target.account_scope, authorization.instrument, target.strategy_id
+                )
+                if (
+                    position.completeness != "LOCAL_LEDGER_COMPLETE"
+                    or position.revision != authorization.close_position_version
+                    or position.quantity_unit != authorization.close_allocation_quantity_unit
+                    or position.available_quantity is None
+                    or position.available_quantity < authorization.close_quantity
+                ):
+                    raise RiskOrderEntryError("GROUP_COMPENSATION_CLOSE_ALLOCATION_CHANGED")
+                submit_args = {
+                    "intent_id": authorization.intent_id,
+                    "signal_id": authorization.intent_id,
+                    "instrument": authorization.instrument,
+                    "side": authorization.closing_side.value,
+                    "position_effect": "CLOSE",
+                    "order_type": "LIMIT",
+                    "quantity": _decimal_text(authorization.close_quantity),
+                    "price": _decimal_text(authorization.source_price),
+                    "time_in_force": "GTC",
+                    "reduce_only": True,
+                    "metadata_version": authorization.metadata_version,
+                    "deadline_ns": None,
+                    "tags": {},
+                }
+                try:
+                    submit_reply = self._submit(
+                        principal_ref=policy.principal_ref,
+                        identity=policy.identity,
+                        scope=policy.scope,
+                        target=target,
+                        admission=admission,
+                        contract=contract,
+                        arguments=submit_args,
+                        trusted_client_order_id=authorization.client_order_id,
+                        reject_duplicate=True,
+                        internal_group_compensation=True,
+                    )
+                except Exception:
+                    # SUBMIT_STARTED is durable at the group owner. Any
+                    # uncertain return is query-only; this bridge never retries.
+                    submit_reply = _reply(
+                        False,
+                        "GROUP_COMPENSATION_SUBMIT_UNCERTAIN",
+                        {"found": False, "record": None},
+                    )
+                phase = GroupCompensationActionPhase.SUBMIT_STARTED.value
+                status = self._group_compensation_status(
+                    authorization,
+                    target=target,
+                    command_reply=submit_reply,
+                    execution_state_type=ExecutionState,
+                    child_status_type=GroupChildOrderStatus,
+                )
+                receipt = self._group_compensation_close_receipt(
+                    authorization, target=target
+                )
+                return _reply(
+                    bool(submit_reply.get("ok")),
+                    str(submit_reply.get("code", "GROUP_COMPENSATION_SUBMIT_UNCERTAIN")),
+                    {
+                        "phase": phase,
+                        "status": None if status is None else status.to_payload(),
+                        "close_receipt": receipt,
+                    },
+                )
+
+            if operation != GROUP_COMPENSATION_QUERY_OPERATION:
+                raise RiskOrderEntryError("UNKNOWN_OPERATION")
+            if facts.phase not in {
+                GroupCompensationActionPhase.SUBMIT_STARTED,
+                GroupCompensationActionPhase.STATUS_OBSERVED,
+                GroupCompensationActionPhase.RESOLVED,
+            }:
+                raise RiskOrderEntryError("GROUP_COMPENSATION_QUERY_PHASE_INVALID")
+            query_reply = self._query(
+                principal_ref=policy.principal_ref,
+                scope=policy.scope,
+                target=target,
+                contract=contract,
+                arguments={"intent_id": authorization.intent_id},
+            )
+            status = self._group_compensation_status(
+                authorization,
+                target=target,
+                command_reply=query_reply,
+                execution_state_type=ExecutionState,
+                child_status_type=GroupChildOrderStatus,
+            )
+            receipt = self._group_compensation_close_receipt(
+                authorization, target=target
+            )
+            return _reply(
+                bool(query_reply.get("ok")),
+                str(query_reply.get("code", "GROUP_COMPENSATION_QUERY_UNCERTAIN")),
+                {
+                    "phase": facts.phase.value,
+                    "status": None if status is None else status.to_payload(),
+                    "close_receipt": receipt,
+                },
+            )
+        except RiskOrderEntryError as error:
+            return _reply(
+                False,
+                error.code,
+                {"phase": phase, "authorization": None, "status": None, "close_receipt": None},
+            )
+        except Exception:
+            return _reply(
+                False,
+                "GROUP_COMPENSATION_UNCERTAIN",
+                {"phase": phase, "authorization": None, "status": None, "close_receipt": None},
+            )
+
+    def _group_compensation_status(
+        self,
+        authorization: object,
+        *,
+        target: RiskOrderTarget,
+        command_reply: Mapping[str, Any],
+        execution_state_type: type,
+        child_status_type: type,
+    ) -> object | None:
+        result = command_reply.get("result")
+        if not isinstance(result, Mapping) or result.get("found") is not True:
+            return None
+        record = result.get("record")
+        if not isinstance(record, Mapping):
+            return None
+        intent_id = getattr(authorization, "intent_id", None)
+        risk_intent_id = getattr(authorization, "risk_intent_id", None)
+        client_order_id = getattr(authorization, "client_order_id", None)
+        policy = self._group_compensation_policy
+        expected_risk_intent_id = _derive_group_compensation_risk_intent_id(
+            intent_id=intent_id,
+            principal_ref=policy.principal_ref,
+            scope=policy.scope,
+            target=target,
+        )
+        command = self._journal.get_command(
+            target.account_scope, policy.principal_ref, intent_id
+        )
+        if (
+            command is None
+            or command.intent_id != intent_id
+            or risk_intent_id != expected_risk_intent_id
+            or command.risk_intent_id != risk_intent_id
+            or command.client_order_id != client_order_id
+            or command.principal_ref != policy.principal_ref
+            or command.scope != target.account_scope
+            or command.canonical_payload.get("position_effect") != "CLOSE"
+            or command.canonical_payload.get("instrument") != getattr(authorization, "instrument", None)
+            or command.canonical_payload.get("side") != getattr(authorization, "closing_side", None).value
+            or command.canonical_payload.get("metadata_version") != getattr(authorization, "metadata_version", None)
+            or Decimal(str(command.canonical_payload.get("quantity"))) != getattr(authorization, "close_quantity", None)
+            or Decimal(str(command.canonical_payload.get("price"))) != getattr(authorization, "source_price", None)
+        ):
+            return None
+        state_value = record.get("state")
+        if state_value == "ACKED_TRACKED":
+            state = execution_state_type.ACKED
+        else:
+            try:
+                state = execution_state_type(state_value)
+            except (TypeError, ValueError):
+                state = execution_state_type.UNKNOWN
+        try:
+            filled = Decimal(str(record.get("filled_quantity", "0")))
+            average = record.get("average_price")
+            average_price = None if average is None else Decimal(str(average))
+            latest = command.latest_event
+            order_revision = latest.get("order_revision")
+            trade_count = latest.get("trade_count")
+            if type(order_revision) is not int or order_revision <= 0:
+                order_revision = None
+            if type(trade_count) is not int or trade_count < 0:
+                trade_count = None
+            reason_code = latest.get("reason_code")
+            if type(reason_code) is not str or re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", reason_code) is None:
+                reason_code = None
+            else:
+                # Risk journal codes are stored in uppercase, while the
+                # execution child-status contract accepts lowercase codes.
+                reason_code = reason_code.lower()
+            return child_status_type(
+                intent_id=intent_id,
+                state=state,
+                filled_quantity=filled,
+                provider_order_id=record.get("provider_order_id"),
+                average_price=average_price,
+                cumulative_commission=None,
+                cumulative_commission_currency=None,
+                reason_code=reason_code,
+                order_revision=order_revision,
+                trade_count=trade_count,
+            )
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    def _group_compensation_close_receipt(
+        self, authorization: object, *, target: RiskOrderTarget
+    ) -> Mapping[str, Any] | None:
+        intent_id = getattr(authorization, "intent_id", None)
+        risk_intent_id = getattr(authorization, "risk_intent_id", None)
+        client_order_id = getattr(authorization, "client_order_id", None)
+        policy = self._group_compensation_policy
+        principal_ref = policy.principal_ref
+        expected_risk_intent_id = _derive_group_compensation_risk_intent_id(
+            intent_id=intent_id,
+            principal_ref=principal_ref,
+            scope=policy.scope,
+            target=target,
+        )
+        command = self._journal.get_command(target.account_scope, principal_ref, intent_id)
+        if (
+            command is None
+            or risk_intent_id != expected_risk_intent_id
+            or command.risk_intent_id != risk_intent_id
+            or command.client_order_id != client_order_id
+            or command.permit_id is None
+            or command.canonical_payload.get("position_effect") != "CLOSE"
+            or command.canonical_payload.get("instrument") != getattr(authorization, "instrument", None)
+            or command.canonical_payload.get("side") != getattr(authorization, "closing_side", None).value
+            or command.canonical_payload.get("metadata_version") != getattr(authorization, "metadata_version", None)
+            or Decimal(str(command.canonical_payload.get("quantity"))) != getattr(authorization, "close_quantity", None)
+            or Decimal(str(command.canonical_payload.get("price"))) != getattr(authorization, "source_price", None)
+        ):
+            return None
+        try:
+            with self._journal.writer_fence(target.account_scope) as fence:
+                current = self._journal.get_command(
+                    target.account_scope, principal_ref, intent_id
+                )
+                if current is None or current.latest_record_sha256 != command.latest_record_sha256:
+                    return None
+                receipt = self._gate.dispatch_close_resolution_receipt(command.permit_id)
+                if (
+                    type(receipt) is not DispatchExposureResolutionReceipt
+                    or receipt.status
+                    is not DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED
+                    or receipt.position_effect != "CLOSE"
+                    or receipt.dispatch_latch_active is not False
+                    or receipt.has_other_active_freezes is not False
+                    or receipt.final_state.value != "FILLED"
+                    or receipt.requested_quantity != getattr(authorization, "close_quantity", None)
+                    or receipt.filled_quantity != receipt.requested_quantity
+                    or type(receipt.trade_count) is not int
+                    or receipt.trade_count <= 0
+                    or receipt.claim.scope != target.account_scope
+                    or receipt.claim.permit_id != command.permit_id
+                    or receipt.claim.intent_id != command.risk_intent_id
+                    or not self._journal.has_resolved_terminal_exposure_history(
+                        fence,
+                        principal_ref=principal_ref,
+                        intent_id=intent_id,
+                        receipt=receipt,
+                    )
+                ):
+                    return None
+                payload = _group_compensation_close_receipt_payload(receipt)
+                payload["receipt_sha256"] = sha256_text(canonical_json(payload))
+                return payload
+        except Exception:
+            return None
+
+    def _verify_group_compensation_prior_actions(
+        self,
+        facts: object,
+        *,
+        target: RiskOrderTarget,
+        principal_ref: str,
+        scope: WireScope,
+        require_current_metadata: bool,
+    ) -> Mapping[str, Fraction]:
+        """Re-read each previous CLOSE from the Risk command and receipt stores.
+
+        The group event chain establishes which actions belong to the accepted
+        unwind plan. It does not establish their fills. Every prior action is
+        therefore matched to its immutable Risk command and a terminal Risk
+        CLOSE receipt whose journal history validates the same permit.
+        """
+
+        try:
+            from bt_api_execution import Side as ExecutionSide
+
+            from .service_group_compensation_contracts import (
+                GroupCompensationResolvedActionRef,
+                derive_group_compensation_client_order_id,
+                derive_group_compensation_intent_id,
+            )
+
+            refs = facts.prior_resolved_actions
+            provider_contract = self._provider_contract_for_target(target)
+            if (
+                type(provider_contract) is not RiskBtApiProviderContract
+                or not provider_contract.exposure_ready
+                or "CLOSE" not in provider_contract.supported_position_effects
+                or type(refs) is not tuple
+                or len(refs) > 9
+                or any(type(ref) is not GroupCompensationResolvedActionRef for ref in refs)
+                or len({ref.action_id for ref in refs}) != len(refs)
+                or len({ref.intent_id for ref in refs}) != len(refs)
+                or len({ref.client_order_id for ref in refs}) != len(refs)
+                or len({ref.permit_id for ref in refs}) != len(refs)
+            ):
+                raise TypeError
+
+            deltas: dict[str, Fraction] = {}
+            total_notional = Fraction(0)
+            for ref in refs:
+                if (
+                    ref.intent_id != derive_group_compensation_intent_id(ref.action_id)
+                    or ref.risk_intent_id
+                    != _derive_group_compensation_risk_intent_id(
+                        intent_id=ref.intent_id,
+                        principal_ref=principal_ref,
+                        scope=scope,
+                        target=target,
+                    )
+                    or ref.client_order_id
+                    != derive_group_compensation_client_order_id(ref.action_id)
+                    or ref.quote_currency != facts.source_quote_currency
+                    or ref.budget_policy_fingerprint
+                    != facts.action_remaining_budget_policy_fingerprint
+                    or ref.close_quantity_unit == ""
+                    or ref.close_quantity <= 0
+                    or ref.source_base_units_per_order_unit <= 0
+                    or ref.close_limit_price <= 0
+                    or ref.close_reference_notional
+                    != ref.close_quantity
+                    * ref.close_limit_price
+                    * ref.source_base_units_per_order_unit
+                    or (
+                        ref.source_leg_id == facts.source_leg_id
+                        and (
+                            ref.instrument != facts.instrument
+                            or ref.metadata_version != facts.metadata_version
+                            or ref.source_base_units_per_order_unit
+                            != facts.source_base_units_per_order_unit
+                            or ref.close_quantity_unit != facts.source_quantity_unit
+                            or ref.close_limit_price != facts.source_price
+                            or ref.closing_side is facts.source_side
+                        )
+                    )
+                ):
+                    raise TypeError
+
+                command = self._journal.get_command(
+                    target.account_scope, principal_ref, ref.intent_id
+                )
+                if (
+                    command is None
+                    or command.scope != target.account_scope
+                    or command.principal_ref != principal_ref
+                    or command.intent_id != ref.intent_id
+                    or command.risk_intent_id != ref.risk_intent_id
+                    or command.client_order_id != ref.client_order_id
+                    or command.permit_id != ref.permit_id
+                ):
+                    raise TypeError
+                canonical = command.canonical_payload
+                request = command.order_request
+                try:
+                    command_quantity = Decimal(str(canonical["quantity"]))
+                    command_price = Decimal(str(canonical["price"]))
+                    request_quantity = Decimal(str(request["quantity"]))
+                    request_price = Decimal(str(request["price"]))
+                except (KeyError, InvalidOperation, TypeError, ValueError):
+                    raise TypeError from None
+                if (
+                    canonical.get("position_effect") != "CLOSE"
+                    or canonical.get("signal_id") != ref.intent_id
+                    or canonical.get("order_type") != "LIMIT"
+                    or canonical.get("time_in_force") != "GTC"
+                    or canonical.get("deadline_ns") is not None
+                    or canonical.get("tags") != {}
+                    or canonical.get("reduce_only") is not True
+                    or canonical.get("side") != ref.closing_side.value
+                    or canonical.get("instrument") != ref.instrument
+                    or canonical.get("metadata_version") != ref.metadata_version
+                    or canonical.get("quantity_unit") != "base"
+                    or command_quantity != ref.close_quantity
+                    or command_price != ref.close_limit_price
+                    or request.get("symbol") != ref.instrument
+                    or request.get("side") != ref.closing_side.value.lower()
+                    or request.get("order_type") != "limit"
+                    or request.get("time_in_force") != "GTC"
+                    or request.get("reduce_only") is not True
+                    or request.get("client_order_id") != ref.client_order_id
+                    or request.get("idempotency_key") != ref.client_order_id
+                    or request.get("account_id") != target.provider_account_id
+                    or request_quantity != ref.close_quantity
+                    or request_price != ref.close_limit_price
+                    or request.get("quantity_unit") != "base"
+                ):
+                    raise TypeError
+
+                if require_current_metadata:
+                    metadata = target.registry.get(ref.instrument)
+                    if (
+                        metadata is None
+                        or metadata.metadata_version != ref.metadata_version
+                        or metadata.quantity_unit != ref.close_quantity_unit
+                        or metadata.contract_multiplier
+                        != ref.source_base_units_per_order_unit
+                        or metadata.quote_currency != ref.quote_currency
+                        or metadata.valuation_unit != ref.quote_currency
+                        or provider_contract.quote_currency(ref.instrument)
+                        != ref.quote_currency
+                        or metadata.expires_at_ns <= time.time_ns()
+                        or (
+                            Fraction(ref.close_limit_price)
+                            / Fraction(metadata.tick_size)
+                        ).denominator
+                        != 1
+                        or (
+                            Fraction(ref.close_quantity)
+                            / Fraction(metadata.quantity_step)
+                        ).denominator
+                        != 1
+                    ):
+                        raise TypeError
+
+                notional = (
+                    Fraction(command_quantity)
+                    * Fraction(command_price)
+                    * Fraction(ref.source_base_units_per_order_unit)
+                )
+                if notional != Fraction(ref.close_reference_notional):
+                    raise TypeError
+                total_notional += notional
+
+                with self._journal.writer_fence(target.account_scope) as fence:
+                    current = self._journal.get_command(
+                        target.account_scope, principal_ref, ref.intent_id
+                    )
+                    if (
+                        current is None
+                        or current.latest_record_sha256 != command.latest_record_sha256
+                    ):
+                        raise TypeError
+                    receipt = self._gate.dispatch_close_resolution_receipt(ref.permit_id)
+                    if (
+                        type(receipt) is not DispatchExposureResolutionReceipt
+                        or receipt.status
+                        is not DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED
+                        or receipt.position_effect != "CLOSE"
+                        or receipt.dispatch_latch_active is not False
+                        or receipt.has_other_active_freezes is not False
+                        or receipt.final_state.value != "FILLED"
+                        or receipt.requested_quantity != ref.close_quantity
+                        or receipt.filled_quantity != ref.close_quantity
+                        or type(receipt.trade_count) is not int
+                        or receipt.trade_count <= 0
+                        or receipt.claim.scope != target.account_scope
+                        or receipt.claim.permit_id != ref.permit_id
+                        or receipt.claim.intent_id != command.risk_intent_id
+                        or not self._journal.has_resolved_terminal_exposure_history(
+                            fence,
+                            principal_ref=principal_ref,
+                            intent_id=ref.intent_id,
+                            receipt=receipt,
+                        )
+                    ):
+                        raise TypeError
+                    receipt_payload = _group_compensation_close_receipt_payload(receipt)
+                    if sha256_text(canonical_json(receipt_payload)) != ref.receipt_sha256:
+                        raise TypeError
+
+                sign = Fraction(1) if ref.closing_side is ExecutionSide.BUY else Fraction(-1)
+                deltas[ref.source_leg_id] = deltas.get(
+                    ref.source_leg_id, Fraction(0)
+                ) + sign * Fraction(ref.close_quantity) * Fraction(
+                    ref.source_base_units_per_order_unit
+                )
+
+            remaining = (
+                Fraction(facts.compensation_budget_cap_amount) - total_notional
+            )
+            if (
+                remaining <= 0
+                or total_notional > Fraction(facts.compensation_budget_cap_amount)
+                or remaining != Fraction(facts.action_remaining_budget_amount)
+            ):
+                raise TypeError
+            return MappingProxyType(deltas)
+        except RiskOrderEntryError:
+            raise
+        except Exception:
+            raise RiskOrderEntryError(
+                "GROUP_COMPENSATION_PRIOR_CLOSE_RECEIPT_INVALID"
+            ) from None
+
+    def _verify_group_compensation_closure_actions(
+        self,
+        facts: object,
+        *,
+        target: RiskOrderTarget,
+        account_ref: str,
+        principal_ref: str,
+        scope: WireScope,
+        contract: RiskBtApiProviderContract,
+    ) -> tuple[str, ...]:
+        """Re-read every durable compensation CLOSE before certifying group closure."""
+
+        try:
+            from bt_api_execution import Side as ExecutionSide
+
+            from .service_group_compensation_contracts import (
+                GroupCompensationClosureFacts,
+                GroupCompensationResolvedActionRef,
+                LIMIT_CLOSE_NOTIONAL_V1,
+                derive_group_compensation_client_order_id,
+                derive_group_compensation_intent_id,
+            )
+
+            if (
+                type(facts) is not GroupCompensationClosureFacts
+                or type(account_ref) is not str
+                or not account_ref
+                or facts.account_ref != account_ref
+                or facts.strategy_id != target.strategy_id
+                or facts.group_state not in {"UNWINDING", "RECOVERY_REQUIRED"}
+                or facts.budget_metric != LIMIT_CLOSE_NOTIONAL_V1
+                or not contract.exposure_ready
+                or "CLOSE" not in contract.supported_position_effects
+                or len(facts.source_legs) != 3
+                or not facts.resolved_actions
+                or len(facts.resolved_actions) > 9
+            ):
+                raise TypeError
+
+            legs = {leg.leg_id: leg for leg in facts.source_legs}
+            if len(legs) != 3:
+                raise TypeError
+            exposure: dict[str, Fraction] = {}
+            for leg in facts.source_legs:
+                if leg.source_terminal_status is None:
+                    if leg.source_intent_id is not None or leg.filled_quantity != 0:
+                        raise TypeError
+                    exposure[leg.leg_id] = Fraction(0)
+                    continue
+                status = leg.source_terminal_status
+                if (
+                    status.intent_id != leg.source_intent_id
+                    or status.filled_quantity != leg.filled_quantity
+                    or leg.source_intent_id is None
+                    or leg.filled_quantity < 0
+                    or leg.filled_quantity > leg.requested_quantity
+                ):
+                    raise TypeError
+                sign = Fraction(1) if leg.side is ExecutionSide.BUY else Fraction(-1)
+                exposure[leg.leg_id] = (
+                    sign
+                    * Fraction(leg.filled_quantity)
+                    * Fraction(leg.base_units_per_order_unit)
+                )
+
+            provider_contract = self._provider_contract_for_target(target)
+            if (
+                type(provider_contract) is not RiskBtApiProviderContract
+                or not provider_contract.exposure_ready
+                or "CLOSE" not in provider_contract.supported_position_effects
+                or provider_contract.fingerprint != contract.fingerprint
+            ):
+                raise TypeError
+
+            seen_actions: set[str] = set()
+            seen_intents: set[str] = set()
+            seen_clients: set[str] = set()
+            seen_permits: set[str] = set()
+            total_notional = Fraction(0)
+            receipt_hashes: list[str] = []
+            for ref in facts.resolved_actions:
+                if type(ref) is not GroupCompensationResolvedActionRef:
+                    raise TypeError
+                leg = legs.get(ref.source_leg_id)
+                if (
+                    leg is None
+                    or leg.source_terminal_status is None
+                    or leg.filled_quantity <= 0
+                    or ref.action_id in seen_actions
+                    or ref.intent_id in seen_intents
+                    or ref.client_order_id in seen_clients
+                    or ref.permit_id in seen_permits
+                    or ref.intent_id != derive_group_compensation_intent_id(ref.action_id)
+                    or ref.risk_intent_id
+                    != _derive_group_compensation_risk_intent_id(
+                        intent_id=ref.intent_id,
+                        principal_ref=principal_ref,
+                        scope=scope,
+                        target=target,
+                    )
+                    or ref.client_order_id
+                    != derive_group_compensation_client_order_id(ref.action_id)
+                    or ref.instrument != leg.instrument
+                    or ref.metadata_version != leg.metadata_version
+                    or ref.close_quantity_unit != leg.quantity_unit
+                    or ref.source_base_units_per_order_unit
+                    != leg.base_units_per_order_unit
+                    or ref.quote_currency != leg.quote_currency
+                    or ref.budget_policy_fingerprint != facts.budget_policy_fingerprint
+                    or ref.close_limit_price != leg.source_price
+                    or ref.closing_side is leg.side
+                    or ref.close_quantity <= 0
+                ):
+                    raise TypeError
+                seen_actions.add(ref.action_id)
+                seen_intents.add(ref.intent_id)
+                seen_clients.add(ref.client_order_id)
+                seen_permits.add(ref.permit_id)
+
+                command = self._journal.get_command(
+                    target.account_scope, principal_ref, ref.intent_id
+                )
+                if (
+                    command is None
+                    or command.scope != target.account_scope
+                    or command.principal_ref != principal_ref
+                    or command.intent_id != ref.intent_id
+                    or command.risk_intent_id != ref.risk_intent_id
+                    or command.client_order_id != ref.client_order_id
+                    or command.permit_id != ref.permit_id
+                ):
+                    raise TypeError
+                canonical = command.canonical_payload
+                request = command.order_request
+                try:
+                    command_quantity = Decimal(str(canonical["quantity"]))
+                    command_price = Decimal(str(canonical["price"]))
+                    request_quantity = Decimal(str(request["quantity"]))
+                    request_price = Decimal(str(request["price"]))
+                except (KeyError, InvalidOperation, TypeError, ValueError):
+                    raise TypeError from None
+                if (
+                    canonical.get("position_effect") != "CLOSE"
+                    or canonical.get("signal_id") != ref.intent_id
+                    or canonical.get("order_type") != "LIMIT"
+                    or canonical.get("time_in_force") != "GTC"
+                    or canonical.get("deadline_ns") is not None
+                    or canonical.get("tags") != {}
+                    or canonical.get("reduce_only") is not True
+                    or canonical.get("side") != ref.closing_side.value
+                    or canonical.get("instrument") != ref.instrument
+                    or canonical.get("metadata_version") != ref.metadata_version
+                    or canonical.get("quantity_unit") != "base"
+                    or command_quantity != ref.close_quantity
+                    or command_price != ref.close_limit_price
+                    or request.get("symbol") != ref.instrument
+                    or request.get("side") != ref.closing_side.value.lower()
+                    or request.get("order_type") != "limit"
+                    or request.get("time_in_force") != "GTC"
+                    or request.get("reduce_only") is not True
+                    or request.get("client_order_id") != ref.client_order_id
+                    or request.get("idempotency_key") != ref.client_order_id
+                    or request.get("account_id") != target.provider_account_id
+                    or request_quantity != ref.close_quantity
+                    or request_price != ref.close_limit_price
+                    or request.get("quantity_unit") != "base"
+                ):
+                    raise TypeError
+
+                if contract.quote_currency(ref.instrument) != ref.quote_currency:
+                    raise TypeError
+                notional = (
+                    Fraction(command_quantity)
+                    * Fraction(command_price)
+                    * Fraction(ref.source_base_units_per_order_unit)
+                )
+                if notional != Fraction(ref.close_reference_notional):
+                    raise TypeError
+                total_notional += notional
+
+                with self._journal.writer_fence(target.account_scope) as fence:
+                    current = self._journal.get_command(
+                        target.account_scope, principal_ref, ref.intent_id
+                    )
+                    if (
+                        current is None
+                        or current.latest_record_sha256 != command.latest_record_sha256
+                    ):
+                        raise TypeError
+                    receipt = self._gate.dispatch_close_resolution_receipt(ref.permit_id)
+                    if (
+                        type(receipt) is not DispatchExposureResolutionReceipt
+                        or receipt.status
+                        is not DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED
+                        or receipt.position_effect != "CLOSE"
+                        or receipt.dispatch_latch_active is not False
+                        or receipt.has_other_active_freezes is not False
+                        or receipt.final_state.value != "FILLED"
+                        or receipt.requested_quantity != ref.close_quantity
+                        or receipt.filled_quantity != ref.close_quantity
+                        or type(receipt.trade_count) is not int
+                        or receipt.trade_count <= 0
+                        or receipt.claim.scope != target.account_scope
+                        or receipt.claim.permit_id != ref.permit_id
+                        or receipt.claim.intent_id != command.risk_intent_id
+                        or not self._journal.has_resolved_terminal_exposure_history(
+                            fence,
+                            principal_ref=principal_ref,
+                            intent_id=ref.intent_id,
+                            receipt=receipt,
+                        )
+                    ):
+                        raise TypeError
+                    receipt_payload = _group_compensation_close_receipt_payload(receipt)
+                    receipt_digest = sha256_text(canonical_json(receipt_payload))
+                    if receipt_digest != ref.receipt_sha256:
+                        raise TypeError
+
+                close_sign = Fraction(1) if ref.closing_side is ExecutionSide.BUY else Fraction(-1)
+                exposure[ref.source_leg_id] += (
+                    close_sign
+                    * Fraction(ref.close_quantity)
+                    * Fraction(ref.source_base_units_per_order_unit)
+                )
+                receipt_hashes.append(receipt_digest)
+
+            ordered_leg_ids = tuple(leg.leg_id for leg in facts.source_legs)
+            recomputed_vector = tuple(
+                (leg_id, _fraction_to_decimal_exact(exposure[leg_id]))
+                for leg_id in ordered_leg_ids
+            )
+            if (
+                recomputed_vector
+                != facts.signed_uncompensated_filled_exposure_vector_base_units
+                or any(value != 0 for _, value in recomputed_vector)
+                or tuple(receipt_hashes)
+                != tuple(ref.receipt_sha256 for ref in facts.resolved_actions)
+            ):
+                raise TypeError
+
+            cap = Fraction(facts.budget_cap_amount)
+            consumed = Fraction(facts.budget_consumed_amount)
+            remaining = Fraction(facts.budget_remaining_amount)
+            if (
+                facts.budget_policy_version <= 0
+                or consumed != total_notional
+                or consumed + remaining != cap
+                or consumed > cap
+                or remaining < 0
+                or Fraction(facts.pending_budget_obligation_amount) != 0
+                or facts.pending_action_count != 0
+                or facts.unknown_order_count != 0
+                or facts.unresolved_group_obligation_count != 0
+                or facts.active_dispatch_latch_count != 0
+                or facts.account_reservation_phase != "RELEASED"
+                or facts.group_budget_reservation_state != "HELD"
+                or facts.budget_policy_fingerprint
+                != _group_compensation_closure_budget_policy_fingerprint(facts)
+            ):
+                raise TypeError
+            return tuple(receipt_hashes)
+        except RiskOrderEntryError:
+            raise
+        except Exception:
+            raise RiskOrderEntryError(
+                "GROUP_COMPENSATION_CLOSURE_RECEIPTS_INVALID"
+            ) from None
 
     def handle(
         self,
         operation: str,
         *,
-        principal_ref: str,
-        identity: WireIdentity,
-        scope: WireScope,
+        principal_ref: str | None = None,
+        identity: WireIdentity | None = None,
+        scope: WireScope | None = None,
         arguments: Mapping[str, Any],
+        context: ServiceCallContext | None = None,
     ) -> Mapping[str, Any]:
         """Handle one authenticated service request without trusting payload scope."""
+
+        if type(operation) is str and operation in GROUP_COMPENSATION_OPERATIONS:
+            if type(context) is not ServiceCallContext:
+                return _reply(False, "GROUP_COMPENSATION_REGISTRATION_REQUIRED", {
+                    "phase": "UNSTARTED", "authorization": None, "status": None, "close_receipt": None,
+                })
+            return self._handle_group_compensation(operation, context, arguments)
+        if type(operation) is not str:
+            return _reply(False, "UNKNOWN_OPERATION", {"found": False, "record": None})
 
         if type(principal_ref) is not str or not _REFERENCE.fullmatch(principal_ref):
             raise RiskOrderEntryError("TRUSTED_PRINCIPAL_INVALID")
@@ -761,6 +1879,8 @@ class RiskOrderEntryService:
             return _reply(False, "CAPABILITY_UNAVAILABLE", {"found": False, "record": None})
         if type(operation) is not str or operation not in SUPPORTED_OPERATIONS:
             return _reply(False, "UNKNOWN_OPERATION", {"found": False, "record": None})
+        if type(identity) is not WireIdentity or type(scope) is not WireScope:
+            raise RiskOrderEntryError("TRUSTED_CONTEXT_INVALID")
         if type(identity) is not WireIdentity or identity.principal_ref != principal_ref:
             raise RiskOrderEntryError("TRUSTED_IDENTITY_MISMATCH")
         if identity.role not in _PERMITTED_ROLES:
@@ -940,14 +2060,33 @@ class RiskOrderEntryService:
         admission: DurableRiskAdmissionAdapter,
         contract: RiskBtApiProviderContract | None,
         arguments: Mapping[str, Any],
+        trusted_client_order_id: str | None = None,
+        reject_duplicate: bool = False,
+        internal_group_compensation: bool = False,
     ) -> Mapping[str, Any]:
+        if (
+            type(reject_duplicate) is not bool
+            or type(internal_group_compensation) is not bool
+            or (trusted_client_order_id is None) is reject_duplicate
+            or internal_group_compensation is not reject_duplicate
+            or (
+                internal_group_compensation
+                and arguments.get("position_effect") != "CLOSE"
+            )
+        ):
+            return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
         if contract is None or not contract.risk_only_write_ready:
             return _reply(False, "CAPABILITY_UNAVAILABLE", {"found": False, "record": None})
         if not _has_order_argument_fields(arguments):
             return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
         try:
             parsed = _parse_order(
-                arguments, target, contract=contract, scope=scope, principal_ref=principal_ref
+                arguments,
+                target,
+                contract=contract,
+                scope=scope,
+                principal_ref=principal_ref,
+                trusted_client_order_id=trusted_client_order_id,
             )
         except RiskOrderEntryError as error:
             return _reply(False, error.code, {"found": False, "record": None})
@@ -956,6 +2095,15 @@ class RiskOrderEntryService:
                 fence, principal_ref=principal_ref, scope=scope, target=target, parsed=parsed
             )
             if not created:
+                if reject_duplicate:
+                    # A compensation action is write-once; the coordinator may query it,
+                    # but a duplicate submit never enters recovery or provider lookup.
+                    return _command_reply(
+                        command,
+                        target.account_scope,
+                        ok=False,
+                        code="GROUP_COMPENSATION_SUBMIT_ALREADY_RECORDED",
+                    )
                 command = self._resolve_duplicate(
                     fence, command, target=target, admission=admission, contract=contract
                 )
@@ -2463,6 +3611,667 @@ class RiskOrderEntryService:
         return True, latest or command
 
 
+def _group_compensation_runtime_types() -> tuple[type, type, type, type]:
+    """Load optional group-compensation wire types only when the bridge is used."""
+
+    from bt_api_execution import GroupChildOrderStatus
+
+    from .service_group_compensation_contracts import (
+        GroupCompensationActionPhase,
+        GroupCompensationActionRef,
+        GroupCompensationCloseAuthorization,
+        GroupCompensationSourceFacts,
+    )
+
+    return (
+        GroupCompensationSourceFacts,
+        GroupCompensationCloseAuthorization,
+        GroupCompensationActionRef,
+        GroupCompensationActionPhase,
+    )
+
+
+def _validate_group_compensation_composition(
+    source: object,
+    policy: TrustedGroupWritePolicy | None,
+    targets: Mapping[WireScope, RiskOrderTarget],
+    contracts: Mapping[WireScope, RiskBtApiProviderContract],
+) -> None:
+    """Require the exact store-backed source and matching single Risk target."""
+
+    try:
+        from bt_api_execution import ExecutionScope
+
+        from .service_execution_group_compensation_source import (
+            GroupCompensationAuthorizationSourceV1,
+        )
+
+        if (
+            type(source) is not GroupCompensationAuthorizationSourceV1
+            or source.ready is not True
+            or type(source.account_scope) is not AccountScope
+            or type(source.execution_scope) is not ExecutionScope
+            or type(source.coordinator_principal_ref) is not str
+            or type(policy) is not TrustedGroupWritePolicy
+            or policy.operation != GROUP_COMPENSATION_SUBMIT_OPERATION
+            or policy.port != "service.order_entry"
+            or policy.identity.role is not WireRole.SERVICE
+            or source.coordinator_principal_ref != policy.principal_ref
+            or source.execution_scope.account_ref != policy.scope.account_ref
+            or source.execution_scope.strategy_id != policy.scope.strategy_ref
+            or source.execution_scope.provider.casefold()
+            != source.account_scope.provider.casefold()
+            or source.execution_scope.environment != source.account_scope.environment
+        ):
+            raise TypeError
+        matches = tuple(
+            (scope, target)
+            for scope, target in targets.items()
+            if target.account_scope is source.account_scope
+            and target.strategy_id == source.execution_scope.strategy_id
+        )
+        if len(matches) != 1:
+            raise TypeError
+        target_scope, target = matches[0]
+        contract = contracts.get(target_scope)
+        if (
+            contract is None
+            or contract.exchange_name != target.exchange_name
+            or not contract.exposure_ready
+            or "CLOSE" not in contract.supported_position_effects
+        ):
+            raise TypeError
+        composition = source.composition
+        if type(composition) is not tuple or len(composition) != 6:
+            raise TypeError
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_SOURCE_COMPOSITION_INVALID") from None
+
+
+def _fraction_to_decimal_exact(value: Fraction) -> Decimal:
+    """Convert a finite base-ten rational without context rounding."""
+
+    if type(value) is not Fraction:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_DECIMAL_INVALID")
+    numerator = value.numerator
+    denominator = value.denominator
+    twos = 0
+    fives = 0
+    while denominator % 2 == 0:
+        denominator //= 2
+        twos += 1
+    while denominator % 5 == 0:
+        denominator //= 5
+        fives += 1
+    scale = max(twos, fives)
+    if denominator != 1 or scale > 512 or len(str(abs(numerator))) > 1024:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_DECIMAL_NOT_EXACT")
+    unscaled = numerator * (2 ** (scale - twos)) * (5 ** (scale - fives))
+    sign = "-" if unscaled < 0 else ""
+    digits = str(abs(unscaled))
+    if scale:
+        digits = digits.rjust(scale + 1, "0")
+        text_value = sign + digits[:-scale] + "." + digits[-scale:]
+    else:
+        text_value = sign + digits
+    result = Decimal(text_value)
+    if Fraction(result) != value:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_DECIMAL_NOT_EXACT")
+    return result
+
+
+def _validate_group_compensation_market_facts(
+    facts: object,
+    *,
+    target: RiskOrderTarget,
+    contract: RiskBtApiProviderContract,
+) -> object:
+    """Bind accepted source price/units to current Risk and provider metadata."""
+
+    try:
+        from bt_api_risk.core.instrument import InstrumentRiskMetadata
+
+        if (
+            type(contract) is not RiskBtApiProviderContract
+            or not contract.exposure_ready
+            or "CLOSE" not in contract.supported_position_effects
+        ):
+            raise TypeError
+        metadata = target.registry.get(facts.instrument)
+        if type(metadata) is not InstrumentRiskMetadata:
+            raise TypeError
+        quote = contract.quote_currency(facts.instrument)
+        if (
+            metadata.metadata_version != facts.metadata_version
+            or metadata.quantity_unit != facts.source_quantity_unit
+            or metadata.contract_multiplier != facts.source_base_units_per_order_unit
+            or metadata.quote_currency != facts.source_quote_currency
+            or metadata.valuation_unit != facts.source_quote_currency
+            or quote != facts.source_quote_currency
+            or metadata.expires_at_ns <= time.time_ns()
+        ):
+            raise TypeError
+        return metadata
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_SOURCE_METADATA_MISMATCH") from None
+
+
+def _assert_group_compensation_source_exposure(
+    facts: object, prior_close_deltas: Mapping[str, Fraction]
+) -> None:
+    """Check the selected position from the source fill and Risk close history.
+
+    The P5B chain deficit only establishes unwind context. Quantity is bounded
+    by signed source fills less terminal CLOSE fills proven by Risk receipts.
+    """
+
+    try:
+        from bt_api_execution import Side as ExecutionSide
+
+        if (
+            type(prior_close_deltas) is not MappingProxyType
+            or type(facts.source_chain_deficit_vector_base_units) is not tuple
+            or type(facts.source_filled_position_exposure_vector_base_units) is not tuple
+        ):
+            raise TypeError
+        chain_vector = facts.source_chain_deficit_vector_base_units
+        exposure_vector = facts.source_filled_position_exposure_vector_base_units
+        if (
+            tuple(leg_id for leg_id, _ in chain_vector)
+            != tuple(leg_id for leg_id, _ in exposure_vector)
+            or len(chain_vector) != 3
+        ):
+            raise TypeError
+        exposure_by_leg = dict(exposure_vector)
+        if facts.source_leg_id not in exposure_by_leg:
+            raise TypeError
+        source_sign = (
+            Fraction(1)
+            if facts.source_side is ExecutionSide.BUY
+            else Fraction(-1)
+            if facts.source_side is ExecutionSide.SELL
+            else None
+        )
+        if source_sign is None:
+            raise TypeError
+        opened = (
+            source_sign
+            * Fraction(facts.source_terminal_status.filled_quantity)
+            * Fraction(facts.source_base_units_per_order_unit)
+        )
+        selected_net = opened + prior_close_deltas.get(
+            facts.source_leg_id, Fraction(0)
+        )
+        checked_net = _fraction_to_decimal_exact(selected_net)
+        if (
+            checked_net == 0
+            or checked_net != facts.source_uncompensated_position_base_units
+            or exposure_by_leg[facts.source_leg_id] != checked_net
+            or (source_sign > 0 and checked_net < 0)
+            or (source_sign < 0 and checked_net > 0)
+        ):
+            raise TypeError
+    except RiskOrderEntryError:
+        raise
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_SOURCE_EXPOSURE_MISMATCH") from None
+
+
+def _build_group_compensation_authorization(
+    facts: object,
+    *,
+    target: RiskOrderTarget,
+    contract: RiskBtApiProviderContract,
+    gate: DurableRiskGate,
+    account_ref: str,
+    principal_ref: str,
+    scope: WireScope,
+) -> object:
+    """Enrich immutable group facts with a current exact Risk close bound."""
+
+    try:
+        facts_type, authorization_type, _action_ref_type, _phase_type = (
+            _group_compensation_runtime_types()
+        )
+        if type(facts) is not facts_type:
+            raise TypeError
+        metadata = _validate_group_compensation_market_facts(
+            facts, target=target, contract=contract
+        )
+        if (
+            facts.account_ref != account_ref
+            or facts.strategy_id != target.strategy_id
+            or facts.execution_scope_key == ""
+            or facts.action_remaining_budget_metric != _GROUP_COMPENSATION_BUDGET_METRIC
+            or facts.action_remaining_budget_currency != facts.source_quote_currency
+            or facts.action_remaining_budget_amount <= 0
+            or facts.compensation_budget_cap_amount <= 0
+            or facts.action_remaining_budget_amount > facts.compensation_budget_cap_amount
+            or facts.action_remaining_budget_policy_fingerprint
+            != _group_compensation_budget_policy_fingerprint(facts)
+        ):
+            raise TypeError
+        position = gate.get_closable_position(
+            target.account_scope, facts.instrument, target.strategy_id
+        )
+        from bt_api_risk.core.admission import ClosablePositionSnapshot
+        from bt_api_execution import Side as ExecutionSide
+
+        if (
+            type(position) is not ClosablePositionSnapshot
+            or position.scope != target.account_scope
+            or position.instrument != facts.instrument
+            or position.strategy_id != facts.strategy_id
+            or position.completeness != "LOCAL_LEDGER_COMPLETE"
+            or type(position.revision) is not str
+            or not position.revision
+            or type(position.available_quantity) is not Decimal
+            or not position.available_quantity.is_finite()
+            or position.available_quantity <= 0
+            or position.quantity_unit != facts.source_quantity_unit
+            or position.quantity_unit != metadata.quantity_unit
+        ):
+            raise TypeError
+        source_side = facts.source_side
+        if source_side is ExecutionSide.BUY:
+            closing_side = ExecutionSide.SELL
+        elif source_side is ExecutionSide.SELL:
+            closing_side = ExecutionSide.BUY
+        else:
+            raise TypeError
+
+        residual = Fraction(abs(facts.source_uncompensated_position_base_units))
+        ratio = Fraction(facts.source_base_units_per_order_unit)
+        source_limit = residual / ratio
+        allocation_limit = Fraction(position.available_quantity)
+        budget_per_order_unit = Fraction(facts.source_price) * ratio
+        budget_limit = Fraction(facts.action_remaining_budget_amount) / budget_per_order_unit
+        maximum = min(source_limit, allocation_limit, budget_limit)
+        quantity_step = Fraction(metadata.quantity_step)
+        step_count = maximum // quantity_step
+        if type(step_count) is not int or step_count <= 0:
+            raise RiskOrderEntryError("GROUP_COMPENSATION_CLOSE_BOUND_EMPTY")
+        quantity = _fraction_to_decimal_exact(quantity_step * step_count)
+        if (
+            metadata.min_quantity is not None and quantity < metadata.min_quantity
+        ) or (metadata.max_quantity is not None and quantity > metadata.max_quantity):
+            raise RiskOrderEntryError("GROUP_COMPENSATION_CLOSE_QUANTITY_OUT_OF_RANGE")
+        price_steps = Fraction(facts.source_price) / Fraction(metadata.tick_size)
+        if price_steps.denominator != 1:
+            raise RiskOrderEntryError("GROUP_COMPENSATION_SOURCE_PRICE_OFF_TICK")
+        notional_fraction = Fraction(quantity) * Fraction(facts.source_price) * ratio
+        notional = _fraction_to_decimal_exact(notional_fraction)
+        if (
+            Fraction(quantity) * ratio
+            > abs(Fraction(facts.source_uncompensated_position_base_units))
+            or Fraction(quantity) * Fraction(facts.source_price) * ratio
+            != Fraction(notional)
+        ):
+            raise RiskOrderEntryError("GROUP_COMPENSATION_NOTIONAL_ROUNDED")
+        intent_id = _derive_compensation_intent_id(facts.action_id)
+        risk_intent_id = _derive_group_compensation_risk_intent_id(
+            intent_id=intent_id,
+            principal_ref=principal_ref,
+            scope=scope,
+            target=target,
+        )
+        return authorization_type(
+            action_id=facts.action_id,
+            ordinal=facts.ordinal,
+            group_id=facts.group_id,
+            origin_run_id=facts.origin_run_id,
+            group_fingerprint=facts.group_fingerprint,
+            execution_scope_key=facts.execution_scope_key,
+            account_ref=facts.account_ref,
+            strategy_id=facts.strategy_id,
+            source_leg_id=facts.source_leg_id,
+            source_intent_id=facts.source_intent_id,
+            source_request_fingerprint=facts.source_request_fingerprint,
+            source_terminal_status=facts.source_terminal_status,
+            source_requested_quantity=facts.source_requested_quantity,
+            source_claim_digest=facts.source_claim_digest,
+            source_risk_resolution_digest=facts.source_risk_resolution_digest,
+            source_event_digest=facts.source_event_digest,
+            source_side=facts.source_side,
+            instrument=facts.instrument,
+            metadata_version=facts.metadata_version,
+            source_price=facts.source_price,
+            source_base_units_per_order_unit=facts.source_base_units_per_order_unit,
+            source_quantity_unit=facts.source_quantity_unit,
+            source_quote_currency=facts.source_quote_currency,
+            closing_side=closing_side,
+            close_quantity=quantity,
+            close_quantity_unit=position.quantity_unit,
+            close_reference_notional=notional,
+            source_uncompensated_position_base_units=facts.source_uncompensated_position_base_units,
+            source_chain_deficit_vector_base_units=facts.source_chain_deficit_vector_base_units,
+            source_filled_position_exposure_vector_base_units=facts.source_filled_position_exposure_vector_base_units,
+            prior_resolved_actions=facts.prior_resolved_actions,
+            compensation_budget_cap_amount=facts.compensation_budget_cap_amount,
+            action_remaining_budget_amount=facts.action_remaining_budget_amount,
+            action_remaining_budget_currency=facts.action_remaining_budget_currency,
+            action_remaining_budget_metric=facts.action_remaining_budget_metric,
+            action_remaining_budget_policy_id=facts.action_remaining_budget_policy_id,
+            action_remaining_budget_policy_version=facts.action_remaining_budget_policy_version,
+            action_remaining_budget_policy_fingerprint=facts.action_remaining_budget_policy_fingerprint,
+            close_position_version=position.revision,
+            close_allocation_available_quantity=position.available_quantity,
+            close_allocation_quantity_unit=position.quantity_unit,
+            intent_id=intent_id,
+            risk_intent_id=risk_intent_id,
+            client_order_id=_derive_compensation_client_order_id(facts.action_id),
+            source_facts_digest=facts.digest,
+        )
+    except RiskOrderEntryError:
+        raise
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_AUTHORIZATION_INVALID") from None
+
+
+def _derive_compensation_intent_id(action_id: str) -> str:
+    from .service_group_compensation_contracts import derive_group_compensation_intent_id
+
+    return derive_group_compensation_intent_id(action_id)
+
+
+def _derive_group_compensation_risk_intent_id(
+    *,
+    intent_id: str,
+    principal_ref: str,
+    scope: WireScope,
+    target: RiskOrderTarget,
+) -> str:
+    """Use the same trusted inputs and canonical formula as ``_prepare_command``."""
+
+    if (
+        type(intent_id) is not str
+        or not intent_id
+        or type(principal_ref) is not str
+        or not principal_ref
+        or type(scope) is not WireScope
+        or type(target) is not RiskOrderTarget
+    ):
+        raise TypeError("invalid trusted compensation Risk identity inputs")
+    return "risk-order:" + sha256_text(
+        canonical_json(
+            {
+                "account_scope": target.account_scope.key,
+                "intent_id": intent_id,
+                "principal_ref": principal_ref,
+                "strategy_id": target.strategy_id,
+                "wire_scope": _wire_scope_identity_payload(scope),
+            }
+        )
+    )
+
+
+def _derive_compensation_client_order_id(action_id: str) -> str:
+    from .service_group_compensation_contracts import (
+        derive_group_compensation_client_order_id,
+    )
+
+    return derive_group_compensation_client_order_id(action_id)
+
+
+def _group_compensation_budget_policy_fingerprint(facts: object) -> str:
+    """Recompute the accepted cap fingerprint using the bridge's fixed metric."""
+
+    from .service_group_compensation_contracts import (
+        LIMIT_CLOSE_NOTIONAL_V1,
+        group_compensation_budget_policy_fingerprint,
+    )
+
+    if (
+        facts.action_remaining_budget_metric != LIMIT_CLOSE_NOTIONAL_V1
+        or facts.action_remaining_budget_currency != facts.source_quote_currency
+        or type(facts.action_remaining_budget_policy_version) is not int
+        or facts.action_remaining_budget_policy_version <= 0
+        or type(facts.compensation_budget_cap_amount) is not Decimal
+        or not facts.compensation_budget_cap_amount.is_finite()
+        or facts.compensation_budget_cap_amount <= 0
+    ):
+        raise RiskOrderEntryError("GROUP_COMPENSATION_BUDGET_POLICY_INVALID")
+    try:
+        return group_compensation_budget_policy_fingerprint(
+            policy_id=facts.action_remaining_budget_policy_id,
+            policy_version=facts.action_remaining_budget_policy_version,
+            cap_amount=facts.compensation_budget_cap_amount,
+            currency=facts.source_quote_currency,
+            metric=facts.action_remaining_budget_metric,
+        )
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_BUDGET_POLICY_INVALID") from None
+
+
+def _group_compensation_closure_budget_policy_fingerprint(facts: object) -> str:
+    """Recompute the immutable group cap fingerprint for terminal closure."""
+
+    from .service_group_compensation_contracts import (
+        LIMIT_CLOSE_NOTIONAL_V1,
+        group_compensation_budget_policy_fingerprint,
+    )
+
+    if (
+        facts.budget_metric != LIMIT_CLOSE_NOTIONAL_V1
+        or type(facts.budget_policy_version) is not int
+        or facts.budget_policy_version <= 0
+        or type(facts.budget_cap_amount) is not Decimal
+        or not facts.budget_cap_amount.is_finite()
+        or facts.budget_cap_amount <= 0
+        or type(facts.budget_currency) is not str
+        or not facts.budget_currency
+    ):
+        raise RiskOrderEntryError("GROUP_COMPENSATION_BUDGET_POLICY_INVALID")
+    try:
+        return group_compensation_budget_policy_fingerprint(
+            policy_id=facts.budget_policy_id,
+            policy_version=facts.budget_policy_version,
+            cap_amount=facts.budget_cap_amount,
+            currency=facts.budget_currency,
+            metric=facts.budget_metric,
+        )
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_BUDGET_POLICY_INVALID") from None
+
+
+def _group_compensation_closure_receipt_payload(
+    facts: object, receipt_hashes: tuple[str, ...]
+) -> dict[str, Any]:
+    """Project the exact independently verified group terminal proof payload."""
+
+    from .service_group_compensation_contracts import GroupCompensationClosureFacts
+
+    if (
+        type(facts) is not GroupCompensationClosureFacts
+        or type(receipt_hashes) is not tuple
+        or len(receipt_hashes) != len(facts.resolved_actions)
+    ):
+        raise RiskOrderEntryError("GROUP_COMPENSATION_CLOSURE_FACTS_INVALID")
+    return {
+        "schema": "group-compensation-close-proof-v1",
+        "group_fingerprint": facts.group_fingerprint,
+        "closure_facts_digest": facts.digest,
+        "chain_deficit_vector_base_units": [
+            [leg_id, _decimal_text(amount)]
+            for leg_id, amount in facts.chain_deficit_vector_base_units
+        ],
+        "signed_uncompensated_filled_exposure_vector_base_units": [
+            [leg_id, "0"]
+            for leg_id, amount in facts.signed_uncompensated_filled_exposure_vector_base_units
+        ],
+        "resolved_action_receipt_sha256s": list(receipt_hashes),
+        "reservation_state_sha256": facts.account_reservation_sha256,
+        "active_dispatch_latches": facts.active_dispatch_latch_count,
+        "budget_policy_fingerprint": facts.budget_policy_fingerprint,
+        "budget_cap_amount": _decimal_text(facts.budget_cap_amount),
+        "budget_consumed_reference_notional": _decimal_text(
+            facts.budget_consumed_amount
+        ),
+        "budget_remaining_amount": _decimal_text(facts.budget_remaining_amount),
+        "pending_budget_obligation_amount": _decimal_text(
+            facts.pending_budget_obligation_amount
+        ),
+    }
+
+
+def _assert_group_compensation_authorization(
+    authorization: object,
+    facts: object,
+    *,
+    target: RiskOrderTarget,
+    contract: RiskBtApiProviderContract,
+    principal_ref: str,
+    scope: WireScope,
+    require_current_metadata: bool,
+) -> None:
+    """Recheck every immutable source field and Risk bound carried by auth."""
+
+    try:
+        facts_type, authorization_type, _action_ref_type, _phase_type = (
+            _group_compensation_runtime_types()
+        )
+        if type(authorization) is not authorization_type or type(facts) is not facts_type:
+            raise TypeError
+        metadata = (
+            _validate_group_compensation_market_facts(
+                facts, target=target, contract=contract
+            )
+            if require_current_metadata
+            else None
+        )
+        expected_pairs = (
+            ("action_id", "action_id"),
+            ("ordinal", "ordinal"),
+            ("group_id", "group_id"),
+            ("origin_run_id", "origin_run_id"),
+            ("group_fingerprint", "group_fingerprint"),
+            ("execution_scope_key", "execution_scope_key"),
+            ("account_ref", "account_ref"),
+            ("strategy_id", "strategy_id"),
+            ("source_leg_id", "source_leg_id"),
+            ("source_intent_id", "source_intent_id"),
+            ("source_request_fingerprint", "source_request_fingerprint"),
+            ("source_terminal_status", "source_terminal_status"),
+            ("source_requested_quantity", "source_requested_quantity"),
+            ("source_claim_digest", "source_claim_digest"),
+            ("source_risk_resolution_digest", "source_risk_resolution_digest"),
+            ("source_event_digest", "source_event_digest"),
+            ("source_side", "source_side"),
+            ("instrument", "instrument"),
+            ("metadata_version", "metadata_version"),
+            ("source_price", "source_price"),
+            ("source_base_units_per_order_unit", "source_base_units_per_order_unit"),
+            ("source_quantity_unit", "source_quantity_unit"),
+            ("source_quote_currency", "source_quote_currency"),
+            (
+                "source_uncompensated_position_base_units",
+                "source_uncompensated_position_base_units",
+            ),
+            (
+                "source_chain_deficit_vector_base_units",
+                "source_chain_deficit_vector_base_units",
+            ),
+            (
+                "source_filled_position_exposure_vector_base_units",
+                "source_filled_position_exposure_vector_base_units",
+            ),
+            ("prior_resolved_actions", "prior_resolved_actions"),
+            ("compensation_budget_cap_amount", "compensation_budget_cap_amount"),
+            ("action_remaining_budget_amount", "action_remaining_budget_amount"),
+            ("action_remaining_budget_currency", "action_remaining_budget_currency"),
+            ("action_remaining_budget_metric", "action_remaining_budget_metric"),
+            ("action_remaining_budget_policy_id", "action_remaining_budget_policy_id"),
+            ("action_remaining_budget_policy_version", "action_remaining_budget_policy_version"),
+            ("action_remaining_budget_policy_fingerprint", "action_remaining_budget_policy_fingerprint"),
+        )
+        if any(getattr(authorization, auth_name) != getattr(facts, facts_name) for auth_name, facts_name in expected_pairs):
+            raise TypeError
+        if authorization.source_facts_digest != facts.digest:
+            raise TypeError
+        if (
+            authorization.intent_id != _derive_compensation_intent_id(facts.action_id)
+            or authorization.risk_intent_id
+            != _derive_group_compensation_risk_intent_id(
+                intent_id=authorization.intent_id,
+                principal_ref=principal_ref,
+                scope=scope,
+                target=target,
+            )
+            or authorization.client_order_id != _derive_compensation_client_order_id(facts.action_id)
+            or authorization.closing_side.value == authorization.source_side.value
+            or authorization.close_quantity_unit != facts.source_quantity_unit
+            or authorization.close_allocation_quantity_unit != facts.source_quantity_unit
+            or authorization.close_position_version == ""
+            or authorization.close_allocation_available_quantity < authorization.close_quantity
+            or authorization.close_quantity <= 0
+            or Fraction(authorization.close_quantity) * Fraction(facts.source_base_units_per_order_unit)
+            > abs(Fraction(facts.source_uncompensated_position_base_units))
+            or Fraction(authorization.close_reference_notional)
+            != Fraction(authorization.close_quantity)
+            * Fraction(facts.source_price)
+            * Fraction(facts.source_base_units_per_order_unit)
+            or authorization.close_reference_notional > facts.action_remaining_budget_amount
+            or authorization.close_reference_notional > facts.compensation_budget_cap_amount
+            or facts.action_remaining_budget_policy_fingerprint
+            != _group_compensation_budget_policy_fingerprint(facts)
+            or (
+                metadata is not None
+                and metadata.quantity_unit != authorization.close_quantity_unit
+            )
+        ):
+            raise TypeError
+        if require_current_metadata and metadata is None:
+            raise TypeError
+        if metadata is not None and (
+            (
+                Fraction(authorization.close_quantity)
+                / Fraction(metadata.quantity_step)
+            ).denominator
+            != 1
+            or (
+                Fraction(facts.source_price) / Fraction(metadata.tick_size)
+            ).denominator
+            != 1
+        ):
+            raise TypeError
+    except RiskOrderEntryError:
+        raise
+    except Exception:
+        raise RiskOrderEntryError("GROUP_COMPENSATION_AUTHORIZATION_MISMATCH") from None
+
+
+def _group_compensation_close_receipt_payload(
+    receipt: DispatchExposureResolutionReceipt,
+) -> dict[str, Any]:
+    """Project the exact terminal Risk CLOSE receipt used by group events."""
+
+    return {
+        "status": receipt.status.value,
+        "claim": {
+            "cause_id": receipt.claim.cause_id,
+            "claim_digest": receipt.claim.claim_digest,
+            "claimed_at": receipt.claim.claimed_at,
+            "intent_hash": receipt.claim.intent_hash,
+            "intent_id": receipt.claim.intent_id,
+            "permit_id": receipt.claim.permit_id,
+            "scope_key": receipt.claim.scope.key,
+        },
+        "proof_sha256": receipt.proof_sha256,
+        "exposure_proof_sha256": receipt.exposure_proof_sha256,
+        "final_state": receipt.final_state.value,
+        "requested_quantity": _decimal_text(receipt.requested_quantity),
+        "filled_quantity": _decimal_text(receipt.filled_quantity),
+        "trade_count": receipt.trade_count,
+        "order_revision": receipt.order_revision,
+        "journal_revision": receipt.journal_revision,
+        "exposure_reservation_id": receipt.exposure_reservation_id,
+        "exposure_reservation_sha256": receipt.exposure_reservation_sha256,
+        "dispatch_latch_active": receipt.dispatch_latch_active,
+        "has_other_active_freezes": receipt.has_other_active_freezes,
+        "position_effect": receipt.position_effect,
+    }
+
+
 def _parse_order(
     arguments: Mapping[str, Any],
     target: RiskOrderTarget,
@@ -2470,6 +4279,7 @@ def _parse_order(
     contract: RiskBtApiProviderContract,
     scope: WireScope,
     principal_ref: str,
+    trusted_client_order_id: str | None = None,
 ) -> dict[str, Any]:
     for name in ("intent_id", "signal_id", "instrument", "metadata_version"):
         if type(arguments.get(name)) is not str or not _REFERENCE.fullmatch(arguments[name]):
@@ -2548,22 +4358,31 @@ def _parse_order(
         raise RiskOrderEntryError("INSTRUMENT_METADATA_UNREGISTERED")
     if arguments["metadata_version"] != metadata.metadata_version:
         raise RiskOrderEntryError("METADATA_VERSION_MISMATCH")
-    client_order_id = (
-        "risk-"
-        + sha256_text(
-            canonical_json(
-                {
-                    "account_scope": target.account_scope.key,
-                    "client_intent_id": arguments["intent_id"],
-                    "exchange_name": target.exchange_name,
-                    "principal_ref": principal_ref,
-                    "provider_account_id": target.provider_account_id,
-                    "strategy_id": target.strategy_id,
-                    "wire_scope": _wire_scope_identity_payload(scope),
-                }
-            )
-        )[:40]
-    )
+    if trusted_client_order_id is None:
+        client_order_id = (
+            "risk-"
+            + sha256_text(
+                canonical_json(
+                    {
+                        "account_scope": target.account_scope.key,
+                        "client_intent_id": arguments["intent_id"],
+                        "exchange_name": target.exchange_name,
+                        "principal_ref": principal_ref,
+                        "provider_account_id": target.provider_account_id,
+                        "strategy_id": target.strategy_id,
+                        "wire_scope": _wire_scope_identity_payload(scope),
+                    }
+                )
+            )[:40]
+        )
+    else:
+        if (
+            type(trusted_client_order_id) is not str
+            or not _REFERENCE.fullmatch(trusted_client_order_id)
+            or position_effect != "CLOSE"
+        ):
+            raise RiskOrderEntryError("TRUSTED_CLIENT_ORDER_ID_INVALID")
+        client_order_id = trusted_client_order_id
     canonical_payload = {
         "deadline_ns": deadline,
         "instrument": arguments["instrument"],

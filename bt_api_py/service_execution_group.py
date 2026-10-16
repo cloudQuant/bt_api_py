@@ -20,6 +20,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from decimal import Decimal
+from fractions import Fraction
 from types import MappingProxyType
 from typing import Any
 
@@ -39,6 +40,7 @@ from bt_api_execution import (
     GroupBudgetReservationState,
     GroupBudgetUnsupportedOrderError,
     GroupChildOrderStatus,
+    GroupCompensationBudgetPolicy,
     GroupDispatchResolutionReceipt,
     GroupLegClaimReceipt,
     GroupLegOrderReceipt,
@@ -62,6 +64,7 @@ from bt_api_execution import (
     TimeInForce,
     group_leg_intent_id,
     order_intent_from_payload,
+    payload_sha256,
 )
 from bt_api_risk import (
     INSTRUMENT_METADATA_DIGEST_TAG,
@@ -79,12 +82,17 @@ from .service_execution_group_client import (
     AcceptedGroupConflictError,
     GroupOriginRunBinding,
     GroupOriginRunBindingStore,
+    verify_accepted_group_projection,
 )
 from .service_execution_group_cancel import (
     GroupCancelPlanLeg,
     GroupCancelPlanError,
     GroupCancelPlanStore,
     group_cancel_leg_id,
+)
+from .service_group_compensation_contracts import (
+    GroupCompensationActionPhase,
+    GroupCompensationCloseAuthorization,
 )
 
 from .service_registry import (
@@ -117,6 +125,8 @@ GROUP_ORDER_QUERY_PORT = "service.order_query"
 _RESERVATION_MOUNT = "upstream.account_reservations"
 _ORDERS_MOUNT = "upstream.orders"
 _ORDER_QUERY_MOUNT = "upstream.order_query"
+_COMPENSATION_ORDERS_MOUNT = "upstream.group_compensation_orders"
+_COMPENSATION_QUERY_MOUNT = "upstream.group_compensation_order_query"
 _MAX_REPLY_BYTES = 1_000_000
 _MAX_RPC_JSON_DEPTH = 64
 _MAX_SQLITE_INTEGER = (1 << 63) - 1
@@ -175,6 +185,8 @@ class GroupAccountRoute:
     order_scope_ref: str
     query_scope_ref: str
     instruments: Mapping[str, GroupInstrumentRule]
+    compensation_order_scope_ref: str | None = None
+    compensation_query_scope_ref: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.execution_scope) is not ExecutionScope:
@@ -189,6 +201,17 @@ class GroupAccountRoute:
                 self.reservation_scope_ref,
                 self.order_scope_ref,
                 self.query_scope_ref,
+            )
+        ):
+            raise ServiceExecutionGroupError("GROUP_ROUTE_INVALID")
+        if (self.compensation_order_scope_ref is None) != (
+            self.compensation_query_scope_ref is None
+        ) or any(
+            value is not None
+            and (type(value) is not str or _REFERENCE.fullmatch(value) is None)
+            for value in (
+                self.compensation_order_scope_ref,
+                self.compensation_query_scope_ref,
             )
         ):
             raise ServiceExecutionGroupError("GROUP_ROUTE_INVALID")
@@ -218,6 +241,7 @@ class GroupCoordinatorTarget:
     max_group_lifetime_ns: int
     portfolio_budget_policy: PortfolioGroupBudgetPolicy | None = None
     budget_quote_builder: GroupBudgetQuoteBuilder | None = None
+    compensation_budget_policy: GroupCompensationBudgetPolicy | None = None
 
     def __post_init__(self) -> None:
         if type(self.scope_ref) is not str or _REFERENCE.fullmatch(self.scope_ref) is None:
@@ -241,6 +265,10 @@ class GroupCoordinatorTarget:
             or not callable(self.budget_quote_builder)
         ):
             raise ServiceExecutionGroupError("GROUP_BUDGET_CONFIGURATION_INVALID")
+        if self.compensation_budget_policy is not None and (
+            type(self.compensation_budget_policy) is not GroupCompensationBudgetPolicy
+        ):
+            raise ServiceExecutionGroupError("GROUP_COMPENSATION_BUDGET_CONFIGURATION_INVALID")
         object.__setattr__(self, "accounts", MappingProxyType(copied))
 
 
@@ -524,6 +552,76 @@ class _OrdersRpcPort:
 
 
 
+    def prepare_group_compensation_close(
+        self, group_id: str, source_leg_id: str
+    ) -> Mapping[str, Any]:
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        if route.compensation_query_scope_ref is None:
+            raise RuntimeError("compensation query route is not configured")
+        response = self._upstream.call(
+            _COMPENSATION_QUERY_MOUNT,
+            "orders.prepare_group_compensation_close",
+            {"group_id": group_id, "source_leg_id": source_leg_id},
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.compensation_query_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        body = _rpc_result(response)
+        if set(body) != {"phase", "authorization", "status", "close_receipt"}:
+            raise RuntimeError("compensation prepare reply is invalid")
+        return body
+
+    def submit_group_compensation_close(
+        self, authorization: GroupCompensationCloseAuthorization
+    ) -> Mapping[str, Any]:
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        if route.compensation_order_scope_ref is None:
+            raise RuntimeError("compensation entry route is not configured")
+        response = self._upstream.call(
+            _COMPENSATION_ORDERS_MOUNT,
+            "orders.submit_group_compensation_close",
+            {"authorization": authorization.to_payload()},
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.compensation_order_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        body = _rpc_result(response)
+        if set(body) != {"phase", "status", "close_receipt"}:
+            raise RuntimeError("compensation submit reply is invalid")
+        return body
+
+    def query_group_compensation_close(
+        self,
+        *,
+        authorization: GroupCompensationCloseAuthorization | None = None,
+        group_id: str | None = None,
+    ) -> Mapping[str, Any]:
+        if (authorization is None) == (group_id is None):
+            raise ValueError("exactly one compensation query selector is required")
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        if route.compensation_query_scope_ref is None:
+            raise RuntimeError("compensation query route is not configured")
+        if authorization is not None:
+            arguments = {"authorization": authorization.to_payload()}
+        else:
+            arguments = {"group_id": group_id}
+        response = self._upstream.call(
+            _COMPENSATION_QUERY_MOUNT,
+            "orders.query_group_compensation_close",
+            arguments,
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.compensation_query_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        body = _rpc_result(response)
+        return body
+
 class GroupCoordinatorService:
     """Normal ServiceHost entry for durable, ordered two-leg and v3 group requests."""
 
@@ -626,6 +724,7 @@ class GroupCoordinatorService:
         except Exception:
             raise ServiceExecutionGroupError("GROUP_COORDINATOR_INVALID") from None
         self._order_ports = MappingProxyType(orders)
+        self._reservation_ports = MappingProxyType(reservations)
         self._targets = MappingProxyType(target_copy)
 
     @property
@@ -725,7 +824,10 @@ class GroupCoordinatorService:
             if target_scope is None:
                 return
             target = self._targets.get(target_scope)
-            if target is None or not self._recovery_binding_matches(
+            if target is None:
+                return
+            binding = self._bind_verified_accepted_snapshot(binding, snapshot)
+            if binding is None or not self._recovery_binding_matches(
                 binding, snapshot, target_scope, target
             ):
                 return
@@ -737,7 +839,33 @@ class GroupCoordinatorService:
             call = _CoordinatorCall(None, target_scope, target, binding)
             token = _CURRENT_COORDINATOR_CALL.set(call)
             try:
-                self._coordinator.advance_group(request.portfolio_ref, request.group_id)
+                history = self._store.events(request.portfolio_ref, request.group_id)
+                if any(
+                    event.event_type == "GROUP_COMPENSATION_PLAN_RECORDED"
+                    for event in history
+                ):
+                    # Once the immutable close plan is durable, this group is
+                    # owned by the compensation state machine.  Re-running the
+                    # source coordinator can overwrite its UNWINDING progress
+                    # with RECOVERY_REQUIRED and prevent a verified receipt
+                    # from being projected.  Resume only the same persisted
+                    # action (or plan the next bounded action) through its
+                    # dedicated query/submit rules.
+                    self._maintain_group_compensation(snapshot)
+                    return
+                advanced = self._coordinator.advance_group(
+                    request.portfolio_ref, request.group_id
+                )
+                if (
+                    type(advanced) is GroupOrderSnapshot
+                    and advanced.state
+                    in {GroupOrderState.RECOVERY_REQUIRED, GroupOrderState.UNWINDING}
+                    and advanced.request.version == 3
+                    and advanced.request.compensation_budget_policy is not None
+                ):
+                    current = self._store.get(request.portfolio_ref, request.group_id)
+                    if type(current) is GroupOrderSnapshot:
+                        self._maintain_group_compensation(current)
             finally:
                 _CURRENT_COORDINATOR_CALL.reset(token)
         finally:
@@ -753,6 +881,12 @@ class GroupCoordinatorService:
         request = binding.request
         scope = binding.strategy_scope
         identity = binding.strategy_identity
+        accepted_fingerprint = binding.accepted_request_fingerprint
+        if accepted_fingerprint is None and snapshot.request.fingerprint == binding.request_fingerprint:
+            # Unquoted legacy rows already carry the full accepted request in
+            # the original binding. Quoted groups require a separate full
+            # fingerprint recovered from their durable accept event.
+            accepted_fingerprint = binding.request_fingerprint
         return (
             type(binding) is GroupOriginRunBinding
             and type(snapshot) is GroupOrderSnapshot
@@ -760,8 +894,10 @@ class GroupCoordinatorService:
             and type(scope) is WireScope
             and self._target_scope_for(scope) == target_scope
             and _coordinator_call_scope(scope)
-            and snapshot.request.unquoted_fingerprint == binding.request_fingerprint
-            and request.unquoted_fingerprint == binding.request_fingerprint
+            and request.fingerprint == binding.request_fingerprint
+            and snapshot.request.unquoted_fingerprint == request.unquoted_fingerprint
+            and accepted_fingerprint is not None
+            and snapshot.request.fingerprint == accepted_fingerprint
             and snapshot.request.portfolio_ref == request.portfolio_ref
             and snapshot.request.group_id == request.group_id
             and snapshot.request.coordinator_principal_ref == self._identity.principal_ref
@@ -788,6 +924,326 @@ class GroupCoordinatorService:
                 )
             )
         )
+
+    def _bind_verified_accepted_snapshot(
+        self,
+        binding: GroupOriginRunBinding,
+        snapshot: GroupOrderSnapshot,
+    ) -> GroupOriginRunBinding | None:
+        """Persist server-owned quote identity from the hashed accept event."""
+
+        if type(binding) is not GroupOriginRunBinding or type(snapshot) is not GroupOrderSnapshot:
+            return None
+        try:
+            history = self._store.events(
+                snapshot.request.portfolio_ref, snapshot.request.group_id
+            )
+            accepted_fingerprint = verify_accepted_group_projection(binding, snapshot, history)
+        except Exception:
+            return None
+        try:
+            return self._run_bindings.bind_accepted_request_fingerprint(
+                binding, accepted_fingerprint
+            )
+        except (AcceptedGroupBindingError, AcceptedGroupConflictError):
+            return None
+
+    def _maintain_group_compensation(self, snapshot: GroupOrderSnapshot) -> None:
+        """Advance one accepted v3 compensation action from the owner tick.
+
+        The group cursor already limits this method to one accepted group per
+        tick.  Its durable marker is written before the only submit route; all
+        later phases use the dedicated query route.  Any incomplete or
+        contradictory evidence leaves the snapshot nonterminal for a later
+        bounded retry.
+        """
+
+        request = snapshot.request
+        if (
+            snapshot.state not in {GroupOrderState.RECOVERY_REQUIRED, GroupOrderState.UNWINDING}
+            or request.version != 3
+            or request.compensation_budget_policy is None
+            or len(request.legs) != 3
+            or not snapshot.reservations
+        ):
+            return
+        account_ref = request.account_refs[0]
+        order_port = self._order_ports.get(account_ref)
+        reservation_port = self._reservation_ports.get(account_ref)
+        if order_port is None or reservation_port is None:
+            return
+        try:
+            history = self._store.events(request.portfolio_ref, request.group_id)
+            actions = _owner_compensation_actions(history)
+            pending = [
+                item
+                for item in actions
+                if item["phase"] is not GroupCompensationActionPhase.RESOLVED
+            ]
+            if len(pending) > 1:
+                return
+            if pending:
+                self._advance_pending_compensation(snapshot, order_port, pending[0])
+                return
+
+            # The source chain must be terminal before we cancel the original
+            # obligation and start CLOSE work. If a leg was never submitted,
+            # allow the normal chain to progress until its original deadline.
+            if not _group_source_is_compensation_ready(snapshot):
+                return
+            exposure = _owner_signed_filled_exposure(snapshot, actions)
+            if exposure is None:
+                return
+            if any(value != 0 for value in exposure.values()):
+                selected_leg_id = next(
+                    plan.leg_id
+                    for plan in request.legs
+                    if exposure[plan.leg_id] != 0
+                )
+                prepared = order_port.prepare_group_compensation_close(
+                    request.group_id, selected_leg_id
+                )
+                if (
+                    prepared.get("phase") != "PREPARED"
+                    or not isinstance(prepared.get("authorization"), Mapping)
+                    or prepared.get("status") is not None
+                    or prepared.get("close_receipt") is not None
+                ):
+                    return
+                authorization = GroupCompensationCloseAuthorization.from_payload(
+                    prepared["authorization"]
+                )
+                if (
+                    authorization.group_id != request.group_id
+                    or authorization.group_fingerprint != request.fingerprint
+                    or authorization.source_leg_id != selected_leg_id
+                    or Fraction(authorization.source_uncompensated_position_base_units)
+                    != exposure[selected_leg_id]
+                    or tuple(authorization.source_filled_position_exposure_vector_base_units)
+                    != tuple(
+                        (plan.leg_id, _fraction_decimal(exposure[plan.leg_id]))
+                        for plan in request.legs
+                    )
+                ):
+                    return
+                payload = authorization.to_payload()
+                self._store.update(
+                    snapshot,
+                    event_type="GROUP_COMPENSATION_PLAN_RECORDED",
+                    event_payload={
+                        "action_id": authorization.action_id,
+                        "authorization_digest": authorization.digest,
+                        "authorization": payload,
+                    },
+                    state=GroupOrderState.UNWINDING,
+                    error_code=None,
+                )
+                return
+
+            if not actions:
+                # This route is reserved for proven CLOSE compensation; the
+                # separate no-exposure terminal event owns no-fill groups.
+                return
+            if not _group_has_filled_source(snapshot):
+                return
+            snapshot = self._release_compensation_reservation(
+                snapshot, reservation_port
+            )
+            if snapshot is None or snapshot.reservations[0].phase is not GroupReservationPhase.RELEASED:
+                return
+            closed = order_port.query_group_compensation_close(group_id=request.group_id)
+            receipt = closed.get("closure_receipt")
+            facts_digest = closed.get("closure_facts_digest")
+            receipt_digest = closed.get("closure_receipt_sha256")
+            if (
+                closed.get("phase") != "CLOSED"
+                or not isinstance(receipt, Mapping)
+                or type(facts_digest) is not str
+                or _SHA256.fullmatch(facts_digest) is None
+                or receipt.get("closure_facts_digest") != facts_digest
+                or type(receipt_digest) is not str
+                or _SHA256.fullmatch(receipt_digest) is None
+                or payload_sha256(dict(receipt)) != receipt_digest
+            ):
+                return
+            self._store.update(
+                snapshot,
+                event_type="GROUP_COMPENSATION_CLOSED",
+                event_payload=receipt,
+                state=GroupOrderState.CLOSED,
+                error_code=None,
+            )
+        except Exception:
+            # A missing route, uncertain reply, malformed receipt, or stale
+            # source projection never becomes a dispatch retry or a release.
+            return
+
+    def _advance_pending_compensation(
+        self,
+        snapshot: GroupOrderSnapshot,
+        order_port: _OrdersRpcPort,
+        action: Mapping[str, Any],
+    ) -> None:
+        authorization = action["authorization"]
+        if type(authorization) is not GroupCompensationCloseAuthorization:
+            return
+        phase = action["phase"]
+        if phase is GroupCompensationActionPhase.PLAN_RECORDED:
+            started = self._store.update(
+                snapshot,
+                event_type="GROUP_COMPENSATION_SUBMIT_STARTED",
+                event_payload={
+                    "action_id": authorization.action_id,
+                    "authorization_digest": authorization.digest,
+                    "intent_id": authorization.intent_id,
+                    "client_order_id": authorization.client_order_id,
+                },
+                state=GroupOrderState.UNWINDING,
+            )
+            # This is the unique provider-write path. Persisting SUBMIT_STARTED
+            # first means every restart and lost reply must query the same ID.
+            reply = order_port.submit_group_compensation_close(authorization)
+            self._record_compensation_reply(started, authorization, reply)
+            return
+        if phase not in {
+            GroupCompensationActionPhase.SUBMIT_STARTED,
+            GroupCompensationActionPhase.STATUS_OBSERVED,
+        }:
+            return
+        reply = order_port.query_group_compensation_close(
+            authorization=authorization
+        )
+        self._record_compensation_reply(snapshot, authorization, reply)
+
+    def _record_compensation_reply(
+        self,
+        snapshot: GroupOrderSnapshot,
+        authorization: GroupCompensationCloseAuthorization,
+        reply: Mapping[str, Any],
+    ) -> None:
+        if reply.get("phase") not in {
+            GroupCompensationActionPhase.SUBMIT_STARTED.value,
+            GroupCompensationActionPhase.STATUS_OBSERVED.value,
+            GroupCompensationActionPhase.RESOLVED.value,
+        }:
+            return
+        status_payload = reply.get("status")
+        status = None
+        if status_payload is not None:
+            if not isinstance(status_payload, Mapping):
+                return
+            status = GroupChildOrderStatus.from_payload(status_payload)
+            if (
+                status.intent_id != authorization.intent_id
+                or Fraction(status.filled_quantity) > Fraction(authorization.close_quantity)
+            ):
+                return
+            events = self._store.events(
+                snapshot.request.portfolio_ref, snapshot.request.group_id
+            )
+            latest = next(
+                (
+                    event.payload.get("status")
+                    for event in reversed(events)
+                    if event.event_type == "GROUP_COMPENSATION_STATUS_OBSERVED"
+                    and event.payload.get("action_id") == authorization.action_id
+                ),
+                None,
+            )
+            if latest != status.to_payload():
+                snapshot = self._store.update(
+                    snapshot,
+                    event_type="GROUP_COMPENSATION_STATUS_OBSERVED",
+                    event_payload={
+                        "action_id": authorization.action_id,
+                        "authorization_digest": authorization.digest,
+                        "status": status.to_payload(),
+                    },
+                    state=GroupOrderState.UNWINDING,
+                )
+        receipt = reply.get("close_receipt")
+        if status is None or not isinstance(receipt, Mapping):
+            return
+        if (
+            status.state.value != "FILLED"
+            or status.filled_quantity != authorization.close_quantity
+            or receipt.get("status") != "TERMINAL_CLOSE_RESOLVED"
+            or receipt.get("final_state") != "FILLED"
+            or receipt.get("position_effect") != "CLOSE"
+            or receipt.get("dispatch_latch_active") is not False
+            or receipt.get("has_other_active_freezes") is not False
+        ):
+            return
+        self._store.update(
+            snapshot,
+            event_type="GROUP_COMPENSATION_RESOLVED",
+            event_payload={
+                "action_id": authorization.action_id,
+                "authorization_digest": authorization.digest,
+                "authorization": authorization.to_payload(),
+                "close_receipt": dict(receipt),
+            },
+            state=GroupOrderState.UNWINDING,
+        )
+
+    def _release_compensation_reservation(
+        self,
+        snapshot: GroupOrderSnapshot,
+        reservation_port: _ReservationsRpcPort,
+    ) -> GroupOrderSnapshot | None:
+        request = snapshot.request
+        if len(snapshot.reservations) != 1:
+            return None
+        account_ref = request.account_refs[0]
+        try:
+            current = self._coordinator._query_reservation(snapshot, account_ref)
+            snapshot = self._store.get(request.portfolio_ref, request.group_id)
+            if type(snapshot) is not GroupOrderSnapshot:
+                return None
+            reservation = self._coordinator._reservation_from_receipt(
+                snapshot, account_ref, current
+            )
+            if not all(
+                (leg.claimed and leg.resolved and leg.state in {"SETTLED", "NO_FILL_TERMINAL"})
+                or (not leg.claimed and leg.state in {"ACTIVE", "RELEASED", "EXPIRED"})
+                for leg in reservation.legs
+            ):
+                return None
+            if any(not leg.claimed and leg.state == "ACTIVE" for leg in reservation.legs):
+                local = snapshot.reservations[0]
+                if local.phase is not GroupReservationPhase.RELEASE_REQUESTED:
+                    snapshot = self._coordinator._record_reservation_event(
+                        snapshot,
+                        account_ref,
+                        "RESERVATION_RELEASE_STARTED",
+                        phase=GroupReservationPhase.RELEASE_REQUESTED,
+                    )
+                released = reservation_port.release_group_unclaimed(
+                    request.group_id, "group_compensation_resolved"
+                )
+                snapshot = self._store.get(request.portfolio_ref, request.group_id)
+                if type(snapshot) is not GroupOrderSnapshot:
+                    return None
+                reservation = self._coordinator._reservation_from_receipt(
+                    snapshot, account_ref, released
+                )
+            if not all(
+                (leg.claimed and leg.resolved and leg.state in {"SETTLED", "NO_FILL_TERMINAL"})
+                or (not leg.claimed and leg.state in {"RELEASED", "EXPIRED"})
+                for leg in reservation.legs
+            ):
+                return None
+            reservation = replace(reservation, phase=GroupReservationPhase.RELEASED)
+            snapshot = self._coordinator._replace_reservation(
+                snapshot,
+                reservation,
+                event_type="RESERVATION_RELEASED",
+                payload={"account_ref": account_ref, "compensation_settled": True},
+                phase=GroupReservationPhase.RELEASED,
+            )
+            return snapshot
+        except Exception:
+            return None
 
     def handle(
         self, operation: str, *, context: ServiceCallContext, arguments: Mapping[str, Any]
@@ -831,9 +1287,15 @@ class GroupCoordinatorService:
             token = _CURRENT_COORDINATOR_CALL.set(call)
             try:
                 try:
-                    self._coordinator.accept(run_binding.request)
+                    accepted_snapshot = self._coordinator.accept(run_binding.request)
                 except ContractValidationError:
                     return _failure("GROUP_ACCEPTANCE_REJECTED")
+                run_binding = self._bind_verified_accepted_snapshot(
+                    run_binding, accepted_snapshot
+                )
+                if run_binding is None:
+                    return _failure("GROUP_ACCEPTED_BINDING_UNAVAILABLE")
+                _CURRENT_COORDINATOR_CALL.set(replace(call, binding=run_binding))
                 snapshot = self._coordinator.advance_group(
                     run_binding.request.portfolio_ref, run_binding.request.group_id
                 )
@@ -1150,6 +1612,12 @@ class GroupCoordinatorService:
                 first_leg_id=first_leg_id,
                 legs=tuple(plans),  # type: ignore[arg-type]
                 version=version,
+                # The strategy wire is intentionally unable to supply this
+                # cap. It is copied only from the trusted target configuration
+                # and then persisted with the accepted v3 group request.
+                compensation_budget_policy=(
+                    target.compensation_budget_policy if version == 3 else None
+                ),
             )
         except Exception:
             raise ServiceExecutionGroupError("GROUP_INTENT_INVALID") from None
@@ -3209,3 +3677,304 @@ __all__ = [
     "ServiceExecutionGroupError",
     "validate_service_options",
 ]
+
+
+def _owner_compensation_actions(history: Sequence[object]) -> tuple[Mapping[str, Any], ...]:
+    """Validate and project the monotonic action phases from the hash-checked group chain."""
+
+    actions: dict[str, dict[str, Any]] = {}
+    for index, event in enumerate(history):
+        event_type = getattr(event, "event_type", None)
+        payload = getattr(event, "payload", None)
+        if not isinstance(payload, Mapping):
+            raise ValueError("invalid group compensation event payload")
+        if event_type == "GROUP_COMPENSATION_PLAN_RECORDED":
+            if set(payload) != {"action_id", "authorization_digest", "authorization"}:
+                raise ValueError("invalid group compensation plan event")
+            authorization = GroupCompensationCloseAuthorization.from_payload(
+                payload["authorization"]
+            )
+            action_id = authorization.action_id
+            if (
+                action_id in actions
+                or payload["action_id"] != action_id
+                or payload["authorization_digest"] != authorization.digest
+            ):
+                raise ValueError("conflicting group compensation plan event")
+            actions[action_id] = {
+                "plan_index": index,
+                "authorization": authorization,
+                "phase": GroupCompensationActionPhase.PLAN_RECORDED,
+                "statuses": [],
+                "receipt": None,
+            }
+        elif event_type == "GROUP_COMPENSATION_SUBMIT_STARTED":
+            if set(payload) != {
+                "action_id",
+                "authorization_digest",
+                "intent_id",
+                "client_order_id",
+            }:
+                raise ValueError("invalid group compensation start event")
+            action = actions.get(payload["action_id"])
+            if (
+                action is None
+                or action["phase"] is not GroupCompensationActionPhase.PLAN_RECORDED
+                or payload["authorization_digest"] != action["authorization"].digest
+                or payload["intent_id"] != action["authorization"].intent_id
+                or payload["client_order_id"] != action["authorization"].client_order_id
+            ):
+                raise ValueError("unbound group compensation start event")
+            action["phase"] = GroupCompensationActionPhase.SUBMIT_STARTED
+        elif event_type == "GROUP_COMPENSATION_STATUS_OBSERVED":
+            if set(payload) != {"action_id", "authorization_digest", "status"}:
+                raise ValueError("invalid group compensation status event")
+            action = actions.get(payload["action_id"])
+            if (
+                action is None
+                or action["phase"]
+                not in {
+                    GroupCompensationActionPhase.SUBMIT_STARTED,
+                    GroupCompensationActionPhase.STATUS_OBSERVED,
+                }
+                or payload["authorization_digest"] != action["authorization"].digest
+                or not isinstance(payload["status"], Mapping)
+            ):
+                raise ValueError("unbound group compensation status event")
+            status = GroupChildOrderStatus.from_payload(payload["status"])
+            authorization = action["authorization"]
+            prior = action["statuses"]
+            previous = (
+                None if not prior else GroupChildOrderStatus.from_payload(prior[-1])
+            )
+            if (
+                status.intent_id != authorization.intent_id
+                or Fraction(status.filled_quantity) > Fraction(authorization.close_quantity)
+                or (
+                    previous is not None
+                    and (
+                        previous.state in _GROUP_COMPENSATION_TERMINAL
+                        or Fraction(status.filled_quantity)
+                        < Fraction(previous.filled_quantity)
+                    )
+                )
+            ):
+                raise ValueError("regressing group compensation status")
+            prior.append(dict(payload["status"]))
+            action["phase"] = GroupCompensationActionPhase.STATUS_OBSERVED
+        elif event_type == "GROUP_COMPENSATION_RESOLVED":
+            if set(payload) != {
+                "action_id",
+                "authorization_digest",
+                "authorization",
+                "close_receipt",
+            }:
+                raise ValueError("invalid group compensation resolution event")
+            action = actions.get(payload["action_id"])
+            if (
+                action is None
+                or action["phase"]
+                not in {
+                    GroupCompensationActionPhase.SUBMIT_STARTED,
+                    GroupCompensationActionPhase.STATUS_OBSERVED,
+                }
+                or payload["authorization_digest"] != action["authorization"].digest
+                or payload["authorization"] != action["authorization"].to_payload()
+                or not isinstance(payload["close_receipt"], Mapping)
+                or not action["statuses"]
+            ):
+                raise ValueError("unbound group compensation resolution event")
+            authorization = action["authorization"]
+            status = GroupChildOrderStatus.from_payload(action["statuses"][-1])
+            receipt = dict(payload["close_receipt"])
+            receipt_body = dict(receipt)
+            receipt_digest = receipt_body.pop("receipt_sha256", None)
+            if (
+                status.state is not ExecutionState.FILLED
+                or status.filled_quantity != authorization.close_quantity
+                or type(receipt_digest) is not str
+                or _SHA256.fullmatch(receipt_digest) is None
+                or payload_sha256(receipt_body) != receipt_digest
+                or receipt.get("status") != "TERMINAL_CLOSE_RESOLVED"
+                or receipt.get("final_state") != ExecutionState.FILLED.value
+                or receipt.get("position_effect") != PositionEffect.CLOSE.value
+                or receipt.get("claim", {}).get("intent_id") != authorization.risk_intent_id
+                or receipt.get("requested_quantity") != format(authorization.close_quantity, "f")
+                or receipt.get("filled_quantity") != format(authorization.close_quantity, "f")
+                or receipt.get("dispatch_latch_active") is not False
+                or receipt.get("has_other_active_freezes") is not False
+            ):
+                raise ValueError("unverified group compensation close receipt")
+            action["phase"] = GroupCompensationActionPhase.RESOLVED
+            action["receipt"] = receipt
+        elif event_type == "GROUP_COMPENSATION_CLOSED":
+            # Closure is a separate terminal event and cannot be followed by
+            # another action in a valid snapshot.
+            if set(actions) == set():
+                raise ValueError("compensation closure has no resolved action")
+
+    pending = [
+        item
+        for item in actions.values()
+        if item["phase"] is not GroupCompensationActionPhase.RESOLVED
+    ]
+    if len(pending) > 1 or len(actions) > 9:
+        raise ValueError("unbounded group compensation action history")
+    return tuple(sorted(actions.values(), key=lambda item: item["plan_index"]))
+
+def _group_source_is_compensation_ready(snapshot: GroupOrderSnapshot) -> bool:
+    """Require terminal, proof-resolved source legs before any compensating write."""
+
+    request = snapshot.request
+    if request.version != 3 or len(request.legs) != 3:
+        return False
+    progress_by_id = {item.leg_id: item for item in snapshot.legs}
+    now_ns = time.time_ns()
+    for plan in request.legs:
+        progress = progress_by_id.get(plan.leg_id)
+        if progress is None:
+            return False
+        intent = progress.submitted_intent
+        if intent is None:
+            if (
+                progress.phase.value != "READY"
+                or progress.child_status is not None
+                or progress.claim_receipt is not None
+                or progress.resolution_receipt is not None
+                or now_ns <= request.deadline_ns
+            ):
+                return False
+            continue
+        status = progress.child_status
+        claim = progress.claim_receipt
+        resolution = progress.resolution_receipt
+        if (
+            status is None
+            or claim is None
+            or resolution is None
+            or progress.phase.value != "OBSERVED"
+            or intent.intent_id != plan.maximum_intent.intent_id
+            or intent.position_effect is not PositionEffect.OPEN
+            or intent.quantity <= 0
+            or intent.quantity > plan.maximum_intent.quantity
+            or status.intent_id != intent.intent_id
+            or status.state not in _GROUP_COMPENSATION_TERMINAL
+            or status.filled_quantity < 0
+            or status.filled_quantity > intent.quantity
+            or claim.permit.group_id != request.group_id
+            or claim.permit.leg_id != plan.leg_id
+            or claim.permit.order_intent_hash != intent.fingerprint
+            or resolution.claim != claim
+            or resolution.final_state is not status.state
+            or resolution.filled_quantity != status.filled_quantity
+            or resolution.dispatch_latch_active
+            or (
+                status.filled_quantity > 0
+                and (
+                    resolution.resolution_kind != "TERMINAL_EXPOSURE_RESOLVED"
+                    or resolution.trade_count <= 0
+                )
+            )
+            or (
+                status.filled_quantity == 0
+                and resolution.resolution_kind != "TERMINAL_NO_FILL_RESOLVED"
+            )
+        ):
+            return False
+    return True
+
+def _owner_signed_filled_exposure(
+    snapshot: GroupOrderSnapshot,
+    actions: Sequence[Mapping[str, Any]],
+) -> dict[str, Fraction] | None:
+    """Compute source fills minus only fully verified, resolved CLOSE fills."""
+
+    request = snapshot.request
+    progress_by_id = {item.leg_id: item for item in snapshot.legs}
+    exposure: dict[str, Fraction] = {}
+    for plan in request.legs:
+        progress = progress_by_id[plan.leg_id]
+        status = progress.child_status
+        intent = progress.submitted_intent
+        if intent is None or status is None:
+            exposure[plan.leg_id] = Fraction(0)
+            continue
+        if status.state not in _GROUP_COMPENSATION_TERMINAL:
+            return None
+        sign = 1 if intent.side is Side.BUY else -1
+        exposure[plan.leg_id] = (
+            sign * Fraction(status.filled_quantity) * Fraction(plan.base_units_per_order_unit)
+        )
+
+    for action in actions:
+        if action.get("phase") is not GroupCompensationActionPhase.RESOLVED:
+            return None
+        authorization = action.get("authorization")
+        receipt = action.get("receipt")
+        if (
+            type(authorization) is not GroupCompensationCloseAuthorization
+            or not isinstance(receipt, Mapping)
+            or authorization.source_leg_id not in exposure
+        ):
+            return None
+        selected = authorization.source_leg_id
+        plan = next(plan for plan in request.legs if plan.leg_id == selected)
+        vector = tuple(
+            (plan_item.leg_id, _fraction_decimal(exposure[plan_item.leg_id]))
+            for plan_item in request.legs
+        )
+        if (
+            tuple(authorization.source_filled_position_exposure_vector_base_units) != vector
+            or Fraction(authorization.source_uncompensated_position_base_units)
+            != exposure[selected]
+            or exposure[selected] == 0
+            or authorization.source_base_units_per_order_unit != plan.base_units_per_order_unit
+            or Fraction(authorization.close_quantity)
+            * Fraction(plan.base_units_per_order_unit)
+            > abs(exposure[selected])
+        ):
+            return None
+        close_sign = 1 if authorization.closing_side is Side.BUY else -1
+        exposure[selected] += (
+            close_sign
+            * Fraction(authorization.close_quantity)
+            * Fraction(plan.base_units_per_order_unit)
+        )
+    return exposure
+
+def _group_has_filled_source(snapshot: GroupOrderSnapshot) -> bool:
+    return any(
+        progress.submitted_intent is not None
+        and progress.child_status is not None
+        and progress.child_status.filled_quantity > 0
+        for progress in snapshot.legs
+    )
+
+def _fraction_decimal(value: Fraction) -> Decimal:
+    """Convert a finite exact rational into Decimal without context rounding."""
+
+    if type(value) is not Fraction:
+        raise ValueError("fraction required")
+    denominator = value.denominator
+    twos = fives = 0
+    while denominator % 2 == 0:
+        denominator //= 2
+        twos += 1
+    while denominator % 5 == 0:
+        denominator //= 5
+        fives += 1
+    scale = max(twos, fives)
+    if denominator != 1 or scale > 512 or len(str(abs(value.numerator))) > 1024:
+        raise ValueError("fraction is not a bounded finite decimal")
+    unscaled = value.numerator * (2 ** (scale - twos)) * (5 ** (scale - fives))
+    sign = "-" if unscaled < 0 else ""
+    digits = str(abs(unscaled))
+    if scale:
+        digits = digits.rjust(scale + 1, "0")
+        text = sign + digits[:-scale] + "." + digits[-scale:]
+    else:
+        text = sign + digits
+    result = Decimal(text)
+    if Fraction(result) != value:
+        raise ValueError("fraction conversion was not exact")
+    return result

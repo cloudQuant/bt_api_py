@@ -779,6 +779,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             optional_resource_keys=frozenset(
                 {
+                    "group_compensation_authorization_source",
                     "position_valuation_resolver",
                     "account_policy_admission_resolver",
                     "account_policy_scope",
@@ -786,14 +787,29 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             public_ports=MappingProxyType(
                 {
-                    "service.order_entry": frozenset({"orders.submit"}),
-                    "service.order_query": frozenset({"orders.query"}),
+                    "service.order_entry": frozenset(
+                        {
+                            "orders.submit",
+                            "orders.submit_group_compensation_close",
+                        }
+                    ),
+                    "service.order_query": frozenset(
+                        {
+                            "orders.query",
+                            "orders.prepare_group_compensation_close",
+                            "orders.query_group_compensation_close",
+                        }
+                    ),
                 }
             ),
             internal_ports=frozenset({"service.provider_session"}),
             validator_module_name="bt_api_py.service_risk_position_snapshot",
             write_operations_by_port=MappingProxyType(
-                {"service.order_entry": frozenset({"orders.submit"})}
+                {
+                    "service.order_entry": frozenset(
+                        {"orders.submit", "orders.submit_group_compensation_close"}
+                    )
+                }
             ),
         ),
     }
@@ -803,6 +819,15 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
 _ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
     {"order_gate", "cancel_gate", "basic_admission_gate", "allow_unprotected", "cancel_quota_admission"}
 )
+
+_GROUP_COMPENSATION_OPERATIONS: Final[frozenset[str]] = frozenset(
+    {
+        "orders.prepare_group_compensation_close",
+        "orders.submit_group_compensation_close",
+        "orders.query_group_compensation_close",
+    }
+)
+_GROUP_COMPENSATION_SUBMIT: Final[str] = "orders.submit_group_compensation_close"
 
 _EXECUTION_OWNER_LOCK_GUARD = threading.Lock()
 _EXECUTION_OWNER_LOCK_PATHS: set[str] = set()
@@ -1695,6 +1720,76 @@ def build_component(
             expected_keys = expected_keys | {"group_admission"}
         if set(resources.values) != set(expected_keys):
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
+        group_compensation_source: object | None = None
+        group_compensation_policy: TrustedGroupWritePolicy | None = None
+        if spec.component == "risk" and spec.options.get("role") == "account_owner":
+            candidate_source = resources.values.get(
+                "group_compensation_authorization_source"
+            )
+            if (
+                "group_compensation_authorization_source" in resources.values
+                and candidate_source is None
+            ):
+                raise ServiceComponentError("GROUP_COMPENSATION_SOURCE_UNAVAILABLE")
+            compensation_policies = tuple(
+                policy
+                for policy in trusted_group_write_policies
+                if policy.operation == _GROUP_COMPENSATION_SUBMIT
+                and policy.instance_id == spec.instance_id
+            )
+            if candidate_source is not None:
+                if (
+                    prepared.operations_by_port.get("service.order_entry") is None
+                    or prepared.operations_by_port["service.order_entry"].intersection(
+                        {"orders.submit_group_compensation_close"}
+                    )
+                    != {"orders.submit_group_compensation_close"}
+                    or prepared.operations_by_port.get("service.order_query") is None
+                    or not {
+                        "orders.prepare_group_compensation_close",
+                        "orders.query_group_compensation_close",
+                    }.issubset(
+                        prepared.operations_by_port["service.order_query"]
+                    )
+                ):
+                    raise ServiceComponentError("GROUP_COMPENSATION_ROUTE_UNAVAILABLE")
+                try:
+                    source_module = importlib.import_module(
+                        "bt_api_py.service_execution_group_compensation_source"
+                    )
+                    source_type = getattr(
+                        source_module, "GroupCompensationAuthorizationSourceV1"
+                    )
+                    if (
+                        not isinstance(source_type, type)
+                        or type(candidate_source) is not source_type
+                        or candidate_source.ready is not True
+                    ):
+                        raise TypeError
+                except Exception:
+                    raise ServiceComponentError(
+                        "GROUP_COMPENSATION_SOURCE_UNAVAILABLE"
+                    ) from None
+                if (
+                    type(service_identity) is not WireIdentity
+                    or service_identity.role is not WireRole.SERVICE
+                ):
+                    raise ServiceComponentError("GROUP_COMPENSATION_SERVICE_IDENTITY_REQUIRED")
+                matches = compensation_policies
+                if (
+                    len(matches) != 1
+                    or matches[0].instance_id != spec.instance_id
+                    or matches[0].identity.role is not WireRole.SERVICE
+                    or matches[0].identity.principal_ref
+                    != candidate_source.coordinator_principal_ref
+                    or matches[0].principal_ref
+                    != candidate_source.coordinator_principal_ref
+                ):
+                    raise ServiceComponentError("GROUP_COMPENSATION_WRITE_POLICY_REQUIRED")
+                group_compensation_source = candidate_source
+                group_compensation_policy = matches[0]
+            elif compensation_policies:
+                raise ServiceComponentError("GROUP_COMPENSATION_SOURCE_UNAVAILABLE")
         account_risk_policy_bindings, account_risk_policy_required_ports = (
             _account_risk_policy_metadata(
                 resources,
@@ -1799,6 +1894,8 @@ def build_component(
                     values["journal"],
                     values["gate"],
                     values["provider_contracts"],
+                    group_compensation_source=group_compensation_source,
+                    group_compensation_policy=group_compensation_policy,
                 )
                 if (
                     "service.order_entry" in spec.bind_ports
@@ -2243,6 +2340,17 @@ def build_component(
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
+            if (
+                spec.component == "risk"
+                and spec.options.get("role") == "account_owner"
+                and group_compensation_source is None
+            ):
+                # Risk compensation routes are an optional, separately
+                # composed owner capability. A normal account owner never
+                # advertises them without their verified store-backed source.
+                operations = operations - (
+                    _GROUP_COMPENSATION_OPERATIONS & operations
+                )
             if spec.component == "risk" and spec.options.get("role") == "group_reservations":
                 configured_operations = getattr(adapter, "supported_operations", None)
                 if type(
@@ -2319,6 +2427,12 @@ def build_component(
             write_operations = prepared.write_operations_by_port[port]
             if (
                 spec.component == "execution"
+                and spec.options.get("role") == "account_owner"
+                and port == "service.order_entry"
+            ):
+                write_operations = write_operations.intersection(operations)
+            if (
+                spec.component == "risk"
                 and spec.options.get("role") == "account_owner"
                 and port == "service.order_entry"
             ):
@@ -2602,6 +2716,16 @@ def build_component(
                         arguments=arguments,
                     )
                 if (
+                    spec.component == "risk"
+                    and spec.options.get("role") == "account_owner"
+                    and _operation in _GROUP_COMPENSATION_OPERATIONS
+                ):
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        context=context,
+                        arguments=arguments,
+                    )
+                if (
                     spec.component in {"execution", "risk"}
                     and spec.options.get("role") == "account_owner"
                 ):
@@ -2693,7 +2817,11 @@ def build_component(
                 "group_coordinator",
                 "group_account_owner",
             }
-        ) or (spec.component == "risk" and spec.options.get("role") == "group_reservations"):
+        ) or (spec.component == "risk" and spec.options.get("role") == "group_reservations") or (
+            spec.component == "risk"
+            and spec.options.get("role") == "account_owner"
+            and group_compensation_source is not None
+        ):
             candidate_maintain_contexts = getattr(adapter, "maintain_registrations", None)
             if not callable(candidate_maintain_contexts):
                 raise ServiceComponentError("GROUP_REGISTRATION_LIFECYCLE_UNAVAILABLE")

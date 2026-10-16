@@ -68,6 +68,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.cancel",
                 "orders.submit_group_leg",
                 "orders.resolve_group_leg",
+            "orders.submit_group_compensation_close",
                 "orders.cancel_group_leg",
             }
         ),
@@ -80,6 +81,8 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.ack",
                 "orders.query_group_leg",
                 "orders.query_group_cancel",
+            "orders.prepare_group_compensation_close",
+            "orders.query_group_compensation_close",
                 "execution.account_books.query",
             }
         ),
@@ -135,6 +138,9 @@ _GROUP_ORDER_ENTRY_OPERATIONS = frozenset(
 _GROUP_ORDER_CANCEL_ENTRY_OPERATIONS = frozenset({"orders.cancel_group_leg"})
 _GROUP_ORDER_ENTRY_ALL_OPERATIONS = (
     _GROUP_ORDER_ENTRY_OPERATIONS | _GROUP_ORDER_CANCEL_ENTRY_OPERATIONS
+)
+_GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS = frozenset(
+    {"orders.submit_group_compensation_close"}
 )
 _DEFAULT_GROUP_ORDER_ENTRY_OPERATIONS = frozenset({"groups.submit", "groups.query"})
 _APPROVED_ORDER_ENTRY_OPERATIONS = frozenset({"orders.submit_approved_target"})
@@ -1258,7 +1264,9 @@ class ServiceClientRuntime:
             # request them; adding a remote capability cannot expand ordinary
             # application or service registrations.
             operations = operations.difference(
-                _GROUP_ORDER_ENTRY_ALL_OPERATIONS | _APPROVED_ORDER_ENTRY_OPERATIONS
+                _GROUP_ORDER_ENTRY_ALL_OPERATIONS
+                | _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
+                | _APPROVED_ORDER_ENTRY_OPERATIONS
             )
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients
@@ -1286,7 +1294,17 @@ class ServiceClientRuntime:
                 == _APPROVED_ORDER_ENTRY_OPERATIONS
                 and operations == _APPROVED_ORDER_ENTRY_OPERATIONS
             )
-            if not (explicit_group_owner or explicit_approved_target_only):
+            explicit_group_compensation_only = (
+                requested is not None
+                and requested.intersection(PORT_OPERATIONS[port])
+                == _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
+                and operations == _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
+            )
+            if not (
+                explicit_group_owner
+                or explicit_approved_target_only
+                or explicit_group_compensation_only
+            ):
                 raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         digest = hashlib.sha256(
             json.dumps(dict(binding), sort_keys=True, separators=(",", ":")).encode()

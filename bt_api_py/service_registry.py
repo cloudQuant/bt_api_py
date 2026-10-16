@@ -367,7 +367,11 @@ class TrustedGroupWritePolicy:
             raise TypeError("group write policy scope must be WireScope")
         if (
             self.port != "service.order_entry"
-            or self.operation not in {"orders.submit_group_leg", "orders.cancel_group_leg"}
+            or self.operation not in {
+                "orders.submit_group_leg",
+                "orders.cancel_group_leg",
+                "orders.submit_group_compensation_close",
+            }
             or not _text(self.run_id)
             or self.scope.execution_domain_ref is None
             or self.scope.account_ref is None
@@ -1678,9 +1682,13 @@ class ServiceRegistry:
             operations = frozenset(json.loads(registration["operations_json"]))
             write_operations = frozenset(json.loads(registration["write_operations_json"]))
             principal = registration["principal"]
+            group_order_writes = write_operations.intersection(
+                {"orders.submit_group_leg", "orders.submit_group_compensation_close"}
+            )
             operation = (
-                "orders.submit_group_leg"
+                next(iter(group_order_writes))
                 if registration["port"] == "service.order_entry"
+                and len(group_order_writes) == 1
                 else "reservations.reserve"
                 if registration["port"] == "service.group_reservations"
                 else None

@@ -43,6 +43,9 @@ _ACCOUNT_GROUP_PORTS = {
     "orders.query_group_leg": ("service.order_query", False),
     "orders.query_group_cancel": ("service.order_query", False),
     "orders.resolve_group_leg": ("service.order_entry", True),
+    "orders.prepare_group_compensation_close": ("service.order_query", False),
+    "orders.query_group_compensation_close": ("service.order_query", False),
+    "orders.submit_group_compensation_close": ("service.order_entry", True),
 }
 _REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -615,6 +618,7 @@ class GroupOriginRunBinding:
     registration_id: str
     service_epoch: str
     request_fingerprint: str
+    accepted_request_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.request) is not GroupOrderIntent:
@@ -643,6 +647,17 @@ class GroupOriginRunBinding:
             type(self.request_fingerprint) is not str
             or len(self.request_fingerprint) != 64
             or any(char not in "0123456789abcdef" for char in self.request_fingerprint)
+            or (
+                self.accepted_request_fingerprint is not None
+                and (
+                    type(self.accepted_request_fingerprint) is not str
+                    or len(self.accepted_request_fingerprint) != 64
+                    or any(
+                        char not in "0123456789abcdef"
+                        for char in self.accepted_request_fingerprint
+                    )
+                )
+            )
             or self.request.fingerprint != self.request_fingerprint
             or self.request.coordinator_principal_ref != self.coordinator_principal_ref
             or self.strategy_scope.run_id != self.origin_run_id
@@ -894,6 +909,64 @@ class GroupOriginRunBindingStore:
         return _Txn()
 
 
+
+    def bind_accepted_request_fingerprint(
+        self,
+        binding: GroupOriginRunBinding,
+        accepted_request_fingerprint: str,
+    ) -> GroupOriginRunBinding:
+        """Bind the trusted accepted snapshot fingerprint exactly once.
+
+        ``request_fingerprint`` remains the full hash of the original client
+        request.  A trusted group coordinator may add server-owned quote facts
+        before persistence; those facts have a separate fingerprint and can
+        only be attached after the caller verifies the durable accept event.
+        """
+
+        if (
+            type(binding) is not GroupOriginRunBinding
+            or type(accepted_request_fingerprint) is not str
+            or len(accepted_request_fingerprint) != 64
+            or any(char not in "0123456789abcdef" for char in accepted_request_fingerprint)
+        ):
+            raise AcceptedGroupBindingError("invalid accepted group fingerprint")
+        key = (binding.request.portfolio_ref, binding.request.group_id)
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT request_fingerprint, binding_json FROM coordinator_group_run_bindings "
+                "WHERE portfolio_ref=? AND group_id=?",
+                key,
+            ).fetchone()
+            if row is None:
+                raise AcceptedGroupBindingError("coordinator run binding is missing")
+            stored = _coordinator_binding_from_json(row["binding_json"])
+            if (
+                stored.request_fingerprint != row["request_fingerprint"]
+                or stored.request_fingerprint != binding.request_fingerprint
+                or stored.request != binding.request
+                or not _same_coordinator_origin(stored, binding)
+            ):
+                raise AcceptedGroupConflictError("accepted group origin binding changed")
+            if stored.accepted_request_fingerprint is not None:
+                if stored.accepted_request_fingerprint != accepted_request_fingerprint:
+                    raise AcceptedGroupConflictError("accepted group snapshot fingerprint changed")
+                return stored
+            updated = replace(
+                stored,
+                accepted_request_fingerprint=accepted_request_fingerprint,
+            )
+            self._connection.execute(
+                "UPDATE coordinator_group_run_bindings SET binding_json=?, updated_at_ns=? "
+                "WHERE portfolio_ref=? AND group_id=? AND request_fingerprint=?",
+                (
+                    _canonical(_coordinator_binding_payload(updated)),
+                    time.time_ns(),
+                    *key,
+                    stored.request_fingerprint,
+                ),
+            )
+            return updated
+
 def _validate_registration(
     registration: ActiveRegistrationContext, *, operation: str
 ) -> ActiveRegistrationContext:
@@ -1005,8 +1078,72 @@ def _same_coordinator_origin(left: GroupOriginRunBinding, right: GroupOriginRunB
     )
 
 
+def verify_accepted_group_projection(
+    binding: GroupOriginRunBinding,
+    snapshot: GroupOrderSnapshot,
+    history: tuple[GroupOrderEvent, ...],
+) -> str:
+    """Verify the durable accept projection and return its trusted fingerprint.
+
+    ``history`` must come from ``SqliteOrderGroupStore.events`` so its event
+    sequence ordering and per-record hashes have already been checked.  That first,
+    unique accept event is durable evidence for a server-enriched snapshot if
+    the coordinator sidecar crashed before storing ``accepted_request_fingerprint``.
+    The original request remains separately bound by its full and unquoted
+    fingerprints; callers cannot supply a replacement quote through this API.
+    """
+
+    if (
+        type(binding) is not GroupOriginRunBinding
+        or type(snapshot) is not GroupOrderSnapshot
+        or type(history) is not tuple
+        or not history
+        or len(history) > 100_000
+        or len(history) != snapshot.revision + 1
+        or any(type(event) is not GroupOrderEvent for event in history)
+    ):
+        raise AcceptedGroupBindingError("accepted group projection is unavailable")
+    request = binding.request
+    accepted_request = snapshot.request
+    accepted_events = tuple(event for event in history if event.event_type == "GROUP_ACCEPTED")
+    expected_leg_ids = [leg.leg_id for leg in accepted_request.legs]
+    first = history[0]
+    payload = first.payload
+    if (
+        binding.request_fingerprint != request.fingerprint
+        or binding.request.group_id != request.group_id
+        or request.group_id != accepted_request.group_id
+        or request.portfolio_ref != accepted_request.portfolio_ref
+        or request.strategy_id != accepted_request.strategy_id
+        or request.coordinator_principal_ref != accepted_request.coordinator_principal_ref
+        or request.deadline_ns != accepted_request.deadline_ns
+        or request.account_refs != accepted_request.account_refs
+        or request.unquoted_fingerprint != accepted_request.unquoted_fingerprint
+        or any(type(event.sequence) is not int or event.sequence <= 0 for event in history)
+        or any(
+            previous.sequence >= current.sequence
+            for previous, current in zip(history, history[1:])
+        )
+        or first.group_id != accepted_request.group_id
+        or first.event_type != "GROUP_ACCEPTED"
+        or not isinstance(payload, Mapping)
+        or len(accepted_events) != 1
+        or accepted_events[0] != first
+        or any(event.group_id != accepted_request.group_id for event in history)
+        or payload.get("request_fingerprint") != accepted_request.fingerprint
+        or payload.get("deadline_ns") != accepted_request.deadline_ns
+        or payload.get("account_refs") != list(accepted_request.account_refs)
+        or payload.get("leg_ids") != expected_leg_ids
+        or (
+            binding.accepted_request_fingerprint is not None
+            and binding.accepted_request_fingerprint != accepted_request.fingerprint
+        )
+    ):
+        raise AcceptedGroupBindingError("accepted group projection does not match its durable event")
+    return accepted_request.fingerprint
+
 def _coordinator_binding_payload(binding: GroupOriginRunBinding) -> dict[str, Any]:
-    return {
+    payload = {
         "schema": 1,
         "request": binding.request.to_payload(),
         "origin_run_id": binding.origin_run_id,
@@ -1022,6 +1159,9 @@ def _coordinator_binding_payload(binding: GroupOriginRunBinding) -> dict[str, An
         "service_epoch": binding.service_epoch,
         "request_fingerprint": binding.request_fingerprint,
     }
+    if binding.accepted_request_fingerprint is not None:
+        payload["accepted_request_fingerprint"] = binding.accepted_request_fingerprint
+    return payload
 
 
 def _coordinator_binding_from_json(payload: str) -> GroupOriginRunBinding:
@@ -1043,7 +1183,12 @@ def _coordinator_binding_from_json(payload: str) -> GroupOriginRunBinding:
             "service_epoch",
             "request_fingerprint",
         }
-        if type(value) is not dict or set(value) != expected or value["schema"] != 1:
+        accepted_expected = expected | {"accepted_request_fingerprint"}
+        if (
+            type(value) is not dict
+            or frozenset(value) not in {frozenset(expected), frozenset(accepted_expected)}
+            or value["schema"] != 1
+        ):
             raise ValueError("schema")
         binding = GroupOriginRunBinding(
             request=GroupOrderIntent.from_payload(value["request"]),
@@ -1059,6 +1204,7 @@ def _coordinator_binding_from_json(payload: str) -> GroupOriginRunBinding:
             registration_id=value["registration_id"],
             service_epoch=value["service_epoch"],
             request_fingerprint=value["request_fingerprint"],
+            accepted_request_fingerprint=value.get("accepted_request_fingerprint"),
         )
         if _canonical(_coordinator_binding_payload(binding)) != payload:
             raise ValueError("canonical")
@@ -1340,6 +1486,24 @@ def _validate_reservation_transition(
         ):
             raise AcceptedGroupBindingError("Risk leg state regressed or identity changed")
 
+
+def validate_group_reservation_transition(
+    previous: GroupAccountReservationSnapshot,
+    current: GroupAccountReservationSnapshot,
+) -> None:
+    """Validate a current reservation against its accepted group snapshot.
+
+    This typed public entry point deliberately delegates to the account
+    binding's single transition algorithm so other durable group projections
+    can apply the same identity and monotonicity rules without copying them.
+    """
+
+    if (
+        type(previous) is not GroupAccountReservationSnapshot
+        or type(current) is not GroupAccountReservationSnapshot
+    ):
+        raise AcceptedGroupBindingError("invalid group reservation transition")
+    _validate_reservation_transition(previous, current)
 
 def _validate_reservation_identity(
     previous: GroupAccountReservationSnapshot, current: GroupAccountReservationSnapshot
