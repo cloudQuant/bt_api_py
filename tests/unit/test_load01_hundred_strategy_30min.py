@@ -9,9 +9,11 @@ import os
 import random
 import sqlite3
 import sys
+import threading
 import time
 import zipfile
-from collections import Counter
+from collections import Counter, deque
+from collections.abc import Mapping
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -469,6 +471,389 @@ def _runtime_lease_snapshot(runtime: Any) -> dict[str, Any]:
 def _safe_diagnostic_code(error: BaseException) -> str:
     return _safe_diagnostic_code_value(getattr(error, "code", None))
 
+
+_LOAD01_RPC_RING_SIZE = 256
+_LOAD01_RPC_TRACE: _Load01RpcTrace | None = None
+
+
+class _Load01RpcTrace:
+    """Bounded per-child trace for synthetic orders.cancel RPCs."""
+
+    def __init__(self, role: str) -> None:
+        self.role, self.pid = role, os.getpid()
+        self.events: deque[dict[str, Any]] = deque(maxlen=_LOAD01_RPC_RING_SIZE)
+        self.sequence = self.total = self.overwritten = 0
+        self.emit_ns_total = self.emit_ns_max = 0
+        self.installation_error: str | None = None
+        self.maintenance: dict[str, dict[str, int]] = {}
+        self.server_sockets: dict[int, str] = {}
+        self.dequeued_ns: dict[int, int] = {}
+        self.local = threading.local()
+
+    @staticmethod
+    def now() -> int | None:
+        try:
+            return time.perf_counter_ns()
+        except BaseException:
+            return None
+
+    def add(
+        self, event: str, key: tuple[str, str], *, at: int | None = None,
+        start: int | None = None, end: int | None = None, service: str | None = None,
+        outcome: str | None = None, error: str | None = None,
+    ) -> None:
+        try:
+            began = self.now()
+            stamp = at if type(at) is int else end
+            if type(stamp) is not int:
+                return
+            self.overwritten += len(self.events) == _LOAD01_RPC_RING_SIZE
+            self.sequence += 1
+            self.total += 1
+            row = {
+                "sequence": self.sequence, "event": event, "at_perf_counter_ns": stamp,
+                "message_id": key[0], "cancel_id": key[1],
+                "process_role": self.role, "pid": self.pid,
+            }
+            if service is not None:
+                row["service_id"] = service
+            if outcome is not None:
+                row["outcome"] = outcome
+            if type(start) is int and type(end) is int:
+                row["duration_ns"] = max(0, end - start)
+            if error is not None:
+                row["error_code"] = error
+            self.events.append(row)
+            cost = self.now()
+            if type(began) is int and type(cost) is int:
+                duration = max(0, cost - began)
+                self.emit_ns_total += duration
+                self.emit_ns_max = max(self.emit_ns_max, duration)
+        except BaseException:
+            pass
+
+    def maintain(self, name: str, start: int | None, end: int | None) -> None:
+        if type(start) is not int or type(end) is not int:
+            return
+        try:
+            row = self.maintenance.setdefault(name, {"count": 0, "total_ns": 0, "max_ns": 0})
+            duration = max(0, end - start)
+            row["count"] += 1
+            row["total_ns"] += duration
+            row["max_ns"] = max(row["max_ns"], duration)
+        except BaseException:
+            pass
+
+    def snapshot(self, limit: int = 32) -> dict[str, Any]:
+        if type(limit) is not int or not 1 <= limit <= _LOAD01_RPC_RING_SIZE:
+            raise ValueError("LOAD01 RPC trace snapshot limit is invalid")
+        info = time.get_clock_info("perf_counter")
+        return {
+            "process_role": self.role, "pid": self.pid, "clock": "time.perf_counter_ns",
+            "python_version": ".".join(str(part) for part in sys.version_info[:3]),
+            "clock_facts": {
+                "implementation": info.implementation, "monotonic": info.monotonic,
+                "adjustable": info.adjustable, "resolution_seconds": info.resolution,
+                "cross_process_domain": "same Windows host; Python 3.10+",
+            },
+            "ring_capacity": _LOAD01_RPC_RING_SIZE, "event_count_total": self.total,
+            "event_count_overwritten": self.overwritten,
+            "event_recording_overhead_measured_ns_total": self.emit_ns_total,
+            "event_recording_overhead_measured_ns_max": self.emit_ns_max,
+            "installation_error": self.installation_error,
+            "overhead_note": "Measured record construction/append; clock reads, wrapper dispatch, "
+            "maintenance timing, and output serialization add further cost.",
+            "maintenance_durations": {key: dict(value) for key, value in self.maintenance.items()},
+            "events": list(self.events)[-limit:],
+        }
+
+
+def _load01_trace_snapshot_or_none(
+    trace: _Load01RpcTrace, max_events: int = 32
+) -> dict[str, Any] | None:
+    try:
+        return trace.snapshot(max_events)
+    except BaseException:
+        return None
+
+
+def _send_load01_rpc_diagnostic(
+    control: Any, role: str, pid: int, snapshot: Any, stage: str
+) -> None:
+    if type(snapshot) is not dict:
+        return
+    with suppress(BaseException):
+        control.send(("rpc-diagnostic", role, pid, snapshot, stage))
+
+
+def _load01_cancel_key(request: Any) -> tuple[str, str] | None:
+    try:
+        header = request.header
+        if header.operation != "orders.cancel":
+            return None
+        payload = request.payload
+        args = payload.get("arguments") if isinstance(payload, Mapping) else None
+        if not isinstance(args, Mapping):
+            return None
+        message_id = _bounded_diagnostic_text(header.message_id, maximum=128)
+        cancel_id = _bounded_diagnostic_text(args.get("cancel_id"), maximum=128)
+        return (message_id, cancel_id) if message_id and cancel_id else None
+    except BaseException:
+        return None
+
+
+def _install_load01_rpc_trace_impl(process_role: str) -> _Load01RpcTrace:
+    """Install pass-through hooks in a synthetic child; all non-cancel calls fast-path."""
+    global _LOAD01_RPC_TRACE
+    if _LOAD01_RPC_TRACE is not None:
+        return _LOAD01_RPC_TRACE
+    import bt_api_transport_zmq.service_v2 as service_v2
+
+    trace = _Load01RpcTrace(process_role)
+    state = trace.local
+    socket_type = zmq.Socket
+    send, send_multipart = socket_type.send, socket_type.send_multipart
+    receive = service_v2._BoundedMultipartReceiver.receive
+    request = service_v2.ZmqServiceClient.request
+    server_init = service_v2.ZmqServiceServer.__init__
+    client_maintain = ServiceClientRuntime.maintain
+    host_maintain = ServiceHost.maintain
+    component_maintain = ServiceHost._maintain_components
+
+    def safe_error_code(exc: BaseException) -> str:
+        try:
+            return _safe_diagnostic_code(exc)
+        except BaseException:
+            return "UNEXPECTED_ERROR"
+
+    def measured_send(original, event: str, context, sock, args, kwargs):
+        start = trace.now()
+        try:
+            result = original(sock, *args, **kwargs)
+        except zmq.Again:
+            trace.add(event, context["key"], start=start, end=trace.now(),
+                      service=context.get("service"), outcome="again")
+            raise
+        except BaseException as exc:
+            trace.add(event, context["key"], start=start, end=trace.now(),
+                      service=context.get("service"), outcome="error",
+                      error=safe_error_code(exc))
+            raise
+        trace.add(event, context["key"], start=start, end=trace.now(),
+                  service=context.get("service"), outcome="sent")
+        return result
+
+    def send_wrapper(sock, *args, **kwargs):
+        context = getattr(state, "client_request", None)
+        try:
+            matches = context is not None and context["client"]._socket is sock
+        except BaseException:
+            matches = False
+        if not matches:
+            return send(sock, *args, **kwargs)
+        return measured_send(send, "client_send", context, sock, args, kwargs)
+
+    def send_multipart_wrapper(sock, *args, **kwargs):
+        context = getattr(state, "server_request", None)
+        if context is None or context["socket_id"] != id(sock):
+            return send_multipart(sock, *args, **kwargs)
+        try:
+            return measured_send(send_multipart, "reply_send", context, sock, args, kwargs)
+        finally:
+            state.server_request = None
+
+    def receive_wrapper(receiver, *args, **kwargs):
+        frames = receive(receiver, *args, **kwargs)
+        try:
+            socket_id = id(receiver._socket)
+            if frames is not None and socket_id in trace.server_sockets:
+                at = trace.now()
+                if type(at) is int:
+                    trace.dequeued_ns[socket_id] = at
+        except BaseException:
+            pass
+        return frames
+
+    def request_wrapper(client, envelope, *, timeout):
+        key = _load01_cancel_key(envelope)
+        if key is None:
+            return request(client, envelope, timeout=timeout)
+        prior = getattr(state, "client_request", None)
+        state.client_request = {"key": key, "client": client}
+        start = trace.now()
+        try:
+            result = request(client, envelope, timeout=timeout)
+        except BaseException as exc:
+            try:
+                error = _bounded_diagnostic_text(getattr(exc, "cause_code", None))
+                error = error or safe_error_code(exc)
+            except BaseException:
+                error = "UNEXPECTED_ERROR"
+            trace.add(
+                "client_outcome", key, start=start, end=trace.now(), outcome="exception",
+                error=error,
+            )
+            raise
+        else:
+            trace.add("client_outcome", key, start=start, end=trace.now(), outcome="reply")
+            return result
+        finally:
+            state.client_request = prior
+
+    def server_init_wrapper(server, *args, **kwargs):
+        handler = args[3] if len(args) >= 4 else kwargs.get("handler")
+        if not callable(handler):
+            return server_init(server, *args, **kwargs)
+
+        def handler_wrapper(principal, envelope):
+            key = _load01_cancel_key(envelope)
+            socket_id = id(server._socket)
+            if key is None:
+                active = getattr(state, "server_request", None)
+                if active is not None and active["socket_id"] == socket_id:
+                    state.server_request = None
+                return handler(principal, envelope)
+            service = trace.server_sockets.get(socket_id)
+            dequeued = trace.dequeued_ns.pop(socket_id, None)
+            if type(dequeued) is int:
+                trace.add("server_dequeue", key, at=dequeued, service=service)
+            start = trace.now()
+            state.server_request = {"socket_id": socket_id, "key": key, "service": service}
+            trace.add("handler_enter", key, at=start, service=service)
+            try:
+                result = handler(principal, envelope)
+            except BaseException as exc:
+                trace.add("handler_return", key, start=start, end=trace.now(), service=service,
+                          outcome="raised", error=safe_error_code(exc))
+                raise
+            trace.add("handler_return", key, start=start, end=trace.now(), service=service,
+                      outcome="returned")
+            return result
+
+        args = list(args)
+        kwargs = dict(kwargs)
+        if len(args) >= 4:
+            args[3] = handler_wrapper
+        else:
+            kwargs["handler"] = handler_wrapper
+        result = server_init(server, *args, **kwargs)
+        try:
+            service = _bounded_diagnostic_text(server._identity.actor_ref, maximum=128)
+            trace.server_sockets[id(server._socket)] = service or "unknown"
+        except BaseException:
+            pass
+        return result
+
+    def timed_maintain(original, label):
+        def wrapper(owner, *args, **kwargs):
+            try:
+                identity = getattr(owner, "identity", None)
+                if identity is None:
+                    identity = getattr(getattr(owner, "_authority", None), "identity", None)
+                service = _bounded_diagnostic_text(getattr(identity, "actor_ref", None)) or "unknown"
+            except BaseException:
+                service = "unknown"
+            start = trace.now()
+            try:
+                return original(owner, *args, **kwargs)
+            finally:
+                trace.maintain(f"{label}:{service}", start, trace.now())
+        return wrapper
+
+    patches = (
+        (socket_type, "send", send, send_wrapper),
+        (socket_type, "send_multipart", send_multipart, send_multipart_wrapper),
+        (service_v2._BoundedMultipartReceiver, "receive", receive, receive_wrapper),
+        (service_v2.ZmqServiceClient, "request", request, request_wrapper),
+        (service_v2.ZmqServiceServer, "__init__", server_init, server_init_wrapper),
+        (ServiceClientRuntime, "maintain", client_maintain,
+         timed_maintain(client_maintain, "service_runtime.maintain")),
+        (ServiceHost, "maintain", host_maintain,
+         timed_maintain(host_maintain, "service_host.maintain")),
+        (ServiceHost, "_maintain_components", component_maintain,
+         timed_maintain(component_maintain, "service_host._maintain_components")),
+    )
+    applied = []
+    try:
+        for owner, name, original, replacement in patches:
+            setattr(owner, name, replacement)
+            applied.append((owner, name, original))
+    except BaseException as exc:
+        for owner, name, original in reversed(applied):
+            try:
+                setattr(owner, name, original)
+            except BaseException:
+                pass
+        trace.installation_error = type(exc).__name__
+    _LOAD01_RPC_TRACE = trace
+    return trace
+
+
+def _install_load01_rpc_trace(process_role: str) -> _Load01RpcTrace:
+    try:
+        return _install_load01_rpc_trace_impl(process_role)
+    except BaseException as exc:
+        trace = _Load01RpcTrace(process_role)
+        trace.installation_error = type(exc).__name__
+        return trace
+
+
+def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
+    by_request: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    processes, seen = [], set()
+    for name, values in sorted(snapshots.items()):
+        group = values if type(values) is list else [values]
+        group = [value for value in group if type(value) is dict]
+        if not group:
+            continue
+        latest = max(group, key=lambda value: value.get("event_count_total", -1))
+        processes.append({key: latest.get(key) for key in (
+            "process_role", "pid", "clock", "python_version", "clock_facts",
+            "installation_error",
+            "event_count_total", "event_count_overwritten",
+            "event_recording_overhead_measured_ns_total",
+            "event_recording_overhead_measured_ns_max", "maintenance_durations",
+        )} | {"name": name})
+        for value in group:
+            for event in value.get("events", ()):
+                key = (event.get("message_id"), event.get("cancel_id"))
+                marker = (event.get("pid"), event.get("sequence"))
+                if all(type(item) is str for item in key) and marker not in seen:
+                    seen.add(marker)
+                    by_request.setdefault(key, []).append(event)
+
+    requests = []
+    for (message_id, cancel_id), events in sorted(by_request.items()):
+        events.sort(key=lambda event: event["at_perf_counter_ns"])
+        stamps = {}
+        for event in events:
+            stamps.setdefault(event["event"], event["at_perf_counter_ns"])
+        def duration(first, last):
+            start, end = stamps.get(first), stamps.get(last)
+            return round((end - start) / 1_000_000, 3) if (
+                type(start) is int and type(end) is int and end >= start
+            ) else None
+        requests.append({
+            "message_id": message_id, "cancel_id": cancel_id, "events": events,
+            "durations_ms": {
+                "client_send_to_server_dequeue": duration("client_send", "server_dequeue"),
+                "dequeue_to_handler_including_auth_decode_validation": duration(
+                    "server_dequeue", "handler_enter"
+                ),
+                "handler": duration("handler_enter", "handler_return"),
+                "handler_return_to_reply_send": duration("handler_return", "reply_send"),
+                "reply_send_to_client_outcome": duration("reply_send", "client_outcome"),
+                "client_send_to_client_outcome": duration("client_send", "client_outcome"),
+            },
+        })
+    return {
+        "ring_capacity_per_process": _LOAD01_RPC_RING_SIZE,
+        "event_filter": "orders.cancel only",
+        "clock_note": "perf_counter_ns; same-host cross-process comparison is supported by Python 3.10+",
+        "hook_overhead_note": "Wrappers and boundary clock reads add runtime cost; measured record "
+        "construction/append is reported per process, excluding wrapper and clock-read costs.",
+        "processes": processes, "correlated_requests": requests,
+    }
 
 def _market_keys() -> tuple[MarketSubscriptionKey, ...]:
     return tuple(
@@ -1647,6 +2032,7 @@ def _owner_process(
     unused_relay_endpoint,
 ):
     _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
+    rpc_trace = _install_load01_rpc_trace("owner")
     account_config = parse_service_config(account_config_raw)
     execution_config = parse_service_config(execution_config_raw)
     account_service_id = account_config.service_id
@@ -1975,7 +2361,15 @@ def _owner_process(
                             relay_runtime.unregister_uncertainties,
                         )
                     )
-                elif next_command == ("close",):
+                elif next_command in {("close",), ("close", "diagnostic")}:
+                    if next_command == ("close", "diagnostic"):
+                        _send_load01_rpc_diagnostic(
+                            control,
+                            f"owner-{account_index:02d}",
+                            os.getpid(),
+                            _load01_trace_snapshot_or_none(rpc_trace, max_events=32),
+                            "emergency",
+                        )
                     draining = True
                     drain_deadline = time.monotonic() + 120
                 else:
@@ -2047,9 +2441,12 @@ def _owner_process(
                 _account_status(account_provider, gateway_worker, account_host),
                 tuple(scope_records),
                 tuple(source_evidence),
+                _load01_trace_snapshot_or_none(rpc_trace),
             )
         )
     except BaseException as exc:
+        rpc_timing_at_failure = _load01_trace_snapshot_or_none(rpc_trace, max_events=32)
+        cleanup_started_ns = rpc_trace.now()
         for relay in relays.values():
             with suppress(BaseException):
                 relay.close()
@@ -2069,9 +2466,31 @@ def _owner_process(
         with suppress(BaseException):
             if journal is not None:
                 journal.close()
+        cleanup_ended_ns = rpc_trace.now()
+        owner_diagnostic = {
+            "rpc_timing_at_failure": rpc_timing_at_failure,
+            "cleanup_duration_ns": (
+                max(0, cleanup_ended_ns - cleanup_started_ns)
+                if type(cleanup_started_ns) is int and type(cleanup_ended_ns) is int
+                else None
+            ),
+        }
+        _send_load01_rpc_diagnostic(
+            control,
+            f"owner-{account_index:02d}",
+            os.getpid(),
+            rpc_timing_at_failure,
+            "failure",
+        )
         with suppress(Exception):
             control.send(
-                ("error", "owner", account_index, getattr(exc, "code", type(exc).__name__))
+                (
+                    "error",
+                    "owner",
+                    account_index,
+                    getattr(exc, "code", type(exc).__name__),
+                    owner_diagnostic,
+                )
             )
         raise
     finally:
@@ -2095,6 +2514,7 @@ def _strategy_process(
     mode,
 ):
     _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
+    rpc_trace = _install_load01_rpc_trace("strategy")
     account_index = index // _PER_ACCOUNT
     local_index = index % _PER_ACCOUNT
     account_ref = _ACCOUNT_REFS[account_index]
@@ -2620,7 +3040,15 @@ def _strategy_process(
 
             if control.poll(0):
                 command = control.recv()
-                if command == ("close",):
+                if command in {("close",), ("close", "diagnostic")}:
+                    if command == ("close", "diagnostic"):
+                        _send_load01_rpc_diagnostic(
+                            control,
+                            f"strategy-{index:03d}",
+                            os.getpid(),
+                            _load01_trace_snapshot_or_none(rpc_trace, max_events=32),
+                            "emergency",
+                        )
                     break
                 raise AssertionError("unknown LOAD01 strategy control")
             # Business work, control handling and progress publication happen
@@ -2677,11 +3105,14 @@ def _strategy_process(
                 runtime.unregister_uncertainties,
                 order_failures,
                 final_stats,
+                _load01_trace_snapshot_or_none(rpc_trace),
             )
         )
     except BaseException as exc:
         if runtime_probe is not None:
             runtime_probe.set_phase("startup-failed")
+        rpc_timing_at_failure = _load01_trace_snapshot_or_none(rpc_trace, max_events=32)
+        cleanup_started_ns = rpc_trace.now()
         child_diagnostic = {
             "runtime_start_duration_ms": runtime_start_duration_ms,
             "registration_lease": registration_lease_snapshot,
@@ -2704,6 +3135,7 @@ def _strategy_process(
             ),
             "safe_error_code": _safe_diagnostic_code(exc),
             "market_poll_failure": market_poll_failure,
+            "rpc_timing_at_failure": rpc_timing_at_failure,
         }
         cleanup_diagnostic: dict[str, Any] = {
             "market_clients": [],
@@ -2786,6 +3218,19 @@ def _strategy_process(
         child_diagnostic["cleanup"] = cleanup_diagnostic
         child_diagnostic["runtime_lease_after_cleanup"] = (
             _runtime_lease_snapshot(runtime) if runtime is not None else None
+        )
+        cleanup_ended_ns = rpc_trace.now()
+        child_diagnostic["rpc_timing_cleanup_duration_ns"] = (
+            max(0, cleanup_ended_ns - cleanup_started_ns)
+            if type(cleanup_started_ns) is int and type(cleanup_ended_ns) is int
+            else None
+        )
+        _send_load01_rpc_diagnostic(
+            control,
+            f"strategy-{index:03d}",
+            os.getpid(),
+            rpc_timing_at_failure,
+            "failure",
         )
         with suppress(Exception):
             control.send(
@@ -2951,6 +3396,24 @@ def _startup_maintenance_report(
     }
 
 
+def _consume_rpc_diagnostic(record: dict[str, Any], message: Any) -> bool:
+    if not isinstance(message, tuple) or not message or message[0] != "rpc-diagnostic":
+        return False
+    if (
+        len(message) != 5
+        or type(message[1]) is not str
+        or type(message[2]) is not int
+        or message[2] != record.get("pid")
+        or type(message[3]) is not dict
+        or type(message[4]) is not str
+        or message[4] not in {"failure", "emergency"}
+    ):
+        return True
+    stage = message[4]
+    record.setdefault("rpc_timing_snapshots", {})[stage] = message[3]
+    return True
+
+
 def _collect_expected(
     records: dict[int, dict[str, Any]],
     expected_tag: str,
@@ -2970,6 +3433,9 @@ def _collect_expected(
                 message = deferred.pop(0) if deferred else record["pipe"].recv()
                 made_progress = True
                 tag = message[0] if isinstance(message, tuple) and message else None
+                if tag == "rpc-diagnostic":
+                    _consume_rpc_diagnostic(record, message)
+                    continue
                 if tag == "progress":
                     _save_progress(message, progress)
                     continue
@@ -2983,9 +3449,16 @@ def _collect_expected(
                 pending.remove(key)
                 continue
             if not record["process"].is_alive():
-                if record["pipe"].poll(0):
+                while record["pipe"].poll(0):
                     message = record["pipe"].recv()
-                    if isinstance(message, tuple) and message and message[0] == "error":
+                    tag = message[0] if isinstance(message, tuple) and message else None
+                    if tag == "rpc-diagnostic":
+                        _consume_rpc_diagnostic(record, message)
+                        continue
+                    if tag == "progress":
+                        _save_progress(message, progress)
+                        continue
+                    if tag == "error":
                         raise _load01_child_failure(label, record["name"], message)
                 raise AssertionError(
                     f"{label} child exited before {expected_tag}: "
@@ -3004,6 +3477,9 @@ def _collect_expected(
                 )
             if tag == "progress":
                 _save_progress(message, progress)
+                made_progress = True
+            elif tag == "rpc-diagnostic":
+                _consume_rpc_diagnostic(record, message)
                 made_progress = True
             else:
                 record.setdefault("deferred_messages", []).append(message)
@@ -3074,6 +3550,9 @@ def _drain_progress(records: dict[str, dict[str, Any]], progress: dict[str, Any]
             tag = message[0] if isinstance(message, tuple) and message else None
             if tag == "progress":
                 _save_progress(message, progress)
+            elif tag == "rpc-diagnostic":
+                _consume_rpc_diagnostic(record, message)
+                continue
             elif tag == "error":
                 raise _load01_child_failure("LOAD01", record["name"], message)
             else:
@@ -3291,6 +3770,35 @@ def _emergency_cleanup(
 ) -> None:
     abort_event.set()
     stop_event.set()
+
+    def retain_snapshot(record: dict[str, Any], label: str, value: Any) -> None:
+        if type(value) is dict:
+            record.setdefault("rpc_timing_snapshots", {})[label] = value
+
+    def retain_message(record: dict[str, Any], message: Any) -> None:
+        if not isinstance(message, tuple) or not message:
+            return
+        tag = message[0]
+        if tag == "rpc-diagnostic":
+            _consume_rpc_diagnostic(record, message)
+        elif tag == "error" and len(message) >= 5 and type(message[4]) is dict:
+            retain_snapshot(record, "at_failure", message[4].get("rpc_timing_at_failure"))
+        elif tag == "closed":
+            trace_index = 8 if record["kind"] == "strategy" else 16
+            if len(message) > trace_index:
+                retain_snapshot(record, "emergency_close", message[trace_index])
+
+    def drain_diagnostics(record: dict[str, Any], limit: int) -> None:
+        pipe = record["pipe"]
+        for _ in range(limit):
+            try:
+                if not pipe.poll(0):
+                    return
+                retain_message(record, pipe.recv())
+            except (EOFError, OSError, ValueError) as exc:
+                record["rpc_timing_collection_error"] = type(exc).__name__
+                return
+
     for record in records.values():
         if record["closed"]:
             continue
@@ -3299,7 +3807,12 @@ def _emergency_cleanup(
             if process.is_alive() and not (
                 record["kind"] == "strategy" and not record.get("ready")
             ):
-                record["pipe"].send(("close",))
+                diagnostic_ready = (
+                    record["kind"] == "strategy" and record.get("ready")
+                ) or (record["kind"] == "owner" and record.get("rpc_diagnostic_ready"))
+                record["pipe"].send(
+                    ("close", "diagnostic") if diagnostic_ready else ("close",)
+                )
         except (BrokenPipeError, EOFError, OSError) as exc:
             cleanup_errors.append(f"{record['name']}:close-send:{type(exc).__name__}")
 
@@ -3312,6 +3825,7 @@ def _emergency_cleanup(
                 if item["closed"]:
                     continue
                 process = item["process"]
+                drain_diagnostics(item, 4)
                 try:
                     process.join(0)
                     if process.is_alive():
@@ -3344,11 +3858,13 @@ def _emergency_cleanup(
         if record["closed"]:
             continue
         process = record["process"]
+        drain_diagnostics(record, 64)
         if process.is_alive():
             cleanup_errors.append(f"{record['name']}:still-alive")
             continue
         record["exit_code"] = process.exitcode
         record["normal_exit"] = False
+        drain_diagnostics(record, 64)
         try:
             record["pipe"].close()
         except (OSError, ValueError) as exc:
@@ -3443,6 +3959,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     monitor_record: dict[str, Any] | None = None
     terminated: list[str] = []
     cleanup_errors: list[str] = []
+    rpc_timing_snapshots: dict[str, dict[str, dict[str, Any]]] = {}
     abort_event = None
     stop_event = None
     failure: dict[str, Any] | None = None
@@ -3749,6 +4266,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 raise AssertionError(
                     f"LOAD01 owner did not register ten durable scopes: {account_index}"
                 )
+            owner_records[account_index]["rpc_diagnostic_ready"] = True
 
         market_identity = WireIdentity(WireRole.SERVICE, _MARKET_PRINCIPAL, _MARKET_ID)
         telemetry_identity = WireIdentity(WireRole.SERVICE, _TELEMETRY_PRINCIPAL, _TELEMETRY_ID)
@@ -4018,6 +4536,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         )
         strategy_results = {}
         for index, message in strategy_closed.items():
+            if len(message) > 8 and type(message[8]) is dict:
+                rpc_timing_snapshots.setdefault(f"strategy-{index:03d}", {})[
+                    "normal_close"
+                ] = message[8]
             if message[1] != index or message[2] != strategy_records[index]["pid"]:
                 raise AssertionError(f"LOAD01 strategy close identity mismatch: {index}")
             if (
@@ -4066,6 +4588,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         owner_source_records: list[dict[str, Any]] = []
         owner_totals = {}
         for account_index, message in owner_closed.items():
+            if len(message) > 16 and type(message[16]) is dict:
+                rpc_timing_snapshots.setdefault(f"owner-{account_index:02d}", {})[
+                    "normal_close"
+                ] = message[16]
             status = message[13]
             account_record = {
                 "account_ref": _ACCOUNT_REFS[account_index],
@@ -4348,6 +4874,31 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 terminated=terminated,
                 cleanup_errors=cleanup_errors,
             )
+        snapshots_by_process: dict[str, list[dict[str, Any]]] = {}
+
+        def add_rpc_snapshot(process_name: str, snapshot: Any) -> None:
+            if type(snapshot) is dict:
+                snapshots_by_process.setdefault(process_name, []).append(snapshot)
+
+        for process_name, snapshots in rpc_timing_snapshots.items():
+            for snapshot in snapshots.values():
+                add_rpc_snapshot(process_name, snapshot)
+        for process_name, record in child_records.items():
+            for snapshot in record.get("rpc_timing_snapshots", {}).values():
+                add_rpc_snapshot(process_name, snapshot)
+        if failure is not None:
+            diagnostic = failure.get("child_diagnostic")
+            if type(diagnostic) is dict:
+                failure_snapshot = diagnostic.get("rpc_timing_at_failure")
+                if type(failure_snapshot) is dict and type(failure_snapshot.get("pid")) is int:
+                    for process_name, record in child_records.items():
+                        if record.get("pid") == failure_snapshot["pid"]:
+                            add_rpc_snapshot(process_name, failure_snapshot)
+                            break
+        try:
+            report["rpc_timing"] = _load01_rpc_timing_report(snapshots_by_process)
+        except BaseException as exc:
+            report["rpc_timing"] = {"collection_error": type(exc).__name__}
         report["cleanup"] = {"termination_requests": terminated, "errors": cleanup_errors}
         report["children"] = [
             {
@@ -4359,6 +4910,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 ),
                 "normal_exit": bool(record.get("normal_exit", False)),
                 "closed": bool(record.get("closed", False)),
+                "rpc_timing_collection_error": record.get("rpc_timing_collection_error"),
             }
             for record in child_records.values()
         ]

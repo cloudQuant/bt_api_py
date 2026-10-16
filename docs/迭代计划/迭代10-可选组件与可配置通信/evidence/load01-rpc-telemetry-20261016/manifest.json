@@ -1,0 +1,332 @@
+{
+  "schema": "iteration10-load01-rpc-telemetry-contract-r207-v1",
+  "round": "R207",
+  "repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "sdk_parent_commit": "03394ac3e37795f3f0e17a2f92effabd601affed"
+  },
+  "evidence_level": "SOURCE_FAKE_RPC_TELEMETRY_CONTRACT_ONLY",
+  "formal_case_count": {
+    "before": 37,
+    "after": 37,
+    "total": 68
+  },
+  "load01_pass": false,
+  "qa": {
+    "artifact_id": "iteration10-load01-rpc-telemetry-contract-root-qa-r1",
+    "output": "D:\\temp\\iteration10-load01-telemetry-unit-root-20261016-r1",
+    "fixed_source_root": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\source",
+    "source_is_git_worktree": false,
+    "source_pin_count": 3726,
+    "nodes": [
+      "tests/unit/test_load01_rpc_telemetry_contract.py::test_hook_correlates_cancel_boundaries_and_preserves_rpc_semantics",
+      "tests/unit/test_load01_rpc_telemetry_contract.py::test_failed_snapshot_is_not_sent_and_invalid_diagnostics_do_not_mask_messages"
+    ],
+    "outcome": "2 passed in 2.07s",
+    "pytest_exit": 0,
+    "warnings": 0,
+    "stderr_bytes": 0,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "junit_internal_seconds": 1.73,
+    "result_sha256": "9a5980fd15f98956341a080da29c2714bc89c61ab37068440466a6dd304fb524",
+    "junit_sha256": "ed171f7c0e2ca6a077adc7a24fb3dc4dff02f6870d9a99b6fa50a332ffa9bd89",
+    "command_sha256": "671c6e49d3348e4145d463c7c1a6ef21bb873b71037b88a36b6e1cc3ea03c979"
+  },
+  "source_provenance": {
+    "fixed_export_root": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016",
+    "frozen_export_base_commit": "e08da3c58cb3b3b040f7799642de38523bbd3229",
+    "frozen_parent_archive_sha256": "3e32218bd459810130d33559aebbd51524f275deb9e834fe3025bfe89d103bb7",
+    "six_gitlinks": [
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 310519,
+        "archive_member_count": 261,
+        "archive_sha256": "cc6053eb2b8d0186c6b1d98ded521454bb374f39183a4d27176326847daaae60",
+        "commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "path": "bt_api/bt_api_base",
+        "prior_review_round": "r1+r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 54830,
+        "archive_member_count": 23,
+        "archive_sha256": "07f8cd6b0c8308e22555fcfc196efc14b85a332c2ba5b679a3bfa6fad25f8c41",
+        "commit": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "path": "bt_api/bt_api_transport_zmq",
+        "prior_review_round": "r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 154707,
+        "archive_member_count": 41,
+        "archive_sha256": "03ba4df4643054c275dc8df1e074050a125ca4e806af648d32d324d815ddd686",
+        "commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "path": "bt_api/bt_api_gateway",
+        "prior_review_round": "r1+r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": true,
+        "archive_bytes": 145856,
+        "archive_member_count": 53,
+        "archive_sha256": "041d3908de1f8039268ee72d58695149bc1da2deba50fdb170839980f1d2896d",
+        "commit": "536a4f04747182749fabdac5e28624f80465bc53",
+        "path": "bt_api/bt_api_monitor",
+        "prior_review_round": "r1+r2"
+      },
+      {
+        "archive_byte_identical_to_prior_review": false,
+        "archive_bytes": 501701,
+        "archive_member_count": 76,
+        "archive_sha256": "14efac09b8bf8073826e85a8c37c9750689f3b12c20a9764b4614a8d0bd961aa",
+        "commit": "f5c030644dea06ce91afbaacf94e11e353538186",
+        "path": "bt_api/bt_api_execution",
+        "prior_review_round": null
+      },
+      {
+        "archive_byte_identical_to_prior_review": false,
+        "archive_bytes": 310232,
+        "archive_member_count": 65,
+        "archive_sha256": "5ad071e3a8fc20034e3003c15999cf7afeaeb5bacf9a81ac2f7ae23ebad4bf7e",
+        "commit": "adb6ec58308149faa93c02920b72f98ac3796056",
+        "path": "bt_api/bt_api_risk",
+        "prior_review_round": null
+      }
+    ],
+    "overlays": [
+      {
+        "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+        "bytes": 216208,
+        "sha256": "27d377d05c55ae005ba532d9493f07d396cdc1d24d23b23e9b2d7ac4942c1143",
+        "origin": "D:\\bt_api_py\\tests\\unit\\test_load01_hundred_strategy_30min.py",
+        "commit_derived": false,
+        "content_scope": "existing accepted lease overlay plus reviewed telemetry instrumentation candidate"
+      },
+      {
+        "path": "tests/unit/test_load01_rpc_telemetry_contract.py",
+        "bytes": 17397,
+        "sha256": "e9837a4f86bd0b398f7577f34fb78934f2028ae445bf7330ca7ee4d02055e6cf",
+        "origin": "D:\\bt_api_py\\tests\\unit\\test_load01_rpc_telemetry_contract.py",
+        "commit_derived": false,
+        "content_scope": "reviewed telemetry contract test"
+      }
+    ],
+    "seven_source_archive_paths_and_pins": [
+      {
+        "name": "parent.zip",
+        "path": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\archives\\parent.zip",
+        "bytes": 14994406,
+        "sha256": "3e32218bd459810130d33559aebbd51524f275deb9e834fe3025bfe89d103bb7",
+        "git_commit": "e08da3c58cb3b3b040f7799642de38523bbd3229",
+        "zip_member_count": 3877,
+        "copied_into_raw_evidence_zip": false
+      },
+      {
+        "name": "bt_api_base.zip",
+        "path": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\archives\\bt_api_base.zip",
+        "bytes": 310519,
+        "sha256": "cc6053eb2b8d0186c6b1d98ded521454bb374f39183a4d27176326847daaae60",
+        "git_commit": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "zip_member_count": 261,
+        "copied_into_raw_evidence_zip": false
+      },
+      {
+        "name": "bt_api_transport_zmq.zip",
+        "path": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\archives\\bt_api_transport_zmq.zip",
+        "bytes": 54830,
+        "sha256": "07f8cd6b0c8308e22555fcfc196efc14b85a332c2ba5b679a3bfa6fad25f8c41",
+        "git_commit": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "zip_member_count": 23,
+        "copied_into_raw_evidence_zip": false
+      },
+      {
+        "name": "bt_api_gateway.zip",
+        "path": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\archives\\bt_api_gateway.zip",
+        "bytes": 154707,
+        "sha256": "03ba4df4643054c275dc8df1e074050a125ca4e806af648d32d324d815ddd686",
+        "git_commit": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+        "zip_member_count": 41,
+        "copied_into_raw_evidence_zip": false
+      },
+      {
+        "name": "bt_api_monitor.zip",
+        "path": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\archives\\bt_api_monitor.zip",
+        "bytes": 145856,
+        "sha256": "041d3908de1f8039268ee72d58695149bc1da2deba50fdb170839980f1d2896d",
+        "git_commit": "536a4f04747182749fabdac5e28624f80465bc53",
+        "zip_member_count": 53,
+        "copied_into_raw_evidence_zip": false
+      },
+      {
+        "name": "bt_api_execution.zip",
+        "path": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\archives\\bt_api_execution.zip",
+        "bytes": 501701,
+        "sha256": "14efac09b8bf8073826e85a8c37c9750689f3b12c20a9764b4614a8d0bd961aa",
+        "git_commit": "f5c030644dea06ce91afbaacf94e11e353538186",
+        "zip_member_count": 76,
+        "copied_into_raw_evidence_zip": false
+      },
+      {
+        "name": "bt_api_risk.zip",
+        "path": "D:\\temp\\iteration10-load01-telemetry-unit-source-20261016\\archives\\bt_api_risk.zip",
+        "bytes": 310232,
+        "sha256": "5ad071e3a8fc20034e3003c15999cf7afeaeb5bacf9a81ac2f7ae23ebad4bf7e",
+        "git_commit": "adb6ec58308149faa93c02920b72f98ac3796056",
+        "zip_member_count": 65,
+        "copied_into_raw_evidence_zip": false
+      }
+    ],
+    "source_export_pins_sha256": "0c32eee4f2add4f594b052506ff7afe2c2a339a6df702159f7b071a432e802e8",
+    "overlay_manifest_sha256": "ee41b246050c0f03a38f63b423aaaeae0c0af15aeec38f52766ff5b1c6e9c826",
+    "source_sha256_table_sha256": "3daa28e63ac9b917eac2ffb4cb038907918490d1ea6ab11bfd4b5e81de91a016",
+    "preparation_summary_sha256": "2edc1e85f82969e7c60492da4776366ad03c1246bc2b71f97682ca1fa8a3a06d",
+    "all_non_overlay_files_match_frozen_archives": true,
+    "mismatches": [],
+    "zip_archives_included_in_raw_evidence": false
+  },
+  "candidate_code": [
+    {
+      "path": "tests/unit/test_load01_hundred_strategy_30min.py",
+      "bytes": 216208,
+      "sha256": "27d377d05c55ae005ba532d9493f07d396cdc1d24d23b23e9b2d7ac4942c1143"
+    },
+    {
+      "path": "tests/unit/test_load01_rpc_telemetry_contract.py",
+      "bytes": 17397,
+      "sha256": "e9837a4f86bd0b398f7577f34fb78934f2028ae445bf7330ca7ee4d02055e6cf"
+    }
+  ],
+  "static_review_documents": [
+    {
+      "path": ".codex-tmp/review_load01_rpc_telemetry_final_20261016.md",
+      "decision": "HOLD initial static review, superseded by correction",
+      "bytes": 3339,
+      "sha256": "fe8b887fcec493949a15774af1ed6405ffa4cfec92db07d11a355cfa0fadbb6e"
+    },
+    {
+      "path": ".codex-tmp/review-load01-rpc-telemetry-correction-20261016.md",
+      "decision": "GO for exact corrected runner pin",
+      "bytes": 2013,
+      "sha256": "7756b1de9ae39a5ca63d1f2cdf15cc8034f358d4d549f8257a2433eac9a8ae17"
+    }
+  ],
+  "prior_r5_pilot": {
+    "output": "D:\\temp\\iteration10-load01-pilot-e08da3c5-20261016-r5-resume",
+    "result": "FAILED / CHILD_FAILED during sustained-load; normal shutdown acceptance failed",
+    "evidence_preserved_at": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/load01-relay-lease-r5-20261016",
+    "altered_by_r207": false,
+    "success_claimed": false
+  },
+  "acceptance_constraints": {
+    "strategies": 100,
+    "owner_accounts": 10,
+    "topics": 20,
+    "market_rate_hz": 200,
+    "cancel_rate_hz": 2,
+    "rpc_timeout_seconds": 5,
+    "lease_seconds": 30,
+    "pilot_seconds": 120,
+    "full_run_seconds": 1800,
+    "thresholds_changed": false,
+    "business_retry_changed": false
+  },
+  "raw_evidence_zip": {
+    "path": "raw-evidence.zip",
+    "bytes": 612797,
+    "sha256": "46c314d18cac1112a012c055168d16ce575bd2789bbe28f63b962ac268974bd5",
+    "member_count": 17
+  },
+  "raw_evidence_members": [
+    {
+      "path": "qa/command.json",
+      "bytes": 2164,
+      "sha256": "671c6e49d3348e4145d463c7c1a6ef21bb873b71037b88a36b6e1cc3ea03c979"
+    },
+    {
+      "path": "qa/exit.txt",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "path": "qa/junit.xml",
+      "bytes": 538,
+      "sha256": "ed171f7c0e2ca6a077adc7a24fb3dc4dff02f6870d9a99b6fa50a332ffa9bd89"
+    },
+    {
+      "path": "qa/result.json",
+      "bytes": 449,
+      "sha256": "9a5980fd15f98956341a080da29c2714bc89c61ab37068440466a6dd304fb524"
+    },
+    {
+      "path": "qa/runner.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    {
+      "path": "qa/running.json",
+      "bytes": 76,
+      "sha256": "1176c13157ff8e5f89b583ffd8a67ed0d44d3e1a51a4f634ca9ec7cfebc2c0c2"
+    },
+    {
+      "path": "qa/source-after.json",
+      "bytes": 925220,
+      "sha256": "9a0a96500578dc5433dc256336ff9c7ffce19d7c8f05a8081b4974b78337693b"
+    },
+    {
+      "path": "qa/source-before.json",
+      "bytes": 925220,
+      "sha256": "9a0a96500578dc5433dc256336ff9c7ffce19d7c8f05a8081b4974b78337693b"
+    },
+    {
+      "path": "qa/spec.json",
+      "bytes": 935334,
+      "sha256": "2ae62b9df7efe62374c5e4bd29205b18b982dffa602cf140b3eb93f972bd6eeb"
+    },
+    {
+      "path": "qa/stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qa/stdout.log",
+      "bytes": 194,
+      "sha256": "12b4bc52b17bc0a22b23dc0709a6cca2ce3d217683811a8c67e968413f9b0d71"
+    },
+    {
+      "path": "reviews/review_load01_rpc_telemetry_final_20261016.md",
+      "bytes": 3339,
+      "sha256": "fe8b887fcec493949a15774af1ed6405ffa4cfec92db07d11a355cfa0fadbb6e"
+    },
+    {
+      "path": "reviews/review-load01-rpc-telemetry-correction-20261016.md",
+      "bytes": 2013,
+      "sha256": "7756b1de9ae39a5ca63d1f2cdf15cc8034f358d4d549f8257a2433eac9a8ae17"
+    },
+    {
+      "path": "source/overlay-manifest.json",
+      "bytes": 7324,
+      "sha256": "ee41b246050c0f03a38f63b423aaaeae0c0af15aeec38f52766ff5b1c6e9c826"
+    },
+    {
+      "path": "source/source-sha256.json",
+      "bytes": 889547,
+      "sha256": "3daa28e63ac9b917eac2ffb4cb038907918490d1ea6ab11bfd4b5e81de91a016"
+    },
+    {
+      "path": "source/source-export-pins.json",
+      "bytes": 5309,
+      "sha256": "0c32eee4f2add4f594b052506ff7afe2c2a339a6df702159f7b071a432e802e8"
+    },
+    {
+      "path": "source/preparation-summary.json",
+      "bytes": 3052,
+      "sha256": "2edc1e85f82969e7c60492da4776366ad03c1246bc2b71f97682ca1fa8a3a06d"
+    }
+  ],
+  "delivery": {
+    "pending_root_review": true,
+    "stage_commit_performed": false,
+    "next_action": "Root review of this fixed-source source-fake package, followed by the next separately authorized serial LOAD01 pilot"
+  }
+}
