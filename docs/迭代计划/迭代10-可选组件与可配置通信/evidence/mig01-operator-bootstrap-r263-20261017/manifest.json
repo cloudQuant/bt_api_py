@@ -1,0 +1,252 @@
+{
+  "schema": "iteration10-mig01-operator-bootstrap-r263-evidence-v1",
+  "round": "R263",
+  "status": "READY_FOR_ROOT_SCOPED_COMMIT",
+  "captured_utc": "2026-10-16T16:54:43.599247+00:00",
+  "evidence_level": "AUTHOR_QA_AND_LOCAL_SYNTHETIC_OPERATOR_INTEGRATION_ONLY",
+  "formal_mig01_pass": false,
+  "repositories": {
+    "sdk": {
+      "path": "D:\\bt_api_py",
+      "branch": "dev",
+      "current_parent_head": "7b6f82c3916dd632fddeb53a000da0c7c2bdc902",
+      "author_run_head_not_independently_retained": true
+    },
+    "gateway_package": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+      "branch": "dev",
+      "commit": "2671fe714d1aad70c40b33255b50f354222e59b7",
+      "parent": "147ef365706bebab383ec12c628be243b8e0b381",
+      "old_sdk_gitlink": "147ef365706bebab383ec12c628be243b8e0b381",
+      "candidate_sdk_gitlink": "2671fe714d1aad70c40b33255b50f354222e59b7",
+      "committed_dependencies": [
+        "src/bt_api_gateway/session_owner.py",
+        "tests/test_session_owner.py"
+      ],
+      "excluded_dirty_paths": [
+        "src/bt_api_gateway/account_session_worker.py",
+        "src/bt_api_gateway/account_position_snapshot.py"
+      ]
+    }
+  },
+  "source_pins": [
+    {
+      "path": "bt_api_py/gateway_operator.py",
+      "bytes": 30033,
+      "sha256": "102db7a1a8a658af0e5ee6a9947afa236d1e6d28bd74e7bd8413ae3e6cf88b49"
+    },
+    {
+      "path": "tests/integration/test_gateway_operator_deployment.py",
+      "bytes": 19383,
+      "sha256": "38f793869391366117148019137cd7b3cd3358ac7996b51ac05452707ce3539a"
+    }
+  ],
+  "exact_parent_scope": [
+    {
+      "path": "bt_api_py/gateway_operator.py",
+      "change": "add",
+      "bytes": 30033,
+      "sha256": "102db7a1a8a658af0e5ee6a9947afa236d1e6d28bd74e7bd8413ae3e6cf88b49"
+    },
+    {
+      "path": "tests/integration/test_gateway_operator_deployment.py",
+      "change": "add",
+      "bytes": 19383,
+      "sha256": "38f793869391366117148019137cd7b3cd3358ac7996b51ac05452707ce3539a"
+    },
+    {
+      "path": "bt_api/bt_api_gateway",
+      "change": "gitlink update",
+      "old": "147ef365706bebab383ec12c628be243b8e0b381",
+      "new": "2671fe714d1aad70c40b33255b50f354222e59b7"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-operator-bootstrap-r263-20261017/raw-evidence.zip",
+      "change": "add",
+      "bytes": 12617,
+      "sha256": "80c4c8b9330585ded882fdfe5e2c16bda7520a48e36d65d4816eb297d85b7960"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-operator-bootstrap-r263-20261017/manifest.json",
+      "change": "add"
+    },
+    {
+      "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-operator-bootstrap-r263-20261017/round-record.md",
+      "change": "add"
+    }
+  ],
+  "accepted_parent_delta_since_candidate_run": {
+    "base": "e6cd356c2c281543202ccf5f5f2433aeebfc6d65",
+    "current": "7b6f82c3916dd632fddeb53a000da0c7c2bdc902",
+    "change_commit": "7b6f82c3916dd632fddeb53a000da0c7c2bdc902",
+    "paths": [
+      "bt_api_py/service_host.py",
+      "bt_api_py/service_registry.py",
+      "tests/unit/test_service_registry.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi13-paper-owner-r238-20261017/raw-evidence.zip"
+    ],
+    "analysis": "R238 adds TrustedPaperOwnerWritePolicy tied to execution/account_owner and service.order_entry/orders.submit; R263 exercises market_hub and account worker-construction failure and neither configures paper_owner_domain nor invokes orders.submit. Candidate source pins are unchanged. No R263 QA was repeated on this descendant."
+  },
+  "operator_contract": {
+    "entry": "bt_api_py.gateway_operator.GatewayOperatorDeployment",
+    "path": "Existing service-v2 ServiceHost; no second router/writer.",
+    "market": "GatewayOkxMarketBinding configures OkxTickerQueueMarketProvider -> GatewayMarketHub -> sdk.market.event / market.event {key,data}. This is an operator composition and does not automatically redirect every legacy AFI quote route.",
+    "status_fields": [
+      "state",
+      "session_generation",
+      "ready",
+      "fresh_for_seconds"
+    ],
+    "recovery_method": "recover_account_session() on owner thread",
+    "secret_boundary": "Credential resolver/provider are local injected capabilities and do not enter ServiceConfig or client wire.",
+    "same_creator_owner_thread": "Create LocalAccountSessionGuard and deployment/account bindings on the same process and thread that starts, serves, recovers, and closes the service. Guard records creator PID/TID; GatewayAccountSessionWorker records construction TID; GatewayOperatorDeployment enforces Host owner TID. Do not construct guard on another thread and hand it over.",
+    "setup_py": "find_packages includes bt_api_py.*; no wheel was built, inspected, or installed."
+  },
+  "author_qa": {
+    "kind": "author_qa_result_record",
+    "provenance": "Reported after original invocation. Standalone SDK pytest stdout/JUnit and exact command were not retained; this is structured metadata, not reconstructed raw output.",
+    "candidate_source_pins": [
+      {
+        "path": "bt_api_py/gateway_operator.py",
+        "bytes": 30033,
+        "sha256": "102db7a1a8a658af0e5ee6a9947afa236d1e6d28bd74e7bd8413ae3e6cf88b49"
+      },
+      {
+        "path": "tests/integration/test_gateway_operator_deployment.py",
+        "bytes": 19383,
+        "sha256": "38f793869391366117148019137cd7b3cd3358ac7996b51ac05452707ce3539a"
+      }
+    ],
+    "result": "PASS",
+    "passed_cases": 3,
+    "failed_cases": 0,
+    "skipped_cases": 0,
+    "elapsed_seconds": 1.19,
+    "selectors": [
+      "test_operator_factory_runs_okx_projection_through_real_service_host",
+      "test_provider_is_closed_or_retained_if_worker_construction_fails_before_handoff (2 parameter cases)"
+    ],
+    "warnings": [
+      "Two PytestUnknownMarkWarning instances for the integration mark in the isolated pytest ini.",
+      "One existing PyZMQ Proactor selector-thread warning."
+    ],
+    "supplemental_check": "py_compile passed",
+    "evidence_level": "AUTHOR_QA_ONLY"
+  },
+  "independent_review": {
+    "kind": "independent_static_review_result_record",
+    "reviewer": "review_bt_v3_cpf",
+    "result": "GO_STATIC",
+    "provenance": "Communicated in parent task; no standalone review artifact supplied.",
+    "reviewed_source_pins": [
+      {
+        "path": "bt_api_py/gateway_operator.py",
+        "bytes": 30033,
+        "sha256": "102db7a1a8a658af0e5ee6a9947afa236d1e6d28bd74e7bd8413ae3e6cf88b49"
+      },
+      {
+        "path": "tests/integration/test_gateway_operator_deployment.py",
+        "bytes": 19383,
+        "sha256": "38f793869391366117148019137cd7b3cd3358ac7996b51ac05452707ce3539a"
+      }
+    ]
+  },
+  "afi09_support": {
+    "evidence_level": "LOCAL_SYNTHETIC_AFI09_UI_HTTP_SDK_GATEWAY_OWNER_INTEGRATION_ONLY",
+    "reported_result": "Browser/HTTP/SDK/operator chain PASS; two AFI clients share one Gateway owner; owner-thread recovery advances generation without another resolver/factory call.",
+    "formal_afi09_pass": false,
+    "limitations": [
+      "synthetic credentials/provider/account data",
+      "local loopback only",
+      "not formal AFI09 acceptance"
+    ],
+    "provenance": "AFI metadata and direct output captures copied verbatim. That archive notes the browser-chain stdout is not a standalone exit receipt and does not independently bind source bytes to invocation-time HEAD."
+  },
+  "raw_evidence_archive": {
+    "path": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig01-operator-bootstrap-r263-20261017/raw-evidence.zip",
+    "bytes": 12617,
+    "sha256": "80c4c8b9330585ded882fdfe5e2c16bda7520a48e36d65d4816eb297d85b7960",
+    "members": [
+      {
+        "path": "afi09/scope-and-results.json",
+        "bytes": 15577,
+        "sha256": "bb0c6fd757b0626bfb5a9c7556a16b1b2880ff7c06e9ef92ac940dd61794c028",
+        "kind": "existing AFI metadata"
+      },
+      {
+        "path": "afi09/direct-output-transcription.md",
+        "bytes": 8461,
+        "sha256": "86ea226c30f3c5858cf551cd220e78734c9079160723766de5db3f5312d37489",
+        "kind": "existing AFI metadata"
+      },
+      {
+        "path": "afi09/raw/gateway-health-browser-chain-final-r2.txt",
+        "bytes": 1481,
+        "sha256": "54adc0861354b90910a9ab5ac62975b1d89e946b9212e37a3ef75a6cb55ea493",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "afi09/raw/gateway-health-browser-final.txt",
+        "bytes": 573,
+        "sha256": "c5a39e3410ca8ed1a8ae21267b1b66859d97585bb64056268be53468b5ad3036",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "afi09/raw/two-afi-processes-direct-final.txt",
+        "bytes": 403,
+        "sha256": "68bbe03aa47cde888737fb60dac73e30d5af0e89520c6913e8efc5b5bea5ef7e",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "afi09/raw/servicehost-two-worker-direct.txt",
+        "bytes": 420,
+        "sha256": "6c9d70e10ae16ad04fb05823c1b6ca94e3a5f241129e24ade667a8b9ef715c5a",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "afi09/raw/authorized-websocket-direct.txt",
+        "bytes": 322,
+        "sha256": "5ea1a03740cf1031ad0541512a2a98238d2351a5e74c89ecbc1e35d51e9d0a1c",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "afi09/raw/sdk-session-owner-pytest.txt",
+        "bytes": 101,
+        "sha256": "30e89b65eb93099f29a1873ce039cfb7ef14150f004f7d4cf2088a5b2f1bf450",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "afi09/raw/sdk-session-owner-ruff.txt",
+        "bytes": 20,
+        "sha256": "a4443afdcfb6d7363adb285762515ccf7cf50473b1a05c20c1a50f6bed4d26b0",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "afi09/raw/two-afi-processes-production-operator-final-r3.txt",
+        "bytes": 1244,
+        "sha256": "91cae1c4f30c0b8f24d838af43e75e35916a636cec32bbb4c2dabe84a48eb465",
+        "kind": "captured AFI output"
+      },
+      {
+        "path": "sdk/author-qa-result-record.json",
+        "bytes": 1189,
+        "sha256": "5718e6094f2ec7addbc60b1b6a18fa74b38cd1fe567dce0b3b22ef4833443bc4",
+        "kind": "structured record, not raw transcript"
+      },
+      {
+        "path": "sdk/independent-static-review-result-record.json",
+        "bytes": 589,
+        "sha256": "a014f59cf1f040ab1b725c8cfde13138386709a84e36110331c83ac8c207b2e1",
+        "kind": "structured record, not raw transcript"
+      }
+    ]
+  },
+  "exclusions": [
+    "unrelated SDK/package WIP",
+    "dirty Gateway worker/account-position-snapshot files",
+    "forwarding retirement edits",
+    "wheel/install verification",
+    "real account/provider/exchange actions"
+  ],
+  "author_staging_or_commit": false
+}
