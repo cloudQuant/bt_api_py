@@ -40,6 +40,9 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 
+[project.scripts]
+bt-gateway-operator = "bt_api_py.gateway_operator_cli:main"
+
 [project.urls]
 Homepage = "https://github.com/cloudQuant/bt_api_py"
 Repository = "https://github.com/cloudQuant/bt_api_py"
