@@ -1,0 +1,15 @@
+# DIM07 quota fairness and shared-backoff round
+
+Repository: `D:\bt_api_py`, branch `dev`; Gateway package branch `dev`.
+
+This round extends the committed Gateway quota admission owner so fairness aggregates requests by account, strategy, and instrument while retaining a separate run digest for audit metadata. It preserves bounded reserved capacity for CLOSE, CANCEL, RECONCILE, and accepted group actions; migrates existing SQLite schemas by adding nullable run metadata; keeps a denied provider connect classified as LOGIN until provider dispatch begins; and checks provider 429 backoff across spawned local processes.
+
+The Gateway child change was committed first as `ed10addd22a6adedcafe21a4981943fe7baae977`, parent `3e303e103781b942e4425e55d856bb09cf583d76`, with exactly two paths: `src/bt_api_gateway/quota_admission.py` and `tests/test_quota_admission.py`. Current child source is 38,904 bytes / SHA-256 `498e20b88554fb03895385ddef0b18585444125fc090fa9049f8e977bcd70c1f`; focused unit file is 7,298 bytes / `f905136940f17a3e83c0c12048a273cbc2e9953f00a2960794b770bcad085414`.
+
+The parent integration candidate is `tests/integration/test_gateway_quota_admission.py`, 30,911 bytes / SHA-256 `cf8554c9e8e89b3be395151edc5b2e62d5c10c7677ae8a724a5d065ecf0d8d1a`. It was based on parent HEAD `aa164c4bb17facf4006de24349361c6fbb783ad9`; its test and Gateway gitlink are awaiting the parent index handoff and scoped commit.
+
+Evidence is source/local-synthetic only. The Gateway unit file passed 7 tests in 1.14 seconds under Python 3.14 on the exact child pins above. After the fairness fixture repair, only `test_quota_fairness_aggregates_runs_under_strategy_and_instrument` was rerun on the exact parent candidate pin; it passed 1 test in 9.01 seconds. The earlier `3 passed` note was from a prior test revision before the wait-time assertion and four-process 429-storm expansion; it is not evidence for this candidate. The later three-node attempt on the expanded revision produced `F..`: the fairness node failed because the test rewrote grant timestamps while spawned waiters were polling SQLite, and the LOGIN and 429 nodes passed on that earlier test revision. The current fairness fixture now queues all workers before seeding and lets the two-second window expire naturally. No claim is carried from the prior full-run output onto the current file pin, and the unaffected nodes were not rerun at Root's direction.
+
+Independent static review of the current three pins returned GO_STATIC and found no remaining blocker in run aggregation, schema migration, LOGIN dispatch classification, reserved capacity, or the spawned 429 backoff storm. `git diff --check` passed; Git only emitted its normal LF-to-CRLF conversion warnings. Python 3.11 and 3.13 are not installed on this host; Python 3.12 is installed without pytest, so the focused executions used Python 3.14.
+
+The process evidence uses local spawned workers, SQLite, and synthetic providers. It does not establish real provider/account behavior, cross-machine fairness, or formal DIM07 acceptance.

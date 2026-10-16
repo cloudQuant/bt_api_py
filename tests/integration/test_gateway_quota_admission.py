@@ -103,6 +103,109 @@ def _quota_process(
         results.put((label, exc.code))
 
 
+def _quota_identity_process(
+    database_path: str,
+    label: str,
+    strategy_ref: str,
+    run_ref: str,
+    instrument_ref: str,
+    ready: Any,
+    release: Any,
+    results: Any,
+) -> None:
+    try:
+        limiter = _quota(
+            Path(database_path),
+            capacity=1,
+            window_seconds=2.0,
+            max_queue_wait_seconds=20.0,
+        )
+        ready.put(label)
+        if not release.wait(10.0):
+            results.put((label, "START_DEADLINE"))
+            return
+        started_ns = time.monotonic_ns()
+        grant = limiter.admit(
+            GatewayQuotaSubject(
+                "account:multi-run",
+                strategy_ref=strategy_ref,
+                instrument_ref=instrument_ref,
+                run_ref=run_ref,
+            ),
+            GatewayQuotaOperation.QUERY,
+            time.monotonic_ns() + 15_000_000_000,
+        )
+        results.put(
+            (
+                label,
+                grant.sequence,
+                grant.subject_digest,
+                grant.run_digest,
+                grant.granted_monotonic_ns - started_ns,
+            )
+        )
+    except GatewayQuotaAdmissionError as exc:
+        results.put((label, exc.code))
+
+
+def _quota_backoff_process(
+    database_path: str,
+    label: str,
+    ready: Any,
+    release: Any,
+    results: Any,
+) -> None:
+    class CountingProvider:
+        def __init__(self) -> None:
+            self.read_calls = 0
+
+        def connect(self, **_kwargs: Any) -> None:
+            return None
+
+        def read_account(self, **_kwargs: Any) -> AccountObservation:
+            self.read_calls += 1
+            raise AssertionError("shared backoff should deny before provider dispatch")
+
+        def close(self) -> None:
+            return None
+
+    try:
+        limiter = _quota(Path(database_path), capacity=4, window_seconds=60.0)
+        raw_provider = CountingProvider()
+        provider = GatewayQuotaProviderSession(
+            raw_provider,
+            limiter,
+            GatewayQuotaSubject("account:429-shared", strategy_ref="strategy:reader"),
+        )
+        ready.put(label)
+        if not release.wait(10.0):
+            results.put((label, "START_DEADLINE", raw_provider.read_calls))
+            return
+        try:
+            provider.read_account(generation="spawned-reader", timeout=0.15)
+        except GatewayQuotaAdmissionError as exc:
+            results.put((label, exc.code, raw_provider.read_calls))
+        else:
+            results.put((label, "PROVIDER_RETURNED", raw_provider.read_calls))
+    except BaseException as exc:
+        results.put((label, "UNEXPECTED", type(exc).__name__))
+
+
+def _wait_for_quota_waiters(database_path: Path, expected: int) -> None:
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        try:
+            with sqlite3.connect(database_path, timeout=0.1) as connection:
+                count = int(connection.execute("SELECT COUNT(*) FROM waiters").fetchone()[0])
+        except sqlite3.OperationalError:
+            time.sleep(0.01)
+            continue
+        if count == expected:
+            return
+        time.sleep(0.01)
+    raise AssertionError(f"expected {expected} quota waiters")
+
+
 @pytest.mark.integration
 def test_quota_admission_is_shared_and_fair_across_spawned_processes(tmp_path: Path) -> None:
     """A hot strategy cannot consume another queued strategy's next turn."""
@@ -575,3 +678,186 @@ def test_account_binding_exposes_one_explicit_dispatch_callback(tmp_path: Path) 
         is None
     )
     assert limiter.status()["grants_in_window"] == 1
+
+
+@pytest.mark.integration
+def test_quota_fairness_aggregates_runs_under_strategy_and_instrument(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "multi-run-fairness.sqlite3"
+    limiter = _quota(
+        database_path,
+        capacity=1,
+        window_seconds=2.0,
+        max_queue_wait_seconds=20.0,
+    )
+    context = multiprocessing.get_context("spawn")
+    ready = context.Queue()
+    results = context.Queue()
+    workers = [
+        ("hot-run-a", "strategy:hot", "run:a"),
+        ("hot-run-b", "strategy:hot", "run:b"),
+        ("cold-strategy", "strategy:cold", "run:cold"),
+    ]
+    children: list[Any] = []
+    releases: list[Any] = []
+    try:
+        for label, strategy_ref, run_ref in workers:
+            release = context.Event()
+            releases.append(release)
+            child = context.Process(
+                target=_quota_identity_process,
+                args=(
+                    str(database_path),
+                    label,
+                    strategy_ref,
+                    run_ref,
+                    "BTC-PERP",
+                    ready,
+                    release,
+                    results,
+                ),
+            )
+            child.start()
+            children.append(child)
+            assert ready.get(timeout=10.0) == label
+
+        seeded = limiter.admit(
+            GatewayQuotaSubject(
+                "account:multi-run",
+                strategy_ref="strategy:hot",
+                instrument_ref="BTC-PERP",
+                run_ref="run:seed",
+            ),
+            GatewayQuotaOperation.QUERY,
+            time.monotonic_ns() + 1_000_000_000,
+        )
+        for release in releases:
+            release.set()
+        _wait_for_quota_waiters(database_path, len(workers))
+
+        first = results.get(timeout=5.0)
+        assert first[0] == "cold-strategy", first
+        outcomes = [first]
+        for _ in range(2):
+            outcomes.append(results.get(timeout=5.0))
+
+        assert [item[1] for item in outcomes] == [2, 3, 4]
+        hot = [item for item in outcomes if item[0].startswith("hot-")]
+        assert {item[2] for item in hot} == {seeded.subject_digest}
+        assert len({item[3] for item in hot}) == 2
+        assert all(0 <= item[4] < 15_000_000_000 for item in outcomes)
+        for child in children:
+            child.join(2.0)
+            assert child.exitcode == 0
+        assert limiter.pending_waiter_count == 0
+    finally:
+        for child in children:
+            if child.is_alive():
+                child.terminate()
+            child.join(2.0)
+            if child.exitcode is not None:
+                child.close()
+        ready.close()
+        results.close()
+
+
+@pytest.mark.integration
+def test_provider_session_keeps_login_until_provider_dispatch_starts(
+    tmp_path: Path,
+) -> None:
+    limiter = _quota(
+        tmp_path / "login-dispatch-quota.sqlite3",
+        capacity=3,
+        window_seconds=0.15,
+    )
+    subject = GatewayQuotaSubject("account:login", strategy_ref="strategy:login")
+    for _ in range(3):
+        limiter.admit(
+            subject,
+            GatewayQuotaOperation.QUERY,
+            time.monotonic_ns() + 1_000_000_000,
+        )
+
+    account_key = AccountKey("synthetic", "loopback", "paper", "login-transition")
+    raw_provider = _Provider(account_key)
+    session = GatewayQuotaProviderSession(raw_provider, limiter, subject)
+    with pytest.raises(GatewayQuotaAdmissionError) as deferred_login:
+        session.connect(account_key=account_key, generation="generation-1", timeout=0.03)
+    assert deferred_login.value.code == "DEADLINE_EXCEEDED"
+    assert raw_provider.calls == []
+
+    time.sleep(0.18)
+    session.connect(account_key=account_key, generation="generation-1", timeout=0.5)
+    session.connect(account_key=account_key, generation="generation-1", timeout=0.5)
+    assert raw_provider.calls == ["connect", "connect"]
+    with sqlite3.connect(tmp_path / "login-dispatch-quota.sqlite3") as connection:
+        operations = [row[0] for row in connection.execute("SELECT operation FROM grants")]
+    assert operations == ["login", "reconnect"]
+
+
+@pytest.mark.integration
+def test_provider_429_backoff_blocks_spawned_process_dispatch(tmp_path: Path) -> None:
+    database_path = tmp_path / "spawned-provider-backoff.sqlite3"
+    owner = _quota(database_path, capacity=4, window_seconds=60.0)
+    context = multiprocessing.get_context("spawn")
+    ready = context.Queue()
+    release = context.Event()
+    results = context.Queue()
+    children: list[Any] = []
+
+    class RateLimitedProvider:
+        def __init__(self) -> None:
+            self.read_calls = 0
+
+        def connect(self, **_kwargs: Any) -> None:
+            return None
+
+        def read_account(self, **_kwargs: Any) -> AccountObservation:
+            self.read_calls += 1
+            raise RateLimitError("synthetic", retry_after=0.8, detail="opaque provider detail")
+
+        def close(self) -> None:
+            return None
+
+    provider_raw = RateLimitedProvider()
+    provider = GatewayQuotaProviderSession(
+        provider_raw,
+        owner,
+        GatewayQuotaSubject("account:429-shared", strategy_ref="strategy:writer"),
+    )
+    try:
+        for index in range(4):
+            label = f"backoff-storm-{index}"
+            child = context.Process(
+                target=_quota_backoff_process,
+                args=(str(database_path), label, ready, release, results),
+            )
+            child.start()
+            children.append(child)
+            assert ready.get(timeout=10.0) == label
+        with pytest.raises(RateLimitError):
+            provider.read_account(generation="429-source", timeout=0.5)
+        assert provider_raw.read_calls == 1
+        assert owner.status()["backoff_remaining_seconds"] > 0.5
+        release.set()
+        results_seen = [results.get(timeout=5.0) for _ in children]
+        assert sorted(results_seen) == [
+            (f"backoff-storm-{index}", "DEADLINE_EXCEEDED", 0)
+            for index in range(4)
+        ]
+        for child in children:
+            child.join(2.0)
+            assert child.exitcode == 0
+        assert owner.pending_waiter_count == 0
+        assert owner.status()["grants_in_window"] == 1
+    finally:
+        release.set()
+        for child in children:
+            if child.is_alive():
+                child.terminate()
+            child.join(2.0)
+            if child.exitcode is not None:
+                child.close()
+        ready.close()
+        results.close()
