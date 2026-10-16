@@ -103,6 +103,20 @@ _FILL_SOURCE_RECORD_SCHEMA = "bt-api-provider-source-row-v1"
 _SUPPORTED_PROVIDER_TIME_IN_FORCE = frozenset(
     {("GTC",), ("IOC",), ("GTC", "IOC")}
 )
+_TRADE_ID_SCOPE_MODES = frozenset({"ACCOUNT", "INSTRUMENT"})
+# Definitive provider identity conflicts: the exact dispatch latch must stay
+# active as durable evidence, but the scope must not treat the accounted
+# conflict as a pending unknown that blocks later risk-increasing intents.
+_IDENTITY_CONFLICT_DENIAL_CODES = frozenset(
+    {
+        "ORDER_EXPOSURE_TRADE_IDENTITY_CONFLICT",
+        "ORDER_EXPOSURE_TRADE_IDENTITY_MODE_MISMATCH",
+        "ORDER_EXPOSURE_TRADE_IDENTITY_DOMAIN_REUSED",
+        "ORDER_EXPOSURE_TRADE_IDENTITY_UNMAPPED",
+        "ORDER_EXPOSURE_FILL_IDENTITY_CONFLICT",
+        "ORDER_EXPOSURE_PROVIDER_ID_REUSED",
+    }
+)
 _OPEN_ORDER_STATES = frozenset({"accepted"})
 _PROVIDER_STATUS_KEYS = frozenset(
     {
@@ -326,6 +340,11 @@ class RiskBtApiProviderContract:
     fee_amount_field: str | None = None
     fee_currency_field: str | None = None
     quote_currency_by_instrument: tuple[tuple[str, str], ...] = ()
+    # Optional DIM01 trade-identity declaration supplied only by the
+    # server-owned provider profile. Both fields are declared together; None
+    # keeps the legacy semantics and the legacy fingerprint byte for byte.
+    trade_id_domain_ref: str | None = None
+    trade_id_scope: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("exchange_name", "profile_id", "order_schema", "fill_schema"):
@@ -433,6 +452,19 @@ class RiskBtApiProviderContract:
         if tuple(checked_quotes) != tuple(sorted(checked_quotes)):
             raise RiskOrderEntryError("PROVIDER_QUOTE_CURRENCY_MAPPING_INVALID")
         object.__setattr__(self, "quote_currency_by_instrument", tuple(checked_quotes))
+        if (self.trade_id_domain_ref is None) != (self.trade_id_scope is None):
+            raise RiskOrderEntryError("PROVIDER_TRADE_IDENTITY_CONTRACT_INVALID")
+        if self.trade_id_domain_ref is not None:
+            if (
+                type(self.trade_id_domain_ref) is not str
+                or _REFERENCE.fullmatch(self.trade_id_domain_ref) is None
+                or self.trade_id_scope not in _TRADE_ID_SCOPE_MODES
+                or not self.exposure_ready
+            ):
+                # A declared identity domain must be enforceable: it needs the
+                # complete normalized observation contract, and ACCOUNT vs
+                # INSTRUMENT is a fixed fail-closed choice.
+                raise RiskOrderEntryError("PROVIDER_TRADE_IDENTITY_CONTRACT_INVALID")
 
     @property
     def write_ready(self) -> bool:
@@ -510,6 +542,11 @@ class RiskBtApiProviderContract:
         else:
             # Keep v1 profile fingerprints byte-for-byte compatible.
             payload["schema"] = "bt-api-risk-provider-contract-v1"
+        if self.trade_id_domain_ref is not None:
+            # Fingerprint unchanged for undeclared profiles; a declared
+            # identity domain is part of the trusted contract version.
+            payload["trade_id_domain_ref"] = self.trade_id_domain_ref
+            payload["trade_id_scope"] = self.trade_id_scope
         return payload
 
     @property
@@ -1709,6 +1746,11 @@ class RiskOrderEntryService:
                 target.account_scope, command.principal_ref, command.intent_id
             ) or command
         except RiskAdmissionDeniedError as error:
+            if error.code in _IDENTITY_CONFLICT_DENIAL_CODES:
+                latch = getattr(self._gate, "latch_dispatch_identity_conflict", None)
+                if callable(latch):
+                    with suppress(Exception):
+                        latch(claim.permit_id)
             return self._mark_unknown(
                 fence,
                 command,
@@ -2352,7 +2394,10 @@ def _command_reply(
         "state": state,
         "provider_order_id": latest.get("provider_order_id"),
         "filled_quantity": _decimal_text(Decimal(str(latest.get("filled_quantity", 0) or 0))),
-        "average_price": None,
+        # A durable terminal ACK publishes the executed weighted average price
+        # derived from the immutable fill facts; every non-fill event leaves it
+        # absent, so the projection stays None until fills are proven.
+        "average_price": latest.get("average_price"),
         "cumulative_commission": None,
         "permit_reference": latest.get("permit_id") or command.permit_id,
         "dispatch_attempts": int(
@@ -3609,6 +3654,8 @@ def _order_exposure_proof(
         writer_owner_id=writer_owner_id,
         writer_fencing_token=writer_fencing_token,
         writer_fence_sha256=writer_fence_sha256,
+        trade_id_domain_ref=contract.trade_id_domain_ref,
+        trade_id_scope=contract.trade_id_scope,
     )
 
 

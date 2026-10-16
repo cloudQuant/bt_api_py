@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="20" time="86.154" timestamp="2026-10-16T10:45:46.264167" hostname="yun"><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_strategy_scope_template_varies_only_by_run_id" time="0.003" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_order_entry_accepts_service_registry_readonly_arguments" time="0.003" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_recovery_observation_timestamp_is_server_bound_and_strict" time="0.002" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_recursive_wire_freeze_matches_service_client_submit_contract" time="0.004" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_journal_appends_a_mapping_payload_after_prepared_command" time="0.146" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_terminal_source_binds_unknown_to_reserved_permit_without_command_column" time="0.447" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[fill-False-trailing_events0-True]" time="3.092" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[fill_then_one_unknown-False-trailing_events1-True]" time="0.582" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[unknown_before_fill-True-trailing_events2-False]" time="0.372" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[two_trailing_unknowns-False-trailing_events3-False]" time="0.496" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[event_after_fill-False-trailing_events4-False]" time="0.494" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_false_dispatch_receipt_projects_ack_as_unknown_and_keeps_history" time="0.453" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_journal_records_normalized_observations_through_proof_ready" time="0.315" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_spawned_risk_service_gates_idempotent_orders_and_metadata_scope" time="6.567"><failure message="AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-restarted-strategy-client:normal_close:BrokenPipeError',)">tests\unit\test_service_risk_only_order_integration.py:2211: in test_spawned_risk_service_gates_idempotent_orders_and_metadata_scope
+    assert restarted_client_ready[0] == "ready", restarted_client_ready
+E   AssertionError: ('error', 'DUPLICATE_ACTIVE_RUN')
+E   assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2274: in test_spawned_risk_service_gates_idempotent_orders_and_metadata_scope
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-restarted-strategy-client:normal_close:BrokenPipeError',)</failure></testcase><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_claimed_but_unjournaled_order_is_unknown_after_service_restart" time="14.729"><failure message="AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-recovery-client:normal_close:BrokenPipeError',)">tests\unit\test_service_risk_only_order_integration.py:2364: in test_claimed_but_unjournaled_order_is_unknown_after_service_restart
+    assert recovered_client_ready[0] == "ready", recovered_client_ready
+E   AssertionError: ('error', 'DUPLICATE_ACTIVE_RUN')
+E   assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2392: in test_claimed_but_unjournaled_order_is_unknown_after_service_restart
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-recovery-client:normal_close:BrokenPipeError',)</failure></testcase><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_provider_written_order_is_reconciled_after_restart_without_resend" time="15.359"><failure message="AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-write-gap-recovery-client:normal_close:BrokenPipeError',)">tests\unit\test_service_risk_only_order_integration.py:2489: in test_provider_written_order_is_reconciled_after_restart_without_resend
+    assert recovered_client_ready[0] == "ready", recovered_client_ready
+E   AssertionError: ('error', 'DUPLICATE_ACTIVE_RUN')
+E   assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2535: in test_provider_written_order_is_reconciled_after_restart_without_resend
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-write-gap-recovery-client:normal_close:BrokenPipeError',)</failure></testcase><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_ambiguous_query_cardinality_cannot_be_tracked_as_one_order" time="4.565" /><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch[after_proof_ready-RISK_PROOF_READY_PROCESS_LOSS-1-process_loss]" time="14.221"><failure message="AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-after_proof_ready-retry-client:normal_close:BrokenPipeError',)">tests\unit\test_service_risk_only_order_integration.py:2782: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    assert _receive(retry_client["pipe"])[0] == "ready"
+E   AssertionError: assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2816: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-after_proof_ready-retry-client:normal_close:BrokenPipeError',)</failure></testcase><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch[after_risk_resolution-RISK_RESOLUTION_PROCESS_LOSS-0-process_loss]" time="14.095"><failure message="AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-after_risk_resolution-retry-client:normal_close:BrokenPipeError',)">tests\unit\test_service_risk_only_order_integration.py:2782: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    assert _receive(retry_client["pipe"])[0] == "ready"
+E   AssertionError: assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2816: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-after_risk_resolution-retry-client:normal_close:BrokenPipeError',)</failure></testcase><testcase classname="tests.unit.test_service_risk_only_order_integration" name="test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch[ack_journal_error_after_risk_resolution-None-0-unknown]" time="8.455"><failure message="AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-ack_journal_error_after_risk_resolution-retry-client:normal_close:BrokenPipeError',)">tests\unit\test_service_risk_only_order_integration.py:2782: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    assert _receive(retry_client["pipe"])[0] == "ready"
+E   AssertionError: assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2816: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-ack_journal_error_after_risk_resolution-retry-client:normal_close:BrokenPipeError',)</failure></testcase></testsuite></testsuites>

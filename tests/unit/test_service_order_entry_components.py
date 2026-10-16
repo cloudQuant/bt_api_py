@@ -106,8 +106,12 @@ def test_account_owner_role_declares_only_the_write_and_query_operations():
     prepared = _prepared()
 
     assert prepared.operations_by_port == {
-        "service.order_entry": frozenset({"orders.submit", "orders.cancel"}),
-        "service.order_query": frozenset({"orders.query"}),
+        "service.order_entry": frozenset(
+            {"orders.submit", "orders.cancel", "orders.submit_approved_target"}
+        ),
+        "service.order_query": frozenset(
+            {"orders.query", "execution.account_books.query"}
+        ),
     }
     assert prepared.options == {"role": "account_owner"}
 
@@ -115,7 +119,11 @@ def test_account_owner_role_declares_only_the_write_and_query_operations():
 def test_account_owner_binding_only_the_query_port_advertises_no_write_operation():
     prepared = _prepared(ports=("service.order_query",))
 
-    assert prepared.operations_by_port == {"service.order_query": frozenset({"orders.query"})}
+    assert prepared.operations_by_port == {
+        "service.order_query": frozenset(
+            {"orders.query", "execution.account_books.query"}
+        )
+    }
 
 
 def test_order_entry_handler_keeps_trusted_attribution_and_serves_its_own_facts(tmp_path):

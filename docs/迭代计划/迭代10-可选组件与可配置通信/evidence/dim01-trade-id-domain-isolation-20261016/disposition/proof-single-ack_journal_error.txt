@@ -1,0 +1,42 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch[ack_journal_error_after_risk_resolution-None-0-unknown] _
+tests\unit\test_service_risk_only_order_integration.py:2668: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    assert _receive(crashed_host["pipe"])[0] == "ready"
+E   AssertionError: assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2816: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-ack_journal_error_after_risk_resolution-host:normal_close:BrokenPipeError',)
+---------------------------- Captured stderr call -----------------------------
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+Process risk-order-ack_journal_error_after_risk_resolution-host:
+Traceback (most recent call last):
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "D:\bt_api_py\tests\unit\test_service_risk_only_order_integration.py", line 1909, in _host_process
+    host.start()
+  File "D:\bt_api_py\bt_api_py\service_host.py", line 711, in start
+    raise ServiceHostError(exc.code) from None
+bt_api_py.service_host.ServiceHostError: ORDER_RECOVERY_FAILED
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_risk_only_order_integration.py::test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch[ack_journal_error_after_risk_resolution-None-0-unknown]
+1 failed, 1 warning in 4.21s

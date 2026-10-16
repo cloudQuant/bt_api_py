@@ -1,0 +1,46 @@
+{
+  "schema": "iteration10-focused-qa-spec-v1",
+  "artifact_id": "it10dim01-p3-20261016-r2a",
+  "python": "C:/anaconda3/python.exe",
+  "cwd": "D:\\bt_api_py",
+  "nodes": [
+    "tests/integration/test_dim01_identity_isolation_service.py"
+  ],
+  "pytest_options": [
+    "--noconftest",
+    "--import-mode=importlib",
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "repositories": {
+    "D:\\bt_api_py": "466977392985ef1d7fa9b282a220096c8d19dff8"
+  },
+  "source_resolution_policy": "Live shared parent worktree pinned by SHA-256 source pins; PYTHONPATH pins worktree SDK root, bt_api_base src and bt_api_risk src (editable .pth installs resolve to the same worktree paths). Scope: DIM01 phase-2 pending-commit files per .codex-tmp/dim01-p2-status.md sha256-final.txt (6 files) plus tests/unit/test_service_order_entry_components.py (round in-scope, spec-B node; live hash recorded in .codex-tmp/dim01-p2-review-status.md because the status doc did not pin it).",
+  "output": "D:/temp/it10dim01-p3-20261016-r2a",
+  "evidence_level": "DIM01_IDENTITY_ISOLATION_FIXED_SOURCE_SDK_OWNER_SERVICE_HOST_CURVE_R2A",
+  "source_sha256": {
+    "D:\\bt_api_py\\bt_api_py\\service_risk_order_entry.py": "67c98d5be424c108c0c6988ac178214fca93e27612fdf1b33a80773670777890",
+    "D:\\bt_api_py\\bt_api_py\\service_risk_order_journal.py": "37d89c3394b86245eae578540303707b15287a66f36de112bb18fc3556e6c3fe",
+    "D:\\bt_api_py\\tests\\integration\\test_dim01_identity_isolation_service.py": "733b85a8d480b94482f38c07bd68bb5b2d5bf4638e3170bbcda89056189f39df",
+    "D:\\bt_api_py\\tests\\unit\\test_service_risk_only_order_integration.py": "9d29b5884dfeada810a0c0c4885965ef04d3bd49c91da8091f7ce51d1412f552",
+    "D:\\bt_api_py\\tests\\unit\\test_service_order_entry_components.py": "164089a18c403e81cf35a6aea89bab356d7f440f8a665eff497b848d38895c8a",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py": "cc595bc72c5eb35ae8857e817d8173ae5457e2056fa363be1295f5459a5b5c58",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\exposure.py": "0d1584fe1a4809c27335e2d29268c692db9e59a9747c25adb115c489788d2da0"
+  }
+}

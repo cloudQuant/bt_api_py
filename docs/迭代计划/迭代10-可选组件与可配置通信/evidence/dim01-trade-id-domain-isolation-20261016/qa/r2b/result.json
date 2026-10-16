@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T02:49:10.196853+00:00",
+  "source_count": 7,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "466977392985ef1d7fa9b282a220096c8d19dff8"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "466977392985ef1d7fa9b282a220096c8d19dff8"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "5c5046d130f9cbc5637a600ab51986cd39ce4e37f213971456e155e173eb8ba0",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "DIM01_OWNED_UNITS_FIXED_SOURCE_CLEAN_SUBSET_NO_RESTART_REGISTRATION_NODES"
+}

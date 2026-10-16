@@ -577,6 +577,10 @@ class RiskOrderJournal:
         )
         reference = {
             "accepted_request_sha256": accepted_request_sha256,
+            # Provider-executed weighted average price over the immutable fill
+            # facts. Derived here so the durable terminal ACK can project the
+            # executed price without re-reading the provider.
+            "average_price": _weighted_average_price(fill_event.payload),
             "claim": _claim_payload(claim),
             "claim_digest": claim.claim_digest,
             "dispatch_attempt_count": 1,
@@ -696,6 +700,7 @@ class RiskOrderJournal:
                 or reference.get("intent_id") != command["risk_intent_id"]
                 or reference.get("permit_id") != permit_id
                 or reference.get("accepted_request_sha256") != command["order_request_sha256"]
+                or reference.get("average_price") != _weighted_average_price(fill_event.payload)
                 or reference.get("order_observation_revision") != order_event.revision
                 or reference.get("order_observation_record_sha256") != order_event.record_sha256
                 or reference.get("fill_observation_revision") != fill_event.revision
@@ -1010,6 +1015,7 @@ class RiskOrderJournal:
             or reference.get("claim_digest") != claim.claim_digest
             or reference.get("claim") != _claim_payload(claim)
             or reference.get("accepted_request_sha256") != command["order_request_sha256"]
+            or reference.get("average_price") != _weighted_average_price(fill_event.payload)
             or reference.get("provider_order_id") != order_event.payload.get("provider_order_id")
             or reference.get("order_observation_revision") != order_event.revision
             or reference.get("order_observation_record_sha256") != order_event.record_sha256
@@ -1028,6 +1034,9 @@ class RiskOrderJournal:
             raise RiskOrderJournalError("TERMINAL_EXPOSURE_RECONCILIATION_MISMATCH")
         if proof is not None:
             observation = proof.observation
+            stored_contract = (fill_event.payload.get("metadata_facts") or {}).get(
+                "provider_contract"
+            )
             if (
                 proof.reconciliation_evidence_sha256
                 != reference.get("reconciliation_evidence_sha256")
@@ -1048,6 +1057,7 @@ class RiskOrderJournal:
                 or observation.writer_fence_sha256 != fill_event.writer_fence_sha256
                 or observation.writer_owner_id != fill_event.writer_owner_id
                 or observation.writer_fencing_token != fill_event.writer_fencing_token
+                or not _trade_identity_declaration_matches(observation, stored_contract)
             ):
                 raise RiskOrderJournalError("TERMINAL_EXPOSURE_PROOF_SOURCE_MISMATCH")
         if ack_events and not self._has_terminal_ack_event_in(
@@ -4608,6 +4618,23 @@ def _fill_facts_from_event(
     return tuple(sorted(facts, key=lambda item: item.trade_id))
 
 
+def _weighted_average_price(payload: Mapping[str, Any]) -> str:
+    """Derive the executed average price from one immutable fill observation.
+
+    The value is the quantity-weighted mean of the exact validated fill facts,
+    so a terminal ACK can expose the provider-executed price without trusting a
+    second provider read.  Non-positive totals are refused instead of returning
+    a silent placeholder.
+    """
+
+    facts = _fill_facts_from_event(payload)
+    quantity = sum((fact.quantity for fact in facts), Decimal(0))
+    if not facts or quantity <= 0:
+        raise RiskOrderJournalError("FILL_FACT_SOURCE_INVALID")
+    gross = sum((fact.quantity * fact.price for fact in facts), Decimal(0))
+    return _decimal_text(gross / quantity)
+
+
 def _fill_source_record_sha256(provenance: Mapping[str, Any]) -> str:
     """Recompute the immutable explicit fill-row digest from normalized provenance."""
 
@@ -4641,7 +4668,8 @@ def _terminal_ack_payload(
         or not isinstance(reference, Mapping)
     ):
         raise RiskOrderJournalError("TERMINAL_EXPOSURE_RECEIPT_INVALID")
-    return {
+    payload = {
+        "average_price": reference.get("average_price"),
         "dispatch_attempt_count": 1,
         "exposure_proof_sha256": receipt.exposure_proof_sha256,
         "exposure_reference_id": receipt.exposure_reservation_id,
@@ -4657,6 +4685,29 @@ def _terminal_ack_payload(
         "risk_intent_id": receipt.claim.intent_id,
         "trade_count": receipt.trade_count,
     }
+    if type(payload["average_price"]) is not str or not payload["average_price"]:
+        # A terminal positive-fill reference always carries the derived text;
+        # refusing an absent value keeps the ACK from presenting a filled order
+        # without its executed price.
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_RECEIPT_INVALID")
+    return payload
+
+
+def _trade_identity_declaration_matches(
+    proof: OrderExposureObservationProof, contract: object
+) -> bool:
+    """Require the declared DIM01 identity domain to match the stored contract.
+
+    Undeclared proofs and undeclared contracts keep the legacy behavior.  Any
+    other combination (declared on one side only, or different values) refuses
+    the proof instead of inferring an identity domain from a profile version.
+    """
+
+    declared_domain = proof.trade_id_domain_ref
+    declared_scope = proof.trade_id_scope
+    stored_domain = contract.get("trade_id_domain_ref") if isinstance(contract, Mapping) else None
+    stored_scope = contract.get("trade_id_scope") if isinstance(contract, Mapping) else None
+    return declared_domain == stored_domain and declared_scope == stored_scope
 
 
 def _terminal_exposure_source_matches(
@@ -4718,6 +4769,7 @@ def _terminal_exposure_source_matches(
             order.get("risk_intent_id") == claim.intent_id,
             fills.get("risk_intent_id") == claim.intent_id,
             order.get("provider_contract_sha256") == source_facts.get("provider_contract_sha256"),
+            _trade_identity_declaration_matches(observation, contract),
             reference.get("claim") == _claim_payload(claim),
             reference.get("claim_digest") == claim.claim_digest,
             reference.get("reservation_id") == reference_id,
@@ -4875,6 +4927,7 @@ def _order_observation_source_matches(
             order_event.writer_fence_sha256 == tracked_order.writer_fence_sha256,
             fill_event.writer_fence_sha256 == tracked_order.writer_fence_sha256,
             metadata_facts.get("provider_contract_sha256") == contract.get("fingerprint"),
+            _trade_identity_declaration_matches(proof, contract),
             proof.quote_currency == quote_currency,
             _observation_fx_matches(proof, fx_rate),
             proof.filled_gross_notional

@@ -1,0 +1,44 @@
+{
+  "argv": [
+    "C:/anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\it10dim01-p3-20261016-r2b\\junit.xml",
+    "--basetemp=D:\\temp\\it10dim01-p3-20261016-r2b\\pytest-tmp",
+    "tests/unit/test_service_order_entry_components.py",
+    "tests/unit/test_service_risk_only_order_integration.py::test_strategy_scope_template_varies_only_by_run_id",
+    "tests/unit/test_service_risk_only_order_integration.py::test_order_entry_accepts_service_registry_readonly_arguments",
+    "tests/unit/test_service_risk_only_order_integration.py::test_recovery_observation_timestamp_is_server_bound_and_strict",
+    "tests/unit/test_service_risk_only_order_integration.py::test_recursive_wire_freeze_matches_service_client_submit_contract",
+    "tests/unit/test_service_risk_only_order_integration.py::test_journal_appends_a_mapping_payload_after_prepared_command",
+    "tests/unit/test_service_risk_only_order_integration.py::test_terminal_source_binds_unknown_to_reserved_permit_without_command_column",
+    "tests/unit/test_service_risk_only_order_integration.py::test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[fill-False-trailing_events0-True]",
+    "tests/unit/test_service_risk_only_order_integration.py::test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[fill_then_one_unknown-False-trailing_events1-True]",
+    "tests/unit/test_service_risk_only_order_integration.py::test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[unknown_before_fill-True-trailing_events2-False]",
+    "tests/unit/test_service_risk_only_order_integration.py::test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[two_trailing_unknowns-False-trailing_events3-False]",
+    "tests/unit/test_service_risk_only_order_integration.py::test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls[event_after_fill-False-trailing_events4-False]",
+    "tests/unit/test_service_risk_only_order_integration.py::test_false_dispatch_receipt_projects_ack_as_unknown_and_keeps_history",
+    "tests/unit/test_service_risk_only_order_integration.py::test_journal_records_normalized_observations_through_proof_ready",
+    "tests/unit/test_service_risk_only_order_integration.py::test_ambiguous_query_cardinality_cannot_be_tracked_as_one_order"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T02:48:58.673741+00:00"
+}

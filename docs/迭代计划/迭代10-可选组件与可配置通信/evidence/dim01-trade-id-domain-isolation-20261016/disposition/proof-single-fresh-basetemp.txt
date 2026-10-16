@@ -1,0 +1,100 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch[after_proof_ready-RISK_PROOF_READY_PROCESS_LOSS-1-process_loss] _
+tests\unit\test_service_risk_only_order_integration.py:2782: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    assert _receive(retry_client["pipe"])[0] == "ready"
+E   AssertionError: assert 'error' == 'ready'
+E     
+E     - ready
+E     + error
+
+During handling of the above exception, another exception occurred:
+tests\unit\test_service_risk_only_order_integration.py:2816: in test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch
+    _assert_no_fallback_cleanup(forced, failures)
+tests\unit\_spawned_process_helpers.py:112: in _assert_no_fallback_cleanup
+    raise AssertionError(
+E   AssertionError: spawned account integration needed fallback cleanup: forced=(), failures=('risk-order-after_proof_ready-retry-client:normal_close:BrokenPipeError',)
+---------------------------- Captured stderr call -----------------------------
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+Process risk-order-after_proof_ready-host:
+Traceback (most recent call last):
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "D:\bt_api_py\tests\unit\test_service_risk_only_order_integration.py", line 1912, in _host_process
+    host.serve_once(timeout_ms=25)
+  File "D:\bt_api_py\bt_api_py\service_host.py", line 746, in serve_once
+    handled = self._server.serve_once(bounded_timeout)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api\bt_api_transport_zmq\src\bt_api_transport_zmq\service_v2.py", line 292, in serve_once
+    result = self._handler(principal_ref, request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_host.py", line 1257, in _dispatch_request
+    return registry.handle(authenticated_principal, request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_registry.py", line 1330, in handle
+    return self._dispatch(authenticated_principal, request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_registry.py", line 2189, in _dispatch
+    result = handler(context, arguments)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_components.py", line 1953, in handler
+    return _adapter.handle(  # type: ignore[attr-defined]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_risk_order_entry.py", line 709, in handle
+    return self._submit(
+           ^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_risk_order_entry.py", line 876, in _submit
+    return self._drive_first_attempt(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_risk_order_entry.py", line 1277, in _drive_first_attempt
+    self._continue_reserved(
+  File "D:\bt_api_py\bt_api_py\service_risk_order_entry.py", line 1466, in _continue_reserved
+    return self._reconcile_claimed_order(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_risk_order_entry.py", line 1643, in _reconcile_claimed_order
+    self._gate.resolve_dispatch_freeze(proof)
+  File "D:\bt_api_py\tests\unit\test_service_risk_only_order_integration.py", line 1837, in crash_before_risk_resolution
+    raise _CrashAfterProofReady()
+tests.unit.test_service_risk_only_order_integration._CrashAfterProofReady
+[bt_api_base.plugins] plugin bt_api_coinbase skipped due to duplicate registration: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin coinbase failed: duplicate registration skipped: duplicate exchanges: COINBASE___SPOT
+[bt_api_base.plugins] plugin bt_api_mexc skipped due to duplicate registration: duplicate exchanges: MEXC___SPOT
+[bt_api_base.plugins] plugin mexc failed: duplicate registration skipped: duplicate exchanges: MEXC___SPOT
+C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+Process risk-order-after_proof_ready-retry-client:
+Traceback (most recent call last):
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 314, in _bootstrap
+    self.run()
+  File "C:\anaconda3\Lib\multiprocessing\process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "D:\bt_api_py\tests\unit\test_service_risk_only_order_integration.py", line 1997, in _strategy_process
+    startup = runtime.start()
+              ^^^^^^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_runtime.py", line 565, in start
+    self._register(
+  File "D:\bt_api_py\bt_api_py\service_runtime.py", line 1066, in _register
+    self._register_port(
+  File "D:\bt_api_py\bt_api_py\service_runtime.py", line 1243, in _register_port
+    result, request_started = self._rpc(
+                              ^^^^^^^^^^
+  File "D:\bt_api_py\bt_api_py\service_runtime.py", line 1613, in _rpc
+    raise ServiceRuntimeError(
+bt_api_py.service_runtime.ServiceRuntimeError: DUPLICATE_ACTIVE_RUN
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_risk_only_order_integration.py::test_proof_ready_crash_recovers_from_exact_risk_receipt_without_redispatch[after_proof_ready-RISK_PROOF_READY_PROCESS_LOSS-1-process_loss]
+1 failed, 1 warning in 15.24s

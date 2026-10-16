@@ -29,6 +29,8 @@ from bt_api_base.service_protocol import (
 from bt_api_risk import (
     AccountScope,
     DispatchClaimBinding,
+    DispatchExposureResolutionProof,
+    DispatchExposureResolutionReceiptStatus,
     DispatchEvidenceClass,
     DispatchResolutionReceiptStatus,
     DurableRiskAdmissionAdapter,
@@ -37,12 +39,16 @@ from bt_api_risk import (
     InstrumentRiskMetadata,
     InstrumentRiskRegistry,
     IntentAction,
+    OrderExposureState,
+    PermitInvalidError,
     RiskIntent,
     RiskPolicy,
 )
 
 from bt_api_py.bt_api import BtApi
-from bt_api_py.service_components import ComponentResources
+from bt_api_py._contracts.models import OrderRequest, OrderType, QueryOrderRequest, Side
+from bt_api_py._normalization import normalize_result
+from bt_api_py.service_components import ComponentResources, TrustedRiskPolicyBinding
 from bt_api_py.service_config import parse_client_config, parse_service_config
 from bt_api_py.service_execution import (
     ServiceExecutionClient,
@@ -55,6 +61,13 @@ from bt_api_py.service_risk_order_entry import (
     _ORDER_FIELDS,
     _RECOVERY_FILL_OBSERVATION_FIELDS,
     _RECOVERY_ORDER_OBSERVATION_FIELDS,
+    _claim_payload,
+    _evidence_class,
+    _followup_observation,
+    _observation_payloads,
+    _order_exposure_proof,
+    _v2_order_facts,
+    _wire_scope_identity_payload,
     RiskBtApiProviderContract,
     RiskOrderEntryError,
     RiskOrderEntryService,
@@ -68,6 +81,7 @@ from bt_api_py.service_risk_order_entry import (
 from bt_api_py.service_risk_order_journal import (
     RiskOrderJournal,
     RiskOrderJournalError,
+    _reconciliation_evidence_sha256,
     canonical_json,
     sha256_text,
 )
@@ -492,6 +506,643 @@ def test_journal_appends_a_mapping_payload_after_prepared_command(tmp_path) -> N
         assert current is not None
         assert current.state == "RESERVED"
         assert current.permit_id == "synthetic-permit-mapping"
+
+
+def test_terminal_source_binds_unknown_to_reserved_permit_without_command_column(
+    tmp_path,
+) -> None:
+    """A raw SQLite command row has no permit column; the event chain does."""
+
+    journal = RiskOrderJournal(
+        str(tmp_path / "journal-terminal-unknown-permit.sqlite3"),
+        writer_id="risk-order-terminal-unknown-permit",
+    )
+    gate = DurableRiskGate(
+        str(tmp_path / "risk-terminal-unknown-permit.sqlite3"),
+        RiskPolicy(
+            "terminal-unknown-permit-policy",
+            Decimal("1000"),
+            max_increase_count=5,
+            notional_unit="USD",
+        ),
+        execution_journal_authority=journal,
+    )
+    intent_id = "terminal-unknown-permit-intent"
+    risk_intent_id = "risk-order:terminal-unknown-permit"
+    risk_intent = RiskIntent(
+        intent_id=risk_intent_id,
+        scope=_ACCOUNT_SCOPE,
+        action=IntentAction.INCREASE,
+        notional=Decimal("20"),
+        payload_fingerprint="f" * 64,
+        notional_unit="USD",
+    )
+    request = {"client_order_id": "terminal-unknown-permit", "symbol": _INSTRUMENT}
+    canonical_payload = {"intent_id": intent_id}
+    # Production records the dispatch envelope digest, so the raw command row
+    # must carry the same authoritative creation hash the journal re-verifies.
+    order_request_sha256 = sha256_text(
+        canonical_json(
+            {
+                "exchange_name": _EXCHANGE,
+                "operation": "BtApi.make_order(normalized=True)",
+                "request": request,
+            }
+        )
+    )
+
+    try:
+        with journal.writer_fence(_ACCOUNT_SCOPE) as fence:
+            command, created = journal.prepare_or_get(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=intent_id,
+                risk_intent_id=risk_intent_id,
+                payload_sha256=sha256_text(canonical_json(canonical_payload)),
+                canonical_payload=canonical_payload,
+                wire_scope={"run_id": "terminal-unknown-permit-run", "strategy_ref": _STRATEGY},
+                exchange_name=_EXCHANGE,
+                provider_account_id=_PROVIDER_ACCOUNT,
+                client_order_id="terminal-unknown-permit",
+                order_request=request,
+                order_request_sha256=order_request_sha256,
+            )
+            assert created and command.state == "PREPARED"
+            permit = gate.reserve(risk_intent)
+            permit_id = permit.permit_id
+            gate.claim_for_dispatch(permit_id, risk_intent)
+            claim = gate.dispatch_claim_binding(permit_id)
+            gate.settle(permit_id)
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=intent_id,
+                event_type="RESERVED",
+                payload={"permit_id": permit_id, "risk_intent_id": risk_intent_id},
+            )
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=intent_id,
+                event_type="CLAIMED",
+                payload={
+                    "claim": {
+                        "cause_id": claim.cause_id,
+                        "claim_digest": claim.claim_digest,
+                        "claimed_at": claim.claimed_at,
+                        "intent_hash": claim.intent_hash,
+                        "intent_id": claim.intent_id,
+                        "permit_id": claim.permit_id,
+                        "scope_key": claim.scope.key,
+                    },
+                    "permit_id": permit_id,
+                    "risk_intent_id": risk_intent_id,
+                },
+            )
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=intent_id,
+                event_type="DISPATCHING",
+                payload={
+                    "dispatch_attempt_count": 1,
+                    "permit_id": permit_id,
+                    "risk_intent_id": risk_intent_id,
+                },
+            )
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=intent_id,
+                event_type="ORDER_OBSERVATION",
+                payload={"fixture": "intentionally-incomplete"},
+            )
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=intent_id,
+                event_type="FILL_OBSERVATION",
+                payload={"fixture": "intentionally-incomplete"},
+            )
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=intent_id,
+                event_type="UNKNOWN",
+                payload={
+                    "dispatch_attempt_count": 1,
+                    "permit_id": permit_id,
+                    "public_state": "UNKNOWN",
+                    "reason_code": "DISPATCH_EXPOSURE_RESOLUTION_UNCERTAIN",
+                },
+            )
+
+            with pytest.raises(RiskOrderJournalError) as rejected:
+                journal.load_terminal_exposure_source(
+                    fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=intent_id,
+                )
+            assert rejected.value.code == "TERMINAL_EXPOSURE_SOURCE_INVALID"
+            current = journal.get_command(_ACCOUNT_SCOPE, _PRINCIPAL, intent_id)
+            assert current is not None
+            assert current.state == "UNKNOWN"
+            assert current.permit_id == permit_id
+    finally:
+        gate.close()
+
+
+@pytest.mark.parametrize(
+    ("case", "unknown_before_observation", "trailing_events", "accepted"),
+    [
+        ("fill", False, (), True),
+        ("fill_then_one_unknown", False, ("UNKNOWN",), True),
+        ("unknown_before_fill", True, (), False),
+        ("two_trailing_unknowns", False, ("UNKNOWN", "UNKNOWN"), False),
+        ("event_after_fill", False, ("PROVIDER_QUERY",), False),
+    ],
+)
+def test_real_typed_terminal_claim_accepts_only_exact_fill_history_without_provider_calls(
+    tmp_path,
+    case: str,
+    unknown_before_observation: bool,
+    trailing_events: tuple[str, ...],
+    accepted: bool,
+) -> None:
+    """Exercise Risk's real typed claim against the journal's narrow fill suffix.
+
+    The raw rows are passed through the production normalizer and proof
+    builders.  No BtApi provider method is called; this isolates the durable
+    claim/observation authority from network or provider behavior.
+    """
+
+    instrument = "BTC-USD"
+    now_ns = time.time_ns()
+    metadata = InstrumentRiskMetadata(
+        instrument=instrument,
+        metadata_version=_METADATA_VERSION,
+        as_of_ns=now_ns - 1_000_000_000,
+        expires_at_ns=now_ns + 3_600_000_000_000,
+        tick_size=Decimal("0.01"),
+        quantity_step=Decimal("0.001"),
+        contract_multiplier=Decimal("1"),
+        max_gross_notional=Decimal("1000"),
+        taker_fee_bps=Decimal("0"),
+        fixed_fee=Decimal("0"),
+        max_slippage_bps=Decimal("0"),
+        quantity_unit="BTC",
+        valuation_unit="USD",
+    )
+    registry = InstrumentRiskRegistry((metadata,))
+    target = RiskOrderTarget(
+        account_scope=_ACCOUNT_SCOPE,
+        strategy_id=_STRATEGY,
+        exchange_name=_EXCHANGE,
+        provider_account_id=_PROVIDER_ACCOUNT,
+        registry=registry,
+    )
+    journal = RiskOrderJournal(
+        str(tmp_path / f"terminal-claim-{case}.sqlite3"),
+        writer_id=f"terminal-claim-{case}",
+    )
+    gate = DurableRiskGate(
+        str(tmp_path / f"terminal-risk-{case}.sqlite3"),
+        RiskPolicy(
+            f"terminal-claim-policy-{case}",
+            Decimal("1000"),
+            max_increase_count=5,
+            notional_unit="USD",
+        ),
+        execution_journal_authority=journal,
+    )
+    mapper = InstrumentRiskAdmissionMapper(_ACCOUNT_SCOPE, registry)
+    admission = DurableRiskAdmissionAdapter(gate, mapper)
+    bt_api = BtApi(debug=False)
+    contract = RiskBtApiProviderContract(
+        exchange_name=_EXCHANGE,
+        profile_id="terminal-claim-provider-v2",
+        order_schema="terminal-order-v2",
+        fill_schema="terminal-fill-v2",
+        client_order_id_query=True,
+        client_order_id_query_unique=True,
+        complete_order_snapshot=True,
+        complete_fill_history=True,
+        provider_accepts_client_order_id=True,
+        provider_status_mapping=(
+            ("cancelled", "canceled"),
+            ("expired", "expired"),
+            ("filled", "completed"),
+            ("open", "accepted"),
+            ("partial", "partial"),
+            ("rejected", "rejected"),
+        ),
+        supported_order_types=("LIMIT",),
+        supported_time_in_force=("GTC",),
+        supported_position_effects=("OPEN",),
+        normalizer_schema="bt-api-order-source-provenance-v2",
+        order_revision_field="order_revision",
+        fill_revision_field="fill_revision",
+        fill_watermark_field="fill_watermark",
+        fee_amount_field="fee_amount",
+        fee_currency_field="fee_currency",
+        quote_currency_by_instrument=((instrument, "USD"),),
+    )
+    try:
+        service = RiskOrderEntryService(
+            bt_api,
+            {_SCOPE: target},
+            {_SCOPE: admission},
+            journal,
+            gate,
+            {_SCOPE: contract},
+        )
+        assert _EXCHANGE not in bt_api.exchange_feeds
+        arguments = _submit_arguments(
+            intent_id=f"terminal-claim-{case}",
+            signal_id=f"terminal-signal-{case}",
+            instrument=instrument,
+            side="BUY",
+            position_effect="OPEN",
+            order_type="LIMIT",
+            quantity="1",
+            price="20",
+            time_in_force="GTC",
+            reduce_only=False,
+            metadata_version=_METADATA_VERSION,
+            deadline_ns=None,
+            tags={},
+        )
+        parsed = _parse_order(
+            arguments,
+            target,
+            scope=_SCOPE,
+            principal_ref=_PRINCIPAL,
+        )
+        with journal.writer_fence(_ACCOUNT_SCOPE) as fence:
+            command, created = service._prepare_command(
+                fence,
+                principal_ref=_PRINCIPAL,
+                scope=_SCOPE,
+                target=target,
+                parsed=parsed,
+            )
+            assert created and command.state == "PREPARED"
+            risk_order = service._admission_order(command, target, parsed)
+            permit = admission.reserve(risk_order)
+            permit_id = permit.permit_id
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=command.intent_id,
+                event_type="RESERVED",
+                payload={
+                    "permit_id": permit_id,
+                    "risk_intent_id": risk_order.intent_id,
+                },
+            )
+            admission.validate(permit_id, risk_order)
+            admission.claim_for_dispatch(permit_id, risk_order)
+            claim = gate.dispatch_claim_binding(permit_id)
+            assert claim.scope == _ACCOUNT_SCOPE
+            assert claim.permit_id == permit_id
+            assert claim.intent_id == command.risk_intent_id
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=command.intent_id,
+                event_type="CLAIMED",
+                payload={
+                    "claim": _claim_payload(claim),
+                    "permit_id": permit_id,
+                    "risk_intent_id": risk_order.intent_id,
+                },
+            )
+            journal.append_event(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=command.intent_id,
+                event_type="DISPATCHING",
+                payload={
+                    "dispatch_attempt_count": 1,
+                    "permit_id": permit_id,
+                    "risk_intent_id": risk_order.intent_id,
+                },
+            )
+            admission.settle(permit_id)
+
+            request = OrderRequest.from_dict(dict(command.order_request))
+            provider_order_id = f"provider-terminal-{case}"
+            order = normalize_result(
+                "query_order",
+                {
+                    "account_id": _PROVIDER_ACCOUNT,
+                    "client_order_id": command.client_order_id,
+                    "complete": True,
+                    "fill_watermark": 1,
+                    "schema_version": contract.order_schema,
+                    "watermark": f"order-{case}-1",
+                    "data": [
+                        {
+                            "account_id": _PROVIDER_ACCOUNT,
+                            "client_order_id": command.client_order_id,
+                            "filled": "1",
+                            "filled_quantity": "1",
+                            "order_id": provider_order_id,
+                            "order_revision": 1,
+                            "avg_price": "20",
+                            "price": "20",
+                            "quantity": "1",
+                            "side": "buy",
+                            "status": "filled",
+                            "symbol": instrument,
+                        }
+                    ],
+                },
+                _EXCHANGE,
+                symbol=request.symbol,
+                request=request,
+            )
+            fills = normalize_result(
+                "get_deals",
+                {
+                    "account_id": _PROVIDER_ACCOUNT,
+                    "client_order_id": command.client_order_id,
+                    "complete": True,
+                    "fill_watermark": 1,
+                    "schema_version": contract.fill_schema,
+                    "watermark": f"fills-{case}-1",
+                    "data": [
+                        {
+                            "account_id": _PROVIDER_ACCOUNT,
+                            "client_order_id": command.client_order_id,
+                            "fee_amount": "-0.01",
+                            "fee_currency": "USD",
+                            "fill_revision": 1,
+                            "order_id": provider_order_id,
+                            "quantity": "1",
+                            "side": "buy",
+                            "symbol": instrument,
+                            "trade_id": f"trade-terminal-{case}",
+                            "trade_price": "20",
+                        }
+                    ],
+                },
+                _EXCHANGE,
+                symbol=request.symbol,
+            )
+            order_observation, fill_observation = _observation_payloads(
+                command,
+                target=target,
+                contract=contract,
+                claim=claim,
+                request=request,
+                acknowledgement=None,
+                order=order,
+                fills=fills,
+            )
+            if unknown_before_observation:
+                journal.append_event(
+                    fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=command.intent_id,
+                    event_type="UNKNOWN",
+                    payload={
+                        "claim": _claim_payload(claim),
+                        "claim_digest": claim.claim_digest,
+                        "dispatch_attempt_count": 1,
+                        "permit_id": permit_id,
+                        "public_state": "UNKNOWN",
+                        "reason_code": "PRE_FILL_OBSERVATION_UNCERTAIN",
+                    },
+                )
+            order_event, fill_event, reconciliation_sha256 = (
+                journal.append_resolution_observations(
+                    fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=command.intent_id,
+                    order_observation=order_observation,
+                    fill_observation=fill_observation,
+                )
+            )
+            assert order_event.payload["exposure_state"] == "FILLED"
+            assert "exposure_state" not in fill_event.payload
+            exposure_id, exposure_sha256 = journal.store_terminal_exposure_reference(
+                fence,
+                principal_ref=_PRINCIPAL,
+                intent_id=command.intent_id,
+                claim=claim,
+                provider_order_id=provider_order_id,
+                accepted_request_sha256=command.order_request_sha256,
+                order_event=order_event,
+                fill_event=fill_event,
+                reconciliation_evidence_sha256=reconciliation_sha256,
+            )
+            if accepted:
+                _source_order, _source_fill, source_reference = (
+                    journal.load_terminal_exposure_source(
+                        fence,
+                        principal_ref=_PRINCIPAL,
+                        intent_id=command.intent_id,
+                    )
+                )
+                assert source_reference["reference_sha256"] == exposure_sha256
+            facts = _v2_order_facts(
+                order,
+                fills,
+                command=command,
+                request=request,
+                contract=contract,
+            )
+            observation_proof = _order_exposure_proof(
+                command,
+                target=target,
+                contract=contract,
+                claim=claim,
+                facts=facts,
+                order_payload=order_event.payload,
+                fill_payload=fill_event.payload,
+                journal_revision=fill_event.revision,
+                journal_record_sha256=fill_event.record_sha256,
+                exposure_reservation_id=exposure_id,
+                exposure_reservation_sha256=exposure_sha256,
+                writer_owner_id=fence.owner_id,
+                writer_fencing_token=fence.fencing_token,
+                writer_fence_sha256=fence.fence_sha256,
+                dispatch_proof_sha256=None,
+            )
+            proof = DispatchExposureResolutionProof(
+                claim=claim,
+                evidence_class=_evidence_class(_ACCOUNT_SCOPE),
+                dispatch_attempt_count=1,
+                reconciliation_evidence_sha256=reconciliation_sha256,
+                observation=observation_proof,
+            )
+
+            def append_interleaved_intent(suffix: str) -> None:
+                peer_arguments = _submit_arguments(
+                    intent_id=f"terminal-peer-{case}-{suffix}",
+                    signal_id=f"terminal-peer-signal-{case}-{suffix}",
+                    instrument=instrument,
+                    side="BUY",
+                    position_effect="OPEN",
+                    order_type="LIMIT",
+                    quantity="1",
+                    price="20",
+                    time_in_force="GTC",
+                    reduce_only=False,
+                    metadata_version=_METADATA_VERSION,
+                    deadline_ns=None,
+                    tags={},
+                )
+                peer_parsed = _parse_order(
+                    peer_arguments,
+                    target,
+                    scope=_SCOPE,
+                    principal_ref=_PRINCIPAL,
+                )
+                peer, peer_created = service._prepare_command(
+                    fence,
+                    principal_ref=_PRINCIPAL,
+                    scope=_SCOPE,
+                    target=target,
+                    parsed=peer_parsed,
+                )
+                assert peer_created and peer.state == "PREPARED"
+
+            injected_event_revisions: list[int] = []
+            for event_type in trailing_events:
+                if event_type == "UNKNOWN":
+                    event = journal.append_event(
+                        fence,
+                        principal_ref=_PRINCIPAL,
+                        intent_id=command.intent_id,
+                        event_type=event_type,
+                        payload={
+                            "claim": _claim_payload(claim),
+                            "claim_digest": claim.claim_digest,
+                            "dispatch_attempt_count": 1,
+                            "permit_id": permit_id,
+                            "public_state": "UNKNOWN",
+                            "reason_code": "PROVIDER_QUERY_UNCERTAIN",
+                        },
+                    )
+                else:
+                    event = journal.append_event(
+                        fence,
+                        principal_ref=_PRINCIPAL,
+                        intent_id=command.intent_id,
+                        event_type=event_type,
+                        payload={
+                            "dispatch_attempt_count": 1,
+                            "public_state": "UNKNOWN",
+                        },
+                    )
+                injected_event_revisions.append(event.revision)
+
+            if accepted:
+                if case == "fill":
+                    append_interleaved_intent("before-ack")
+                receipt = gate.resolve_dispatch_exposure(proof)
+                assert (
+                    receipt.status
+                    is DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+                )
+                assert receipt.claim == claim
+                assert receipt.dispatch_latch_active is False
+                assert receipt.journal_revision == fill_event.revision
+                assert receipt.proof_sha256 == proof.fingerprint
+                assert receipt.final_state is OrderExposureState.FILLED
+                acknowledged = journal.append_terminal_exposure_ack(
+                    fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=command.intent_id,
+                    receipt=receipt,
+                    proof=proof,
+                )
+                assert acknowledged.state == "ACKED_TRACKED"
+                assert type(acknowledged.latest_event.get("updated_at_ns")) is int
+                assert acknowledged.latest_event["updated_at_ns"] > 0
+                if case == "fill":
+                    append_interleaved_intent("after-ack")
+                replayed_ack = journal.append_terminal_exposure_ack(
+                    fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=command.intent_id,
+                    receipt=receipt,
+                    proof=proof,
+                )
+                assert replayed_ack.state == "ACKED_TRACKED"
+                assert replayed_ack.latest_revision == acknowledged.latest_revision
+                assert journal.has_resolved_terminal_exposure_history(
+                    fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=command.intent_id,
+                    receipt=receipt,
+                    proof=proof,
+                )
+                if trailing_events:
+                    assert trailing_events == ("UNKNOWN",)
+                    assert len(injected_event_revisions) == 1
+                    assert injected_event_revisions[0] > fill_event.revision
+                    assert receipt.journal_revision < injected_event_revisions[0]
+                assert gate.dispatch_exposure_resolution_receipt(permit_id).status is (
+                    DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+                )
+            else:
+                with pytest.raises(PermitInvalidError) as rejected:
+                    gate.resolve_dispatch_exposure(proof)
+                assert rejected.value.code == "DISPATCH_EXPOSURE_PROOF_REJECTED"
+                with pytest.raises(RiskOrderJournalError) as invalid_source:
+                    journal.load_terminal_exposure_source(
+                        fence,
+                        principal_ref=_PRINCIPAL,
+                        intent_id=command.intent_id,
+                    )
+                assert invalid_source.value.code == "TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID"
+                unresolved = gate.dispatch_exposure_resolution_receipt(permit_id)
+                assert (
+                    unresolved.status
+                    is DispatchExposureResolutionReceiptStatus.UNRESOLVED_ACTIVE
+                )
+                assert unresolved.claim == claim
+                assert unresolved.dispatch_latch_active is True
+            risk_snapshot = gate.snapshot(_ACCOUNT_SCOPE)
+            assert risk_snapshot["increase_count"] == 1
+            assert risk_snapshot["increase_notional"] == Decimal("20")
+
+        if accepted and case == "fill":
+            # A fresh account fence must validate the immutable source fence
+            # and Risk receipt without rebinding either or repeating dispatch.
+            with journal.writer_fence(_ACCOUNT_SCOPE) as replay_fence:
+                assert replay_fence.fencing_token > fence.fencing_token
+                replay_receipt = gate.dispatch_exposure_resolution_receipt(permit_id)
+                assert (
+                    replay_receipt.status
+                    is DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+                )
+                replayed_ack = journal.append_terminal_exposure_ack(
+                    replay_fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=command.intent_id,
+                    receipt=replay_receipt,
+                    proof=proof,
+                )
+                assert replayed_ack.state == "ACKED_TRACKED"
+                assert replayed_ack.latest_revision == acknowledged.latest_revision
+                assert journal.has_resolved_terminal_exposure_history(
+                    replay_fence,
+                    principal_ref=_PRINCIPAL,
+                    intent_id=command.intent_id,
+                    receipt=replay_receipt,
+                    proof=proof,
+                )
+                replay_snapshot = gate.snapshot(_ACCOUNT_SCOPE)
+                assert replay_snapshot["increase_count"] == 1
+                assert replay_snapshot["increase_notional"] == Decimal("20")
+        assert _EXCHANGE not in bt_api.exchange_feeds
+    finally:
+        bt_api.close()
+        gate.close()
 
 
 def test_false_dispatch_receipt_projects_ack_as_unknown_and_keeps_history(tmp_path) -> None:
@@ -1240,6 +1891,17 @@ def _host_process(
                     "provider_contracts": {_SCOPE: contract},
                 },
                 ready=lambda: True,
+                # The service config uses the operator alias
+                # ``service-risk-policy-v1`` for the configured account policy
+                # while the gate's policy_id is the internal fixture id; the
+                # binding commits to the exact gate policy object.
+                risk_policy_bindings=(
+                    TrustedRiskPolicyBinding(
+                        reference="service-risk-policy-v1",
+                        scope=_SCOPE,
+                        policy=gate.policy,
+                    ),
+                ),
             )
 
         authority = _authority(config=config, keys=keys)

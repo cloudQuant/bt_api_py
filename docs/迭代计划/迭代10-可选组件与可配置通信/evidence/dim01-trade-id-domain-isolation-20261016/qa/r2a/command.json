@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "C:/anaconda3/python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-q",
+    "--no-header",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\it10dim01-p3-20261016-r2a\\junit.xml",
+    "--basetemp=D:\\temp\\it10dim01-p3-20261016-r2a\\pytest-tmp",
+    "tests/integration/test_dim01_identity_isolation_service.py"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T02:45:27.264751+00:00"
+}
