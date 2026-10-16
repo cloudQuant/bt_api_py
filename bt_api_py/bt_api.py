@@ -61,6 +61,7 @@ from ._contracts.models import (
     TradingReadiness,
     TransportMode,
 )
+from ._gateway_wire import GatewayWireClient, GatewayWireConfig
 from ._ctp_execution_authorization import (
     _CONTEXT_FIELDS,
     APPROVAL_PURPOSE,
@@ -921,6 +922,7 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         *,
         transport_mode: TransportMode | str = TransportMode.DIRECT,
         forwarding_config: ForwardingConfig | None = None,
+        gateway_wire_config: GatewayWireConfig | None = None,
         execution_config: dict[str, Any] | None = None,
     ) -> None:
         """初始化 BtApi 实例。
@@ -985,7 +987,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         settings = deepcopy(exchange_kwargs or {})
         if isinstance(forwarding_config, dict):
             forwarding_config = ForwardingConfig(**forwarding_config)
-        self._backend = self._build_backend(self.transport_mode, forwarding_config)
+        if isinstance(gateway_wire_config, dict):
+            gateway_wire_config = GatewayWireConfig(**gateway_wire_config)
+        self._backend = self._build_backend(
+            self.transport_mode, forwarding_config, gateway_wire_config
+        )
         try:
             self.configure_execution(execution_config, _exchange_names=settings)
             _ensure_plugins_loaded()
@@ -3644,9 +3650,12 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         raise failure from None
 
     def _build_backend(
-        self, transport_mode: TransportMode, forwarding_config: ForwardingConfig | None
+        self,
+        transport_mode: TransportMode,
+        forwarding_config: ForwardingConfig | None,
+        gateway_wire_config: GatewayWireConfig | None = None,
     ) -> Any:
-        if transport_mode is TransportMode.ZMQ:
+        if transport_mode is TransportMode.ZMQ and gateway_wire_config is None:
             # Retired entry point: fail closed before any socket/thread is
             # created.  Keep the typed error so callers can distinguish the
             # retirement from ordinary validation errors.
@@ -3656,10 +3665,12 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             )
         from ._direct_backend import DirectBackend
 
+        client = GatewayWireClient(gateway_wire_config) if gateway_wire_config is not None else None
         return DirectBackend(
             self._get_feed,
             self.exchange_feeds,
             execution_capability=lambda: getattr(self, "_ctp_execution_capability", None),
+            client=client,
         )
 
     def _configure_ctp_execution_gate(

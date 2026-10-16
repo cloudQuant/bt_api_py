@@ -11,12 +11,11 @@ from bt_api_base.gateway.runtime import GatewayRuntime
 from bt_api_py import BtApi
 from bt_api_py._contracts.models import (
     CancelOrderRequest,
-    ForwardingConfig,
     OrderRequest,
     OrderType,
     Side,
 )
-from bt_api_py.forwarding.schema import CommandAck, OrderCommand
+from bt_api_py._gateway_wire import CommandAck, GatewayWireConfig, OrderCommand
 
 
 @pytest.fixture
@@ -35,7 +34,7 @@ def pipeline(monkeypatch):
         {"MT5___FX": {}},
         debug=False,
         transport_mode="zmq",
-        forwarding_config=ForwardingConfig(
+        gateway_wire_config=GatewayWireConfig(
             command_endpoint="inproc://c",
             market_endpoint="inproc://m",
             private_endpoint="inproc://p",
