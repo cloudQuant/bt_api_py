@@ -1,0 +1,547 @@
+{
+  "evidence_level": "LOCAL_SYNTHETIC_AFI09_UI_HTTP_SDK_GATEWAY_OWNER_INTEGRATION_ONLY",
+  "formal_afi09_pass": false,
+  "afi_repository": {
+    "path": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "head_at_archive": "f1c84524a2f7e1ec4834a61045d8b28832de1c87",
+    "head_at_initial_archive": "fe4c83c5a3425283e2ca3a3eae7c6cf035b6d0bc",
+    "head_at_partial_commit": "f1c84524a2f7e1ec4834a61045d8b28832de1c87",
+    "partial_commit_parent": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+    "partial_commit": "f1c84524a2f7e1ec4834a61045d8b28832de1c87"
+  },
+  "candidate_patch": {
+    "path": "candidate.patch",
+    "bytes": 82413,
+    "sha256": "CE7E1402FD65FEA21C5EFCE6203DFD002A53BCD638F03D48137D6A292ADD56D4",
+    "changed_paths": [
+      "src/backend/app/api/router.py",
+      "src/frontend/src/router/index.ts",
+      "src/frontend/src/navigation/routes.ts",
+      "src/frontend/src/navigation/capabilities.ts",
+      "src/frontend/src/i18n/locales/en-US.ts",
+      "src/frontend/src/i18n/locales/zh-CN.ts",
+      "src/frontend/src/__tests__/navigation/capabilities.test.ts",
+      "src/frontend/src/__tests__/router/index.test.ts",
+      "src/backend/app/api/service_gateway_ws.py",
+      "src/backend/tests/test_afi09_gateway_health_ws.py",
+      "src/backend/tests/test_afi09_gateway_multiworker_single_owner.py",
+      "src/frontend/e2e/afi09-gateway-health.config.ts",
+      "src/frontend/e2e/afi09-gateway-health.vite.config.ts",
+      "src/frontend/e2e/tests/afi09-gateway-health.spec.ts",
+      "src/frontend/src/__tests__/api/serviceGateway.test.ts",
+      "src/frontend/src/__tests__/views/ServiceGatewayHealthPage.test.ts",
+      "src/frontend/src/api/serviceGateway.ts",
+      "src/frontend/src/views/ServiceGatewayHealthPage.vue"
+    ],
+    "tracked_paths_are_exact_owned_hunks": true,
+    "unrelated_service_read_paper_and_analytics_hunks_included": false,
+    "base_head": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+    "reverse_check_head": "f1c84524a2f7e1ec4834a61045d8b28832de1c87"
+  },
+  "changed_source_pins": [
+    {
+      "path": "src/backend/app/api/router.py",
+      "bytes": 8648,
+      "sha256": "33d82252fd74c23a1a694844cd47bc0539e0703ccd6a4a9b7414dd25d06055c0"
+    },
+    {
+      "path": "src/frontend/src/router/index.ts",
+      "bytes": 17734,
+      "sha256": "8f9ac8f6ad124e85e2dafcc04ed7d64242a35c7b83a572566adf75c443307535"
+    },
+    {
+      "path": "src/frontend/src/navigation/routes.ts",
+      "bytes": 1555,
+      "sha256": "c4f5b3ea12c5dfe83a2afaaf36cae3af2f2cde6383ae3caf0ce873d50ee1111b"
+    },
+    {
+      "path": "src/frontend/src/navigation/capabilities.ts",
+      "bytes": 13063,
+      "sha256": "3bdd13c19eb240c3742bf9d8a43db07d3d38af37b3638f5e15ee13d0352af3bb"
+    },
+    {
+      "path": "src/frontend/src/i18n/locales/en-US.ts",
+      "bytes": 252516,
+      "sha256": "94dc3acb3f911b3a2a9f7fca34ab74f819cbf28463c1f50f42bc9a887493e949"
+    },
+    {
+      "path": "src/frontend/src/i18n/locales/zh-CN.ts",
+      "bytes": 244778,
+      "sha256": "1fa43c358cdc058a5cfe7103434bc4a39b9d02bc19d54a150c933224677b82f0"
+    },
+    {
+      "path": "src/frontend/src/__tests__/navigation/capabilities.test.ts",
+      "bytes": 3879,
+      "sha256": "3bd5f42eb849d6f3659604ba63d4f6644b387dca15bdce9cec761f15dd893919"
+    },
+    {
+      "path": "src/frontend/src/__tests__/router/index.test.ts",
+      "bytes": 21990,
+      "sha256": "247e0f467399fc3f084b42092973612777728420f8de37931840a6d6a7a99ec0"
+    },
+    {
+      "path": "src/backend/app/api/service_gateway_ws.py",
+      "bytes": 4993,
+      "sha256": "96B9027EDB4A2F10FA75B967718B52644D3A0E3F96E47BB3BD4D694FE19A1335"
+    },
+    {
+      "path": "src/backend/tests/test_afi09_gateway_health_ws.py",
+      "bytes": 12682,
+      "sha256": "4BFD191040A93944DD354B913022790CCF0DAAC14DE85BE2046763CB7E0575B8"
+    },
+    {
+      "path": "src/backend/tests/test_afi09_gateway_multiworker_single_owner.py",
+      "bytes": 35707,
+      "sha256": "9d79aba38bcb6b752427687d8231169fe0e34991c8a04056004ca4909db49187"
+    },
+    {
+      "path": "src/frontend/e2e/afi09-gateway-health.config.ts",
+      "bytes": 1332,
+      "sha256": "ffcd24fddb92180657c7dd8340cfcf23c45098ecb139fda3a2b1b078709fa988"
+    },
+    {
+      "path": "src/frontend/e2e/afi09-gateway-health.vite.config.ts",
+      "bytes": 334,
+      "sha256": "ebeb19626a48bace6af0c747770d661ee1ebb644a6e841c800278877d3c524e8"
+    },
+    {
+      "path": "src/frontend/e2e/tests/afi09-gateway-health.spec.ts",
+      "bytes": 5846,
+      "sha256": "069ec8ea0554937c601bae46e5a459ebd47fe7c7b369cb125a557672013f1f67"
+    },
+    {
+      "path": "src/frontend/src/__tests__/api/serviceGateway.test.ts",
+      "bytes": 708,
+      "sha256": "fd19a1b7cb31b10be0bed33a8fd169e07dc861f649298998d0d800eae1bb2eb7"
+    },
+    {
+      "path": "src/frontend/src/__tests__/views/ServiceGatewayHealthPage.test.ts",
+      "bytes": 2627,
+      "sha256": "23aada4744f686c822cca0001ad323f7597ed8f84db8b866bd8201dc7d6b59b7"
+    },
+    {
+      "path": "src/frontend/src/api/serviceGateway.ts",
+      "bytes": 992,
+      "sha256": "21e066ff85eba7c3913298247879279c9ad14ea30765268756c6473fafabb25c"
+    },
+    {
+      "path": "src/frontend/src/views/ServiceGatewayHealthPage.vue",
+      "bytes": 5264,
+      "sha256": "96f4606e94e9b477cf68d1e1af3d1695611389b1a0fd3313bce309b7170133c2"
+    }
+  ],
+  "inherited_dependencies": [
+    {
+      "path": "src/backend/app/api/service_gateway.py",
+      "bytes": 3112,
+      "sha256": "57eb3b985f755318a74f30da5ebd64cf69ea38ca115e7cd221fc0fc23d086c29",
+      "role": "R247 committed HTTP endpoint",
+      "head_blob": "1435d3d1a2d8494844e32f7bea62b9c09043941c"
+    },
+    {
+      "path": "src/backend/app/services/service_read/gateway_health.py",
+      "bytes": 4013,
+      "sha256": "fc3c50eb589e6f99845b9c056867a41875dc4a02951faadd182a55c64fbcbc25",
+      "role": "R247 committed finite projection",
+      "head_blob": "b50cf4c4ff07774d9f6f837745e2f37a20a1c48c"
+    },
+    {
+      "path": "src/backend/app/api/afi_owner_scope.py",
+      "bytes": 2785,
+      "sha256": "a7bcf7323840017e529a459f8eaabb316335391282a1c10c9a322b20b4de49e4",
+      "role": "R255 persisted-owner dependency",
+      "head_blob": "7bedc209bbce1a07b6027263449692d6d84033ff"
+    },
+    {
+      "path": "src/backend/app/api/service_read.py",
+      "bytes": 13217,
+      "sha256": "5403861b29c9fa62665622d8f353a09a7fcfbc19334777c98b10f922289517bd",
+      "role": "authorized resolver; Paper helper diff excluded",
+      "head_blob": "137fda4b96c5f3dfb9a247422beb6879f7ea3c4f"
+    },
+    {
+      "path": "src/backend/app/services/service_read/access.py",
+      "bytes": 17261,
+      "sha256": "8a55cb031560ec8a82d4e85e3dce16d9ae469e5a7996f7323a1695613172520f",
+      "role": "authorized account directory",
+      "head_blob": "64ebf9d866d6e85b80a678027cf77e96df1665b8"
+    },
+    {
+      "path": "src/backend/app/services/service_read/client.py",
+      "bytes": 33617,
+      "sha256": "575aea9fd98f40179d2ab12e65df3b53ae69b6526f26b663d9d92ae558ac3d04",
+      "role": "SDK read client",
+      "head_blob": "88f652e76f44c09100c194111d0f6546580328c5"
+    },
+    {
+      "path": "src/backend/app/services/service_read/deployment.py",
+      "bytes": 46140,
+      "sha256": "adb0b7d24d104fcb507d615fef9b69d9f20ebc0e863a8879baf6ed583e046290",
+      "role": "ServiceRead deployment",
+      "head_blob": "718836d4b73e392ab26dd3a354b9ce086611d0c2"
+    },
+    {
+      "path": "src/backend/app/services/service_read/session.py",
+      "bytes": 32280,
+      "sha256": "e3af34b88fe36ea05286be5514bff9c1be6d22314c2246c6ee3ff6f79e39e2b3",
+      "role": "ServiceRead session",
+      "head_blob": "b6ff2cea99a9643d779a7ce7f0d95f01b0a44c63"
+    },
+    {
+      "path": "src/backend/app/services/service_read/worker.py",
+      "bytes": 23090,
+      "sha256": "f86c774d0f26c80c0dabf455a6b84eaa7e861df102c813bc503d5eb92dc43e50",
+      "role": "ServiceRead worker",
+      "head_blob": "5692fc1ad4aa3b3010609d340b872aeb25417368"
+    }
+  ],
+  "sdk_dependencies": [
+    {
+      "repo": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+      "branch": "dev",
+      "commit": "2671fe714d1aad70c40b33255b50f354222e59b7",
+      "parent": "147ef365706bebab383ec12c628be243b8e0b381",
+      "paths": [
+        "src/bt_api_gateway/session_owner.py",
+        "tests/test_session_owner.py"
+      ],
+      "source_pins": [
+        {
+          "path": "src/bt_api_gateway/session_owner.py",
+          "bytes": 9731,
+          "sha256": "62393df498deDA15a503316cbb59927736ed14cbf086e9696616ac4827f45e3d",
+          "blob": "915f80a49d66b41a4a828730799d13614c8092da"
+        },
+        {
+          "path": "tests/test_session_owner.py",
+          "bytes": 5942,
+          "sha256": "8382487a2a999b63f71473c7835117703141ee3cccfde5ad64f5e95ebc5ca813",
+          "blob": "979a11688703ea53f0ff2fc976da0cbf71650db2"
+        }
+      ],
+      "status": "committed to package dev; parent SDK gitlink not updated here",
+      "retained_author_qa": "10 passed; Ruff passed; output pins below; not rerun"
+    },
+    {
+      "repo": "D:\\bt_api_py",
+      "branch": "dev",
+      "path": "bt_api_py/gateway_operator.py",
+      "bytes": 30033,
+      "sha256": "102DB7A1A8A658AF0E5EE6A9947AFA236D1E6D28BD74E7BD8413AE3E6CF88B49",
+      "status": "MIG01 source/test candidate independently reviewed GO; parent SDK index/commit action by Root",
+      "test_path": "tests/integration/test_gateway_operator_deployment.py",
+      "test_bytes": 19383,
+      "test_sha256": "38F793869391366117148019137CD7B3CD3358AC7996B51AC05452707CE3539A"
+    }
+  ],
+  "raw_outputs": [
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\gateway-health-browser-final.txt",
+      "bytes": 573,
+      "sha256": "c5a39e3410ca8ed1a8ae21267b1b66859d97585bb64056268be53468b5ad3036",
+      "role": "Chromium child output, one test passed."
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\two-afi-processes-direct-final.txt",
+      "bytes": 403,
+      "sha256": "68bbe03aa47cde888737fb60dac73e30d5af0e89520c6913e8efc5b5bea5ef7e",
+      "role": "Direct Python-function output for two AFI processes and owner recovery."
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\servicehost-two-worker-direct.txt",
+      "bytes": 420,
+      "sha256": "6c9d70e10ae16ad04fb05823c1b6ca94e3a5f241129e24ade667a8b9ef715c5a",
+      "role": "Direct ServiceHost two-worker composition output."
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\authorized-websocket-direct.txt",
+      "bytes": 322,
+      "sha256": "5ea1a03740cf1031ad0541512a2a98238d2351a5e74c89ecbc1e35d51e9d0a1c",
+      "role": "Direct authorized WebSocket projection output."
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\sdk-session-owner-pytest.txt",
+      "bytes": 101,
+      "sha256": "30e89b65eb93099f29a1873ce039cfb7ef14150f004f7d4cf2088a5b2f1bf450",
+      "role": "Retained GatewaySessionOwner focused author pytest output."
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\sdk-session-owner-ruff.txt",
+      "bytes": 20,
+      "sha256": "a4443afdcfb6d7363adb285762515ccf7cf50473b1a05c20c1a50f6bed4d26b0",
+      "role": "Retained GatewaySessionOwner Ruff output."
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\gateway-health-browser-chain-final-r2.txt",
+      "bytes": 1481,
+      "sha256": "54ADC0861354B90910A9AB5AC62975B1D89E946B9212E37A3EF75A6CB55EA493",
+      "role": "Complete raw stdout from the browser-enabled direct Python-function integration invocation; PASS marker plus captured warnings, not an exit-code receipt."
+    },
+    {
+      "path": "D:\\source_code\\ai-for-investor\\src\\backend\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\two-afi-processes-production-operator-final-r3.txt",
+      "bytes": 1244,
+      "sha256": "91CAE1C4F30C0B8F24D838AF43E75E35916A636CEC32BBB4C2DABE84A48EB465",
+      "role": "Direct production GatewayOperator output for two authenticated HTTP clients, AFI restart, and explicit owner recovery."
+    }
+  ],
+  "validation": [
+    "Captured Chromium child output reports one Playwright test passed in 7.6 seconds.",
+    "Browser-enabled Python integration function was directly invoked and returned exit 0; no pytest claim.",
+    "Separate direct output reports two AFI processes sharing one Gateway owner with owner-thread recovery.",
+    "ServiceHost two-worker and authorized WebSocket direct outputs report PASS.",
+    "py_compile, Ruff, and focused TypeScript compilation were green before the captured integration run.",
+    "The browser-enabled direct Python-function invocation returned exit 0 in the original run context (~45 seconds); the exact command/function name and a standalone machine-readable exit receipt were not retained.",
+    "The complete parent stdout is retained as gateway-health-browser-chain-final-r2.txt; it is not pytest output and is separate from the nested Playwright child transcript.",
+    "Authorization-continuity delta: three focused test functions were directly invoked with runpy and returned exit 0; this was not pytest.",
+    "Expiry after the first frame and persisted owner revocation on the same AsyncSession both closed with 1008 before another Gateway worker read; revocation test asserted rollback/fresh identity-map lookup."
+  ],
+  "limitations": [
+    "Synthetic credentials, persisted-owner database row, account provider, and local loopback only.",
+    "No real account/provider/secret store, external network, cross-machine, or formal AFI09 acceptance.",
+    "The AFI01 persisted-owner dependency is inherited; this candidate adds no tenant model or selector-based identity claim.",
+    "No tests were rerun while assembling the archive."
+  ],
+  "explicit_exclusions": [
+    "src/backend/app/api/service_read.py Paper helper removal hunk in the checkout",
+    "all unrelated analytics, Paper, risk-budget, and router/sidebar hunks",
+    "bt_api_gateway account_session_worker.py and account_position_snapshot.py WIP",
+    "MIG01 operator parent SDK index/commit"
+  ],
+  "direct_invocation_provenance": {
+    "kind": "direct Python-function invocation wrapping the browser integration; not pytest",
+    "reported_exit_code": 0,
+    "exit_code_source": "original tool execution context; no standalone machine-readable receipt",
+    "approximate_elapsed_seconds": 45,
+    "exact_command_retained": false,
+    "full_stdout_path": "D:\\source_code\\ai-for-investor\\src\\backend\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\gateway-health-browser-chain-final-r2.txt",
+    "full_stdout_bytes": 1481,
+    "full_stdout_sha256": "54ADC0861354B90910A9AB5AC62975B1D89E946B9212E37A3EF75A6CB55EA493",
+    "full_stdout_last_write_local": "2026-10-17 00:39:59",
+    "candidate_pin_observation_local": "2026-10-17 00:38:53",
+    "invocation_time_source_binding_proven": false,
+    "source_binding_limit": "The archive pins current source/checkout state; the captured stdout does not itself bind candidate source bytes or Git HEAD at invocation time."
+  },
+  "archive_state": {
+    "afi_index_empty_at_archive": true,
+    "afi_stage_or_commit_attempted": false,
+    "root_postcommit_receipt": null,
+    "archive_members": [
+      {
+        "path": "candidate.patch",
+        "bytes": 82413,
+        "sha256": "CE7E1402FD65FEA21C5EFCE6203DFD002A53BCD638F03D48137D6A292ADD56D4"
+      },
+      {
+        "path": "direct-output-transcription.md",
+        "bytes": 11612,
+        "sha256": "9D5FE84F6D8355EAFF12F9D23ED2DBFBF8546CB672D36C6C3BD6AAA998FD4430"
+      },
+      {
+        "path": "scope-and-results.json"
+      }
+    ],
+    "afi_stage_or_commit_by_this_agent": false,
+    "candidate_reverse_apply_verified_against_head": "f1c84524a2f7e1ec4834a61045d8b28832de1c87",
+    "postcommit_exact_scope_paths": [
+      "src/backend/app/api/router.py",
+      "src/backend/app/api/service_gateway_ws.py",
+      "src/backend/tests/test_afi09_gateway_health_ws.py",
+      "src/backend/tests/test_afi09_gateway_multiworker_single_owner.py",
+      "src/frontend/e2e/afi09-gateway-health.config.ts",
+      "src/frontend/e2e/afi09-gateway-health.vite.config.ts",
+      "src/frontend/e2e/tests/afi09-gateway-health.spec.ts",
+      "src/frontend/src/__tests__/api/serviceGateway.test.ts",
+      "src/frontend/src/__tests__/navigation/capabilities.test.ts",
+      "src/frontend/src/__tests__/router/index.test.ts",
+      "src/frontend/src/__tests__/views/ServiceGatewayHealthPage.test.ts",
+      "src/frontend/src/api/serviceGateway.ts",
+      "src/frontend/src/i18n/locales/en-US.ts",
+      "src/frontend/src/i18n/locales/zh-CN.ts",
+      "src/frontend/src/navigation/capabilities.ts",
+      "src/frontend/src/navigation/routes.ts",
+      "src/frontend/src/router/index.ts",
+      "src/frontend/src/views/ServiceGatewayHealthPage.vue"
+    ],
+    "postcommit_index_empty": true,
+    "postcommit_unrelated_wip_preserved": true,
+    "postcommit_receipt": {
+      "commit": "f1c84524a2f7e1ec4834a61045d8b28832de1c87",
+      "parent": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+      "exact_paths": [
+        "src/backend/app/api/router.py",
+        "src/backend/app/api/service_gateway_ws.py",
+        "src/backend/tests/test_afi09_gateway_health_ws.py",
+        "src/backend/tests/test_afi09_gateway_multiworker_single_owner.py",
+        "src/frontend/e2e/afi09-gateway-health.config.ts",
+        "src/frontend/e2e/afi09-gateway-health.vite.config.ts",
+        "src/frontend/e2e/tests/afi09-gateway-health.spec.ts",
+        "src/frontend/src/__tests__/api/serviceGateway.test.ts",
+        "src/frontend/src/__tests__/navigation/capabilities.test.ts",
+        "src/frontend/src/__tests__/router/index.test.ts",
+        "src/frontend/src/__tests__/views/ServiceGatewayHealthPage.test.ts",
+        "src/frontend/src/api/serviceGateway.ts",
+        "src/frontend/src/i18n/locales/en-US.ts",
+        "src/frontend/src/i18n/locales/zh-CN.ts",
+        "src/frontend/src/navigation/capabilities.ts",
+        "src/frontend/src/navigation/routes.ts",
+        "src/frontend/src/router/index.ts",
+        "src/frontend/src/views/ServiceGatewayHealthPage.vue"
+      ],
+      "index_empty": true,
+      "branch": "dev",
+      "note": "Direct postcommit verification while refreshing the archive; unrelated worktree changes remained preserved."
+    },
+    "postcommit_blob_pins": [
+      {
+        "path": "src/backend/app/api/router.py",
+        "bytes": 8464,
+        "sha256": "E2465B235E2E2811A70A6DCB12140472D0D7546B4302D1144D61077BFD854EFC"
+      },
+      {
+        "path": "src/backend/app/api/service_gateway_ws.py",
+        "bytes": 4993,
+        "sha256": "96B9027EDB4A2F10FA75B967718B52644D3A0E3F96E47BB3BD4D694FE19A1335"
+      },
+      {
+        "path": "src/backend/tests/test_afi09_gateway_health_ws.py",
+        "bytes": 12682,
+        "sha256": "4BFD191040A93944DD354B913022790CCF0DAAC14DE85BE2046763CB7E0575B8"
+      },
+      {
+        "path": "src/backend/tests/test_afi09_gateway_multiworker_single_owner.py",
+        "bytes": 35707,
+        "sha256": "9D79ABA38BCB6B752427687D8231169FE0E34991C8A04056004CA4909DB49187"
+      },
+      {
+        "path": "src/frontend/e2e/afi09-gateway-health.config.ts",
+        "bytes": 1332,
+        "sha256": "FFCD24FDDB92180657C7DD8340CFCF23C45098ECB139FDA3A2B1B078709FA988"
+      },
+      {
+        "path": "src/frontend/e2e/afi09-gateway-health.vite.config.ts",
+        "bytes": 334,
+        "sha256": "EBEB19626A48BACE6AF0C747770D661EE1EBB644A6E841C800278877D3C524E8"
+      },
+      {
+        "path": "src/frontend/e2e/tests/afi09-gateway-health.spec.ts",
+        "bytes": 5846,
+        "sha256": "069EC8EA0554937C601BAE46E5A459EBD47FE7C7B369CB125A557672013F1F67"
+      },
+      {
+        "path": "src/frontend/src/__tests__/api/serviceGateway.test.ts",
+        "bytes": 708,
+        "sha256": "FD19A1B7CB31B10BE0BED33A8FD169E07DC861F649298998D0D800EAE1BB2EB7"
+      },
+      {
+        "path": "src/frontend/src/__tests__/navigation/capabilities.test.ts",
+        "bytes": 3797,
+        "sha256": "78A9ECFD1BC24681375760967029318F02AC6227BAB2D3D8E4F61DF99B0FD38E"
+      },
+      {
+        "path": "src/frontend/src/__tests__/router/index.test.ts",
+        "bytes": 21500,
+        "sha256": "975637807872ABA792025222A4A5C0C36193B6C5178EE084728EDA20EDF03402"
+      },
+      {
+        "path": "src/frontend/src/__tests__/views/ServiceGatewayHealthPage.test.ts",
+        "bytes": 2627,
+        "sha256": "23AADA4744F686C822CCA0001AD323F7597ED8F84DB8B866BD8201DC7D6B59B7"
+      },
+      {
+        "path": "src/frontend/src/api/serviceGateway.ts",
+        "bytes": 992,
+        "sha256": "21E066FF85EBA7C3913298247879279C9AD14EA30765268756C6473FAFABB25C"
+      },
+      {
+        "path": "src/frontend/src/i18n/locales/en-US.ts",
+        "bytes": 246931,
+        "sha256": "713C844068649752E18F3DD20A9C29C258C9783A887D73A988802500A576E419"
+      },
+      {
+        "path": "src/frontend/src/i18n/locales/zh-CN.ts",
+        "bytes": 239174,
+        "sha256": "CE4EA6618271ACD9FAEC3E5256A626A0E64E3EE561F6871398CFF5178A4C0AC6"
+      },
+      {
+        "path": "src/frontend/src/navigation/capabilities.ts",
+        "bytes": 12570,
+        "sha256": "38297938E9BD8AD4C8CA28E6E6304BCCA9DF02EDAB30489A14E446ED6F5C1370"
+      },
+      {
+        "path": "src/frontend/src/navigation/routes.ts",
+        "bytes": 1506,
+        "sha256": "D847579135D3A04A6E112854E243BF49971A596CBB29010A19FBA05C9ADBC5C7"
+      },
+      {
+        "path": "src/frontend/src/router/index.ts",
+        "bytes": 17178,
+        "sha256": "9FE8E882FA12E6E5885352B43F4EF2E9AA9D9BA40D5D4C43E598C23E174E4E0A"
+      },
+      {
+        "path": "src/frontend/src/views/ServiceGatewayHealthPage.vue",
+        "bytes": 5264,
+        "sha256": "96F4606E94E9B477CF68D1E1AF3D1695611389B1A0FD3313BCE309B7170133C2"
+      }
+    ]
+  },
+  "focused_auth_continuity_delta": {
+    "changed_paths": [
+      "src/backend/app/api/service_gateway_ws.py",
+      "src/backend/tests/test_afi09_gateway_health_ws.py"
+    ],
+    "direct_invocation": "python -X utf8 -c \"import runpy; namespace = runpy.run_path('tests/test_afi09_gateway_health_ws.py'); namespace['test_afi09_gateway_health_ws_is_an_authorized_projection_only'](); namespace['test_afi09_gateway_health_ws_revalidates_expiry_before_next_worker_read'](); namespace['test_afi09_gateway_health_ws_rechecks_owner_after_fresh_read_transaction'](); print('AFI09 focused WebSocket authorization tests: 3 direct function calls passed')\"",
+    "reported_exit_code": 0,
+    "invocation_kind": "direct test-function calls through runpy, not pytest",
+    "functions_invoked": 3,
+    "warning_count": 1,
+    "output_transcription": "direct-output-transcription.md",
+    "full_raw_output_file_retained": false,
+    "pytest_attempts": [
+      {
+        "command": "python -m pytest -q tests/test_afi09_gateway_health_ws.py",
+        "result": "pre-collection UnicodeDecodeError: GBK while Starlette Config read configuration"
+      },
+      {
+        "command": "python -X utf8 -m pytest -q tests/test_afi09_gateway_health_ws.py",
+        "result": "pre-collection ModuleNotFoundError: purgedcv while repository conftest imported app.main"
+      }
+    ],
+    "browser_chain_rerun": false
+  },
+  "patch_refresh": {
+    "prior_patch_bytes": 82213,
+    "prior_patch_sha256": "D96D3D5DE8DDD2B9F6B7119047EBD7CDE5B5C133D57FE589C74B579522A3D077",
+    "refreshed_patch_bytes": 82413,
+    "refreshed_patch_sha256": "CE7E1402FD65FEA21C5EFCE6203DFD002A53BCD638F03D48137D6A292ADD56D4",
+    "byte_delta": 200,
+    "delta_explanation": "The prior patch omitted eight Git index metadata lines for eight newly added files. Those lines total 200 bytes. The source hunks were not missing: the prior patch reconstructed from its added lines matched the committed service_gateway_ws.py and test_afi09_gateway_health_ws.py blobs byte-for-byte.",
+    "missing_index_metadata_paths": [
+      "src/backend/tests/test_afi09_gateway_multiworker_single_owner.py",
+      "src/frontend/e2e/afi09-gateway-health.config.ts",
+      "src/frontend/e2e/afi09-gateway-health.vite.config.ts",
+      "src/frontend/e2e/tests/afi09-gateway-health.spec.ts",
+      "src/frontend/src/__tests__/api/serviceGateway.test.ts",
+      "src/frontend/src/__tests__/views/ServiceGatewayHealthPage.test.ts",
+      "src/frontend/src/api/serviceGateway.ts",
+      "src/frontend/src/views/ServiceGatewayHealthPage.vue"
+    ],
+    "reverse_apply_check": "git apply --reverse --check against current AFI commit succeeded; no files changed.",
+    "checkout_normalization": "All 18 changed_source_pins match raw checkout bytes; CRLF-to-LF normalization yields the corresponding exact committed blob for all 18 paths.",
+    "websocket_source_blob": {
+      "path": "src/backend/app/api/service_gateway_ws.py",
+      "bytes": 4993,
+      "sha256": "96B9027EDB4A2F10FA75B967718B52644D3A0E3F96E47BB3BD4D694FE19A1335"
+    },
+    "websocket_test_blob": {
+      "path": "src/backend/tests/test_afi09_gateway_health_ws.py",
+      "bytes": 12682,
+      "sha256": "4BFD191040A93944DD354B913022790CCF0DAAC14DE85BE2046763CB7E0575B8"
+    }
+  },
+  "author_output_preservation": {
+    "browser_parent_stdout": "Preserved verbatim in the first fenced output block in direct-output-transcription.md; the pinned original raw stdout path remains listed in raw_outputs.",
+    "chromium_child_stdout": "Preserved verbatim in the separate Chromium output block in direct-output-transcription.md; the pinned original raw child-output path remains listed in raw_outputs.",
+    "auth_continuity_delta": "The later three-function direct invocation remains a separate section and is not attributed to the original browser run."
+  }
+}

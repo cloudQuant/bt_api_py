@@ -1,0 +1,76 @@
+{
+  "packet_id": "R269-AFI09-minimal-formal-evidence",
+  "created_local_date": "2026-10-17",
+  "evidence_level": "LOCAL_SYNTHETIC_AFI09_INTEGRATION_AND_AUTHORIZATION_CONTINUITY_ONLY",
+  "formal_afi09_pass": true,
+  "formal_criteria_reference": {
+    "document": "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md",
+    "row": 801,
+    "criterion": "Independent Gateway entry; connection/account/data health separation; page open does not auto-connect; session owner resolves credential references; real UI/API/service chain; multiple AFI workers do not duplicate a provider session; browser WebSocket is only an authorized projection; visible references contain no credentials."
+  },
+  "afi_delivery": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "commit": "f1c84524a2f7e1ec4834a61045d8b28832de1c87",
+    "parent": "50f6a6826ce30fb108aefead33af1cc2633f266f",
+    "exact_paths": 18,
+    "index_empty_after_commit": true
+  },
+  "review": {
+    "root_ws_review": "root-ws-review.md",
+    "independent_read_only_audit": {
+      "status": "GO_RECOMMENDED_TO_ROOT_FORMAL_GO",
+      "persistent_artifact": false,
+      "communication_transcript": {
+        "path": "independent-read-only-audit-communication.md",
+        "bytes": 2242,
+        "sha256": "E6F8C90E140DCAF4CC38A5AAE52A22D10F9C21A114B586905E718A3D890F799A"
+      },
+      "note": "The reviewer reported local synthetic Chromium → HTTP/WS → SDK → GatewayOperator coverage, two AFI processes, and recovery, and recommended Root formal GO. The message is the available audit record; it has no separate persisted review artifact. Its limits are transcribed verbatim in the linked file."
+    },
+    "root_formal_adjudication": {
+      "status": "GO",
+      "source": "root-adjudication.md",
+      "qualification": "Root checked committed code, preserved author outputs, independent review communication and WS authorization delta; invocation-time provenance limitations remain explicit."
+    }
+  },
+  "author_outputs": {
+    "author-output/browser-parent-stdout.txt": {
+      "bytes": 1481,
+      "sha256": "54ADC0861354B90910A9AB5AC62975B1D89E946B9212E37A3EF75A6CB55EA493",
+      "origin": "D:\\source_code\\ai-for-investor\\src\\backend\\src\\backend\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\gateway-health-browser-chain-final-r2.txt",
+      "role": "original author-captured local synthetic output; not pytest report"
+    },
+    "author-output/chromium-playwright-child.txt": {
+      "bytes": 573,
+      "sha256": "C5A39E3410CA8ED1A8AE21267B1B66859D97585BB64056268BE53468B5AD3036",
+      "origin": "D:\\source_code\\ai-for-investor\\src\\backend\\tests\\.codex-tmp\\afi09-session-owner-local-qa-20261017\\gateway-health-browser-final.txt",
+      "role": "original author-captured local synthetic output; not pytest report"
+    }
+  },
+  "separate_direct_delta_transcript": {
+    "path": "ws-auth-continuity-direct-transcript.md",
+    "bytes": 2631,
+    "sha256": "07DB809A2C7217AA555A512D2AB4253209E3E4F90C5B67FA73D2DA6139283E7A",
+    "kind": "three direct Python test-function calls via runpy; not pytest and separate from the original browser outputs"
+  },
+  "existing_archive": {
+    "directory": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi09-gateway-health-session-owner-20261017",
+    "candidate_patch": {
+      "bytes": 82413,
+      "sha256": "CE7E1402FD65FEA21C5EFCE6203DFD002A53BCD638F03D48137D6A292ADD56D4",
+      "parent_to_commit": "50f6a6826ce30fb108aefead33af1cc2633f266f..f1c84524a2f7e1ec4834a61045d8b28832de1c87"
+    },
+    "scope_and_results": "scope-and-results.json",
+    "direct_output_transcription": "direct-output-transcription.md"
+  },
+  "limitations": [
+    "Synthetic persisted owner and account directory; local loopback only.",
+    "No real credentials, secret store, account, provider, external network, or cross-machine run.",
+    "No pytest success is claimed for the three authorization-continuity direct calls; two pytest attempts stopped before collection as described in the archive.",
+    "The faithful fake models SQLAlchemy identity-map/rollback behavior but is not an actual SQLAlchemy database integration test.",
+    "The combined browser integration stdout has no independent machine-readable exit receipt and no persistent invocation-time HEAD/source-pin snapshot; provenance is limited to the preserved archive/current pins and contemporaneous caller record.",
+    "All integration evidence is local synthetic. No real credentials, account, provider, external network, or cross-machine run is claimed."
+  ],
+  "no_progress_matrix_or_index_updates": true
+}

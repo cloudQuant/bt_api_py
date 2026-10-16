@@ -1,0 +1,11 @@
+# AFI09 正式验收：Gateway页面与会话归属
+
+Root对照正式AFI09条款，核对已提交18路径、原始作者输出、独立审阅通信及后续WS授权修复，裁定 **正式PASS**。在已登记AFI01/AFI04/AFI11基础上新增AFI09，累计44/68。
+
+独立Gateway页面使用真实Chromium→Uvicorn HTTP/WS→SDK→本机GatewayOperator服务链。页面打开不自动连接；连接、账户观察与行情feed健康分开呈现；浏览器只得到授权投影，用户可见内容不包含凭据引用或secret。凭据引用由GatewaySessionOwner解析并持有，两独立AFI客户端进程及恢复客户端复用同一服务会话，resolver claim一次，恢复和关闭沿owner线程执行。provider和secret resolver输入是合成的，本项不冒充真实账户验收。
+
+原组合链由作者直接调用Python测试函数，stdout记录PASS；Chromium子进程输出1 passed/7.6s。没有独立机器可读exit收据或运行当时源码/HEAD快照，不能称固定全源pytest通过。原日志、当前提交与调用者当时记录作为有限来源证据保留；独立resume_load01_prepare审阅已明确这些限制，未发现正式条款还需要额外真实venue或组织tenant环境。
+
+Root另发现WS只握手时验证令牌的问题，已修成每次投影前解码原握手JWT并保持subject；结束旧读事务后重查active persisted User，撤权/过期在额外Gateway读取前1008关闭。三项直接函数回归通过，含受控clock和identity-map fake；不是SQLAlchemy实际DB回归，也不是pytest。完整浏览器链未重复。Root已读新增代码与断言并核对提交blob。
+
+AFI dev f1c84524a2f7e1ec4834a61045d8b28832de1c87精确18路径已交付。原archive与提交diff的200字节差异仅为8条新文件index元数据行，源内容包括WS修复原本已一致；现archive已经恢复成精确parent→commit diff。SDK本轮仅归档这些证据及状态，不重复QA。AFI10旧领域整体退役、控制启停、真实provider及双机验收仍各自独立。

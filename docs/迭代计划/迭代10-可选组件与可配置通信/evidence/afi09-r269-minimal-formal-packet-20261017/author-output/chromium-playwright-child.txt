@@ -1,0 +1,10 @@
+
+Running 1 test using 1 worker
+
+  ok 1 [afi09-chromium] › e2e\tests\afi09-gateway-health.spec.ts:3:1 › Gateway health page reads an authorized service projection only on submit (2.1s)
+
+  1 passed (7.6s)
+[WebServer] (node:16352) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+(node:72684) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node.EXE --trace-warnings ...` to show where the warning was created)
