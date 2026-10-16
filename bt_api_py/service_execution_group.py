@@ -59,6 +59,7 @@ from bt_api_execution import (
     OrderType,
     PortfolioGroupBudgetPolicy,
     PositionEffect,
+    Side,
     SqliteExecutionStore,
     SqliteOrderGroupStore,
     TimeInForce,
@@ -128,6 +129,9 @@ _ORDER_QUERY_MOUNT = "upstream.order_query"
 _COMPENSATION_ORDERS_MOUNT = "upstream.group_compensation_orders"
 _COMPENSATION_QUERY_MOUNT = "upstream.group_compensation_order_query"
 _MAX_REPLY_BYTES = 1_000_000
+_GROUP_COMPENSATION_TERMINAL = frozenset(
+    {ExecutionState.FILLED, ExecutionState.CANCELLED, ExecutionState.REJECTED}
+)
 _MAX_RPC_JSON_DEPTH = 64
 _MAX_SQLITE_INTEGER = (1 << 63) - 1
 _REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")

@@ -16,7 +16,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, fields, replace
 from decimal import Decimal, InvalidOperation
