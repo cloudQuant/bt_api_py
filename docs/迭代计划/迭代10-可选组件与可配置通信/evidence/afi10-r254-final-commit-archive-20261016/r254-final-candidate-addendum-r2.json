@@ -1,0 +1,323 @@
+{
+  "schema": "iteration10-afi10-service-market-quote-consumer-r254-final-candidate-addendum-v2",
+  "round": "R254",
+  "status": "READY_FOR_INDEPENDENT_REVIEW_AND_ROOT_SCOPED_COMMIT",
+  "recorded_utc": "2026-10-16T15:52:35.7020711Z",
+  "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_HOST_UI_ONLY",
+  "scope": "Final R254 synthetic provider fixture validates exact active MarketProvider handle under the frozen SDK poll contract.",
+  "repositories": {
+    "afi": {
+      "path": "D:\\source_code\\ai-for-investor",
+      "branch": "dev",
+      "current_head_at_final_host_qa": "8943fc0fe15c0c34ed33d7a20e42637e5831e2a3",
+      "index_empty": true,
+      "staging_or_commit_performed_by_author": false,
+      "unrelated_existing_worktree_changes_preserved": true
+    },
+    "sdk_parent": {
+      "path": "D:\\bt_api_py",
+      "branch": "dev",
+      "current_head_at_final_host_qa": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "index_empty": true,
+      "source_dependencies": [
+        {
+          "repository": "D:\\bt_api_py",
+          "repository_head": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "path": "bt_api_py/service_host.py",
+          "current_sha256": "eaaa53998ea8031591553ebff3b664ab905d0e214ecca60c130539e70223d6bc",
+          "current_blob_oid": "d9ee0abe20fc12618f98e391841d4e10cb219c96",
+          "head_blob_oid": "046ddf64d43b2397787ed8717765815d7d7adc1a"
+        },
+        {
+          "repository": "D:\\bt_api_py",
+          "repository_head": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "path": "bt_api_py/service_runtime.py",
+          "current_sha256": "678341af32b26bfca0f131e109015ee6d0a9cfa92a624e9c95746c82bd2c42cf",
+          "current_blob_oid": "87341f5876882d953199eda53c7e3e9a062d7f05",
+          "head_blob_oid": "df86148f466a313b79a1325b759b427c01b59091"
+        },
+        {
+          "repository": "D:\\bt_api_py",
+          "repository_head": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "path": "bt_api_py/service_market.py",
+          "current_sha256": "5b7a357693ef4ddc50ef397f4bfc67ca7116ab2809850c03ee07f05a18bc75b6",
+          "current_blob_oid": "e3cbb35dbd3c55cfe3aab5185d50d98563d864d5",
+          "head_blob_oid": "e3cbb35dbd3c55cfe3aab5185d50d98563d864d5"
+        },
+        {
+          "repository": "D:\\bt_api_py",
+          "repository_head": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "path": "bt_api_py/service_components.py",
+          "current_sha256": "d1d47e024309695f4ef06db5f9008fffd97f6550bd0565c7a66a931a8c991377",
+          "current_blob_oid": "73fe6c6c2269383c75fc5669bbe18ea6192abb5f",
+          "head_blob_oid": "4b6e056e8e64445ef22e80e2c4260de358659077"
+        },
+        {
+          "repository": "D:\\bt_api_py",
+          "repository_head": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "path": "bt_api_py/service_config.py",
+          "current_sha256": "7e41500937a333d9a5b7627ab4cb2be1a959aa31d70f3539fa63d05c789854cb",
+          "current_blob_oid": "854273cd12ddcf76cb7a2599f4b39722d85dddad",
+          "head_blob_oid": "7923b0bd955f4ee861b7a240d085c71bad19da2b"
+        },
+        {
+          "repository": "D:\\bt_api_py",
+          "repository_head": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+          "path": "bt_api_py/service_registry.py",
+          "current_sha256": "0d3195a708db315ea3001687e9061b5c913222300fe8e54faa4ecc3d5788c6fc",
+          "current_blob_oid": "af62412918776f7e9df415a916173e44296aab7f",
+          "head_blob_oid": "39b8ef855228cfa9723e63436d49aacc8493c84e"
+        },
+        {
+          "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+          "parent_gitlink_path": "bt_api/bt_api_base",
+          "parent_gitlink_at_parent_head": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+          "repository_head": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+          "path": "src/bt_api_base/market_protocol.py",
+          "current_sha256": "e054a93f55c88ac5a26bbb45cdf7abbb120241867b53ffb7c17e37d512260222",
+          "current_blob_oid": "532b9e58a890b96910a7b446da3605f26e61e8ce",
+          "head_blob_oid": "888cdd800d2d16d25ed596fa302b76f6d513fcc4"
+        },
+        {
+          "repository": "D:\\bt_api_py\\bt_api\\bt_api_base",
+          "parent_gitlink_path": "bt_api/bt_api_base",
+          "parent_gitlink_at_parent_head": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+          "repository_head": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+          "path": "src/bt_api_base/service_protocol.py",
+          "current_sha256": "f0ed739ac98cda400bed07bf8487b79ee0a5ebe6842b9d0711b4b12e8af6b15a",
+          "current_blob_oid": "cf0fac23d3ae29cc482b12fba7ae44e2d529e24c",
+          "head_blob_oid": "cf0fac23d3ae29cc482b12fba7ae44e2d529e24c"
+        },
+        {
+          "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+          "parent_gitlink_path": "bt_api/bt_api_gateway",
+          "parent_gitlink_at_parent_head": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+          "repository_head": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+          "path": "src/bt_api_gateway/market_hub.py",
+          "current_sha256": "d8e8201d8a45e42070a1e9362714edc8d7489763ab8093f080c6b412e9286110",
+          "current_blob_oid": "94adeb561ff48ed0a45aad986bebcebc08d69d13",
+          "head_blob_oid": "3ed85eee04cacea948d40af0fddf9c22725103b5"
+        },
+        {
+          "repository": "D:\\bt_api_py\\bt_api\\bt_api_gateway",
+          "parent_gitlink_path": "bt_api/bt_api_gateway",
+          "parent_gitlink_at_parent_head": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+          "repository_head": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+          "path": "src/bt_api_gateway/service_component.py",
+          "current_sha256": "8d8f147e171cf28cdc73add75780aa814bb20890b0aacd7cf033a02377ded43a",
+          "current_blob_oid": "6cf161881d618c92137fe680100ff517c28f2c71",
+          "head_blob_oid": "27a9cf148e96cb77c2e9563bc1bc4b29d7658ff5"
+        }
+      ]
+    }
+  },
+  "frozen_original_packet": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi10-service-market-quote-consumer-r254-20261016",
+    "files": [
+      {
+        "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi10-service-market-quote-consumer-r254-20261016\\acceptance-spec.md",
+        "bytes": 2719,
+        "sha256": "015ba00479e22fb18bbb85ad6295f9adc68408be14e87ee8ac1611fe5fa9b2d9"
+      },
+      {
+        "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi10-service-market-quote-consumer-r254-20261016\\candidate-partial-index.json",
+        "bytes": 2172,
+        "sha256": "22a24e5016fe901653e5acce7940b930d2e79aa0c6fbde826b3a5e036b624d2b"
+      },
+      {
+        "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi10-service-market-quote-consumer-r254-20261016\\manifest.json",
+        "bytes": 8909,
+        "sha256": "f418fa2b4d3ecb22ae596bc633db8356e1691c0c7e17cf1e35e42e7e3070b70c"
+      },
+      {
+        "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi10-service-market-quote-consumer-r254-20261016\\raw-evidence.zip",
+        "bytes": 36385,
+        "sha256": "5278a8c6e248645fab0cb1ca4dda0cfdd751a2f274b1459b5df228a885b5fc20"
+      },
+      {
+        "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\afi10-service-market-quote-consumer-r254-20261016\\round-record.md",
+        "bytes": 1938,
+        "sha256": "2aa99e80db09bc3400c1a1df7dbf2da07a15fbf86ce6aafd63edfe8c84957e37"
+      }
+    ],
+    "raw_evidence_zip_sha256": "5278a8c6e248645fab0cb1ca4dda0cfdd751a2f274b1459b5df228a885b5fc20",
+    "modified_by_addenda": false,
+    "original_candidate_freeze_head": "80d9b8ad5eb48df9e2f01d944d57cee428950a12"
+  },
+  "prior_addendum_v1": {
+    "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\r254-final-candidate-addendum.json",
+    "bytes": 15533,
+    "sha256": "29473ad35486061f9d471a7cfb022cdf8a54a3ad8d7530ba4f7b8f9c48c77d66",
+    "status": "SUPERSEDED_FOR_FINAL_CANDIDATE_BY_R2"
+  },
+  "superseded_incremental_attempt_r1": {
+    "result": "PASS_1_NODE_BUT_REVIEW_HOLD_ON_INCOMPLETE_ACTIVE_HANDLE_GUARD",
+    "raw_files": [
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-20261016\\stdout.txt",
+        "bytes": 1750,
+        "sha256": "1efe1ecb73e3fcb7a6e51a83414f2bf6db69583ba8932d1cba1800328c282bec"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-20261016\\stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-20261016\\junit.xml",
+        "bytes": 402,
+        "sha256": "90d7a3eb0a94612522a9881d15744fbed22500bc67e4316c74828d8155092fd0"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-20261016\\command-result.json",
+        "bytes": 1987,
+        "sha256": "d89b103c7ae57cbafebad4d68a51014778594f8827f48949ddf3b89d9e49b78a"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-20261016\\ruff-check.txt",
+        "bytes": 19,
+        "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-20261016\\ruff-check-stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-20261016\\static-check-result.json",
+        "bytes": 108,
+        "sha256": "002daad2eb4feb744c637e1e88682ae012c8018aaac6788a50826bb7eb8b7da3"
+      }
+    ],
+    "superseded_reason": "Poll fixture checked only tag and did not reject truncated, wrong-count, or wrong-generation tuples."
+  },
+  "final_candidate": {
+    "source_root": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi",
+    "file_count": 4,
+    "final_delta_from_original_packet": [
+      "src/backend/tests/integration/test_quote_service_market_host_integration.py: store the complete active handle tuple and validate exact tuple shape/types/count/generation; reset it on unsubscribe; add assertions rejecting truncated, wrong-count and stale-generation handles."
+    ],
+    "source_scope": [
+      {
+        "path": "src/backend/app/services/quote_service.py",
+        "mode": "100644",
+        "baseline_head_blob_at_original_candidate_freeze": "ede3011d4acc59e4d082c1733f2d45ec5faf36c3",
+        "current_afidev_head_blob": "ede3011d4acc59e4d082c1733f2d45ec5faf36c3",
+        "current_head_absent": false,
+        "candidate_blob_oid": "0110f70f090a7cf204c64c6115d7e5740868fc8b",
+        "candidate_sha256": "1df5d2d99836c928ea7090c7e2e72da926156f8e84f4d4bb4b3d252fbe246908",
+        "candidate_bytes": 57012,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote_service.py",
+        "candidate_matches_current_live_file": true
+      },
+      {
+        "path": "src/backend/app/services/quote/service_market.py",
+        "mode": "100644",
+        "baseline_head_blob_at_original_candidate_freeze": null,
+        "current_afidev_head_blob": null,
+        "current_head_absent": true,
+        "candidate_blob_oid": "66838e416577f43f6f9db1dbe901376c76496b96",
+        "candidate_sha256": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc",
+        "candidate_bytes": 31660,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote\\service_market.py",
+        "candidate_matches_current_live_file": true
+      },
+      {
+        "path": "src/backend/tests/test_quote_service_market.py",
+        "mode": "100644",
+        "baseline_head_blob_at_original_candidate_freeze": null,
+        "current_afidev_head_blob": null,
+        "current_head_absent": true,
+        "candidate_blob_oid": "819c83c5e2d1c7e0948f59a9dac2d51e65527ab7",
+        "candidate_sha256": "833ad834fb4b1fd3fd65a424f3441378cb82f827706c58e74a7ecbe57f43da2f",
+        "candidate_bytes": 20437,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\test_quote_service_market.py",
+        "candidate_matches_current_live_file": true
+      },
+      {
+        "path": "src/backend/tests/integration/test_quote_service_market_host_integration.py",
+        "mode": "100644",
+        "baseline_head_blob_at_original_candidate_freeze": null,
+        "current_afidev_head_blob": null,
+        "current_head_absent": true,
+        "candidate_blob_oid": "af8525576855bd1e6550e4e2af2eeeb48e9f1c3a",
+        "candidate_sha256": "d91f906fbeb33634c89e9d13722c50b77ae16bc684c0a88e2c53fd3a1c447e38",
+        "candidate_bytes": 19316,
+        "candidate_file": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\integration\\test_quote_service_market_host_integration.py",
+        "candidate_matches_current_live_file": true
+      }
+    ],
+    "partial_index_scope": [
+      "src/backend/app/services/quote_service.py",
+      "src/backend/app/services/quote/service_market.py",
+      "src/backend/tests/test_quote_service_market.py",
+      "src/backend/tests/integration/test_quote_service_market_host_integration.py"
+    ]
+  },
+  "final_incremental_validation": {
+    "selected_node": "tests/integration/test_quote_service_market_host_integration.py::test_quote_http_route_reads_real_service_market_client_and_host",
+    "result": "PASS",
+    "collected": 1,
+    "passed": 1,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "pytest_exit": 0,
+    "warning_count": 1,
+    "warning": "Expected Windows ZMQ Proactor/add_reader RuntimeWarning; see raw stdout.",
+    "pytest_reported_duration_seconds": 1.98,
+    "ruff_check_exit": 0,
+    "raw_files": [
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-r2-20261016\\stdout.txt",
+        "bytes": 1753,
+        "sha256": "ae71410809247541335115752342b2904e9c343cd2b8d0bc723658f1a23e62f6"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-r2-20261016\\stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-r2-20261016\\junit.xml",
+        "bytes": 402,
+        "sha256": "58a4a555a7b1503014c5efd089a351e40daa5f700a512394c90059b5df070cf5"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-r2-20261016\\command-result.json",
+        "bytes": 2046,
+        "sha256": "7b6ba2b9b71ccc3d32741995171daf3d18147c014ac15b560d35d5bdbee0a3da"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-r2-20261016\\ruff-check.txt",
+        "bytes": 19,
+        "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-r2-20261016\\ruff-check-stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "D:\\source_code\\ai-for-investor\\src\\backend\\.codex-tmp\\afi_iter10_service_market_quote_r254_20261016\\mig01-poll-compat-r2-20261016\\static-check-result.json",
+        "bytes": 108,
+        "sha256": "002daad2eb4feb744c637e1e88682ae012c8018aaac6788a50826bb7eb8b7da3"
+      }
+    ],
+    "sdk_contract": "MarketProvider.poll(handle, *, limit: int) -> tuple[MarketProviderEvent, ...]; GatewayMarketHub.maintain calls bounded nonblocking poll on Hub owner thread. Manual-publication fixture accepts only exact active subscription handle and returns an empty tuple."
+  },
+  "coverage_accounting": {
+    "original_frozen_run": "4/4 selected nodes passed using pre-poll integration fixture; retained unchanged historical evidence.",
+    "final_candidate_coverage": "Three focused unit nodes remain byte-identical and passed in the original run; the final Host integration node passed once in r2 with the strict-handle fixture.",
+    "one_run_passed_all_final_nodes": false,
+    "no_repeated_unit_nodes": true,
+    "broad_suite_rerun": false
+  },
+  "limitations": [
+    "No production OKX WSS queue-to-Hub or real provider deployment proof.",
+    "Host/client/UI path is local and uses a synthetic provider; no real account acceptance.",
+    "Legacy manager/runtime/receiver consumers remain for later retirement rounds.",
+    "Only the four listed AFI paths are in this candidate; unrelated concurrent lane changes remain outside its scope.",
+    "Original packet records the whole-file Ruff format advisory exit 1, primarily inherited R248 formatting; this round did not change or rerun that advisory."
+  ]
+}

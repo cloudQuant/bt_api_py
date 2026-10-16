@@ -1,0 +1,50 @@
+{
+  "repo": "D:\\source_code\\ai-for-investor",
+  "parent": "8943fc0fe15c0c34ed33d7a20e42637e5831e2a3",
+  "head": "318608a29997fe9e37db9a8053542375eabf286b",
+  "entries": [
+    {
+      "path": "src/backend/app/services/quote_service.py",
+      "payload": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote_service.py",
+      "sha256": "1df5d2d99836c928ea7090c7e2e72da926156f8e84f4d4bb4b3d252fbe246908",
+      "blob": "0110f70f090a7cf204c64c6115d7e5740868fc8b",
+      "old_blob": "ede3011d4acc59e4d082c1733f2d45ec5faf36c3"
+    },
+    {
+      "path": "src/backend/app/services/quote/service_market.py",
+      "payload": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\app\\services\\quote\\service_market.py",
+      "sha256": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc",
+      "blob": "66838e416577f43f6f9db1dbe901376c76496b96",
+      "old_blob": null
+    },
+    {
+      "path": "src/backend/tests/test_quote_service_market.py",
+      "payload": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\test_quote_service_market.py",
+      "sha256": "833ad834fb4b1fd3fd65a424f3441378cb82f827706c58e74a7ecbe57f43da2f",
+      "blob": "819c83c5e2d1c7e0948f59a9dac2d51e65527ab7",
+      "old_blob": null
+    },
+    {
+      "path": "src/backend/tests/integration/test_quote_service_market_host_integration.py",
+      "payload": "D:\\temp\\afi10-service-market-ad9c8dcc-r254\\source\\afi\\src\\backend\\tests\\integration\\test_quote_service_market_host_integration.py",
+      "sha256": "d91f906fbeb33634c89e9d13722c50b77ae16bc684c0a88e2c53fd3a1c447e38",
+      "blob": "af8525576855bd1e6550e4e2af2eeeb48e9f1c3a",
+      "old_blob": null
+    }
+  ],
+  "index_empty": true,
+  "selected_checkout_before": {
+    "src/backend/app/services/quote_service.py": "1df5d2d99836c928ea7090c7e2e72da926156f8e84f4d4bb4b3d252fbe246908",
+    "src/backend/app/services/quote/service_market.py": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc",
+    "src/backend/tests/test_quote_service_market.py": "833ad834fb4b1fd3fd65a424f3441378cb82f827706c58e74a7ecbe57f43da2f",
+    "src/backend/tests/integration/test_quote_service_market_host_integration.py": "d91f906fbeb33634c89e9d13722c50b77ae16bc684c0a88e2c53fd3a1c447e38"
+  },
+  "selected_checkout_after": {
+    "src/backend/app/services/quote_service.py": "1df5d2d99836c928ea7090c7e2e72da926156f8e84f4d4bb4b3d252fbe246908",
+    "src/backend/app/services/quote/service_market.py": "3f3fd9a879e3b1086ddf97803109d3b5ac243013f3dc299652b53dfd3e7036fc",
+    "src/backend/tests/test_quote_service_market.py": "833ad834fb4b1fd3fd65a424f3441378cb82f827706c58e74a7ecbe57f43da2f",
+    "src/backend/tests/integration/test_quote_service_market_host_integration.py": "d91f906fbeb33634c89e9d13722c50b77ae16bc684c0a88e2c53fd3a1c447e38"
+  },
+  "selected_checkout_unchanged": true,
+  "whole_worktree_stability_claim": false
+}
