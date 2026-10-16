@@ -1,0 +1,67 @@
+{
+  "command.json": {
+    "bytes": 885,
+    "sha256": "91b067880e7eb51c0a165a9c6574d71348421b089bead037c3ff8055980c2fe8"
+  },
+  "exit.txt": {
+    "bytes": 3,
+    "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+  },
+  "junit.xml": {
+    "bytes": 1871,
+    "sha256": "f055fe726a8c94c044effc6885ad4756516c12340c75f4afa1c591bc7b12e126"
+  },
+  "result.json": {
+    "bytes": 833,
+    "sha256": "b9e397bdfcccce279c8455db37aeb67f98105270317d3534780cfb54d1e75d8d"
+  },
+  "runner.py": {
+    "bytes": 3204,
+    "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+  },
+  "running.json": {
+    "bytes": 76,
+    "sha256": "3149d2a81efea434d396ce17c5a26c24ab72cdebc7c827b8467bdec5f6a78ffb"
+  },
+  "source-after.json": {
+    "bytes": 21423,
+    "sha256": "dbe60cc02cd8649172f72c0e0bd39d049311d6343518c451678b1ced078f862c"
+  },
+  "source-before.json": {
+    "bytes": 21423,
+    "sha256": "dbe60cc02cd8649172f72c0e0bd39d049311d6343518c451678b1ced078f862c"
+  },
+  "spec.json": {
+    "bytes": 22742,
+    "sha256": "a2ab18b9d950785fb53fa8609dc6a6fe9c617acca4d7eb023f00b3ba156f90f3"
+  },
+  "stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "stdout.log": {
+    "bytes": 200,
+    "sha256": "dcc42643752ced3b3c33d746c6f9b0a2cb9e7cadae5d1db5f0ce210074a5c5b0"
+  },
+  "review.md": {
+    "bytes": 3305,
+    "sha256": "c21ebcf1209fa25cdd1480a154f4ffa5538488daee6ee60745b963a4313b3218"
+  },
+  "postcommit.json": {
+    "bytes": 736,
+    "sha256": "35f787266fd6f0f2fdf472b353c523dad7cf0b64111e5df8a95dbcb9870120ac"
+  },
+  "accepted-source/src/bt_api_execution/group_store.py": {
+    "bytes": 45592,
+    "sha256": "66b4d99df7056f6f24042d342ab5b336197edfb140ee43e5706feeca1d85e1d4"
+  },
+  "accepted-source/tests/test_group_store_recoverable_page.py": {
+    "bytes": 5928,
+    "sha256": "2371f6d7c2fe21afe6e4ad04b8f71ae2abca91340def037f9360bf992be68ed9"
+  },
+  "accepted-source/docs/iteration10-recoverable-page-20261016.md": {
+    "bytes": 1262,
+    "sha256": "3e3709d7d05604b2303fbcc3a0a9be87a3f5ae9cbe91c44a2de24a6444510ab4"
+  },
+  "archive_sha256": "dca2a9d2f70f4842556e061aaa71d0794e06941e2e6b2a28dbf505405e022787"
+}
