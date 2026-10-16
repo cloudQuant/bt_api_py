@@ -1,0 +1,20 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+rootdir: D:\bt_api_py
+configfile: ..\temp\it10cfg06-scratch\pytest-risk-fx.ini
+collecting ... collected 6 items
+
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_portfolio_analytics_real_registration_control_plane PASSED [ 16%]
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_portfolio_analytics_options_fail_closed PASSED [ 33%]
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_analysis_port_rejects_other_roles_and_bad_options_before_resources PASSED [ 50%]
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_analysis_task_store_fail_closed_semantics PASSED [ 66%]
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_build_component_binds_the_analysis_task_store PASSED [ 83%]
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_base_install_serves_portfolio_analytics_without_numpy_or_sklearn PASSED [100%]
+
+============================== warnings summary ===============================
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_portfolio_analytics_real_registration_control_plane
+  C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+    self._get_loop()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 6 passed, 1 warning in 2.78s =========================

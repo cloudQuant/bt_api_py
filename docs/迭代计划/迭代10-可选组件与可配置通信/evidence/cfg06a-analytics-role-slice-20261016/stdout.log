@@ -1,0 +1,10 @@
+............                                                             [100%]
+============================== warnings summary ===============================
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_portfolio_analytics_real_registration_control_plane
+tests/unit/test_service_policy_catalog_control_plane.py::test_policy_catalog_real_registration_control_plane_and_outage
+  C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+    self._get_loop()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+------- generated xml file: D:\temp\it10cfg06a-qa-20261016-r1\junit.xml -------
+12 passed, 2 warnings in 8.36s

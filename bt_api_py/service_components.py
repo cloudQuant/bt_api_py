@@ -599,6 +599,32 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 }
             ),
         ),
+        ("risk", "portfolio_analytics"): _Builtin(
+            module_name="bt_api_risk.service_analytics",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"analysis"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.risk_analysis": frozenset(
+                        {
+                            "analysis.submit",
+                            "analysis.query",
+                            "analysis.cancel",
+                            "analysis.input_upload",
+                        }
+                    )
+                }
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {
+                    "service.risk_analysis": frozenset(
+                        {"analysis.submit", "analysis.cancel", "analysis.input_upload"}
+                    )
+                }
+            ),
+            validator_module_name="bt_api_risk.service_component",
+        ),
         ("risk", "account_owner"): _Builtin(
             module_name="bt_api_py.service_risk_order_entry",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -1427,6 +1453,43 @@ def build_component(
                     raise ServiceComponentError("POLICY_CATALOG_STORE_INVALID")
                 constructor = getattr(module, "PolicyCatalogService", None)
                 adapter = constructor(catalog)
+            elif (
+                spec.component == "risk"
+                and spec.options.get("role") == "portfolio_analytics"
+            ):
+                store_type = getattr(module, "AnalysisTaskStore", None)
+                analysis = values["analysis"]
+                if not isinstance(store_type, type) or type(analysis) is not store_type:
+                    raise ServiceComponentError("ANALYSIS_STORE_INVALID")
+                try:
+                    profile_ref = analysis.model_profile_ref
+                    modes = analysis.allowed_source_modes
+                    max_tasks = analysis.max_concurrent_tasks
+                    profile = analysis.model_profile
+                    max_input_bytes = profile.max_input_bytes
+                except Exception:
+                    raise ServiceComponentError("ANALYSIS_STORE_INVALID") from None
+                configured_modes = prepared.options["allowed_source_modes"]
+                if (
+                    type(profile_ref) is not str
+                    or profile_ref != prepared.options["model_profile_ref"]
+                    or type(modes) is not tuple
+                    or sorted(modes) != sorted(configured_modes)
+                    or type(max_tasks) is not int
+                    or not 1 <= max_tasks <= 64
+                    or type(max_input_bytes) is not int
+                    or (
+                        "max_concurrent_tasks" in prepared.options
+                        and max_tasks != prepared.options["max_concurrent_tasks"]
+                    )
+                    or (
+                        "max_input_bytes" in prepared.options
+                        and max_input_bytes != prepared.options["max_input_bytes"]
+                    )
+                ):
+                    raise ServiceComponentError("ANALYSIS_STORE_INVALID")
+                constructor = getattr(module, "PortfolioAnalyticsTaskService", None)
+                adapter = constructor(analysis)
             elif spec.component == "risk":
                 constructor = getattr(module, "RiskReadService", None)
                 adapter = constructor(values["gate"], values["targets"])
@@ -1659,6 +1722,18 @@ def build_component(
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
             if spec.component == "risk" and spec.options.get("role") == "policy_catalog":
+                configured_operations = getattr(adapter, "supported_operations", None)
+                if type(
+                    configured_operations
+                ) is not frozenset or configured_operations != frozenset(
+                    prepared.module.SUPPORTED_OPERATIONS
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured_operations)
+            if (
+                spec.component == "risk"
+                and spec.options.get("role") == "portfolio_analytics"
+            ):
                 configured_operations = getattr(adapter, "supported_operations", None)
                 if type(
                     configured_operations
@@ -1934,6 +2009,18 @@ def build_component(
                     return False
 
             readiness = account_worker_readiness
+
+        if (
+            spec.component == "risk"
+            and spec.options.get("role") == "portfolio_analytics"
+        ):
+            # The analysis role executes its durable task queue on the host's
+            # owner thread; a fixed-table role without the executor hook is a
+            # build-time fault instead of a silently idle service.
+            candidate_maintain = getattr(adapter, "maintain", None)
+            if not callable(candidate_maintain):
+                raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+            maintain = candidate_maintain
 
         if (
             spec.component == "execution"

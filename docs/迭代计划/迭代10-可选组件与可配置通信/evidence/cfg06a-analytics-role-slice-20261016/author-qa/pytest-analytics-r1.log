@@ -1,0 +1,210 @@
+F.F...                                                                   [100%]
+================================== FAILURES ===================================
+__________ test_portfolio_analytics_real_registration_control_plane ___________
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1005/test_portfolio_analytics_real_0')
+
+    def test_portfolio_analytics_real_registration_control_plane(tmp_path) -> None:
+        endpoint = _endpoint()
+        config = parse_service_config(_analysis_service_config(endpoint))
+        server_public, server_secret = zmq.curve_keypair()
+        manager_public, manager_secret = zmq.curve_keypair()
+        reader_public, reader_secret = zmq.curve_keypair()
+        foreign_public, foreign_secret = zmq.curve_keypair()
+        keys = {
+            "server_public": server_public,
+            "server_secret": server_secret,
+            "manager_public": manager_public,
+            "manager_secret": manager_secret,
+            "reader_public": reader_public,
+            "reader_secret": reader_secret,
+            "foreign_public": foreign_public,
+            "foreign_secret": foreign_secret,
+        }
+        clock = _TestClock()
+        stores: list[AnalysisTaskStore] = []
+        analysis_path = str(tmp_path / "analysis-tasks.sqlite")
+    
+        def resources(component, instance_id, options, _scope):
+            if component != "risk" or options.get("role") != "portfolio_analytics":
+                raise AssertionError("only the fixed portfolio_analytics route is selected")
+            if instance_id != _ANALYSIS_INSTANCE:
+                raise AssertionError("unexpected instance")
+            store = AnalysisTaskStore(
+                analysis_path,
+                model_profile=_model_profile(),
+                allowed_source_modes=options["allowed_source_modes"],
+                max_concurrent_tasks=options.get("max_concurrent_tasks", 4),
+                pending_ttl_seconds=10,
+                clock=clock.now,
+            )
+            stores.append(store)
+            return ComponentResources.borrowed(
+                {"analysis": store},
+                ready=lambda: True,
+            )
+    
+        host = None
+        try:
+            host = ServiceHost(
+                config, _analysis_authority(keys), str(tmp_path / "registry.sqlite"), resources
+            )
+            host.start()
+            summary = host.summary
+            assert summary["state"] == "started"
+            component_summary = summary["components"][0]
+            assert component_summary["declared_ports"] == ("service.risk_analysis",)
+            assert component_summary["capabilities"] == (
+                {
+                    "port": "service.risk_analysis",
+                    "operations": (
+                        "analysis.cancel",
+                        "analysis.input_upload",
+                        "analysis.query",
+                        "analysis.submit",
+                    ),
+                },
+            )
+    
+            manager_done = threading.Event()
+            manager_thread, manager_results, manager_errors = _run_on_thread(
+                lambda: _run_manager_script(endpoint, keys, clock, manager_done)
+            )
+            _serve_until(host, manager_done)
+            manager_thread.join(10)
+            assert not manager_thread.is_alive()
+            assert not manager_errors, manager_errors
+            assert len(manager_results) == _HANDLED_CHECKS
+            by = {row[0]: row for row in manager_results}
+            assert len(by) == _HANDLED_CHECKS
+            digest = _upload_digest()
+    
+            # Upload: immutable offline inputs, digest verified independently.
+            u1 = by["u1"]
+            assert u1[2] is True and u1[3] == "OK"
+            assert u1[4]["input_snapshot_id"] == "cut-2026-01"
+            assert u1[4]["input_sha256"] == digest
+            assert u1[4]["source_mode"] == "imported"
+            assert u1[4]["created_ns"] == _T0_NS
+            u2 = by["u2"]
+            assert u2[2] is True and u2[4] == u1[4]
+            u3 = by["u3"]
+            assert u3[2] is False and u3[3] == "SOURCE_MODE_NOT_ALLOWED"
+            u4 = by["u4"]
+            assert u4[2] is False and u4[3] == "INVALID_INPUT"
+            u5 = by["u5"]
+            assert u5[2] is False and u5[3] == "INVALID_REFERENCE"
+            u6 = by["u6"]
+            assert u6[2] is False and u6[3] == "INPUT_PORTFOLIO_MISMATCH"
+            u7 = by["u7"]
+            assert u7[2] is False and u7[3] == "INVALID_REQUEST"
+            u8 = by["u8"]
+            assert u8[2] is True and u8[4]["input_sha256"] != digest
+    
+            # The first submit's post-serve maintain claims the task immediately.
+            t1_submit = by["t1-submit"]
+            assert t1_submit[2] is True and t1_submit[4]["state"] == "pending"
+            assert t1_submit[4]["input_sha256"] == digest
+            t1_running = by["t1-running"]
+            assert t1_running[2] is True and t1_running[4]["state"] == "running"
+            assert t1_running[4]["state_ns"] == _T0_NS
+            t1_cancel = by["t1-cancel"]
+            assert t1_cancel[2] is True and t1_cancel[4]["state"] == "cancelled"
+            t1_cancel_again = by["t1-cancel-again"]
+            assert t1_cancel_again[2] is True and t1_cancel_again[4]["state"] == "cancelled"
+            assert t1_cancel_again[4]["state_ns"] == t1_cancel[4]["state_ns"]
+            assert by["t1-cancel-missing"][2] is False
+            assert by["t1-cancel-missing"][3] == "TASK_NOT_FOUND"
+            assert by["t1-query-missing"][3] == "TASK_NOT_FOUND"
+    
+            # One task transition per store-clock second: task-2 stays pending
+            # until the clock advances, then one transition per advance.
+            assert by["t2-submit"][2] is True and by["t2-submit"][4]["state"] == "pending"
+            t2_pending = by["t2-pending"]
+            assert t2_pending[4]["state"] == "pending"
+            assert t2_pending[4]["state_ns"] == _T0_NS
+            for probe in ("probe-1", "probe-2", "probe-3", "probe-4", "probe-5", "probe-6", "probe-7"):
+                assert by[probe][2] is True and by[probe][4]["state"] == "cancelled"
+            t2_running = by["t2-running"]
+            assert t2_running[2] is True and t2_running[4]["state"] == "running"
+            assert t2_running[4]["state_ns"] == _T0_NS + 1_000_000_000
+            t2_succeeded = by["t2-succeeded"]
+            assert t2_succeeded[2] is True and t2_succeeded[4]["state"] == "succeeded"
+            assert t2_succeeded[4]["detail_code"] is None
+            assert t2_succeeded[4]["state_ns"] == _T0_NS + 2_000_000_000
+            payload = t2_succeeded[4]["result"]
+            assert payload["status"] == "AVAILABLE"
+>           assert payload["reason_codes"] == []
+E           assert () == []
+E             
+E             Use -v to get more diff
+
+tests\unit\test_service_portfolio_analytics_control_plane.py:972: AssertionError
+___ test_analysis_port_rejects_other_roles_and_bad_options_before_resources ___
+
+tmp_path = WindowsPath('C:/Users/yunji/AppData/Local/Temp/pytest-of-yunji/pytest-1005/test_analysis_port_rejects_oth0')
+
+    def test_analysis_port_rejects_other_roles_and_bad_options_before_resources(
+        tmp_path,
+    ) -> None:
+        keys = _placeholder_keys()
+        resource_requests: list[tuple[str, str]] = []
+    
+        def resources(component, instance_id, _options, _scope):
+            resource_requests.append((component, instance_id))
+            raise AssertionError("rejected options must never reach the resources")
+    
+        def _rejected_start(options: dict[str, Any]) -> ServiceHostError:
+            config = parse_service_config(
+                _analysis_service_config(_endpoint(), singleton=(options, ("service.risk_analysis",), _ANALYSIS_INSTANCE))
+            )
+            host = ServiceHost(
+                config, _analysis_authority(keys), str(tmp_path / "rejected.sqlite"), resources
+            )
+            try:
+                with pytest.raises(ServiceHostError) as excinfo:
+                    host.start()
+                return excinfo.value
+            finally:
+                with suppress(BaseException):
+                    host.close()
+    
+        # Missing model_profile_ref: the package validator fails the role closed.
+>       missing = _rejected_start(
+            {"role": "portfolio_analytics", "allowed_source_modes": ["research", "imported"]}
+        )
+
+tests\unit\test_service_portfolio_analytics_control_plane.py:1155: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\test_service_portfolio_analytics_control_plane.py:1140: in _rejected_start
+    config = parse_service_config(
+bt_api_py\service_config.py:478: in parse_service_config
+    parsed, role = _parse_component(component_name, component_raw)
+bt_api_py\service_config.py:897: in _parse_component
+    normalized_options = _validate_component_options(name, role, options_raw, path)
+bt_api_py\service_config.py:1004: in _validate_component_options
+    "model_profile_ref": _versioned_ref(raw, "model_profile_ref", options_path),
+bt_api_py\service_config.py:1072: in _versioned_ref
+    value = _required_ref(raw, key, path)
+bt_api_py\service_config.py:1166: in _required_ref
+    _fail("MISSING_FIELD", f"{path}.{key}")
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+code = 'MISSING_FIELD'
+path = '$.components.risk.settings.options.model_profile_ref'
+
+    def _fail(code: str, path: str) -> None:
+>       raise ServiceConfigError(code, path)
+E       bt_api_py.service_config.ServiceConfigError: MISSING_FIELD at $.components.risk.settings.options.model_profile_ref
+
+bt_api_py\service_config.py:1216: ServiceConfigError
+============================== warnings summary ===============================
+tests/unit/test_service_portfolio_analytics_control_plane.py::test_portfolio_analytics_real_registration_control_plane
+  C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+    self._get_loop()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/unit/test_service_portfolio_analytics_control_plane.py::test_portfolio_analytics_real_registration_control_plane
+FAILED tests/unit/test_service_portfolio_analytics_control_plane.py::test_analysis_port_rejects_other_roles_and_bad_options_before_resources
+2 failed, 4 passed, 1 warning in 3.33s
