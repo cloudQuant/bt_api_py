@@ -1,10 +1,13 @@
-"""ServiceHost adapters for the durable two-leg Execution group workflow.
+"""ServiceHost adapters for the durable Execution group workflow.
 
 The coordinator accepts only authenticated strategy registrations and derives
-run authority from the Registry snapshot.  Account-owner RPCs are routed over
-the Host's borrowed upstream client; each account owner independently binds a
-permit to its accepted reservation, current writer lease, and durable group
-proof source.  Query operations never advance or dispatch a group.
+run authority from the Registry snapshot.  The wire keeps the frozen two-leg
+body and additionally accepts an explicit version-3 three-leg body (one
+same-account Put/Future/Call chain with per-leg ratios).  Account-owner RPCs
+are routed over the Host's borrowed upstream client; each account owner
+independently binds a permit to its accepted reservation, current writer
+lease, and durable group proof source.  Query operations never advance or
+dispatch a group.
 """
 
 from __future__ import annotations
@@ -92,6 +95,12 @@ _MAX_SQLITE_INTEGER = (1 << 63) - 1
 _REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _DEFAULT_LEASE_TTL_NS = 5_000_000_000
+_LEGACY_SUBMIT_KEYS = frozenset({"group_id", "deadline_ns", "first_leg_id", "legs"})
+_VERSIONED_SUBMIT_KEYS = _LEGACY_SUBMIT_KEYS | {"version"}
+_LEGACY_SUBMIT_LEG_KEYS = frozenset({"leg_id", "account_ref", "intent"})
+_THREE_LEG_SUBMIT_LEG_KEYS = _LEGACY_SUBMIT_LEG_KEYS | {"ratio"}
+_THREE_LEG_GROUP_VERSION = 3
+_RATIO_DECIMAL = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
 
 
 class ServiceExecutionGroupError(RuntimeError):
@@ -392,7 +401,7 @@ class _OrdersRpcPort:
 
 
 class GroupCoordinatorService:
-    """Normal ServiceHost entry for durable, ordered two-leg group requests."""
+    """Normal ServiceHost entry for durable, ordered two-leg and v3 group requests."""
 
     SUPPORTED_OPERATIONS = GROUP_COORDINATOR_OPERATIONS
 
@@ -587,8 +596,10 @@ class GroupCoordinatorService:
     ) -> GroupOriginRunBinding | None:
         """Read an existing same-ID submit binding under the current grant."""
 
-        expected_keys = {"group_id", "deadline_ns", "first_leg_id", "legs"}
-        if not isinstance(arguments, Mapping) or set(arguments) != expected_keys:
+        if not isinstance(arguments, Mapping):
+            return None
+        keys = frozenset(arguments)
+        if keys != _LEGACY_SUBMIT_KEYS and keys != _VERSIONED_SUBMIT_KEYS:
             return None
         group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
         return self._run_bindings.get_for_registration(
@@ -605,13 +616,11 @@ class GroupCoordinatorService:
     ) -> None:
         """Require the replay body to equal the previously accepted business intent."""
 
-        if not isinstance(arguments, Mapping) or set(arguments) != {
-            "group_id",
-            "deadline_ns",
-            "first_leg_id",
-            "legs",
-        }:
+        if not isinstance(arguments, Mapping):
             raise ServiceExecutionGroupError("INVALID_REQUEST")
+        declared_version = _submit_declared_version(arguments)
+        if declared_version != accepted.version:
+            raise AcceptedGroupConflictError("submit replay changed its accepted group version")
         group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
         first_leg_id = _reference(arguments["first_leg_id"], "FIRST_LEG_INVALID")
         deadline_ns = arguments["deadline_ns"]
@@ -628,12 +637,13 @@ class GroupCoordinatorService:
             or first_leg_id != accepted.first_leg_id
         ):
             raise AcceptedGroupConflictError("submit replay changed its accepted group identity")
+        leg_keys = (
+            _THREE_LEG_SUBMIT_LEG_KEYS
+            if declared_version == _THREE_LEG_GROUP_VERSION
+            else _LEGACY_SUBMIT_LEG_KEYS
+        )
         for raw_leg, planned in zip(raw_legs, accepted.legs, strict=True):
-            if not isinstance(raw_leg, Mapping) or set(raw_leg) != {
-                "leg_id",
-                "account_ref",
-                "intent",
-            }:
+            if not isinstance(raw_leg, Mapping) or set(raw_leg) != leg_keys:
                 raise ServiceExecutionGroupError("GROUP_LEG_INVALID")
             leg_id = _reference(raw_leg["leg_id"], "GROUP_LEG_INVALID")
             account_ref = _reference(raw_leg["account_ref"], "GROUP_ACCOUNT_INVALID")
@@ -644,10 +654,15 @@ class GroupCoordinatorService:
                 intent = order_intent_from_payload(payload)
             except Exception:
                 raise ServiceExecutionGroupError("GROUP_INTENT_INVALID") from None
+            ratio_bound = (
+                declared_version != _THREE_LEG_GROUP_VERSION
+                or _parse_ratio(raw_leg["ratio"]) == planned.ratio
+            )
             if (
                 leg_id != planned.leg_id
                 or account_ref != planned.account_ref
                 or intent.to_payload() != planned.maximum_intent.to_payload()
+                or not ratio_bound
             ):
                 raise AcceptedGroupConflictError("submit replay changed an accepted leg")
 
@@ -785,13 +800,9 @@ class GroupCoordinatorService:
         target: GroupCoordinatorTarget,
         arguments: Mapping[str, Any],
     ) -> GroupOrderIntent:
-        if not isinstance(arguments, Mapping) or set(arguments) != {
-            "group_id",
-            "deadline_ns",
-            "first_leg_id",
-            "legs",
-        }:
+        if not isinstance(arguments, Mapping):
             raise ServiceExecutionGroupError("INVALID_REQUEST")
+        version = _submit_declared_version(arguments)
         group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
         first_leg_id = _reference(arguments["first_leg_id"], "FIRST_LEG_INVALID")
         deadline_ns = arguments["deadline_ns"]
@@ -805,23 +816,29 @@ class GroupCoordinatorService:
         raw_legs = arguments["legs"]
         if isinstance(raw_legs, (str, bytes)) or not isinstance(raw_legs, Sequence):
             raise ServiceExecutionGroupError("GROUP_LEGS_INVALID")
-        if len(raw_legs) != 2:
+        if len(raw_legs) != (_THREE_LEG_GROUP_VERSION if version == _THREE_LEG_GROUP_VERSION else 2):
             raise ServiceExecutionGroupError("GROUP_LEGS_INVALID")
+        leg_keys = (
+            _THREE_LEG_SUBMIT_LEG_KEYS
+            if version == _THREE_LEG_GROUP_VERSION
+            else _LEGACY_SUBMIT_LEG_KEYS
+        )
         scope = registration.context.scope
         plans: list[GroupOrderLegPlan] = []
         used_leg_ids: set[str] = set()
         for raw_leg in raw_legs:
-            if not isinstance(raw_leg, Mapping) or set(raw_leg) != {
-                "leg_id",
-                "account_ref",
-                "intent",
-            }:
+            if not isinstance(raw_leg, Mapping) or set(raw_leg) != leg_keys:
                 raise ServiceExecutionGroupError("GROUP_LEG_INVALID")
             leg_id = _reference(raw_leg["leg_id"], "GROUP_LEG_INVALID")
             account_ref = _reference(raw_leg["account_ref"], "GROUP_ACCOUNT_INVALID")
             if leg_id in used_leg_ids or account_ref not in target.accounts:
                 raise ServiceExecutionGroupError("GROUP_LEG_INVALID")
             used_leg_ids.add(leg_id)
+            ratio = (
+                _parse_ratio(raw_leg["ratio"])
+                if version == _THREE_LEG_GROUP_VERSION
+                else None
+            )
             payload = raw_leg["intent"]
             if not isinstance(payload, Mapping):
                 raise ServiceExecutionGroupError("GROUP_INTENT_INVALID")
@@ -845,6 +862,7 @@ class GroupCoordinatorService:
                     metadata_valid_until_ns=route.instruments[
                         intent.instrument
                     ].metadata.expires_at_ns,
+                    ratio=ratio,
                 )
             )
         try:
@@ -857,6 +875,7 @@ class GroupCoordinatorService:
                 deadline_ns=deadline_ns,
                 first_leg_id=first_leg_id,
                 legs=tuple(plans),  # type: ignore[arg-type]
+                version=version,
             )
         except Exception:
             raise ServiceExecutionGroupError("GROUP_INTENT_INVALID") from None
@@ -1882,6 +1901,39 @@ def _same_reserved_order_except_quantity(reserved: OrderIntent, candidate: Order
         return replace(reserved, quantity=candidate.quantity) == candidate
     except (TypeError, ValueError):
         return False
+
+
+def _submit_declared_version(arguments: Mapping[str, Any]) -> int:
+    """Resolve one groups.submit body version under the frozen key whitelist.
+
+    The legacy body carries no version discriminator and keeps its two-leg
+    semantics. Version 3 is the only widened wire version: it must arrive with
+    the explicit ``version`` key, and every other declared value fails closed.
+    """
+
+    keys = frozenset(arguments)
+    if keys == _LEGACY_SUBMIT_KEYS:
+        return 1
+    if keys == _VERSIONED_SUBMIT_KEYS:
+        version = arguments["version"]
+        if type(version) is not int or version != _THREE_LEG_GROUP_VERSION:
+            raise ServiceExecutionGroupError("GROUP_VERSION_INVALID")
+        return _THREE_LEG_GROUP_VERSION
+    raise ServiceExecutionGroupError("INVALID_REQUEST")
+
+
+def _parse_ratio(value: object) -> Decimal:
+    """Parse one version-3 wire ratio as an exact positive Decimal."""
+
+    if type(value) is not str or _RATIO_DECIMAL.fullmatch(value) is None:
+        raise ServiceExecutionGroupError("GROUP_LEG_TERMS_INVALID")
+    try:
+        ratio = Decimal(value)
+    except Exception:
+        raise ServiceExecutionGroupError("GROUP_LEG_TERMS_INVALID") from None
+    if not ratio.is_finite() or ratio <= 0:
+        raise ServiceExecutionGroupError("GROUP_LEG_TERMS_INVALID")
+    return ratio
 
 
 def _reference(value: object, error_code: str) -> str:

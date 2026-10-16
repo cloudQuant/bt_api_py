@@ -1,0 +1,43 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\temp\\it10dim09-step2-scratch\\pytest-fx.ini",
+    "--rootdir",
+    "D:\\bt_api_py",
+    "-q",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\it10dim09-step2-20261016-r1\\run-2\\junit.xml",
+    "--basetemp=D:\\temp\\it10dim09-step2-20261016-r1\\run-2\\pytest-tmp",
+    "tests/integration/test_dim09_three_leg_group_service.py",
+    "tests/unit/test_service_execution_group.py",
+    "tests/unit/test_service_execution_group_client.py",
+    "tests/unit/test_service_execution_group_wire_reply.py",
+    "tests/unit/test_service_group_reservations.py",
+    "tests/integration/test_service_execution_group_local_process.py",
+    "tests/integration/test_group_policy_host_combo3.py"
+  ],
+  "cwd": "D:\\bt_api_py",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T04:57:34.501225+00:00"
+}

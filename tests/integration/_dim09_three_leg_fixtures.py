@@ -1,0 +1,1064 @@
+"""Host-level fixtures for the DIM09 v3 three-leg group service slice.
+
+The harness composes the real SDK group services in one process, mirroring
+``tests/unit/test_service_execution_group.py`` (the two-leg end-to-end node)
+instead of spawning CURVE hosts: only the exchange leaf is synthetic, while
+the wire request crosses the real coordinator service, typed borrowed-client
+route, real Risk reservations adapter, real Execution facade, proof journal,
+and durable SQLite stores.  The spawned-host harness of
+``test_arb03_dim05_group_partial_fill_service.py`` is deliberately not reused
+because it imports the in-flight ``service_host.py`` WIP.
+
+Wire contract implemented by this harness (DIM09 step 2):
+
+* v3 submit bodies use the exact five-key shape ``version``, ``group_id``,
+  ``deadline_ns``, ``first_leg_id``, ``legs`` with per-leg keys ``leg_id``,
+  ``account_ref``, ``intent``, ``ratio`` and exactly three legs in
+  put -> future -> call order on one account.
+* ``restart_owner`` models an account-owner process restart on the same
+  durable stores (new service object, ``recover_interrupted_dispatches``).
+* ``restart_coordinator`` models a coordinator restart: the two durable
+  stores are closed and reopened on the same paths, a renewed registration
+  epoch inspects the persisted snapshot, and the original-ID query path must
+  reconcile an UNKNOWN leg without resubmitting it.
+* ``Dim09ThreeLegLoopback.drop_submit_replies_for`` runs the real owner
+  handler to completion (durable write committed) and only then raises, so
+  the coordinator models a lost reply, never a lost write.
+
+Known composition gap exercised here: the production trusted quote builder
+``bt_api_execution.group_budget.build_instrument_risk_group_budget_quote``
+still rejects ``request.version != 1`` (a v1-only gate predating DIM09), so a
+v3 unquoted request cannot yet be quoted by it and the coordinator fails
+closed with ``GROUP_BUDGET_QUOTE_INVALID``.  ``_replicated_v3_quote`` below is
+the byte-faithful replication of that exact algorithm (same trusted
+``InstrumentRiskRegistry.assess`` calls, unit checks, and quote binding) with
+only that version gate lifted, so these host nodes can prove the DIM09 wire
+gates and coordinator chain end to end.  Legacy requests keep using the
+production function unchanged.  The production builder widening is step-1
+follow-up work, not part of this slice.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import time
+from contextlib import ExitStack
+from decimal import Decimal
+from functools import partial
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any
+
+from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
+from bt_api_execution import (
+    AccountScopedGroupAdmissionAdapter,
+    ExecutionScope,
+    GroupBudgetLegQuote,
+    GroupBudgetQuote,
+    GroupBudgetUnsupportedOrderError,
+    GroupOrderIntent,
+    OrderIntent,
+    OrderType,
+    PortfolioGroupBudgetPolicy,
+    Side,
+    SqliteExecutionStore,
+    SqliteOrderGroupStore,
+    TimeInForce,
+    build_instrument_risk_group_budget_quote,
+    group_leg_intent_id,
+    risk_account_scope_fingerprint,
+)
+from bt_api_execution.errors import ContractValidationError
+from bt_api_risk import (
+    INSTRUMENT_METADATA_DIGEST_TAG,
+    AccountScope,
+    DispatchEvidenceClass,
+    DurableRiskAdmissionAdapter,
+    DurableRiskGate,
+    ExposureAccountingMode,
+    InstrumentRiskAdmissionMapper,
+    InstrumentRiskAssessment,
+    InstrumentRiskMetadata,
+    InstrumentRiskOrder,
+    InstrumentRiskRegistry,
+    RiskPolicy,
+)
+
+from bt_api_py.bt_api import BtApi
+from bt_api_py.service_components import BorrowedServiceClient
+from bt_api_py.service_execution_group import (
+    GROUP_ACCOUNT_OWNER_OPERATIONS,
+    GROUP_COORDINATOR_OPERATIONS,
+    ExecutionGroupOrderEntryService,
+    GroupAccountRoute,
+    GroupCoordinatorService,
+    GroupCoordinatorTarget,
+    GroupInstrumentRule,
+)
+from bt_api_py.service_execution_group_authority import (
+    ExecutionGroupAuthority,
+    ExecutionStoreGroupCompletionVerifier,
+)
+from bt_api_py.service_execution_group_client import (
+    AcceptedGroupBindingStore,
+    GroupOriginRunBindingStore,
+)
+from bt_api_py.service_execution_group_proofs import (
+    GroupProofJournal,
+    GroupProofRuntimeBundle,
+    GroupProofSource,
+    GroupProofTarget,
+)
+from bt_api_py.service_execution_group_proofs import (
+    GroupReservationTarget as ProofReservationTarget,
+)
+from bt_api_py.service_group_reservations import (
+    GroupReservationsService,
+    GroupReservationTarget,
+)
+from bt_api_py.service_registry import (
+    ActiveRegistrationContext,
+    ServiceCallContext,
+    TrustedGroupReservationPolicy,
+    TrustedGroupResolutionPolicy,
+    TrustedGroupWritePolicy,
+)
+from bt_api_py.service_risk_order_entry import RiskBtApiProviderContract, RiskOrderTarget
+from bt_api_py.service_risk_order_journal import RiskOrderJournal
+from tests.unit._service_group_provider_fixtures import (
+    _V2_FILL_SCHEMA,
+    _V2_INSTRUMENT,
+    _V2_METADATA_VERSION,
+    _V2_ORDER_SCHEMA,
+    _V2_PROVIDER_ACCOUNT,
+    _V2SyntheticBtApiFeed,
+)
+
+_DOMAIN = "dim09:three-leg-host"
+_STRATEGY = "dim09-strategy"
+_RUN = "dim09-run"
+_PORTFOLIO = "dim09-portfolio"
+_COORDINATOR_INSTANCE = "dim09-group-coordinator"
+_COORDINATOR_SCOPE_REF = "dim09-group-scope-v1"
+_COORDINATOR_PRINCIPAL = "dim09-coordinator-principal"
+_STRATEGY_PRINCIPAL = "dim09-strategy-principal"
+_ACCOUNT = "account-a"
+_OWNER_INSTANCE = "dim09-account-owner"
+# The executor-defined put -> future -> call staging order.
+LEG_IDS = ("leg-put", "leg-future", "leg-call")
+LEG_SIDES = (Side.BUY, Side.SELL, Side.BUY)
+LEG_RATIOS = ("1", "1", "1")
+_LEGACY_IDS = ("leg-entry", "leg-hedge")
+_LEGACY_SIDES = (Side.BUY, Side.SELL)
+
+
+def _digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+class _ThreeLegMappedFeed(_V2SyntheticBtApiFeed):
+    """The synthetic leaf, pinned to the exact typed v3 child order shape."""
+
+    def make_order(
+        self,
+        symbol: str,
+        volume: float,
+        price: float,
+        order_type: str,
+        *,
+        client_order_id: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        # Check the arguments the real DirectBackend/FeedAdapter actually
+        # deliver from the typed Binance mapper before recording a write.
+        assert symbol == _V2_INSTRUMENT
+        assert Decimal(str(volume)) == Decimal("1"), volume
+        assert Decimal(str(price)) == Decimal("100"), price
+        assert order_type in {"buy-limit", "sell-limit"}
+        assert client_order_id.startswith("grp-") and len(client_order_id) == 44
+        assert kwargs == {
+            "offset": "open",
+            "post_only": False,
+            "reduce_only": False,
+            "time_in_force": "IOC",
+        }
+        return super().make_order(
+            symbol,
+            volume,
+            price,
+            order_type,
+            client_order_id=client_order_id,
+            **kwargs,
+        )
+
+
+class _UnusedExecutionDispatch:
+    """The group session's call-local dispatcher must own every provider write."""
+
+    def submit(self, _intent: OrderIntent) -> object:
+        raise AssertionError("ordinary Execution dispatcher bypassed group proof session")
+
+    def cancel(self, _intent: object) -> object:
+        raise AssertionError("group-only service must not dispatch cancellation")
+
+
+class Dim09ThreeLegLoopback:
+    """Borrowed RPC surface that invokes the real group service handlers."""
+
+    state = "registered"
+    healthy = True
+
+    def __init__(
+        self,
+        reservation_context: ServiceCallContext,
+        entry_context: ServiceCallContext,
+        query_context: ServiceCallContext,
+        *,
+        drop_submit_replies_for: tuple[str, ...] = (),
+    ) -> None:
+        self.reservation_context = reservation_context
+        self.entry_context = entry_context
+        self.query_context = query_context
+        self.reservations: GroupReservationsService | None = None
+        self.orders: ExecutionGroupOrderEntryService | None = None
+        self.calls: list[tuple[str, str, str, str, dict[str, Any]]] = []
+        self.replies: list[tuple[str, str, dict[str, Any]]] = []
+        # Lost-reply injection: the owner handler still runs to completion and
+        # commits its durable write; only the reply never reaches the
+        # coordinator.
+        self.drop_submit_replies_for = frozenset(drop_submit_replies_for)
+
+    def call(
+        self,
+        mount: str,
+        operation: str,
+        arguments: dict[str, Any],
+        *,
+        account_ref: str | None = None,
+        portfolio_ref: str | None = None,
+        scope_ref: str | None = None,
+        max_reply_message_bytes: int | None = None,
+    ) -> dict[str, Any]:
+        if (
+            account_ref is None
+            or portfolio_ref is None
+            or scope_ref is None
+            or max_reply_message_bytes != 1_000_000
+        ):
+            raise AssertionError("group RPC omitted its bounded trusted route")
+        self.calls.append((mount, operation, account_ref, scope_ref, dict(arguments)))
+        if mount == "upstream.account_reservations" and self.reservations is not None:
+            reply = self.reservations.handle(
+                operation,
+                context=self.reservation_context,
+                arguments=arguments,
+            )
+            self.replies.append((mount, operation, dict(reply)))
+            return reply
+        if mount == "upstream.orders" and self.orders is not None:
+            reply = self.orders.handle(
+                operation,
+                context=self.entry_context,
+                arguments=arguments,
+            )
+            self.replies.append((mount, operation, dict(reply)))
+            if (
+                operation == "orders.submit_group_leg"
+                and arguments["intent"]["intent_id"] in self.drop_submit_replies_for
+            ):
+                raise ConnectionError("dim09 synthetic submit reply loss")
+            return reply
+        if mount == "upstream.order_query" and self.orders is not None:
+            reply = self.orders.handle(
+                operation,
+                context=self.query_context,
+                arguments=arguments,
+            )
+            self.replies.append((mount, operation, dict(reply)))
+            return reply
+        raise AssertionError(f"unexpected or unbound group RPC route: {mount}/{operation}")
+
+    def operation_names(self, *, since: int = 0) -> list[str]:
+        return [call[1] for call in self.calls[since:]]
+
+    def submitted_intent_ids(self, *, since: int = 0) -> list[str]:
+        return [
+            call[4]["intent"]["intent_id"]
+            for call in self.calls[since:]
+            if call[1] == "orders.submit_group_leg"
+        ]
+
+    def mark(self) -> int:
+        return len(self.calls)
+
+
+def _strategy_scope(*, run_id: str | None = _RUN) -> WireScope:
+    return WireScope(
+        execution_domain_ref=_DOMAIN,
+        account_refs=(_ACCOUNT,),
+        strategy_ref=_STRATEGY,
+        run_id=run_id,
+        portfolio_ref=_PORTFOLIO,
+    )
+
+
+def _registration(
+    now_ns: int,
+    *,
+    registration_id: str = "dim09-strategy-registration-a",
+    service_epoch: str = "dim09-strategy-epoch-a",
+) -> ActiveRegistrationContext:
+    identity = WireIdentity(
+        WireRole.STRATEGY_CLIENT,
+        _STRATEGY_PRINCIPAL,
+        actor_ref=_STRATEGY,
+    )
+    context = ServiceCallContext(
+        identity=identity,
+        scope=_strategy_scope(),
+        registration_id=registration_id,
+        principal_ref=_STRATEGY_PRINCIPAL,
+    )
+    return ActiveRegistrationContext(
+        context=context,
+        instance_id=_COORDINATOR_INSTANCE,
+        port="service.order_group_entry",
+        scope_ref=_COORDINATOR_SCOPE_REF,
+        operations=GROUP_COORDINATOR_OPERATIONS,
+        write_operations=frozenset({"groups.submit"}),
+        service_epoch=service_epoch,
+        policy_version="dim09-policy-v1",
+        requirements_version="dim09-requirements-v1",
+        expires_at=now_ns / 1_000_000_000 + 3_600,
+        strategy_write_run_id=_RUN,
+    )
+
+
+def _replicated_v3_quote(
+    request: GroupOrderIntent,
+    policy: PortfolioGroupBudgetPolicy,
+    *,
+    registry: InstrumentRiskRegistry,
+    now_ns: int,
+) -> GroupBudgetQuote:
+    """Byte-faithful v3 replication of the production quote builder.
+
+    This is ``build_instrument_risk_group_budget_quote`` with only its
+    ``request.version != 1`` gate lifted: same trusted
+    ``InstrumentRiskRegistry.assess`` calls, same metadata/unit/validity
+    checks, same quote leg binding, exact Decimal sum.  It exists because the
+    production builder still refuses non-v1 unquoted requests; remove once
+    that gate widens to v3.
+    """
+
+    if type(request) is not GroupOrderIntent:
+        raise ContractValidationError("group budget quote source must be an unquoted request")
+    if type(policy) is not PortfolioGroupBudgetPolicy:
+        raise ContractValidationError("trusted portfolio group budget policy is required")
+    if policy.portfolio_ref != request.portfolio_ref:
+        raise ContractValidationError("group budget policy portfolio mismatch")
+    if type(now_ns) is not int or now_ns <= 0 or now_ns >= request.deadline_ns:
+        raise ContractValidationError("group budget assessment time is outside the request window")
+    if any(plan.maximum_intent.order_type is OrderType.MARKET for plan in request.legs):
+        raise GroupBudgetUnsupportedOrderError(
+            "the built-in group budget estimator has no trusted market-price bound"
+        )
+    if type(registry) is not InstrumentRiskRegistry:
+        raise ContractValidationError("exact trusted InstrumentRiskRegistry is required")
+    quotes: list[GroupBudgetLegQuote] = []
+    for plan in request.legs:
+        intent = plan.maximum_intent
+        metadata_digest = intent.tags.get("instrument_metadata_digest")
+        metadata_version = intent.metadata_version
+        if type(metadata_digest) is not str or type(metadata_version) is not str:
+            raise ContractValidationError("group leg lacks trusted instrument metadata binding")
+        risk_order = InstrumentRiskOrder(
+            instrument=intent.instrument,
+            quantity=intent.quantity,
+            limit_price=intent.price,
+            metadata_version=metadata_version,
+            metadata_digest=metadata_digest,
+        )
+        assessment = registry.assess(risk_order, now_ns)
+        if type(assessment) is not InstrumentRiskAssessment:
+            raise ContractValidationError("Risk registry returned an untyped assessment")
+        metadata = assessment.metadata
+        if (
+            metadata.instrument != intent.instrument
+            or metadata.metadata_version != metadata_version
+            or metadata.digest != metadata_digest
+            or metadata.quantity_unit is None
+            or metadata.valuation_unit != policy.valuation_unit
+            or metadata.quantity_step != plan.quantity_step
+            or metadata.expires_at_ns < request.deadline_ns
+        ):
+            raise ContractValidationError(
+                "group leg metadata units or validity do not match policy"
+            )
+        if assessment.order != risk_order:
+            raise ContractValidationError("Risk assessment changed the exact group order")
+        quotes.append(
+            GroupBudgetLegQuote(
+                leg_id=plan.leg_id,
+                account_ref=plan.account_ref,
+                intent_fingerprint=intent.fingerprint,
+                metadata_digest=metadata.digest,
+                assessment_fingerprint=assessment.bound_payload_fingerprint(
+                    intent.fingerprint
+                ),
+                valuation_unit=metadata.valuation_unit,
+                gross_notional=assessment.gross_notional,
+                assessed_at_ns=now_ns,
+                valid_until_ns=min(metadata.expires_at_ns, plan.metadata_valid_until_ns),
+            )
+        )
+    gross_notional = sum((item.gross_notional for item in quotes), Decimal("0"))
+    return GroupBudgetQuote(
+        policy_fingerprint=policy.fingerprint,
+        valuation_unit=policy.valuation_unit,
+        gross_notional=gross_notional,
+        legs=tuple(quotes),
+    )
+
+
+def _budget_binding(
+    metadata: InstrumentRiskMetadata,
+    *,
+    portfolio_ref: str = _PORTFOLIO,
+) -> tuple[PortfolioGroupBudgetPolicy, Any]:
+    policy = PortfolioGroupBudgetPolicy(
+        portfolio_ref=portfolio_ref,
+        policy_id="dim09-portfolio-budget-v1",
+        policy_version=1,
+        valuation_unit="USD",
+        max_group_gross_notional=Decimal("1000000"),
+        max_active_gross_notional=Decimal("10000000"),
+        max_active_groups=100,
+    )
+    registry = InstrumentRiskRegistry((metadata,))
+    production_builder = partial(
+        build_instrument_risk_group_budget_quote,
+        registry=registry,
+    )
+
+    def trusted_builder(request, package_policy, *, now_ns: int):
+        if request.version == 3:
+            return _replicated_v3_quote(
+                request, package_policy, registry=registry, now_ns=now_ns
+            )
+        return production_builder(request, package_policy, now_ns=now_ns)
+
+    return policy, trusted_builder
+
+
+class Dim09ThreeLegCluster:
+    """One in-process deployment of the real coordinator + account owner."""
+
+    def __init__(
+        self,
+        tmp_path: Path,
+        monkeypatch: Any,
+        *,
+        initial_states: tuple[str, ...] = ("filled", "filled", "filled"),
+        group_admission: Any = None,
+        drop_submit_replies_for: tuple[str, ...] = (),
+    ) -> None:
+        self.tmp_path = tmp_path
+        self._stack = ExitStack()
+        self._extra_closers: list[Any] = []
+        try:
+            self._build(monkeypatch, initial_states, group_admission, drop_submit_replies_for)
+        except BaseException:
+            self.close()
+            raise
+
+    # ------------------------------------------------------------------ build
+
+    def _build(
+        self,
+        monkeypatch: Any,
+        initial_states: tuple[str, ...],
+        group_admission: Any,
+        drop_submit_replies_for: tuple[str, ...],
+    ) -> None:
+        tmp_path = self.tmp_path
+        now_ns = time.time_ns()
+        self.deadline_ns = now_ns + 120_000_000_000
+        self.group_admission = group_admission
+        self.account_ref = _ACCOUNT
+        execution_scope = ExecutionScope(
+            "fixture", "simulation", _ACCOUNT, _STRATEGY, "20261016"
+        )
+        self.execution_scope = execution_scope
+        self.owner_scope = WireScope(
+            _DOMAIN,
+            account_ref=_ACCOUNT,
+            strategy_ref=_STRATEGY,
+            portfolio_ref=_PORTFOLIO,
+        )
+        self.strategy_template = WireScope(
+            _DOMAIN,
+            account_refs=(_ACCOUNT,),
+            strategy_ref=_STRATEGY,
+            portfolio_ref=_PORTFOLIO,
+        )
+        metadata = InstrumentRiskMetadata(
+            instrument=_V2_INSTRUMENT,
+            metadata_version=_V2_METADATA_VERSION,
+            as_of_ns=now_ns - 1_000_000_000,
+            expires_at_ns=now_ns + 3_600_000_000_000,
+            tick_size=Decimal("0.01"),
+            quantity_step=Decimal("0.001"),
+            contract_multiplier=Decimal("1"),
+            max_gross_notional=Decimal("100000"),
+            taker_fee_bps=Decimal("0"),
+            fixed_fee=Decimal("0"),
+            max_slippage_bps=Decimal("0"),
+            quantity_unit="base",
+            valuation_unit="USD",
+        )
+        self.metadata = metadata
+        registry = InstrumentRiskRegistry((metadata,))
+        provider_account = _V2_PROVIDER_ACCOUNT
+        risk_scope = AccountScope("fixture", provider_account, "simulation")
+        self.risk_scope = risk_scope
+        risk_target = RiskOrderTarget(
+            account_scope=risk_scope,
+            strategy_id=_STRATEGY,
+            exchange_name="FIXTURE___SPOT",
+            provider_account_id=provider_account,
+            registry=registry,
+        )
+        self.provider = _ThreeLegMappedFeed(
+            str(tmp_path / "dim09-provider.sqlite3"), tuple(initial_states), provider_account
+        )
+
+        # FIXTURE___SPOT is synthetic and intentionally absent from the
+        # production mapper registry. Verify the exact typed request mapping
+        # from the real Binance mapper function, then install only that trusted
+        # function under the synthetic venue for this test.
+        from bt_api_py._contracts.models import OrderRequest as BtOrderRequest
+        from bt_api_py._contracts.models import OrderType as BtOrderType
+        from bt_api_py._contracts.models import Side as BtSide
+        from bt_api_py._venue_mappers import MAPPERS
+
+        fixture_mapper = MAPPERS["BINANCE___SPOT"]
+        mapped_preflight = fixture_mapper(
+            BtOrderRequest(
+                symbol=_V2_INSTRUMENT,
+                side=BtSide.BUY,
+                order_type=BtOrderType.LIMIT,
+                quantity=Decimal("1"),
+                account_id=provider_account,
+                client_order_id="dim09-fixture-preflight",
+                price=Decimal("100"),
+                time_in_force="IOC",
+                reduce_only=False,
+                idempotency_key="dim09-fixture-preflight",
+                quantity_unit="base",
+                offset="open",
+            )
+        )
+        assert mapped_preflight == {
+            "symbol": _V2_INSTRUMENT,
+            "vol": "1",
+            "price": "100",
+            "order_type": "buy-limit",
+            "offset": "open",
+            "post_only": False,
+            "client_order_id": "dim09-fixture-preflight",
+            "reduce_only": False,
+            "time_in_force": "IOC",
+        }
+        monkeypatch.setitem(MAPPERS, "FIXTURE___SPOT", fixture_mapper)
+
+        bt_api = BtApi(debug=False)
+        self._stack.callback(bt_api.close)
+        bt_api.exchange_feeds["FIXTURE___SPOT"] = self.provider
+
+        execution_store = SqliteExecutionStore(tmp_path / "dim09-execution.sqlite3")
+        self._stack.callback(execution_store.close)
+        risk_order_journal = RiskOrderJournal(
+            tmp_path / "dim09-risk-order.sqlite3", writer_id="dim09-risk-order-owner"
+        )
+        proof_journal = GroupProofJournal(
+            tmp_path / "dim09-proof.sqlite3", writer_id="dim09-proof-owner"
+        )
+        self._stack.callback(proof_journal.close)
+        self.execution_store = execution_store
+        self.proof_journal = proof_journal
+
+        provider_contract = RiskBtApiProviderContract(
+            exchange_name="FIXTURE___SPOT",
+            profile_id="service-group-provider-v2",
+            order_schema=_V2_ORDER_SCHEMA,
+            fill_schema=_V2_FILL_SCHEMA,
+            client_order_id_query=True,
+            client_order_id_query_unique=True,
+            complete_order_snapshot=True,
+            complete_fill_history=True,
+            provider_accepts_client_order_id=True,
+            provider_status_mapping=(
+                ("cancelled", "canceled"),
+                ("expired", "expired"),
+                ("filled", "completed"),
+                ("open", "accepted"),
+                ("partial", "partial"),
+                ("rejected", "rejected"),
+            ),
+            supported_order_types=("LIMIT",),
+            supported_time_in_force=("IOC",),
+            supported_position_effects=("OPEN",),
+            normalizer_schema="bt-api-order-source-provenance-v2",
+            order_revision_field="order_revision",
+            fill_revision_field="fill_revision",
+            fill_watermark_field="fill_watermark",
+            fee_amount_field="fee_amount",
+            fee_currency_field="fee_currency",
+            quote_currency_by_instrument=((_V2_INSTRUMENT, "USD"),),
+        )
+        proof_target = GroupProofTarget(
+            execution_scope=execution_scope,
+            risk_target=risk_target,
+            provider_contract=provider_contract,
+            bt_api=bt_api,
+            execution_store=execution_store,
+            risk_order_journal=risk_order_journal,
+            evidence_class=DispatchEvidenceClass.SIMULATION_JOURNAL,
+        )
+        proof_source = GroupProofSource(proof_journal, {self.owner_scope: proof_target})
+        self.proof_source = proof_source
+        risk_gate = DurableRiskGate(
+            tmp_path / "dim09-risk.sqlite3",
+            RiskPolicy(
+                "dim09-three-leg-risk-policy-v1",
+                Decimal("100000"),
+                max_increase_count=10,
+                permit_ttl_seconds=240,
+                require_strategy_allocation=False,
+                notional_unit="USD",
+                exposure_accounting_mode=ExposureAccountingMode.RESERVATIONS_ONLY,
+            ),
+            execution_journal_authority=proof_source,
+        )
+        self._stack.callback(risk_gate.close)
+        risk_gate.set_strategy_allocation(
+            risk_scope,
+            _STRATEGY,
+            "dim09-allocation-v1",
+            max_notional=Decimal("100000"),
+            notional_unit="USD",
+        )
+        self.risk_gate = risk_gate
+        mapper = InstrumentRiskAdmissionMapper(
+            risk_scope,
+            registry,
+            clock_ns=time.time_ns,
+            allocation_reader=lambda routed_scope: risk_gate.get_strategy_allocation(
+                risk_scope, routed_scope.strategy_id
+            ),
+            wire_account_ref=_ACCOUNT,
+        )
+        risk_admission = DurableRiskAdmissionAdapter(risk_gate, mapper)
+        account_admission = AccountScopedGroupAdmissionAdapter(
+            risk_admission, account_scope=risk_scope
+        )
+        reservation_target = GroupReservationTarget(risk_scope, risk_admission)
+        proof_reservation_target = ProofReservationTarget(risk_scope, risk_admission)
+        bundle = GroupProofRuntimeBundle(
+            risk_admission,
+            account_admission,
+            MappingProxyType({self.owner_scope: proof_reservation_target}),
+            MappingProxyType({self.owner_scope: proof_target}),
+            proof_source,
+        )
+        bundle.require_runtime_bundle(
+            account_scoped_admission=account_admission,
+            risk_admission=risk_admission,
+        )
+        self.risk_admission = risk_admission
+        self.account_admission = account_admission
+
+        accepted_store = AcceptedGroupBindingStore(tmp_path / "dim09-accepted.sqlite3")
+        self._stack.callback(accepted_store.close)
+        authority = ExecutionGroupAuthority(
+            tmp_path / "dim09-authority.sqlite3",
+            completion_verifier=ExecutionStoreGroupCompletionVerifier(
+                execution_store, execution_scopes=(execution_scope,)
+            ),
+        )
+        self._stack.callback(authority.close)
+        self.accepted_store = accepted_store
+        self.authority = authority
+
+        service_identity = WireIdentity(
+            WireRole.SERVICE, _COORDINATOR_PRINCIPAL, "dim09-coordinator-actor"
+        )
+        self.service_identity = service_identity
+        reservation_scope_ref = "dim09-reservation-scope-a"
+        entry_scope_ref = "dim09-order-entry-scope-a"
+        query_scope_ref = "dim09-order-query-scope-a"
+        self.entry_scope_ref = entry_scope_ref
+        self.reservation_scope_ref = reservation_scope_ref
+        self.query_scope_ref = query_scope_ref
+        reservation_context = ServiceCallContext(
+            identity=service_identity,
+            scope=self.owner_scope,
+            registration_id="dim09-reservation-registration",
+            principal_ref=_COORDINATOR_PRINCIPAL,
+        )
+        entry_context = ServiceCallContext(
+            identity=service_identity,
+            scope=self.owner_scope,
+            registration_id="dim09-order-entry-registration",
+            principal_ref=_COORDINATOR_PRINCIPAL,
+        )
+        query_context = ServiceCallContext(
+            identity=service_identity,
+            scope=self.owner_scope,
+            registration_id="dim09-order-query-registration",
+            principal_ref=_COORDINATOR_PRINCIPAL,
+        )
+        self.reservation_context = reservation_context
+        self.entry_context = entry_context
+        self.query_context = query_context
+        expiry = time.time() + 3600
+        service_epoch = "dim09-owner-epoch-a"
+        policy_version = "dim09-policy-v1"
+        requirements_version = "dim09-requirements-v1"
+        reservation_operations = GroupReservationsService.SUPPORTED_OPERATIONS
+        reservation_registration = ActiveRegistrationContext(
+            context=reservation_context,
+            instance_id=_OWNER_INSTANCE,
+            port="service.group_reservations",
+            scope_ref=reservation_scope_ref,
+            operations=reservation_operations,
+            write_operations=frozenset({"reservations.reserve", "reservations.release"}),
+            service_epoch=service_epoch,
+            policy_version=policy_version,
+            requirements_version=requirements_version,
+            expires_at=expiry,
+            strategy_write_run_id=_RUN,
+        )
+        entry_operations = frozenset(
+            {"orders.submit_group_leg", "orders.resolve_group_leg"}
+        )
+        entry_registration = ActiveRegistrationContext(
+            context=entry_context,
+            instance_id=_OWNER_INSTANCE,
+            port="service.order_entry",
+            scope_ref=entry_scope_ref,
+            operations=entry_operations,
+            write_operations=entry_operations,
+            service_epoch=service_epoch,
+            policy_version=policy_version,
+            requirements_version=requirements_version,
+            expires_at=expiry,
+            strategy_write_run_id=_RUN,
+        )
+        query_registration = ActiveRegistrationContext(
+            context=query_context,
+            instance_id=_OWNER_INSTANCE,
+            port="service.order_query",
+            scope_ref=query_scope_ref,
+            operations=frozenset({"orders.query_group_leg"}),
+            write_operations=frozenset(),
+            service_epoch=service_epoch,
+            policy_version=policy_version,
+            requirements_version=requirements_version,
+            expires_at=expiry,
+            strategy_write_run_id=_RUN,
+        )
+        self.reservation_registration = reservation_registration
+        self.entry_registration = entry_registration
+        self.query_registration = query_registration
+        reservation_policy = TrustedGroupReservationPolicy(
+            _OWNER_INSTANCE,
+            _COORDINATOR_PRINCIPAL,
+            service_identity,
+            reservation_scope_ref,
+            self.owner_scope,
+            _RUN,
+            _ACCOUNT,
+        )
+        write_policy = TrustedGroupWritePolicy(
+            _OWNER_INSTANCE,
+            _COORDINATOR_PRINCIPAL,
+            service_identity,
+            entry_scope_ref,
+            self.owner_scope,
+            _RUN,
+        )
+        resolution_policy = TrustedGroupResolutionPolicy(
+            _OWNER_INSTANCE,
+            _COORDINATOR_PRINCIPAL,
+            service_identity,
+            entry_scope_ref,
+            self.owner_scope,
+            _RUN,
+            _ACCOUNT,
+        )
+        self.reservation_policy = reservation_policy
+        self.write_policy = write_policy
+        self.resolution_policy = resolution_policy
+
+        self.owner_service = self._build_owner_service(writer_id=_OWNER_INSTANCE)
+        self._extra_closers.append(self.owner_service.close)
+        assert self.owner_service.supported_operations == GROUP_ACCOUNT_OWNER_OPERATIONS
+        assert self.owner_service.recover_interrupted_dispatches() == ()
+        self.owner_service.maintain_registrations((entry_registration, query_registration))
+        assert self.owner_service.ready is True
+
+        authority.control.activate(
+            entry_context,
+            execution_scope=execution_scope,
+            risk_account_scope_key=risk_scope.key,
+        )
+        reservation_service = GroupReservationsService(
+            {self.owner_scope: reservation_target}, accepted_store, (reservation_policy,)
+        )
+        self._stack.callback(reservation_service.close)
+        reservation_service.maintain_registrations((reservation_registration,))
+        assert reservation_service.ready is True
+        self.reservation_service = reservation_service
+
+        loopback = Dim09ThreeLegLoopback(
+            reservation_context,
+            entry_context,
+            query_context,
+            drop_submit_replies_for=drop_submit_replies_for,
+        )
+        loopback.reservations = reservation_service
+        loopback.orders = self.owner_service
+        self.loopback = loopback
+        self.borrowed_upstream = BorrowedServiceClient(loopback)
+
+        coordinator_store = SqliteOrderGroupStore(tmp_path / "dim09-groups.sqlite3")
+        self._stack.callback(coordinator_store.close)
+        origin_run_bindings = GroupOriginRunBindingStore(tmp_path / "dim09-group-runs.sqlite3")
+        self._stack.callback(origin_run_bindings.close)
+        self.coordinator_store = coordinator_store
+        self.origin_run_bindings = origin_run_bindings
+        route = GroupAccountRoute(
+            execution_scope=execution_scope,
+            risk_scope_fingerprint=risk_account_scope_fingerprint(risk_scope.key),
+            reservation_scope_ref=reservation_scope_ref,
+            order_scope_ref=entry_scope_ref,
+            query_scope_ref=query_scope_ref,
+            instruments={
+                metadata.instrument: GroupInstrumentRule(
+                    metadata=metadata,
+                    base_units_per_order_unit=Decimal("1"),
+                    allowed_order_types=frozenset({OrderType.LIMIT}),
+                )
+            },
+        )
+        budget_policy, budget_quote_builder = _budget_binding(
+            metadata, portfolio_ref=self.strategy_template.portfolio_ref
+        )
+        self.portfolio_budget_policy = budget_policy
+        self.coordinator_target = GroupCoordinatorTarget(
+            scope_ref=_COORDINATOR_SCOPE_REF,
+            accounts={_ACCOUNT: route},
+            max_group_lifetime_ns=300_000_000_000,
+            portfolio_budget_policy=budget_policy,
+            budget_quote_builder=budget_quote_builder,
+        )
+        self.coordinator_service = GroupCoordinatorService(
+            coordinator_store,
+            {self.strategy_template: self.coordinator_target},
+            origin_run_bindings,
+            self.borrowed_upstream,
+            service_identity,
+            instance_id=_COORDINATOR_INSTANCE,
+            group_admission=group_admission,
+        )
+        self._extra_closers.append(self.coordinator_service.close)
+        self.strategy_registration = _registration(now_ns)
+        self.coordinator_service.maintain_registrations((self.strategy_registration,))
+        assert self.coordinator_service.ready is True
+
+    def _build_owner_service(self, *, writer_id: str) -> ExecutionGroupOrderEntryService:
+        return ExecutionGroupOrderEntryService(
+            self.execution_store,
+            {self.owner_scope: self.execution_scope},
+            _UnusedExecutionDispatch(),
+            self.account_admission,
+            self.accepted_store,
+            self.authority.guard,
+            self.proof_source,
+            (self.write_policy,),
+            (self.resolution_policy,),
+            writer_id=writer_id,
+        )
+
+    # -------------------------------------------------------------- wire body
+
+    def leg_intent(
+        self,
+        leg_id: str,
+        side: Side,
+        *,
+        group_id: str,
+        deadline_ns: int | None = None,
+    ) -> dict[str, Any]:
+        deadline = self.deadline_ns if deadline_ns is None else deadline_ns
+        return OrderIntent.limit(
+            intent_id=group_leg_intent_id(group_id, leg_id),
+            scope=self.execution_scope,
+            signal_id=f"dim09-signal-{leg_id}",
+            instrument=self.metadata.instrument,
+            side=side,
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            time_in_force=TimeInForce.IOC,
+            metadata_version=self.metadata.metadata_version,
+            deadline_ns=deadline,
+            tags={INSTRUMENT_METADATA_DIGEST_TAG: self.metadata.digest},
+        ).to_payload()
+
+    def bound_intent_id(self, group_id: str, leg_id: str) -> str:
+        return group_leg_intent_id(group_id, leg_id)
+
+    def v3_body(
+        self,
+        group_id: str,
+        *,
+        leg_ids: tuple[str, ...] = LEG_IDS,
+        sides: tuple[Side, ...] = LEG_SIDES,
+        ratios: tuple[str, ...] = LEG_RATIOS,
+        deadline_ns: int | None = None,
+        version: object = 3,
+    ) -> dict[str, Any]:
+        deadline = self.deadline_ns if deadline_ns is None else deadline_ns
+        return {
+            "version": version,
+            "group_id": group_id,
+            "deadline_ns": deadline,
+            "first_leg_id": leg_ids[0],
+            "legs": [
+                {
+                    "leg_id": leg_id,
+                    "account_ref": _ACCOUNT,
+                    "ratio": ratio,
+                    "intent": self.leg_intent(
+                        leg_id, side, group_id=group_id, deadline_ns=deadline
+                    ),
+                }
+                for leg_id, side, ratio in zip(leg_ids, sides, ratios)
+            ],
+        }
+
+    def legacy_body(
+        self,
+        group_id: str,
+        *,
+        leg_ids: tuple[str, ...] = _LEGACY_IDS,
+        sides: tuple[Side, ...] = _LEGACY_SIDES,
+        deadline_ns: int | None = None,
+    ) -> dict[str, Any]:
+        deadline = self.deadline_ns if deadline_ns is None else deadline_ns
+        return {
+            "group_id": group_id,
+            "deadline_ns": deadline,
+            "first_leg_id": leg_ids[0],
+            "legs": [
+                {
+                    "leg_id": leg_id,
+                    "account_ref": _ACCOUNT,
+                    "intent": self.leg_intent(
+                        leg_id, side, group_id=group_id, deadline_ns=deadline
+                    ),
+                }
+                for leg_id, side in zip(leg_ids, sides)
+            ],
+        }
+
+    # ------------------------------------------------------------- operations
+
+    def submit(self, body: dict[str, Any]) -> dict[str, Any]:
+        return dict(
+            self.coordinator_service.handle(
+                "groups.submit",
+                context=self.strategy_registration.context,
+                arguments=body,
+            )
+        )
+
+    def query(self, group_id: str) -> dict[str, Any]:
+        return dict(
+            self.coordinator_service.handle(
+                "groups.query",
+                context=self.strategy_registration.context,
+                arguments={"group_id": group_id},
+            )
+        )
+
+    def current_snapshot(self, group_id: str):
+        from bt_api_execution import GroupOrderSnapshot
+
+        reply = self.query(group_id)
+        assert reply["ok"] is True, reply
+        return GroupOrderSnapshot.from_payload(reply["result"]["snapshot"])
+
+    # ---------------------------------------------------------------- restart
+
+    def restart_owner(self) -> None:
+        """Model an account-owner process restart on the same durable stores."""
+
+        self.owner_service.close()
+        # The restarted process reuses its configured writer identity, so the
+        # durable writer lease is renewed under the same fencing generation.
+        restarted = self._build_owner_service(writer_id=_OWNER_INSTANCE)
+        self._extra_closers.append(restarted.close)
+        restarted.maintain_registrations(
+            (self.entry_registration, self.query_registration)
+        )
+        assert restarted.ready is True
+        # A restarted owner must find no live dispatch latch to recover; the
+        # committed child write is durable and served by query only.
+        assert restarted.recover_interrupted_dispatches() == ()
+        self.owner_service = restarted
+        self.loopback.orders = restarted
+
+    def restart_coordinator(self) -> None:
+        """Reopen the coordinator's durable stores under a renewed epoch."""
+
+        self.coordinator_service.close()
+        self.coordinator_store.close()
+        self.origin_run_bindings.close()
+        coordinator_store = SqliteOrderGroupStore(self.tmp_path / "dim09-groups.sqlite3")
+        self._extra_closers.append(coordinator_store.close)
+        origin_run_bindings = GroupOriginRunBindingStore(
+            self.tmp_path / "dim09-group-runs.sqlite3"
+        )
+        self._extra_closers.append(origin_run_bindings.close)
+        service = GroupCoordinatorService(
+            coordinator_store,
+            {self.strategy_template: self.coordinator_target},
+            origin_run_bindings,
+            self.borrowed_upstream,
+            self.service_identity,
+            instance_id=_COORDINATOR_INSTANCE,
+            group_admission=self.group_admission,
+        )
+        self._extra_closers.append(service.close)
+        registration = _registration(
+            time.time_ns(),
+            registration_id="dim09-strategy-registration-b",
+            service_epoch="dim09-strategy-epoch-b",
+        )
+        service.maintain_registrations((registration,))
+        assert service.ready is True
+        self.coordinator_store = coordinator_store
+        self.origin_run_bindings = origin_run_bindings
+        self.coordinator_service = service
+        self.strategy_registration = registration
+
+    # ------------------------------------------------------------------ close
+
+    def close(self) -> None:
+        for closer in reversed(self._extra_closers):
+            closer()
+        self._extra_closers.clear()
+        self._stack.close()

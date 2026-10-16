@@ -102,7 +102,7 @@ class AcceptedGroupBinding:
             raise AcceptedGroupBindingError("invalid accepted group scope")
         if type(self.deadline_ns) is not int or self.deadline_ns <= 0:
             raise AcceptedGroupBindingError("invalid accepted group deadline")
-        if type(self.members) is not tuple or not 1 <= len(self.members) <= 2:
+        if type(self.members) is not tuple or not 1 <= len(self.members) <= 3:
             raise AcceptedGroupBindingError("invalid accepted group member vector")
         if any(
             type(item) is not tuple
@@ -1096,7 +1096,7 @@ def _normalize_members(
         ):
             raise AcceptedGroupBindingError("group member scope or identity mismatch")
         parsed.append((leg_id, intent))
-    if not parsed or len(parsed) > 2 or len({leg_id for leg_id, _ in parsed}) != len(parsed):
+    if not parsed or len(parsed) > 3 or len({leg_id for leg_id, _ in parsed}) != len(parsed):
         raise AcceptedGroupBindingError("invalid group member count")
     return tuple(sorted(parsed, key=lambda item: item[0]))
 

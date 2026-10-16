@@ -1,0 +1,1 @@
+C:/anaconda3/python.exe -m pytest -c D:/temp/it10dim09-step2-review-20261016-r1/pytest-review.ini --rootdir D:/bt_api_py -q --noconftest --import-mode=importlib -p no:cacheprovider --collect-only tests/integration/test_dim09_three_leg_group_service.py

@@ -658,7 +658,7 @@ class GroupReservationsService:
     ) -> tuple[tuple[str, OrderIntent], ...]:
         if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
             raise GroupReservationsServiceError("INVALID_MEMBERS")
-        if not 1 <= len(value) <= 2:
+        if not 1 <= len(value) <= 3:
             raise GroupReservationsServiceError("INVALID_MEMBERS")
         members: list[tuple[str, OrderIntent]] = []
         for item in value:
