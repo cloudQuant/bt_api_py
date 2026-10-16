@@ -1,0 +1,4 @@
+CMD: C:/anaconda3/python.exe -m ruff check tests/unit/test_service_migration_drill.py
+Fri Oct 16 13:44:32     2026
+All checks passed!
+exit:0

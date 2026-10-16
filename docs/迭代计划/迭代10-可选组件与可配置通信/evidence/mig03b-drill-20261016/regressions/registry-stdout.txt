@@ -1,0 +1,42 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+hypothesis profile 'default'
+benchmark: 5.1.0 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+metadata: {'Python': '3.11.5', 'Platform': 'Windows-10-10.0.26300-SP0', 'Packages': {'pytest': '8.0.0', 'pluggy': '1.5.0'}, 'Plugins': {'anyio': '4.11.0', 'dash': '2.18.2', 'hypothesis': '6.151.9', 'benchmark': '5.1.0', 'cov': '6.0.0', 'html': '4.1.1', 'metadata': '3.1.1', 'ordering': '0.6', 'picked': '0.5.1', 'rerunfailures': '14.0', 'sugar': '1.0.0', 'xdist': '3.6.1'}}
+rootdir: D:\bt_api_py
+configfile: pyproject.toml
+plugins: anyio-4.11.0, dash-2.18.2, hypothesis-6.151.9, benchmark-5.1.0, cov-6.0.0, html-4.1.1, metadata-3.1.1, ordering-0.6, picked-0.5.1, rerunfailures-14.0, sugar-1.0.0, xdist-3.6.1
+collecting ... collected 21 items
+
+tests/unit/test_service_registry.py::test_active_registration_maintenance_expires_without_client_traffic PASSED [  4%]
+tests/unit/test_service_registry.py::test_active_registration_maintenance_observes_renew_and_unregister PASSED [  9%]
+tests/unit/test_service_registry.py::test_active_registration_maintenance_is_instance_scoped PASSED [ 14%]
+tests/unit/test_service_registry.py::test_discovery_and_dispatch_bind_authenticated_identity_scope_and_operations PASSED [ 19%]
+tests/unit/test_service_registry.py::test_approved_target_write_uses_only_its_exact_application_grant PASSED [ 23%]
+tests/unit/test_service_registry.py::test_pre_dispatch_market_denial_is_explicit_and_other_failures_are_not_denied PASSED [ 28%]
+tests/unit/test_service_registry.py::test_registration_idempotency_conflict_and_strategy_write_claim_survive_restart PASSED [ 33%]
+tests/unit/test_service_registry.py::test_registration_receipt_reports_remaining_lease_without_resetting_duplicate PASSED [ 38%]
+tests/unit/test_service_registry.py::test_concurrent_strategy_writer_registrations_are_serialized PASSED [ 42%]
+tests/unit/test_service_registry.py::test_expiry_renews_by_epoch_and_old_registration_cannot_dispatch PASSED [ 47%]
+tests/unit/test_service_registry.py::test_app_workers_do_not_consume_strategy_writer_claims PASSED [ 52%]
+tests/unit/test_service_registry.py::test_service_portfolio_writes_wait_for_coordinator_generation_claim PASSED [ 57%]
+tests/unit/test_service_registry.py::test_manual_book_and_paper_scope_are_exact_trusted_resources PASSED [ 61%]
+tests/unit/test_service_registry.py::test_not_ready_blocks_registration_renewal_and_dispatch_but_allows_unregister PASSED [ 66%]
+tests/unit/test_service_registry.py::test_handler_exceptions_are_finite_and_registry_bounds_are_enforced PASSED [ 71%]
+tests/unit/test_service_registry.py::test_durable_idempotency_key_limit_never_evicts_collision_history PASSED [ 76%]
+tests/unit/test_service_registry.py::test_database_has_one_live_owner_and_persisted_epoch_fences_old_instance PASSED [ 80%]
+tests/unit/test_service_registry.py::test_invalid_schema_and_unknown_control_are_finite PASSED [ 85%]
+tests/unit/test_service_registry.py::test_transport_printable_principal_refs_are_not_limited_to_registry_ids PASSED [ 90%]
+tests/unit/test_service_registry.py::test_registry_close_retains_owner_lock_until_file_close_retry_succeeds[False] PASSED [ 95%]
+tests/unit/test_service_registry.py::test_registry_close_retains_owner_lock_until_file_close_retry_succeeds[True] PASSED [100%]
+
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\it10mig03b-20261016-r1\regressions\registry-junit.xml -
+======================== 21 passed, 1 warning in 1.82s ========================
+exit:0

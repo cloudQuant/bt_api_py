@@ -1,0 +1,4 @@
+CMD: C:/anaconda3/python.exe -m pytest -p no:asyncio -p no:cacheprovider tests/unit/test_service_migration_drill.py -v --junitxml=D:/temp/it10mig03b-20261016-r1/run-03-final/junit.xml
+CWD: D:/bt_api_py
+Fri Oct 16 13:43:01     2026
+pytest-exit:0

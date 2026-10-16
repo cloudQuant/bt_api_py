@@ -1,0 +1,57 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+hypothesis profile 'default'
+benchmark: 5.1.0 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+metadata: {'Python': '3.11.5', 'Platform': 'Windows-10-10.0.26300-SP0', 'Packages': {'pytest': '8.0.0', 'pluggy': '1.5.0'}, 'Plugins': {'anyio': '4.11.0', 'dash': '2.18.2', 'hypothesis': '6.151.9', 'benchmark': '5.1.0', 'cov': '6.0.0', 'html': '4.1.1', 'metadata': '3.1.1', 'ordering': '0.6', 'picked': '0.5.1', 'rerunfailures': '14.0', 'sugar': '1.0.0', 'xdist': '3.6.1'}}
+rootdir: D:\bt_api_py
+configfile: pyproject.toml
+plugins: anyio-4.11.0, dash-2.18.2, hypothesis-6.151.9, benchmark-5.1.0, cov-6.0.0, html-4.1.1, metadata-3.1.1, ordering-0.6, picked-0.5.1, rerunfailures-14.0, sugar-1.0.0, xdist-3.6.1
+collecting ... collected 32 items
+
+tests/unit/test_service_host.py::test_selected_monitor_adapter_starts_with_exact_capabilities_and_closes PASSED [  3%]
+tests/unit/test_service_host.py::test_unsupported_public_port_fails_before_any_resource_resolution PASSED [  6%]
+tests/unit/test_service_host.py::test_declared_order_entry_requires_trusted_write_resources PASSED [  9%]
+tests/unit/test_service_host.py::test_order_entry_resources_must_match_the_declared_keys_exactly PASSED [ 12%]
+tests/unit/test_service_host.py::test_risk_factory_advertises_only_the_adapter_class_read_operation PASSED [ 15%]
+tests/unit/test_service_host.py::test_authority_reference_mismatch_fails_before_selected_package_import PASSED [ 18%]
+tests/unit/test_service_host.py::test_invalid_grant_capability_pair_fails_before_resource_resolution PASSED [ 21%]
+tests/unit/test_service_host.py::test_invalid_curve_z85_key_fails_before_resource_resolution PASSED [ 25%]
+tests/unit/test_service_host.py::test_registry_startup_cleanup_failure_is_retained_and_retried_by_host PASSED [ 28%]
+tests/unit/test_service_host.py::test_transport_startup_cleanup_failure_is_retained_and_retried_by_host PASSED [ 31%]
+tests/unit/test_service_host.py::test_unready_component_rolls_back_listener_and_closes_components_in_reverse_order PASSED [ 34%]
+tests/unit/test_service_host.py::test_service_outbound_bindings_fail_explicitly_before_resource_resolution PASSED [ 37%]
+tests/unit/test_service_host.py::test_readiness_is_rechecked_before_serve_and_preserves_control_operations PASSED [ 40%]
+tests/unit/test_service_host.py::test_readiness_change_during_wait_is_rechecked_at_dispatch PASSED [ 43%]
+tests/unit/test_service_host.py::test_failed_owned_close_is_retained_reported_and_retryable PASSED [ 46%]
+tests/unit/test_service_host.py::test_adapter_build_failure_retains_unattached_resource_for_cleanup_retry PASSED [ 50%]
+tests/unit/test_service_host.py::test_outbound_runtime_starts_before_resources_and_uses_trusted_transport PASSED [ 53%]
+tests/unit/test_service_host.py::test_invalid_outbound_directory_fails_before_client_or_component_io PASSED [ 56%]
+tests/unit/test_service_host.py::test_configured_clients_require_bundle_and_unused_bundle_is_rejected PASSED [ 59%]
+tests/unit/test_service_host.py::test_optional_upstream_degradation_does_not_withdraw_local_readiness PASSED [ 62%]
+tests/unit/test_service_host.py::test_upstream_maintenance_clamps_poll_and_explicit_recovery_restores_readiness PASSED [ 65%]
+tests/unit/test_service_host.py::test_component_close_failure_keeps_upstream_until_component_retry PASSED [ 68%]
+tests/unit/test_service_host.py::test_market_source_uses_registry_registration_and_idle_lease_pruning PASSED [ 71%]
+tests/unit/test_service_host.py::test_invalid_market_audience_is_rejected_before_either_listener_binds PASSED [ 75%]
+tests/unit/test_service_host.py::test_market_bind_without_selected_market_component_fails_before_provider PASSED [ 78%]
+tests/unit/test_service_host.py::test_market_component_without_market_bind_is_rejected_by_parser PASSED [ 81%]
+tests/unit/test_service_host.py::test_market_publisher_close_failure_retains_hub_until_explicit_retry PASSED [ 84%]
+tests/unit/test_service_host.py::test_account_session_worker_shares_one_read_across_strategies_and_survives_one_unregister PASSED [ 87%]
+tests/unit/test_service_host.py::test_account_session_start_failure_closes_tracked_worker_resources PASSED [ 90%]
+tests/unit/test_service_host.py::test_account_session_invalid_mapping_fails_before_provider_connect PASSED [ 93%]
+tests/unit/test_service_host.py::test_account_session_provider_close_failure_retains_host_resources_for_retry PASSED [ 96%]
+tests/unit/test_service_host.py::test_expired_account_baseline_withdraws_readiness_and_maintains_without_reconnect PASSED [100%]
+
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/unit/test_service_host.py: 13 warnings
+  C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+    self._get_loop()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\it10mig03b-20261016-r1\regressions\host-junit.xml -
+======================= 32 passed, 14 warnings in 4.35s =======================
+exit:0

@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="3.804" timestamp="2026-10-16T13:44:05.747778" hostname="yun"><testcase classname="tests.unit.test_service_execution_integration" name="test_spawned_strategy_uses_the_sdk_execution_facade_end_to_end" time="2.990" /></testsuite></testsuites>

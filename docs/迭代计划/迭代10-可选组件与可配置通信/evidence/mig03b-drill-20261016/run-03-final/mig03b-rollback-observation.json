@@ -1,0 +1,247 @@
+{
+  "business_facts": {
+    "after_import_failure": {
+      "active_registration_ids": {
+        "mig03b-execution-owner": [
+          "6db70084157447a0a822ea46c5d3cb6c",
+          "f69e63a8e079405895d6552e6020fb72"
+        ],
+        "mig03b-gateway-read": [
+          "07c8d5b6281b4ce2be5cd3e5bfce0a29"
+        ]
+      },
+      "execution_rows_intent_1": [
+        [
+          "scope:8bb5332fb4a34d624606a7f536161c0400d6c088b2aa19143dddb917d565d85a",
+          "mig03b-unknown-order-001",
+          "UNKNOWN",
+          "06744fdb-171e-44f8-928a-2744e08bc690",
+          1,
+          "dispatch_outcome_unknown"
+        ]
+      ],
+      "execution_rows_intent_2": [],
+      "provider_cancel_count": 0,
+      "provider_dispatch_counts": {
+        "intent_1": 1,
+        "intent_2": 0
+      },
+      "risk_rows_intent_1": {
+        "dispatch_claims": [
+          [
+            "mig03b-unknown-order-001",
+            "06744fdb-171e-44f8-928a-2744e08bc690",
+            "dispatch-inflight:mig03b-unknown-order-001"
+          ]
+        ],
+        "freezes": [
+          [
+            "dispatch-inflight:mig03b-unknown-order-001",
+            "dispatch-inflight:mig03b-unknown-order-001",
+            1
+          ]
+        ],
+        "reservations": [
+          [
+            "mig03b-unknown-order-001",
+            "06744fdb-171e-44f8-928a-2744e08bc690",
+            "active",
+            null,
+            "100000.00"
+          ]
+        ]
+      },
+      "risk_rows_intent_2": {
+        "dispatch_claims": [],
+        "freezes": [],
+        "reservations": []
+      },
+      "risk_snapshot": {
+        "active_freeze_reasons": [
+          "dispatch-inflight:mig03b-unknown-order-001"
+        ],
+        "increase_count": 1,
+        "increase_notional": "100000"
+      },
+      "service_epoch": "ff7b561e99244e6ab1b6135628c4a994"
+    },
+    "after_rollback_restart": {
+      "active_registration_ids": {
+        "mig03b-execution-owner": [
+          "3137079f0f8c41af9b6136b638809efe",
+          "5a0bafe8f91545498889ce5a59143374"
+        ],
+        "mig03b-gateway-read": [
+          "b01177432ac749ab934e8809c3c3d43f"
+        ]
+      },
+      "execution_rows_intent_1": [
+        [
+          "scope:8bb5332fb4a34d624606a7f536161c0400d6c088b2aa19143dddb917d565d85a",
+          "mig03b-unknown-order-001",
+          "UNKNOWN",
+          "06744fdb-171e-44f8-928a-2744e08bc690",
+          1,
+          "dispatch_outcome_unknown"
+        ]
+      ],
+      "execution_rows_intent_2": [],
+      "provider_cancel_count": 0,
+      "provider_dispatch_counts": {
+        "intent_1": 1,
+        "intent_2": 0
+      },
+      "risk_rows_intent_1": {
+        "dispatch_claims": [
+          [
+            "mig03b-unknown-order-001",
+            "06744fdb-171e-44f8-928a-2744e08bc690",
+            "dispatch-inflight:mig03b-unknown-order-001"
+          ]
+        ],
+        "freezes": [
+          [
+            "dispatch-inflight:mig03b-unknown-order-001",
+            "dispatch-inflight:mig03b-unknown-order-001",
+            1
+          ]
+        ],
+        "reservations": [
+          [
+            "mig03b-unknown-order-001",
+            "06744fdb-171e-44f8-928a-2744e08bc690",
+            "active",
+            null,
+            "100000.00"
+          ]
+        ]
+      },
+      "risk_rows_intent_2": {
+        "dispatch_claims": [],
+        "freezes": [],
+        "reservations": []
+      },
+      "risk_snapshot": {
+        "active_freeze_reasons": [
+          "dispatch-inflight:mig03b-unknown-order-001"
+        ],
+        "increase_count": 1,
+        "increase_notional": "100000"
+      },
+      "service_epoch": "8211cd1478b240b39505b7f6f746a329"
+    },
+    "old_epoch_first_slice": {
+      "active_registration_ids": {
+        "mig03b-execution-owner": [
+          "624ebe242a5241d4b2ecca31d87adf98",
+          "784dac3e9f5746afb4eb1456f2b217c7"
+        ],
+        "mig03b-gateway-read": [
+          "70a62967948341ccbf4a53b50461b77d"
+        ]
+      },
+      "execution_rows_intent_1": [
+        [
+          "scope:8bb5332fb4a34d624606a7f536161c0400d6c088b2aa19143dddb917d565d85a",
+          "mig03b-unknown-order-001",
+          "UNKNOWN",
+          "06744fdb-171e-44f8-928a-2744e08bc690",
+          1,
+          "dispatch_outcome_unknown"
+        ]
+      ],
+      "execution_rows_intent_2": [],
+      "provider_cancel_count": 0,
+      "provider_dispatch_counts": {
+        "intent_1": 1,
+        "intent_2": 0
+      },
+      "risk_rows_intent_1": {
+        "dispatch_claims": [
+          [
+            "mig03b-unknown-order-001",
+            "06744fdb-171e-44f8-928a-2744e08bc690",
+            "dispatch-inflight:mig03b-unknown-order-001"
+          ]
+        ],
+        "freezes": [
+          [
+            "dispatch-inflight:mig03b-unknown-order-001",
+            "dispatch-inflight:mig03b-unknown-order-001",
+            1
+          ]
+        ],
+        "reservations": [
+          [
+            "mig03b-unknown-order-001",
+            "06744fdb-171e-44f8-928a-2744e08bc690",
+            "active",
+            null,
+            "100000.00"
+          ]
+        ]
+      },
+      "risk_rows_intent_2": {
+        "dispatch_claims": [],
+        "freezes": [],
+        "reservations": []
+      },
+      "risk_snapshot": {
+        "active_freeze_reasons": [
+          "dispatch-inflight:mig03b-unknown-order-001"
+        ],
+        "increase_count": 1,
+        "increase_notional": "100000"
+      },
+      "service_epoch": "48e78d44d00144759c0c5aa2103c6bbb"
+    }
+  },
+  "cleanup": {
+    "failures": [],
+    "forced_cleanup": [],
+    "runtime_cleanup_failures": []
+  },
+  "conflicting_rearm_negative": "CUTOVER_MARKER_CONFLICT",
+  "fixed_source_root": null,
+  "hosts": [
+    {
+      "closed": true,
+      "label": "mig03b-rollback-host-a",
+      "normal_close_ack": true,
+      "normal_exit_code": 0,
+      "pid": 17396,
+      "terminal_exit_code": null
+    },
+    {
+      "closed": true,
+      "label": "mig03b-rollback-host-b",
+      "normal_close_ack": true,
+      "normal_exit_code": 0,
+      "pid": 22036,
+      "terminal_exit_code": null
+    },
+    {
+      "closed": true,
+      "label": "mig03b-rollback-host-a2",
+      "normal_close_ack": true,
+      "normal_exit_code": 0,
+      "pid": 59452,
+      "terminal_exit_code": null
+    }
+  ],
+  "node": "rollback_window_and_import_failure_negatives",
+  "parent_source_origins": {
+    "DurableRiskAdmissionAdapter": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\order_admission.py",
+    "DurableRiskGate": "D:\\bt_api_py\\bt_api\\bt_api_risk\\src\\bt_api_risk\\core\\admission.py",
+    "GatewayEventJournal": "D:\\bt_api_py\\bt_api\\bt_api_gateway\\src\\bt_api_gateway\\event_journal.py",
+    "ServiceClientRuntime": "D:\\bt_api_py\\bt_api_py\\service_runtime.py",
+    "ServiceExecutionClient": "D:\\bt_api_py\\bt_api_py\\service_execution.py",
+    "ServiceHost": "D:\\bt_api_py\\bt_api_py\\service_host.py",
+    "ServiceRegistry": "D:\\bt_api_py\\bt_api_py\\service_registry.py",
+    "SqliteExecutionStore": "D:\\bt_api_py\\bt_api\\bt_api_execution\\src\\bt_api_execution\\store.py",
+    "WireScope": "D:\\bt_api_py\\bt_api\\bt_api_base\\src\\bt_api_base\\service_protocol.py"
+  },
+  "pre_seal_window": "old_deployment_start_permitted",
+  "rollback": "marker_removed_before_seal",
+  "status": "PASS"
+}
