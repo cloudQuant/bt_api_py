@@ -26,12 +26,17 @@ from typing import Any
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     AccountScopedGroupAdmissionAdapter,
+    CancelDispatchClaimReceiptV1,
+    CancelIntent,
+    CancelRecord,
     ContractValidationError,
     ExecutionRecord,
     ExecutionScope,
+    ExecutionState,
     GroupAccountReservationSnapshot,
     GroupBudgetQuote,
     GroupBudgetQuoteBuilder,
+    GroupBudgetReservationState,
     GroupBudgetUnsupportedOrderError,
     GroupChildOrderStatus,
     GroupDispatchResolutionReceipt,
@@ -45,7 +50,9 @@ from bt_api_execution import (
     GroupOrderState,
     GroupPermitBinding,
     GroupReservationDeniedError,
+    GroupReservationPhase,
     GroupRiskLegSnapshot,
+    ManagedCancellationFacade,
     OrderIntent,
     OrderType,
     PortfolioGroupBudgetPolicy,
@@ -73,6 +80,13 @@ from .service_execution_group_client import (
     GroupOriginRunBinding,
     GroupOriginRunBindingStore,
 )
+from .service_execution_group_cancel import (
+    GroupCancelPlanLeg,
+    GroupCancelPlanError,
+    GroupCancelPlanStore,
+    group_cancel_leg_id,
+)
+
 from .service_registry import (
     ActiveRegistrationContext,
     ServiceCallContext,
@@ -80,9 +94,21 @@ from .service_registry import (
     TrustedGroupWritePolicy,
 )
 
-GROUP_COORDINATOR_OPERATIONS = frozenset({"groups.submit", "groups.query"})
-GROUP_ACCOUNT_OWNER_OPERATIONS = frozenset(
+_GROUP_COORDINATOR_BASE_OPERATIONS = frozenset({"groups.submit", "groups.query"})
+_GROUP_COORDINATOR_FULL_OPERATIONS = _GROUP_COORDINATOR_BASE_OPERATIONS | {"groups.cancel"}
+_GROUP_COORDINATOR_WRITE_OPERATIONS = frozenset({"groups.submit", "groups.cancel"})
+GROUP_COORDINATOR_OPERATIONS = _GROUP_COORDINATOR_FULL_OPERATIONS
+_GROUP_ACCOUNT_OWNER_BASE_OPERATIONS = frozenset(
     {"orders.submit_group_leg", "orders.query_group_leg", "orders.resolve_group_leg"}
+)
+GROUP_ACCOUNT_OWNER_OPERATIONS = frozenset(
+    {
+        "orders.submit_group_leg",
+        "orders.query_group_leg",
+        "orders.resolve_group_leg",
+        "orders.cancel_group_leg",
+        "orders.query_group_cancel",
+    }
 )
 
 GROUP_COORDINATOR_PORT = "service.order_group_entry"
@@ -255,6 +281,57 @@ class _CoordinatorCall:
     binding: GroupOriginRunBinding
 
 
+
+class _AcceptedGroupCancelAdmissionGate:
+    """Bind cancellation admission to one current accepted group child.
+
+    Group cancellation reduces an already accepted OPEN order obligation. Its
+    authority comes from the immutable account-owner group binding and exact
+    local child record; this gate adds no caller-selected Risk permit.
+    """
+
+    def __init__(
+        self,
+        intent: CancelIntent,
+        permit_reference: str,
+        assert_current: Callable[[], None],
+    ) -> None:
+        self._intent = intent
+        self._permit_reference = permit_reference
+        self._assert_current = assert_current
+
+    def _check(self, intent: CancelIntent, permit_reference: str | None = None) -> None:
+        if intent != self._intent or (
+            permit_reference is not None and permit_reference != self._permit_reference
+        ):
+            raise PermissionError("accepted group cancellation identity changed")
+        self._assert_current()
+
+    def reserve(self, intent: CancelIntent) -> str:
+        self._check(intent)
+        return self._permit_reference
+
+    def validate(self, permit_reference: str, intent: CancelIntent) -> None:
+        self._check(intent, permit_reference)
+
+    def claim_before_dispatch(
+        self, permit_reference: str, intent: CancelIntent
+    ) -> CancelDispatchClaimReceiptV1:
+        self._check(intent, permit_reference)
+        return CancelDispatchClaimReceiptV1(
+            permit_reference=permit_reference,
+            scope_key=intent.scope.key,
+            cancel_id=intent.cancel_id,
+            intent_fingerprint=intent.fingerprint,
+        )
+
+    def settle(self, permit_reference: str) -> None:
+        if permit_reference != self._permit_reference:
+            raise PermissionError("accepted group cancellation permit changed")
+
+    def release(self, permit_reference: str, _reason: str) -> None:
+        if permit_reference != self._permit_reference:
+            raise PermissionError("accepted group cancellation permit changed")
 _CURRENT_COORDINATOR_CALL: contextvars.ContextVar[_CoordinatorCall | None] = contextvars.ContextVar(
     "bt_api_group_coordinator_call", default=None
 )
@@ -402,6 +479,50 @@ class _OrdersRpcPort:
             raise GroupReservationDeniedError("GROUP_RESOLUTION_UNPROVEN")
         return receipt.resolution
 
+    def cancel_group_leg(
+        self, *, group_id: str, cancel_request_id: str, leg_id: str
+    ) -> Mapping[str, Any]:
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        response = self._upstream.call(
+            _ORDERS_MOUNT,
+            "orders.cancel_group_leg",
+            {
+                "origin_run_id": current.binding.origin_run_id,
+                "group_id": group_id,
+                "cancel_request_id": cancel_request_id,
+                "leg_id": leg_id,
+            },
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.order_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        return _cancel_result_response(response)
+
+    def query_group_cancel(
+        self, *, group_id: str, cancel_request_id: str, cancel_id: str, leg_id: str
+    ) -> Mapping[str, Any]:
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        response = self._upstream.call(
+            _ORDER_QUERY_MOUNT,
+            "orders.query_group_cancel",
+            {
+                "origin_run_id": current.binding.origin_run_id,
+                "group_id": group_id,
+                "cancel_request_id": cancel_request_id,
+                "cancel_id": cancel_id,
+                "leg_id": leg_id,
+            },
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.query_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        return _cancel_result_response(response)
+
+
 
 class GroupCoordinatorService:
     """Normal ServiceHost entry for durable, ordered two-leg and v3 group requests."""
@@ -461,6 +582,7 @@ class GroupCoordinatorService:
             target_copy[stable_scope] = target
         self._store = store
         self._run_bindings = run_bindings
+        self._cancel_plans = GroupCancelPlanStore(run_bindings)
         self._upstream = borrowed_upstream
         self._identity = service_identity
         self._instance_id = instance_id
@@ -673,6 +795,8 @@ class GroupCoordinatorService:
             registration, target_scope, target = self._authorize(operation, context)
             if operation == "groups.query":
                 return self._query(registration, target, arguments)
+            if operation == "groups.cancel":
+                return self._cancel(registration, target_scope, target, arguments)
             if target.portfolio_budget_policy is None or target.budget_quote_builder is None:
                 return _failure("GROUP_BUDGET_POLICY_REQUIRED")
             run_binding = self._existing_submit_binding(registration, arguments)
@@ -717,6 +841,8 @@ class GroupCoordinatorService:
             return _success({"found": True, "snapshot": snapshot.to_payload()})
         except ServiceExecutionGroupError as error:
             return _failure(error.code)
+        except GroupCancelPlanError as error:
+            return _failure(str(error))
         except AcceptedGroupConflictError:
             return _failure("GROUP_BINDING_CONFLICT")
         except AcceptedGroupBindingError:
@@ -878,7 +1004,8 @@ class GroupCoordinatorService:
         if not self._registration_is_eligible(registration, target):
             raise ServiceExecutionGroupError("REGISTRATION_SCOPE_MISMATCH")
         if operation not in registration.operations or (
-            operation == "groups.submit" and operation not in registration.write_operations
+            operation in _GROUP_COORDINATOR_WRITE_OPERATIONS
+            and operation not in registration.write_operations
         ):
             raise ServiceExecutionGroupError("OPERATION_NOT_GRANTED")
         if registration.expires_at <= self._clock_ns() / 1_000_000_000:
@@ -890,12 +1017,23 @@ class GroupCoordinatorService:
     ) -> bool:
         context = registration.context
         scope = context.scope
+        coordinator_operation_sets = {
+            _GROUP_COORDINATOR_BASE_OPERATIONS,
+            _GROUP_COORDINATOR_FULL_OPERATIONS,
+            self.SUPPORTED_OPERATIONS,
+        }
+        write_operations = registration.write_operations
         full_write_view = (
-            registration.operations == self.SUPPORTED_OPERATIONS
-            and registration.write_operations == frozenset({"groups.submit"})
+            registration.operations in coordinator_operation_sets
+            and "groups.submit" in write_operations
+            and write_operations
+            <= registration.operations & _GROUP_COORDINATOR_WRITE_OPERATIONS
         )
         query_only_view = (
-            registration.operations == frozenset({"groups.query"})
+            registration.operations
+            in {
+                frozenset({"groups.query"}),
+            }
             and registration.write_operations == frozenset()
         )
         return (
@@ -1081,6 +1219,195 @@ class GroupCoordinatorService:
         return _success({"found": True, "snapshot": snapshot.to_payload()})
 
 
+    def _cancel(
+        self,
+        registration: ActiveRegistrationContext,
+        target_scope: WireScope,
+        target: GroupCoordinatorTarget,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if not isinstance(arguments, Mapping) or set(arguments) != {
+            "group_id",
+            "cancel_request_id",
+        }:
+            raise ServiceExecutionGroupError("INVALID_REQUEST")
+        group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
+        cancel_request_id = _reference(
+            arguments["cancel_request_id"], "GROUP_CANCEL_REQUEST_ID_INVALID"
+        )
+        binding = self._run_bindings.get_for_registration(
+            registration,
+            group_id,
+            coordinator_principal_ref=self._identity.principal_ref,
+            operation="groups.cancel",
+        )
+        if binding is None:
+            return _success({"found": False, "group_id": group_id, "legs": []})
+        snapshot = self._store.get(binding.request.portfolio_ref, group_id)
+        if (
+            type(snapshot) is not GroupOrderSnapshot
+            or snapshot.request.unquoted_fingerprint != binding.request_fingerprint
+            or not self._recovery_binding_matches(binding, snapshot, target_scope, target)
+            or snapshot.state
+            not in {
+                GroupOrderState.PREPARING,
+                GroupOrderState.FIRST_PENDING,
+                GroupOrderState.HEDGE_PENDING,
+                GroupOrderState.RECOVERY_REQUIRED,
+            }
+            or any(item.phase is not GroupReservationPhase.ACTIVE for item in snapshot.reservations)
+            or (
+                snapshot.request.version != 1
+                and (
+                    snapshot.budget_reservation is None
+                    or snapshot.budget_reservation.state is not GroupBudgetReservationState.HELD
+                )
+            )
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_NOT_AUTHORIZED")
+
+        manifest: list[dict[str, str]] = []
+        for plan, progress in zip(snapshot.request.legs, snapshot.legs, strict=True):
+            intent = progress.submitted_intent
+            status = progress.child_status
+            if intent is None:
+                continue
+            if snapshot.state is GroupOrderState.RECOVERY_REQUIRED:
+                # Recovery cancellation is query-first: re-read every already
+                # submitted child by its original business id. An UNKNOWN or
+                # missing fact blocks the whole action and keeps all holds.
+                try:
+                    receipt = self._order_ports[plan.account_ref].query(intent.intent_id)
+                except Exception:
+                    raise ServiceExecutionGroupError(
+                        "GROUP_CANCEL_FACTS_UNCONFIRMED"
+                    ) from None
+                if receipt is None:
+                    raise ServiceExecutionGroupError("GROUP_CANCEL_FACTS_UNCONFIRMED")
+                status = receipt.status
+            if (
+                status is None
+                or progress.claim_receipt is None
+                or intent.intent_id != status.intent_id
+                or intent.intent_id != progress.claim_receipt.permit.intent_id
+                or status.state is ExecutionState.UNKNOWN
+            ):
+                raise ServiceExecutionGroupError("GROUP_CANCEL_FACTS_UNCONFIRMED")
+            if status.state in {ExecutionState.ACKED, ExecutionState.PARTIALLY_FILLED}:
+                if (
+                    type(status.provider_order_id) is not str
+                    or not status.provider_order_id
+                    or plan.account_ref not in target.accounts
+                ):
+                    raise ServiceExecutionGroupError("GROUP_CANCEL_TARGET_UNAVAILABLE")
+            else:
+                # Previously terminal children are facts, not cancel targets.
+                continue
+            manifest.append(
+                {
+                    "leg_id": plan.leg_id,
+                    "account_ref": plan.account_ref,
+                    "cancel_id": group_cancel_leg_id(
+                        binding.request.portfolio_ref,
+                        group_id,
+                        binding.origin_run_id,
+                        plan.leg_id,
+                        plan.account_ref,
+                        target.accounts[plan.account_ref].execution_scope.key,
+                        intent.intent_id,
+                        status.provider_order_id,
+                    ),
+                    "target_intent_id": intent.intent_id,
+                    "provider_order_id": status.provider_order_id,
+                }
+            )
+        if not manifest:
+            raise ServiceExecutionGroupError("GROUP_CANCEL_NO_ACTIVE_LEGS")
+        try:
+            self._cancel_plans.create_or_get(
+                portfolio_ref=binding.request.portfolio_ref,
+                group_id=group_id,
+                cancel_request_id=cancel_request_id,
+                origin_run_id=binding.origin_run_id,
+                legs=manifest,
+            )
+        except GroupCancelPlanError:
+            raise
+
+        call = _CoordinatorCall(registration, target_scope, target, binding)
+        token = _CURRENT_COORDINATOR_CALL.set(call)
+        try:
+            for leg in manifest:
+                dispatch_claimed = self._cancel_plans.claim_dispatch(
+                    binding.request.portfolio_ref,
+                    group_id,
+                    cancel_request_id,
+                    leg["leg_id"],
+                )
+                if dispatch_claimed:
+                    try:
+                        result = self._order_ports[leg["account_ref"]].cancel_group_leg(
+                            group_id=group_id,
+                            cancel_request_id=cancel_request_id,
+                            leg_id=leg["leg_id"],
+                        )
+                    except Exception:
+                        self._cancel_plans.mark_unknown(
+                            binding.request.portfolio_ref,
+                            group_id,
+                            cancel_request_id,
+                            leg["leg_id"],
+                        )
+                    else:
+                        self._cancel_plans.record_result(
+                            binding.request.portfolio_ref,
+                            group_id,
+                            cancel_request_id,
+                            leg["leg_id"],
+                            result,
+                        )
+                    # A first-attempt response loss is returned as UNKNOWN.
+                    # Recovery is an explicit same-request replay below; it
+                    # never performs an inline query and cannot redispatch.
+                    continue
+                # A replay or concurrent claimant can only query the exact
+                # durable account receipt under the already-reserved ID.
+                try:
+                    result = self._order_ports[leg["account_ref"]].query_group_cancel(
+                        group_id=group_id,
+                        cancel_request_id=cancel_request_id,
+                        cancel_id=leg["cancel_id"],
+                        leg_id=leg["leg_id"],
+                    )
+                except Exception:
+                    self._cancel_plans.mark_unknown(
+                        binding.request.portfolio_ref,
+                        group_id,
+                        cancel_request_id,
+                        leg["leg_id"],
+                    )
+                else:
+                    self._cancel_plans.record_result(
+                        binding.request.portfolio_ref,
+                        group_id,
+                        cancel_request_id,
+                        leg["leg_id"],
+                        result,
+                    )
+        finally:
+            _CURRENT_COORDINATOR_CALL.reset(token)
+        persisted = self._cancel_plans.get(
+            binding.request.portfolio_ref, group_id, cancel_request_id
+        )
+        if persisted is None:
+            raise ServiceExecutionGroupError("GROUP_CANCEL_PLAN_MISSING")
+        return _success({
+            "found": True,
+            "group_id": group_id,
+            "cancel_request_id": persisted.cancel_request_id,
+            "legs": [_cancel_plan_leg_payload(item) for item in persisted.legs],
+        })
+
 class ExecutionGroupOrderEntryService:
     """Authenticated account-owner adapter for the three group-only routes.
 
@@ -1105,6 +1432,7 @@ class ExecutionGroupOrderEntryService:
         trusted_resolution_policies: tuple[TrustedGroupResolutionPolicy, ...],
         *,
         writer_id: str,
+        trusted_cancel_policies: tuple[TrustedGroupWritePolicy, ...] = (),
         clock_ns: Callable[[], int] = time.time_ns,
     ) -> None:
         if type(store) is not SqliteExecutionStore:
@@ -1135,6 +1463,8 @@ class ExecutionGroupOrderEntryService:
                 type(item) is not TrustedGroupResolutionPolicy
                 for item in trusted_resolution_policies
             )
+            or type(trusted_cancel_policies) is not tuple
+            or any(type(item) is not TrustedGroupWritePolicy for item in trusted_cancel_policies)
         ):
             raise ServiceExecutionGroupError("GROUP_POLICIES_INVALID")
         if type(writer_id) is not str or _REFERENCE.fullmatch(writer_id) is None:
@@ -1240,6 +1570,20 @@ class ExecutionGroupOrderEntryService:
             resolution_keys.add(key)
         if set(write_by_key) != resolution_keys:
             raise ServiceExecutionGroupError("GROUP_POLICIES_MISMATCH")
+        cancel_keys: set[tuple[object, ...]] = set()
+        for policy in trusted_cancel_policies:
+            if (
+                policy.port != GROUP_ORDER_ENTRY_PORT
+                or policy.operation != "orders.cancel_group_leg"
+                or policy.scope not in target_copy
+                or getattr(policy, "account_ref", policy.scope.account_ref)
+                != policy.scope.account_ref
+            ):
+                raise ServiceExecutionGroupError("GROUP_POLICIES_INVALID")
+            key = _policy_key(policy)
+            if key in cancel_keys or key not in write_by_key:
+                raise ServiceExecutionGroupError("GROUP_POLICIES_MISMATCH")
+            cancel_keys.add(key)
 
         self._store = store
         self._targets = MappingProxyType(target_copy)
@@ -1247,7 +1591,9 @@ class ExecutionGroupOrderEntryService:
         self._authority = group_authority
         self._proof_source = proof_source
         self._write_policies = tuple(trusted_write_policies)
+        self._cancel_policies = tuple(trusted_cancel_policies)
         self._resolution_policies = tuple(trusted_resolution_policies)
+        self._dispatch = dispatch
         self._clock_ns = clock_ns
         self._lock = threading.RLock()
         self._closed = False
@@ -1296,14 +1642,21 @@ class ExecutionGroupOrderEntryService:
             if registration.instance_id != self._instance_id:
                 continue
             if registration.port == GROUP_ORDER_ENTRY_PORT:
-                expected_ops = frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"})
-                expected_writes = expected_ops
+                expected_ops = frozenset(
+                    {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                )
                 expected_policy_ops = {
                     "orders.submit_group_leg": self._write_policies,
                     "orders.resolve_group_leg": self._resolution_policies,
                 }
+                if self._cancel_policies:
+                    expected_ops = expected_ops | {"orders.cancel_group_leg"}
+                    expected_policy_ops["orders.cancel_group_leg"] = self._cancel_policies
+                expected_writes = expected_ops
             elif registration.port == GROUP_ORDER_QUERY_PORT:
                 expected_ops = frozenset({"orders.query_group_leg"})
+                if self._cancel_policies:
+                    expected_ops = expected_ops | {"orders.query_group_cancel"}
                 expected_writes = frozenset()
                 expected_policy_ops = {}
             else:
@@ -1343,10 +1696,18 @@ class ExecutionGroupOrderEntryService:
                     and policy.run_id == registration.strategy_write_run_id
                     and policy.port == GROUP_ORDER_ENTRY_PORT
                     and policy.operation
-                    in {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                    in {
+                        "orders.submit_group_leg",
+                        "orders.resolve_group_leg",
+                        "orders.cancel_group_leg",
+                    }
                     and getattr(policy, "account_ref", context.scope.account_ref)
                     == context.scope.account_ref
-                    for policy in (*self._write_policies, *self._resolution_policies)
+                    for policy in (
+                        *self._write_policies,
+                        *self._resolution_policies,
+                        *self._cancel_policies,
+                    )
                 )
             if registration.strategy_write_run_id is None or not policy_match:
                 continue
@@ -1370,8 +1731,16 @@ class ExecutionGroupOrderEntryService:
             registration, execution_scope = self._authorize(operation, context)
             if operation == "orders.query_group_leg":
                 return self._query(registration, context, execution_scope, arguments)
+            if operation == "orders.query_group_cancel":
+                return self._query_group_cancel(
+                    registration, context, execution_scope, arguments
+                )
             if operation == "orders.resolve_group_leg":
                 return self._resolve(registration, context, execution_scope, arguments)
+            if operation == "orders.cancel_group_leg":
+                return self._cancel_group_leg(
+                    registration, context, execution_scope, arguments
+                )
             return self._submit(registration, context, execution_scope, arguments)
         except ServiceExecutionGroupError as error:
             return _failure(error.code)
@@ -1407,7 +1776,7 @@ class ExecutionGroupOrderEntryService:
             raise ServiceExecutionGroupError("SERVICE_CONTEXT_REQUIRED")
         port = (
             GROUP_ORDER_QUERY_PORT
-            if operation == "orders.query_group_leg"
+            if operation in {"orders.query_group_leg", "orders.query_group_cancel"}
             else GROUP_ORDER_ENTRY_PORT
         )
         if (
@@ -1429,7 +1798,12 @@ class ExecutionGroupOrderEntryService:
         ):
             raise ServiceExecutionGroupError("REGISTRATION_EXPIRED")
         if operation not in registration.operations or (
-            operation in {"orders.submit_group_leg", "orders.resolve_group_leg"}
+            operation
+            in {
+                "orders.submit_group_leg",
+                "orders.resolve_group_leg",
+                "orders.cancel_group_leg",
+            }
             and operation not in registration.write_operations
         ):
             raise ServiceExecutionGroupError("OPERATION_NOT_GRANTED")
@@ -1452,7 +1826,7 @@ class ExecutionGroupOrderEntryService:
 
     def _policy_matches(self, registration: ActiveRegistrationContext, operation: str) -> bool:
         context = registration.context
-        if operation == "orders.query_group_leg":
+        if operation in {"orders.query_group_leg", "orders.query_group_cancel"}:
             # The query route is a separately Registry-authorized read port.
             # Its active registration is exact in _authorize; here we bind it
             # to the same durable owner identity, target, and logical run as
@@ -1465,14 +1839,24 @@ class ExecutionGroupOrderEntryService:
                 and getattr(policy, "run_id", None) == registration.strategy_write_run_id
                 and getattr(policy, "port", None) == GROUP_ORDER_ENTRY_PORT
                 and getattr(policy, "operation", None)
-                in {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                in {
+                    "orders.submit_group_leg",
+                    "orders.resolve_group_leg",
+                    "orders.cancel_group_leg",
+                }
                 and getattr(policy, "account_ref", context.scope.account_ref)
                 == context.scope.account_ref
-                for policy in (*self._write_policies, *self._resolution_policies)
+                for policy in (
+                    *self._write_policies,
+                    *self._resolution_policies,
+                    *self._cancel_policies,
+                )
             )
         policies: Sequence[object]
         if operation == "orders.submit_group_leg":
             policies = self._write_policies
+        elif operation == "orders.cancel_group_leg":
+            policies = self._cancel_policies
         elif operation == "orders.resolve_group_leg":
             policies = self._resolution_policies
         else:
@@ -1779,6 +2163,14 @@ class ExecutionGroupOrderEntryService:
             registrations = tuple(self._registrations.values())
         if current_query != query_registration or query_registration.expires_at <= now:
             raise ServiceExecutionGroupError("GROUP_QUERY_REGISTRATION_STALE")
+        entry_operations = frozenset(
+            {"orders.submit_group_leg", "orders.resolve_group_leg"}
+        )
+        query_operations = frozenset({"orders.query_group_leg"})
+        if self._cancel_policies:
+            entry_operations = entry_operations | {"orders.cancel_group_leg"}
+            query_operations = query_operations | {"orders.query_group_cancel"}
+
         candidates = tuple(
             candidate
             for candidate in registrations
@@ -1794,17 +2186,20 @@ class ExecutionGroupOrderEntryService:
             and candidate.strategy_write_run_id == origin_run_id
             and candidate.context.registration_id != query_context.registration_id
             and candidate.expires_at > now
-            and candidate.operations
-            == frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"})
+            and candidate.operations == entry_operations
             and candidate.write_operations == candidate.operations
             and self._policy_matches(candidate, "orders.submit_group_leg")
             and self._policy_matches(candidate, "orders.resolve_group_leg")
+            and (
+                not self._cancel_policies
+                or self._policy_matches(candidate, "orders.cancel_group_leg")
+            )
             and self._targets.get(candidate.context.scope) == execution_scope
         )
         if len(candidates) != 1:
             raise ServiceExecutionGroupError("GROUP_OWNER_REGISTRATION_UNAVAILABLE")
         if (
-            query_registration.operations != frozenset({"orders.query_group_leg"})
+            query_registration.operations != query_operations
             or query_registration.write_operations
             or not self._policy_matches(query_registration, "orders.query_group_leg")
         ):
@@ -1859,6 +2254,436 @@ class ExecutionGroupOrderEntryService:
         # acquisition yet. Existing exact RISK_RESOLVED receipts are returned
         # by query; unresolved and stale cases stay held and fail closed here.
         raise ServiceExecutionGroupError("GROUP_RESOLUTION_UNAVAILABLE")
+
+    def _cancel_group_leg(
+        self,
+        registration: ActiveRegistrationContext,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if not isinstance(arguments, Mapping) or set(arguments) != {
+            "origin_run_id",
+            "group_id",
+            "cancel_request_id",
+            "leg_id",
+        }:
+            raise ServiceExecutionGroupError("INVALID_REQUEST")
+        origin_run_id = _reference(arguments["origin_run_id"], "GROUP_RUN_INVALID")
+        group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
+        cancel_request_id = _reference(
+            arguments["cancel_request_id"], "GROUP_CANCEL_REQUEST_ID_INVALID"
+        )
+        leg_id = _reference(arguments["leg_id"], "GROUP_LEG_ID_INVALID")
+        target = self._accepted_group_cancel_target(
+            registration,
+            context,
+            execution_scope,
+            origin_run_id=origin_run_id,
+            group_id=group_id,
+            leg_id=leg_id,
+            require_open_order=False,
+            allow_resolved=True,
+        )
+        if target is None:
+            return _success({"found": False, "record": None})
+        binding, cancel_intent, order_record = target
+        order_intent = self._store.get_intent(order_record.intent_id, scope=execution_scope)
+        if (
+            type(order_intent) is not OrderIntent
+            or order_intent.intent_id != cancel_intent.target_intent_id
+            or order_intent.fingerprint != order_record.payload_sha256
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_TARGET_UNAVAILABLE")
+        existing_record = self._store.get_cancel(
+            cancel_intent.cancel_id, scope=execution_scope
+        )
+        existing_intent = self._store.get_cancel_intent(
+            cancel_intent.cancel_id, scope=execution_scope
+        )
+        if (existing_record is None) != (existing_intent is None) or (
+            existing_record is not None
+            and (
+                type(existing_record) is not CancelRecord
+                or existing_intent != cancel_intent
+            )
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_RECORD_MISMATCH")
+
+        # Re-read the original order and complete fill history before any new
+        # cancel dispatch.  A lost/ambiguous cancel is never retried: its
+        # deterministic cancel ID returns the existing record below.
+        source_receipt = self._reconcile_accepted_group_order(
+            registration,
+            context,
+            execution_scope,
+            binding=binding,
+            intent=order_intent,
+            origin_run_id=origin_run_id,
+        )
+        if source_receipt.status.state not in {
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+        }:
+            if existing_record is not None:
+                return _success(
+                    {"found": True, "record": _cancel_record_payload(existing_record)}
+                )
+            raise ServiceExecutionGroupError("GROUP_CANCEL_TARGET_NOT_OPEN")
+        order_permit = self._permit_from_binding(binding, order_intent)
+        if (
+            source_receipt.claim is None
+            or source_receipt.claim.permit != order_permit
+            or source_receipt.resolution is not None
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_CLAIM_NOT_ACTIVE")
+
+        active_target = self._accepted_group_cancel_target(
+            registration,
+            context,
+            execution_scope,
+            origin_run_id=origin_run_id,
+            group_id=group_id,
+            leg_id=leg_id,
+            require_open_order=True,
+        )
+        if (
+            active_target is None
+            or active_target[0] != binding
+            or active_target[1] != cancel_intent
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_TARGET_CHANGED")
+
+        def assert_current(intent: CancelIntent | None = None) -> None:
+            if intent is not None and intent != cancel_intent:
+                raise PermissionError("accepted group cancellation intent changed")
+            current = self._accepted_group_cancel_target(
+                registration,
+                context,
+                execution_scope,
+                origin_run_id=origin_run_id,
+                group_id=group_id,
+                leg_id=leg_id,
+                require_open_order=True,
+            )
+            if (
+                current is None
+                or current[0] != binding
+                or current[1] != cancel_intent
+            ):
+                raise PermissionError("accepted group cancellation target changed")
+
+        permit_reference = "group-cancel-" + cancel_intent.cancel_id
+        try:
+            facade = ManagedCancellationFacade(
+                self._store,
+                execution_scope,
+                acquire_writer_lease=lambda: self._order_entry._facade_pair(
+                    execution_scope
+                )[0].acquire_writer_lease(),
+                admission_gate=_AcceptedGroupCancelAdmissionGate(
+                    cancel_intent, permit_reference, assert_current
+                ),
+                allow_unprotected=False,
+            )
+            record = facade.cancel(
+                cancel_intent,
+                self._dispatch,
+                before_dispatch=assert_current,
+            )
+        except Exception:
+            raise ServiceExecutionGroupError("GROUP_CANCEL_OUTCOME_UNPROVEN") from None
+        if type(record) is not CancelRecord:
+            raise ServiceExecutionGroupError("GROUP_CANCEL_RECORD_INVALID")
+        # The cancel record is independent of the original order claim.  In
+        # particular, UNKNOWN stays query-only here; the explicit original
+        # orders.query_group_leg route (or owner recovery tick) obtains the
+        # order/fill source receipt that may resolve the original submit hold.
+        return _success({"found": True, "record": _cancel_record_payload(record)})
+
+    def _query_group_cancel(
+        self,
+        registration: ActiveRegistrationContext,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if not isinstance(arguments, Mapping) or set(arguments) != {
+            "origin_run_id",
+            "group_id",
+            "cancel_request_id",
+            "cancel_id",
+            "leg_id",
+        }:
+            raise ServiceExecutionGroupError("INVALID_REQUEST")
+        origin_run_id = _reference(arguments["origin_run_id"], "GROUP_RUN_INVALID")
+        group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
+        cancel_request_id = _reference(
+            arguments["cancel_request_id"], "GROUP_CANCEL_REQUEST_ID_INVALID"
+        )
+        cancel_id = _reference(arguments["cancel_id"], "GROUP_CANCEL_ID_INVALID")
+        leg_id = _reference(arguments["leg_id"], "GROUP_LEG_ID_INVALID")
+        target = self._accepted_group_cancel_target(
+            registration,
+            context,
+            execution_scope,
+            origin_run_id=origin_run_id,
+            group_id=group_id,
+            leg_id=leg_id,
+            require_open_order=False,
+            allow_resolved=True,
+            binding_operation="orders.query_group_cancel",
+        )
+        if target is None:
+            return _success({"found": False, "record": None})
+        _binding, cancel_intent, order_record = target
+        if cancel_intent.cancel_id != cancel_id:
+            raise ServiceExecutionGroupError("GROUP_CANCEL_ID_MISMATCH")
+        order_intent = self._store.get_intent(order_record.intent_id, scope=execution_scope)
+        if (
+            type(order_intent) is not OrderIntent
+            or order_intent.intent_id != cancel_intent.target_intent_id
+            or order_intent.fingerprint != order_record.payload_sha256
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_TARGET_UNAVAILABLE")
+        record = self._store.get_cancel(cancel_id, scope=execution_scope)
+        stored_intent = self._store.get_cancel_intent(cancel_id, scope=execution_scope)
+        if record is None and stored_intent is None:
+            return _success({"found": False, "record": None})
+        if (
+            type(record) is not CancelRecord
+            or stored_intent != cancel_intent
+            or record.scope_key != execution_scope.key
+            or record.cancel_id != cancel_id
+            or record.target_intent_id != cancel_intent.target_intent_id
+            or record.provider_order_id != cancel_intent.provider_order_id
+            or record.payload_sha256 != cancel_intent.fingerprint
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_RECORD_MISMATCH")
+        # A cancellation query is read-only with respect to the target order.
+        # Its independent source reconciliation is exposed by the original
+        # orders.query_group_leg route and retains the original Risk hold until
+        # complete order + fill evidence is available.
+        return _success({"found": True, "record": _cancel_record_payload(record)})
+
+    def _reconcile_accepted_group_order(
+        self,
+        registration: ActiveRegistrationContext,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+        *,
+        binding: AcceptedGroupBinding,
+        intent: OrderIntent,
+        origin_run_id: str,
+    ) -> GroupLegOrderReceipt:
+        """Query the original accepted order through its live read/owner pair."""
+
+        query_registration = registration
+        if registration.port != GROUP_ORDER_QUERY_PORT:
+            now = self._clock_ns() / 1_000_000_000
+            query_operations = frozenset({"orders.query_group_leg"})
+            if self._cancel_policies:
+                query_operations = query_operations | {"orders.query_group_cancel"}
+            with self._lock:
+                registrations = tuple(self._registrations.values())
+            candidates = tuple(
+                candidate
+                for candidate in registrations
+                if candidate.port == GROUP_ORDER_QUERY_PORT
+                and candidate.instance_id == registration.instance_id
+                and candidate.context.identity == context.identity
+                and candidate.context.principal_ref == context.principal_ref
+                and candidate.context.scope == context.scope
+                and candidate.service_epoch == registration.service_epoch
+                and candidate.policy_version == registration.policy_version
+                and candidate.requirements_version == registration.requirements_version
+                and candidate.strategy_write_run_id == origin_run_id
+                and candidate.operations == query_operations
+                and not candidate.write_operations
+                and candidate.expires_at > now
+                and self._targets.get(candidate.context.scope) == execution_scope
+                and self._policy_matches(candidate, "orders.query_group_leg")
+            )
+            if len(candidates) != 1:
+                raise ServiceExecutionGroupError("GROUP_QUERY_REGISTRATION_UNAVAILABLE")
+            query_registration = candidates[0]
+        elif not _same_call(registration.context, context):
+            raise ServiceExecutionGroupError("GROUP_QUERY_REGISTRATION_INVALID")
+        query_context = query_registration.context
+        reconciliation_registrations = self._reconciliation_registration_pair(
+            query_registration,
+            query_context,
+            execution_scope,
+            origin_run_id=origin_run_id,
+        )
+        if registration.port == GROUP_ORDER_ENTRY_PORT and (
+            reconciliation_registrations[1] != registration
+        ):
+            raise ServiceExecutionGroupError("GROUP_OWNER_REGISTRATION_CHANGED")
+        permit = self._permit_from_binding(binding, intent)
+        wire_scope = replace(
+            query_context.scope, group_id=permit.group_id, leg_id=permit.leg_id
+        )
+        try:
+            with self._authority.bind_service_call(
+                query_context,
+                execution_scope=execution_scope,
+                reconciliation_registrations=reconciliation_registrations,
+            ):
+                permit_binding = self._proof_source.bind_permit(
+                    permit=permit,
+                    intent=intent,
+                    principal_ref=query_context.principal_ref,
+                    identity=query_context.identity,
+                    wire_scope=wire_scope,
+                    service_context=query_context,
+                )
+                receipt = self._proof_source.reconcile_unknown(
+                    binding=permit_binding,
+                    intent=intent,
+                    permit=permit,
+                    principal_ref=query_context.principal_ref,
+                    identity=query_context.identity,
+                    wire_scope=wire_scope,
+                    service_context=query_context,
+                    active_authority=self._authority,
+                    acquire_writer_lease=lambda: self._order_entry._facade_pair(
+                        execution_scope
+                    )[0].acquire_writer_lease(),
+                )
+        except ServiceExecutionGroupError:
+            raise
+        except Exception:
+            raise ServiceExecutionGroupError("GROUP_EVIDENCE_UNAVAILABLE") from None
+        if (
+            type(receipt) is not GroupLegOrderReceipt
+            or receipt.status.intent_id != intent.intent_id
+        ):
+            raise ServiceExecutionGroupError("GROUP_EVIDENCE_UNAVAILABLE")
+        record = self._store.get(intent.intent_id, scope=execution_scope)
+        if (
+            type(record) is not ExecutionRecord
+            or record.dispatch_attempts != 1
+            or record.payload_sha256 != intent.fingerprint
+            or record.scope_key != execution_scope.key
+            or record.provider_order_id is None
+            or receipt.status.provider_order_id != record.provider_order_id
+        ):
+            raise ServiceExecutionGroupError("GROUP_EVIDENCE_UNAVAILABLE")
+        return receipt
+
+    def _accepted_group_cancel_target(
+        self,
+        registration: ActiveRegistrationContext,
+        context: ServiceCallContext,
+        execution_scope: ExecutionScope,
+        *,
+        origin_run_id: str,
+        group_id: str,
+        leg_id: str,
+        require_open_order: bool,
+        allow_resolved: bool = False,
+        binding_operation: str = "orders.cancel_group_leg",
+    ) -> tuple[AcceptedGroupBinding, CancelIntent, ExecutionRecord] | None:
+        if origin_run_id != registration.strategy_write_run_id:
+            raise ServiceExecutionGroupError("GROUP_RUN_MISMATCH")
+        binding = self._accepted_groups.get_binding(
+            registration,
+            origin_run_id=origin_run_id,
+            group_id=group_id,
+            operation=binding_operation,
+        )
+        if binding is None:
+            return None
+        self._validate_accepted_owner(binding, registration, origin_run_id)
+        if binding.group_id != group_id or self._target_for_binding(binding) != execution_scope:
+            raise ServiceExecutionGroupError("GROUP_SCOPE_MISMATCH")
+        members = [(item_id, item) for item_id, item in binding.members if item_id == leg_id]
+        if len(members) != 1:
+            raise ServiceExecutionGroupError("GROUP_MEMBER_MISMATCH")
+        _member_leg_id, reserved_intent = members[0]
+        reservation = binding.reservation
+        if type(reservation) is not GroupAccountReservationSnapshot:
+            raise ServiceExecutionGroupError("GROUP_BINDING_INCOMPLETE")
+        risk_legs = [item for item in reservation.legs if item.leg_id == leg_id]
+        if len(risk_legs) != 1:
+            raise ServiceExecutionGroupError("GROUP_RESERVATION_MISMATCH")
+        risk_leg = risk_legs[0]
+        if (
+            reservation.group_id != group_id
+            or reservation.account_ref != binding.account_ref
+            or risk_leg.intent_id != reserved_intent.intent_id
+            or (
+                not allow_resolved
+                and (
+                    reservation.phase is not GroupReservationPhase.ACTIVE
+                    or risk_leg.state != "ACTIVE"
+                    or risk_leg.resolved
+                )
+            )
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_NOT_AUTHORIZED")
+        intent = self._store.get_intent(reserved_intent.intent_id, scope=execution_scope)
+        record = self._store.get(reserved_intent.intent_id, scope=execution_scope)
+        if (
+            type(intent) is not OrderIntent
+            or type(record) is not ExecutionRecord
+            or not _same_reserved_order_except_quantity(reserved_intent, intent)
+            or record.scope_key != execution_scope.key
+            or record.payload_sha256 != intent.fingerprint
+            or type(record.group_binding) is not GroupPermitBinding
+            or record.provider_order_id is None
+            or not record.provider_order_id
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_TARGET_UNAVAILABLE")
+        permit = self._permit_from_binding(binding, intent)
+        try:
+            binding.permit_for(permit, intent)
+            expected_group_binding = self._proof_source.bind_permit(
+                permit=permit,
+                intent=intent,
+                principal_ref=context.principal_ref,
+                identity=context.identity,
+                wire_scope=replace(context.scope, group_id=group_id, leg_id=leg_id),
+                service_context=context,
+            )
+        except Exception:
+            raise ServiceExecutionGroupError("GROUP_CANCEL_BINDING_INVALID") from None
+        if (
+            type(expected_group_binding) is not GroupPermitBinding
+            or record.group_binding != expected_group_binding
+            or record.group_binding.group_id != group_id
+            or record.group_binding.leg_id != leg_id
+            or record.group_binding.order_intent_hash != intent.fingerprint
+        ):
+            raise ServiceExecutionGroupError("GROUP_CANCEL_RECORD_MISMATCH")
+        if require_open_order and record.state not in {
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+        }:
+            raise ServiceExecutionGroupError("GROUP_CANCEL_TARGET_NOT_OPEN")
+        cancel_intent = CancelIntent(
+            cancel_id=group_cancel_leg_id(
+                binding.portfolio_ref,
+                group_id,
+                binding.origin_run_id,
+                leg_id,
+                binding.account_ref,
+                execution_scope.key,
+                intent.intent_id,
+                record.provider_order_id,
+            ),
+            scope=execution_scope,
+            target_intent_id=intent.intent_id,
+            provider_order_id=record.provider_order_id,
+            metadata_version="group-cancel-v1",
+            tags={
+                "group_id": group_id,
+                "leg_id": leg_id,
+                "group_order_sha256": intent.fingerprint,
+            },
+        )
+        return binding, cancel_intent, record
 
     def _read_existing_receipt(
         self,
@@ -2001,6 +2826,116 @@ def _optional_order_receipt_response(response: object) -> GroupLegOrderReceipt |
     except Exception:
         raise RuntimeError("account order receipt is invalid") from None
 
+
+_CANCEL_RECORD_WIRE_FIELDS = frozenset(
+    {
+        "cancel_id",
+        "scope_key",
+        "target_intent_id",
+        "provider_order_id",
+        "payload_sha256",
+        "state",
+        "dispatch_attempts",
+        "review_required",
+        "created_at_ns",
+        "updated_at_ns",
+        "is_terminal",
+    }
+)
+
+_CANCEL_RECORD_WIRE_STATES = frozenset(
+    {
+        "PENDING_ADMISSION",
+        "PENDING_DISPATCH",
+        "DISPATCHING",
+        "UNKNOWN",
+        "ACKED",
+        "CANCELLED",
+        "REJECTED",
+        "BLOCKED",
+    }
+)
+
+def _cancel_record_payload(record: CancelRecord) -> dict[str, object]:
+    """Project only identity and outcome fields from the local cancel journal."""
+
+    if type(record) is not CancelRecord or type(record.state) is not ExecutionState:
+        raise RuntimeError("cancellation record is invalid")
+    payload = {
+        "cancel_id": record.cancel_id,
+        "scope_key": record.scope_key,
+        "target_intent_id": record.target_intent_id,
+        "provider_order_id": record.provider_order_id,
+        "payload_sha256": record.payload_sha256,
+        "state": record.state.value,
+        "dispatch_attempts": record.dispatch_attempts,
+        "review_required": record.review_required,
+        "created_at_ns": record.created_at_ns,
+        "updated_at_ns": record.updated_at_ns,
+        "is_terminal": record.is_terminal,
+    }
+    return _validate_cancel_record_wire_payload(payload)
+
+def _cancel_result_response(response: object) -> Mapping[str, Any]:
+    body = _rpc_result(response)
+    if not isinstance(body, Mapping) or set(body) != {"found", "record"}:
+        raise RuntimeError("cancellation RPC reply is invalid")
+    if type(body["found"]) is not bool:
+        raise RuntimeError("cancellation RPC reply is invalid")
+    if body["found"] is False:
+        if body["record"] is not None:
+            raise RuntimeError("cancellation RPC reply is invalid")
+        return {"found": False, "record": None}
+    return {
+        "found": True,
+        "record": _validate_cancel_record_wire_payload(body["record"]),
+    }
+
+def _validate_cancel_record_wire_payload(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping) or set(value) != _CANCEL_RECORD_WIRE_FIELDS:
+        raise RuntimeError("cancellation record reply is invalid")
+    record = dict(value)
+    if (
+        any(
+            type(record[name]) is not str or not record[name]
+            for name in (
+                "cancel_id",
+                "scope_key",
+                "target_intent_id",
+                "provider_order_id",
+            )
+        )
+        or type(record["payload_sha256"]) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", record["payload_sha256"]) is None
+        or type(record["state"]) is not str
+        or record["state"] not in _CANCEL_RECORD_WIRE_STATES
+        or type(record["dispatch_attempts"]) is not int
+        or record["dispatch_attempts"] < 0
+        or type(record["review_required"]) is not bool
+        or type(record["created_at_ns"]) is not int
+        or record["created_at_ns"] <= 0
+        or type(record["updated_at_ns"]) is not int
+        or record["updated_at_ns"] < record["created_at_ns"]
+        or type(record["is_terminal"]) is not bool
+        or record["is_terminal"]
+        != (record["state"] in {"CANCELLED", "REJECTED", "BLOCKED"})
+    ):
+        raise RuntimeError("cancellation record reply is invalid")
+    return record
+
+def _cancel_plan_leg_payload(item: GroupCancelPlanLeg) -> dict[str, object]:
+    if type(item) is not GroupCancelPlanLeg:
+        raise RuntimeError("group cancellation plan leg is invalid")
+    return {
+        "leg_id": item.leg_id,
+        "account_ref": item.account_ref,
+        "cancel_id": item.cancel_id,
+        "target_intent_id": item.target_intent_id,
+        "provider_order_id": item.provider_order_id,
+        "phase": item.phase,
+        "result": None if item.result is None else _plain_rpc_json(item.result),
+        "updated_at_ns": item.updated_at_ns,
+    }
 
 def _rpc_result(response: object, *, allow_none: bool = False) -> object:
     if not isinstance(response, Mapping) or set(response) != {"ok", "code", "result"}:

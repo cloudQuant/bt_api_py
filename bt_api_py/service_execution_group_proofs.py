@@ -96,9 +96,10 @@ from .service_risk_order_journal import (
     sha256_text,
 )
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _ZERO_SHA256 = "0" * 64
 _MAX_EVENTS_PER_ACCOUNT = 100_000
+_MAX_GROUP_EVENTS_PER_INTENT = 256
 _MAX_EVENT_BYTES = 1_000_000
 _MAX_FILL_ROWS = 10_000
 _REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -540,6 +541,7 @@ class GroupProofJournal:
             "ATTEMPT_STARTED",
             "ATTEMPT_UNKNOWN",
             "SOURCE_OBSERVED",
+            "SOURCE_PROGRESS",
             "SOURCE_RECONCILED",
             "PROOF_READY",
             "RISK_RESOLVED",
@@ -618,7 +620,7 @@ class GroupProofJournal:
                     "group_id TEXT NOT NULL,leg_id TEXT NOT NULL,event_type TEXT NOT NULL,payload_json TEXT NOT NULL,"
                     "previous_account_sha256 TEXT NOT NULL,previous_intent_sha256 TEXT NOT NULL,"
                     "record_sha256 TEXT NOT NULL,writer_owner_id TEXT NOT NULL,writer_fencing_token INTEGER NOT NULL,"
-                    "writer_fence_sha256 TEXT NOT NULL,UNIQUE(account_scope_key,intent_id,event_type))"
+                    "writer_fence_sha256 TEXT NOT NULL)"
                 )
                 row = connection.execute(
                     "SELECT value FROM group_proof_meta WHERE key='schema_version'"
@@ -635,6 +637,31 @@ class GroupProofJournal:
                     connection.execute("INSERT INTO group_proof_meta VALUES('head_revision','0')")
                     connection.execute(
                         "INSERT INTO group_proof_meta VALUES('head_sha256',?)", (_ZERO_SHA256,)
+                    )
+                elif row["value"] == "1":
+                    # Version 1 allowed one row per event type and intent. Open
+                    # orders can receive several source-bound progress reads
+                    # before a terminal proof exists, so v2 removes only that
+                    # uniqueness restriction while preserving every existing
+                    # event byte, revision and hash-chain link.
+                    connection.execute(
+                        "ALTER TABLE group_proof_events RENAME TO group_proof_events_v1"
+                    )
+                    connection.execute(
+                        "CREATE TABLE group_proof_events("
+                        "revision INTEGER PRIMARY KEY,account_scope_key TEXT NOT NULL,intent_id TEXT NOT NULL,"
+                        "group_id TEXT NOT NULL,leg_id TEXT NOT NULL,event_type TEXT NOT NULL,payload_json TEXT NOT NULL,"
+                        "previous_account_sha256 TEXT NOT NULL,previous_intent_sha256 TEXT NOT NULL,"
+                        "record_sha256 TEXT NOT NULL,writer_owner_id TEXT NOT NULL,writer_fencing_token INTEGER NOT NULL,"
+                        "writer_fence_sha256 TEXT NOT NULL)"
+                    )
+                    connection.execute(
+                        "INSERT INTO group_proof_events SELECT * FROM group_proof_events_v1"
+                    )
+                    connection.execute("DROP TABLE group_proof_events_v1")
+                    connection.execute(
+                        "UPDATE group_proof_meta SET value=? WHERE key='schema_version'",
+                        (str(_SCHEMA_VERSION),),
                     )
                 elif row["value"] != str(_SCHEMA_VERSION):
                     raise GroupProofSourceError("GROUP_JOURNAL_SCHEMA_UNSUPPORTED")
@@ -1358,7 +1385,7 @@ class GroupProofSource:
         self, target: GroupProofTarget, intent_id: str
     ) -> tuple[GroupProofJournalEvent, ...]:
         events = self._journal.events(target.account_scope.key, intent_id)
-        if len(events) > 6 or any(
+        if len(events) > _MAX_GROUP_EVENTS_PER_INTENT or any(
             event.account_scope_key != target.account_scope.key or event.intent_id != intent_id
             for event in events
         ):
@@ -1701,6 +1728,81 @@ class GroupProofSource:
         ):
             raise GroupProofSourceError("GROUP_UNKNOWN_EVENT_BINDING_MISMATCH")
 
+        latest_source = _latest_source_event(events)
+        if latest_source is None:
+            return _unknown_group_receipt(intent, record, claim_projection)
+        if latest_source.payload.get("status") is None:
+            # Pre-v2 open-source rows did not persist a typed status. Keep them
+            # query-only UNKNOWN until a fresh exact-source reconciliation
+            # replaces that projection with a typed, hash-chained snapshot.
+            return _unknown_group_receipt(intent, record, claim_projection)
+        try:
+            latest_status = GroupChildOrderStatus.from_payload(
+                latest_source.payload.get("status")
+            )
+            latest_state = ExecutionState(latest_source.payload.get("state"))
+        except Exception:
+            raise GroupProofSourceError("GROUP_SOURCE_STATUS_INVALID") from None
+        if latest_status.state is not latest_state:
+            raise GroupProofSourceError("GROUP_SOURCE_STATUS_INVALID")
+        if latest_state not in {
+            ExecutionState.FILLED,
+            ExecutionState.CANCELLED,
+            ExecutionState.REJECTED,
+        }:
+            if any(event.event_type in {"PROOF_READY", "RISK_RESOLVED"} for event in events):
+                raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
+            # An open order may be used as a cancellation target only while
+            # the exact original dispatch claim remains active.  The public
+            # accepted-reservation snapshot is immutable and can still say
+            # ``claimed=False`` after dispatch, so bind this check to the live
+            # Risk claim read above instead.
+            claim_projection = self._claim_projection(
+                target, intent, permit, mapped, claim, require_unresolved=True
+            )
+            session = _ACTIVE_SESSION.get()
+            if (
+                type(session) is not GroupProofDispatchSession
+                or session.source is not self
+                or session.intent.intent_id != intent.intent_id
+            ):
+                if (
+                    type(principal_ref) is not str
+                    or type(identity) is not WireIdentity
+                    or type(wire_scope) is not WireScope
+                    or type(service_context) is not ServiceCallContext
+                    or type(active_authority) is not ExecutionGroupAuthorityGuard
+                ):
+                    raise GroupProofSourceError("GROUP_RECEIPT_CONTEXT_REQUIRED")
+                session = GroupProofDispatchSession(
+                    source=self,
+                    target=target,
+                    binding=binding,
+                    intent=intent,
+                    permit=permit,
+                    mapped_intent=mapped,
+                    principal_ref=principal_ref,
+                    identity=identity,
+                    wire_scope=wire_scope,
+                    service_context=service_context,
+                    active_authority=active_authority,
+                )
+                session._claim_receipt = claim
+                session._claim_projection = claim_projection
+                session._attempt_started = True
+                session._attempt_unknown = unknown_event is not None
+            elif session._claim_projection != claim_projection:
+                raise GroupProofSourceError("GROUP_SESSION_CONTEXT_MISMATCH")
+            session._source_event = latest_source
+            session._status = latest_status
+            session._validate_source_event(latest_source)
+            if not _execution_record_matches_group_status(record, latest_status):
+                return _unknown_group_receipt(intent, record, claim_projection)
+            return GroupLegOrderReceipt(
+                status=latest_status,
+                claim=claim_projection,
+                resolution=None,
+            )
         source_event = _terminal_source_event(events)
         if source_event is None:
             return _unknown_group_receipt(intent, record, claim_projection)
@@ -2276,6 +2378,71 @@ class GroupProofSource:
                 except Exception:
                     return self._read_recovery_receipt(session)
                 state = facts["state"]
+                if state in {
+                    ExecutionState.ACKED,
+                    ExecutionState.PARTIALLY_FILLED,
+                    ExecutionState.UNKNOWN,
+                }:
+                    status = session._status_from_facts(facts, state)
+                    session._facts = facts
+                    session._status = status
+                    source_payload = session._source_event_payload(
+                        facts, state=state, status=status
+                    )
+                    latest_source = _latest_source_event(events)
+                    if latest_source is not None:
+                        session._validate_source_event(latest_source)
+                    append_progress = _source_progress_is_new(
+                        latest_source, source_payload
+                    )
+                    current_record = target.execution_store.get(
+                        intent.intent_id, scope=target.execution_scope
+                    )
+                    if type(current_record) is not ExecutionRecord or (
+                        current_record.dispatch_attempts != 1
+                        or current_record.group_binding != binding
+                        or current_record.payload_sha256 != intent.fingerprint
+                    ):
+                        raise GroupProofSourceError("GROUP_EXECUTION_RECORD_MISMATCH")
+                    if not _execution_record_matches_group_status(current_record, status):
+                        lease = acquire_writer_lease()
+                        if (
+                            type(lease) is not WriterLease
+                            or lease.scope_key != target.execution_scope.account_key
+                        ):
+                            raise GroupProofSourceError(
+                                "GROUP_EXECUTION_WRITER_LEASE_UNAVAILABLE"
+                            )
+                        session._writer_lease = lease
+                        session._assert_current()
+                        try:
+                            current_record = target.execution_store.record_observation(
+                                session._provider_observation(status),
+                                scope=target.execution_scope,
+                                source="provider",
+                                writer_lease=lease,
+                            )
+                        except Exception:
+                            raise GroupProofSourceError(
+                                "GROUP_EXECUTION_RECONCILIATION_UNCERTAIN"
+                            ) from None
+                        if not _execution_record_matches_group_status(current_record, status):
+                            raise GroupProofSourceError(
+                                "GROUP_EXECUTION_OBSERVATION_MISMATCH"
+                            )
+                    session._assert_current()
+                    if append_progress:
+                        session._source_event = self._append_event(
+                            target=target,
+                            fence=session._risk_fence,
+                            intent=intent,
+                            permit=permit,
+                            event_type="SOURCE_PROGRESS",
+                            payload=source_payload,
+                        )
+                    else:
+                        session._source_event = latest_source
+                    return self._read_recovery_receipt(session)
                 if state not in {
                     ExecutionState.FILLED,
                     ExecutionState.REJECTED,
@@ -2895,8 +3062,14 @@ def _validate_recovery_event_order(
         raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
     by_type: dict[str, GroupProofJournalEvent] = {}
     positions: dict[str, int] = {}
+    progress: list[tuple[int, GroupProofJournalEvent]] = []
     for index, event in enumerate(events):
-        if event.event_type not in GroupProofJournal.EVENT_TYPES or event.event_type in by_type:
+        if event.event_type not in GroupProofJournal.EVENT_TYPES:
+            raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
+        if event.event_type == "SOURCE_PROGRESS":
+            progress.append((index, event))
+            continue
+        if event.event_type in by_type:
             raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
         by_type[event.event_type] = event
         positions[event.event_type] = index
@@ -2922,6 +3095,56 @@ def _validate_recovery_event_order(
             and positions["SOURCE_OBSERVED"] >= positions["ATTEMPT_UNKNOWN"]
         ):
             raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
+    if progress:
+        if unknown is None or any(index <= positions["ATTEMPT_UNKNOWN"] for index, _ in progress):
+            raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
+        if reconciled is not None and any(
+            index >= positions["SOURCE_RECONCILED"] for index, _ in progress
+        ):
+            raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
+        if any(
+            event.event_type == "PROOF_READY"
+            and index < positions["ATTEMPT_UNKNOWN"]
+            for index, event in enumerate(events)
+        ):
+            raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
+
+    source_events = [
+        event
+        for event in events
+        if event.event_type in {"SOURCE_OBSERVED", "SOURCE_PROGRESS", "SOURCE_RECONCILED"}
+    ]
+    prior_source_payload: Mapping[str, Any] | None = None
+    for source_event in source_events:
+        payload = source_event.payload
+        if prior_source_payload is not None:
+            try:
+                prior_order_revision = prior_source_payload.get("order_revision")
+                prior_fill_revision = prior_source_payload.get("fill_watermark_revision")
+                order_revision = payload.get("order_revision")
+                fill_revision = payload.get("fill_watermark_revision")
+                prior_filled = Decimal(str(prior_source_payload.get("filled_quantity")))
+                filled = Decimal(str(payload.get("filled_quantity")))
+                if (
+                    type(prior_order_revision) is not int
+                    or type(prior_fill_revision) is not int
+                    or type(order_revision) is not int
+                    or type(fill_revision) is not int
+                    or order_revision < prior_order_revision
+                    or fill_revision < prior_fill_revision
+                    or filled < prior_filled
+                    or (
+                        order_revision == prior_order_revision
+                        and fill_revision == prior_fill_revision
+                        and payload.get("observation_sha256")
+                        != prior_source_payload.get("observation_sha256")
+                    )
+                ):
+                    raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
+            except (TypeError, ValueError, ArithmeticError):
+                raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID") from None
+        prior_source_payload = payload
+
     terminal_source = _terminal_source_event(events)
     if proof is not None and (
         terminal_source is None
@@ -2938,7 +3161,8 @@ def _validate_recovery_event_order(
             (
                 event
                 for event in reversed(events[: positions["ATTEMPT_UNKNOWN"]])
-                if event.event_type in {"SOURCE_OBSERVED", "SOURCE_RECONCILED"}
+                if event.event_type
+                in {"SOURCE_OBSERVED", "SOURCE_PROGRESS", "SOURCE_RECONCILED"}
             ),
             None,
         )
@@ -2975,11 +3199,7 @@ def _unknown_group_receipt(
 def _terminal_source_event(
     events: tuple[GroupProofJournalEvent, ...],
 ) -> GroupProofJournalEvent | None:
-    reconciled = [event for event in events if event.event_type == "SOURCE_RECONCILED"]
-    observed = [event for event in events if event.event_type == "SOURCE_OBSERVED"]
-    if len(reconciled) > 1 or len(observed) > 1:
-        raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
-    event = reconciled[0] if reconciled else (observed[0] if observed else None)
+    event = _latest_source_event(events)
     if event is None or event.payload.get("state") not in {
         ExecutionState.FILLED.value,
         ExecutionState.CANCELLED.value,
@@ -2987,6 +3207,65 @@ def _terminal_source_event(
     }:
         return None
     return event
+
+
+def _latest_source_event(
+    events: tuple[GroupProofJournalEvent, ...],
+) -> GroupProofJournalEvent | None:
+    return next(
+        (
+            event
+            for event in reversed(events)
+            if event.event_type
+            in {"SOURCE_OBSERVED", "SOURCE_PROGRESS", "SOURCE_RECONCILED"}
+        ),
+        None,
+    )
+
+
+def _source_progress_is_new(
+    previous: GroupProofJournalEvent | None,
+    payload: Mapping[str, Any],
+) -> bool:
+    """Validate a source snapshot's monotonicity and report whether it changed."""
+
+    if previous is None:
+        return True
+    old = previous.payload
+    try:
+        old_order = old.get("order_revision")
+        old_fill = old.get("fill_watermark_revision")
+        new_order = payload.get("order_revision")
+        new_fill = payload.get("fill_watermark_revision")
+        old_filled = Decimal(str(old.get("filled_quantity")))
+        new_filled = Decimal(str(payload.get("filled_quantity")))
+    except (TypeError, ValueError, ArithmeticError):
+        raise GroupProofSourceError("GROUP_SOURCE_PROGRESS_INVALID") from None
+    if (
+        type(old_order) is not int
+        or type(old_fill) is not int
+        or type(new_order) is not int
+        or type(new_fill) is not int
+        or new_order < old_order
+        or new_fill < old_fill
+        or new_filled < old_filled
+    ):
+        raise GroupProofSourceError("GROUP_SOURCE_PROGRESS_REGRESSION")
+    same_revision = new_order == old_order and new_fill == old_fill
+    # SQLite JSON readback represents Decimal quantities as their canonical
+    # strings, while a fresh provider projection still carries Decimal.
+    # Compare the parsed values above so an identical source snapshot remains
+    # idempotent across that persistence boundary.
+    same_facts = (
+        payload.get("observation_sha256") == old.get("observation_sha256")
+        and payload.get("state") == old.get("state")
+        and new_filled == old_filled
+        and payload.get("trade_count") == old.get("trade_count")
+        and payload.get("fill_history_sha256") == old.get("fill_history_sha256")
+    )
+    if same_revision and not same_facts:
+        raise GroupProofSourceError("GROUP_SOURCE_REVISION_CONFLICT")
+    return not (same_revision and same_facts)
 
 
 def _execution_record_matches_group_status(
@@ -3427,6 +3706,21 @@ class GroupProofDispatchSession:
             )
             self._facts = facts
             state = facts["state"]
+            if state in {ExecutionState.ACKED, ExecutionState.PARTIALLY_FILLED}:
+                status = self._status_from_facts(facts, state)
+                self._status = status
+                self._source_event = self._record_source(
+                    facts, state=state, status=status
+                )
+                return self._provider_observation(status)
+            if state is ExecutionState.UNKNOWN:
+                status = self._status_from_facts(facts, state)
+                self._status = status
+                self._source_event = self._record_source(
+                    facts, state=state, status=status
+                )
+                self._mark_unknown("GROUP_PROVIDER_STATE_UNKNOWN")
+                return self._provider_observation(status)
             # A provider CANCELLED terminal fact is either a zero-fill cancel
             # or an IOC remainder cancel after a strictly positive partial
             # fill. Full-fill CANCELLED is contradictory and remains UNKNOWN.
@@ -3989,7 +4283,8 @@ class GroupProofDispatchSession:
             "scope_key": self.target.account_scope.key,
         }
         if (
-            source_event.event_type not in {"SOURCE_OBSERVED", "SOURCE_RECONCILED"}
+            source_event.event_type
+            not in {"SOURCE_OBSERVED", "SOURCE_PROGRESS", "SOURCE_RECONCILED"}
             or
             payload.get("claim_digest") != self._claim_projection.claim_digest
             or payload.get("intent_fingerprint") != self.intent.fingerprint
@@ -4008,6 +4303,9 @@ class GroupProofDispatchSession:
         if (
             payload.get("state")
             not in {
+                ExecutionState.ACKED.value,
+                ExecutionState.PARTIALLY_FILLED.value,
+                ExecutionState.UNKNOWN.value,
                 ExecutionState.FILLED.value,
                 ExecutionState.CANCELLED.value,
                 ExecutionState.REJECTED.value,
@@ -4246,16 +4544,31 @@ class GroupProofDispatchSession:
             or payload.get("fee_currency") != next(iter(fee_currencies), None)
         ):
             raise GroupProofSourceError("GROUP_SOURCE_FILL_TOTAL_MISMATCH")
-        if payload["state"] == ExecutionState.FILLED.value:
+        state = ExecutionState(payload["state"])
+        if state is ExecutionState.FILLED:
             if filled_quantity != quantity or not rows:
                 raise GroupProofSourceError("GROUP_SOURCE_FILL_TOTAL_MISMATCH")
-        elif payload["state"] == ExecutionState.CANCELLED.value:
+        elif state is ExecutionState.CANCELLED:
             if not (
                 filled_quantity == 0 and not rows
                 or Decimal("0") < filled_quantity < quantity and bool(rows)
             ):
                 raise GroupProofSourceError("GROUP_SOURCE_CANCELLED_FILL_CONFLICT")
-        elif filled_quantity != 0 or rows:
+        elif state is ExecutionState.REJECTED:
+            if filled_quantity != 0 or rows:
+                raise GroupProofSourceError("GROUP_SOURCE_REJECTED_WITH_FILL")
+        elif state is ExecutionState.ACKED:
+            if filled_quantity != 0 or rows:
+                raise GroupProofSourceError("GROUP_SOURCE_ACK_FILL_MISMATCH")
+        elif state is ExecutionState.PARTIALLY_FILLED:
+            if not (Decimal("0") < filled_quantity < quantity and rows):
+                raise GroupProofSourceError("GROUP_SOURCE_PARTIAL_FILL_MISMATCH")
+        elif state is ExecutionState.UNKNOWN:
+            if not (Decimal("0") <= filled_quantity <= quantity) or bool(rows) != (
+                filled_quantity > 0
+            ):
+                raise GroupProofSourceError("GROUP_SOURCE_UNKNOWN_FILL_MISMATCH")
+        else:
             raise GroupProofSourceError("GROUP_SOURCE_REJECTED_WITH_FILL")
         metadata = self.target.risk_target.registry.get(self.intent.instrument)
         quote_currency = contract.quote_currency(self.intent.instrument)
@@ -4715,6 +5028,35 @@ class GroupProofDispatchSession:
         record: ExecutionRecord,
     ) -> None:
         self._check_callback_identity(intent, binding, authorization, writer_lease, validated_claim)
+        if record.state in {ExecutionState.ACKED, ExecutionState.PARTIALLY_FILLED}:
+            if (
+                not self._attempt_started
+                or self._source_event is None
+                or self._status is None
+                or record.dispatch_attempts != 1
+                or record.state is not self._status.state
+                or record.provider_order_id != self._status.provider_order_id
+                or record.filled_quantity != self._status.filled_quantity
+                or record.average_price != self._status.average_price
+                or record.cumulative_commission != self._status.cumulative_commission
+            ):
+                self._mark_unknown("GROUP_OPEN_ORDER_RESULT_MISMATCH")
+                raise GroupProofSourceError("GROUP_OPEN_ORDER_RESULT_UNPROVEN")
+            self._validate_source_event(self._source_event)
+            self._assert_current()
+            try:
+                # Settlement records the accepted source-backed dispatch while
+                # deliberately retaining the original Risk dispatch latch.
+                self.source._runtime_bundle.risk_admission.ensure_settled(
+                    self.permit.permit_id
+                )
+            except Exception:
+                raise GroupProofSourceError("GROUP_OPEN_ORDER_RISK_HOLD_UNPROVEN") from None
+            self._assert_current()
+            # The Execution record and source facts are now durable, but the
+            # original submit claim remains unresolved until complete terminal
+            # order and fill history produce the existing typed proof.
+            raise GroupProofSourceError("GROUP_ORDER_STILL_OPEN")
         if (
             not self._attempt_started
             or self._source_event is None

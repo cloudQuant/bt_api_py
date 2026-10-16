@@ -310,7 +310,7 @@ class TrustedGroupWritePolicy:
             raise TypeError("group write policy scope must be WireScope")
         if (
             self.port != "service.order_entry"
-            or self.operation != "orders.submit_group_leg"
+            or self.operation not in {"orders.submit_group_leg", "orders.cancel_group_leg"}
             or not _text(self.run_id)
             or self.scope.execution_domain_ref is None
             or self.scope.account_ref is None

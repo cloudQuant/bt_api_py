@@ -39,7 +39,9 @@ _RESERVATION_PORT = "service.group_reservations"
 _RESERVATION_OPS = frozenset({"reservations.reserve", "reservations.query", "reservations.release"})
 _ACCOUNT_GROUP_PORTS = {
     "orders.submit_group_leg": ("service.order_entry", True),
+    "orders.cancel_group_leg": ("service.order_entry", True),
     "orders.query_group_leg": ("service.order_query", False),
+    "orders.query_group_cancel": ("service.order_query", False),
     "orders.resolve_group_leg": ("service.order_entry", True),
 }
 _REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -952,10 +954,10 @@ def _validate_coordinator_registration(
     context = registration.context
     scope = context.scope
     if (
-        operation not in {"groups.submit", "groups.query"}
+        operation not in {"groups.submit", "groups.query", "groups.cancel"}
         or registration.port != "service.order_group_entry"
         or operation not in registration.operations
-        or (operation == "groups.submit" and operation not in registration.write_operations)
+        or (operation in {"groups.submit", "groups.cancel"} and operation not in registration.write_operations)
         or type(context.identity.role) is not WireRole
         or context.identity.role is not WireRole.STRATEGY_CLIENT
         or context.identity.actor_ref != scope.strategy_ref

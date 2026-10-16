@@ -81,6 +81,7 @@ from tests.integration.test_arb03_dim05_group_partial_fill_service import (
     _stable_strategy_scope,
     _stop_process,
     _strategy_client_config,
+    _plain_runtime_json,
     _submit_and_query,
 )
 
@@ -99,6 +100,14 @@ class _WireFaultState:
     def count(self, account_ref: str, operation: str) -> None:
         key = (account_ref, operation)
         self.counts[key] = self.counts.get(key, 0) + 1
+
+    def arm(self, operation: str, remaining_drops: int) -> None:
+        assert type(operation) is str and operation
+        assert type(remaining_drops) is int and remaining_drops > 0
+        if self.dropped or self.remaining:
+            raise RuntimeError("reply-loss fault is already active")
+        self.operation = operation
+        self.remaining = remaining_drops
 
     def statistics(self) -> tuple[tuple[tuple[str, str, int], ...], int, int]:
         items = tuple(
@@ -174,6 +183,7 @@ def _arb04_coordinator_host_process(
     rule_specs: dict[str, dict[str, str]],
     fault_operation: str,
     fault_drops: int,
+    enable_group_cancel: bool = False,
 ) -> None:
     """ARB03 coordinator host with an armed wire reply-loss factory."""
 
@@ -216,8 +226,14 @@ def _arb04_coordinator_host_process(
             {endpoint: account_ref for account_ref, endpoint in account_endpoints.items()},
         ),
         requested_operations={
-            "upstream.orders": frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"}),
-            "upstream.order_query": frozenset({"orders.query_group_leg"}),
+            "upstream.orders": frozenset(
+                {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                | ({"orders.cancel_group_leg"} if enable_group_cancel else set())
+            ),
+            "upstream.order_query": frozenset(
+                {"orders.query_group_leg"}
+                | ({"orders.query_group_cancel"} if enable_group_cancel else set())
+            ),
             "upstream.account_reservations": frozenset(
                 {
                     "reservations.reserve",
@@ -307,7 +323,10 @@ def _arb04_coordinator_host_process(
                                     "service.order_group_entry",
                                     _COORDINATOR_SCOPE_REF,
                                     strategy_scope,
-                                    frozenset({"groups.submit", "groups.query"}),
+                                    frozenset(
+                                        {"groups.submit", "groups.query"}
+                                        | ({"groups.cancel"} if enable_group_cancel else set())
+                                    ),
                                 ),
                             ),
                         ),
@@ -351,6 +370,9 @@ def _arb04_coordinator_host_process(
                 if command == "fault-stats":
                     counts, dropped, remaining = fault_state.statistics()
                     control.send(("fault-stats", counts, dropped, remaining))
+                elif type(command) is tuple and len(command) == 3 and command[0] == "arm-fault":
+                    fault_state.arm(command[1], command[2])
+                    control.send(("fault-armed", command[1], command[2]))
             host.serve_once(15)
     except BaseException as error:
         if host is not None and host.state not in {"closed", "failed"}:
@@ -389,6 +411,7 @@ class Arb04GroupCluster:
         rule_specs: dict[str, dict[str, str]],
         fault_operation: str = "orders.submit_group_leg",
         fault_drops: int = 1,
+        enable_group_cancel: bool = False,
     ) -> None:
         self.accounts = accounts
         self.instruments = instruments
@@ -397,6 +420,7 @@ class Arb04GroupCluster:
         self.rule_specs = rule_specs
         self.fault_operation = fault_operation
         self.fault_drops = fault_drops
+        self.enable_group_cancel = enable_group_cancel
         self.metadata_reference_ns = time.time_ns()
         self.account_paths: dict[str, dict[str, str]] = {
             account: {
@@ -481,6 +505,7 @@ class Arb04GroupCluster:
                     self.initial_states[account_ref],
                     self.instruments[account_ref],
                     self.expected_orders[account_ref],
+                    self.enable_group_cancel,
                 ),
             )
             try:
@@ -523,6 +548,7 @@ class Arb04GroupCluster:
                 self.rule_specs,
                 self.fault_operation,
                 self.fault_drops,
+                self.enable_group_cancel,
             ),
         )
         try:
@@ -551,8 +577,14 @@ class Arb04GroupCluster:
             }
         )
         expected_upstream_operations = {
-            "upstream.orders": frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"}),
-            "upstream.order_query": frozenset({"orders.query_group_leg"}),
+            "upstream.orders": frozenset(
+                {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                | ({"orders.cancel_group_leg"} if self.enable_group_cancel else set())
+            ),
+            "upstream.order_query": frozenset(
+                {"orders.query_group_leg"}
+                | ({"orders.query_group_cancel"} if self.enable_group_cancel else set())
+            ),
             "upstream.account_reservations": frozenset(
                 {"reservations.reserve", "reservations.query", "reservations.release"}
             ),
@@ -608,7 +640,10 @@ class Arb04GroupCluster:
             ),
             run_id=_RUN,
             requested_operations={
-                "broker.order_groups": frozenset({"groups.submit", "groups.query"})
+                "broker.order_groups": frozenset(
+                    {"groups.submit", "groups.query"}
+                    | ({"groups.cancel"} if self.enable_group_cancel else set())
+                )
             },
         )
         self.strategy_runtime = strategy_runtime
@@ -620,11 +655,41 @@ class Arb04GroupCluster:
         assert strategy_binding.mount == "broker.order_groups"
         assert strategy_binding.scope.account_refs == self.accounts
         assert strategy_binding.scope.run_id == _RUN
-        assert strategy_binding.operations == frozenset({"groups.submit", "groups.query"})
+        assert strategy_binding.operations == frozenset(
+            {"groups.submit", "groups.query"}
+            | ({"groups.cancel"} if self.enable_group_cancel else set())
+        )
 
     def submit_group(self, request: dict[str, Any]) -> GroupOrderSnapshot:
         assert self.strategy_runtime is not None
         return _submit_and_query(self.strategy_runtime, request)
+
+    def cancel_group(self, group_id: str, cancel_request_id: str) -> Mapping[str, Any]:
+        assert self.enable_group_cancel
+        assert self.strategy_runtime is not None
+        reply = self.strategy_runtime.call(
+            "broker.order_groups",
+            "groups.cancel",
+            {"group_id": group_id, "cancel_request_id": cancel_request_id},
+            portfolio_ref=_PORTFOLIO,
+        )
+        assert reply["ok"] is True, reply
+        assert reply["code"] == "OK", reply
+        return _plain_runtime_json(reply["result"])
+
+    def query_group(self, group_id: str) -> GroupOrderSnapshot:
+        assert self.strategy_runtime is not None
+        reply = self.strategy_runtime.call(
+            "broker.order_groups",
+            "groups.query",
+            {"group_id": group_id},
+            portfolio_ref=_PORTFOLIO,
+        )
+        assert reply["ok"] is True, reply
+        assert reply["code"] == "OK", reply
+        result = _plain_runtime_json(reply["result"])
+        assert result["found"] is True, result
+        return GroupOrderSnapshot.from_payload(result["snapshot"])
 
     def status(self, account_ref: str) -> tuple[Any, ...]:
         control = self.account_controls[account_ref]
@@ -641,6 +706,13 @@ class Arb04GroupCluster:
         assert stats[0] == "fault-stats", stats
         counts = {(account, operation): count for account, operation, count in stats[1]}
         return counts, stats[2], stats[3]
+
+    def arm_fault(self, operation: str, drops: int) -> None:
+        control = self.coordinator_control
+        assert control is not None
+        control.send(("arm-fault", operation, drops))
+        result = _receive(control)
+        assert result == ("fault-armed", operation, drops), result
 
     def close(self) -> None:
         cleanup_failures: list[BaseException] = []

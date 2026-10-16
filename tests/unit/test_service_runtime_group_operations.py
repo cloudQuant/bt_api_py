@@ -36,6 +36,9 @@ _RUN_ID = "strategy-run-a"
 _COORDINATOR = WireIdentity(
     WireRole.SERVICE, "group-coordinator-principal", "group-coordinator-service"
 )
+_STRATEGY = WireIdentity(WireRole.STRATEGY_CLIENT, "strategy-principal", "strategy-a")
+_LEGACY_GROUP_CLIENT_OPERATIONS = frozenset({"groups.submit", "groups.query"})
+_GROUP_CLIENT_CANCEL_OPERATION = "groups.cancel"
 _APPLICATION = WireIdentity(
     WireRole.APPLICATION_CLIENT, "application-principal", "application-a"
 )
@@ -159,12 +162,58 @@ def _application_config():
     )
 
 
+def _strategy_group_client_config():
+    return parse_client_config(
+        {
+            "client_config_schema_version": 1,
+            "process_role": "strategy_client",
+            "registration": {"strategy_ref": _STRATEGY.actor_ref},
+            "clients": {
+                "execution": {
+                    "config_schema_version": 1,
+                    "settings": {
+                        "bindings": [
+                            {
+                                "mount": "broker.order_groups",
+                                "service_id": _COORDINATOR.actor_ref,
+                                "instance_id": "group-coordinator",
+                                "scope_ref": "group-coordinator-scope",
+                                "portfolio_ref": "portfolio-a",
+                                "transport_ref": "coordinator-rpc",
+                            }
+                        ],
+                        "options": {"request_timeout_ms": 1000},
+                    },
+                }
+            },
+            "communication": {
+                "config_schema_version": 1,
+                "profiles": {
+                    "coordinator-rpc": {
+                        "backend": "zmq",
+                        "config_schema_version": 1,
+                        "endpoints": {"rpc_connect": "tcp://127.0.0.1:7602"},
+                        "security_profile_ref": "coordinator-security",
+                    }
+                },
+            },
+        }
+    )
+
+
 class RegistryTransport:
     """In-process wire fake that exercises the real ServiceRegistry protocol."""
 
-    def __init__(self, registry: ServiceRegistry, authenticated_principal: str) -> None:
+    def __init__(
+        self,
+        registry: ServiceRegistry,
+        authenticated_principal: str,
+        *,
+        response_identity: WireIdentity = _OWNER,
+    ) -> None:
         self.registry = registry
         self.authenticated_principal = authenticated_principal
+        self.response_identity = response_identity
         self.requests: list[WireEnvelope] = []
         self.closed = False
 
@@ -178,7 +227,7 @@ class RegistryTransport:
                 kind=WireMessageKind.REPLY,
                 message_id="reply-" + request.header.message_id,
                 correlation_id=request.header.message_id,
-                identity=_OWNER,
+                identity=self.response_identity,
             ),
             payload,
         )
@@ -297,6 +346,99 @@ def test_group_coordinator_explicit_operations_register_with_matching_ports(tmp_
         }
     finally:
         runtime.close()
+        registry.close()
+
+
+def test_strategy_group_client_defaults_to_legacy_operations_and_cancel_is_opt_in(
+    tmp_path,
+):
+    advertised = frozenset(
+        _LEGACY_GROUP_CLIENT_OPERATIONS | {_GROUP_CLIENT_CANCEL_OPERATION}
+    )
+    registry = ServiceRegistry(
+        tmp_path / "group-client-default.sqlite",
+        service_id=_COORDINATOR.actor_ref,
+        capabilities=(
+            ServiceCapability(
+                "group-coordinator",
+                "service.order_group_entry",
+                advertised,
+                frozenset({"groups.submit", _GROUP_CLIENT_CANCEL_OPERATION}),
+            ),
+        ),
+        grants={
+            _STRATEGY.principal_ref: (
+                PrincipalGrant(
+                    _STRATEGY,
+                    (
+                        ResourceGrant(
+                            "group-coordinator",
+                            "service.order_group_entry",
+                            "group-coordinator-scope",
+                            _GROUP_SCOPE,
+                            _LEGACY_GROUP_CLIENT_OPERATIONS,
+                        ),
+                    ),
+                ),
+            )
+        },
+        policy_version="access-v1",
+        requirements_version="requirements-v1",
+    )
+
+    def make_runtime(requested_operations=None):
+        transport = RegistryTransport(
+            registry,
+            _STRATEGY.principal_ref,
+            response_identity=_COORDINATOR,
+        )
+        kwargs = {}
+        if requested_operations is not None:
+            kwargs["requested_operations"] = requested_operations
+        runtime = ServiceClientRuntime(
+            _strategy_group_client_config(),
+            identity=_STRATEGY,
+            scope_resolver=lambda _scope_ref: _GROUP_SCOPE,
+            peer_resolver=lambda _service_id: _COORDINATOR,
+            transport_factory=lambda *_args: transport,
+            run_id=_RUN_ID,
+            **kwargs,
+        )
+        return runtime, transport
+
+    runtime, transport = make_runtime()
+    try:
+        runtime.start()
+        registrations = [
+            request.payload
+            for request in transport.requests
+            if request.header.operation == "service.register"
+        ]
+        assert len(registrations) == 1
+        assert registrations[0]["port"] == "service.order_group_entry"
+        assert frozenset(registrations[0]["operations"]) == (
+            _LEGACY_GROUP_CLIENT_OPERATIONS
+        )
+        assert runtime.bindings[0].operations == _LEGACY_GROUP_CLIENT_OPERATIONS
+    finally:
+        runtime.close()
+
+    cancel_runtime, cancel_transport = make_runtime(
+        {"broker.order_groups": advertised}
+    )
+    try:
+        with pytest.raises(ServiceRuntimeError) as exc_info:
+            cancel_runtime.start()
+        assert exc_info.value.code == "SCOPE_DENIED"
+        register_requests = [
+            request.payload
+            for request in cancel_transport.requests
+            if request.header.operation == "service.register"
+        ]
+        assert len(register_requests) == 1
+        assert frozenset(register_requests[0]["operations"]) == advertised
+    finally:
+        cancel_runtime.close()
         registry.close()
 
 

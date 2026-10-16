@@ -602,16 +602,26 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             public_ports=MappingProxyType(
                 {
                     "service.order_entry": frozenset(
-                        {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                        {
+                            "orders.submit_group_leg",
+                            "orders.resolve_group_leg",
+                            "orders.cancel_group_leg",
+                        }
                     ),
-                    "service.order_query": frozenset({"orders.query_group_leg"}),
+                    "service.order_query": frozenset(
+                        {"orders.query_group_leg", "orders.query_group_cancel"}
+                    ),
                 }
             ),
             internal_ports=frozenset(),
             write_operations_by_port=MappingProxyType(
                 {
                     "service.order_entry": frozenset(
-                        {"orders.submit_group_leg", "orders.resolve_group_leg"}
+                        {
+                            "orders.submit_group_leg",
+                            "orders.resolve_group_leg",
+                            "orders.cancel_group_leg",
+                        }
                     )
                 }
             ),
@@ -621,11 +631,11 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             operations_attribute=("GROUP_COORDINATOR_OPERATIONS",),
             resource_keys=frozenset({"store", "targets", "run_bindings"}),
             public_ports=MappingProxyType(
-                {"service.order_group_entry": frozenset({"groups.submit", "groups.query"})}
+                {"service.order_group_entry": frozenset({"groups.submit", "groups.query", "groups.cancel"})}
             ),
             internal_ports=frozenset(),
             write_operations_by_port=MappingProxyType(
-                {"service.order_group_entry": frozenset({"groups.submit"})}
+                {"service.order_group_entry": frozenset({"groups.submit", "groups.cancel"})}
             ),
         ),
         ("execution", "legacy_import_owner"): _Builtin(
@@ -1790,12 +1800,24 @@ def build_component(
             elif (
                 spec.component == "execution" and spec.options.get("role") == "group_account_owner"
             ):
+                submit_policies = tuple(
+                    policy
+                    for policy in trusted_group_write_policies
+                    if policy.operation == "orders.submit_group_leg"
+                )
+                cancel_policies = tuple(
+                    policy
+                    for policy in trusted_group_write_policies
+                    if policy.operation == "orders.cancel_group_leg"
+                )
                 if (
-                    not trusted_group_write_policies
+                    not submit_policies
                     or not trusted_group_resolution_policies
                     or any(
-                        policy.instance_id != spec.instance_id
-                        for policy in trusted_group_write_policies
+                        policy.instance_id != spec.instance_id for policy in submit_policies
+                    )
+                    or any(
+                        policy.instance_id != spec.instance_id for policy in cancel_policies
                     )
                     or any(
                         policy.instance_id != spec.instance_id
@@ -1812,7 +1834,19 @@ def build_component(
                         policy.run_id,
                         policy.scope.account_ref,
                     )
-                    for policy in trusted_group_write_policies
+                    for policy in submit_policies
+                    if policy.instance_id == spec.instance_id
+                }
+                cancel_keys = {
+                    (
+                        policy.principal_ref,
+                        policy.identity,
+                        policy.scope_ref,
+                        policy.scope,
+                        policy.run_id,
+                        policy.scope.account_ref,
+                    )
+                    for policy in cancel_policies
                     if policy.instance_id == spec.instance_id
                 }
                 resolutions = {
@@ -1827,7 +1861,7 @@ def build_component(
                     for policy in trusted_group_resolution_policies
                     if policy.instance_id == spec.instance_id
                 }
-                if not writes or writes != resolutions:
+                if not writes or writes != resolutions or not cancel_keys.issubset(writes):
                     raise ServiceComponentError("GROUP_ACCOUNT_OWNER_POLICIES_MISMATCH")
                 bundle = _group_runtime_bundle(values["group_runtime_bundle"])
                 execution_targets = MappingProxyType(
@@ -1845,9 +1879,10 @@ def build_component(
                     values["accepted_group_store"],
                     values["group_authority"],
                     bundle.proof_source,  # type: ignore[attr-defined]
-                    trusted_group_write_policies,
+                    submit_policies,
                     trusted_group_resolution_policies,
                     writer_id=spec.instance_id,
+                    trusted_cancel_policies=cancel_policies,
                 )
                 if "service.order_entry" in spec.bind_ports:
                     execution_owner_lock = _acquire_execution_owner_lock(values["store"])

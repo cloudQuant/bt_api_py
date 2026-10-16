@@ -67,6 +67,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.cancel",
                 "orders.submit_group_leg",
                 "orders.resolve_group_leg",
+                "orders.cancel_group_leg",
             }
         ),
         "service.order_query": frozenset(
@@ -77,6 +78,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.read_after",
                 "orders.ack",
                 "orders.query_group_leg",
+                "orders.query_group_cancel",
                 "execution.account_books.query",
             }
         ),
@@ -129,6 +131,11 @@ _GROUP_MONITOR_OPERATIONS = frozenset({"monitor.read_after"})
 _GROUP_ORDER_ENTRY_OPERATIONS = frozenset(
     {"orders.submit_group_leg", "orders.resolve_group_leg"}
 )
+_GROUP_ORDER_CANCEL_ENTRY_OPERATIONS = frozenset({"orders.cancel_group_leg"})
+_GROUP_ORDER_ENTRY_ALL_OPERATIONS = (
+    _GROUP_ORDER_ENTRY_OPERATIONS | _GROUP_ORDER_CANCEL_ENTRY_OPERATIONS
+)
+_DEFAULT_GROUP_ORDER_ENTRY_OPERATIONS = frozenset({"groups.submit", "groups.query"})
 _APPROVED_ORDER_ENTRY_OPERATIONS = frozenset({"orders.submit_approved_target"})
 _REGISTRATION_POLICY_FIELDS = frozenset(
     {
@@ -1240,14 +1247,17 @@ class ServiceClientRuntime:
             # Account-book and group-leg views each need an explicit request
             # and grant. Existing order readers retain their prior set.
             operations = operations.difference(
-                {"execution.account_books.query", "orders.query_group_leg"}
+                {"execution.account_books.query", "orders.query_group_leg", "orders.query_group_cancel"}
             )
+        elif port == "service.order_group_entry":
+            # Keep the legacy submit/query view when callers omit explicit operations.
+            operations = operations.intersection(_DEFAULT_GROUP_ORDER_ENTRY_OPERATIONS)
         elif port == "service.order_entry":
             # Group-owner writes are available only to callers that explicitly
             # request them; adding a remote capability cannot expand ordinary
             # application or service registrations.
             operations = operations.difference(
-                _GROUP_ORDER_ENTRY_OPERATIONS | _APPROVED_ORDER_ENTRY_OPERATIONS
+                _GROUP_ORDER_ENTRY_ALL_OPERATIONS | _APPROVED_ORDER_ENTRY_OPERATIONS
             )
         elif port == "service.telemetry_ingress":
             # Durable facts use a distinct event operation. Existing clients
@@ -1266,8 +1276,8 @@ class ServiceClientRuntime:
             explicit_group_owner = (
                 requested is not None
                 and requested.intersection(PORT_OPERATIONS[port])
-                == _GROUP_ORDER_ENTRY_OPERATIONS
-                and operations == _GROUP_ORDER_ENTRY_OPERATIONS
+                in {_GROUP_ORDER_ENTRY_OPERATIONS, _GROUP_ORDER_ENTRY_ALL_OPERATIONS}
+                and operations == requested.intersection(PORT_OPERATIONS[port])
             )
             explicit_approved_target_only = (
                 requested is not None
