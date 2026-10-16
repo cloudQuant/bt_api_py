@@ -89,12 +89,6 @@ __all__ = [
     "DurableCancellationControlAudit",
     "DurableManagedRecoveryCoordinator",
     "FreezeReleaseResult",
-    "GatewayExecutionAuthority",
-    "GatewayManagedDispatchError",
-    "GatewayManagedDispatcher",
-    "GatewayManagedExecutionRuntime",
-    "GatewayManagedOutcomeUnknown",
-    "GatewayManagedOutcomeUnknownError",
     "InstrumentRiskAdmission",
     "NormalizedInstrumentMetadata",
     "LoadedCapabilities",
@@ -114,39 +108,5 @@ __all__ = [
     "RuntimePluginError",
     "SealedNormalizedInstrumentMetadataSnapshot",
     "compose_managed_execution",
-    "compose_gateway_execution_authority",
-    "compose_gateway_managed_client",
     "compose_instrument_risk_admission",
-    "gateway_command_id",
 ]
-
-
-_RETIRED_GATEWAY_EXPORTS = frozenset(
-    {
-        "GatewayExecutionAuthority",
-        "GatewayManagedDispatchError",
-        "GatewayManagedDispatcher",
-        "GatewayManagedExecutionRuntime",
-        "GatewayManagedOutcomeUnknown",
-        "GatewayManagedOutcomeUnknownError",
-        "compose_gateway_execution_authority",
-        "compose_gateway_managed_client",
-        "gateway_command_id",
-    }
-)
-
-
-def __getattr__(name: str):
-    """Load retired gateway API names only when an old caller asks for them.
-
-    Importing ``runtime_plugins`` remains independent of the retired gateway
-    router and transport.  Accessing a legacy name resolves to a fail-closed
-    stub so callers receive the migration error at the old API boundary.
-    """
-
-    if name not in _RETIRED_GATEWAY_EXPORTS:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    from importlib import import_module
-
-    module = import_module(".gateway_dispatch", __name__)
-    return getattr(module, name)

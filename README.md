@@ -3,7 +3,7 @@
 [![Python 3.11-3.13](https://img.shields.io/badge/python-3.11--3.13-blue.svg)](https://www.python.org/downloads/)
 [![Tests](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml/badge.svg)](https://github.com/cloudQuant/bt_api_py/actions/workflows/tests.yml)
 
-`bt_api_py` is a Python façade for exchange plugins, direct Feed calls, and an optional ZeroMQ forwarding boundary. It is a library and integration framework—not a declaration that every registered plugin or venue is ready for live trading.
+`bt_api_py` is a Python façade for exchange plugins and direct Feed calls. Managed live execution uses Backtrader's explicit `ServiceExecutionSession` and the service-v2 `ServiceHost`; this SDK does not provide a separate forwarding runtime. The package is an integration framework—not a declaration that every registered plugin or venue is ready for live trading.
 
 Release-blocking CI targets Python 3.11–3.13. Python 3.14 is canary-only.
 
@@ -25,7 +25,7 @@ python -m bt_api_py.doctor --bundle core-reference --format json
 
 The doctor command verifies installed package metadata and reports plugins as installed, disabled, or unavailable. It does not authenticate to an exchange or place orders.
 
-## Typed order example
+## Direct typed order example
 
 ```python
 from decimal import Decimal
@@ -72,7 +72,7 @@ api = BtApi(
 )
 ```
 
-`BtApi` remains the only public trading client. Its internal session owns the
+`BtApi` remains the direct SDK facade. Its optional execution session owns the
 exclusive journal lock, intent persistence, client ID uniqueness, uncertain
 execution reconciliation and cumulative fill/fee state. Call
 `new_client_order_id(exchange_name)` before binding a local order reference,
@@ -87,20 +87,16 @@ contract. Omitting `execution_config` preserves the historical API behavior.
 `get_execution_summary()` reports the session's unresolved orders and fees;
 `get_all_balances(normalized=True)` preserves individual account currencies,
 and `get_portfolio_balance()` rejects mixed or nonzero unknown currencies.
-The session does not contain Backtrader orders, feeds or strategy accounting.
+This is direct provider execution support; it does not contain Backtrader
+orders, feeds or strategy accounting. Managed live execution that requires
+Host-owned admission and dispatch uses Backtrader's explicit
+`ServiceExecutionSession` and service-v2 `ServiceHost` path.
 
-## Direct and forwarding reads
+## Direct provider reads
 
-Direct mode preserves the native Feed result shape. In ZMQ mode, typed reads use `Consistency`:
+The direct backend preserves each provider Feed's native result shape. Forwarding reads through `BtApi` have been retired. For managed service market or account reads, use the configured service-v2 read services; this package's direct Feed API does not silently route to a remote service.
 
-```python
-from bt_api_py import Consistency
-
-# With a configured forwarding service and an active market subscription:
-snapshot = api.get_tick("SIM___SPOT", "BTC-USDT", consistency=Consistency.CACHE_OK)
-```
-
-`LIVE` waits for a post-call event within the configured timeout. `CACHE_OK` only returns a bounded, explicitly stale snapshot; cache misses and timeouts use different domain errors. ZMQ public trades are not part of the current forwarding protocol and fail explicitly instead of falling back to a local Feed.
+To configure the direct provider path, pass its registered exchange settings when constructing `BtApi`. The service transport and its read scopes are configured separately at the Host boundary.
 
 ## Historical tick collection (CTP)
 

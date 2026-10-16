@@ -1,4 +1,6 @@
-"""Focused offline checks for the retired SDK gateway client entry points."""
+"""The retired forwarding runtimes are absent; supported SDK entry points remain."""
+
+from __future__ import annotations
 
 import json
 import os
@@ -8,70 +10,84 @@ import textwrap
 from pathlib import Path
 
 
-def test_gateway_import_and_construction_never_load_forwarding_runtime() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+def _source_environment(repository: Path) -> dict[str, str]:
+    environment = os.environ.copy()
+    inherited = environment.get("PYTHONPATH", "").split(os.pathsep)
+    base_src = repository / "bt_api" / "bt_api_base" / "src"
+    paths: list[str] = []
+    seen: set[str] = set()
+    for raw_path in [str(repository), str(base_src), *inherited]:
+        if not raw_path:
+            continue
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = repository / path
+        normalized = os.path.normcase(os.path.abspath(path))
+        if normalized not in seen:
+            seen.add(normalized)
+            paths.append(str(path))
+    environment["PYTHONPATH"] = os.pathsep.join(paths)
+    environment["BT_API_PY_LIGHT_IMPORT"] = "1"
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    return environment
+
+
+def test_retired_runtime_modules_are_absent_after_normal_package_import() -> None:
+    repository = Path(__file__).resolve().parents[1]
     script = textwrap.dedent(
         """
-        import importlib
+        import importlib.util
         import json
         import sys
+        from pathlib import Path
 
         import bt_api_py
-        from bt_api_py._contracts.errors import LegacyForwardingRetiredError
+        import bt_api_py.runtime_plugins as runtime_plugins
 
-        gateway = importlib.import_module("bt_api_py.gateway")
-        client_module = importlib.import_module("bt_api_py.gateway.client")
-        package_client = gateway.GatewayClient
-        module_client = client_module.GatewayClient
-        error = None
-        try:
-            module_client(command_endpoint="ipc://command", market_endpoint="ipc://market")
-        except LegacyForwardingRetiredError as exc:
-            error = {"type": type(exc).__name__, "target": exc.target, "detail": exc.detail}
+        root = Path(bt_api_py.__file__).resolve().parent
+        names = (
+            "bt_api_py.forwarding",
+            "bt_api_py.gateway",
+            "bt_api_py._gateway_wire",
+            "bt_api_py.runtime_plugins.gateway_dispatch",
+        )
+        modules = {name: importlib.util.find_spec(name) is not None for name in names}
         print(json.dumps({
-            "same_class": package_client is module_client,
-            "gateway_config": hasattr(gateway, "GatewayConfig"),
-            "package_file": bt_api_py.__file__,
-            "client_module_file": client_module.__file__,
-            "forwarding_modules": sorted(
-                name for name in sys.modules if name.startswith("bt_api_py.forwarding")
-            ),
-            "error": error,
+            "package_file": str(Path(bt_api_py.__file__).resolve()),
+            "runtime_plugins_file": str(Path(runtime_plugins.__file__).resolve()),
+            "modules": modules,
+            "loaded": sorted(name for name in sys.modules if name in names),
         }))
         """
     )
-    env = os.environ.copy()
-    env.pop("BT_API_PY_LIGHT_IMPORT", None)
-    inherited_python_path = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = str(repo_root) + (
-        os.pathsep + inherited_python_path if inherited_python_path else ""
-    )
-
     result = subprocess.run(
         [sys.executable, "-c", script],
         check=True,
         capture_output=True,
         text=True,
-        env=env,
+        cwd=repository,
+        env=_source_environment(repository),
         timeout=15,
     )
     payload = json.loads(result.stdout)
 
-    assert payload["same_class"] is True
-    assert payload["gateway_config"] is True
-    assert Path(payload["package_file"]).resolve() == (repo_root / "bt_api_py" / "__init__.py").resolve()
-    assert Path(payload["client_module_file"]).resolve() == (
-        repo_root / "bt_api_py" / "gateway" / "client.py"
-    ).resolve()
-    assert payload["forwarding_modules"] == []
-    assert payload["error"]["type"] == "LegacyForwardingRetiredError"
-    assert payload["error"]["target"] == "bt_api_py.gateway.client.GatewayClient"
-    assert "ServiceClientRuntime" in payload["error"]["detail"]
+    assert Path(payload["package_file"]) == (repository / "bt_api_py" / "__init__.py").resolve()
+    assert (
+        Path(payload["runtime_plugins_file"])
+        == (repository / "bt_api_py" / "runtime_plugins" / "__init__.py").resolve()
+    )
+    assert payload["modules"] == {
+        "bt_api_py.forwarding": False,
+        "bt_api_py.gateway": False,
+        "bt_api_py._gateway_wire": False,
+        "bt_api_py.runtime_plugins.gateway_dispatch": False,
+    }
+    assert payload["loaded"] == []
+    assert not (repository / "bt_api_py" / "forwarding").exists()
+    assert not (repository / "bt_api_py" / "gateway").exists()
 
 
-def test_direct_btapi_rejects_legacy_forwarding_config_before_plugin_or_feed_setup(
-    monkeypatch,
-) -> None:
+def test_direct_btapi_rejects_legacy_forwarding_config_before_setup(monkeypatch) -> None:
     from importlib import import_module
 
     import pytest
@@ -81,28 +97,25 @@ def test_direct_btapi_rejects_legacy_forwarding_config_before_plugin_or_feed_set
 
     bt_api_module = import_module("bt_api_py.bt_api")
     setup_calls: list[str] = []
-    original_init_logger = bt_api_module.BtApi.init_logger
-    original_event_bus = bt_api_module.EventBus
-
-    def init_logger(self):
-        setup_calls.append("logger")
-        return original_init_logger(self)
-
-    def event_bus():
-        setup_calls.append("event_bus")
-        return original_event_bus()
-
     monkeypatch.setattr(
         bt_api_module,
         "_ensure_plugins_loaded",
         lambda: setup_calls.append("plugins"),
     )
-    monkeypatch.setattr(bt_api_module.BtApi, "init_logger", init_logger)
-    monkeypatch.setattr(bt_api_module, "EventBus", event_bus)
+    monkeypatch.setattr(
+        bt_api_module.BtApi,
+        "init_logger",
+        lambda _self: setup_calls.append("logger"),
+    )
     monkeypatch.setattr(
         bt_api_module.BtApi,
         "init_exchange",
-        lambda self, settings: setup_calls.append("feeds"),
+        lambda _self, _settings: setup_calls.append("feeds"),
+    )
+    monkeypatch.setattr(
+        bt_api_module,
+        "EventBus",
+        lambda: setup_calls.append("event_bus"),
     )
 
     legacy_config = ForwardingConfig(
@@ -122,18 +135,55 @@ def test_direct_btapi_rejects_legacy_forwarding_config_before_plugin_or_feed_set
 
     assert excinfo.value.target == "forwarding_config"
     assert "ordinary direct/backtest use" in excinfo.value.detail
-    assert "ServiceClientRuntime" in excinfo.value.detail
+    assert "ServiceExecutionSession" in excinfo.value.detail
     assert setup_calls == []
 
 
-def test_direct_btapi_without_legacy_config_keeps_normal_direct_backend(monkeypatch) -> None:
-    from importlib import import_module
+def test_direct_btapi_rejects_gateway_wire_config_before_setup(monkeypatch) -> None:
+    import pytest
+
+    from bt_api_py import BtApi
+    from bt_api_py import bt_api as bt_api_module
+    from bt_api_py._contracts.errors import LegacyForwardingRetiredError
+
+    setup_calls: list[str] = []
+    monkeypatch.setattr(
+        bt_api_module,
+        "_ensure_plugins_loaded",
+        lambda: setup_calls.append("plugins"),
+    )
+    monkeypatch.setattr(
+        bt_api_module.BtApi,
+        "init_logger",
+        lambda _self: setup_calls.append("logger"),
+    )
+    monkeypatch.setattr(
+        bt_api_module.BtApi,
+        "init_exchange",
+        lambda _self, _settings: setup_calls.append("feeds"),
+    )
+    monkeypatch.setattr(
+        bt_api_module,
+        "EventBus",
+        lambda: setup_calls.append("event_bus"),
+    )
+
+    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
+        BtApi({"SIM___SPOT": {}}, debug=False, gateway_wire_config=object())
+
+    assert excinfo.value.target == "gateway_wire_config"
+    assert "ServiceExecutionSession" in excinfo.value.detail
+    assert "service.order_entry" in excinfo.value.detail
+    assert setup_calls == []
+
+
+def test_direct_btapi_without_legacy_inputs_keeps_normal_backend(monkeypatch) -> None:
     import sys
 
     from bt_api_py import BtApi, TransportMode
+    from bt_api_py import bt_api as bt_api_module
     from bt_api_py._direct_backend import DirectBackend
 
-    bt_api_module = import_module("bt_api_py.bt_api")
     plugin_initializations: list[str] = []
     monkeypatch.setattr(bt_api_module, "_plugins_loaded", False)
     monkeypatch.setattr(
@@ -141,8 +191,11 @@ def test_direct_btapi_without_legacy_config_keeps_normal_direct_backend(monkeypa
         "_initialize_plugins",
         lambda: plugin_initializations.append("initialized"),
     )
-    forwarding_before = {
-        name for name in sys.modules if name.startswith("bt_api_py.forwarding")
+    legacy_modules_before = {
+        name
+        for name in sys.modules
+        if name.startswith(("bt_api_py.forwarding", "bt_api_py.gateway"))
+        or name in {"bt_api_py._gateway_wire", "bt_api_py.runtime_plugins.gateway_dispatch"}
     }
     api = BtApi(debug=False)
     try:
@@ -153,132 +206,10 @@ def test_direct_btapi_without_legacy_config_keeps_normal_direct_backend(monkeypa
     finally:
         api.close()
     assert plugin_initializations == ["initialized"]
-
-    forwarding_after = {
-        name for name in sys.modules if name.startswith("bt_api_py.forwarding")
+    legacy_modules_after = {
+        name
+        for name in sys.modules
+        if name.startswith(("bt_api_py.forwarding", "bt_api_py.gateway"))
+        or name in {"bt_api_py._gateway_wire", "bt_api_py.runtime_plugins.gateway_dispatch"}
     }
-    assert forwarding_after == forwarding_before
-
-
-def test_legacy_forwarding_package_and_runtime_fail_before_transport_startup() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    script = textwrap.dedent(
-        """
-        import importlib
-        import json
-        import sys
-        import threading
-
-        from bt_api_py._contracts.errors import LegacyForwardingRetiredError
-        from bt_api_py._contracts.models import ForwardingConfig
-
-        forwarding = importlib.import_module("bt_api_py.forwarding")
-        service = importlib.import_module("bt_api_py.forwarding.service")
-        backend = importlib.import_module("bt_api_py.forwarding.btapi_backend")
-        client = importlib.import_module("bt_api_py.forwarding.client")
-        config = ForwardingConfig(
-            command_endpoint="ipc://command",
-            market_endpoint="ipc://market",
-            private_endpoint="ipc://private",
-            account_id="paper",
-            strategy_id="legacy",
-        )
-
-        class Adapter:
-            connect_calls = 0
-
-            async def connect(self):
-                self.connect_calls += 1
-
-        adapter = Adapter()
-        starts = []
-        old_start = threading.Thread.start
-        def record_start(self, *args, **kwargs):
-            starts.append(type(self).__name__)
-            raise AssertionError("retired runtime tried to start a thread")
-        threading.Thread.start = record_start
-
-        package_errors = []
-        for name in (
-            "ForwardingClient",
-            "ForwardingRuntime",
-            "ZmqForwardingClient",
-            "ZmqForwardingRuntime",
-            "ZmqBtApiBackend",
-        ):
-            try:
-                getattr(forwarding, name)
-            except LegacyForwardingRetiredError as exc:
-                package_errors.append((name, exc.target))
-
-        calls = (
-            ("ForwardingRuntime", lambda: service.ForwardingRuntime(adapter)),
-            (
-                "ZmqForwardingRuntime",
-                lambda: service.ZmqForwardingRuntime(
-                    adapter,
-                    market_endpoint="ipc://market",
-                    command_endpoint="ipc://command",
-                    private_endpoint="ipc://private",
-                ),
-            ),
-            ("ZmqBtApiBackend", lambda: backend.ZmqBtApiBackend(config)),
-            (
-                "ZmqForwardingClient",
-                lambda: client.ZmqForwardingClient(
-                    market_endpoint="ipc://market",
-                    command_endpoint="ipc://command",
-                ),
-            ),
-        )
-        module_errors = []
-        for name, construct in calls:
-            try:
-                construct()
-            except LegacyForwardingRetiredError as exc:
-                module_errors.append((name, exc.target, exc.detail))
-        threading.Thread.start = old_start
-        print(json.dumps({
-            "package_errors": package_errors,
-            "module_errors": module_errors,
-            "transport_module_loaded": "bt_api_py.forwarding.transport" in sys.modules,
-            "thread_starts": starts,
-            "adapter_connect_calls": adapter.connect_calls,
-        }))
-        """
-    )
-    env = os.environ.copy()
-    env.pop("BT_API_PY_LIGHT_IMPORT", None)
-    inherited_python_path = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = str(repo_root) + (
-        os.pathsep + inherited_python_path if inherited_python_path else ""
-    )
-
-    result = subprocess.run(
-        [sys.executable, "-c", script],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=15,
-    )
-    payload = json.loads(result.stdout)
-
-    assert {name for name, _target in payload["package_errors"]} == {
-        "ForwardingClient",
-        "ForwardingRuntime",
-        "ZmqForwardingClient",
-        "ZmqForwardingRuntime",
-        "ZmqBtApiBackend",
-    }
-    assert {name for name, _target, _detail in payload["module_errors"]} == {
-        "ForwardingRuntime",
-        "ZmqForwardingRuntime",
-        "ZmqBtApiBackend",
-        "ZmqForwardingClient",
-    }
-    assert all("ServiceHost" in detail for _name, _target, detail in payload["module_errors"])
-    assert all("service.order_entry" in detail for _name, _target, detail in payload["module_errors"])
-    assert payload["transport_module_loaded"] is False
-    assert payload["thread_starts"] == []
-    assert payload["adapter_connect_calls"] == 0
+    assert legacy_modules_after == legacy_modules_before == set()

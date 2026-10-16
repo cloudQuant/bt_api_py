@@ -169,29 +169,6 @@ from bt_api_py.cross_venue import (
     signed_funding_cashflow,
 )
 
-# The legacy forwarding/gateway runtime exports are retired from the public
-# surface.  The names stay enumerable for migration tooling (see ``__all__``),
-# but resolving one raises ``LegacyForwardingRetiredError`` instead of
-# importing the legacy ZMQ runtime; ordinary clients/config validation must
-# never silently resolve these names.
-_RETIRED_FORWARDING_EXPORTS = frozenset(
-    {
-        "MAX_MESSAGE_BYTES",
-        "BtApiForwardingAdapter",
-        "ForwardingClient",
-        "ForwardingRuntime",
-        "InMemoryForwardingBus",
-        "MarketDataHub",
-        "MarketEvent",
-        "OrderCommand",
-        "OrderRouter",
-        "PrivateEvent",
-        "SQLiteStateStore",
-        "ZmqForwardingClient",
-        "ZmqForwardingRuntime",
-    }
-)
-
 _LIGHT_IMPORT = str(_os.getenv("BT_API_PY_LIGHT_IMPORT") or "").strip().lower() in {
     "1",
     "true",
@@ -223,14 +200,6 @@ _SIMNOW_EXPORTS = frozenset(
 
 
 def __getattr__(name: str):
-    if name in _RETIRED_FORWARDING_EXPORTS or name == "GatewayClient":
-        raise LegacyForwardingRetiredError(
-            name,
-            detail=(
-                "ordinary backtest calls use BtApi with the direct transport; managed writes "
-                "use Backtrader ServiceExecutionSession with ServiceHost and service.order_entry"
-            ),
-        )
     if name == "BtApi":
         from bt_api_py.bt_api import BtApi as _BtApi
 
@@ -331,22 +300,6 @@ __all__ = [
     "list_registered_adapters",
     "load_adapter",
     "register_adapter",
-    # Retired legacy forwarding/gateway exports: still enumerable, but any
-    # resolution raises LegacyForwardingRetiredError (no legacy runtime import).
-    "ForwardingClient",
-    "GatewayClient",
-    "ForwardingRuntime",
-    "BtApiForwardingAdapter",
-    "InMemoryForwardingBus",
-    "MAX_MESSAGE_BYTES",
-    "MarketDataHub",
-    "MarketEvent",
-    "OrderCommand",
-    "OrderRouter",
-    "PrivateEvent",
-    "SQLiteStateStore",
-    "ZmqForwardingClient",
-    "ZmqForwardingRuntime",
     # v1 BtApi contract types (data types only, not a second trading client)
     "Side",
     "OrderType",

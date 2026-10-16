@@ -874,43 +874,18 @@ def test_foreign_fee_currency_is_explicit_not_converted():
 
 
 def test_direct_gateway_wire_config_is_rejected_before_runtime_setup(monkeypatch):
-    from bt_api_py._gateway_wire import GatewayWireClient, GatewayWireConfig
-
     from_plugins = Mock(side_effect=AssertionError("plugin loading must stay untouched"))
     create_feed = Mock(side_effect=AssertionError("direct feed setup must stay untouched"))
-    construct_client = Mock(side_effect=AssertionError("retired wire client must stay untouched"))
-    dispatch = Mock(side_effect=AssertionError("retired gateway dispatch"))
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", from_plugins)
     monkeypatch.setattr("bt_api_py.bt_api.ExchangeRegistry.create_feed", create_feed)
-    monkeypatch.setattr(GatewayWireClient, "__init__", construct_client)
-    config = GatewayWireConfig(
-        command_endpoint="inproc://command",
-        market_endpoint="inproc://market",
-        private_endpoint="inproc://private",
-        account_id="account-a",
-        strategy_id="strategy-a",
-        dispatch=dispatch,
-    )
+    with pytest.raises(LegacyForwardingRetiredError) as exc_info:
+        BtApi({"MT5___FX": {}}, debug=False, gateway_wire_config=object())
 
-    config_mapping = {
-        "command_endpoint": config.command_endpoint,
-        "market_endpoint": config.market_endpoint,
-        "private_endpoint": config.private_endpoint,
-        "account_id": config.account_id,
-        "strategy_id": config.strategy_id,
-        "dispatch": dispatch,
-    }
-    for legacy_config in (config, config_mapping):
-        with pytest.raises(LegacyForwardingRetiredError) as exc_info:
-            BtApi({"MT5___FX": {}}, debug=False, gateway_wire_config=legacy_config)
-
-        assert exc_info.value.target == "gateway_wire_config"
-        assert "ServiceExecutionSession" in exc_info.value.detail
-        assert "service.order_entry" in exc_info.value.detail
+    assert exc_info.value.target == "gateway_wire_config"
+    assert "ServiceExecutionSession" in exc_info.value.detail
+    assert "service.order_entry" in exc_info.value.detail
     from_plugins.assert_not_called()
     create_feed.assert_not_called()
-    construct_client.assert_not_called()
-    dispatch.assert_not_called()
 
 
 def test_retired_zmq_ctp_cancel_route_rejects_before_runtime_setup(monkeypatch):

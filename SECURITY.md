@@ -35,8 +35,8 @@ In scope:
 - Credential handling and leakage paths (API keys, tokens, session files)
 - Order routing, cancellation, and idempotency flaws that could cause
   unintended real-money actions
-- The `bt_api_py.forwarding` gateway (authentication, authorization,
-  transport), including ZeroMQ endpoints
+- The service execution and gateway boundary (authentication, authorization,
+  order routing, and scope), including configured ZeroMQ transport endpoints
 - Injection, deserialization, and SSRF issues in REST/WebSocket adapters
 - Release/supply-chain integrity (PyPI publishing path)
 
@@ -64,7 +64,8 @@ anonymous.
   或模块、影响评估与最小复现；PoC 私下附件，不要粘贴凭据。
 - **响应承诺**：3 个工作日内首次确认；10 个工作日内给出状态更新。
 - **处理范围**：凭据处理与泄漏路径；可能导致非预期真实下单/撤单的订单路由与
-  幂等缺陷；`bt_api_py.forwarding` 网关（认证、授权、ZeroMQ 传输）；适配器中的
+  幂等缺陷；ServiceHost、Gateway 与 Execution 服务边界（认证、授权、scope 和
+  已配置的 ZeroMQ 传输）；适配器中的
   注入/反序列化/SSRF；发布与供应链完整性。交易所自身的漏洞请向对应交易所报告。
 
 ## 历史提示

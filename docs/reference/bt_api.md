@@ -1,24 +1,27 @@
-﻿# BtApi
+# BtApi
 
-`BtApi` is the single public façade. It builds a `DirectBackend` by default; passing `transport_mode=TransportMode.ZMQ` and a `ForwardingConfig` activates the forwarding backend.
+`BtApi` is the public façade for direct provider and backtest operations. It
+uses `DirectBackend` by default and returns the native result shape from the
+selected Feed.
 
 ```python
-from bt_api_py import BtApi, ForwardingConfig, TransportMode
+from bt_api_py import BtApi
 
 api = BtApi(
+    exchange_kwargs={"SIM___SPOT": {"market_data_only": True}},
     debug=False,
-    transport_mode=TransportMode.ZMQ,
-    forwarding_config=ForwardingConfig(
-        command_endpoint="tcp://gateway.example:5555",
-        market_endpoint="tcp://gateway.example:5556",
-        private_endpoint="tcp://gateway.example:5557",
-        account_id="paper",
-        strategy_id="strategy-a",
-    ),
 )
+try:
+    tick = api.get_tick("SIM___SPOT", "BTC-USDT")
+finally:
+    api.close()
 ```
 
-The endpoints above are illustrative; configuring a client does not establish a production authorization boundary. Inspect `api.get_capabilities(exchange_name)` before relying on an operation.
+The old `transport_mode="zmq"`, `forwarding_config`, and `gateway_wire_config`
+entry points are retired. They raise `LegacyForwardingRetiredError` before
+provider initialization. Managed live writes use Backtrader's explicit
+`ServiceExecutionSession` with a service-v2 `ServiceHost` and its
+`service.order_entry` path.
 
 ::: bt_api_py.bt_api.BtApi
     options:

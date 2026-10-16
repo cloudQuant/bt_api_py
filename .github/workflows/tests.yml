@@ -21,8 +21,6 @@ env:
   # （当前 40），此处不再重复定义，避免两处数值漂移。
   SMOKE_TEST_PATHS: >-
     tests/test_bt_api_quality.py
-    tests/test_forwarding_schema.py
-    tests/test_forwarding_bus_router_client.py
     tests/test_monitoring_contracts.py
   FULL_SUITE_MARKERS: "not network and not integration and not performance and not e2e and not ctp"
 

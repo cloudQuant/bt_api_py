@@ -2,7 +2,8 @@
 
 ## Requests
 
-Use typed requests for cross-transport trading operations:
+Use typed requests for direct provider operations and for constructing intents
+that a managed live session will submit:
 
 ```python
 from decimal import Decimal
@@ -25,7 +26,10 @@ cancel = CancelOrderRequest(symbol="BTC-USDT", account_id="paper", order_id="ord
 query = QueryOrderRequest(symbol="BTC-USDT", account_id="paper", order_id="order-1")
 ```
 
-`BtApi.make_order`, `cancel_order`, `cancel_all`, and `query_order` accept these requests. String positional forms remain for direct legacy compatibility; they are converted to typed requests in ZMQ mode.
+`BtApi.make_order`, `cancel_order`, `cancel_all`, and `query_order` accept these
+requests on the direct provider path. Managed live orders use Backtrader's
+`ServiceExecutionSession`, which submits through service-v2 `ServiceHost` and
+`service.order_entry`.
 
 ## Read consistency
 
@@ -36,23 +40,13 @@ snapshot = api.get_tick("SIM___SPOT", "BTC-USDT", consistency=Consistency.LIVE)
 cached = api.get_tick("SIM___SPOT", "BTC-USDT", consistency=Consistency.CACHE_OK)
 ```
 
-In direct mode the Feed owns the result shape. In ZMQ mode these methods return contract snapshots with `Freshness`:
-
-- `LIVE`: waits for a post-call market event; timeout is `LiveQueryFailedError`.
-- `CACHE_OK`: accepts only a bounded cache entry and marks it stale; missing/expired cache is `StaleDataUnavailableError`.
+The direct Feed owns the result shape. Remote market and account reads belong to
+the configured service-v2 read services; `BtApi` no longer opens a forwarding
+transport or presents forwarding consistency modes.
 
 ## Commands
 
-ZMQ commands return a forwarding `CommandAck`. If transport timeout leaves completion uncertain, catch `CommandResultUnknownError` and reconcile:
-
-```python
-from bt_api_py import CommandResultUnknownError
-
-try:
-    api.make_order("SIM___SPOT", order)
-except CommandResultUnknownError as error:
-    status = api.get_command_status("SIM___SPOT", error.command_id)
-    print(status.status)
-```
-
-Do not blindly resend an order after timeout. Reusing an idempotency key with different intent is a protocol-correlation failure.
+The former forwarding `CommandAck` and `get_command_status` path is retired.
+For managed live orders, the service session and Host own reservation,
+dispatch journaling, and uncertain-outcome reconciliation. Callers must not
+retry an uncertain live intent as a new order.
