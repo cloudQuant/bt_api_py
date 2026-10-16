@@ -1,0 +1,1 @@
+python -m pytest tests/unit/test_service_execution_group_wire_reply.py -v -p no:cacheprovider --basetemp=run-f-wire-reply/bt

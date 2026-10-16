@@ -1,0 +1,1 @@
+python -m pytest tests/unit/test_service_execution_group.py -v -p no:cacheprovider --basetemp=run-e-execution-group/bt

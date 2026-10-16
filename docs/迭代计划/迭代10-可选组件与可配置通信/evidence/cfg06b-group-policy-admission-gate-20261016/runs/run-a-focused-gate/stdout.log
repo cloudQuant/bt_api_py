@@ -1,0 +1,29 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+rootdir: D:\bt_api_py
+configfile: pyproject.toml
+collecting ... collected 13 items
+
+tests/unit/test_service_group_policy_admission_gate.py::test_group_policy_role_validates_with_no_public_operation_surface PASSED [  7%]
+tests/unit/test_service_group_policy_admission_gate.py::test_group_policy_role_build_wires_the_internal_gate PASSED [ 15%]
+tests/unit/test_service_group_policy_admission_gate.py::test_group_policy_role_build_refuses_missing_invalid_or_unready_gate PASSED [ 23%]
+tests/unit/test_service_group_policy_admission_gate.py::test_coordinator_ctor_validates_only_a_gate_shaped_resource PASSED [ 30%]
+tests/unit/test_service_group_policy_admission_gate.py::test_new_submit_gate_scope_denial_is_a_stable_failure_without_side_effects PASSED [ 38%]
+tests/unit/test_service_group_policy_admission_gate.py::test_new_submit_gate_denied_group_is_a_stable_failure PASSED [ 46%]
+tests/unit/test_service_group_policy_admission_gate.py::test_new_submit_gate_version_drift_rejects_before_any_scope_decision PASSED [ 53%]
+tests/unit/test_service_group_policy_admission_gate.py::test_new_submit_gate_raised_codes_are_mapped_one_to_one PASSED [ 61%]
+tests/unit/test_service_group_policy_admission_gate.py::test_new_submit_admitted_gate_continues_to_binding_and_budget_decision PASSED [ 69%]
+tests/unit/test_service_group_policy_admission_gate.py::test_retry_replay_bypasses_the_gate_after_new_submit_consulted_it PASSED [ 76%]
+tests/unit/test_service_group_policy_admission_gate.py::test_retry_replay_bypasses_a_tampered_reference_gate PASSED [ 84%]
+tests/unit/test_service_group_policy_admission_gate.py::test_component_build_coordinator_enforces_the_provider_gate PASSED [ 92%]
+tests/unit/test_service_group_policy_admission_gate.py::test_component_build_refuses_null_gate_and_keeps_gate_free_builds_working PASSED [100%]
+
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: D:\temp\it10cfg06b-20261016-r2\run-a-focused-gate\junit.xml -
+======================== 13 passed, 1 warning in 2.57s ========================

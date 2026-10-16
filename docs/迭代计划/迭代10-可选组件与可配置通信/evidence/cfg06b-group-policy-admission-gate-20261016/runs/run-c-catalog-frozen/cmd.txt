@@ -1,0 +1,1 @@
+python -m pytest tests/unit/test_service_policy_catalog_control_plane.py -v -p no:cacheprovider --basetemp=run-c-catalog-frozen/bt

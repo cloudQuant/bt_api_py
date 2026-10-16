@@ -1,0 +1,24 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+rootdir: D:\bt_api_py
+configfile: pyproject.toml
+collecting ... collected 5 items
+
+tests/unit/test_service_policy_catalog_control_plane.py::test_policy_catalog_real_registration_control_plane_and_outage PASSED [ 20%]
+tests/unit/test_service_policy_catalog_control_plane.py::test_group_policy_role_has_no_sdk_builtin_public_port PASSED [ 40%]
+tests/unit/test_service_policy_catalog_control_plane.py::test_confirmed_policy_store_rejects_conflicts_and_bad_versions PASSED [ 60%]
+tests/unit/test_service_policy_catalog_control_plane.py::test_policy_catalog_options_fail_closed PASSED [ 80%]
+tests/unit/test_service_policy_catalog_control_plane.py::test_base_install_serves_policy_catalog_without_numpy_or_sklearn PASSED [100%]
+
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/unit/test_service_policy_catalog_control_plane.py::test_policy_catalog_real_registration_control_plane_and_outage
+  C:\anaconda3\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+    self._get_loop()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 5 passed, 2 warnings in 2.01s ========================

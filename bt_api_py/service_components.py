@@ -625,6 +625,13 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             ),
             validator_module_name="bt_api_risk.service_component",
         ),
+        ("risk", "group_policy"): _Builtin(
+            module_name="bt_api_risk.service_component",
+            operations_attribute=("GroupPolicyService", "SUPPORTED_OPERATIONS"),
+            resource_keys=frozenset(),
+            public_ports=MappingProxyType({}),
+            internal_ports=frozenset({"service.group_admission"}),
+        ),
         ("risk", "account_owner"): _Builtin(
             module_name="bt_api_py.service_risk_order_entry",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -1277,6 +1284,14 @@ def build_component(
             if resources.values["approved_target_authority"] is None:
                 raise ServiceComponentError("INVALID_APPROVED_TARGET_AUTHORITY_RESOURCE")
             expected_keys = expected_keys | {"approved_target_authority"}
+        if (
+            spec.component == "execution"
+            and spec.options.get("role") == "group_coordinator"
+            and "group_admission" in resources.values
+        ):
+            if resources.values["group_admission"] is None:
+                raise ServiceComponentError("GROUP_POLICY_RESOURCE_INVALID")
+            expected_keys = expected_keys | {"group_admission"}
         if set(resources.values) != set(expected_keys):
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
         account_risk_policy_bindings, account_risk_policy_required_ports = (
@@ -1507,6 +1522,7 @@ def build_component(
                     values["run_bindings"],
                     borrowed_upstream,
                     service_identity,
+                    group_admission=values.get("group_admission"),
                     instance_id=spec.instance_id,
                 )
             elif (
@@ -1695,6 +1711,16 @@ def build_component(
         }
         if missing_internal:
             raise ServiceComponentError("INTERNAL_PORT_UNAVAILABLE")
+
+        if spec.component == "risk" and spec.options.get("role") == "group_policy":
+            admission = internal_ports.get("service.group_admission")
+            gate_type = getattr(prepared.module, "GroupPolicyService", None)
+            if not isinstance(gate_type, type) or type(admission) is not gate_type:
+                raise ServiceComponentError("GROUP_POLICY_RESOURCE_INVALID")
+            if admission.group_policy_ref != prepared.options.get("group_policy_ref"):
+                raise ServiceComponentError("GROUP_POLICY_REF_MISMATCH")
+            if admission.ready is not True:
+                raise ServiceComponentError("GROUP_POLICY_UNAVAILABLE")
 
         capabilities: list[ServiceCapability] = []
         all_operations: set[str] = set()

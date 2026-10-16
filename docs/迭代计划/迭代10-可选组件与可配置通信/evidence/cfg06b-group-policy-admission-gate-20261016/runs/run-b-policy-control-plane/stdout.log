@@ -1,0 +1,33 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+rootdir: D:\bt_api_py
+configfile: pyproject.toml
+collecting ... collected 18 items
+
+tests/unit/test_service_group_policy_control_plane.py::test_store_pins_the_exact_schema_and_survives_reopen PASSED [  5%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_is_idempotent_and_conflicting_versions_are_rejected PASSED [ 11%]
+tests/unit/test_service_group_policy_control_plane.py::test_store_requires_a_real_path PASSED [ 16%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_refuses_mutable_or_malformed_references[None-INVALID_REFERENCE] PASSED [ 22%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_refuses_mutable_or_malformed_references[-INVALID_REFERENCE] PASSED [ 27%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_refuses_mutable_or_malformed_references[group policy v1-INVALID_REFERENCE] PASSED [ 33%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_refuses_mutable_or_malformed_references[latest-VERSIONED_REFERENCE_REQUIRED] PASSED [ 38%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_refuses_mutable_or_malformed_references[group-policy-VERSIONED_REFERENCE_REQUIRED] PASSED [ 44%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_refuses_mutable_or_malformed_references[group-policy-v0-VERSIONED_REFERENCE_REQUIRED] PASSED [ 50%]
+tests/unit/test_service_group_policy_control_plane.py::test_pin_refuses_bad_versions_and_documents PASSED [ 55%]
+tests/unit/test_service_group_policy_control_plane.py::test_resolve_refuses_unknown_and_mutable_references PASSED [ 61%]
+tests/unit/test_service_group_policy_control_plane.py::test_service_requires_type_checked_store_and_versioned_activation PASSED [ 66%]
+tests/unit/test_service_group_policy_control_plane.py::test_service_ready_tracks_the_exact_activated_version PASSED [ 72%]
+tests/unit/test_service_group_policy_control_plane.py::test_evaluate_returns_immutable_decisions_with_constant_codes PASSED [ 77%]
+tests/unit/test_service_group_policy_control_plane.py::test_evaluate_rejects_version_drift_before_any_scope_decision PASSED [ 83%]
+tests/unit/test_service_group_policy_control_plane.py::test_evaluate_fails_closed_on_unpinned_ref_invalid_context_and_close PASSED [ 88%]
+tests/unit/test_service_group_policy_control_plane.py::test_evaluate_refuses_a_tampered_stored_document PASSED [ 94%]
+tests/unit/test_service_group_policy_control_plane.py::test_evaluate_recovery_after_store_reopen PASSED [100%]
+
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 18 passed, 1 warning in 0.96s ========================

@@ -56,6 +56,7 @@ from bt_api_risk import (
     InstrumentRiskMetadata,
     RiskDeniedError,
 )
+from bt_api_risk.service_component import GroupPolicyError
 
 from .service_components import BorrowedServiceClient
 from .service_execution_group_authority import ExecutionGroupAuthorityGuard
@@ -404,6 +405,7 @@ class GroupCoordinatorService:
         service_identity: WireIdentity,
         *,
         instance_id: str,
+        group_admission: Any = None,
         clock_ns: Callable[[], int] = time.time_ns,
     ) -> None:
         if type(store) is not SqliteOrderGroupStore:
@@ -420,6 +422,11 @@ class GroupCoordinatorService:
             raise ServiceExecutionGroupError("SERVICE_IDENTITY_INVALID")
         if type(instance_id) is not str or _REFERENCE.fullmatch(instance_id) is None:
             raise ServiceExecutionGroupError("COMPONENT_INSTANCE_INVALID")
+        if group_admission is not None:
+            gate_evaluate = getattr(group_admission, "evaluate", None)
+            gate_ref = getattr(group_admission, "group_policy_ref", None)
+            if not callable(gate_evaluate) or type(gate_ref) is not str:
+                raise ServiceExecutionGroupError("GROUP_POLICY_RESOURCE_INVALID")
         if not callable(clock_ns) or not isinstance(targets, Mapping) or not targets:
             raise ServiceExecutionGroupError("GROUP_TARGETS_INVALID")
         target_copy: dict[WireScope, GroupCoordinatorTarget] = {}
@@ -445,6 +452,7 @@ class GroupCoordinatorService:
         self._upstream = borrowed_upstream
         self._identity = service_identity
         self._instance_id = instance_id
+        self._group_admission = group_admission
         self._clock_ns = clock_ns
         self._lock = threading.RLock()
         self._closed = False
@@ -526,6 +534,16 @@ class GroupCoordinatorService:
             run_binding = self._existing_submit_binding(registration, arguments)
             if run_binding is None:
                 request = self._parse_request(registration, target, arguments)
+                if self._group_admission is not None:
+                    try:
+                        admission_decision = self._group_admission.evaluate(
+                            portfolio_ref=request.portfolio_ref,
+                            group_id=request.group_id,
+                        )
+                    except GroupPolicyError as error:
+                        return _failure(error.code)
+                    if admission_decision.admitted is not True:
+                        return _failure(admission_decision.code)
                 # Persist the Registry-derived run before package acceptance.
                 run_binding = self._run_bindings.bind(
                     registration,

@@ -1,0 +1,1 @@
+python -m pytest tests/unit/test_service_components_group_runtime_bundle.py -v -p no:cacheprovider --basetemp=run-d-bundle-frozen/bt

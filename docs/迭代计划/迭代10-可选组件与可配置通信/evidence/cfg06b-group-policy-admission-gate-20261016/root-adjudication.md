@@ -1,0 +1,10 @@
+# 第165轮根裁定：CFG06b group_policy 角色与组协调器准入闸门
+
+- 裁定：GO（增量）；CFG06 仍部分，不新增正式 PASS（当前 28/68）。依据：固定来源 QA r1（54 passed/exit 0、139 pins 前后不变）+ 独立静态复核 GO + 4 SDK/测试文件 pins 与工作区字节等同 + risk 子包按 QA 候选字节先行提交（`c7fc809b`）。
+- 范围：risk `service_component.py` +266/-0（GroupPolicyError/Store/Decision/Service、`group_policy_versions`、evaluate 顺序 closed→context→storage→not-found→version→document→scope→denied）；SDK `service_components.py` +26/4 hunks（role builtin、构建期三校验、coordinator resource 键与 ctor 接线）；`service_execution_group.py` +18（新提交路径 gate、retry 旁路、错误码保真）；新增单测 18+13 节点；全部纯插入。
+- 验收证据：run-a..f 全 EXIT 0（13/18/5/1/11/6 passed）；QA r1 `D:/temp/it10cfg06b-qa-20261016-r1` exit 0、54 passed、junit 54/0/0/0 sha `fcc9dd6a…`、stdout sha256 `38769d74…`、stderr 空、result sha `15ce1500…`、spec sha `a4351a09…`（与 `.codex-tmp/iteration10-cfg06b-qa-spec-r1.json` 字节等同、runner 与 `iteration10-focused-qa.py` 字节等同、source-before==source-after）。
+- 固定 pins：root f308c8d853aff7e6ef67fda449b6e2214eb00219、risk 089b5efd71ebd0398c73e9aab370d674d88b41ba → `c7fc809b5b3fbcf0a19b06f9082cb010a095174e`（仅 `src/bt_api_risk/service_component.py`；admission.py 现场改动属 DIM03，未登记）、base b4aabd1e17b9c7252fa7b4d266932087d99b5517、execution dc8bd7a3682d00cfaef4f15261607043c6d24fca、transport a397fdb460d2deb22e67ceb4963992ef63dbbb0e。QA spec 导入闭包另含外部 ini `f9aada43…` 与三名外部文件现场快照（DIM03 admission.py `fd129688…`、registry #32 两文件），D2 已登记漂移。
+- 独立复核 GO（`.codex-tmp/cfg06b-phase2-review-status.md` sha `018688a14a5c43c1c1c7db922d130b89092b2d70fceff19580fe9dd0b984f42e`）：D1 提交范围（仅 5 文件+证据+risk gitlink）；D2 外部漂移（r1 对运行期字节有效，正式轮重建 spec）；D3 冻结 docstring 过时不改；D4 补充件标注；D5 evidence_level 无宿主声明；D6 本轮记录；D7 证据 sha 引注。正式 CFG06 PASS 不翻转。
+- 条款映射（正式迭代计划.md:743 CFG06 行 / :538 combo-3）：group_policy 真实角色关闭于单元/构建/handler 层；仍缺宿主组合 3 矩阵、公共访问拒绝负面、combo-3 固定来源 QA 轮 → CFG06 不新增 PASS。
+- 提交：risk 子包先行 1 提交（`c7fc809b`）+ 父仓本提交（SDK 2 文件 + 2 新测试 + risk gitlink + 证据 33 件 + 进度/汇总文档）。
+- 证据等级：`FIXED_SOURCE_CFG06B_RISK_GROUP_POLICY_ROLE_AND_GROUP_COORDINATOR_ADMISSION_GATE_UNITS_WITH_CFG06_REGRESSION_UNITS_ONLY`。

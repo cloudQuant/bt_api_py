@@ -1,0 +1,26 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.5, pytest-8.0.0, pluggy-1.5.0 -- C:\anaconda3\python.exe
+rootdir: D:\bt_api_py
+configfile: pyproject.toml
+collecting ... collected 11 items
+
+tests/unit/test_service_execution_group.py::test_missing_budget_policy_rejects_submit_before_run_binding_and_keeps_query_readable PASSED [  9%]
+tests/unit/test_service_execution_group.py::test_wire_cannot_supply_budget_quote_or_policy_resources PASSED [ 18%]
+tests/unit/test_service_execution_group.py::test_budget_denial_and_unsupported_builder_error_are_stable_and_pre_dispatch PASSED [ 27%]
+tests/unit/test_service_execution_group.py::test_exact_expired_group_submit_replay_uses_registry_binding_without_requoting PASSED [ 36%]
+tests/unit/test_service_execution_group.py::test_budget_resources_must_pair_match_portfolio_and_not_conflict PASSED [ 45%]
+tests/unit/test_service_execution_group.py::test_coordinator_uses_trusted_registration_and_never_resubmits_unknown_after_restart PASSED [ 54%]
+tests/unit/test_service_execution_group.py::test_coordinator_rejects_caller_run_authority_and_expired_registration_without_rpc PASSED [ 63%]
+tests/unit/test_service_execution_group.py::test_group_target_fails_closed_when_it_advertises_market_order_terms PASSED [ 72%]
+tests/unit/test_service_execution_group.py::test_query_only_registration_cannot_advance_or_submit_a_group PASSED [ 81%]
+tests/unit/test_service_execution_group.py::test_re_registration_by_a_different_strategy_principal_cannot_take_over_group PASSED [ 90%]
+tests/unit/test_service_execution_group.py::test_normal_group_services_complete_two_filled_legs_from_source_backed_provider_facts PASSED [100%]
+
+============================== warnings summary ===============================
+C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394
+  C:\anaconda3\Lib\site-packages\_pytest\config\__init__.py:1394: PytestConfigWarning: Unknown config option: asyncio_default_fixture_loop_scope
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 11 passed, 1 warning in 4.23s ========================
