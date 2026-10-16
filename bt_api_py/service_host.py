@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import sys
 import threading
+from hashlib import sha256
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -63,7 +64,7 @@ from .service_registry import (
     TrustedPaperOwnerWritePolicy,
     validate_capabilities_and_grants,
 )
-from .service_runtime import RegistrationSummary, ServiceClientRuntime
+from .service_runtime import RegisteredBinding, RegistrationSummary, ServiceClientRuntime
 
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -281,6 +282,9 @@ class ServiceHost:
         self._upstream_registration_summary: RegistrationSummary | None = None
         self._upstream_faulted = False
         self._last_upstream_cleanup: Mapping[str, Any] | None = None
+        self._paper_composition_modes: dict[str, str] = {}
+        self._paper_monitor_relays: list[tuple[str, object, object]] = []
+        self._paper_monitor_faults: dict[str, str] = {}
         self._market_publisher: Any = None
         self._market_transport_module: Any = None
         self._market_startup_cleanup_error_type: type[BaseException] | None = None
@@ -328,6 +332,13 @@ class ServiceHost:
                 "cleanup_history": tuple(self._cleanup_history),
                 "upstream": self._upstream_summary(),
                 "last_upstream_cleanup": self._last_upstream_cleanup,
+                "paper": MappingProxyType(
+                    {
+                        "compositions": MappingProxyType(dict(self._paper_composition_modes)),
+                        "monitor_relays": len(self._paper_monitor_relays),
+                        "monitor_faults": MappingProxyType(dict(self._paper_monitor_faults)),
+                    }
+                ),
                 "market": MappingProxyType(
                     {
                         "endpoint": self._market_endpoint,
@@ -537,6 +548,9 @@ class ServiceHost:
                     raise ServiceHostError("UPSTREAM_START_FAILED") from None
 
             built_by_instance: dict[str, ServiceComponent] = {}
+            paper_owner_resources: list[
+                tuple[PreparedComponent, ServiceComponent, ComponentResources]
+            ] = []
             trusted_paper_owner_write_policies: list[TrustedPaperOwnerWritePolicy] = []
             trusted_paper_legacy_import_policies: list[
                 TrustedPaperLegacyImportPolicy
@@ -615,6 +629,15 @@ class ServiceHost:
                 if (
                     item.spec.component == "execution"
                     and item.spec.options.get("role") == "account_owner"
+                    and (
+                        "paper_owner_domain" in pending_resources.values
+                        or "paper_composition" in item.options
+                    )
+                ):
+                    paper_owner_resources.append((item, component, pending_resources))
+                if (
+                    item.spec.component == "execution"
+                    and item.spec.options.get("role") == "account_owner"
                     and "approved_target_authority" not in pending_resources.values
                 ):
                     owner_reduce_omission_allowed.add(item.spec.instance_id)
@@ -627,6 +650,7 @@ class ServiceHost:
                 self._pending_resources.pop()
                 built_by_instance[component.instance_id] = component
 
+            self._configure_paper_compositions(paper_owner_resources)
             self._validate_group_runtime_bundle_sharing()
             self._validate_shared_collateral_composition()
 
@@ -767,6 +791,9 @@ class ServiceHost:
             self._maintain_components(registrations_only=True)
             if self._component_maintenance_faults:
                 raise ServiceHostError("COMPONENT_MAINTENANCE_FAILED")
+            self._poll_paper_monitor_relays()
+            if self._paper_monitor_faults:
+                raise ServiceHostError("PAPER_MONITOR_RELAY_START_FAILED")
 
             # The same validated inputs are used to create the owner-thread
             # listener. Its constructor owns partial socket/authenticator
@@ -1018,6 +1045,280 @@ class ServiceHost:
         if not isinstance(profile, Mapping):
             raise ServiceHostError("LISTENER_PROFILE_INVALID")
         return profile
+
+    def _configure_paper_compositions(
+        self,
+        owners: list[tuple[PreparedComponent, ServiceComponent, ComponentResources]],
+    ) -> None:
+        """Bind each configured Paper owner to its exact local Risk/Monitor objects."""
+
+        if not owners:
+            return
+        try:
+            from bt_api_execution.contracts import ExecutionScope
+            from bt_api_execution.paper_execution import (
+                PAPER_ENVIRONMENT,
+                PAPER_PROVIDER,
+                PaperMatchingPort,
+                PaperOwnerDomainV1,
+            )
+        except ImportError:
+            raise ServiceHostError("PAPER_EXECUTION_COMPONENT_UNAVAILABLE") from None
+
+        prepared_by_instance = {item.spec.instance_id: item for item in self._prepared}
+        for item, component, resources in owners:
+            selected_mode = item.options.get("paper_composition")
+            mode = "execution_only" if selected_mode is None else selected_mode
+            if mode not in {
+                "execution_only",
+                "execution_risk",
+                "execution_risk_monitor",
+            }:
+                raise ServiceHostError("PAPER_COMPOSITION_INVALID")
+            values = resources.values
+            domain = values.get("paper_owner_domain")
+            if domain is None:
+                if selected_mode is not None:
+                    raise ServiceHostError("PAPER_OWNER_DOMAIN_REQUIRED")
+                continue
+            if (
+                type(domain) is not PaperOwnerDomainV1
+                or component.component != "execution"
+                or item.spec.options.get("role") != "account_owner"
+                or "service.order_entry" not in item.spec.bind_ports
+            ):
+                raise ServiceHostError("PAPER_OWNER_COMPONENT_INVALID")
+            targets = values.get("targets")
+            dispatch = values.get("dispatch")
+            admission = values.get("admission")
+            if (
+                not isinstance(targets, Mapping)
+                or len(targets) != 1
+                or type(dispatch) is not PaperMatchingPort
+                or dispatch.owner_domain is not domain
+                or not isinstance(admission, Mapping)
+            ):
+                raise ServiceHostError("PAPER_OWNER_TARGET_INVALID")
+            wire_scope, execution_scope = next(iter(targets.items()))
+            if (
+                type(wire_scope) is not WireScope
+                or type(execution_scope) is not ExecutionScope
+                or wire_scope.run_id is not None
+                or wire_scope.manual_book_ref is not None
+                or wire_scope.portfolio_ref is not None
+                or wire_scope.group_id is not None
+                or wire_scope.leg_id is not None
+                or wire_scope.account_refs
+                or wire_scope.execution_domain_ref != domain.execution_domain_ref
+                or wire_scope.account_ref != domain.simulation_account_ref
+                or wire_scope.strategy_ref != domain.strategy_ref
+                or execution_scope.provider != PAPER_PROVIDER
+                or execution_scope.environment != PAPER_ENVIRONMENT
+                or execution_scope.account_ref != domain.simulation_account_ref
+                or execution_scope.strategy_id != domain.strategy_ref
+            ):
+                raise ServiceHostError("PAPER_OWNER_TARGET_INVALID")
+            self._paper_composition_modes[component.instance_id] = mode
+            if mode == "execution_only":
+                continue
+
+            try:
+                from bt_api_execution.paper_risk import PaperRiskAdmissionAdapter
+                from bt_api_risk import (
+                    AccountScope,
+                    DurableRiskAdmissionAdapter,
+                    DurableRiskGate,
+                )
+                from bt_api_py.service_risk_order_entry import RiskOrderTarget
+            except ImportError:
+                raise ServiceHostError("PAPER_RISK_COMPOSITION_UNAVAILABLE") from None
+
+            paper_risk = admission.get("order_gate")
+            if type(paper_risk) is not PaperRiskAdmissionAdapter:
+                raise ServiceHostError("PAPER_RISK_ADMISSION_REQUIRED")
+            risk_gate = paper_risk.risk_gate
+            if type(risk_gate) is not DurableRiskGate:
+                raise ServiceHostError("PAPER_RISK_BINDING_UNAVAILABLE")
+
+            matching_risk_owners = [
+                candidate
+                for candidate in self._components
+                if candidate.component == "risk"
+                and candidate.risk_owner_gate is risk_gate
+                and any(
+                    capability.port == "service.order_entry"
+                    and "orders.submit" in capability.write_operations
+                    for capability in candidate.capabilities
+                )
+            ]
+            if len(matching_risk_owners) != 1:
+                raise ServiceHostError("PAPER_RISK_COMPONENT_UNAVAILABLE")
+            risk_owner = matching_risk_owners[0]
+            risk_prepared = prepared_by_instance.get(risk_owner.instance_id)
+            if (
+                risk_prepared is None
+                or risk_prepared.spec.component != "risk"
+                or risk_prepared.options.get("role") != "account_owner"
+            ):
+                raise ServiceHostError("PAPER_RISK_COMPONENT_UNAVAILABLE")
+            risk_targets = risk_owner.risk_owner_targets
+            risk_admissions = risk_owner.risk_owner_admission
+            if (
+                set(risk_targets) != {wire_scope}
+                or set(risk_admissions) != {wire_scope}
+            ):
+                raise ServiceHostError("PAPER_RISK_SCOPE_MISMATCH")
+            risk_target = risk_targets[wire_scope]
+            risk_admission = risk_admissions[wire_scope]
+            if (
+                type(risk_target) is not RiskOrderTarget
+                or type(risk_target.account_scope) is not AccountScope
+                or risk_target.account_scope
+                != AccountScope(PAPER_PROVIDER, domain.simulation_account_ref, PAPER_ENVIRONMENT)
+                or risk_target.strategy_id != domain.strategy_ref
+                or risk_target.provider_account_id != domain.simulation_account_ref
+                or type(risk_admission) is not DurableRiskAdmissionAdapter
+                or risk_admission.is_bound_to(risk_gate) is not True
+                or paper_risk.is_bound_to_composition(
+                    risk_gate,
+                    domain,
+                    dispatch,
+                    store=values.get("store"),
+                    execution_scope=execution_scope,
+                    instrument_registry=risk_target.registry,
+                )
+                is not True
+            ):
+                raise ServiceHostError("PAPER_RISK_COMPOSITION_MISMATCH")
+            if mode == "execution_risk_monitor":
+                self._configure_paper_monitor_relay(
+                    instance_id=component.instance_id,
+                    store=values.get("store"),
+                    domain=domain,
+                    execution_scope=execution_scope,
+                )
+
+    def _configure_paper_monitor_relay(
+        self,
+        *,
+        instance_id: str,
+        store: object,
+        domain: object,
+        execution_scope: object,
+    ) -> None:
+        """Create one owner-thread relay to the sole exact Monitor append binding."""
+
+        upstream = self._upstream
+        if upstream is None or upstream.healthy is not True:
+            raise ServiceHostError("PAPER_MONITOR_INGRESS_UNAVAILABLE")
+        try:
+            from bt_api_execution.contracts import ExecutionScope
+            from bt_api_execution.journal_reader import ExecutionJournalReader
+            from bt_api_execution.store import SqliteExecutionStore
+            from .service_execution_monitor import (
+                ServiceExecutionMonitorRelay,
+                ServiceExecutionMonitorRelayError,
+            )
+        except ImportError:
+            raise ServiceHostError("PAPER_MONITOR_RELAY_UNAVAILABLE") from None
+        if (
+            type(store) is not SqliteExecutionStore
+            or type(execution_scope) is not ExecutionScope
+            or type(getattr(domain, "simulation_account_ref", None)) is not str
+        ):
+            raise ServiceHostError("PAPER_MONITOR_SOURCE_INVALID")
+
+        candidates = tuple(
+            binding
+            for binding in upstream.bindings
+            if type(binding) is RegisteredBinding
+            and binding.active is True
+            and binding.mount == "upstream.telemetry"
+            and type(binding.operations) is frozenset
+            and "events.append" in binding.operations
+        )
+        if len(candidates) != 1:
+            raise ServiceHostError("PAPER_MONITOR_INGRESS_UNAVAILABLE")
+        binding = candidates[0]
+        expected_scope = WireScope(
+            execution_domain_ref=domain.execution_domain_ref,
+            account_ref=domain.simulation_account_ref,
+            strategy_ref=domain.strategy_ref,
+        )
+        if (
+            binding.operations != frozenset({"events.append"})
+            or binding.scope != expected_scope
+            or type(binding.scope_ref) is not str
+            or not binding.scope_ref
+        ):
+            raise ServiceHostError("PAPER_MONITOR_INGRESS_SCOPE_MISMATCH")
+        store_path = getattr(store, "path", None)
+        if type(store_path) is not str or not store_path:
+            raise ServiceHostError("PAPER_MONITOR_SOURCE_INVALID")
+        if store_path == ":memory:":
+            raise ServiceHostError("PAPER_MONITOR_SOURCE_NOT_PERSISTENT")
+        try:
+            source_path = Path(store_path).expanduser().resolve(strict=True)
+        except Exception:
+            raise ServiceHostError("PAPER_MONITOR_SOURCE_UNAVAILABLE") from None
+        digest = sha256(
+            "\0".join(
+                (
+                    str(source_path),
+                    domain.fingerprint,
+                    execution_scope.key,
+                    binding.scope_ref,
+                )
+            ).encode("utf-8")
+        ).hexdigest()[:32]
+        checkpoint_path = source_path.with_name(f".paper-monitor-{digest}.sqlite3")
+        reader = None
+        try:
+            reader = ExecutionJournalReader(source_path, scope=execution_scope)
+            relay = ServiceExecutionMonitorRelay(
+                upstream,
+                reader,
+                scope_ref=binding.scope_ref,
+                checkpoint_path=checkpoint_path,
+            )
+        except ServiceExecutionMonitorRelayError:
+            if reader is not None:
+                with suppress(Exception):
+                    reader.close()
+            raise ServiceHostError("PAPER_MONITOR_RELAY_START_FAILED") from None
+        except Exception:
+            if reader is not None:
+                with suppress(Exception):
+                    reader.close()
+            raise ServiceHostError("PAPER_MONITOR_RELAY_START_FAILED") from None
+        self._paper_monitor_relays.append((instance_id, reader, relay))
+
+    def _poll_paper_monitor_relays(self) -> None:
+        self._check_owner_thread()
+        if not self._paper_monitor_relays:
+            self._paper_monitor_faults.clear()
+            return
+        try:
+            from .service_execution_monitor import ServiceExecutionMonitorRelayError
+        except ImportError:
+            for instance_id, _reader, _relay in self._paper_monitor_relays:
+                self._paper_monitor_faults[instance_id] = "PAPER_MONITOR_RELAY_UNAVAILABLE"
+            return
+        for instance_id, _reader, relay in self._paper_monitor_relays:
+            try:
+                relay.poll(limit=32)  # type: ignore[attr-defined]
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                if (
+                    type(exc) is ServiceExecutionMonitorRelayError
+                    and type(code) is str
+                    and _SAFE_REF.fullmatch(code) is not None
+                ):
+                    self._paper_monitor_faults[instance_id] = f"PAPER_MONITOR_{code}"
+                else:
+                    self._paper_monitor_faults[instance_id] = "PAPER_MONITOR_RELAY_FAILED"
+            else:
+                self._paper_monitor_faults.pop(instance_id, None)
 
     def _validate_group_runtime_bundle_sharing(self) -> None:
         """Require Risk/Execution group roles for one account to share a bundle."""
@@ -1704,6 +2005,8 @@ class ServiceHost:
     def _all_components_ready(self) -> bool:
         if self._component_maintenance_faults:
             return False
+        if self._paper_monitor_faults:
+            return False
         if self._upstream is not None:
             try:
                 if self._upstream_faulted or self._upstream.healthy is not True:
@@ -1848,6 +2151,19 @@ class ServiceHost:
             with suppress(ServiceHostError):
                 self._refresh_registry_readiness()
             raise ServiceHostError("UPSTREAM_RECOVERY_FAILED") from None
+        relay_rebind_failed = False
+        for instance_id, _reader, relay in self._paper_monitor_relays:
+            try:
+                relay.rebind()  # type: ignore[attr-defined]
+            except Exception:
+                self._paper_monitor_faults[instance_id] = "PAPER_MONITOR_REBIND_FAILED"
+                relay_rebind_failed = True
+            else:
+                self._paper_monitor_faults.pop(instance_id, None)
+        if relay_rebind_failed:
+            with suppress(ServiceHostError):
+                self._refresh_registry_readiness()
+            raise ServiceHostError("PAPER_MONITOR_REBIND_FAILED")
         self._refresh_registry_readiness()
         return summary
 
@@ -2078,6 +2394,8 @@ class ServiceHost:
             ):
                 active_market_registrations = len(active_ids)
         self._market_active_registration_count = active_market_registrations
+        if not registrations_only:
+            self._poll_paper_monitor_relays()
 
     def _dispatch_request(self, authenticated_principal: str, request: Any) -> Mapping[str, Any]:
         """Recheck component readiness at the exact listener dispatch point."""
@@ -2133,6 +2451,27 @@ class ServiceHost:
             # Do not tear down resources while the listener may still dispatch.
             return tuple(failures)
 
+        paper_monitor_failed = False
+        if self._paper_monitor_relays:
+            retained_relays: list[tuple[str, object, object]] = []
+            for instance_id, reader, relay in reversed(self._paper_monitor_relays):
+                try:
+                    reader.close()  # type: ignore[attr-defined]
+                except BaseException:
+                    failures.append(f"paper_monitor_reader_close:{instance_id}")
+                    retained_relays.append((instance_id, reader, relay))
+                    paper_monitor_failed = True
+                    continue
+                try:
+                    relay.close()  # type: ignore[attr-defined]
+                except BaseException:
+                    failures.append(f"paper_monitor_relay_close:{instance_id}")
+                    retained_relays.append((instance_id, reader, relay))
+                    paper_monitor_failed = True
+            self._paper_monitor_relays = list(reversed(retained_relays))
+            if not self._paper_monitor_relays:
+                self._paper_monitor_faults.clear()
+
         market_publisher = self._market_publisher
         market_publisher_failed = False
         if market_publisher is not None:
@@ -2147,7 +2486,7 @@ class ServiceHost:
 
         # A resource returned by the most recent provider call may not yet
         # have become a ServiceComponent because adapter construction failed.
-        if not market_publisher_failed:
+        if not market_publisher_failed and not paper_monitor_failed:
             for index in range(len(self._pending_resources) - 1, -1, -1):
                 component_name, instance_id, resource = self._pending_resources[index]
                 try:
@@ -2169,7 +2508,11 @@ class ServiceHost:
                     del self._components[index]
 
         component_resources_remain = bool(
-            market_publisher_failed or self._pending_resources or self._components
+            market_publisher_failed
+            or paper_monitor_failed
+            or self._paper_monitor_relays
+            or self._pending_resources
+            or self._components
         )
         if not component_resources_remain:
             self._group_runtime_resources.clear()

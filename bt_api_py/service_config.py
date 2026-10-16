@@ -505,7 +505,10 @@ def parse_service_config(raw: object) -> ServiceConfig:
 
     _validate_component_references(components, instance_roles)
     for port, owners in bound_ports.items():
-        if len(owners) > 1 and not _shared_provider_session_binding(port, owners):
+        if len(owners) > 1 and not (
+            _shared_provider_session_binding(port, owners)
+            or _shared_paper_risk_order_entry(port, owners)
+        ):
             component_name = owners[1][0]
             _fail("PORT_CONFLICT", f"$.components.{component_name}.settings.bind_ports")
 
@@ -976,7 +979,12 @@ def _validate_component_options(
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}
         if role == "account_owner":
-            fields = {"role", "provider_session_ref", "approved_target_required"}
+            fields = {
+                "role",
+                "provider_session_ref",
+                "approved_target_required",
+                "paper_composition",
+            }
             _check_keys(raw, fields, options_path)
             result = {"role": role}
             if "provider_session_ref" in raw:
@@ -988,6 +996,15 @@ def _validate_component_options(
                 if type(approved_target_required) is not bool:
                     _fail("INVALID_VALUE", f"{options_path}.approved_target_required")
                 result["approved_target_required"] = approved_target_required
+            if "paper_composition" in raw:
+                paper_composition = raw["paper_composition"]
+                if type(paper_composition) is not str or paper_composition not in {
+                    "execution_only",
+                    "execution_risk",
+                    "execution_risk_monitor",
+                }:
+                    _fail("INVALID_VALUE", f"{options_path}.paper_composition")
+                result["paper_composition"] = paper_composition
             return result
         if role == "group_account_owner":
             _check_keys(raw, {"role"}, options_path)
@@ -1105,6 +1122,31 @@ def _shared_provider_session_binding(
         and risk_options.get("role") == "account_owner"
         and risk_options.get("provider_session_ref")
         == gateway[1]["settings"].get("instance_id")
+    )
+
+
+
+def _shared_paper_risk_order_entry(
+    port: str,
+    owners: list[tuple[str, Mapping[str, Any]]],
+) -> bool:
+    """Allow one exact Paper Execution/Risk owner pair to share the RPC port."""
+
+    if port != "service.order_entry" or len(owners) != 2:
+        return False
+    execution = next((row for row in owners if row[0] == "execution"), None)
+    risk = next((row for row in owners if row[0] == "risk"), None)
+    if execution is None or risk is None:
+        return False
+    execution_options = execution[1]["settings"].get("options", {})
+    risk_options = risk[1]["settings"].get("options", {})
+    return (
+        execution_options.get("role") == "account_owner"
+        and execution_options.get("paper_composition")
+        in {"execution_risk", "execution_risk_monitor"}
+        and risk_options.get("role") == "account_owner"
+        and type(risk_options.get("account_policy_ref")) is str
+        and bool(risk_options.get("account_policy_ref"))
     )
 
 
