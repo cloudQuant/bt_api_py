@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-10-16T00:36:19.616380+00:00",
+  "task_state": "PAUSED_BY_USER",
+  "purpose": "Read-only pre-handoff code baseline; metadata only, not QA or acceptance",
+  "formal_pass_count": 25,
+  "formal_total": 68,
+  "scope": "Local acceptance first; DIST01/DIST02 and ARB05 true-two-machine subscenarios deferred, not passed",
+  "repositories": {
+    "sdk": {
+      "path": "D:/bt_api_py",
+      "branch": "dev",
+      "head": "cf441efcfc00529c0ab350c434884c39a20c1dba",
+      "staged_paths": [],
+      "tracked_status_porcelain": [
+        " M bt_api/bt_api_execution",
+        " M bt_api_py/service_components.py",
+        " M bt_api_py/service_execution_group.py",
+        " M bt_api_py/service_group_reservations.py",
+        " M bt_api_py/service_host.py",
+        " M bt_api_py/service_registry.py",
+        " M bt_api_py/service_risk_order_entry.py",
+        " M tests/integration/test_arb02_group_budget_service.py",
+        " M tests/unit/test_service_execution_group.py",
+        " M tests/unit/test_service_group_reservations.py",
+        " M tests/unit/test_service_order_entry_components.py",
+        " M tests/unit/test_service_risk_only_order_integration.py"
+      ]
+    },
+    "risk": {
+      "path": "D:/bt_api_py/bt_api/bt_api_risk",
+      "branch": "dev",
+      "head": "756ffbd42caac1618f286239dedecce278d781d2",
+      "staged_paths": [],
+      "tracked_status_porcelain": []
+    },
+    "execution": {
+      "path": "D:/bt_api_py/bt_api/bt_api_execution",
+      "branch": "dev",
+      "head": "12372d82bb5c871e8a46c39c3daed9f85edccb0c",
+      "staged_paths": [],
+      "tracked_status_porcelain": [
+        " M src/bt_api_execution/group_coordinator.py",
+        " M tests/test_group_coordinator.py"
+      ]
+    },
+    "base": {
+      "path": "D:/bt_api_py/bt_api/bt_api_base",
+      "branch": "dev",
+      "head": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+      "staged_paths": [],
+      "tracked_status_porcelain": []
+    },
+    "gateway": {
+      "path": "D:/bt_api_py/bt_api/bt_api_gateway",
+      "branch": "dev",
+      "head": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "staged_paths": [],
+      "tracked_status_porcelain": []
+    },
+    "monitor": {
+      "path": "D:/bt_api_py/bt_api/bt_api_monitor",
+      "branch": "dev",
+      "head": "536a4f04747182749fabdac5e28624f80465bc53",
+      "staged_paths": [],
+      "tracked_status_porcelain": []
+    },
+    "transport": {
+      "path": "D:/bt_api_py/bt_api/bt_api_transport_zmq",
+      "branch": "dev",
+      "head": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "staged_paths": [],
+      "tracked_status_porcelain": []
+    },
+    "afi": {
+      "path": "D:/source_code/ai-for-investor",
+      "branch": "dev",
+      "head": "a421354b38740f26531645accd8e13338fadbf4d",
+      "staged_paths": [],
+      "tracked_status_porcelain": [
+        " M README.md",
+        " M scripts/README.md",
+        " M scripts/ops/app.bat",
+        " M scripts/windows/restart_app.bat",
+        " M scripts/windows/start_app.bat",
+        " M scripts/windows/stop_app.bat",
+        " M src/backend/app/api/router.py",
+        " M src/backend/app/api/service_read.py",
+        " M src/backend/app/models/__init__.py",
+        " M src/backend/app/models/permission.py",
+        " M src/backend/app/services/service_read/access.py",
+        " M src/backend/app/services/service_read/client.py",
+        " M src/backend/app/services/service_read/deployment.py",
+        " M src/backend/app/services/service_read/session.py",
+        " M src/backend/app/services/service_read/worker.py",
+        " M src/backend/tests/test_service_read_authorized_http_integration.py"
+      ]
+    },
+    "backtrader": {
+      "path": "D:/source_code/backtrader",
+      "branch": "dev",
+      "head": "48bde5d76bd666ce876763a613f27b92e9c62074",
+      "staged_paths": [],
+      "tracked_status_porcelain": [
+        " D 0",
+        " M backtrader/brokers/btapibroker.py",
+        " M backtrader/stores/service_execution_adapter.py",
+        " M backtrader/stores/service_execution_recovery.py",
+        " M backtrader/stores/service_execution_session.py",
+        " M backtrader/stores/service_strategy_account_book.py",
+        " M backtrader/strategy.py",
+        " M backtrader/trade.py",
+        " M backtrader_runtime/ctp_configured_front_check.py",
+        " M backtrader_runtime/ctp_simnow_operator.py",
+        " M tests/unit/runtime/test_ctp_simnow_config_operator_route.py"
+      ]
+    }
+  },
+  "public_working_file_groups": {
+    "afi_approved_target": [
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/api/router.py",
+        "size_bytes": 8406,
+        "sha256": "db9765b88cfc3b93db234f4926ca97e4fff9a302d9cddc6b1786fd492cb6dde9"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/api/service_read.py",
+        "size_bytes": 11450,
+        "sha256": "cf058c363f8ff739163a50743bdce1893ae27a8f947bf8a00c032cedd67372b1"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/api/approved_orders.py",
+        "size_bytes": 24755,
+        "sha256": "f970a31f012cc3c03018b87b072d33f2044455ce76c684f28b470f45a62e4b87"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/models/__init__.py",
+        "size_bytes": 9759,
+        "sha256": "aa43862d07a70be6395d51f89d02adc590d158d45ae7e758fc1a6ce764a4e230"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/models/permission.py",
+        "size_bytes": 4100,
+        "sha256": "ed340e5546aa9c5576277141fcdfadf840875b832a50a895abe34a6e03d04b5e"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/models/approved_target_http_operation.py",
+        "size_bytes": 2746,
+        "sha256": "cdd0e39e5e4bafb0e005eb055d0127272e73c6c15d6713005281dc651e36859f"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/services/approved_target_http_operations.py",
+        "size_bytes": 9542,
+        "sha256": "ab0fc77bc53707671fd416b1c13e4c57514e6a32d462f01dfc3251e381da6b20"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/services/service_read/access.py",
+        "size_bytes": 13891,
+        "sha256": "6acbb3facd92897e6fdc75602654147eb936c9cdd52adff6316a20552380acea"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/services/service_read/client.py",
+        "size_bytes": 31157,
+        "sha256": "98c16cf20dfba51b7bef09ebd0f3083a6c552a94005e7e4cbaef64b9d6110528"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/services/service_read/deployment.py",
+        "size_bytes": 41204,
+        "sha256": "940e786d3ea3e3d99dfecc0927c0ddd5e9952dace9594d91dec453f92f06ad98"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/services/service_read/session.py",
+        "size_bytes": 24992,
+        "sha256": "a33abc75ef47b5cbfb2a4e1b9d4fb592d2fcb6747be5609e8704458992f5b838"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/services/service_read/worker.py",
+        "size_bytes": 19578,
+        "sha256": "cc95e1aafd9e98a3e556865f03bc7c86f63d5fdbddb5220bd9ff1575c425bf89"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/app/services/service_read/approved_target_authority.py",
+        "size_bytes": 14206,
+        "sha256": "095952364ea8358804776b1cdcf76fe4745675995b400f8559bfab2a7d9768f4"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/alembic/versions/20261016_approved_target_http_operations.py",
+        "size_bytes": 3244,
+        "sha256": "f34c4bd8d63c60f8a6eb44b5e90671bfae4cd9e34ae6906f2c9daeb0168824a6"
+      },
+      {
+        "path": "D:/source_code/ai-for-investor/src/backend/tests/test_service_read_authorized_http_integration.py",
+        "size_bytes": 268087,
+        "sha256": "f7ca663a138828ff6c3830cbfeefd041f1f8b4b4056fa2c2c1ffa7091a905db3"
+      }
+    ],
+    "risk_ttl": [
+      {
+        "path": "D:/bt_api_py/bt_api_py/service_risk_order_entry.py",
+        "size_bytes": 154077,
+        "sha256": "91b9528ec249a04d45d69ede889f03292c8844f8e4bccbae8c1384a8c598f002"
+      },
+      {
+        "path": "D:/bt_api_py/bt_api_py/service_risk_order_journal.py",
+        "size_bytes": 231705,
+        "sha256": "7edc42810134221b753f76530054595d0ae94d76e6baa76f0cd1fe72fad8a46c"
+      },
+      {
+        "path": "D:/bt_api_py/tests/unit/test_service_risk_order_ttl_restart_integration.py",
+        "size_bytes": 32996,
+        "sha256": "8c9b9e74376ab2854172b27d180289c6e8163b97a1ca0a16dcba95657b291f75"
+      }
+    ],
+    "arb02": [
+      {
+        "path": "D:/bt_api_py/bt_api/bt_api_execution/src/bt_api_execution/group_coordinator.py",
+        "size_bytes": 66514,
+        "sha256": "61b8508d3cdde0b51877229b6065517e62132afe1c55d8fe5e31befaadb2e2ad"
+      },
+      {
+        "path": "D:/bt_api_py/bt_api/bt_api_execution/tests/test_group_coordinator.py",
+        "size_bytes": 34776,
+        "sha256": "fd7df6bccabd51f16cd50bff3c4f974c6ff9f67ebd173a36d9e2c8d70b047c89"
+      },
+      {
+        "path": "D:/bt_api_py/bt_api_py/service_group_reservations.py",
+        "size_bytes": 35992,
+        "sha256": "675a54b731fdcbbca61078377f42f9e7bde8205f09a4aa3540e9f379e1487169"
+      },
+      {
+        "path": "D:/bt_api_py/tests/unit/test_service_group_reservations.py",
+        "size_bytes": 28757,
+        "sha256": "ebbdad3854f3f3dd90587d1185da949039a621ecd49fd2f101731d1328bb7861"
+      },
+      {
+        "path": "D:/bt_api_py/bt_api_py/service_execution_group.py",
+        "size_bytes": 86687,
+        "sha256": "5606785cd59711c03b57dab1de34f9dd6ed542d1a4034819fec5d1883c75702d"
+      },
+      {
+        "path": "D:/bt_api_py/tests/unit/test_service_execution_group.py",
+        "size_bytes": 71242,
+        "sha256": "24010a4937bf262a54556c1e0679932c589828d1fc4ee618b37c76878d44a3c3"
+      },
+      {
+        "path": "D:/bt_api_py/tests/integration/test_arb02_group_budget_service.py",
+        "size_bytes": 102427,
+        "sha256": "b6e57e846954bc7996f9de68614d3a71f947b1ae06825b865b77d38fe331b36f"
+      }
+    ],
+    "backtrader_v2": [
+      {
+        "path": "D:/source_code/backtrader/backtrader/stores/service_execution_adapter.py",
+        "size_bytes": 70612,
+        "sha256": "b3c415a1f70671162a171902e83d95c391d2b8bd559efcd312c07b5fcb79098e"
+      },
+      {
+        "path": "D:/source_code/backtrader/backtrader/stores/service_execution_recovery.py",
+        "size_bytes": 171714,
+        "sha256": "193e6dc0f7fcf64f01e87963448678612adb1396d27c2ec100766c53d4702856"
+      },
+      {
+        "path": "D:/source_code/backtrader/backtrader/stores/service_execution_session.py",
+        "size_bytes": 49981,
+        "sha256": "cd78e89af63b3f86afee3334e1c46990cd23af3c752908d4b9d71655314ee922"
+      },
+      {
+        "path": "D:/source_code/backtrader/tests/unit/stores/test_service_execution_recovery_v2.py",
+        "size_bytes": 22401,
+        "sha256": "8659b5a6ff98dc92fa380dab4141810def92589dbe830f1d4138ac2ac79229f1"
+      },
+      {
+        "path": "D:/source_code/backtrader/backtrader/brokers/btapibroker.py",
+        "size_bytes": 461833,
+        "sha256": "364d5ce6f36fe3017c2ee523a7b7b83562a595f280f43601e0a496c76e344a95"
+      },
+      {
+        "path": "D:/source_code/backtrader/backtrader/strategy.py",
+        "size_bytes": 193154,
+        "sha256": "dc1b519d7301988b85806a4b1f50c605d10a483f4d011a08509416a2ab7f0db5"
+      },
+      {
+        "path": "D:/source_code/backtrader/backtrader/trade.py",
+        "size_bytes": 19121,
+        "sha256": "38dec048b2e9884acbfe196173c009b1c8340a9870be24ed9c4d9c050d45a9b4"
+      }
+    ],
+    "dim01": [
+      {
+        "path": "D:/bt_api_py/tests/integration/test_dim01_identity_isolation_service.py",
+        "size_bytes": 63211,
+        "sha256": "d7ac329579184db952607a0abb6e420608c172ae2f0dfa65ebb2d8e6f849750d"
+      }
+    ]
+  },
+  "public_artifact_pins": [
+    {
+      "path": "D:/bt_api_py/.codex-tmp/iteration10-approved-target-http-qa-root-r6.json",
+      "size_bytes": 394092,
+      "sha256": "c0a197ef44411b4426181b5ca4ed3cd1de844003fa94ca80f673b18f89f8e4bf"
+    },
+    {
+      "path": "D:/bt_api_py/.codex-tmp/iteration10-focused-qa.py",
+      "size_bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    {
+      "path": "D:/temp/it10riskttl-candidate-r2-manifest.json",
+      "size_bytes": 396861,
+      "sha256": "736ef69cffd609b696212d1ea3a667b2dd7c69e1916cc6d7d958e29429dd0bbf"
+    }
+  ],
+  "afi_r6_output_exists": false,
+  "limitations": [
+    "Not a complete workspace backup; unrelated dirty/untracked files must be preserved.",
+    "Hashes identify current working files; several are incomplete and unreviewed.",
+    "No tests, service Hosts, provider calls or process cleanup executed during this handoff.",
+    "Historical retained-host restrictions in AGENTS.md remain applicable."
+  ]
+}
