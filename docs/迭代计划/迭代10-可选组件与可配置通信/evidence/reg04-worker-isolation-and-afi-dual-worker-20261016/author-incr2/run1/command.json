@@ -1,0 +1,39 @@
+{
+  "argv": [
+    "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "--noconftest",
+    "--import-mode=importlib",
+    "-p",
+    "no:cacheprovider",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-approved-target-http-pytest-r3.ini",
+    "--rootdir",
+    "D:\\source_code\\ai-for-investor\\src\\backend",
+    "-q",
+    "--tb=short",
+    "--junitxml=D:\\temp\\it10reg04-incr2-20261016-r1\\run1\\junit.xml",
+    "--basetemp=D:\\temp\\it10reg04-incr2-20261016-r1\\run1\\pytest-tmp",
+    "tests/test_service_read_reg04_workers.py::test_reg04_dual_worker_processes_and_strategy_run_share_one_owner",
+    "tests/test_service_read_reg04_workers.py::test_reg04_worker_registration_under_live_strategy_claim_keeps_single_active_run"
+  ],
+  "cwd": "D:\\source_code\\ai-for-investor\\src\\backend",
+  "environment": {
+    "PYTHONPATH": "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\root;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\execution\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\base\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\transport\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\monitor\\src;D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\gateway\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTEST_ADDOPTS",
+    "AFI_DUAL_LIVE_PREFLIGHT_ONLY",
+    "PYTEST_PLUGINS",
+    "PYTEST_CURRENT_TEST",
+    "PYTHONHOME",
+    "PYTHONUSERBASE",
+    "PYTHONSTARTUP",
+    "PYTHONINSPECT"
+  ],
+  "started_utc": "2026-10-16T04:43:53.046237+00:00"
+}

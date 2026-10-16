@@ -1,0 +1,47 @@
+REG04 INCR-1 evidence window: D:\temp\it10reg04-20261016-r1
+Interpreter: C:/anaconda3/python.exe (Python 3.11.5), pytest 8.0.0
+Serialization: `ps -W | grep -i python | grep -v grep` before each run; only two
+stale Oct-13 venv/python312 background processes (pids 128016, 132224) were seen;
+no other agent test runners were active, so no bounded-sleep waits were needed.
+
+NOTE: `-p no:asyncio` is required in this environment. pytest_asyncio 0.23.0
+crashes collection under pytest 8.0.0 with "'Package' object has no attribute
+'obj'" for ANY repo test file (reproduced on tests/unit/test_service_registry.py),
+i.e. it is an environmental plugin incompatibility, not a property of the new
+file. The new file uses no asyncio fixtures.
+
+Exact commands (run from D:\bt_api_py), with result:
+  C:/anaconda3/python.exe -m pytest tests/unit/test_service_reg04_worker_isolation.py -p no:asyncio --collect-only -q
+    -> exit 0; 4 tests collected
+       (stdout: run-collect-final.out, stderr: run-collect-final.err)
+  C:/anaconda3/python.exe -m pytest tests/unit/test_service_reg04_worker_isolation.py -p no:asyncio -v
+    -> run 2: exit 0; 4 passed, 1 warning in 4.74s
+       (stdout: run2.out, stderr: run2.err, exit: run2.exit)
+  C:/anaconda3/python.exe -m pytest tests/unit/test_service_reg04_worker_isolation.py -p no:asyncio -v
+    -> run 3: exit 0; 4 passed, 1 warning in 4.74s
+       (stdout: run3.out, stderr: run3.err, exit: run3.exit)
+  C:/anaconda3/python.exe -m pytest tests/unit/test_service_reg04_worker_isolation.py -p no:asyncio -v
+    -> run 4 (confirmation after concurrent agents changed production files;
+       production-module hashes at run time: production-modules.sha256):
+       exit 0; 4 passed, 1 warning in 4.92s
+       (stdout: run4.out, stderr: run4.err, exit: run4.exit)
+
+Serialization waits before run 4 (other agents' python runners were active):
+  ps checks at 12:42:24, 12:42:26, 12:42:38-12:42:59 showed new short-lived
+  anaconda/Python312/venv processes; bounded waits of 30 s, 60 s, then a
+  120 s-loop (15 s polls) were used; environment showed only the two stale
+  Oct-13 processes at 12:46:14 and run 4 was started then. Per-wait bound
+  <= 120 s respected. Post-run check confirmed no leftover children.
+NOTE: a concurrent agent modified bt_api_py/service_execution_group*.py and
+  service_group_reservations.py at 12:41:51-12:41:55, i.e. right after run 3;
+  run 4 re-validated the suite under that newer production state (exit 0).
+
+Historical (pre-fix, kept for audit; test-side bug, fixed):
+  run1.out/run1.err, run-collect.out/run-collect.err -> 1 failed, 3 passed.
+
+Final test file hash (also in test-file.sha256):
+  7c749a6810295b8f7431d6e01bf39663e3477b248c32455f588e338685910861
+  tests/unit/test_service_reg04_worker_isolation.py
+
+Post-run `ps -W` check confirmed no leftover child processes from the suite
+(only the same two stale Oct-13 processes).

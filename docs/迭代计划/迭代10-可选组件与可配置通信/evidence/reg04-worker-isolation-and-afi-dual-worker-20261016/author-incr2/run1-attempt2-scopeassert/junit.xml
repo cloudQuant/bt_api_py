@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="58.137" timestamp="2026-10-16T12:39:57.589495+08:00" hostname="yun"><testcase classname="tests.test_service_read_reg04_workers" name="test_reg04_dual_worker_processes_and_strategy_run_share_one_owner" time="37.784"><failure message="AssertionError: assert 'afi-approved-target-a-v1' == 'afi-approved...et-scope-a-v1'&#10;  &#10;  - afi-approved-target-scope-a-v1&#10;  ?                     ------&#10;  + afi-approved-target-a-v1&#10;reg04 dual-worker phase: registry_before_strategy">tests\test_service_read_reg04_workers.py:997: in test_reg04_dual_worker_processes_and_strategy_run_share_one_owner
+    _run_reg04_dual_worker_one_owner(tmp_path)
+tests\test_service_read_reg04_workers.py:920: in _run_reg04_dual_worker_one_owner
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_reg04_workers.py:696: in _run_reg04_dual_worker_one_owner
+    _reg04_assert_application_sessions(
+tests\test_service_read_reg04_workers.py:524: in _reg04_assert_application_sessions
+    assert session["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
+E   AssertionError: assert 'afi-approved-target-a-v1' == 'afi-approved...et-scope-a-v1'
+E     
+E     - afi-approved-target-scope-a-v1
+E     ?                     ------
+E     + afi-approved-target-a-v1
+E   reg04 dual-worker phase: registry_before_strategy</failure></testcase><testcase classname="tests.test_service_read_reg04_workers" name="test_reg04_worker_registration_under_live_strategy_claim_keeps_single_active_run" time="18.069"><failure message="AssertionError: assert 'afi-approved-target-a-v1' == 'afi-approved...et-scope-a-v1'&#10;  &#10;  - afi-approved-target-scope-a-v1&#10;  ?                     ------&#10;  + afi-approved-target-a-v1&#10;reg04 late-worker phase: registry_workers_under_claim">tests\test_service_read_reg04_workers.py:1294: in test_reg04_worker_registration_under_live_strategy_claim_keeps_single_active_run
+    _run_reg04_late_worker_under_claim(tmp_path, monkeypatch)
+tests\test_service_read_reg04_workers.py:1261: in _run_reg04_late_worker_under_claim
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_reg04_workers.py:1078: in _run_reg04_late_worker_under_claim
+    _reg04_assert_application_sessions(
+tests\test_service_read_reg04_workers.py:524: in _reg04_assert_application_sessions
+    assert session["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
+E   AssertionError: assert 'afi-approved-target-a-v1' == 'afi-approved...et-scope-a-v1'
+E     
+E     - afi-approved-target-scope-a-v1
+E     ?                     ------
+E     + afi-approved-target-a-v1
+E   reg04 late-worker phase: registry_workers_under_claim</failure></testcase></testsuite></testsuites>

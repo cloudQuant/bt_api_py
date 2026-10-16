@@ -1,0 +1,16 @@
+{
+  "pytest_exit": 1,
+  "finished_utc": "2026-10-16T04:43:39.447980+00:00",
+  "source_count": 2148,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\source_code\\ai-for-investor": "794eab0c26589ccad7ebb49899ac04e75a46d0cb"
+  },
+  "heads_after": {
+    "D:\\source_code\\ai-for-investor": "794eab0c26589ccad7ebb49899ac04e75a46d0cb"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "6453aa89d5e70b876706735bff80797110f507a816da9222fa620e62e6de9077",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "SYNTHETIC_HTTP_SDK_EXECUTION_HOST_APPROVED_TARGET_WITH_SYNTHETIC_RISK_AND_PROVIDER"
+}

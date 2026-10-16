@@ -1,0 +1,42 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+______ test_reg04_dual_worker_processes_and_strategy_run_share_one_owner ______
+tests\test_service_read_reg04_workers.py:997: in test_reg04_dual_worker_processes_and_strategy_run_share_one_owner
+    _run_reg04_dual_worker_one_owner(tmp_path)
+tests\test_service_read_reg04_workers.py:920: in _run_reg04_dual_worker_one_owner
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_reg04_workers.py:696: in _run_reg04_dual_worker_one_owner
+    _reg04_assert_application_sessions(
+tests\test_service_read_reg04_workers.py:524: in _reg04_assert_application_sessions
+    assert session["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
+E   AssertionError: assert 'afi-approved-target-a-v1' == 'afi-approved...et-scope-a-v1'
+E     
+E     - afi-approved-target-scope-a-v1
+E     ?                     ------
+E     + afi-approved-target-a-v1
+E   reg04 dual-worker phase: registry_before_strategy
+---------------------------- Captured stderr call -----------------------------
+D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+_ test_reg04_worker_registration_under_live_strategy_claim_keeps_single_active_run _
+tests\test_service_read_reg04_workers.py:1294: in test_reg04_worker_registration_under_live_strategy_claim_keeps_single_active_run
+    _run_reg04_late_worker_under_claim(tmp_path, monkeypatch)
+tests\test_service_read_reg04_workers.py:1261: in _run_reg04_late_worker_under_claim
+    raise primary_error.with_traceback(primary_traceback)
+tests\test_service_read_reg04_workers.py:1078: in _run_reg04_late_worker_under_claim
+    _reg04_assert_application_sessions(
+tests\test_service_read_reg04_workers.py:524: in _reg04_assert_application_sessions
+    assert session["scope_ref"] == _APPROVED_TARGET_EXPECTED_SCOPE
+E   AssertionError: assert 'afi-approved-target-a-v1' == 'afi-approved...et-scope-a-v1'
+E     
+E     - afi-approved-target-scope-a-v1
+E     ?                     ------
+E     + afi-approved-target-a-v1
+E   reg04 late-worker phase: registry_workers_under_claim
+---------------------------- Captured stderr call -----------------------------
+D:\source_code\ai-for-investor\src\backend\.venv\Lib\site-packages\zmq\_future.py:718: RuntimeWarning: Proactor event loop does not implement add_reader family of methods required for zmq. Registering an additional selector thread for add_reader support via tornado. Use `asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())` to avoid this warning.
+  self._get_loop()
+=========================== short test summary info ===========================
+FAILED tests/test_service_read_reg04_workers.py::test_reg04_dual_worker_processes_and_strategy_run_share_one_owner
+FAILED tests/test_service_read_reg04_workers.py::test_reg04_worker_registration_under_live_strategy_claim_keeps_single_active_run
+2 failed in 58.14s

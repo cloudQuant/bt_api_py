@@ -1,0 +1,26 @@
+{
+  "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\root.tar": {
+    "size": 36526080,
+    "sha256": "17a8b3e4e2b35352b31dd66f38322e8f4befc5fda8452ec137d19e9d4727d6d1"
+  },
+  "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\execution.tar": {
+    "size": 1771520,
+    "sha256": "196b6d96ecf259edb83c6c6c41c5e87b8b158d623c17e4a35d21e2749478f0bd"
+  },
+  "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\base.tar": {
+    "size": 757760,
+    "sha256": "7b5ae3b3441858b86f682e8cf88e9e127d8650425e412ac467ed7bd3d68a4e5d"
+  },
+  "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\transport.tar": {
+    "size": 102400,
+    "sha256": "43dc14f4c3af010099ccbb5931d55f7a9ff5a85e33109754705457e33f3c0a44"
+  },
+  "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\monitor.tar": {
+    "size": 389120,
+    "sha256": "3fb3617f0423a811f4e0ab31d2ddd45002c3d24885dfd38d524fb797560acee1"
+  },
+  "D:\\temp\\afi_iter10_approved_target_sdk_sources_20261016_r6_fixed\\gateway.tar": {
+    "size": 399360,
+    "sha256": "9962e37d547101478117d146bffbdd8def268e1fb8b90633b8f6782ada17907e"
+  }
+}
