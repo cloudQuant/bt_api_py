@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "round": "R240",
+  "title": "AFI11 app-process failure/recovery source delivery",
+  "status": "READY_FOR_PARENT_SCOPED_REVIEW",
+  "evidence_level": "AUTHOR_LOCAL_FIXED_EXPORT_SYNTHETIC_PROVIDER_ONLY",
+  "repositories": {
+    "sdk": {
+      "path": "D:\\bt_api_py",
+      "branch": "dev",
+      "head_at_author_run": "53f33158429f89fd9b4dce83c068056c99d6778f"
+    },
+    "afi": {
+      "path": "D:\\source_code\\ai-for-investor",
+      "branch": "dev",
+      "head_at_author_run": "ac52830cd66c8ca79547db5be56a971906ccef4c"
+    },
+    "risk": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "branch": "dev",
+      "head_at_author_run": "ccac8818312c1474077c00bfe9d8f12521af39c9"
+    },
+    "base": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "branch": "dev",
+      "head_at_author_run": "cc6036c89c534a17d93e6b793f930c576b4aa960"
+    },
+    "execution": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_execution",
+      "branch": "dev",
+      "head_at_author_run": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e"
+    },
+    "transport": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq",
+      "branch": "dev",
+      "head_at_author_run": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "monitor": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_monitor",
+      "branch": "dev",
+      "head_at_author_run": "536a4f04747182749fabdac5e28624f80465bc53"
+    }
+  },
+  "source_candidate": {
+    "path": "tests/integration/test_afi11_service_failure_isolation.py",
+    "absolute_path": "D:\\bt_api_py\\tests\\integration\\test_afi11_service_failure_isolation.py",
+    "bytes": 56055,
+    "sha256": "b4f22c31a11bcea1f86c354c796715a4bad5e89e3b8a24599c92b573c20d7cf7",
+    "status": "untracked at packet preparation; sole source candidate",
+    "author_run_before_sha256": "b4f22c31a11bcea1f86c354c796715a4bad5e89e3b8a24599c92b573c20d7cf7",
+    "author_run_after_sha256": "b4f22c31a11bcea1f86c354c796715a4bad5e89e3b8a24599c92b573c20d7cf7",
+    "source_kind": "new integration test only; no production source changes",
+    "node": "test_afi11_app_process_failure_recovery_keeps_strategy_on_same_owner"
+  },
+  "accepted_source_exports": {
+    "sdk_afi_risk": {
+      "sdk_runtime_commit": "00cd647b57defb533d43eeb8cca16be195d6489e",
+      "afi_runtime_commit": "5be2e26c9cbb558187ed4ba7cce622989cb50c0e",
+      "afi_checkout_head_guard_only": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+      "export_root": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3",
+      "manifest_path": "D:\\temp\\iteration10-afi11-app-failure-source-export-r3\\manifest.json",
+      "manifest_sha256": "499738f13717d661b4ea6bbe70f340ea178a8b6860a8e868a07b8190b463fd28"
+    },
+    "monitor": {
+      "commit": "24516efc42f0696389592ecd36436c66c28ba270",
+      "checkout_head_guard": "536a4f04747182749fabdac5e28624f80465bc53",
+      "export_root": "D:\\temp\\iteration10-afi11-monitor-source-export-r1",
+      "manifest_path": "D:\\temp\\iteration10-afi11-monitor-source-export-r1\\export-manifest.json",
+      "manifest_sha256": "351c63cf43513f49016cf35ba00a76dc147f2169b1c5781d356d197bed56bc78",
+      "dependency_metadata_sha256": "37be6783a76fc83d09ac90e538fc8fd00ae1476fd53299288a1b71556a3ed7ea"
+    }
+  },
+  "author_run": {
+    "output": "D:\\temp\\iteration10-afi11-app-failure-author-20261016-r5",
+    "spec_sha256": "ae117246d3d87c45bfd8db23d4cd555302ad85840e8da28752a0a01fbc597a16",
+    "python": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+    "started_utc": "2026-10-16T22:23:09.932936+08:00",
+    "finished_utc": "2026-10-16T22:23:56.604268+08:00",
+    "elapsed_seconds": 43.722,
+    "pytest": {
+      "collected": 1,
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit": 0,
+      "warnings": 1,
+      "warning": "pre-existing Backtrader Quandl DeprecationWarning",
+      "junit_sha256": "820fa3b0fa70ed0be2f5401423aae93e5dbc5f2ab6202caf8d3bb583da94c335"
+    },
+    "source_pin_check": {
+      "source_count": 2894,
+      "before_sha256": "748f9462edbd85ec18ebc296883578dcd04a524759636d9cd4be9988e511d697",
+      "after_sha256": "748f9462edbd85ec18ebc296883578dcd04a524759636d9cd4be9988e511d697",
+      "unchanged": true,
+      "heads_unchanged": true,
+      "heads_before": {
+        "D:\\bt_api_py": "53f33158429f89fd9b4dce83c068056c99d6778f",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+        "D:\\source_code\\ai-for-investor": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+        "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53"
+      },
+      "heads_after": {
+        "D:\\bt_api_py": "53f33158429f89fd9b4dce83c068056c99d6778f",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+        "D:\\source_code\\ai-for-investor": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+        "D:\\bt_api_py\\bt_api\\bt_api_monitor": "536a4f04747182749fabdac5e28624f80465bc53"
+      }
+    },
+    "stdout_sha256": "3494f9b1e3b52f44c752ef97acfe772dd460d7face611301fb42b9e3bd0fb4f2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "evidence_level": "AFI11_APP_PROCESS_FAILURE_RECOVERY_FIXED_EXPORT_SYNTHETIC_PROVIDER_ONLY",
+    "root_qa": false,
+    "formal_afi11_pass": false
+  },
+  "scenario_observations": {
+    "app_process": "Test-owned FastAPI/Uvicorn app A started and served HTTP; the test terminated/reaped its exact captured PID with nonzero exit; app B then started as a distinct PID and recovered HTTP read of owner-backed order records.",
+    "same_owner": "The same registered Strategy runtime session facts, transport identity, binding registrations, owner PID, ServiceHost state, policy id and fingerprint remained stable across app-A failure and app-B recovery.",
+    "account_fact_denial": "Unregistered instrument lacked registered risk facts; owner admission rejected before dispatch (REJECTED, admission_denied, dispatch_attempts=0, no provider order id). The HTTP account endpoint remained 403 SERVICE_READ_ACCESS_DENIED before and after recovery because no account binding was configured.",
+    "valid_intent": "One approved synthetic BTC-USDT intent was ACKED via the same still-running owner while AFI app A was down.",
+    "provider_isolation": "Synthetic provider session id remained afi11-synthetic-provider-session-1; construction/session-open counters stayed one; only the approved intent was submitted; no production provider/account access.",
+    "cleanup": "App A exact PID terminated and joined nonzero, control/process handles closed; app B returned (True,True,True,True,True,1) and exited zero; strategy runtime cleanup_failures=0 and unregister_uncertainties=0; owner closed gracefully and exited zero; final cleanup_errors empty. These are passing test assertions; no separate runtime cleanup JSON receipt."
+  },
+  "raw_archive": {
+    "file": "raw-r5.zip",
+    "bytes": 408940,
+    "sha256": "65ffe000a949d93fd60026d92c419a544eb23328193a3ec5ecdd0492ad7bd704",
+    "member_count": 11,
+    "members": [
+      {
+        "entry": "raw-r5/command.json",
+        "bytes": 2319,
+        "sha256": "331cbbb4df80a55a34412571fcf3478df8fc2da606bd0482dafba7346050edc4"
+      },
+      {
+        "entry": "raw-r5/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "entry": "raw-r5/junit.xml",
+        "bytes": 409,
+        "sha256": "820fa3b0fa70ed0be2f5401423aae93e5dbc5f2ab6202caf8d3bb583da94c335"
+      },
+      {
+        "entry": "raw-r5/result.json",
+        "bytes": 1693,
+        "sha256": "99754c153a28d1036dc139c7cb93ce5a578312560d1faa55ef4c39e095e6c99d"
+      },
+      {
+        "entry": "raw-r5/runner.py",
+        "bytes": 3400,
+        "sha256": "7c6dd88c57aebff4de4f88fce8c3623599db9369d499fbd42dc9df9c7ea5b7a0"
+      },
+      {
+        "entry": "raw-r5/running.json",
+        "bytes": 75,
+        "sha256": "90d4f6fd7aebf3daed6556fd661e3dfa6a2e0a70aca9eda7d40ccf2efdf5989a"
+      },
+      {
+        "entry": "raw-r5/source-after.json",
+        "bytes": 576701,
+        "sha256": "748f9462edbd85ec18ebc296883578dcd04a524759636d9cd4be9988e511d697"
+      },
+      {
+        "entry": "raw-r5/source-before.json",
+        "bytes": 576701,
+        "sha256": "748f9462edbd85ec18ebc296883578dcd04a524759636d9cd4be9988e511d697"
+      },
+      {
+        "entry": "raw-r5/spec.json",
+        "bytes": 590242,
+        "sha256": "ae117246d3d87c45bfd8db23d4cd555302ad85840e8da28752a0a01fbc597a16"
+      },
+      {
+        "entry": "raw-r5/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw-r5/stdout.log",
+        "bytes": 672,
+        "sha256": "3494f9b1e3b52f44c752ef97acfe772dd460d7face611301fb42b9e3bd0fb4f2"
+      }
+    ],
+    "excluded": [
+      "pytest-tmp SQLite databases and scratch files"
+    ]
+  },
+  "preserved_failed_attempts": [
+    {
+      "id": "Root R2",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-root-20261016-r2",
+      "outcome": "pre-case source-hash guard typo; no test case",
+      "cause": "harness input digest transcription was wrong",
+      "spec_sha256": "7cf0776ad80a55aad63deb5b35cb018bd0f40ac7820eecd605540d9d33deb630",
+      "result_sha256": "ec597937d53afca1673024fe6fede83d5fc961172bad24bc3d211c18c6742b4b",
+      "junit_sha256": "3abd20ce95a8737a98967de53dfdf91e1d47a6157ad75a443c460a303b15dff2"
+    },
+    {
+      "id": "Root R3",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-root-20261016-r3",
+      "outcome": "pre-case import/setup failure",
+      "cause": "Path.home could not determine home directory under cleared profile environment",
+      "spec_sha256": "b71275c0ffee2ab0a6c7f5a1a6cc28c720feee0733a4ff3ff5ab9f0002d297fc",
+      "result_sha256": "d6b1febb0a96667c395f923094f3e1692883e7b61ed9aa51371e9eba6689b252",
+      "junit_sha256": "4efca98604028fddb67241075b1c5c971914e81d19ae51181b912428fb060c0e"
+    },
+    {
+      "id": "Root R4",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-root-20261016-r4",
+      "outcome": "pre-case import/setup failure",
+      "cause": "ModuleNotFoundError for purgedcv in normal AFI app import chain",
+      "spec_sha256": "0fb99ef74a5e736afe42b216dd20c239e71dc53b56d80e6eada8811cc3d04989",
+      "result_sha256": "1d89f3840caf6b157462612cfba4dc38302a74dcd4807b34a97c26a701503585",
+      "junit_sha256": "6031e99c8151bd40a8c4b787ac0354c856975ac2b853c8047accff9a8324ee7f"
+    },
+    {
+      "id": "Root R5",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-root-20261016-r5",
+      "outcome": "one test skipped; not PASS",
+      "cause": "optional importorskip hid missing bt_api_monitor dependency",
+      "spec_sha256": "9dba38a99b8c9828cecf155986ce312e6ba7ad2bbd3e4f776a6d70ca54fcf0b5",
+      "result_sha256": "d5b356982a8ee6686fe81b1ca148db148da32991688b397b3fe0b855d1efe213",
+      "junit_sha256": "36366ecf91213cc5e0fca1140ce5968349db718578a038d8a1b7ccc16c08f647"
+    },
+    {
+      "id": "Root R6",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-root-20261016-r6",
+      "outcome": "pre-case import/setup failure",
+      "cause": "KeyError PATH in ctypes.util.find_library after environment sanitization",
+      "spec_sha256": "6ff614e51705543df1dcf8c67bdcf700de434a9fcfcf20444d853217f2252762",
+      "result_sha256": "b3aa6247544255d07561c12f0b3adfc76b2a195dc5ef0d5d2a8fb18281be8da6",
+      "junit_sha256": "0509b446120477fbe49a439a7cff2cd33df40b9e6c3ecc887584f01f73b2f600"
+    },
+    {
+      "id": "Root R7",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-root-20261016-r7",
+      "outcome": "service startup failed",
+      "cause": "DUPLICATE_AUTHENTICATED_PRINCIPAL from duplicate principal-map fixture",
+      "spec_sha256": "e4c3beb9cf85c89f23364d2a9a46d980fcd8aaa63f1b0c7be8f44acd929b3f41",
+      "result_sha256": "d895834e99ed3c9712c5746b7af0c34b364795bf1a3f907ca50d5ae504c53b50",
+      "junit_sha256": "cfd2e352f7b1bbc4d183b7c5ed31184d1ae9defb1fc6a831b960d4666ff1a308"
+    },
+    {
+      "id": "Root R8",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-root-20261016-r8",
+      "outcome": "case failed before injected process fault",
+      "cause": "fixture expected ServiceHost state running; pinned start reports started",
+      "spec_sha256": "23ca83c17680bbedf51e4a1dbc9bda84c3f5508bed2cae9e0b56aaf6204485e6",
+      "result_sha256": "c2c6218cc626c86211b2eab46d4b25edecfff67b9ac5f5ea8221f7d8bfb2792a",
+      "junit_sha256": "daa561f0e8003265032800a332382891e0eeaba162c1fabda7443944ffc630f4"
+    },
+    {
+      "id": "Author R1",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-author-20261016-r1",
+      "outcome": "case failed at second submit",
+      "cause": "fixture expected second ACKED order despite durable unresolved-dispatch freeze after first successful order",
+      "spec_sha256": "34c71296075d33557d888433dbc15b5fa5a01d424a35ab0e2203b22538deb0af",
+      "result_sha256": "9588ced7d6d798ac5a0b653a7a9bce81f4b0cd117b375c9dcd9b117939212552",
+      "junit_sha256": "ea4be740027c41c70151a0dc8ee1f90f715029cb479d0548cf1479fd126fdebe"
+    },
+    {
+      "id": "Author R2",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-author-20261016-r2",
+      "outcome": "case assertion failed",
+      "cause": "fixture used error.detail; AFI response uses error.details",
+      "spec_sha256": "11e1bd67ae0438becf631c21902c213afe3bfa46099b3f59e79b73d195da06c7",
+      "result_sha256": "73745b5bfde1de63433c9c69a3d144add0d8567254d53779706b36c5147c5964",
+      "junit_sha256": "010e6126cd33bedacd4029867f10721bb27938c28e410f4156615eb5b9a28837"
+    },
+    {
+      "id": "Author R3",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-author-20261016-r3",
+      "outcome": "case assertion failed",
+      "cause": "same response details-versus-detail fixture mismatch",
+      "spec_sha256": "60f98a53aa7720a2abaccf39cff8635d35b7002aa463b54ef7c30823d08983e0",
+      "result_sha256": "f8096341f8414e3000109dc788c4cdd620be7f3e9fc5cfc65a55053b092884e1",
+      "junit_sha256": "79aa02f658eb36ef3d20537195fc0e522560f4c08643d77cadd1429b8004fc34"
+    },
+    {
+      "id": "Author R4",
+      "output": "D:\\temp\\iteration10-afi11-app-failure-author-20261016-r4",
+      "outcome": "scenario reached final cleanup assertion",
+      "cause": "fixture compared empty list to tuple; successful close receipt assertions were already satisfied",
+      "spec_sha256": "085151ccecff81698153fc100e83c967d72f3a87e462a72cbd8c3a3538d3c98a",
+      "result_sha256": "ec43a2fa0693912057d2f2ee8ccc520d045e120d431be69d676cda4a5c5d8f52",
+      "junit_sha256": "5a8737361d6cc1cd181ebc4b6fc327f703bcd4844bd64659d4ccda544bce7586"
+    }
+  ],
+  "packet": {
+    "files": [
+      "manifest.json",
+      "round-record.md",
+      "raw-r5.zip"
+    ],
+    "source_candidate_path": "tests/integration/test_afi11_service_failure_isolation.py",
+    "parent_scoped_stage_set": [
+      "tests/integration/test_afi11_service_failure_isolation.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi11-app-failure-r240-20261016/manifest.json",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi11-app-failure-r240-20261016/round-record.md",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi11-app-failure-r240-20261016/raw-r5.zip"
+    ],
+    "staged": false,
+    "committed": false,
+    "progress_tracker_changed": false
+  },
+  "limitations": [
+    "One author-local single-node run only against fixed accepted source exports and a synthetic local provider.",
+    "No Root QA is claimed for R5; earlier Root R5 skipped and is preserved only as an invalid run reference.",
+    "No AFI11 formal case pass is claimed.",
+    "Monitor independent failure isolation and analytics-worker failure/timeout remain unestablished.",
+    "No real account, exchange/provider, or external financial facts were accessed.",
+    "pytest-tmp scratch/SQLite files are excluded. Only one test source file is proposed."
+  ],
+  "parent_commit": "pending; this packet is not staged or committed"
+}
