@@ -1,0 +1,1 @@
+6b4a5b74f548761fa2c705af0cf7210cff6d5de039dde27155acf0c997ad4bd2 *tests/unit/test_service_market_integration.py

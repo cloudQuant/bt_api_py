@@ -1,0 +1,9 @@
+cd /d/bt_api_py
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH="D:/bt_api_py;D:/bt_api_py/bt_api/bt_api_base/src;D:/bt_api_py/bt_api/bt_api_execution/src;D:/bt_api_py/bt_api/bt_api_risk/src;D:/bt_api_py/bt_api/bt_api_transport_zmq/src" C:/anaconda3/python.exe -m pytest tests/unit/test_service_market_integration.py --noconftest --import-mode=importlib -p no:cacheprovider --basetemp=D:/temp/it10gw01fix-20261016-r1/basetemp -q
+
+Fix: epoch node stale indices after 4d5cebf5 account_ref insertion at ready index 2:
+- line 903 ready[2:5] -> ready[3:6] (mirrors ten-clients node fix in 4d5cebf5)
+- line 915 ready[5] -> ready[6] (cursor_epoch shifted by insertion; not reached in baseline run)
+Baseline failing run (pre-fix, preserved): D:/temp/it10dim02-20261016-r1/run3-gw01-regression
+  exit 1, "1 failed, 1 passed" -- FAILED test_market_epoch_change_requires_explicit_incomplete_resync
+  at line 903 AssertionError ('account:synthetic-market-gw01' != 'latest_event')
