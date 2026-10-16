@@ -404,7 +404,7 @@ def test_group_host_cleanup_attempts_every_action_and_raises_first_failure() -> 
         def set(self) -> None:
             calls.append(("release", "provider"))
 
-    def close_clients(*_args) -> None:
+    def close_clients(*_args, **_kwargs) -> None:
         calls.append(("clients", "close"))
         raise first_error
 

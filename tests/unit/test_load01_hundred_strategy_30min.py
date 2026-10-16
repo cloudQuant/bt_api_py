@@ -91,6 +91,7 @@ _EVENT_TYPES = ("execution.lifecycle", "execution.cancellation")
 _RELAY_MAX_EVENTS = 1_000_000
 _RELAY_MAX_BYTES = 512 * 1024 * 1024
 _MIN_FREE_BYTES = 2 * 1024**3
+_FULL_LOAD_SECONDS = 30 * 60
 _MARKET_OPS = frozenset(
     {
         "market.subscribe",
@@ -2515,7 +2516,15 @@ def _strategy_process(
                     reconnect_window = 1
                 else:
                     window = int(elapsed // 300)
-                    if window >= 1:
+                    # Window 6 would begin exactly at the t=1800 s end boundary:
+                    # the controller can publish stop_event a few milliseconds
+                    # after this process already sees elapsed >= 1800, which
+                    # would schedule reconnects past the 5-window budget and
+                    # make len(reconnect_records) exceed 5 * _ACCOUNTS. Only
+                    # windows whose nominal start is strictly inside the load
+                    # timeline may schedule a reconnect, so window 5 is the
+                    # terminal window of the full-mode timeline.
+                    if window >= 1 and window < _FULL_LOAD_SECONDS // 300:
                         reconnect_window = window
                         target_local = (window - 1) % _PER_ACCOUNT
                         target_at = window * 300 + account_index * 1.0
@@ -3355,7 +3364,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     mode = os.environ.get("BT_API_LOAD01_MODE", "full")
     if mode not in {"pilot", "full"}:
         raise ValueError("BT_API_LOAD01_MODE must be pilot or full")
-    duration_seconds = 120 if mode == "pilot" else 30 * 60
+    duration_seconds = 120 if mode == "pilot" else _FULL_LOAD_SECONDS
     source_root = _fixed_source_root()
     export_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
     archive_validation = _verify_fixed_archives(source_root, export_pin_path)

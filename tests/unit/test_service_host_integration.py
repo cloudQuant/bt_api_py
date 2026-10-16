@@ -209,6 +209,16 @@ def _client_config(endpoint: str, *, application: bool = False):
     return parse_client_config(raw)
 
 
+class _UnusedDispatch:
+    """Query-only execution component must never dispatch an order."""
+
+    def submit(self, _intent):
+        raise AssertionError("query-only service dispatched an order")
+
+    def cancel(self, _intent):
+        raise AssertionError("query-only service dispatched a cancellation")
+
+
 def _resource_provider(paths: dict[str, str], closed: list[str]):
     """Construct real package resources inside the spawned service process."""
 
@@ -260,8 +270,17 @@ def _resource_provider(paths: dict[str, str], closed: list[str]):
 
         if component == "execution":
             store = SqliteExecutionStore(paths["execution"])
+            # The account_owner builtin requires the full trusted write-path
+            # resource set even when only the query port is bound here; the
+            # dispatch port is a query-only stub and admission is explicitly
+            # unprotected because this synthetic service has no risk gate.
             return ComponentResources.owned(
-                {"store": store, "targets": {scope: _EXECUTION_SCOPE}},
+                {
+                    "store": store,
+                    "targets": {scope: _EXECUTION_SCOPE},
+                    "dispatch": _UnusedDispatch(),
+                    "admission": {"allow_unprotected": True},
+                },
                 ready=lambda: True,
                 close=lambda: _close_resource("execution", store.close, closed),
             )
