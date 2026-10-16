@@ -1,0 +1,273 @@
+{
+  "schema": "iteration10-dim03-fx-r232-evidence-manifest-v1",
+  "round": "R232",
+  "title": "DIM03 FX valuation through accepted shared-collateral ServiceHost path",
+  "evidence_level": "DIM03_FX_SOURCE_BOUND_SHARED_COLLATERAL_HOST_LOCAL_SYNTHETIC_PROVIDER_ONLY",
+  "formal_dim03_pass": false,
+  "formal_progress_updated": false,
+  "archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 125162,
+    "sha256": "212e8afaa4ad780ff4bab9b61d20ec3ec0b7efef7dc0246a8456fc0a94d32c7e",
+    "entries": {
+      "qa/r2/raw11/command.json": {
+        "bytes": 2408,
+        "sha256": "251cfc8e07a3da0eee95598002864ed21edec665ffcf2bbbea29eb4fa77d6ccf"
+      },
+      "qa/r2/raw11/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "qa/r2/raw11/junit.xml": {
+        "bytes": 647,
+        "sha256": "1292ccceadad069e16dbb28837a3c4e83df310c3e6c36236de5e0217a4c7850d"
+      },
+      "qa/r2/raw11/result.json": {
+        "bytes": 1345,
+        "sha256": "e631a8225d3593a129e9223dcfb576b0b643d541861d21801e4acb87c19fa0c9"
+      },
+      "qa/r2/raw11/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "qa/r2/raw11/running.json": {
+        "bytes": 76,
+        "sha256": "c7a2923142acd06e663cc31134260efb07e35b735277f8d0e229518ca7772999"
+      },
+      "qa/r2/raw11/source-after.json": {
+        "bytes": 76753,
+        "sha256": "c45413cbaac9c8c7bed092f414023095136fd40ae19757edc245e1c079a1303e"
+      },
+      "qa/r2/raw11/source-before.json": {
+        "bytes": 76753,
+        "sha256": "c45413cbaac9c8c7bed092f414023095136fd40ae19757edc245e1c079a1303e"
+      },
+      "qa/r2/raw11/spec.json": {
+        "bytes": 82077,
+        "sha256": "0c0ec2705182cc4039231a0680ec17d264508fd135d691e5afaef7bbb1a63c07"
+      },
+      "qa/r2/raw11/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "qa/r2/raw11/stdout.log": {
+        "bytes": 932,
+        "sha256": "b81fc496ef77a474bb93881761480da4607c61884e45641e264153624d7bcad5"
+      },
+      "source/actual-root-bound-spec.json": {
+        "bytes": 82077,
+        "sha256": "0c0ec2705182cc4039231a0680ec17d264508fd135d691e5afaef7bbb1a63c07"
+      },
+      "source/iteration10-focused-qa.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "source/r2-fixed-source-manifest.json": {
+        "bytes": 83707,
+        "sha256": "296675a03ef5cc67e7dee8a74010de15c9e1afd73c3ae41d20b9a38b30cd1343"
+      },
+      "source/r223-accepted-manifest.json": {
+        "bytes": 14748,
+        "sha256": "aef21495664635b537cd4d854752d3b3fc9fb182dc2783e495a787f6a65a9e20"
+      },
+      "source/r223-risk-postcommit.json": {
+        "bytes": 537,
+        "sha256": "c24a96c7e9057247d789a9cf0098a39711603706306af510d176a63b6cf9f1a8"
+      },
+      "source/r223-round-record.md": {
+        "bytes": 2249,
+        "sha256": "b87f82544682ceb8c0f7336337bc2544dc04b85d7fdb9ad39f0e966908481353"
+      },
+      "source/r223-sdk-postcommit.json": {
+        "bytes": 3806,
+        "sha256": "c74c2ff005b3fb0a01f61cfe7c161da34402647c811fa6669a296f7621144cd1"
+      },
+      "source/test_dim03_fx_shared_pool_host.py": {
+        "bytes": 18717,
+        "sha256": "bd92c749b2408cc773d00869507bb5f1844e780a956f3bd4fdac56e86117d29a"
+      },
+      "source/test_dim03_shared_collateral_composition.py": {
+        "bytes": 39958,
+        "sha256": "7802856366954e2fd2da635b5c109fecbe7b7c8c37ce1daa67418a1f741b146a"
+      }
+    }
+  },
+  "accepted_execution": {
+    "output_directory": "D:\\temp\\iteration10-dim03-fx-shared-pool-host-root-qa-r2-20261016",
+    "result_json": {
+      "path": "D:\\temp\\iteration10-dim03-fx-shared-pool-host-root-qa-r2-20261016\\result.json",
+      "bytes": 1345,
+      "sha256": "e631a8225d3593a129e9223dcfb576b0b643d541861d21801e4acb87c19fa0c9"
+    },
+    "pytest_exit": 0,
+    "passed": 3,
+    "failed": 0,
+    "skipped": 0,
+    "duration_stdout": "3.77s",
+    "warnings": 2,
+    "warning_summary": "PyZMQ Proactor loop selector-thread RuntimeWarning on the first two nodes; retained in stdout.log.",
+    "stderr_bytes": 0,
+    "stdout_sha256": "b81fc496ef77a474bb93881761480da4607c61884e45641e264153624d7bcad5",
+    "source_pin_count": 376,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "heads": {
+      "D:\\bt_api_py": "33c381007abcfc437044c67f4c752a788944846d",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+      "D:\\bt_api_py\\bt_api\\bt_api_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+      "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    },
+    "nodeids": [
+      "tests.integration.test_dim03_fx_shared_pool_host::test_fx_shared_pool_uses_source_bound_rate_before_dispatch",
+      "tests.integration.test_dim03_fx_shared_pool_host::test_stale_fx_denies_without_provider_dispatch",
+      "tests.integration.test_dim03_fx_shared_pool_host::test_missing_fx_fails_host_start_before_registry"
+    ],
+    "command": {
+      "argv": [
+        "C:\\anaconda3\\python.exe",
+        "-m",
+        "pytest",
+        "-c",
+        "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\qa-harness\\pytest.ini",
+        "--rootdir",
+        "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\sdk",
+        "-q",
+        "--noconftest",
+        "--import-mode=importlib",
+        "-p",
+        "no:cacheprovider",
+        "--junitxml=D:\\temp\\iteration10-dim03-fx-shared-pool-host-root-qa-r2-20261016\\junit.xml",
+        "--basetemp=D:\\temp\\iteration10-dim03-fx-shared-pool-host-root-qa-r2-20261016\\pytest-tmp",
+        "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\sdk\\tests\\integration\\test_dim03_fx_shared_pool_host.py::test_fx_shared_pool_uses_source_bound_rate_before_dispatch",
+        "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\sdk\\tests\\integration\\test_dim03_fx_shared_pool_host.py::test_stale_fx_denies_without_provider_dispatch",
+        "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\sdk\\tests\\integration\\test_dim03_fx_shared_pool_host.py::test_missing_fx_fails_host_start_before_registry"
+      ],
+      "cwd": "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\sdk",
+      "environment": {
+        "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\sdk;D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\base\\src;D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\risk\\src;D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\execution\\src;D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\candidate\\transport\\src",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1"
+      },
+      "unset_environment": [
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+        "PYTEST_ADDOPTS",
+        "PYTEST_CURRENT_TEST",
+        "PYTEST_PLUGINS",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONNOUSERSITE",
+        "BT_API_LOAD01_MODE",
+        "BT_API_LOAD01_OUTPUT",
+        "BT_API_LOAD01_EXPORT_PINS",
+        "BT_API_LOAD01_SOURCE_ROOT",
+        "BT_API_LOAD01_SOURCE_MANIFEST"
+      ],
+      "started_utc": "2026-10-16T13:02:15.970309+00:00"
+    }
+  },
+  "frozen_inputs": {
+    "actual_root_bound_spec": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-fx-shared-pool-host-root-spec-r2-20261016.json",
+      "bytes": 82077,
+      "sha256": "0c0ec2705182cc4039231a0680ec17d264508fd135d691e5afaef7bbb1a63c07"
+    },
+    "executed_output_spec": {
+      "path": "output/spec.json",
+      "bytes": 82077,
+      "sha256": "0c0ec2705182cc4039231a0680ec17d264508fd135d691e5afaef7bbb1a63c07"
+    },
+    "focused_runner": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-focused-qa.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "output_runner": {
+      "path": "output/runner.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "fixed_source_manifest": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\dim03-fx-shared-pool-host-source-r2-20261016\\source-manifest.json",
+      "bytes": 83707,
+      "sha256": "296675a03ef5cc67e7dee8a74010de15c9e1afd73c3ae41d20b9a38b30cd1343"
+    },
+    "candidate_test": {
+      "path": "tests/integration/test_dim03_fx_shared_pool_host.py",
+      "bytes": 18717,
+      "sha256": "bd92c749b2408cc773d00869507bb5f1844e780a956f3bd4fdac56e86117d29a",
+      "matches_fixed_export": true
+    },
+    "existing_shared_collateral_test": {
+      "path": "tests/integration/test_dim03_shared_collateral_composition.py",
+      "bytes": 39958,
+      "sha256": "7802856366954e2fd2da635b5c109fecbe7b7c8c37ce1daa67418a1f741b146a",
+      "accepted_sdk_commit": "98648af2ea3a24394537c9fbd414fb897fb38f11"
+    },
+    "formal_plan": {
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\正式迭代计划.md",
+      "bytes": 161040,
+      "sha256": "a6f8dba3e749bd321e0ba118f666914fe6bf540ae9ea1396c2a4273087d75349",
+      "dim03_line": 775,
+      "text": "多品种/产品竞争同一保证金池，策略及合约集中度、FX/Greeks 缺失/过期、过滤快照不误作全账户；两个 AccountKey 共享抵押品且无单一准入 owner 时拒绝写入 | 原子多维预留；同一抵押品不重复授信，计价及资源范围明确，拒绝时零新增派发"
+    },
+    "status_tracker_at_packet_creation": {
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\迭代10验收状态汇总.md",
+      "bytes": 71429,
+      "sha256": "b0fc804040d98fcb9c970a64fc48e8db9e19cc594a2affb48dcd101675bf66e5",
+      "note": "Packet creation only; tracker is not modified by this round."
+    }
+  },
+  "fixed_runtime_commits": {
+    "sdk_runtime_base": "a6f220b9b5bdeae313f7324a86ee7a2c53cd10ee",
+    "sdk_accepted_r223_overlay": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+    "base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "risk_base": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+    "risk_accepted_instrument_overlay": "647840a75b2071fcb5b4395f554190afe2fae082",
+    "execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+    "transport": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "r223_shared_collateral_dependency": {
+    "accepted_sdk_commit": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+    "accepted_risk_commit": "647840a75b2071fcb5b4395f554190afe2fae082",
+    "sdk_postcommit": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-r223-sdk-postcommit.json",
+      "bytes": 3806,
+      "sha256": "c74c2ff005b3fb0a01f61cfe7c161da34402647c811fa6669a296f7621144cd1"
+    },
+    "risk_postcommit": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-r223-risk-postcommit.json",
+      "bytes": 537,
+      "sha256": "c24a96c7e9057247d789a9cf0098a39711603706306af510d176a63b6cf9f1a8"
+    },
+    "prior_packet_manifest": {
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim03-shared-collateral-host-20261016\\manifest.json",
+      "bytes": 14748,
+      "sha256": "aef21495664635b537cd4d854752d3b3fc9fb182dc2783e495a787f6a65a9e20"
+    },
+    "prior_packet_round_record": {
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim03-shared-collateral-host-20261016\\round-record.md",
+      "bytes": 2249,
+      "sha256": "b87f82544682ceb8c0f7336337bc2544dc04b85d7fdb9ad39f0e966908481353"
+    },
+    "prior_packet_archive": {
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\dim03-shared-collateral-host-20261016\\raw-evidence.zip",
+      "bytes": 151282,
+      "sha256": "12d784acf0fdf0c826e4f2f5d14857668fdfc8415da25ed2d19421a6ea934d97"
+    }
+  },
+  "repository_at_inventory_creation": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "head": "33c381007abcfc437044c67f4c752a788944846d"
+  },
+  "disclosures": [
+    "The Root run used the immutable R2 fixed export and only the candidate integration test overlay; current repository HEAD values are drift guards, not runtime imports.",
+    "The synthetic input quotes 20 EUR and converts at 1.5 USD per EUR to 30 USD notional. It is not 30 EUR.",
+    "The two warnings are preserved and were not suppressed. The provider and account are synthetic/local; this is not real venue or account evidence.",
+    "This packet archives one accepted new test only. DIM03 remains partial and the official progress count is not changed."
+  ],
+  "round_record": "round-record.md"
+}
