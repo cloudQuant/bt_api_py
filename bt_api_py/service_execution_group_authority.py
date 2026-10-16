@@ -1679,11 +1679,38 @@ class ExecutionGroupAuthorityGuard:
             or type(entry_registration) is not ActiveRegistrationContext
             or type(query_context) is not ServiceCallContext
             or type(execution_scope) is not ExecutionScope
+        ):
+            raise GroupAuthorityReconciliationRejected(
+                "typed query and owner registrations are required"
+            )
+        legacy_query_operations = frozenset({"orders.query_group_leg"})
+        legacy_entry_operations = frozenset(
+            {"orders.submit_group_leg", "orders.resolve_group_leg"}
+        )
+        cancel_query_operations = frozenset(
+            {"orders.query_group_leg", "orders.query_group_cancel"}
+        )
+        cancel_entry_operations = frozenset(
+            {
+                "orders.submit_group_leg",
+                "orders.resolve_group_leg",
+                "orders.cancel_group_leg",
+            }
+        )
+        route_operations_match = (
+            query_registration.operations == legacy_query_operations
+            and entry_registration.operations == legacy_entry_operations
+        ) or (
+            query_registration.operations == cancel_query_operations
+            and entry_registration.operations == cancel_entry_operations
+        )
+        expected_entry_writes = entry_registration.operations
+        if (
             # ServiceRegistry stores the authenticated identity fields in its
             # immutable registration snapshot, while each dispatch adds a
             # request-specific result_fits callback. The callback is transport
             # metadata, not part of the principal/registration authorization.
-            or query_registration.context.identity != query_context.identity
+            query_registration.context.identity != query_context.identity
             or query_registration.context.scope != query_context.scope
             or query_registration.context.registration_id != query_context.registration_id
             or query_registration.context.principal_ref != query_context.principal_ref
@@ -1703,12 +1730,9 @@ class ExecutionGroupAuthorityGuard:
             or query_registration.context.principal_ref
             != entry_registration.context.principal_ref
             or query_registration.context.scope != entry_registration.context.scope
-            or query_registration.operations != frozenset({"orders.query_group_leg"})
+            or not route_operations_match
             or query_registration.write_operations
-            or entry_registration.operations
-            != frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"})
-            or entry_registration.write_operations
-            != entry_registration.operations
+            or entry_registration.write_operations != expected_entry_writes
             or query_registration.expires_at <= now
             or entry_registration.expires_at <= now
         ):

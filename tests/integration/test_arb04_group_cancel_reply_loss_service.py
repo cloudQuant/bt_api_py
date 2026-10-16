@@ -12,6 +12,7 @@ import json
 import sqlite3
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 from bt_api_execution import (
     CancelRecord,
@@ -27,15 +28,24 @@ from bt_api_py.service_execution_group_cancel import (
     GroupCancelPlanStore,
     group_cancel_leg_id,
 )
+from bt_api_py.service_execution_group_authority import (
+    ExecutionGroupAuthority,
+    ExecutionStoreGroupCompletionVerifier,
+)
 from bt_api_py.service_execution_group_client import GroupOriginRunBindingStore
 
-from tests.integration._arb04_group_reply_loss_support import Arb04GroupCluster
+from tests.integration._arb04_group_reply_loss_support import (
+    Arb04GroupCluster,
+    _ReplyLossTransport,
+    _WireFaultState,
+)
 from tests.integration.test_arb03_dim05_group_partial_fill_service import (
     _PORTFOLIO,
     _RUN,
     _execution_scope,
     _group_request,
     _assert_holds_resolved,
+    _provider_snapshot,
     _risk_legs,
 )
 from tests.unit._service_group_provider_fixtures import _V2_INSTRUMENT
@@ -44,6 +54,36 @@ _ARB04_CANCEL_ACCOUNTS = ("account-a", "account-b")
 _GROUP_CANCEL_UNKNOWN = "group-arb04-cancel-unknown-01"
 _GROUP_CANCEL_REQUEST = "cancel-arb04-unknown-01"
 _GROUP_CANCEL_REQUEST_REPLAY = "cancel-arb04-unknown-02"
+_GROUP_CANCEL_SOCKET_DISCONNECT = "group-arb04-cancel-socket-disconnect-01"
+_GROUP_CANCEL_SOCKET_REQUEST = "cancel-arb04-socket-disconnect-01"
+_GROUP_DUPLICATE_FILL = "group-arb04-duplicate-fill-01"
+
+
+def test_arb04_fault_counter_tracks_wrapped_owner_rpc_only() -> None:
+    """The fault counter measures transport requests, not local proof work."""
+
+    class _InnerTransport:
+        _transport = None
+
+        def request(self, request: object, *, timeout: float) -> object:
+            assert timeout == 5.0
+            return request
+
+    state = _WireFaultState("orders.cancel_group_leg", 0)
+    transport = _ReplyLossTransport(_InnerTransport(), state, "account-a")
+    request = SimpleNamespace(
+        header=SimpleNamespace(
+            operation="orders.query_group_cancel",
+            message_id="arb04-counter-scope-regression",
+        )
+    )
+
+    assert transport.request(request, timeout=5.0) is request
+    assert state.statistics() == (
+        (("account-a", "orders.query_group_cancel", 1),),
+        0,
+        0,
+    )
 
 
 def test_arb04_group_cancel_unknown_replays_only_original_cancel_query(
@@ -328,3 +368,385 @@ def test_arb04_group_cancel_unknown_replays_only_original_cancel_query(
         )
     finally:
         run_bindings.close()
+
+
+def test_arb04_group_cancel_real_socket_close_reconnects_for_original_resolution(
+    tmp_path: Path,
+) -> None:
+    """A closed DEALER after provider dispatch stays UNKNOWN, then reconnects."""
+
+    with Arb04GroupCluster(
+        tmp_path,
+        accounts=_ARB04_CANCEL_ACCOUNTS,
+        instruments={account: (_V2_INSTRUMENT,) for account in _ARB04_CANCEL_ACCOUNTS},
+        initial_states={"account-a": ("open",), "account-b": ("open",)},
+        expected_orders={
+            "account-a": ((_V2_INSTRUMENT, "2", "100", "buy-limit"),),
+            "account-b": ((_V2_INSTRUMENT, "4", "100", "sell-limit"),),
+        },
+        rule_specs={
+            "account-a": {_V2_INSTRUMENT: "2"},
+            "account-b": {_V2_INSTRUMENT: "1"},
+        },
+        fault_operation="orders.cancel_group_leg",
+        fault_drops=0,
+        fault_mode="socket_disconnect_after_provider_dispatch",
+        enable_group_cancel=True,
+    ) as cluster:
+        original_request = _group_request(
+            _GROUP_CANCEL_SOCKET_DISCONNECT,
+            cluster.metadata_reference_ns,
+            (
+                ("leg-a", "account-a", Side.BUY, Decimal("2"), _V2_INSTRUMENT),
+                ("leg-b", "account-b", Side.SELL, Decimal("4"), _V2_INSTRUMENT),
+            ),
+        )
+        accepted = cluster.submit_group(original_request)
+        assert accepted.state is GroupOrderState.FIRST_PENDING
+        assert accepted.budget_reservation is not None
+        assert accepted.budget_reservation.state is GroupBudgetReservationState.HELD
+        assert accepted.legs[0].child_status is not None
+        assert accepted.legs[0].child_status.state is ExecutionState.ACKED
+
+        cluster.arm_fault("orders.cancel_group_leg", 1)
+        first = cluster.cancel_group(
+            _GROUP_CANCEL_SOCKET_DISCONNECT, _GROUP_CANCEL_SOCKET_REQUEST
+        )
+        assert first["found"] is True
+        assert first["cancel_request_id"] == _GROUP_CANCEL_SOCKET_REQUEST
+        assert first["legs"][0]["phase"] == "UNKNOWN"
+        cancel_id = first["legs"][0]["cancel_id"]
+        assert first["legs"][0]["result"] is None
+
+        fault_snapshot = cluster.fault_details()
+        assert fault_snapshot["fault_mode"] == "socket_disconnect_after_provider_dispatch"
+        assert fault_snapshot["operation"] == "orders.cancel_group_leg"
+        fault_counts = {
+            (account_ref, operation): count
+            for account_ref, operation, count in fault_snapshot["counts"]
+        }
+        boundary_events = fault_snapshot["boundary_events"]
+        assert [event["phase"] for event in boundary_events] == [
+            "plan_claim_dispatch",
+            "upstream_port_enter",
+            "upstream_port_error",
+        ], boundary_events
+        assert boundary_events[0]["claimed"] is True, boundary_events
+        assert boundary_events[2]["error_type"] == "RequestOutcomeUnknownError", (
+            boundary_events
+        )
+        assert fault_counts.get(("account-a", "orders.cancel_group_leg")) == 1
+        assert fault_snapshot["dropped"] == 1
+        assert fault_snapshot["remaining"] == 0
+        fault_events = fault_snapshot["events"]
+        assert [event["phase"] for event in fault_events] == [
+            "socket_closed_before_reply_receive",
+            "native_poll_error_after_close",
+            "client_uncertain_result",
+        ], fault_snapshot
+        close_event, native_error, unknown_event = fault_events
+        assert close_event["account_ref"] == "account-a"
+        assert close_event["operation"] == "orders.cancel_group_leg"
+        assert close_event["message_id"] == native_error["message_id"]
+        assert native_error["message_id"] == unknown_event["message_id"]
+        assert type(close_event["provider_dispatch_count"]) is int
+        assert close_event["provider_dispatch_count"] == 1
+        assert close_event["socket_identity"]
+        assert unknown_event["cause_code"] == "receive_transport_error"
+        assert unknown_event["socket_retired"] is True
+
+        counts, dropped, remaining = cluster.fault_stats()
+        assert counts[("account-a", "orders.cancel_group_leg")] == 1
+        assert counts[("account-a", "orders.submit_group_leg")] == 1
+        assert counts.get(("account-b", "orders.cancel_group_leg")) is None
+        assert counts.get(("account-a", "reservations.release")) is None
+        assert counts.get(("account-b", "reservations.release")) is None
+        assert dropped == 1
+        assert remaining == 0
+
+        # The coordinator reads the same durable cancel identity. This recovery
+        # uses the read-only query operation and cannot repeat the provider write.
+        replay = cluster.cancel_group(
+            _GROUP_CANCEL_SOCKET_DISCONNECT, _GROUP_CANCEL_SOCKET_REQUEST
+        )
+        assert replay["found"] is True
+        assert replay["legs"][0]["cancel_id"] == cancel_id
+        assert replay["legs"][0]["phase"] == "UNKNOWN"
+        assert replay["legs"][0]["result"]["record"]["state"] == "UNKNOWN"
+        counts, dropped, remaining = cluster.fault_stats()
+        assert counts[("account-a", "orders.cancel_group_leg")] == 1
+        assert counts[("account-a", "orders.query_group_cancel")] == 1
+        assert counts[("account-a", "orders.submit_group_leg")] == 1
+        assert counts.get(("account-a", "reservations.release")) is None
+        assert dropped == 1
+        assert remaining == 0
+
+        # Independent original-order reconciliation proves the terminal cancel
+        # from full order/fill facts. The retired upstream DEALER must be
+        # replaced before the source proof can complete.
+        completed = cluster.submit_group(original_request)
+        assert completed.state is GroupOrderState.CLOSED
+        assert completed.budget_reservation is not None
+        assert completed.budget_reservation.state is GroupBudgetReservationState.RELEASED
+        terminal = completed.legs[0]
+        assert terminal.child_status is not None
+        assert terminal.submitted_intent is not None
+        assert terminal.child_status.state is ExecutionState.CANCELLED
+        assert terminal.child_status.filled_quantity == Decimal("0")
+        assert terminal.resolution_receipt is not None
+        assert terminal.resolution_receipt.final_state is ExecutionState.CANCELLED
+        assert terminal.resolution_receipt.dispatch_latch_active is False
+        _assert_holds_resolved(
+            cluster.account_paths, "account-a", _GROUP_CANCEL_SOCKET_DISCONNECT
+        )
+
+        fault_snapshot = cluster.fault_details()
+        fault_events = fault_snapshot["events"]
+        reconnect_events = [
+            event
+            for event in fault_events
+            if event["phase"] == "same_transport_reconnected"
+        ]
+        assert len(reconnect_events) == 1, fault_snapshot
+        reconnect = reconnect_events[0]
+        assert reconnect["account_ref"] == "account-a"
+        # The read-only query of the same cancel identity is the first request
+        # after the socket fault, so it is where the same client transport
+        # recreates its DEALER. Original-order resolution then reuses it.
+        assert reconnect["operation"] == "orders.query_group_cancel"
+        assert reconnect["old_socket_identity"] == close_event["socket_identity"]
+        assert reconnect["new_socket_identity"]
+        assert reconnect["new_socket_identity"] != reconnect["old_socket_identity"]
+
+        counts, dropped, remaining = cluster.fault_stats()
+        assert counts[("account-a", "orders.cancel_group_leg")] == 1
+        assert counts[("account-a", "orders.query_group_cancel")] == 1
+        assert counts[("account-a", "orders.submit_group_leg")] == 1
+        # Original-order recovery calls GroupProofSource directly in-process;
+        # the wrapped coordinator→owner transport counter must not invent a
+        # wire `orders.resolve_group_leg` request for that proof work.
+        assert counts.get(("account-a", "orders.resolve_group_leg")) is None
+        assert counts.get(("account-a", "reservations.release")) == 1
+        assert counts.get(("account-b", "reservations.release")) is None
+        assert dropped == 1
+        assert remaining == 0
+
+        with sqlite3.connect(cluster.account_paths["account-a"]["provider"]) as connection:
+            provider_order_json, fills_json = connection.execute(
+                "SELECT order_json, fills_json FROM provider_orders"
+            ).fetchone()
+            provider_cancel_rows = connection.execute(
+                "SELECT cancel_id, provider_order_id, target_intent_id "
+                "FROM provider_cancel_dispatches"
+            ).fetchall()
+            provider_attempt_rows = connection.execute(
+                "SELECT cancel_id, provider_order_id, target_intent_id "
+                "FROM provider_cancel_attempts ORDER BY sequence"
+            ).fetchall()
+        provider_order = json.loads(provider_order_json)
+        assert provider_order["status"] == "cancelled"
+        assert json.loads(fills_json) == []
+        assert provider_cancel_rows == provider_attempt_rows
+        assert provider_cancel_rows == [
+            (
+                cancel_id,
+                terminal.child_status.provider_order_id,
+                terminal.submitted_intent.intent_id,
+            )
+        ]
+
+
+def test_arb04_duplicate_provider_fill_replay_is_durable_idempotent(
+    tmp_path: Path,
+) -> None:
+    """Repeated real-source reads of one open fill never double-count it."""
+
+    with Arb04GroupCluster(
+        tmp_path,
+        accounts=_ARB04_CANCEL_ACCOUNTS,
+        instruments={account: (_V2_INSTRUMENT,) for account in _ARB04_CANCEL_ACCOUNTS},
+        initial_states={"account-a": ("partial:1",), "account-b": ("open",)},
+        expected_orders={
+            "account-a": ((_V2_INSTRUMENT, "2", "100", "buy-limit"),),
+            "account-b": ((_V2_INSTRUMENT, "4", "100", "sell-limit"),),
+        },
+        rule_specs={
+            "account-a": {_V2_INSTRUMENT: "2"},
+            "account-b": {_V2_INSTRUMENT: "1"},
+        },
+        fault_operation="orders.cancel_group_leg",
+        fault_drops=0,
+    ) as cluster:
+        request = _group_request(
+            _GROUP_DUPLICATE_FILL,
+            cluster.metadata_reference_ns,
+            (
+                ("leg-a", "account-a", Side.BUY, Decimal("2"), _V2_INSTRUMENT),
+                ("leg-b", "account-b", Side.SELL, Decimal("4"), _V2_INSTRUMENT),
+            ),
+        )
+        initial = cluster.submit_group(request)
+        assert initial.state is GroupOrderState.FIRST_PENDING
+        assert initial.budget_reservation is not None
+        assert initial.budget_reservation.state is GroupBudgetReservationState.HELD
+        first_leg = initial.legs[0]
+        assert first_leg.submitted_intent is not None
+        assert first_leg.child_status is not None
+        assert first_leg.child_status.state is ExecutionState.PARTIALLY_FILLED
+        assert first_leg.child_status.filled_quantity == Decimal("1")
+        assert first_leg.child_status.average_price == Decimal("100")
+        assert first_leg.child_status.cumulative_commission == Decimal("-0.05")
+        assert first_leg.child_status.trade_count == 1
+        assert first_leg.resolution_receipt is None
+
+        intent_id = group_leg_intent_id(_GROUP_DUPLICATE_FILL, "leg-a")
+        provider_path = Path(cluster.account_paths["account-a"]["provider"])
+        writes, initial_counters = _provider_snapshot(provider_path)
+        assert len(writes) == 1
+        client_order_id = writes[0]
+        assert client_order_id
+        assert initial_counters["order_queries"] == initial_counters["fill_queries"]
+
+        previous = initial
+        previous_counters = initial_counters
+        previous_wire_counts, dropped, remaining = cluster.fault_stats()
+        assert dropped == 0 and remaining == 0
+        for _ in range(2):
+            # Re-submitting the exact accepted group request advances the
+            # same FIRST_PENDING group by querying its original child intent;
+            # it cannot create a new provider order or change its business ID.
+            replay = cluster.submit_group(request)
+            assert replay.state is GroupOrderState.FIRST_PENDING
+            assert replay.legs[0].submitted_intent is not None
+            assert replay.legs[0].submitted_intent.intent_id == intent_id
+            assert replay.legs[0].child_status == first_leg.child_status
+            assert replay.legs[0].resolution_receipt is None
+            assert replay.residual_base_units == initial.residual_base_units
+            assert replay.budget_reservation is not None
+            assert replay.budget_reservation.state is GroupBudgetReservationState.HELD
+
+            current_writes, current_counters = _provider_snapshot(provider_path)
+            assert current_writes == writes
+            # The provider query is made through the real account Host and
+            # DirectBackend/BtApi normalizer for the same sole client order.
+            assert current_counters["order_queries"] > previous_counters["order_queries"]
+            assert current_counters["fill_queries"] > previous_counters["fill_queries"]
+            assert current_counters["order_queries"] == current_counters["fill_queries"]
+
+            current_wire_counts, dropped, remaining = cluster.fault_stats()
+            assert current_wire_counts.get(("account-a", "orders.submit_group_leg")) == 1
+            assert current_wire_counts.get(("account-a", "orders.query_group_leg"), 0) > (
+                previous_wire_counts.get(("account-a", "orders.query_group_leg"), 0)
+            )
+            assert current_wire_counts.get(("account-a", "orders.resolve_group_leg")) is None
+            assert current_wire_counts.get(("account-a", "orders.cancel_group_leg")) is None
+            assert current_wire_counts.get(("account-a", "reservations.release")) is None
+            assert current_wire_counts.get(("account-b", "orders.submit_group_leg")) is None
+            assert dropped == 0 and remaining == 0
+            previous = replay
+            previous_counters = current_counters
+            previous_wire_counts = current_wire_counts
+
+        assert previous.legs[0].child_status == first_leg.child_status
+        assert cluster.status("account-a")[4] == ()
+        assert cluster.status("account-b")[4] == (
+            (_V2_INSTRUMENT, "4", "100", "sell-limit"),
+        )
+
+    intent_id = group_leg_intent_id(_GROUP_DUPLICATE_FILL, "leg-a")
+    execution_scope = _execution_scope("account-a")
+    store = SqliteExecutionStore(cluster.account_paths["account-a"]["execution"])
+    try:
+        record = store.get(intent_id, scope=execution_scope)
+        assert record is not None
+        assert record.state is ExecutionState.PARTIALLY_FILLED
+        assert record.filled_quantity == Decimal("1")
+        assert record.average_price == Decimal("100")
+        assert record.cumulative_commission == Decimal("-0.05")
+        assert record.dispatch_attempts == 1
+        assert record.review_required is False
+        execution_events = tuple(
+            event
+            for event in store.read_outbox(after_sequence=0, limit=1000, scope=execution_scope)
+            if event.intent_id == intent_id
+        )
+        assert tuple(event.event_type for event in execution_events) == (
+            "intent_recorded",
+            "intent_admitted",
+            "dispatch_claimed",
+            "provider_observation",
+        )
+        assert execution_events[-1].state is ExecutionState.PARTIALLY_FILLED
+        assert execution_events[-1].payload["filled_quantity"] == "1"
+        assert execution_events[-1].payload["cumulative_commission"] == "-0.05"
+    finally:
+        store.close()
+
+    proof_uri = Path(cluster.account_paths["account-a"]["proof"]).resolve().as_uri()
+    with sqlite3.connect(f"{proof_uri}?mode=ro", uri=True) as connection:
+        connection.execute("PRAGMA query_only=ON")
+        proof_rows = connection.execute(
+            "SELECT event_type, payload_json FROM group_proof_events "
+            "WHERE intent_id=? ORDER BY revision",
+            (intent_id,),
+        ).fetchall()
+
+    provider_uri = provider_path.resolve().as_uri()
+    with sqlite3.connect(f"{provider_uri}?mode=ro", uri=True) as connection:
+        connection.execute("PRAGMA query_only=ON")
+        provider_order_json, fills_json = connection.execute(
+            "SELECT order_json, fills_json FROM provider_orders WHERE client_order_id=?",
+            (client_order_id,),
+        ).fetchone()
+    source_events = [
+        json.loads(payload_json)
+        for event_type, payload_json in proof_rows
+        if event_type == "SOURCE_OBSERVED"
+    ]
+    assert len(source_events) == 1
+    source = source_events[0]
+    assert Decimal(str(source["filled_quantity"])) == Decimal("1")
+    assert Decimal(str(source["fee_total"])) == Decimal("-0.05")
+    assert source["trade_count"] == 1
+    source_fills = source["fill_records"]
+    assert len(source_fills) == 1
+    assert source_fills[0]["record"]["trade_id"] == f"fill-{client_order_id}-1"
+    assert Decimal(str(source_fills[0]["record"]["size"])) == Decimal("1")
+    assert Decimal(str(source_fills[0]["record"]["fee"])) == Decimal("-0.05")
+    assert not any(
+        event_type in {"SOURCE_PROGRESS", "SOURCE_RECONCILED", "PROOF_READY", "RISK_RESOLVED"}
+        for event_type, _payload_json in proof_rows
+    )
+
+    provider_order = json.loads(provider_order_json)
+    provider_fills = json.loads(fills_json)
+    assert provider_order["client_order_id"] == client_order_id
+    assert len(provider_fills) == 1
+    assert provider_fills[0]["trade_id"] == f"fill-{client_order_id}-1"
+    assert provider_fills[0]["quantity"] == "1"
+    assert provider_fills[0]["fee_amount"] == "-0.05"
+    final_writes, final_counters = _provider_snapshot(provider_path)
+    assert final_writes == (client_order_id,)
+    assert final_counters["fill_queries"] >= initial_counters["fill_queries"] + 2
+    assert final_counters["order_queries"] == final_counters["fill_queries"]
+
+    execution_store = SqliteExecutionStore(cluster.account_paths["account-a"]["execution"])
+    authority = ExecutionGroupAuthority(
+        cluster.account_paths["account-a"]["group_authority"],
+        completion_verifier=ExecutionStoreGroupCompletionVerifier(
+            execution_store,
+            execution_scopes=(execution_scope,),
+        ),
+    )
+    try:
+        pending_holds = authority.pending_holds()
+        assert len(pending_holds) == 1
+        assert pending_holds[0].intent_id == intent_id
+    finally:
+        authority.close()
+        execution_store.close()
+
+    assert _risk_legs(cluster.account_paths, "account-a", _GROUP_DUPLICATE_FILL) == (
+        ("leg-a", True, False),
+    )
+    _assert_holds_resolved(cluster.account_paths, "account-b", _GROUP_DUPLICATE_FILL)

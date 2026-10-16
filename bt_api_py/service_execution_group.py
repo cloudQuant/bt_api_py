@@ -625,6 +625,7 @@ class GroupCoordinatorService:
             )
         except Exception:
             raise ServiceExecutionGroupError("GROUP_COORDINATOR_INVALID") from None
+        self._order_ports = MappingProxyType(orders)
         self._targets = MappingProxyType(target_copy)
 
     @property

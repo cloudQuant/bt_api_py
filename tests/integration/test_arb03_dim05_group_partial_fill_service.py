@@ -19,6 +19,7 @@ as a gap rather than simulated.
 from __future__ import annotations
 
 import multiprocessing
+import json
 import socket
 import sqlite3
 import time
@@ -34,6 +35,8 @@ import zmq
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
     AccountScopedGroupAdmissionAdapter,
+    CancelIntent,
+    CancelObservation,
     ExecutionScope,
     ExecutionState,
     GroupOrderSnapshot,
@@ -478,6 +481,71 @@ class _UnusedExecutionDispatch:
         raise AssertionError("group-only owner must not dispatch cancellation")
 
 
+class _SyntheticGroupCancelDispatch:
+    """Provider cancel leaf with a durable side effect and lost response."""
+
+    def __init__(self, ledger_path: str) -> None:
+        self._ledger_path = ledger_path
+        with sqlite3.connect(self._ledger_path) as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS provider_cancel_attempts("
+                "sequence INTEGER PRIMARY KEY AUTOINCREMENT, cancel_id TEXT NOT NULL, "
+                "provider_order_id TEXT NOT NULL, target_intent_id TEXT NOT NULL)"
+            )
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS provider_cancel_dispatches("
+                "cancel_id TEXT PRIMARY KEY, provider_order_id TEXT NOT NULL, "
+                "target_intent_id TEXT NOT NULL)"
+            )
+
+    def submit(self, _intent: OrderIntent) -> object:
+        raise AssertionError("group submission must use the proof-owned dispatcher")
+
+    def cancel(self, intent: CancelIntent) -> CancelObservation:
+        if type(intent) is not CancelIntent:
+            raise AssertionError("provider cancellation must carry the immutable intent")
+        with sqlite3.connect(self._ledger_path) as connection:
+            connection.execute(
+                "INSERT INTO provider_cancel_attempts "
+                "(cancel_id, provider_order_id, target_intent_id) VALUES (?, ?, ?)",
+                (intent.cancel_id, intent.provider_order_id, intent.target_intent_id),
+            )
+        with sqlite3.connect(self._ledger_path) as connection:
+            rows = connection.execute(
+                "SELECT client_order_id, order_json FROM provider_orders"
+            ).fetchall()
+            matches = [
+                (client_order_id, json.loads(order_json))
+                for client_order_id, order_json in rows
+                if json.loads(order_json).get("order_id") == intent.provider_order_id
+            ]
+            if len(matches) != 1:
+                raise AssertionError("provider cancellation target is not unique")
+            client_order_id, order = matches[0]
+            if order.get("status") not in {"open", "partial"}:
+                raise AssertionError("provider cancellation target is no longer open")
+            order["status"] = "cancelled"
+            order["order_revision"] = int(order["order_revision"]) + 1
+            cursor = connection.execute(
+                "INSERT INTO provider_cancel_dispatches "
+                "(cancel_id, provider_order_id, target_intent_id) VALUES (?, ?, ?)",
+                (intent.cancel_id, intent.provider_order_id, intent.target_intent_id),
+            )
+            if cursor.rowcount != 1:
+                raise AssertionError("synthetic provider cancellation was not recorded")
+            connection.execute(
+                "UPDATE provider_orders SET order_json=? WHERE client_order_id=?",
+                (
+                    json.dumps(order, sort_keys=True, separators=(",", ":")),
+                    client_order_id,
+                ),
+            )
+        # The provider-side change is durable, but this leaf loses its reply.
+        # ManagedCancellationFacade must therefore persist UNKNOWN; a later
+        # group replay may only query this original cancel id.
+        raise TimeoutError("synthetic provider cancel response was lost")
+
+
 class _AccountResourceGraph:
     def __init__(
         self,
@@ -679,6 +747,7 @@ def _account_host_process(
     initial_states: tuple[str, ...],
     instruments: tuple[str, ...],
     expected_orders: tuple[tuple[str, str, str, str], ...],
+    group_cancel_enabled: bool = False,
 ) -> None:
     config = parse_service_config(raw_config)
     account_scope = _owner_scope(account_ref)
@@ -705,6 +774,27 @@ def _account_host_process(
         account_scope,
         _RUN,
         account_ref,
+    )
+    cancel_policy = (
+        TrustedGroupWritePolicy(
+            execution_instance,
+            _COORDINATOR_PRINCIPAL,
+            coordinator_identity,
+            entry_ref,
+            account_scope,
+            _RUN,
+            operation="orders.cancel_group_leg",
+        )
+        if group_cancel_enabled
+        else None
+    )
+    entry_grant_operations = frozenset(
+        {"orders.submit_group_leg", "orders.resolve_group_leg"}
+        | ({"orders.cancel_group_leg"} if group_cancel_enabled else set())
+    )
+    query_grant_operations = frozenset(
+        {"orders.query_group_leg"}
+        | ({"orders.query_group_cancel"} if group_cancel_enabled else set())
     )
     reservation_policy = TrustedGroupReservationPolicy(
         risk_instance,
@@ -733,7 +823,11 @@ def _account_host_process(
             return ComponentResources.borrowed(
                 {
                     "store": resources.execution_store,
-                    "dispatch": _UnusedExecutionDispatch(),
+                    "dispatch": (
+                        _SyntheticGroupCancelDispatch(paths["provider"])
+                        if group_cancel_enabled
+                        else _UnusedExecutionDispatch()
+                    ),
                     "accepted_group_store": resources.accepted_store,
                     "group_authority": resources.authority.guard,
                     "group_runtime_bundle": resources.bundle,
@@ -781,19 +875,14 @@ def _account_host_process(
                                     "service.order_entry",
                                     entry_ref,
                                     account_scope,
-                                    frozenset(
-                                        {
-                                            "orders.submit_group_leg",
-                                            "orders.resolve_group_leg",
-                                        }
-                                    ),
+                                    entry_grant_operations,
                                 ),
                                 ResourceGrant(
                                     execution_instance,
                                     "service.order_query",
                                     query_ref,
                                     account_scope,
-                                    frozenset({"orders.query_group_leg"}),
+                                    query_grant_operations,
                                 ),
                                 ResourceGrant(
                                     risk_instance,
@@ -812,7 +901,11 @@ def _account_host_process(
                         ),
                     )
                 },
-                group_write_policies=(write_policy,),
+                group_write_policies=(
+                    (write_policy, cancel_policy)
+                    if cancel_policy is not None
+                    else (write_policy,)
+                ),
                 group_reservation_policies=(reservation_policy,),
                 group_resolution_policies=(resolution_policy,),
             ),
