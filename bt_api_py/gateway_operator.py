@@ -97,6 +97,7 @@ class GatewayAccountSessionBinding:
     refresh_interval_seconds: float = 1.0
     max_staleness_seconds: float = 5.0
     request_timeout_seconds: float = 2.0
+    quota_admission: object | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not _valid_ref(self.account_session_ref) or not _valid_ref(self.state_scope):
@@ -108,6 +109,7 @@ class GatewayAccountSessionBinding:
                 validate_policy_set,
             )
             from bt_api_gateway.event_journal import GatewayEventJournal
+            from bt_api_gateway.quota_admission import GatewayQuotaAdmission
             from bt_api_gateway.router import GatewayPrincipal
             from bt_api_gateway.service_component import GatewayServiceAccountScope
             from bt_api_gateway.session_guard import LocalAccountSessionGuard
@@ -119,6 +121,10 @@ class GatewayAccountSessionBinding:
                 or type(self.guard) is not LocalAccountSessionGuard
                 or self.guard.account_key_digest
                 != hashlib.sha256(self.account_key.account_key_id.encode("ascii")).hexdigest()
+                or (
+                    self.quota_admission is not None
+                    and type(self.quota_admission) is not GatewayQuotaAdmission
+                )
             ):
                 raise ValueError
             if (
@@ -605,6 +611,18 @@ class GatewayOperatorDeployment:
 
         try:
             from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
+
+            if binding.quota_admission is not None:
+                from bt_api_gateway.quota_admission import (
+                    GatewayQuotaProviderSession,
+                    GatewayQuotaSubject,
+                )
+
+                provider = GatewayQuotaProviderSession(
+                    provider,
+                    binding.quota_admission,  # type: ignore[arg-type]
+                    GatewayQuotaSubject(account_ref=binding.account_scope.account_ref),
+                )
 
             worker = GatewayAccountSessionWorker(
                 provider,
