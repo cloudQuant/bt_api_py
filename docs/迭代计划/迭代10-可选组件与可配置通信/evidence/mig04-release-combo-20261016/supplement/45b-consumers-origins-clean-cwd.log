@@ -1,0 +1,13 @@
+MIG04 r3 commit-time supplement B: clean-cwd origin checks (consumers venv)
+cwd: D:\temp\it10mig04-r3-20261016-r1-supplement  (outside all repos and all archive extractions)
+command: D:\temp\it10mig04-r3-20261016-r1\venvs\consumers\Scripts\python.exe -c "<import app, backtrader, bt_api_binance, bt_api_py; print json __file__>"
+exit: 0
+stderr: ''
+--- stdout ---
+{
+  "sys_prefix": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers",
+  "app": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers\\Lib\\site-packages\\app\\__init__.py",
+  "backtrader": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers\\Lib\\site-packages\\backtrader\\__init__.py",
+  "bt_api_binance": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers\\Lib\\site-packages\\bt_api_binance\\__init__.py",
+  "bt_api_py": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers\\Lib\\site-packages\\bt_api_py\\__init__.py"
+}

@@ -1,0 +1,37 @@
+aiohappyeyeballs==2.7.1
+aiohttp==3.14.5
+aiosignal==1.4.0
+annotated-types==0.8.0
+anyio==4.15.1
+attrs==26.1.0
+bt_api_base @ file:///D:/temp/it10mig04-r3-20261016-r1/wheelhouse/bt_api_base-0.15.8-py3-none-any.whl#sha256=840090fbc13e7b1fefdc686805ec8685a5e5a7dfd39ace3e7a5763922fd5dbb0
+bt_api_py @ file:///D:/temp/it10mig04-r3-20261016-r1/wheelhouse/bt_api_py-0.15.5-py3-none-any.whl#sha256=6ed0ccc39991ef715f33a8a816c41ee6244b4490b911c2204eba4486a04377b8
+certifi==2026.7.22
+charset-normalizer==3.5.2
+frozenlist==1.8.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.20
+multidict==7.1.0
+numpy==2.4.6
+packaging==26.3
+pandas==3.0.6
+propcache==0.5.4
+pyarrow==25.0.1
+pydantic==2.14.1
+pydantic_core==2.50.1
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.4
+python-rapidjson==1.25
+pytz==2026.5
+PyYAML==6.0.3
+requests==2.34.2
+six==1.17.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+tzdata==2026.5
+urllib3==2.8.0
+websocket-client==1.9.2
+websockets==17.2
+yarl==1.25.1

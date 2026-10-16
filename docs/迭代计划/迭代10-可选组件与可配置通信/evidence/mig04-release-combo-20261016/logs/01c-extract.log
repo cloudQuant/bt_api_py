@@ -1,0 +1,10 @@
+extract sdk exit=0
+extract base exit=0
+extract transport_zmq exit=0
+extract gateway exit=0
+extract execution exit=0
+extract risk exit=0
+extract monitor exit=0
+extract binance exit=0
+extract backtrader exit=0
+extract afi exit=0

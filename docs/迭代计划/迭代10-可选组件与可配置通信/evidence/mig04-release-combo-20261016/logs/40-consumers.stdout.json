@@ -1,0 +1,16 @@
+{
+  "backtrader_file": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers\\Lib\\site-packages\\backtrader\\__init__.py",
+  "backtrader_version": "1.4.0",
+  "binance_entry_point_load": "ok: <function register_plugin at 0x00000297BB7339C0>",
+  "bt_api_binance_file": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers\\Lib\\site-packages\\bt_api_binance\\__init__.py",
+  "bt_api_binance_version": "2.0.1",
+  "bt_api_plugins_entry_points": [
+    "binance"
+  ],
+  "certlib_import": "IMPORTED D:\\temp\\it10mig04-r3-20261016-r1\\src\\backtrader\\examples\\live\\000_live_certification\\binance_penetration\\certlib\\__init__.py",
+  "certlib_source_root": "D:\\temp\\it10mig04-r3-20261016-r1\\src\\backtrader\\examples\\live\\000_live_certification\\binance_penetration",
+  "certlib_source_root_exists": true,
+  "executable": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers\\Scripts\\python.exe",
+  "prefix": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\consumers",
+  "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]"
+}

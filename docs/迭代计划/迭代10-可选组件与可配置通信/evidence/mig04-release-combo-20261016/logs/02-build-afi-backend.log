@@ -1,0 +1,16 @@
+Processing .\src\afi\src\backend
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: ai-for-investor-backend
+  Building wheel for ai-for-investor-backend (pyproject.toml): started
+  Building wheel for ai-for-investor-backend (pyproject.toml): finished with status 'done'
+  Created wheel for ai-for-investor-backend: filename=ai_for_investor_backend-0.1.0-py3-none-any.whl size=4100625 sha256=287ee6fcef1ff50f0d51600e951285741596cc3a1d365906dbb0d7afcb0fa234
+  Stored in directory: C:\Users\yunji\AppData\Local\Temp\pip-ephem-wheel-cache-_m1t62l9\wheels\83\76\83\12d01a026e13c12a846c7922e8b3e0f02696aaeb39220a920e
+Successfully built ai-for-investor-backend
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: C:\anaconda3\python.exe -m pip install --upgrade pip

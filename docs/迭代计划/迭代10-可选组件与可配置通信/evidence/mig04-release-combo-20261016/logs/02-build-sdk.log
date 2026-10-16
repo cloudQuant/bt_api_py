@@ -1,0 +1,16 @@
+Processing .\src\sdk
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: bt_api_py
+  Building wheel for bt_api_py (pyproject.toml): started
+  Building wheel for bt_api_py (pyproject.toml): finished with status 'done'
+  Created wheel for bt_api_py: filename=bt_api_py-0.15.5-py3-none-any.whl size=1244151 sha256=6ed0ccc39991ef715f33a8a816c41ee6244b4490b911c2204eba4486a04377b8
+  Stored in directory: C:\Users\yunji\AppData\Local\Temp\pip-ephem-wheel-cache-bfcqokvo\wheels\c0\01\21\b3036b83214a5ebd0e6f4c0348d130b2aa28577244808a6cef
+Successfully built bt_api_py
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: C:\anaconda3\python.exe -m pip install --upgrade pip

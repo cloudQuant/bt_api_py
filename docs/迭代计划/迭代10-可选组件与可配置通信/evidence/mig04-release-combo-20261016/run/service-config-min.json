@@ -1,0 +1,41 @@
+{
+  "communication": {
+    "config_schema_version": 1,
+    "profiles": {
+      "mig04-pilot-listener-v1": {
+        "backend": "zmq",
+        "config_schema_version": 1,
+        "endpoints": {
+          "market_bind": "tcp://127.0.0.1:53129",
+          "rpc_bind": "tcp://127.0.0.1:53128"
+        },
+        "options": {
+          "high_water_mark": 128,
+          "max_message_bytes": 262144
+        },
+        "security_profile_ref": "mig04-pilot-curve-v1"
+      }
+    }
+  },
+  "components": {
+    "gateway": {
+      "config_schema_version": 2,
+      "settings": {
+        "bind_ports": [
+          "service.market_source"
+        ],
+        "instance_id": "mig04-pilot-market-hub",
+        "options": {
+          "role": "market_hub"
+        }
+      }
+    }
+  },
+  "process_role": "service",
+  "registration_policy_ref": "mig04-pilot-registration-v1",
+  "scope_ref": "mig04-pilot-market-scope-v1",
+  "service_config_schema_version": 1,
+  "service_id": "mig04-pilot-market-service",
+  "service_requirements_ref": "mig04-pilot-requirements-v1",
+  "transport_ref": "mig04-pilot-listener-v1"
+}

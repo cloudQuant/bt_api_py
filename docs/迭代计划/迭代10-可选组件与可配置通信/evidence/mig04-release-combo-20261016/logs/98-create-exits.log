@@ -1,0 +1,8 @@
+venv strategy exit=0
+venv service exit=0
+venv extras exit=0
+venv consumers exit=0
+install strategy exit=0
+install service exit=0
+install extras exit=0
+install consumers exit=0

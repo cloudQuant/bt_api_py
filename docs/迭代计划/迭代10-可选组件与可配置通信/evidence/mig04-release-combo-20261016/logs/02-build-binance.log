@@ -1,0 +1,16 @@
+Processing .\src\binance
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: bt_api_binance
+  Building wheel for bt_api_binance (pyproject.toml): started
+  Building wheel for bt_api_binance (pyproject.toml): finished with status 'done'
+  Created wheel for bt_api_binance: filename=bt_api_binance-2.0.1-py3-none-any.whl size=111075 sha256=7cac597539bfa6a2a6fa6249e9983df1494d30c4f427898346f22940c9b89a23
+  Stored in directory: C:\Users\yunji\AppData\Local\Temp\pip-ephem-wheel-cache-tqg0ndrd\wheels\74\1f\57\3c01101b8b6c230c8590843e57a96b8da545a79ffd8b20dcb0
+Successfully built bt_api_binance
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: C:\anaconda3\python.exe -m pip install --upgrade pip

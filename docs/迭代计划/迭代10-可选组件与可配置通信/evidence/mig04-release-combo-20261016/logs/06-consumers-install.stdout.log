@@ -1,0 +1,473 @@
+Processing d:\temp\it10mig04-r3-20261016-r1\wheelhouse\bt_api_base-0.15.8-py3-none-any.whl
+Processing d:\temp\it10mig04-r3-20261016-r1\wheelhouse\bt_api_py-0.15.5-py3-none-any.whl
+Processing d:\temp\it10mig04-r3-20261016-r1\wheelhouse\bt_api_binance-2.0.1-py3-none-any.whl
+Processing d:\temp\it10mig04-r3-20261016-r1\wheelhouse\backtrader-1.4.0-py3-none-any.whl
+Processing d:\temp\it10mig04-r3-20261016-r1\wheelhouse\ai_for_investor_backend-0.1.0-py3-none-any.whl
+Collecting numpy>=1.26.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for numpy>=1.26.0 from https://files.pythonhosted.org/packages/c5/31/7fc6239c12bce7e931463251cca4426c465e1876ba3cc785402ef4dd8f4e/numpy-2.4.6-cp311-cp311-win_amd64.whl.metadata
+  Using cached numpy-2.4.6-cp311-cp311-win_amd64.whl.metadata (6.6 kB)
+Collecting python-dotenv>=1.0.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for python-dotenv>=1.0.0 from https://files.pythonhosted.org/packages/60/d1/38f3a3405989a89ac18390803e70c6ad7c7760da4f9b83cbeca0c44a0c72/python_dotenv-1.2.4-py3-none-any.whl.metadata
+  Using cached python_dotenv-1.2.4-py3-none-any.whl.metadata (29 kB)
+Collecting requests>=2.31.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for requests>=2.31.0 from https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl.metadata
+  Using cached requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Collecting websocket-client>=1.6.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for websocket-client>=1.6.0 from https://files.pythonhosted.org/packages/d5/d2/cc4dc1271e464942db7ee278baae2daa99ee77cb2af744025c04da585a3e/websocket_client-1.9.2-py3-none-any.whl.metadata
+  Using cached websocket_client-1.9.2-py3-none-any.whl.metadata (8.3 kB)
+Collecting pyyaml>=6.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for pyyaml>=6.0 from https://files.pythonhosted.org/packages/da/e3/ea007450a105ae919a72393cb06f122f288ef60bba2dc64b26e2646fa315/pyyaml-6.0.3-cp311-cp311-win_amd64.whl.metadata
+  Using cached pyyaml-6.0.3-cp311-cp311-win_amd64.whl.metadata (2.4 kB)
+Collecting pandas>=2.0.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for pandas>=2.0.0 from https://files.pythonhosted.org/packages/d3/dc/d2df02854aec5d47659acfb2be352eecc691845b2f86e99c84f1010a8671/pandas-3.0.6-cp311-cp311-win_amd64.whl.metadata
+  Using cached pandas-3.0.6-cp311-cp311-win_amd64.whl.metadata (19 kB)
+Collecting pyarrow<26.0.0,>=14.0.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for pyarrow<26.0.0,>=14.0.0 from https://files.pythonhosted.org/packages/8e/1c/5236033550633c9b7377b2a53660b2bbb06cb06dc09c4356332d67643ca1/pyarrow-25.0.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached pyarrow-25.0.1-cp311-cp311-win_amd64.whl.metadata (3.0 kB)
+Collecting aiohttp>=3.9.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for aiohttp>=3.9.0 from https://files.pythonhosted.org/packages/0f/15/52b5e65f02b33686ae49f1518548ae4f5a7adaf31d9d3c54fa12a143137b/aiohttp-3.14.5-cp311-cp311-win_amd64.whl.metadata
+  Using cached aiohttp-3.14.5-cp311-cp311-win_amd64.whl.metadata (8.5 kB)
+Collecting packaging>=24.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for packaging>=24.0 from https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl.metadata
+  Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Collecting pytz>=2023.3 (from bt-api-base==0.15.8)
+  Obtaining dependency information for pytz>=2023.3 from https://files.pythonhosted.org/packages/4f/ef/c66110d46fb800dda0bf33164182dfadabe26a90e4476844d502a23dca8e/pytz-2026.5-py2.py3-none-any.whl.metadata
+  Using cached pytz-2026.5-py2.py3-none-any.whl.metadata (22 kB)
+Collecting python-rapidjson>=1.10 (from bt-api-base==0.15.8)
+  Obtaining dependency information for python-rapidjson>=1.10 from https://files.pythonhosted.org/packages/6e/95/4fa2d5c689056abdaba695cf42514e4e03c096a931bfcaacc0bbe5db6dc4/python_rapidjson-1.25-cp311-cp311-win_amd64.whl.metadata
+  Using cached python_rapidjson-1.25-cp311-cp311-win_amd64.whl.metadata (26 kB)
+Collecting httpx>=0.27.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for httpx>=0.27.0 from https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl.metadata
+  Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting pydantic>=2.0.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for pydantic>=2.0.0 from https://files.pythonhosted.org/packages/35/ea/a56b9fe5066f3537b7882f77e9c5dfb26d8c2eefdaed9b5fc73d57b4dc22/pydantic-2.14.1-py3-none-any.whl.metadata
+  Using cached pydantic-2.14.1-py3-none-any.whl.metadata (133 kB)
+Collecting websockets>=12.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for websockets>=12.0 from https://files.pythonhosted.org/packages/0a/18/4fcc23f2159393ad7a668574ee97ee5a135003bfcbdd56b30581110c0fe8/websockets-17.2-cp311-cp311-win_amd64.whl.metadata
+  Using cached websockets-17.2-cp311-cp311-win_amd64.whl.metadata (6.5 kB)
+Collecting typing-extensions>=4.8.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for typing-extensions>=4.8.0 from https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl.metadata
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting numpy>=1.26.0 (from bt-api-base==0.15.8)
+  Obtaining dependency information for numpy>=1.26.0 from https://files.pythonhosted.org/packages/3f/6b/5610004206cf7f8e7ad91c5a85a8c71b2f2f8051a0c0c4d5916b76d6cbb2/numpy-1.26.4-cp311-cp311-win_amd64.whl.metadata
+  Using cached numpy-1.26.4-cp311-cp311-win_amd64.whl.metadata (61 kB)
+Collecting matplotlib>=3.3.0 (from backtrader==1.4.0)
+  Obtaining dependency information for matplotlib>=3.3.0 from https://files.pythonhosted.org/packages/66/54/91fe3fdfa29100b4668cbf9721577a10acde6e009694618230e4e7a97527/matplotlib-3.11.2-cp311-cp311-win_amd64.whl.metadata
+  Using cached matplotlib-3.11.2-cp311-cp311-win_amd64.whl.metadata (80 kB)
+Collecting scipy>=1.5.0 (from backtrader==1.4.0)
+  Obtaining dependency information for scipy>=1.5.0 from https://files.pythonhosted.org/packages/95/da/0d1df507cf574b3f224ccc3d45244c9a1d732c81dcb26b1e8a766ae271a8/scipy-1.17.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached scipy-1.17.1-cp311-cp311-win_amd64.whl.metadata (60 kB)
+Collecting statsmodels>=0.12.0 (from backtrader==1.4.0)
+  Obtaining dependency information for statsmodels>=0.12.0 from https://files.pythonhosted.org/packages/b8/be/77c4b5d3f61eab5676981d20f705acee8222ad31de8aca42a331dcd4cfdb/statsmodels-0.15.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached statsmodels-0.15.0-cp311-cp311-win_amd64.whl.metadata (9.6 kB)
+Collecting anyio<5.0,>=4.14.2 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for anyio<5.0,>=4.14.2 from https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl.metadata
+  Using cached anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+Collecting fastapi>=0.109.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for fastapi>=0.109.0 from https://files.pythonhosted.org/packages/d5/5a/9a5fd06659a63e13e876dd660347c044b3954ede3db928c69df879fac02c/fastapi-0.143.2-py3-none-any.whl.metadata
+  Using cached fastapi-0.143.2-py3-none-any.whl.metadata (26 kB)
+Collecting starlette>=1.3.1 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for starlette>=1.3.1 from https://files.pythonhosted.org/packages/c1/b0/5742e4ac7af5eb58ec3470a537a49d7aa507e5539413e504b3a65ef50ba8/starlette-1.8.0-py3-none-any.whl.metadata
+  Using cached starlette-1.8.0-py3-none-any.whl.metadata (6.6 kB)
+Collecting uvicorn[standard]>=0.27.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for uvicorn[standard]>=0.27.0 from https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl.metadata
+  Using cached uvicorn-0.54.0-py3-none-any.whl.metadata (6.6 kB)
+Collecting apscheduler>=3.10.4 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for apscheduler>=3.10.4 from https://files.pythonhosted.org/packages/42/c9/8638db32514dbb9157b3d82680c6faea89283523edf9ed2415ea3884f2ae/apscheduler-3.11.3-py3-none-any.whl.metadata
+  Using cached apscheduler-3.11.3-py3-none-any.whl.metadata (6.5 kB)
+Collecting email-validator>=2.0.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for email-validator>=2.0.0 from https://files.pythonhosted.org/packages/de/15/545e2b6cf2e3be84bc1ed85613edd75b8aea69807a71c26f4ca6a9258e82/email_validator-2.3.0-py3-none-any.whl.metadata
+  Using cached email_validator-2.3.0-py3-none-any.whl.metadata (26 kB)
+Collecting pydantic-settings>=2.14.2 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for pydantic-settings>=2.14.2 from https://files.pythonhosted.org/packages/53/f4/b987bf8c51e5b19a95fa66d1ee596074141e085d9c2ddf97920803c7029b/pydantic_settings-2.16.0-py3-none-any.whl.metadata
+  Using cached pydantic_settings-2.16.0-py3-none-any.whl.metadata (4.0 kB)
+Collecting jinja2>=3.1.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for jinja2>=3.1.0 from https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl.metadata
+  Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting markdown-it-py<5.0.0,>=3.0.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for markdown-it-py<5.0.0,>=3.0.0 from https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl.metadata
+  Using cached markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting weasyprint>=67.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for weasyprint>=67.0 from https://files.pythonhosted.org/packages/22/8b/0c53c869f29d3273536b896dd17f092549e34e35ffba4c7a60a6de1cb1c2/weasyprint-70.0-py3-none-any.whl.metadata
+  Using cached weasyprint-70.0-py3-none-any.whl.metadata (3.8 kB)
+Collecting slowapi>=0.1.9 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for slowapi>=0.1.9 from https://files.pythonhosted.org/packages/c4/8b/1d359f38706b4097d9a943bf8bd22599f537de4cbaff1e622d3e3936e164/slowapi-0.1.10-py3-none-any.whl.metadata
+  Using cached slowapi-0.1.10-py3-none-any.whl.metadata (3.3 kB)
+Collecting sqlalchemy[asyncio]<2.1,>=2.0.50 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for sqlalchemy[asyncio]<2.1,>=2.0.50 from https://files.pythonhosted.org/packages/d6/49/18fe80f64b1f6bcd422e649e40a78031f8624b2fde22ca54e950dfa6e25a/sqlalchemy-2.0.54-cp311-cp311-win_amd64.whl.metadata
+  Using cached sqlalchemy-2.0.54-cp311-cp311-win_amd64.whl.metadata (9.9 kB)
+Collecting aiosqlite>=0.19.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for aiosqlite>=0.19.0 from https://files.pythonhosted.org/packages/00/b7/e3bf5133d697a08128598c8d0abc5e16377b51465a33756de24fa7dee953/aiosqlite-0.22.1-py3-none-any.whl.metadata
+  Using cached aiosqlite-0.22.1-py3-none-any.whl.metadata (4.3 kB)
+Collecting PyJWT[crypto]>=2.15.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for PyJWT[crypto]>=2.15.0 from https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl.metadata
+  Using cached pyjwt-2.15.1-py3-none-any.whl.metadata (3.5 kB)
+Collecting urllib3>=2.8.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for urllib3>=2.8.0 from https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl.metadata
+  Using cached urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting cryptography>=50.0.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for cryptography>=50.0.0 from https://files.pythonhosted.org/packages/9a/4f/adfc442765721292fff86d314ce385d3249d22db42295c0dd057727b60f3/cryptography-50.0.2-cp311-abi3-win_amd64.whl.metadata
+  Using cached cryptography-50.0.2-cp311-abi3-win_amd64.whl.metadata (4.4 kB)
+Collecting passlib[bcrypt]>=1.7.4 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for passlib[bcrypt]>=1.7.4 from https://files.pythonhosted.org/packages/3b/a4/ab6b7589382ca3df236e03faa71deac88cae040af60c071a78d254a62172/passlib-1.7.4-py2.py3-none-any.whl.metadata
+  Using cached passlib-1.7.4-py2.py3-none-any.whl.metadata (1.7 kB)
+Collecting loguru>=0.7.2 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for loguru>=0.7.2 from https://files.pythonhosted.org/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl.metadata
+  Using cached loguru-0.7.3-py3-none-any.whl.metadata (22 kB)
+Collecting python-multipart>=0.0.31 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for python-multipart>=0.0.31 from https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl.metadata
+  Using cached python_multipart-0.0.32-py3-none-any.whl.metadata (2.1 kB)
+Collecting fincore<0.6.0,>=0.5.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for fincore<0.6.0,>=0.5.0 from https://files.pythonhosted.org/packages/e6/8e/8824c0cc7b6e653f8868db4ec43391c8962452b322e7bfc68079ff08d060/fincore-0.5.1-py3-none-any.whl.metadata
+  Using cached fincore-0.5.1-py3-none-any.whl.metadata (10 kB)
+Collecting mysql-connector-python>=8.0.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for mysql-connector-python>=8.0.0 from https://files.pythonhosted.org/packages/00/88/7060928e0b9743d5e49133be158c05399817e04f2eebdf23d562d2d805e7/mysql_connector_python-26.7.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached mysql_connector_python-26.7.0-cp311-cp311-win_amd64.whl.metadata (11 kB)
+Collecting PyMySQL>=1.2.3 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for PyMySQL>=1.2.3 from https://files.pythonhosted.org/packages/a9/4b/0a906d8184f011ff8dbd4722743783867589b33269d2c5fff238d636fdcb/pymysql-1.2.3-py3-none-any.whl.metadata
+  Using cached pymysql-1.2.3-py3-none-any.whl.metadata (4.2 kB)
+Collecting purgedcv>=0.1.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for purgedcv>=0.1.0 from https://files.pythonhosted.org/packages/d2/01/41b26dd00e1029d60503820d8a8ca1d8a367cd911f4037535ffa21118550/purgedcv-0.1.10-py3-none-any.whl.metadata
+  Using cached purgedcv-0.1.10-py3-none-any.whl.metadata (28 kB)
+Collecting opentelemetry-api>=1.20.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-api>=1.20.0 from https://files.pythonhosted.org/packages/1e/41/f7dcf80b81ee8e71c1a2b59f14208bc723edbd89ed027a73b175abf6348e/opentelemetry_api-1.45.1-py3-none-any.whl.metadata
+  Using cached opentelemetry_api-1.45.1-py3-none-any.whl.metadata (1.4 kB)
+Collecting opentelemetry-sdk>=1.20.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-sdk>=1.20.0 from https://files.pythonhosted.org/packages/95/3c/87c42b4bd6dd297536f04cd9383d212ac557ecd49f2cbdcd46da1c9ef5c8/opentelemetry_sdk-1.45.1-py3-none-any.whl.metadata
+  Using cached opentelemetry_sdk-1.45.1-py3-none-any.whl.metadata (1.6 kB)
+Collecting opentelemetry-instrumentation-fastapi>=0.41b0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-instrumentation-fastapi>=0.41b0 from https://files.pythonhosted.org/packages/75/70/676928d537978acc7bff2ac8657bd0836ba608ffc8f65455238f1fa2bd0f/opentelemetry_instrumentation_fastapi-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_instrumentation_fastapi-0.66b1-py3-none-any.whl.metadata (2.2 kB)
+Collecting opentelemetry-instrumentation-sqlalchemy>=0.41b0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-instrumentation-sqlalchemy>=0.41b0 from https://files.pythonhosted.org/packages/08/05/f8cff0c68a7f9ab8fab01904be5a49c5214435109c2a6b6d173a974c10d9/opentelemetry_instrumentation_sqlalchemy-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_instrumentation_sqlalchemy-0.66b1-py3-none-any.whl.metadata (2.2 kB)
+Collecting opentelemetry-instrumentation-httpx>=0.41b0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-instrumentation-httpx>=0.41b0 from https://files.pythonhosted.org/packages/4f/c6/e5682b1bfb320b32505e88255c34ae1e99fe9fb220cc465c244e91967eac/opentelemetry_instrumentation_httpx-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_instrumentation_httpx-0.66b1-py3-none-any.whl.metadata (9.0 kB)
+Collecting opentelemetry-exporter-otlp-proto-grpc>=1.20.0 (from ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-exporter-otlp-proto-grpc>=1.20.0 from https://files.pythonhosted.org/packages/4d/46/2d1da202f1e17c81aae7efcf702898d524b46709e4d3e2bf1f7f8ca8fbc6/opentelemetry_exporter_otlp_proto_grpc-1.45.1-py3-none-any.whl.metadata
+  Using cached opentelemetry_exporter_otlp_proto_grpc-1.45.1-py3-none-any.whl.metadata (2.6 kB)
+Collecting aiohappyeyeballs>=2.5.0 (from aiohttp>=3.9.0->bt-api-base==0.15.8)
+  Obtaining dependency information for aiohappyeyeballs>=2.5.0 from https://files.pythonhosted.org/packages/71/43/1947f06babed6b3f1d7f38b0c767f52df66bfb2bc10b468c4a7de9eceff2/aiohappyeyeballs-2.7.1-py3-none-any.whl.metadata
+  Using cached aiohappyeyeballs-2.7.1-py3-none-any.whl.metadata (5.9 kB)
+Collecting aiosignal>=1.4.0 (from aiohttp>=3.9.0->bt-api-base==0.15.8)
+  Obtaining dependency information for aiosignal>=1.4.0 from https://files.pythonhosted.org/packages/fb/76/641ae371508676492379f16e2fa48f4e2c11741bd63c48be4b12a6b09cba/aiosignal-1.4.0-py3-none-any.whl.metadata
+  Using cached aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+Collecting attrs>=17.3.0 (from aiohttp>=3.9.0->bt-api-base==0.15.8)
+  Obtaining dependency information for attrs>=17.3.0 from https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl.metadata
+  Using cached attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+Collecting frozenlist>=1.1.1 (from aiohttp>=3.9.0->bt-api-base==0.15.8)
+  Obtaining dependency information for frozenlist>=1.1.1 from https://files.pythonhosted.org/packages/0a/f5/603d0d6a02cfd4c8f2a095a54672b3cf967ad688a60fb9faf04fc4887f65/frozenlist-1.8.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached frozenlist-1.8.0-cp311-cp311-win_amd64.whl.metadata (21 kB)
+Collecting multidict<8.0,>=4.5 (from aiohttp>=3.9.0->bt-api-base==0.15.8)
+  Obtaining dependency information for multidict<8.0,>=4.5 from https://files.pythonhosted.org/packages/37/fd/1ed7b7d206ef7a6918ac3de515543ca4b49bc50131325ca1814c005daf3f/multidict-7.1.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached multidict-7.1.0-cp311-cp311-win_amd64.whl.metadata (6.4 kB)
+Collecting propcache>=0.2.0 (from aiohttp>=3.9.0->bt-api-base==0.15.8)
+  Obtaining dependency information for propcache>=0.2.0 from https://files.pythonhosted.org/packages/0a/8a/3db6a3543d8101263b4c52978b6276a04ead2caff2c5ab880d934f47bd89/propcache-0.5.4-cp311-cp311-win_amd64.whl.metadata
+  Using cached propcache-0.5.4-cp311-cp311-win_amd64.whl.metadata (25 kB)
+Collecting yarl<2.0,>=1.25.1 (from aiohttp>=3.9.0->bt-api-base==0.15.8)
+  Obtaining dependency information for yarl<2.0,>=1.25.1 from https://files.pythonhosted.org/packages/aa/9d/8cdceec66a9b940700cb45931741403f045b162afd79bcb93c41cadd0972/yarl-1.25.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached yarl-1.25.1-cp311-cp311-win_amd64.whl.metadata (115 kB)
+Collecting idna>=2.8 (from anyio<5.0,>=4.14.2->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for idna>=2.8 from https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl.metadata
+  Using cached idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+Collecting tzlocal>=3.0 (from apscheduler>=3.10.4->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for tzlocal>=3.0 from https://files.pythonhosted.org/packages/9e/a4/017a7a6cbe387d961a688ec31364ae60a5c4e22c96ae9921b79a947c855d/tzlocal-5.4.4-py3-none-any.whl.metadata
+  Using cached tzlocal-5.4.4-py3-none-any.whl.metadata (7.7 kB)
+Collecting cffi>=2.0.0 (from cryptography>=50.0.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for cffi>=2.0.0 from https://files.pythonhosted.org/packages/73/c0/77ba02423c2f7d7091143c45cd49e0e6575c4c1967394bb542bd923a9b74/cffi-2.1.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached cffi-2.1.1-cp311-cp311-win_amd64.whl.metadata (2.6 kB)
+Collecting dnspython>=2.0.0 (from email-validator>=2.0.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for dnspython>=2.0.0 from https://files.pythonhosted.org/packages/10/02/cdcc9b7c051786a103c3b09e1003a82fa0c66bcb91ffbdabcfbf7b4163b9/dnspython-2.9.0-py3-none-any.whl.metadata
+  Using cached dnspython-2.9.0-py3-none-any.whl.metadata (5.7 kB)
+Collecting typing-inspection>=0.4.2 (from fastapi>=0.109.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for typing-inspection>=0.4.2 from https://files.pythonhosted.org/packages/67/81/4add07e5172b7ac40d8ed5ff580409a7801a4fe26d529bdd915401dabfbe/typing_inspection-0.4.4-py3-none-any.whl.metadata
+  Using cached typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+Collecting annotated-doc>=0.0.2 (from fastapi>=0.109.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for annotated-doc>=0.0.2 from https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl.metadata
+  Using cached annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+Collecting certifi (from httpx>=0.27.0->bt-api-base==0.15.8)
+  Obtaining dependency information for certifi from https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl.metadata
+  Using cached certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+Collecting httpcore==1.* (from httpx>=0.27.0->bt-api-base==0.15.8)
+  Obtaining dependency information for httpcore==1.* from https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl.metadata
+  Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Collecting h11>=0.16 (from httpcore==1.*->httpx>=0.27.0->bt-api-base==0.15.8)
+  Obtaining dependency information for h11>=0.16 from https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl.metadata
+  Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Collecting MarkupSafe>=2.0 (from jinja2>=3.1.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for MarkupSafe>=2.0 from https://files.pythonhosted.org/packages/91/89/f2b509f7bf79352e40117824c1070dbeafd4df67031d3fa98165a3134228/markupsafe-3.0.4-cp311-cp311-win_amd64.whl.metadata
+  Using cached markupsafe-3.0.4-cp311-cp311-win_amd64.whl.metadata (2.8 kB)
+Collecting colorama>=0.3.4 (from loguru>=0.7.2->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for colorama>=0.3.4 from https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl.metadata
+  Using cached colorama-0.4.6-py2.py3-none-any.whl.metadata (17 kB)
+Collecting win32-setctime>=1.0.0 (from loguru>=0.7.2->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for win32-setctime>=1.0.0 from https://files.pythonhosted.org/packages/e1/07/c6fe3ad3e685340704d314d765b7912993bcb8dc198f0e7a89382d37974b/win32_setctime-1.2.0-py3-none-any.whl.metadata
+  Using cached win32_setctime-1.2.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting mdurl~=0.1 (from markdown-it-py<5.0.0,>=3.0.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for mdurl~=0.1 from https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl.metadata
+  Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Collecting contourpy>=1.0.1 (from matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for contourpy>=1.0.1 from https://files.pythonhosted.org/packages/98/4b/9bd370b004b5c9d8045c6c33cf65bae018b27aca550a3f657cdc99acdbd8/contourpy-1.3.3-cp311-cp311-win_amd64.whl.metadata
+  Using cached contourpy-1.3.3-cp311-cp311-win_amd64.whl.metadata (5.5 kB)
+Collecting cycler>=0.10 (from matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for cycler>=0.10 from https://files.pythonhosted.org/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl.metadata
+  Using cached cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+Collecting fonttools>=4.28.2 (from matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for fonttools>=4.28.2 from https://files.pythonhosted.org/packages/24/73/5c281531cf7899ae37a0937c62feed1f7d0e8a35538eea4d1595b52447e1/fonttools-4.67.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached fonttools-4.67.0-cp311-cp311-win_amd64.whl.metadata (139 kB)
+Collecting kiwisolver>=1.3.1 (from matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for kiwisolver>=1.3.1 from https://files.pythonhosted.org/packages/bf/9f/6f9e489c188200e6fb3193935501894811e8c97577c8ffe9033589bf3521/kiwisolver-1.5.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached kiwisolver-1.5.1-cp311-cp311-win_amd64.whl.metadata (5.2 kB)
+Collecting pillow>=9 (from matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for pillow>=9 from https://files.pythonhosted.org/packages/63/c6/4bad1b18d132a50b27e1365e1ab163616f7a5bb56d330f66f9d1d9d4f9d4/pillow-12.3.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached pillow-12.3.0-cp311-cp311-win_amd64.whl.metadata (9.3 kB)
+Collecting pyparsing>=3 (from matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for pyparsing>=3 from https://files.pythonhosted.org/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl.metadata
+  Using cached pyparsing-3.3.3-py3-none-any.whl.metadata (5.9 kB)
+Collecting python-dateutil>=2.7 (from matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for python-dateutil>=2.7 from https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata
+  Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+Collecting googleapis-common-protos~=1.57 (from opentelemetry-exporter-otlp-proto-grpc>=1.20.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for googleapis-common-protos~=1.57 from https://files.pythonhosted.org/packages/65/b9/6b29500a1c581ff4d77fd83c6568d068bee06f1b139fb6eb0a4f2d4bce8a/googleapis_common_protos-1.75.5-py3-none-any.whl.metadata
+  Using cached googleapis_common_protos-1.75.5-py3-none-any.whl.metadata (8.5 kB)
+Collecting grpcio<2.0.0,>=1.63.2 (from opentelemetry-exporter-otlp-proto-grpc>=1.20.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for grpcio<2.0.0,>=1.63.2 from https://files.pythonhosted.org/packages/da/1e/da99356b3b573af357d059753a47fba54f1ca1a9c0e4deccd0210cb7f4ba/grpcio-1.84.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached grpcio-1.84.0-cp311-cp311-win_amd64.whl.metadata (3.9 kB)
+Collecting opentelemetry-exporter-otlp-common==0.66b1 (from opentelemetry-exporter-otlp-proto-grpc>=1.20.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-exporter-otlp-common==0.66b1 from https://files.pythonhosted.org/packages/fc/39/8c23d67665c762aa51840fa06f86e902e8f6f1693bc8d7e3d98cd6e2f753/opentelemetry_exporter_otlp_common-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_exporter_otlp_common-0.66b1-py3-none-any.whl.metadata (1.9 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.45.1 (from opentelemetry-exporter-otlp-proto-grpc>=1.20.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-exporter-otlp-proto-common==1.45.1 from https://files.pythonhosted.org/packages/84/aa/92f225d353904e7f70b8b3e3c1b02db0cf56f744c2e83c581dc372e78873/opentelemetry_exporter_otlp_proto_common-1.45.1-py3-none-any.whl.metadata
+  Using cached opentelemetry_exporter_otlp_proto_common-1.45.1-py3-none-any.whl.metadata (1.8 kB)
+Collecting opentelemetry-proto==1.45.1 (from opentelemetry-exporter-otlp-proto-grpc>=1.20.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-proto==1.45.1 from https://files.pythonhosted.org/packages/ab/9a/42ec8180a769516ae757e893b69736826efceac7332553915b4528a91c6d/opentelemetry_proto-1.45.1-py3-none-any.whl.metadata
+  Using cached opentelemetry_proto-1.45.1-py3-none-any.whl.metadata (2.3 kB)
+Collecting protobuf<8.0,>=5.0 (from opentelemetry-proto==1.45.1->opentelemetry-exporter-otlp-proto-grpc>=1.20.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for protobuf<8.0,>=5.0 from https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl.metadata
+  Using cached protobuf-7.36.2-cp310-abi3-win_amd64.whl.metadata (595 bytes)
+Collecting opentelemetry-instrumentation-asgi==0.66b1 (from opentelemetry-instrumentation-fastapi>=0.41b0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-instrumentation-asgi==0.66b1 from https://files.pythonhosted.org/packages/67/ea/10ba99110bf3c9fb736af39c96ca8f3668b988cabb6b59309e058c44461c/opentelemetry_instrumentation_asgi-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_instrumentation_asgi-0.66b1-py3-none-any.whl.metadata (2.0 kB)
+Collecting opentelemetry-instrumentation==0.66b1 (from opentelemetry-instrumentation-fastapi>=0.41b0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-instrumentation==0.66b1 from https://files.pythonhosted.org/packages/da/b2/d1413681ff43e13ac9860df27e1226d3199ab0b97b352ceea41abcc660a5/opentelemetry_instrumentation-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_instrumentation-0.66b1-py3-none-any.whl.metadata (7.2 kB)
+Collecting opentelemetry-semantic-conventions==0.66b1 (from opentelemetry-instrumentation-fastapi>=0.41b0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-semantic-conventions==0.66b1 from https://files.pythonhosted.org/packages/bc/14/67f8aa798857f8cf686f515bf93d9bb877ce952ddc8efae0fa25b45ce0d6/opentelemetry_semantic_conventions-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_semantic_conventions-0.66b1-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-util-http==0.66b1 (from opentelemetry-instrumentation-fastapi>=0.41b0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for opentelemetry-util-http==0.66b1 from https://files.pythonhosted.org/packages/eb/9b/c77ecaea79ba0de1a11e7f06a7f5eea7043ec23f1860dcf5f03536698e4c/opentelemetry_util_http-0.66b1-py3-none-any.whl.metadata
+  Using cached opentelemetry_util_http-0.66b1-py3-none-any.whl.metadata (2.6 kB)
+Collecting wrapt<3.0.0,>=1.0.0 (from opentelemetry-instrumentation==0.66b1->opentelemetry-instrumentation-fastapi>=0.41b0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for wrapt<3.0.0,>=1.0.0 from https://files.pythonhosted.org/packages/e6/d4/ae9ca837038a7a9aadb906eeca76b42df54e299edb29f8ac2cbad1d55b4f/wrapt-2.5.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached wrapt-2.5.1-cp311-cp311-win_amd64.whl.metadata (7.7 kB)
+Collecting asgiref~=3.0 (from opentelemetry-instrumentation-asgi==0.66b1->opentelemetry-instrumentation-fastapi>=0.41b0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for asgiref~=3.0 from https://files.pythonhosted.org/packages/c0/1b/54f4ad77cd8a584fa70746c47df988e002cf1ee1eba43364d46f87803647/asgiref-3.12.1-py3-none-any.whl.metadata
+  Using cached asgiref-3.12.1-py3-none-any.whl.metadata (9.4 kB)
+Collecting tzdata (from pandas>=2.0.0->bt-api-base==0.15.8)
+  Obtaining dependency information for tzdata from https://files.pythonhosted.org/packages/94/21/1e5995a1c920cce14e4bffae20c665ec10e7ed03ab25e006cd741092b718/tzdata-2026.5-py2.py3-none-any.whl.metadata
+  Using cached tzdata-2026.5-py2.py3-none-any.whl.metadata (1.4 kB)
+Collecting bcrypt>=3.1.0 (from passlib[bcrypt]>=1.7.4->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for bcrypt>=3.1.0 from https://files.pythonhosted.org/packages/9f/b9/9d9a641194a730bda138b3dfe53f584d61c58cd5230e37566e83ec2ffa0d/bcrypt-5.0.0-cp39-abi3-win_amd64.whl.metadata
+  Using cached bcrypt-5.0.0-cp39-abi3-win_amd64.whl.metadata (10 kB)
+Collecting scikit-learn>=1.3 (from purgedcv>=0.1.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for scikit-learn>=1.3 from https://files.pythonhosted.org/packages/29/8a/8d1e888fe3d0dd4e2a1f3356dad703eed569aaf673e222b6f647005ad30f/scikit_learn-1.9.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached scikit_learn-1.9.1-cp311-cp311-win_amd64.whl.metadata (9.3 kB)
+Collecting annotated-types>=0.6.0 (from pydantic>=2.0.0->bt-api-base==0.15.8)
+  Obtaining dependency information for annotated-types>=0.6.0 from https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl.metadata
+  Using cached annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.50.1 (from pydantic>=2.0.0->bt-api-base==0.15.8)
+  Obtaining dependency information for pydantic-core==2.50.1 from https://files.pythonhosted.org/packages/24/65/3e875e7991eaecd4d70686293ff0d8a99aa8f93dc295e6a21c3d702912fb/pydantic_core-2.50.1-cp311-cp311-win_amd64.whl.metadata
+  Using cached pydantic_core-2.50.1-cp311-cp311-win_amd64.whl.metadata (6.7 kB)
+Collecting charset_normalizer<4,>=2 (from requests>=2.31.0->bt-api-base==0.15.8)
+  Obtaining dependency information for charset_normalizer<4,>=2 from https://files.pythonhosted.org/packages/e8/fc/fdf8cf52ff21cd5bf158f20978991cf985325842f74283eb6df26c8a39d8/charset_normalizer-3.5.2-cp311-cp311-win_amd64.whl.metadata
+  Using cached charset_normalizer-3.5.2-cp311-cp311-win_amd64.whl.metadata (47 kB)
+Collecting limits>=2.3 (from slowapi>=0.1.9->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for limits>=2.3 from https://files.pythonhosted.org/packages/b9/98/cb5ca20618d205a09d5bec7591fbc4130369c7e6308d9a676a28ff3ab22c/limits-5.8.0-py3-none-any.whl.metadata
+  Using cached limits-5.8.0-py3-none-any.whl.metadata (10 kB)
+Collecting greenlet>=1 (from sqlalchemy[asyncio]<2.1,>=2.0.50->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for greenlet>=1 from https://files.pythonhosted.org/packages/ce/6c/019d2ef898f4b9ac845167f1c6f73229e9a4e2439362a5e2ce50205a19b0/greenlet-3.5.6-cp311-cp311-win_amd64.whl.metadata
+  Using cached greenlet-3.5.6-cp311-cp311-win_amd64.whl.metadata (3.9 kB)
+Collecting patsy>=0.5.6 (from statsmodels>=0.12.0->backtrader==1.4.0)
+  Obtaining dependency information for patsy>=0.5.6 from https://files.pythonhosted.org/packages/20/70/cd3cf5cff538323076a879edef02cce6f13f7d75e03d12f211b0a0dbd178/patsy-1.0.3-py2.py3-none-any.whl.metadata
+  Using cached patsy-1.0.3-py2.py3-none-any.whl.metadata (3.7 kB)
+Collecting formulaic>=1.1.0 (from statsmodels>=0.12.0->backtrader==1.4.0)
+  Obtaining dependency information for formulaic>=1.1.0 from https://files.pythonhosted.org/packages/fc/75/0576b03f7889ad25b5385b4f6c69e0543713425a6f193b056c9b0a2e65ce/formulaic-1.2.2-py3-none-any.whl.metadata
+  Using cached formulaic-1.2.2-py3-none-any.whl.metadata (7.0 kB)
+Collecting click>=7.0 (from uvicorn[standard]>=0.27.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for click>=7.0 from https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl.metadata
+  Using cached click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+Collecting httptools>=0.8.0 (from uvicorn[standard]>=0.27.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for httptools>=0.8.0 from https://files.pythonhosted.org/packages/9c/41/214e2da998e6348eb68fd0883ffa9774c83ab7a5da12d97595aafb07d0ba/httptools-0.9.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached httptools-0.9.0-cp311-cp311-win_amd64.whl.metadata (3.7 kB)
+Collecting watchfiles>=0.20 (from uvicorn[standard]>=0.27.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for watchfiles>=0.20 from https://files.pythonhosted.org/packages/48/a1/1c4a1b3c8030cd03206232612be8a6e8799093490c220b0fcb935d02b75a/watchfiles-1.3.0-cp310-abi3-win_amd64.whl.metadata
+  Using cached watchfiles-1.3.0-cp310-abi3-win_amd64.whl.metadata (5.0 kB)
+Collecting pydyf>=0.11.0 (from weasyprint>=67.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for pydyf>=0.11.0 from https://files.pythonhosted.org/packages/78/0a/091fdda21512cc4a149c5d43a3d29b8b336f4f04181f2553f43ed54f7490/pydyf-0.13.0-py3-none-any.whl.metadata
+  Using cached pydyf-0.13.0-py3-none-any.whl.metadata (2.6 kB)
+Collecting tinyhtml5>=2.0.0b1 (from weasyprint>=67.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for tinyhtml5>=2.0.0b1 from https://files.pythonhosted.org/packages/52/48/01695a036b695f83fea7aef6955d735db0f517b1c8e25ddb399ac0bdbcbf/tinyhtml5-2.1.0-py3-none-any.whl.metadata
+  Using cached tinyhtml5-2.1.0-py3-none-any.whl.metadata (2.9 kB)
+Collecting tinycss2>=1.5.0 (from weasyprint>=67.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for tinycss2>=1.5.0 from https://files.pythonhosted.org/packages/60/45/c7b5c3168458db837e8ceab06dc77824e18202679d0463f0e8f002143a97/tinycss2-1.5.1-py3-none-any.whl.metadata
+  Using cached tinycss2-1.5.1-py3-none-any.whl.metadata (3.0 kB)
+Collecting cssselect2>=0.8.0 (from weasyprint>=67.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for cssselect2>=0.8.0 from https://files.pythonhosted.org/packages/bd/59/6b1daa3b94de8970e2a2787ba73616c2d0675d2f948ef4cad8bef7f21bc6/cssselect2-0.10.1-py3-none-any.whl.metadata
+  Using cached cssselect2-0.10.1-py3-none-any.whl.metadata (2.9 kB)
+Collecting Pyphen>=0.9.1 (from weasyprint>=67.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for Pyphen>=0.9.1 from https://files.pythonhosted.org/packages/ec/1d/23801cf008f71575f0a4800463f349afa5f04b27fe783178a45cdc4d5edf/pyphen-0.18.1-py3-none-any.whl.metadata
+  Using cached pyphen-0.18.1-py3-none-any.whl.metadata (3.4 kB)
+Collecting pycparser (from cffi>=2.0.0->cryptography>=50.0.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for pycparser from https://files.pythonhosted.org/packages/90/11/0e6f11117525ff0eec40ebac3d313376f102df93ca44ad9e893ee85e4f89/pycparser-3.11-py3-none-any.whl.metadata
+  Using cached pycparser-3.11-py3-none-any.whl.metadata (8.2 kB)
+Collecting webencodings (from cssselect2>=0.8.0->weasyprint>=67.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for webencodings from https://files.pythonhosted.org/packages/77/c6/040cbc72480d789a5f40d63fb484d3106554c4dfa2d2b70ad5022057750f/webencodings-0.6.1-py3-none-any.whl.metadata
+  Using cached webencodings-0.6.1-py3-none-any.whl.metadata (3.4 kB)
+Collecting brotli>=1.0.1 (from fonttools>=4.28.2->matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for brotli>=1.0.1 from https://files.pythonhosted.org/packages/02/8b/ecb5761b989629a4758c394b9301607a5880de61ee2ee5fe104b87149ebc/brotli-1.2.0-cp311-cp311-win_amd64.whl.metadata
+  Using cached brotli-1.2.0-cp311-cp311-win_amd64.whl.metadata (6.3 kB)
+Collecting zopfli>=0.1.4 (from fonttools>=4.28.2->matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for zopfli>=0.1.4 from https://files.pythonhosted.org/packages/9d/3a/4ff4fdead77ef30f5832b38a47eb7a1283e98b3c678576b83f8fdfff53eb/zopfli-0.4.3-cp310-abi3-win_amd64.whl.metadata
+  Using cached zopfli-0.4.3-cp310-abi3-win_amd64.whl.metadata (3.6 kB)
+Collecting interface-meta>=1.2.0 (from formulaic>=1.1.0->statsmodels>=0.12.0->backtrader==1.4.0)
+  Obtaining dependency information for interface-meta>=1.2.0 from https://files.pythonhosted.org/packages/a1/d3/20a61a248feb1249cd81f83ce731f0bdf5170ed96a08a298f7081cda9e90/interface_meta-2.0.1-py3-none-any.whl.metadata
+  Using cached interface_meta-2.0.1-py3-none-any.whl.metadata (6.4 kB)
+Collecting narwhals>=1.17 (from formulaic>=1.1.0->statsmodels>=0.12.0->backtrader==1.4.0)
+  Obtaining dependency information for narwhals>=1.17 from https://files.pythonhosted.org/packages/d1/89/5d4c86da1130d9059681e5b6cd7645df5c10279a6a079c5c37dcb2cc6f3f/narwhals-2.27.1-py3-none-any.whl.metadata
+  Using cached narwhals-2.27.1-py3-none-any.whl.metadata (15 kB)
+Collecting deprecated>=1.2 (from limits>=2.3->slowapi>=0.1.9->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for deprecated>=1.2 from https://files.pythonhosted.org/packages/84/d0/205d54408c08b13550c733c4b85429e7ead111c7f0014309637425520a9a/deprecated-1.3.1-py2.py3-none-any.whl.metadata
+  Using cached deprecated-1.3.1-py2.py3-none-any.whl.metadata (5.9 kB)
+Collecting six>=1.5 (from python-dateutil>=2.7->matplotlib>=3.3.0->backtrader==1.4.0)
+  Obtaining dependency information for six>=1.5 from https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl.metadata
+  Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Collecting joblib>=1.4.0 (from scikit-learn>=1.3->purgedcv>=0.1.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for joblib>=1.4.0 from https://files.pythonhosted.org/packages/18/53/84099323c2ec4be98d935f63c033ac4151ee83836ca1050ede3b3aadf155/joblib-1.6.0-py3-none-any.whl.metadata
+  Using cached joblib-1.6.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting threadpoolctl>=3.5.0 (from scikit-learn>=1.3->purgedcv>=0.1.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for threadpoolctl>=3.5.0 from https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl.metadata
+  Using cached threadpoolctl-3.7.0-py3-none-any.whl.metadata (24 kB)
+Collecting cloudpickle>=3.0 (from joblib>=1.4.0->scikit-learn>=1.3->purgedcv>=0.1.0->ai-for-investor-backend==0.1.0)
+  Obtaining dependency information for cloudpickle>=3.0 from https://files.pythonhosted.org/packages/88/39/799be3f2f0f38cc727ee3b4f1445fe6d5e4133064ec2e4115069418a5bb6/cloudpickle-3.1.2-py3-none-any.whl.metadata
+  Using cached cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+Using cached aiohttp-3.14.5-cp311-cp311-win_amd64.whl (512 kB)
+Using cached aiosqlite-0.22.1-py3-none-any.whl (17 kB)
+Using cached anyio-4.15.1-py3-none-any.whl (132 kB)
+Using cached apscheduler-3.11.3-py3-none-any.whl (66 kB)
+Using cached cryptography-50.0.2-cp311-abi3-win_amd64.whl (3.8 MB)
+Using cached email_validator-2.3.0-py3-none-any.whl (35 kB)
+Using cached fastapi-0.143.2-py3-none-any.whl (144 kB)
+Using cached fincore-0.5.1-py3-none-any.whl (661 kB)
+Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+Using cached loguru-0.7.3-py3-none-any.whl (61 kB)
+Using cached markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Using cached matplotlib-3.11.2-cp311-cp311-win_amd64.whl (9.3 MB)
+Using cached mysql_connector_python-26.7.0-cp311-cp311-win_amd64.whl (17.7 MB)
+Using cached numpy-1.26.4-cp311-cp311-win_amd64.whl (15.8 MB)
+Using cached opentelemetry_api-1.45.1-py3-none-any.whl (60 kB)
+Using cached opentelemetry_exporter_otlp_proto_grpc-1.45.1-py3-none-any.whl (19 kB)
+Using cached opentelemetry_exporter_otlp_common-0.66b1-py3-none-any.whl (12 kB)
+Using cached opentelemetry_exporter_otlp_proto_common-1.45.1-py3-none-any.whl (15 kB)
+Using cached opentelemetry_proto-1.45.1-py3-none-any.whl (72 kB)
+Using cached opentelemetry_instrumentation_fastapi-0.66b1-py3-none-any.whl (14 kB)
+Using cached opentelemetry_instrumentation-0.66b1-py3-none-any.whl (36 kB)
+Using cached opentelemetry_instrumentation_asgi-0.66b1-py3-none-any.whl (15 kB)
+Using cached opentelemetry_semantic_conventions-0.66b1-py3-none-any.whl (206 kB)
+Using cached opentelemetry_util_http-0.66b1-py3-none-any.whl (8.4 kB)
+Using cached opentelemetry_instrumentation_httpx-0.66b1-py3-none-any.whl (17 kB)
+Using cached opentelemetry_instrumentation_sqlalchemy-0.66b1-py3-none-any.whl (14 kB)
+Using cached opentelemetry_sdk-1.45.1-py3-none-any.whl (140 kB)
+Using cached packaging-26.3-py3-none-any.whl (129 kB)
+Using cached pandas-3.0.6-cp311-cp311-win_amd64.whl (9.9 MB)
+Using cached purgedcv-0.1.10-py3-none-any.whl (64 kB)
+Using cached pyarrow-25.0.1-cp311-cp311-win_amd64.whl (27.9 MB)
+Using cached pydantic-2.14.1-py3-none-any.whl (488 kB)
+Using cached pydantic_core-2.50.1-cp311-cp311-win_amd64.whl (2.2 MB)
+Using cached pydantic_settings-2.16.0-py3-none-any.whl (80 kB)
+Using cached pymysql-1.2.3-py3-none-any.whl (46 kB)
+Using cached python_dotenv-1.2.4-py3-none-any.whl (23 kB)
+Using cached python_multipart-0.0.32-py3-none-any.whl (30 kB)
+Using cached python_rapidjson-1.25-cp311-cp311-win_amd64.whl (346 kB)
+Using cached pytz-2026.5-py2.py3-none-any.whl (506 kB)
+Using cached pyyaml-6.0.3-cp311-cp311-win_amd64.whl (158 kB)
+Using cached requests-2.34.2-py3-none-any.whl (73 kB)
+Using cached scipy-1.17.1-cp311-cp311-win_amd64.whl (36.6 MB)
+Using cached slowapi-0.1.10-py3-none-any.whl (14 kB)
+Using cached starlette-1.8.0-py3-none-any.whl (79 kB)
+Using cached statsmodels-0.15.0-cp311-cp311-win_amd64.whl (11.4 MB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Using cached urllib3-2.8.0-py3-none-any.whl (135 kB)
+Using cached weasyprint-70.0-py3-none-any.whl (328 kB)
+Using cached websocket_client-1.9.2-py3-none-any.whl (95 kB)
+Using cached websockets-17.2-cp311-cp311-win_amd64.whl (218 kB)
+Using cached aiohappyeyeballs-2.7.1-py3-none-any.whl (15 kB)
+Using cached aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+Using cached annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+Using cached annotated_types-0.8.0-py3-none-any.whl (13 kB)
+Using cached attrs-26.1.0-py3-none-any.whl (67 kB)
+Using cached bcrypt-5.0.0-cp39-abi3-win_amd64.whl (150 kB)
+Using cached certifi-2026.7.22-py3-none-any.whl (136 kB)
+Using cached cffi-2.1.1-cp311-cp311-win_amd64.whl (185 kB)
+Using cached charset_normalizer-3.5.2-cp311-cp311-win_amd64.whl (214 kB)
+Using cached click-8.5.0-py3-none-any.whl (125 kB)
+Using cached colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+Using cached contourpy-1.3.3-cp311-cp311-win_amd64.whl (225 kB)
+Using cached cssselect2-0.10.1-py3-none-any.whl (15 kB)
+Using cached cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Using cached dnspython-2.9.0-py3-none-any.whl (354 kB)
+Using cached fonttools-4.67.0-cp311-cp311-win_amd64.whl (1.6 MB)
+Using cached formulaic-1.2.2-py3-none-any.whl (118 kB)
+Using cached frozenlist-1.8.0-cp311-cp311-win_amd64.whl (44 kB)
+Using cached googleapis_common_protos-1.75.5-py3-none-any.whl (307 kB)
+Using cached greenlet-3.5.6-cp311-cp311-win_amd64.whl (323 kB)
+Using cached grpcio-1.84.0-cp311-cp311-win_amd64.whl (5.3 MB)
+Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+Using cached httptools-0.9.0-cp311-cp311-win_amd64.whl (92 kB)
+Using cached idna-3.20-py3-none-any.whl (69 kB)
+Using cached kiwisolver-1.5.1-cp311-cp311-win_amd64.whl (70 kB)
+Using cached limits-5.8.0-py3-none-any.whl (60 kB)
+Using cached markupsafe-3.0.4-cp311-cp311-win_amd64.whl (14 kB)
+Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Using cached multidict-7.1.0-cp311-cp311-win_amd64.whl (93 kB)
+Using cached patsy-1.0.3-py2.py3-none-any.whl (233 kB)
+Using cached pillow-12.3.0-cp311-cp311-win_amd64.whl (7.2 MB)
+Using cached propcache-0.5.4-cp311-cp311-win_amd64.whl (46 kB)
+Using cached pydyf-0.13.0-py3-none-any.whl (8.1 kB)
+Using cached pyparsing-3.3.3-py3-none-any.whl (126 kB)
+Using cached pyphen-0.18.1-py3-none-any.whl (2.1 MB)
+Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+Using cached scikit_learn-1.9.1-cp311-cp311-win_amd64.whl (8.3 MB)
+Using cached tinycss2-1.5.1-py3-none-any.whl (28 kB)
+Using cached tinyhtml5-2.1.0-py3-none-any.whl (39 kB)
+Using cached typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+Using cached tzlocal-5.4.4-py3-none-any.whl (18 kB)
+Using cached watchfiles-1.3.0-cp310-abi3-win_amd64.whl (290 kB)
+Using cached win32_setctime-1.2.0-py3-none-any.whl (4.1 kB)
+Using cached wrapt-2.5.1-cp311-cp311-win_amd64.whl (105 kB)
+Using cached yarl-1.25.1-cp311-cp311-win_amd64.whl (102 kB)
+Using cached passlib-1.7.4-py2.py3-none-any.whl (525 kB)
+Using cached pyjwt-2.15.1-py3-none-any.whl (33 kB)
+Using cached sqlalchemy-2.0.54-cp311-cp311-win_amd64.whl (2.2 MB)
+Using cached tzdata-2026.5-py2.py3-none-any.whl (347 kB)
+Using cached uvicorn-0.54.0-py3-none-any.whl (87 kB)
+Using cached asgiref-3.12.1-py3-none-any.whl (25 kB)
+Using cached brotli-1.2.0-cp311-cp311-win_amd64.whl (369 kB)
+Using cached deprecated-1.3.1-py2.py3-none-any.whl (11 kB)
+Using cached interface_meta-2.0.1-py3-none-any.whl (15 kB)
+Using cached joblib-1.6.0-py3-none-any.whl (306 kB)
+Using cached narwhals-2.27.1-py3-none-any.whl (483 kB)
+Using cached protobuf-7.36.2-cp310-abi3-win_amd64.whl (456 kB)
+Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+Using cached threadpoolctl-3.7.0-py3-none-any.whl (26 kB)
+Using cached webencodings-0.6.1-py3-none-any.whl (8.7 kB)
+Using cached zopfli-0.4.3-cp310-abi3-win_amd64.whl (288 kB)
+Using cached pycparser-3.11-py3-none-any.whl (51 kB)
+Using cached cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+Installing collected packages: pytz, passlib, brotli, zopfli, wrapt, win32-setctime, websockets, websocket-client, webencodings, urllib3, tzdata, typing-extensions, threadpoolctl, six, pyyaml, python-rapidjson, python-multipart, python-dotenv, Pyphen, pyparsing, PyMySQL, PyJWT, pydyf, pycparser, pyarrow, protobuf, propcache, pillow, packaging, opentelemetry-util-http, numpy, narwhals, mysql-connector-python, multidict, mdurl, MarkupSafe, kiwisolver, interface-meta, idna, httptools, h11, greenlet, frozenlist, fonttools, dnspython, cycler, colorama, cloudpickle, click, charset_normalizer, certifi, bcrypt, attrs, asgiref, annotated-types, annotated-doc, aiosqlite, aiohappyeyeballs, yarl, uvicorn, tzlocal, typing-inspection, tinyhtml5, tinycss2, sqlalchemy, scipy, requests, python-dateutil, pydantic-core, patsy, opentelemetry-proto, opentelemetry-api, markdown-it-py, loguru, joblib, jinja2, httpcore, grpcio, googleapis-common-protos, email-validator, deprecated, contourpy, cffi, anyio, aiosignal, watchfiles, starlette, scikit-learn, pydantic, pandas, opentelemetry-semantic-conventions, opentelemetry-exporter-otlp-proto-common, matplotlib, limits, httpx, cssselect2, cryptography, apscheduler, aiohttp, weasyprint, slowapi, pydantic-settings, purgedcv, opentelemetry-sdk, opentelemetry-instrumentation, formulaic, fincore, fastapi, bt-api-base, statsmodels, opentelemetry-instrumentation-sqlalchemy, opentelemetry-instrumentation-httpx, opentelemetry-instrumentation-asgi, opentelemetry-exporter-otlp-common, bt-api-py, bt-api-binance, opentelemetry-instrumentation-fastapi, opentelemetry-exporter-otlp-proto-grpc, backtrader, ai-for-investor-backend
+Successfully installed MarkupSafe-3.0.4 PyJWT-2.15.1 PyMySQL-1.2.3 Pyphen-0.18.1 ai-for-investor-backend-0.1.0 aiohappyeyeballs-2.7.1 aiohttp-3.14.5 aiosignal-1.4.0 aiosqlite-0.22.1 annotated-doc-0.0.5 annotated-types-0.8.0 anyio-4.15.1 apscheduler-3.11.3 asgiref-3.12.1 attrs-26.1.0 backtrader-1.4.0 bcrypt-5.0.0 brotli-1.2.0 bt-api-base-0.15.8 bt-api-binance-2.0.1 bt-api-py-0.15.5 certifi-2026.7.22 cffi-2.1.1 charset_normalizer-3.5.2 click-8.5.0 cloudpickle-3.1.2 colorama-0.4.6 contourpy-1.3.3 cryptography-50.0.2 cssselect2-0.10.1 cycler-0.12.1 deprecated-1.3.1 dnspython-2.9.0 email-validator-2.3.0 fastapi-0.143.2 fincore-0.5.1 fonttools-4.67.0 formulaic-1.2.2 frozenlist-1.8.0 googleapis-common-protos-1.75.5 greenlet-3.5.6 grpcio-1.84.0 h11-0.16.0 httpcore-1.0.9 httptools-0.9.0 httpx-0.28.1 idna-3.20 interface-meta-2.0.1 jinja2-3.1.6 joblib-1.6.0 kiwisolver-1.5.1 limits-5.8.0 loguru-0.7.3 markdown-it-py-4.2.0 matplotlib-3.11.2 mdurl-0.1.2 multidict-7.1.0 mysql-connector-python-26.7.0 narwhals-2.27.1 numpy-1.26.4 opentelemetry-api-1.45.1 opentelemetry-exporter-otlp-common-0.66b1 opentelemetry-exporter-otlp-proto-common-1.45.1 opentelemetry-exporter-otlp-proto-grpc-1.45.1 opentelemetry-instrumentation-0.66b1 opentelemetry-instrumentation-asgi-0.66b1 opentelemetry-instrumentation-fastapi-0.66b1 opentelemetry-instrumentation-httpx-0.66b1 opentelemetry-instrumentation-sqlalchemy-0.66b1 opentelemetry-proto-1.45.1 opentelemetry-sdk-1.45.1 opentelemetry-semantic-conventions-0.66b1 opentelemetry-util-http-0.66b1 packaging-26.3 pandas-3.0.6 passlib-1.7.4 patsy-1.0.3 pillow-12.3.0 propcache-0.5.4 protobuf-7.36.2 purgedcv-0.1.10 pyarrow-25.0.1 pycparser-3.11 pydantic-2.14.1 pydantic-core-2.50.1 pydantic-settings-2.16.0 pydyf-0.13.0 pyparsing-3.3.3 python-dateutil-2.9.0.post0 python-dotenv-1.2.4 python-multipart-0.0.32 python-rapidjson-1.25 pytz-2026.5 pyyaml-6.0.3 requests-2.34.2 scikit-learn-1.9.1 scipy-1.17.1 six-1.17.0 slowapi-0.1.10 sqlalchemy-2.0.54 starlette-1.8.0 statsmodels-0.15.0 threadpoolctl-3.7.0 tinycss2-1.5.1 tinyhtml5-2.1.0 typing-extensions-4.16.0 typing-inspection-0.4.4 tzdata-2026.5 tzlocal-5.4.4 urllib3-2.8.0 uvicorn-0.54.0 watchfiles-1.3.0 weasyprint-70.0 webencodings-0.6.1 websocket-client-1.9.2 websockets-17.2 win32-setctime-1.2.0 wrapt-2.5.1 yarl-1.25.1 zopfli-0.4.3
+
+[notice] A new release of pip is available: 23.2.1 -> 26.2.1
+[notice] To update, run: D:\temp\it10mig04-r3-20261016-r1\venvs\consumers\Scripts\python.exe -m pip install --upgrade pip

@@ -1,0 +1,16 @@
+Processing .\src\monitor
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: bt_api_monitor
+  Building wheel for bt_api_monitor (pyproject.toml): started
+  Building wheel for bt_api_monitor (pyproject.toml): finished with status 'done'
+  Created wheel for bt_api_monitor: filename=bt_api_monitor-0.1.0-py3-none-any.whl size=90461 sha256=6bf28cb42f3a6dd1ecf143ce5ac385b4e76540545d778d07826c15e59bda440d
+  Stored in directory: C:\Users\yunji\AppData\Local\Temp\pip-ephem-wheel-cache-8cxhlo4_\wheels\fd\43\a4\828850926dee29abe172e86541bc351e6a4d68c4ca2b75b686
+Successfully built bt_api_monitor
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: C:\anaconda3\python.exe -m pip install --upgrade pip

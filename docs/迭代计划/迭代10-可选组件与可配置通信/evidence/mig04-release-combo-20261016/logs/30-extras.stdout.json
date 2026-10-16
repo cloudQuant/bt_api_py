@@ -1,0 +1,102 @@
+{
+  "DurableRiskGate_import": "type",
+  "RiskAdmissionPolicyBinding_import": "type",
+  "RiskPolicy_import": "type",
+  "absence_simulation": {
+    "AnomalyDetector": "ImportError: AnomalyDetector requires the 'ml' extra of bt_api_risk (install bt_api_risk[ml]): simulated absence: numpy is not importable (extra not installed)",
+    "RiskAssessor": "IMPORTED",
+    "RiskEnsembleModel": "ImportError: RiskEnsembleModel requires the 'ml' extra of bt_api_risk (install bt_api_risk[ml]): simulated absence: numpy is not importable (extra not installed)",
+    "RiskManager": "ImportError: RiskManager requires the 'analytics' extra of bt_api_risk (install bt_api_risk[analytics]): simulated absence: numpy is not importable (extra not installed)",
+    "base_path_under_absence": "imported bt_api_risk + service_component + order_admission",
+    "blocked_modules": [
+      "joblib",
+      "numpy",
+      "scipy",
+      "sklearn"
+    ]
+  },
+  "absence_simulation_exit": 0,
+  "absence_simulation_stderr_tail": [],
+  "base_path_sys_modules": {
+    "joblib": false,
+    "numpy": false,
+    "scipy": false,
+    "sklearn": false
+  },
+  "bt_api_base_requires_dist": [
+    "numpy>=1.26.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "websocket-client>=1.6.0",
+    "pyyaml>=6.0",
+    "pandas>=2.0.0",
+    "pyarrow<26.0.0,>=14.0.0; python_version < \"3.13\"",
+    "pyarrow>=14.0.0; python_version >= \"3.13\"",
+    "aiohttp>=3.9.0",
+    "packaging>=24.0",
+    "pytz>=2023.3",
+    "python-rapidjson>=1.10",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "websockets>=12.0",
+    "typing-extensions>=4.8.0",
+    "eval-type-backport>=0.2.0; python_version < \"3.10\"",
+    "spdlog>=2.0.0; extra == \"spdlog\"",
+    "pyzmq>=26.0.0; extra == \"transport-zmq\"",
+    "pytest>=7.0; extra == \"dev\"",
+    "pytest-asyncio>=0.21.0; extra == \"dev\"",
+    "ruff>=0.1.0; extra == \"dev\"",
+    "mypy>=1.0; extra == \"dev\""
+  ],
+  "bt_api_risk_direct_url": "{\"archive_info\": {\"hash\": \"sha256=0adb56b3fc9b00e9a03d29b735a4d56ee542aa2418ae6661058844f741d602b3\", \"hashes\": {\"sha256\": \"0adb56b3fc9b00e9a03d29b735a4d56ee542aa2418ae6661058844f741d602b3\"}}, \"url\": \"file:///D:/temp/it10mig04-r3-20261016-r1/wheelhouse/bt_api_risk-0.1.0-py3-none-any.whl\"}",
+  "bt_api_risk_file": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\extras\\Lib\\site-packages\\bt_api_risk\\__init__.py",
+  "bt_api_risk_provides_extras": [
+    "analytics",
+    "ml",
+    "dev"
+  ],
+  "bt_api_risk_requires_dist": [
+    "bt_api_base<0.16,>=0.15.5",
+    "pydantic>=2.0.0",
+    "typing-extensions>=4.8.0",
+    "numpy>=1.26.0; extra == \"analytics\"",
+    "scikit-learn>=1.0.0; extra == \"ml\"",
+    "pytest>=7.0; extra == \"dev\"",
+    "ruff>=0.1.0; extra == \"dev\"",
+    "mypy>=1.0; extra == \"dev\""
+  ],
+  "catalog_classes": {
+    "RiskReadService": true,
+    "validate_service_options": true
+  },
+  "executable": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\extras\\Scripts\\python.exe",
+  "joblib_installed": null,
+  "numpy_installed": "2.4.6",
+  "pandas_installed": "3.0.6",
+  "policy_catalog_port": [
+    "service.risk_policy"
+  ],
+  "prefix": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\extras",
+  "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+  "real_venv_requests": {
+    "AnomalyDetector": {
+      "import_error": "AnomalyDetector requires the 'ml' extra of bt_api_risk (install bt_api_risk[ml]): No module named 'sklearn'",
+      "outcome": "ImportError: AnomalyDetector requires the 'ml' extra of bt_api_risk (install bt_api_risk[ml]): No module named 'sklearn'"
+    },
+    "RiskAssessor": {
+      "import_error": null,
+      "outcome": "IMPORTED"
+    },
+    "RiskEnsembleModel": {
+      "import_error": "RiskEnsembleModel requires the 'ml' extra of bt_api_risk (install bt_api_risk[ml]): No module named 'sklearn'",
+      "outcome": "ImportError: RiskEnsembleModel requires the 'ml' extra of bt_api_risk (install bt_api_risk[ml]): No module named 'sklearn'"
+    },
+    "RiskManager": {
+      "import_error": null,
+      "outcome": "IMPORTED"
+    }
+  },
+  "scikit-learn_installed": null,
+  "scipy_installed": null,
+  "service_component_file": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\extras\\Lib\\site-packages\\bt_api_risk\\service_component.py"
+}

@@ -1,0 +1,16 @@
+Processing .\src\transport_zmq
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: bt_api_transport_zmq
+  Building wheel for bt_api_transport_zmq (pyproject.toml): started
+  Building wheel for bt_api_transport_zmq (pyproject.toml): finished with status 'done'
+  Created wheel for bt_api_transport_zmq: filename=bt_api_transport_zmq-0.1.0-py3-none-any.whl size=27729 sha256=2d7bd6421b573ea048c74b26931d57c79e5591f38a7a7ed67e28ec46bc3bf65d
+  Stored in directory: C:\Users\yunji\AppData\Local\Temp\pip-ephem-wheel-cache-bfw2es6h\wheels\52\62\85\5174a50dfe377addc4ff937c0975aff2f0c954ba5094a8c4f5
+Successfully built bt_api_transport_zmq
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: C:\anaconda3\python.exe -m pip install --upgrade pip

@@ -1,0 +1,91 @@
+{
+  "distributions": {
+    "bt_api_base": "0.15.8",
+    "bt_api_execution": "0.2.0",
+    "bt_api_gateway": "0.1.0",
+    "bt_api_monitor": "0.1.0",
+    "bt_api_py": "0.15.5",
+    "bt_api_risk": "0.1.0",
+    "bt_api_transport_zmq": "0.1.0"
+  },
+  "endpoint": "tcp://127.0.0.1:53128",
+  "market_endpoint": "tcp://127.0.0.1:53129",
+  "origins": {
+    "bt_api_base.service_protocol": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\service\\Lib\\site-packages\\bt_api_base\\service_protocol.py",
+    "bt_api_gateway.market_hub": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\service\\Lib\\site-packages\\bt_api_gateway\\market_hub.py",
+    "bt_api_py.service_host": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\service\\Lib\\site-packages\\bt_api_py\\service_host.py",
+    "bt_api_transport_zmq.server": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\service\\Lib\\site-packages\\bt_api_transport_zmq\\server.py"
+  },
+  "prefix": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\service",
+  "python": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\service\\Scripts\\python.exe",
+  "started_summary": {
+    "cleanup_failures": [],
+    "cleanup_history": [],
+    "components": [
+      {
+        "capabilities": [
+          {
+            "operations": [
+              "market.head",
+              "market.read_after",
+              "market.snapshot",
+              "market.subscribe",
+              "market.unsubscribe"
+            ],
+            "port": "service.market_source"
+          }
+        ],
+        "component": "gateway",
+        "declared_ports": [
+          "service.market_source"
+        ],
+        "instance_id": "mig04-pilot-market-hub",
+        "internal_ports": []
+      }
+    ],
+    "endpoint": "tcp://127.0.0.1:53128",
+    "last_upstream_cleanup": null,
+    "market": {
+      "active_registrations": 0,
+      "endpoint": "tcp://127.0.0.1:53129",
+      "maintenance_failures": []
+    },
+    "service_id": "mig04-pilot-market-service",
+    "start_failure": null,
+    "state": "started",
+    "upstream": null
+  }
+}
+{
+  "closed_summary": {
+    "cleanup_failures": [],
+    "cleanup_history": [],
+    "components": [
+      {
+        "capabilities": [],
+        "component": "gateway",
+        "declared_ports": [
+          "service.market_source"
+        ],
+        "instance_id": "mig04-pilot-market-hub",
+        "internal_ports": []
+      }
+    ],
+    "endpoint": "tcp://127.0.0.1:53128",
+    "last_upstream_cleanup": null,
+    "market": {
+      "active_registrations": 0,
+      "endpoint": null,
+      "maintenance_failures": []
+    },
+    "service_id": "mig04-pilot-market-service",
+    "start_failure": null,
+    "state": "closed",
+    "upstream": null
+  },
+  "closed_without_cleanup_failures": true,
+  "exact_single_explicit_component": true,
+  "provider_starts": 0,
+  "provider_stops": 0,
+  "state": "closed"
+}

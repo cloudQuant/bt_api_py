@@ -1,0 +1,8 @@
+== strategy ==
+pip 23.2.1 from D:\temp\it10mig04-r3-20261016-r1\venvs\strategy\Lib\site-packages\pip (python 3.11)
+== service ==
+pip 23.2.1 from D:\temp\it10mig04-r3-20261016-r1\venvs\service\Lib\site-packages\pip (python 3.11)
+== extras ==
+pip 23.2.1 from D:\temp\it10mig04-r3-20261016-r1\venvs\extras\Lib\site-packages\pip (python 3.11)
+== consumers ==
+pip 23.2.1 from D:\temp\it10mig04-r3-20261016-r1\venvs\consumers\Lib\site-packages\pip (python 3.11)

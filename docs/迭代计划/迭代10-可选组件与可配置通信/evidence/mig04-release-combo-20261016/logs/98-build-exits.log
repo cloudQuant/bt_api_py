@@ -1,0 +1,11 @@
+sdk exit=0
+base exit=0
+transport_zmq exit=0
+gateway exit=0
+execution exit=0
+risk exit=0
+monitor exit=0
+binance exit=0
+backtrader exit=0
+afi-backend exit=0
+certlib exit=1

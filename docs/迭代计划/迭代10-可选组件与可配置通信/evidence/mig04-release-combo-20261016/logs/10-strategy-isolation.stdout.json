@@ -1,0 +1,39 @@
+{
+  "absence_checks": {
+    "bt_api_execution": {
+      "distribution": null,
+      "find_spec": false,
+      "import": "ModuleNotFoundError: No module named 'bt_api_execution'"
+    },
+    "bt_api_gateway": {
+      "distribution": null,
+      "find_spec": false,
+      "import": "ModuleNotFoundError: No module named 'bt_api_gateway'"
+    },
+    "bt_api_monitor": {
+      "distribution": null,
+      "find_spec": false,
+      "import": "ModuleNotFoundError: No module named 'bt_api_monitor'"
+    },
+    "bt_api_risk": {
+      "distribution": null,
+      "find_spec": false,
+      "import": "ModuleNotFoundError: No module named 'bt_api_risk'"
+    },
+    "zmq": {
+      "distribution": null,
+      "find_spec": false,
+      "import": "ModuleNotFoundError: No module named 'zmq'"
+    }
+  },
+  "bt_api_base_file": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\strategy\\Lib\\site-packages\\bt_api_base\\__init__.py",
+  "bt_api_base_in_site_packages": true,
+  "bt_api_py_dist_version": "0.15.5",
+  "bt_api_py_file": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\strategy\\Lib\\site-packages\\bt_api_py\\__init__.py",
+  "bt_api_py_in_site_packages": true,
+  "bt_api_py_version": "0.15.5",
+  "executable": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\strategy\\Scripts\\python.exe",
+  "include_system_site_packages": "false",
+  "prefix": "D:\\temp\\it10mig04-r3-20261016-r1\\venvs\\strategy",
+  "python": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]"
+}

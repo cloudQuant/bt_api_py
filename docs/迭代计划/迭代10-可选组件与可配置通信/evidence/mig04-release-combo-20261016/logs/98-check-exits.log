@@ -1,0 +1,11 @@
+pipcheck strategy exit=0 :: No broken requirements found.
+pipcheck service exit=0 :: No broken requirements found.
+pipcheck extras exit=0 :: No broken requirements found.
+pipcheck consumers exit=0 :: No broken requirements found.
+check 10-strategy-isolation exit=0
+check 11-strategy-cli-no-new-block exit=0
+check 12-strategy-cli-empty-clients exit=0
+check 20-service-host-min exit=0
+check 30-extras exit=0
+check 40-consumers exit=0
+check 45-afi-import exit=0

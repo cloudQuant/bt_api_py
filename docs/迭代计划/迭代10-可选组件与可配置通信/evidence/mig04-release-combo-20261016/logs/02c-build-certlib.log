@@ -1,0 +1,4 @@
+
+[notice] A new release of pip is available: 26.0.1 -> 26.2.1
+[notice] To update, run: C:\anaconda3\python.exe -m pip install --upgrade pip
+ERROR: Directory 'D:/temp/it10mig04-r3-20261016-r1/src/backtrader/examples/live/000_live_certification/binance_penetration' is not installable. Neither 'setup.py' nor 'pyproject.toml' found.
