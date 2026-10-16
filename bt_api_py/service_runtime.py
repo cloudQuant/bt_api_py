@@ -780,6 +780,21 @@ class ServiceClientRuntime:
                     self._unregister_uncertainties.pop(binding.registration_id, None)
                 binding = self._bindings[index]
                 if binding.required:
+                    if (
+                        not force
+                        and not server_rejected
+                        and isinstance(error, TimeoutError)
+                        and self._monotonic_now() < binding.lease_deadline
+                    ):
+                        # The renewal outcome is indeterminate (the transport
+                        # timed out) while the current lease is still
+                        # unexpired. Keep the binding due and retry on the
+                        # next maintenance pass instead of failing the whole
+                        # session; the lease deadline stays the hard boundary
+                        # (a lease that never renews still fails with
+                        # REQUIRED_LEASE_EXPIRED). Explicit hub rejections and
+                        # forced renewals keep failing fast.
+                        break
                     self._state = "failed"
                     if isinstance(error, ServiceRuntimeError):
                         raise
