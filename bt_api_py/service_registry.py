@@ -202,8 +202,14 @@ class ResourceGrant:
             raise ValueError("resource grant identifiers are invalid")
         if type(self.scope) is not WireScope:
             raise TypeError("scope must be WireScope")
-        if self.scope.run_id is not None:
-            raise ValueError("trusted scope templates must not bind a run_id")
+        if self.scope.run_id is not None and (
+            self.scope.account_ref is None
+            or self.scope.account_refs
+            or self.scope.strategy_ref is None
+            or self.scope.group_id is not None
+            or self.scope.leg_id is not None
+        ):
+            raise ValueError("exact run grants require one account and strategy")
         _operation_set(self.operations, field_name="grant operations")
 
 
@@ -221,6 +227,34 @@ class PrincipalGrant:
             raise TypeError("resources must be a tuple")
         if any(type(resource) is not ResourceGrant for resource in self.resources):
             raise TypeError("resources must contain ResourceGrant values")
+
+
+def _is_exact_owner_cancel_scope(
+    identity: WireIdentity,
+    *,
+    port: str,
+    scope: WireScope,
+    operation: str,
+) -> bool:
+    """Recognize the one exact-run service owner cancellation operation.
+
+    This is only a narrow exception to the generic service-write policy. The
+    caller still has to match a trusted ``PrincipalGrant`` and exact
+    ``ResourceGrant``. A live strategy run claim is checked again at dispatch.
+    """
+
+    return (
+        identity.role is WireRole.SERVICE
+        and port == "service.owner_control"
+        and operation == "owner.cancel"
+        and scope.account_ref is not None
+        and not scope.account_refs
+        and scope.strategy_ref is not None
+        and scope.run_id is not None
+        and scope.manual_book_ref is None
+        and scope.group_id is None
+        and scope.leg_id is None
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -653,6 +687,25 @@ def validate_capabilities_and_grants(
                 capability = capability_map.get((resource.instance_id, resource.port))
                 if capability is None or not resource.operations.issubset(capability.operations):
                     raise ValueError("resource grant exceeds declared capability")
+                if resource.scope.run_id is not None and (
+                    not (
+                        entry.identity.role is WireRole.APPLICATION_CLIENT
+                        and resource.port == "service.monitor_control"
+                        and resource.operations.issubset(
+                            {"monitor.control", "monitor.control_status"}
+                        )
+                    )
+                    and not (
+                        resource.operations == frozenset({"owner.cancel"})
+                        and _is_exact_owner_cancel_scope(
+                            entry.identity,
+                            port=resource.port,
+                            scope=resource.scope,
+                            operation="owner.cancel",
+                        )
+                    )
+                ):
+                    raise ValueError("exact run grants exceed an allowed owner operation")
         trusted_grants[principal] = entries
     return MappingProxyType(capability_map), MappingProxyType(trusted_grants)
 
@@ -2173,7 +2226,10 @@ class ServiceRegistry:
                 # is admitted only by its exact trusted ResourceGrant; its
                 # Execution adapter rechecks the approval authority at dispatch.
                 if any(
-                    not self._is_approved_target_write(
+                    not _is_exact_owner_cancel_scope(
+                        identity, port=port, scope=scope, operation=operation
+                    )
+                    and not self._is_approved_target_write(
                         identity, port=port, operation=operation
                     )
                     and self._trusted_group_policy(
@@ -2609,7 +2665,13 @@ class ServiceRegistry:
                 identity.role is WireRole.SERVICE
                 and scope.strategy_ref is not None
                 and (operation in write_ops or row["port"] == "service.group_reservations")
-                and not self._trusted_group_write_run_matches(
+            ):
+                if _is_exact_owner_cancel_scope(
+                    identity, port=row["port"], scope=scope, operation=operation
+                ):
+                    if not self._strategy_owner_run_claim_exists(scope):
+                        return self._failure("DUPLICATE_ACTIVE_RUN")
+                elif not self._trusted_group_write_run_matches(
                     principal,
                     identity,
                     instance_id=instance_id,
@@ -2617,9 +2679,8 @@ class ServiceRegistry:
                     scope_ref=row["scope_ref"],
                     scope=scope,
                     operation=operation,
-                )
-            ):
-                return self._failure("DUPLICATE_ACTIVE_RUN")
+                ):
+                    return self._failure("DUPLICATE_ACTIVE_RUN")
 
             def result_fits(result: Mapping[str, Any]) -> bool:
                 normalized_result = self._normalize_result(result)
@@ -2779,7 +2840,9 @@ class ServiceRegistry:
             is None
         ):
             return False
-        if operation in capability.write_operations:
+        if operation in capability.write_operations and not _is_exact_owner_cancel_scope(
+            identity, port=port, scope=scope, operation=operation
+        ):
             if identity.role is WireRole.STRATEGY_CLIENT:
                 if scope.strategy_ref is None or scope.run_id is None:
                     return False
@@ -2847,3 +2910,24 @@ class ServiceRegistry:
             ):
                 return False
         return True
+
+    def _strategy_owner_run_claim_exists(self, scope: WireScope) -> bool:
+        """Require a live durable strategy/account/run claim for owner.cancel."""
+
+        if (
+            scope.account_ref is None
+            or scope.account_refs
+            or scope.strategy_ref is None
+            or scope.run_id is None
+        ):
+            return False
+        row = self._db.execute(
+            "SELECT run_id, active_registration_id FROM strategy_write_claims "
+            "WHERE execution_domain_ref=? AND strategy_ref=? AND account_ref=?",
+            (scope.execution_domain_ref, scope.strategy_ref, scope.account_ref),
+        ).fetchone()
+        return bool(
+            row is not None
+            and row["run_id"] == scope.run_id
+            and _text(row["active_registration_id"])
+        )

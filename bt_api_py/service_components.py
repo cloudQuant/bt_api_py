@@ -572,9 +572,10 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                     "service.order_query": frozenset(
                         {"orders.query", "execution.account_books.query"}
                     ),
+                    "service.owner_control": frozenset({"owner.cancel"}),
                 }
             ),
-            internal_ports=frozenset({"service.owner_control"}),
+            internal_ports=frozenset(),
             write_operations_by_port=MappingProxyType(
                 {
                     "service.order_entry": frozenset(
@@ -583,7 +584,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "orders.cancel",
                             "orders.submit_approved_target",
                         }
-                    )
+                    ),
+                    "service.owner_control": frozenset({"owner.cancel"}),
                 }
             ),
             validator_module_name="bt_api_execution.service_component",
@@ -793,7 +795,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
 
 
 _ADMISSION_KEYS: Final[frozenset[str]] = frozenset(
-    {"order_gate", "cancel_gate", "basic_admission_gate", "allow_unprotected"}
+    {"order_gate", "cancel_gate", "basic_admission_gate", "allow_unprotected", "cancel_quota_admission"}
 )
 
 _EXECUTION_OWNER_LOCK_GUARD = threading.Lock()
@@ -1944,6 +1946,7 @@ def build_component(
                 constructor_args = {
                     "admission_gate": order_gate,
                     "cancel_admission_gate": cancel_gate,
+                    "cancel_quota_admission": admission.get("cancel_quota_admission"),
                     "basic_admission_gate": basic_gate,
                     "allow_unprotected": allow_unprotected,
                     "account_books_source": values.get("account_books"),
@@ -2047,7 +2050,7 @@ def build_component(
                 operations = operations.intersection(configured_operations)
             if spec.component == "execution" and spec.options.get("role") == "account_owner":
                 configured_operations = getattr(adapter, "supported_operations", None)
-                expected_operations = frozenset({"orders.submit", "orders.cancel", "orders.query"})
+                expected_operations = frozenset({"orders.submit", "orders.cancel", "orders.query", "owner.cancel"})
                 if "account_books" in resources.values:
                     expected_operations = expected_operations | {"execution.account_books.query"}
                 if "approved_target_authority" in resources.values:
