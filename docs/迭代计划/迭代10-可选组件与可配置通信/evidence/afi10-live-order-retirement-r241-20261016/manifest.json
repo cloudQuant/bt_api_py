@@ -1,0 +1,261 @@
+{
+  "schema": "iteration10-afi10-live-order-retirement-r241-evidence-v1",
+  "round": "R241",
+  "status": "READY_FOR_ROOT_REVIEW_AND_SCOPED_THREE_FILE_COMMIT",
+  "captured_utc": "2026-10-16T14:30:56.333317+00:00",
+  "formal_afi10_pass": false,
+  "progress_document_modified": false,
+  "evidence_directory_file_count": 3,
+  "parent_repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "qa_head_at_packet_creation": "3b58addb5d9511d53977c3cc83cf031591ca1302",
+    "commit_status": "PENDING_ROOT_REVIEW_AND_SCOPED_THREE_FILE_COMMIT",
+    "staging_or_commit_performed_by_author": false
+  },
+  "afi_source_round": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "parent": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+    "head": "00cf38fd1dbcd3bd860972bda7f2a4be6f83f138",
+    "evidence_level": "AUTHOR_FIXED_SOURCE_QA_PLUS_STATIC_REVIEW_REFERENCE",
+    "index_empty": true,
+    "source_scope": [
+      {
+        "path": "src/backend/app/services/direct_order_service.py",
+        "bytes": 20978,
+        "sha256": "de64970d27c7a286955d253849fa7fa7ae79dd041e2913bff1f7c3b3b254a2ee",
+        "blob_oid": "eb165db679ea69870ae59f6a6ef309027813339e",
+        "head_blob_oid": "29d000438b099b6022bfc827821a3bacb52a97e6"
+      },
+      {
+        "path": "src/backend/app/services/ai_trading_service.py",
+        "bytes": 35270,
+        "sha256": "36787e14ec6ebaae4860d6a800ea3431df57fd9035831427c41c0e031d20cc98",
+        "blob_oid": "2bca09f620263228cd4ba2a081d454f765b988c7",
+        "head_blob_oid": "90e23cc279eca2d3873408837be136cf24aa66eb"
+      },
+      {
+        "path": "src/backend/tests/test_direct_order_service.py",
+        "bytes": 21886,
+        "sha256": "50b4ebef8512fcff4b3adf35f206cd0cebb5b364a874c451b54dd08ede8c08e4",
+        "blob_oid": "f014e0a074426c6772f66862c342059d2017560b",
+        "head_blob_oid": "52a9e7ccf20823169c2ab8e6be6a293f1f4731b5"
+      },
+      {
+        "path": "src/backend/tests/test_ai_trading.py",
+        "bytes": 52562,
+        "sha256": "d0c568c5a93336b67e8dfd4eb8bd95e132fcd407844d0b0e80c4dc7975908f28",
+        "blob_oid": "7569a40fb037b18b246a4cb62e5dc32a61ed3738",
+        "head_blob_oid": "8085a7f54c8f2131a6e1d45a8b150ce2c5d7ce15"
+      },
+      {
+        "path": "src/backend/tests/test_afi10_live_order_retirement.py",
+        "bytes": 2285,
+        "sha256": "1faed1f952801a5208cb7d4a9eb0e6b2800e9c6fc8851cece7e18ee102d97950",
+        "blob_oid": "b98c179dac52a49b4e9f3ca4f518a499d8f7028f",
+        "head_blob_oid": null
+      }
+    ],
+    "root_postcommit_receipt": {
+      "path": "root/afi10-retirement-postcommit.json",
+      "size_bytes": 3628,
+      "sha256": "20c45c24e682fc3677e259b04f84574f0f0e879ff6861a6bc624a579060b5638"
+    },
+    "selected_checkout_unchanged": true,
+    "selected_checkout_hashes_before_after": {
+      "src/backend/app/services/direct_order_service.py": "f20d67cc648b8b9c4884710561bd3987dbd635a8ece53e79e6fc9d4c26c76222",
+      "src/backend/app/services/ai_trading_service.py": "c1b178f8058bae1d17980363b1ef4a1520598ccf52b2b20cf07c064dd7fa557a",
+      "src/backend/tests/test_direct_order_service.py": "54cea1437fec095ad67b0d6e1eb975793dd2aa000545b59b7bd764e6d17eb9df",
+      "src/backend/tests/test_ai_trading.py": "7395dee19c36f0de7635e63fe92366df2907765726a9f35f6305de0821868269",
+      "src/backend/tests/test_afi10_live_order_retirement.py": "1faed1f952801a5208cb7d4a9eb0e6b2800e9c6fc8851cece7e18ee102d97950"
+    },
+    "whole_worktree_stability_claim": false
+  },
+  "author_qa": {
+    "full_suite": {
+      "candidate_stage": "R2 production candidate; production source unchanged in final R3",
+      "tests": 31,
+      "passed": 31,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "pytest_exit": 0,
+      "result": {
+        "path": "author/R2-full-suite/result.json",
+        "size_bytes": 1320,
+        "sha256": "47f21995758bfe799047a41ee10d9204fba328dfccb845416aecc50e0477d86f"
+      },
+      "raw_members_prefix": "author/R2-full-suite/"
+    },
+    "r3_test_delta_supplement": {
+      "selected_methods": 2,
+      "parameter_cases": 6,
+      "passed": 6,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "pytest_exit": 0,
+      "result": {
+        "path": "author/R3-delta-supplement/result.json",
+        "size_bytes": 1320,
+        "sha256": "e4422d08652784dc11b656a824b9f7f6e3d85373d5c1bf7c8b98c30c90f3e6e0"
+      },
+      "raw_members_prefix": "author/R3-delta-supplement/",
+      "broader_suite_rerun": false,
+      "source_pins": 2804,
+      "heads_unchanged": true
+    }
+  },
+  "independent_review": {
+    "verdict": "GO_STATIC",
+    "reviewer_thread": "/root/resume_pass_audit_reg_risk_cfg",
+    "artifact_status": "thread-reference only; no separately hashed original review artifact",
+    "qa_run_by_reviewer": false,
+    "raw_member": "reference/independent-static-review-reference.md"
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "size_bytes": 1150594,
+    "sha256": "c8e7bcbd15fa41fe31bae067cd25fc7b5168d8a2f69d83698a9d081d6ca56eaf",
+    "entry_count": 26,
+    "entries": [
+      {
+        "path": "author/R2-full-suite/command.json",
+        "size_bytes": 1789,
+        "sha256": "ab97af23269c660b56a2fbd06c3a21225fed7deff055d2ecae4432ffd82a547c"
+      },
+      {
+        "path": "author/R2-full-suite/exit.txt",
+        "size_bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "author/R2-full-suite/junit.xml",
+        "size_bytes": 4893,
+        "sha256": "e2dc4b2957f03b0e7240bfee9bcd3092cbabc8247bb346455f9601c84a50bd1f"
+      },
+      {
+        "path": "author/R2-full-suite/result.json",
+        "size_bytes": 1320,
+        "sha256": "47f21995758bfe799047a41ee10d9204fba328dfccb845416aecc50e0477d86f"
+      },
+      {
+        "path": "author/R2-full-suite/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "author/R2-full-suite/running.json",
+        "size_bytes": 76,
+        "sha256": "1f330dc34d0b5af35f51c270651fd03967c50cc9ad3b6654647d9dd469df2b6c"
+      },
+      {
+        "path": "author/R2-full-suite/source-after.json",
+        "size_bytes": 554428,
+        "sha256": "3e32887643663e3e1995e9a855f7b6345cc175ab9dbb7a727739150ea38bc1e8"
+      },
+      {
+        "path": "author/R2-full-suite/source-before.json",
+        "size_bytes": 554428,
+        "sha256": "3e32887643663e3e1995e9a855f7b6345cc175ab9dbb7a727739150ea38bc1e8"
+      },
+      {
+        "path": "author/R2-full-suite/spec.json",
+        "size_bytes": 1186325,
+        "sha256": "20da7dae83351ad8fc050e0a9387a8a80df5e1585df7abeb3bb7fca912e619e9"
+      },
+      {
+        "path": "author/R2-full-suite/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/R2-full-suite/stdout.log",
+        "size_bytes": 101,
+        "sha256": "a8e7aa2fb70fe8cb01771c5de80154cc46d3387bdc16d9d2b8ce9a14b6478182"
+      },
+      {
+        "path": "author/R3-delta-supplement/command.json",
+        "size_bytes": 1831,
+        "sha256": "f92c74179e1b544cbda40547152a579c6385948a1237fc9076b0b6b85b6b8483"
+      },
+      {
+        "path": "author/R3-delta-supplement/exit.txt",
+        "size_bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "author/R3-delta-supplement/junit.xml",
+        "size_bytes": 1192,
+        "sha256": "3a317693d7fdd713fe0eb1de83cdb7c7d689bf7b975ea106044301352a711e38"
+      },
+      {
+        "path": "author/R3-delta-supplement/result.json",
+        "size_bytes": 1320,
+        "sha256": "e4422d08652784dc11b656a824b9f7f6e3d85373d5c1bf7c8b98c30c90f3e6e0"
+      },
+      {
+        "path": "author/R3-delta-supplement/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "author/R3-delta-supplement/running.json",
+        "size_bytes": 76,
+        "sha256": "2422d96997c948c9d6f18821502ec2851e383abf91b6024515e80b25a750943c"
+      },
+      {
+        "path": "author/R3-delta-supplement/source-after.json",
+        "size_bytes": 554428,
+        "sha256": "0b4e3be0e2a7b7ea27066fe7dc990fc1a9f35685465ce726b187ae08ca9cf574"
+      },
+      {
+        "path": "author/R3-delta-supplement/source-before.json",
+        "size_bytes": 554428,
+        "sha256": "0b4e3be0e2a7b7ea27066fe7dc990fc1a9f35685465ce726b187ae08ca9cf574"
+      },
+      {
+        "path": "author/R3-delta-supplement/spec.json",
+        "size_bytes": 1186944,
+        "sha256": "cd89a9042a368256c7e76eafae48e321ea365a895fb42b8910aefcc20e55b6b8"
+      },
+      {
+        "path": "author/R3-delta-supplement/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "author/R3-delta-supplement/stdout.log",
+        "size_bytes": 100,
+        "sha256": "c221f199bfec113faefae4aa9ef2ab10aa7cca5adec9fd5a69d94dac07f9bd3b"
+      },
+      {
+        "path": "reference/independent-static-review-reference.md",
+        "size_bytes": 1505,
+        "sha256": "81de7622f82707069e9aa5e6b17f841041981d3bec869387cd4aad92e38d5a62"
+      },
+      {
+        "path": "reference/acceptance-spec-r3.md",
+        "size_bytes": 2599,
+        "sha256": "a42425412f5d2f06710af64ee4ef8ea6a8005dd157de780a1e203e60c2507642"
+      },
+      {
+        "path": "reference/candidate-partial-index-r4.json",
+        "size_bytes": 6483,
+        "sha256": "9f459fedbcffb559be994733b21183f4b5ebe9812d7885af459bb2ed9afeeaa7"
+      },
+      {
+        "path": "root/afi10-retirement-postcommit.json",
+        "size_bytes": 3628,
+        "sha256": "20c45c24e682fc3677e259b04f84574f0f0e879ff6861a6bc624a579060b5638"
+      }
+    ]
+  },
+  "round_record": {
+    "path": "round-record.md",
+    "size_bytes": 3862,
+    "sha256": "0e9aa10bf1e30d3566ba723e15ea049eaf575b0244f9ef135b4e578a21de6a4b"
+  },
+  "next_scope": "Migrate or retire AFI manager/quote consumers of old Base.gateway while preserving required market page and strategy behavior; use a supported service-v2 path rather than permanent unavailability."
+}
