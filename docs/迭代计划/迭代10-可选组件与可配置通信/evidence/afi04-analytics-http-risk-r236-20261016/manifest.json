@@ -1,0 +1,652 @@
+{
+  "schema_version": 1,
+  "round": "R236",
+  "evidence_round": "AFI04 authenticated HTTP to independent Risk Host integration source delivery",
+  "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_AFI_HTTP_TO_INDEPENDENT_RISK_HOST_AND_FOCUSED_UI_TEST_ONLY",
+  "repositories_at_author_run": {
+    "afi": {
+      "path": "D:\\source_code\\ai-for-investor",
+      "branch": "dev",
+      "head": "ac52830cd66c8ca79547db5be56a971906ccef4c"
+    },
+    "sdk": {
+      "path": "D:\\bt_api_py",
+      "branch": "dev",
+      "head": "53f33158429f89fd9b4dce83c068056c99d6778f"
+    },
+    "risk": {
+      "path": "D:\\bt_api_py\\bt_api\\bt_api_risk",
+      "branch": "dev",
+      "head": "ccac8818312c1474077c00bfe9d8f12521af39c9"
+    },
+    "base": {
+      "head": "cc6036c89c534a17d93e6b793f930c576b4aa960"
+    },
+    "transport": {
+      "head": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+    }
+  },
+  "accepted_dependency": {
+    "sdk_r218": "a6f220b9b5bdeae313f7324a86ee7a2c53cd10ee",
+    "risk_r218": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+    "risk_v2_service_export": "D:\\temp\\afi04-http-risk-r9\\clean-source\\vendor\\risk",
+    "risk_service_analytics_sha256": "1b148a4a923081302e507829d540aa9e45fc8ae3aac37eeb8f7f8dd3f1bda9c8",
+    "risk_portfolio_analytics_v2_sha256": "fa5b37ec2f0ac1a348407c0170644195f2d3603fb9726d1c827117d31de5133b",
+    "risk_export_note": "The author node ran from the fixed R9 source export; current Risk repository HEAD above is recorded metadata, not a claim that the mutable checkout was imported."
+  },
+  "integration": {
+    "node": "tests/test_service_read_portfolio_analytics_process.py::test_authenticated_http_analytics_uses_sdk_owner_and_independent_risk_host",
+    "output": "D:\\temp\\afi04-risk-r9-author-output",
+    "pytest": {
+      "exit": 0,
+      "collected": 1,
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "case_seconds": "9.751",
+      "total_reported_seconds": "10.051",
+      "overall_elapsed_seconds": 29.203,
+      "stderr_bytes": 0
+    },
+    "host_markers": {
+      "ready": true,
+      "stop": true,
+      "closed": true
+    },
+    "risk_host_log_sha256": "c69c6728860936165dc62cfeb622fab21bd6095f40155d0d96d62cc1443ab16a",
+    "root_author_reviewed": true,
+    "duplicate_root_qa_run": false,
+    "result_sha256": "11f5ba9bd00e0cf8a0185c685e16a3ae876220ed4bd64985bf191eeb63243452",
+    "junit_sha256": "dd8e62a7fcb3f13f4b39428814cb20dc3a40b274099f886d93c6bd2c232e2a24"
+  },
+  "source_scope": {
+    "shared_base_manifest_sha256": "927c863d9768534b58b2e14832b7fdbd9be1948286a0ce3514b7698578616460",
+    "shared_patch": {
+      "file": "source/afi/analytics-shared-live.patch",
+      "bytes": 31861,
+      "sha256": "94c6df5d0ff7494baa2ebcd4198233cebc14536690546391a4059190ac4a74eb",
+      "targets": [
+        "src/backend/app/api/portfolio/__init__.py",
+        "src/backend/app/api/service_read.py",
+        "src/backend/app/services/service_read/access.py",
+        "src/backend/app/services/service_read/client.py",
+        "src/backend/app/services/service_read/deployment.py",
+        "src/backend/app/services/service_read/session.py",
+        "src/backend/app/services/service_read/worker.py"
+      ]
+    },
+    "page_patch": {
+      "file": "source/afi/PortfolioPage.analytics-only.patch",
+      "bytes": 1163,
+      "sha256": "53b1bb0ddac1a67d3c2b6ba0cb4004b1173dc35b45cca47db48c54ad81df7519",
+      "target": "src/frontend/src/views/PortfolioPage.vue",
+      "scope": "analytics mount hunk only; full Page contains separate AFI03 WIP and is not included/pinned here"
+    },
+    "source_files": [
+      {
+        "path": "src/backend/app/api/portfolio/__init__.py",
+        "bytes": 558,
+        "sha256": "ac17dff0e605e9d45552b13048340d36bb2bf1c4c2621ffe00889dc6ed4415ab",
+        "kind": "shared tracked source with analytics-only diff hunks"
+      },
+      {
+        "path": "src/backend/app/api/service_read.py",
+        "bytes": 12220,
+        "sha256": "d18eee1c6e8a51063916196f49efb68c58d4aa8dc204aed79af4974886b89a2f",
+        "kind": "shared tracked source with analytics-only diff hunks"
+      },
+      {
+        "path": "src/backend/app/services/service_read/access.py",
+        "bytes": 17261,
+        "sha256": "8a55cb031560ec8a82d4e85e3dce16d9ae469e5a7996f7323a1695613172520f",
+        "kind": "shared tracked source with analytics-only diff hunks"
+      },
+      {
+        "path": "src/backend/app/services/service_read/client.py",
+        "bytes": 33617,
+        "sha256": "575aea9fd98f40179d2ab12e65df3b53ae69b6526f26b663d9d92ae558ac3d04",
+        "kind": "shared tracked source with analytics-only diff hunks"
+      },
+      {
+        "path": "src/backend/app/services/service_read/deployment.py",
+        "bytes": 46100,
+        "sha256": "41a5e48cc8686dbf1318b7eb39084fe31a4c4d735df86f0989bbd8ba87b0b254",
+        "kind": "shared tracked source with analytics-only diff hunks"
+      },
+      {
+        "path": "src/backend/app/services/service_read/session.py",
+        "bytes": 30882,
+        "sha256": "09dcc1be19e87a0966863b9216d86d82fa998f9ed0e7fd2e38349dc0a549f852",
+        "kind": "shared tracked source with analytics-only diff hunks"
+      },
+      {
+        "path": "src/backend/app/services/service_read/worker.py",
+        "bytes": 22530,
+        "sha256": "f49ee0975c1d6139d727db2d65fd9b0a01932c5b2ed0093eee0310ba08b2631e",
+        "kind": "shared tracked source with analytics-only diff hunks"
+      },
+      {
+        "path": "src/backend/app/api/portfolio/analytics_tasks.py",
+        "bytes": 5923,
+        "sha256": "eaded05887df8cc25986f114c0b75c4ba58b47e7846cce6d6c3af299a160347e",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/backend/app/schemas/portfolio_analytics_tasks.py",
+        "bytes": 4855,
+        "sha256": "08b4744896cea7e6aa0017f273dd8cea318565ba6fe3d25fe92c22f7492bbab6",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/backend/app/services/portfolio_analytics_tasks.py",
+        "bytes": 16698,
+        "sha256": "bd55fc3ceaf25c60ee46f075e72293a87504504f6d5b7ff74bb9bd41dd921459",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/backend/tests/test_portfolio_analytics_tasks_api.py",
+        "bytes": 10300,
+        "sha256": "ff7cbabe395e09a7ef3b90c5d3358046eb10639e0a25a4f310c903888268b737",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/backend/tests/test_service_read_portfolio_analytics.py",
+        "bytes": 3394,
+        "sha256": "91b66a65aa657ed812eb9c7bf03b776b85ddea3388b9b02f1277d322f2f12a4b",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/backend/tests/test_service_read_portfolio_analytics_process.py",
+        "bytes": 43115,
+        "sha256": "f2680d4db91331cac35d77fad37e88144d51876255f3c3198d1ddfc8455321f1",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/frontend/src/api/portfolioAnalyticsTasks.ts",
+        "bytes": 2290,
+        "sha256": "06f0bb244c420cb2b12aa0be2acb4210d4daa24602174297be1ffce3bd306f3a",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/frontend/src/composables/usePortfolioAnalyticsTask.ts",
+        "bytes": 4356,
+        "sha256": "553c65419322864e0c58a150305b36dc63f926083b36b64cb9603bb9d41be6d4",
+        "kind": "new or updated analytics source/test; unwraps the API client direct task response"
+      },
+      {
+        "path": "src/frontend/src/components/portfolio/PortfolioAnalyticsTaskPanel.vue",
+        "bytes": 6711,
+        "sha256": "fcb3c4a1576399a7c62c39d99182c77dda6586bfe7b973755b5e427003f2407f",
+        "kind": "new or updated analytics source/test"
+      },
+      {
+        "path": "src/frontend/src/__tests__/components/PortfolioAnalyticsTaskPanel.test.ts",
+        "bytes": 6705,
+        "sha256": "fb8e38eee91ac7fce9d8292e675c7e7d99549407e2e6ce80265368843031ea94",
+        "kind": "new focused component/composable API workflow test"
+      }
+    ],
+    "excluded_live_wip": [
+      "src/backend/app/main.py",
+      "src/frontend/src/views/PortfolioPage.vue full-file AFI03 hunks",
+      "all Paper-specific shared changes"
+    ],
+    "patch_check": "Both analytics shared patch and Page partial patch passed reverse-apply check against live checkout immediately before packet creation.",
+    "candidate_base_head_for_ui": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+    "source_path_count_including_page_hunk": 18,
+    "ui_api_contract_fix": {
+      "file": "src/frontend/src/composables/usePortfolioAnalyticsTask.ts",
+      "reason": "the shared API response interceptor returns response.data and the typed API wrapper already promises PortfolioAnalyticsTask; the composable now consumes the direct task for create/get/cancel",
+      "affected_methods": [
+        "start",
+        "refresh",
+        "cancel"
+      ],
+      "bytes": 4356,
+      "sha256": "553c65419322864e0c58a150305b36dc63f926083b36b64cb9603bb9d41be6d4"
+    }
+  },
+  "raw_archive": {
+    "file": "raw-evidence.zip",
+    "bytes": 87177,
+    "sha256": "ceb22c1ea2005363df2a9b64880216f380183d67d35c3a15ec735ccc865de0c6",
+    "members": [
+      {
+        "entry": "raw/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/author-review.json",
+        "bytes": 1556,
+        "sha256": "0e7e184e795bc8967523592ad3a0c75ca26e9eb77e2d0433b6c8b7fa873cfda0"
+      },
+      {
+        "entry": "raw/junit.xml",
+        "bytes": 405,
+        "sha256": "dd8e62a7fcb3f13f4b39428814cb20dc3a40b274099f886d93c6bd2c232e2a24"
+      },
+      {
+        "entry": "raw/result.json",
+        "bytes": 1319,
+        "sha256": "11f5ba9bd00e0cf8a0185c685e16a3ae876220ed4bd64985bf191eeb63243452"
+      },
+      {
+        "entry": "raw/root-review-provenance-summary.md",
+        "bytes": 799,
+        "sha256": "6c7b014b68169655f30680f45999f6760170642e76e21507c57a255f32a96b87"
+      },
+      {
+        "entry": "raw/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/stdout.log",
+        "bytes": 691,
+        "sha256": "64965df899e71bc835b2af1fea3e5997eb866a405818013edfe8d023743bef8b"
+      },
+      {
+        "entry": "raw/ui/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/test-first-envelope-failure/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/test-first-envelope-failure/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "entry": "raw/ui/test-first-envelope-failure/junit.xml",
+        "bytes": 10864,
+        "sha256": "b5b3ac7ad15000cb490e8028ec83373fada3bc9d427d303d4656c313e10232f7"
+      },
+      {
+        "entry": "raw/ui/test-first-envelope-failure/stderr.txt",
+        "bytes": 5664,
+        "sha256": "2390e03f4256a5e39ff1c9787ca67bf960de5bc1eb943a72eeb2963b90904488"
+      },
+      {
+        "entry": "raw/ui/test-first-envelope-failure/stdout.txt",
+        "bytes": 4480,
+        "sha256": "9136e6dfeb7d706df6040a526c76832040014b607e83ad1314b45defbc35976f"
+      },
+      {
+        "entry": "raw/ui/test-pass/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/test-pass/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "entry": "raw/ui/test-pass/junit.xml",
+        "bytes": 1336,
+        "sha256": "1b8cbfc67bc015475268ad9973e6899ce01dd5701ef3eee72e06012a6b46b35f"
+      },
+      {
+        "entry": "raw/ui/test-pass/stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/test-pass/stdout.txt",
+        "bytes": 1041,
+        "sha256": "897fcbb63ef25078260c804f801704899e9d1ac56813921afdefdacfc8f32d38"
+      },
+      {
+        "entry": "raw/ui/typecheck-first-config-failure/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/typecheck-first-config-failure/exit.txt",
+        "bytes": 3,
+        "sha256": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b"
+      },
+      {
+        "entry": "raw/ui/typecheck-first-config-failure/stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/typecheck-first-config-failure/stdout.txt",
+        "bytes": 2949,
+        "sha256": "cc9de2865b8da1b99d3be01f0e46f98096757cea03e6d0531085428068843e17"
+      },
+      {
+        "entry": "raw/ui/typecheck-pass/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/typecheck-pass/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "entry": "raw/ui/typecheck-pass/stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/typecheck-pass/stdout.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "raw/ui/typecheck-pass/tsconfig.analytics-focus.json",
+        "bytes": 371,
+        "sha256": "f1fad59625fab4b73ff82bca7cb02ed2cd80498a3b4a220eef4d4bbedb72500b"
+      },
+      {
+        "entry": "source/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/PortfolioPage.analytics-only.patch",
+        "bytes": 1163,
+        "sha256": "53b1bb0ddac1a67d3c2b6ba0cb4004b1173dc35b45cca47db48c54ad81df7519"
+      },
+      {
+        "entry": "source/afi/analytics-shared-live.patch",
+        "bytes": 31861,
+        "sha256": "94c6df5d0ff7494baa2ebcd4198233cebc14536690546391a4059190ac4a74eb"
+      },
+      {
+        "entry": "source/afi/new/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/backend/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/backend/app/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/backend/app/api/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/backend/app/api/portfolio/analytics_tasks.py",
+        "bytes": 5923,
+        "sha256": "eaded05887df8cc25986f114c0b75c4ba58b47e7846cce6d6c3af299a160347e"
+      },
+      {
+        "entry": "source/afi/new/src/backend/app/schemas/portfolio_analytics_tasks.py",
+        "bytes": 4855,
+        "sha256": "08b4744896cea7e6aa0017f273dd8cea318565ba6fe3d25fe92c22f7492bbab6"
+      },
+      {
+        "entry": "source/afi/new/src/backend/app/services/portfolio_analytics_tasks.py",
+        "bytes": 16698,
+        "sha256": "bd55fc3ceaf25c60ee46f075e72293a87504504f6d5b7ff74bb9bd41dd921459"
+      },
+      {
+        "entry": "source/afi/new/src/backend/tests/test_portfolio_analytics_tasks_api.py",
+        "bytes": 10300,
+        "sha256": "ff7cbabe395e09a7ef3b90c5d3358046eb10639e0a25a4f310c903888268b737"
+      },
+      {
+        "entry": "source/afi/new/src/backend/tests/test_service_read_portfolio_analytics.py",
+        "bytes": 3394,
+        "sha256": "91b66a65aa657ed812eb9c7bf03b776b85ddea3388b9b02f1277d322f2f12a4b"
+      },
+      {
+        "entry": "source/afi/new/src/backend/tests/test_service_read_portfolio_analytics_process.py",
+        "bytes": 43115,
+        "sha256": "f2680d4db91331cac35d77fad37e88144d51876255f3c3198d1ddfc8455321f1"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/__tests__/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/__tests__/components/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/__tests__/components/PortfolioAnalyticsTaskPanel.test.ts",
+        "bytes": 6705,
+        "sha256": "fb8e38eee91ac7fce9d8292e675c7e7d99549407e2e6ce80265368843031ea94"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/api/portfolioAnalyticsTasks.ts",
+        "bytes": 2290,
+        "sha256": "06f0bb244c420cb2b12aa0be2acb4210d4daa24602174297be1ffce3bd306f3a"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/components/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/components/portfolio/PortfolioAnalyticsTaskPanel.vue",
+        "bytes": 6711,
+        "sha256": "fcb3c4a1576399a7c62c39d99182c77dda6586bfe7b973755b5e427003f2407f"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/composables/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/new/src/frontend/src/composables/usePortfolioAnalyticsTask.ts",
+        "bytes": 4356,
+        "sha256": "553c65419322864e0c58a150305b36dc63f926083b36b64cb9603bb9d41be6d4"
+      },
+      {
+        "entry": "source/afi/r9-source-layout.json",
+        "bytes": 4548,
+        "sha256": "b16830e6c66dbeb47ede4bf94f855dda5c0549520bbcf1d221b5bf2419c3d4ae"
+      },
+      {
+        "entry": "source/afi/r9-unavailable-ref-fixture.patch",
+        "bytes": 708,
+        "sha256": "70988bc3c6d1fba9f07e5645d45f24d86da9dd8d7619cea34cab42e54e9cf5c3"
+      },
+      {
+        "entry": "source/afi/shared-base-manifest.json",
+        "bytes": 2366,
+        "sha256": "927c863d9768534b58b2e14832b7fdbd9be1948286a0ce3514b7698578616460"
+      },
+      {
+        "entry": "source/afi/shared/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/shared/src/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/api/portfolio/__init__.py",
+        "bytes": 558,
+        "sha256": "ac17dff0e605e9d45552b13048340d36bb2bf1c4c2621ffe00889dc6ed4415ab"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/api/service_read.py",
+        "bytes": 12220,
+        "sha256": "d18eee1c6e8a51063916196f49efb68c58d4aa8dc204aed79af4974886b89a2f"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/services/",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/services/service_read/access.py",
+        "bytes": 17261,
+        "sha256": "8a55cb031560ec8a82d4e85e3dce16d9ae469e5a7996f7323a1695613172520f"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/services/service_read/client.py",
+        "bytes": 33617,
+        "sha256": "575aea9fd98f40179d2ab12e65df3b53ae69b6526f26b663d9d92ae558ac3d04"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/services/service_read/deployment.py",
+        "bytes": 46100,
+        "sha256": "41a5e48cc8686dbf1318b7eb39084fe31a4c4d735df86f0989bbd8ba87b0b254"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/services/service_read/session.py",
+        "bytes": 30882,
+        "sha256": "09dcc1be19e87a0966863b9216d86d82fa998f9ed0e7fd2e38349dc0a549f852"
+      },
+      {
+        "entry": "source/afi/shared/src/backend/app/services/service_read/worker.py",
+        "bytes": 22530,
+        "sha256": "f49ee0975c1d6139d727db2d65fd9b0a01932c5b2ed0093eee0310ba08b2631e"
+      },
+      {
+        "entry": "source/afi/ui-focused-candidate.json",
+        "bytes": 1614,
+        "sha256": "511115ecefa8868f3c4a7ae42ac0eb5c38695946690396ccfe44d171860b08eb"
+      }
+    ],
+    "entry_count": 68,
+    "file_count": 44,
+    "directory_count": 24
+  },
+  "not_claimed": [
+    "AFI04 formal PASS",
+    "real-account/provider/external finance data",
+    "trusted FX provenance or market freshness",
+    "complete V1 valuation/cashflow/Modified Dietz integration"
+  ],
+  "parent_delivery_scope": [
+    "AFI source: seven shared partial-hunk files",
+    "AFI source: ten analytics-specific new/updated files",
+    "PortfolioPage.vue analytics-only patch hunk",
+    "three SDK evidence packet files"
+  ],
+  "sdk_repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "head_at_preparation": "53f33158429f89fd9b4dce83c068056c99d6778f",
+    "parent_delivery_commit": "not assigned by Root"
+  },
+  "ui_acceptance": {
+    "evidence_level": "AUTHOR_LOCAL_FOCUSED_UI_TEST_AND_TYPECHECK_ONLY",
+    "candidate": "D:\\temp\\iteration10-afi04-r236-ui-fixed-20261016\\src\\frontend",
+    "candidate_base_head": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+    "test": {
+      "node": "src/__tests__/components/PortfolioAnalyticsTaskPanel.test.ts",
+      "result": "PASS",
+      "passed": 4,
+      "failed": 0,
+      "exit": 0,
+      "output": "D:\\temp\\afi04-r236-ui-author-output-r2",
+      "junit_sha256": "1b8cbfc67bc015475268ad9973e6899ce01dd5701ef3eee72e06012a6b46b35f",
+      "stdout_sha256": "897fcbb63ef25078260c804f801704899e9d1ac56813921afdefdacfc8f32d38",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "test_contract": "real panel/composable/API wrapper with only api/index transport mocked; exact create/get/cancel routes, pending-to-succeeded result values, unavailable null/reason, imported cancellation and live form suppression"
+    },
+    "typecheck": {
+      "tool": "vue-tsc --noEmit --project tsconfig.analytics-focus.json",
+      "result": "PASS",
+      "exit": 0,
+      "stdout_bytes": 0,
+      "stderr_bytes": 0
+    },
+    "diagnostic_attempts": [
+      {
+        "attempt": "test-first-envelope-failure",
+        "exit": 1,
+        "cause": "test fixture included the idempotency key, while the component intentionally generates it and accepts only facts/request"
+      },
+      {
+        "attempt": "typecheck-first-config-failure",
+        "exit": 2,
+        "cause": "focused config omitted the existing element-plus locale module declarations"
+      }
+    ],
+    "runtime": {
+      "node": "v24.13.0",
+      "npm": "11.6.2",
+      "package_lock_sha256": "c248cd403630f1d18a0147b8de74fb4dd1b1aa47090b17f1cf1eb4a14b501d66"
+    },
+    "raw_entries": [
+      "raw/ui/test-first-envelope-failure/exit.txt",
+      "raw/ui/test-first-envelope-failure/junit.xml",
+      "raw/ui/test-first-envelope-failure/stderr.txt",
+      "raw/ui/test-first-envelope-failure/stdout.txt",
+      "raw/ui/test-pass/exit.txt",
+      "raw/ui/test-pass/junit.xml",
+      "raw/ui/test-pass/stderr.txt",
+      "raw/ui/test-pass/stdout.txt",
+      "raw/ui/typecheck-first-config-failure/exit.txt",
+      "raw/ui/typecheck-first-config-failure/stderr.txt",
+      "raw/ui/typecheck-first-config-failure/stdout.txt",
+      "raw/ui/typecheck-pass/exit.txt",
+      "raw/ui/typecheck-pass/stderr.txt",
+      "raw/ui/typecheck-pass/stdout.txt",
+      "raw/ui/typecheck-pass/tsconfig.analytics-focus.json"
+    ],
+    "not_claimed": [
+      "AFI04 formal PASS",
+      "real network/server E2E",
+      "real accounts/providers",
+      "V1 valuation/cashflow/Modified Dietz integration"
+    ]
+  },
+  "repositories_at_ui_run": {
+    "afi_fixed_candidate_base_head": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+    "sdk": "not consumed by the UI source/typecheck candidate",
+    "risk": "not consumed by the UI source/typecheck candidate"
+  },
+  "repositories_at_packet_update": {
+    "afi": "00cf38fd1dbcd3bd860972bda7f2a4be6f83f138",
+    "sdk": "3b58addb5d9511d53977c3cc83cf031591ca1302"
+  }
+}
