@@ -1,0 +1,501 @@
+diff --git a/src/backend/app/api/router.py b/src/backend/app/api/router.py
+index 88bf55b7..64f5139c 100644
+--- a/src/backend/app/api/router.py
++++ b/src/backend/app/api/router.py
+@@ -162,6 +162,11 @@ _register_optional_router(
+     "app.api.service_read",
+     tags=["Service Read"],
+ )
++_register_optional_router(
++    "service_gateway",
++    "app.api.service_gateway",
++    tags=["Service Gateway"],
++)
+ _register_optional_router(
+     "service_orders",
+     "app.api.service_orders",
+diff --git a/src/backend/app/services/service_read/deployment.py b/src/backend/app/services/service_read/deployment.py
+index 357b389c..86af1c9d 100644
+--- a/src/backend/app/services/service_read/deployment.py
++++ b/src/backend/app/services/service_read/deployment.py
+@@ -254,7 +254,9 @@ def _create_runtime(profile: _SubjectProfile) -> Any:
+     }
+     requested_operations: dict[str, frozenset[str]] = {}
+     if profile.account_bindings:
+-        requested_operations["application.account"] = frozenset({"account.snapshot"})
++        requested_operations["application.account"] = frozenset(
++            {"account.snapshot", "account.head"}
++        )
+     if profile.account_book_bindings:
+         operations = {"execution.account_books.query"}
+         if profile.order_bindings:
+diff --git a/src/backend/app/services/service_read/session.py b/src/backend/app/services/service_read/session.py
+index d0d8c438..a35e08e8 100644
+--- a/src/backend/app/services/service_read/session.py
++++ b/src/backend/app/services/service_read/session.py
+@@ -31,6 +31,7 @@ from .contracts import (
+     StrategyHealthView,
+     _thaw_json,
+ )
++from .gateway_health import GatewayHealthView
+ 
+ if TYPE_CHECKING:
+     from bt_api_base.service_protocol import WireIdentity
+@@ -213,7 +214,13 @@ class SdkServiceReadSession:
+     def _expected_binding_specs(self) -> set[tuple[str, str, frozenset[str]]]:
+         expected: set[tuple[str, str, frozenset[str]]] = set()
+         for binding in self._account_bindings.values():
+-            expected.add((binding.mount, binding.scope_ref, frozenset({"account.snapshot"})))
++            expected.add(
++                (
++                    binding.mount,
++                    binding.scope_ref,
++                    frozenset({"account.snapshot", "account.head"}),
++                )
++            )
+         order_query_operations: set[str] = set()
+         if self._order_bindings:
+             order_query_operations.add("orders.query")
+@@ -364,13 +371,14 @@ class SdkServiceReadSession:
+         view = self._runtime.account_binding_view(
+             configured.mount,
+             account_ref,
+-            required_operations=frozenset({"account.snapshot"}),
++            required_operations=frozenset({"account.snapshot", "account.head"}),
+         )
+         if (
+             view.scope_ref != configured.scope_ref
+             or view.account_ref != account_ref
+             or view.mount != configured.mount
+-            or frozenset(view.operations) != frozenset({"account.snapshot"})
++            or frozenset(view.operations)
++            != frozenset({"account.snapshot", "account.head"})
+             or getattr(view.rpc_scope, "account_ref", None) != account_ref
+             or self._scope_has_unbounded_account_alias(view.rpc_scope)
+         ):
+@@ -465,6 +473,36 @@ class SdkServiceReadSession:
+         assert self._read_client is not None
+         return self._read_client.read_account(account_ref, currency=currency)
+ 
++    def read_gateway_health(self, account_ref: str) -> GatewayHealthView:
++        """Read Gateway owner status and account facts as separate observations."""
++
++        self._assert_owner()
++        self._require_open()
++        if not self._started:
++            raise ServiceReadSessionError(
++                "SERVICE_READ_NOT_STARTED",
++                "service-read runtime must be started before reads",
++            )
++        configured = self._account_bindings.get(account_ref)
++        if configured is None:
++            raise ServiceReadUnavailableError("ACCOUNT_NOT_CONFIGURED")
++        self._validate_runtime()
++        self._validate_account_scope(account_ref, configured)
++        assert self._runtime is not None
++        assert self._read_client is not None
++        head_reply = self._runtime.call(
++            configured.mount,
++            "account.head",
++            {},
++            scope_ref=configured.scope_ref,
++        )
++        account_observation = self._read_client.read_account(account_ref)
++        return GatewayHealthView.from_replies(
++            account_ref,
++            head_reply,
++            account_observation,
++        )
++
+     def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView:
+         self._assert_owner()
+         self._require_open()
+diff --git a/src/backend/app/services/service_read/worker.py b/src/backend/app/services/service_read/worker.py
+index 81e3b824..c0b0cc31 100644
+--- a/src/backend/app/services/service_read/worker.py
++++ b/src/backend/app/services/service_read/worker.py
+@@ -24,6 +24,7 @@ if TYPE_CHECKING:
+         OrderReadView,
+         StrategyHealthView,
+     )
++    from app.services.service_read.gateway_health import GatewayHealthView
+ 
+ __all__ = ["ServiceReadSession", "ServiceReadWorker", "ServiceReadWorkerError"]
+ 
+@@ -54,6 +55,8 @@ class ServiceReadSession(Protocol):
+ 
+     def read_account(self, account_ref: str, *, currency: str | None = None) -> AccountReadView: ...
+ 
++    def read_gateway_health(self, account_ref: str) -> GatewayHealthView: ...
++
+     def read_account_book(self, account_ref: str) -> AccountBookReadView: ...
+ 
+     def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView: ...
+@@ -90,6 +93,7 @@ class _State(Enum):
+ 
+ class _Kind(Enum):
+     ACCOUNT = auto()
++    GATEWAY_HEALTH = auto()
+     ACCOUNT_BOOK = auto()
+     ORDER = auto()
+     STRATEGY_HEALTH = auto()
+@@ -217,6 +221,11 @@ class ServiceReadWorker:
+     ) -> AccountReadView:
+         return await self._submit(_Kind.ACCOUNT, account_ref, currency)
+ 
++    async def read_gateway_health(self, account_ref: str) -> GatewayHealthView:
++        """Queue the paired status and account reads on the existing owner thread."""
++
++        return await self._submit(_Kind.GATEWAY_HEALTH, account_ref)
++
+     async def read_order(self, scope_ref: str, intent_id: str) -> OrderReadView:
+         return await self._submit(_Kind.ORDER, scope_ref, intent_id)
+ 
+@@ -427,6 +436,8 @@ class ServiceReadWorker:
+         try:
+             if request.kind is _Kind.ACCOUNT:
+                 result = session.read_account(request.arguments[0], currency=request.arguments[1])
++            elif request.kind is _Kind.GATEWAY_HEALTH:
++                result = session.read_gateway_health(request.arguments[0])
+             elif request.kind is _Kind.ACCOUNT_BOOK:
+                 result = session.read_account_book(request.arguments[0])
+             elif request.kind is _Kind.ORDER:
+diff --git a/src/backend/tests/test_service_read_authorized_http_integration.py b/src/backend/tests/test_service_read_authorized_http_integration.py
+index 19813eee..f513971f 100644
+--- a/src/backend/tests/test_service_read_authorized_http_integration.py
++++ b/src/backend/tests/test_service_read_authorized_http_integration.py
+@@ -2690,6 +2694,7 @@ def _dual_gateway_service_process(
+     client_scope_ref: str,
+     account_key_values: dict[str, Any],
+     service_keys: dict[str, bytes],
++    account_operations: frozenset[str] = frozenset({"account.snapshot"}),
+ ) -> None:
+     """Spawn target: one actual Gateway ServiceHost and one synthetic account session."""
+ 
+@@ -2763,7 +2768,7 @@ def _dual_gateway_service_process(
+         "service.account_read",
+         client_scope_ref,
+         WireScope(_DUAL_LIVE_DOMAIN, account_ref=account_ref),
+-        frozenset({"account.snapshot"}),
++        account_operations,
+     )
+     host = None
+     try:
+@@ -3991,13 +3996,14 @@ def test_afi02_dual_live_projection_uses_gateway_and_execution_service_hosts(
+     _run_dual_live_composition_projection(tmp_path, monkeypatch)
+ 
+ 
+-def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
++def test_default_service_read_runtime_assembly_requests_gateway_owner_health(
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
+-    from app.services.service_read.deployment import _create_runtime
+     import bt_api_py.service_runtime as service_runtime
+     from bt_api_py.service_config import parse_client_config
+ 
++    from app.services.service_read.deployment import _create_runtime
++
+     real_runtime_type = service_runtime.ServiceClientRuntime
+     requested_operations: list[Any] = []
+ 
+@@ -4021,7 +4027,7 @@ def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
+ 
+     runtime = _create_runtime(profile)
+     expected = {
+-        "application.account": frozenset({"account.snapshot"}),
++        "application.account": frozenset({"account.snapshot", "account.head"}),
+         "application.order_query": frozenset({"execution.account_books.query"}),
+     }
+     assert requested_operations == [expected]
+@@ -4031,6 +4037,252 @@ def test_default_service_read_runtime_assembly_limits_gateway_to_snapshot(
+     runtime.close()
+ 
+ 
++def test_afi09_gateway_health_keeps_missing_owner_status_unobserved() -> None:
++    from app.services.service_read.contracts import AccountReadView, ReadQuality
++    from app.services.service_read.gateway_health import GatewayHealthView
++
++    account = AccountReadView(
++        account_ref=_ACCOUNT_A,
++        execution_domain_ref=_DUAL_LIVE_DOMAIN,
++        currency="USDT",
++        quality=ReadQuality.FRESH,
++        session_generation="account-snapshot-generation",
++        cursor=7,
++        observed_at_utc="2026-10-16T00:00:00Z",
++        received_age_seconds=0.1,
++        fresh_for_seconds=30.0,
++    )
++    view = GatewayHealthView.from_replies(
++        _ACCOUNT_A,
++        {"latest_cursor": 7},
++        account,
++    )
++
++    assert view.rpc_reachable is True
++    assert view.gateway_session_status == "unobserved"
++    assert view.session_generation is None
++    assert view.account_observation.quality is ReadQuality.FRESH
++
++
++def test_afi09_gateway_health_http_reads_real_owner_facts_without_connecting_again(
++    tmp_path: Any,
++) -> None:
++    """Exercise the status API through a real synthetic Gateway ServiceHost."""
++
++    import httpx
++    from bt_api_base.account_protocol import AccountKey, AccountResourceKey
++    from fastapi import FastAPI
++    from pydantic import SecretStr
++
++    from app.api.deps import get_current_user
++    from app.api.service_gateway import router as service_gateway_router
++    from app.api.service_read import configure_service_read
++    from app.schemas.auth import TokenPayload
++    from app.services.service_read.deployment import start_service_read_deployment
++
++    account_ref = _ACCOUNT_A
++    account_key = AccountKey(
++        "PAPER", "synthetic-venue", "simulation", "afi-health-account-a"
++    )
++    app_public, app_secret = zmq.curve_keypair()
++    server_public, server_secret = zmq.curve_keypair()
++    endpoint = _order._endpoint()
++    service_id = "afi09-health-gateway-service"
++    instance_id = "afi09-health-gateway-instance"
++    service_scope_ref = "afi09-health-gateway-v1"
++    transport_ref = "afi09-health-gateway-connect-v1"
++    security_ref = "afi09-health-gateway-curve-v1"
++    client_scope_ref = "afi09-health-account-read-v1"
++    raw_service_config = _dual_gateway_service_config(
++        endpoint,
++        account_ref,
++        service_id,
++        instance_id,
++        service_scope_ref,
++        "afi09-health-gateway-listen-v1",
++        security_ref,
++    )
++    context = multiprocessing.get_context("spawn")
++    root = tmp_path / "afi09-gateway-health"
++    root.mkdir()
++    guard_directory = root / "session-guard"
++    guard_directory.mkdir()
++    host = _order._start_process(
++        context,
++        _dual_gateway_service_process,
++        (
++            raw_service_config,
++            str(root / "registry.sqlite3"),
++            str(root / "journal.sqlite3"),
++            str(guard_directory),
++            account_ref,
++            client_scope_ref,
++            account_key.to_dict(),
++            {
++                "server_public": server_public,
++                "server_secret": server_secret,
++                "application_public": app_public,
++                "security_ref": security_ref,
++            },
++            frozenset({"account.snapshot", "account.head"}),
++        ),
++        "afi09-synthetic-gateway-host",
++    )
++    close_reply = None
++    try:
++        ready = _order._receive(host["pipe"], timeout=20.0)
++        assert ready[0:3] == ("ready", endpoint, "started"), ready
++        startup = ready[3]
++        assert startup["worker_ready"] is True
++        assert startup["connect_calls"] == startup["read_calls"] == 1
++        assert startup["close_calls"] == 0
++
++        identity = _DUAL_LIVE_APPLICATION_IDENTITY
++        profile = {
++            "subject": _SUBJECT_A,
++            "identity": {
++                "principal_ref": identity.principal_ref,
++                "actor_ref": identity.actor_ref,
++                "delegate_ref": identity.delegate_ref,
++            },
++            "client_config": {
++                "client_config_schema_version": 1,
++                "process_role": "application_client",
++                "registration": {"application_ref": identity.actor_ref},
++                "clients": {
++                    "gateway": {
++                        "config_schema_version": 1,
++                        "settings": {
++                            "bindings": [
++                                {
++                                    "mount": "application.account",
++                                    "service_id": service_id,
++                                    "instance_id": instance_id,
++                                    "scope_ref": client_scope_ref,
++                                    "transport_ref": transport_ref,
++                                    "account_ref": account_ref,
++                                }
++                            ],
++                            "options": {"request_timeout_ms": _REQUEST_TIMEOUT_MS},
++                        },
++                    }
++                },
++                "communication": {
++                    "config_schema_version": 1,
++                    "profiles": {
++                        transport_ref: {
++                            "backend": "zmq",
++                            "config_schema_version": 1,
++                            "endpoints": {"rpc_connect": endpoint},
++                            "security_profile_ref": security_ref,
++                            "options": {
++                                "high_water_mark": 32,
++                                "max_message_bytes": _MAX_MESSAGE_BYTES,
++                            },
++                        }
++                    },
++                },
++            },
++            "scope_claims": {
++                client_scope_ref: {
++                    "execution_domain_ref": _DUAL_LIVE_DOMAIN,
++                    "account_ref": account_ref,
++                }
++            },
++            "peer_identities": {
++                service_id: {
++                    "principal_ref": f"{service_id}-principal",
++                    "actor_ref": service_id,
++                }
++            },
++            "curve_keys": {
++                security_ref: {
++                    "server_key": server_public.decode("ascii"),
++                    "public_key": app_public.decode("ascii"),
++                    "secret_key": app_secret.decode("ascii"),
++                }
++            },
++            "grants": {
++                "account_refs": [account_ref],
++                "order_scope_refs": [],
++                "monitor_scope_refs": [],
++            },
++            "account_bindings": {
++                account_ref: {
++                    "mount": "application.account",
++                    "scope_ref": client_scope_ref,
++                    "currency": "USDT",
++                    "account_key": account_key.to_dict(),
++                    "coverage": [AccountResourceKey("spot", "cash").to_dict()],
++                    "require_open_orders": False,
++                }
++            },
++            "order_bindings": {},
++            "monitor_bindings": {},
++            "worker": {"maintenance_interval_seconds": 60},
++        }
++        async def exercise_http() -> None:
++            deployment = await start_service_read_deployment(
++                SecretStr(json.dumps({"schema_version": 1, "subjects": [profile]}))
++            )
++            assert deployment is not None
++            configure_service_read(deployment.directory)
++
++            app = FastAPI()
++            app.include_router(service_gateway_router, prefix="/api/v1")
++            active_subject = {"value": _SUBJECT_A}
++
++            def current_user() -> TokenPayload:
++                return TokenPayload(sub=active_subject["value"], username="synthetic-user")
++
++            app.dependency_overrides[get_current_user] = current_user
++            try:
++                async with httpx.AsyncClient(
++                    transport=httpx.ASGITransport(app=app),
++                    base_url="http://afi09-health.synthetic.test",
++                ) as client:
++                    response = await client.get(
++                        f"/api/v1/service-gateway/accounts/{account_ref}/health"
++                    )
++                    assert response.status_code == 200, response.text
++                    payload = response.json()
++                    assert payload["service_connection"]["rpc_status"] == "reachable"
++                    assert payload["gateway_session"]["status"] == "ready"
++                    assert payload["gateway_session"]["session_generation"]
++                    assert payload["account_observation"]["quality"] == "fresh"
++                    assert payload["account_observation"]["same_session_generation"] is True
++                    assert payload["market_data_feed"]["status"] == "unobserved"
++                    assert app_secret.decode("ascii") not in response.text
++                    assert server_secret.decode("ascii") not in response.text
++
++                    active_subject["value"] = _SUBJECT_B
++                    denied = await client.get(
++                        f"/api/v1/service-gateway/accounts/{account_ref}/health"
++                    )
++                    assert denied.status_code == 403
++
++                host["pipe"].send(("status",))
++                status_reply = _order._receive(host["pipe"], timeout=5.0)
++                assert status_reply == ("status", 1, 1, 0, True)
++            finally:
++                configure_service_read(None)
++                await deployment.aclose()
++
++        asyncio.run(exercise_http())
++    finally:
++        if host["process"].is_alive():
++            with suppress(BaseException):
++                host["pipe"].send(("close",))
++                close_reply = _order._receive(host["pipe"], timeout=20.0)
++            host["process"].join(timeout=20.0)
++        assert close_reply is not None
++        assert close_reply[0:2] == ("closed", "closed"), close_reply
++        assert close_reply[2:5] == (1, 1, 1), close_reply
++        assert not host["process"].is_alive()
++        host["pipe"].close()
++        host["process"].close()
++
++
+ _MANUAL_SUBMIT_SELECTOR = "afi-manual-order-current-v1"
+ _MANUAL_BOOK_A = "afi-manual-book-a-v1"
+ _MANUAL_BOOK_B = "afi-manual-book-b-v1"
+diff --git a/src/backend/tests/test_service_read_session.py b/src/backend/tests/test_service_read_session.py
+index 5e87681d..4acc37aa 100644
+--- a/src/backend/tests/test_service_read_session.py
++++ b/src/backend/tests/test_service_read_session.py
+@@ -39,11 +39,14 @@ def _account_scope(account_ref: str = "account-a") -> WireScope:
+     return WireScope("paper:venue-a", account_ref=account_ref)
+ 
+ 
+-def _registered(mount: str, scope_ref: str, operation: str, scope: WireScope):
++def _registered(
++    mount: str, scope_ref: str, operation: str | frozenset[str], scope: WireScope
++):
++    operations = frozenset({operation}) if type(operation) is str else operation
+     return SimpleNamespace(
+         mount=mount,
+         scope_ref=scope_ref,
+-        operations=frozenset({operation}),
++        operations=operations,
+         active=True,
+         scope=scope,
+     )
+@@ -60,7 +63,7 @@ class _Runtime:
+             _registered(
+                 "application.account",
+                 "account-a-read-v1",
+-                "account.snapshot",
++                frozenset({"account.snapshot", "account.head"}),
+                 _account_scope(),
+             )
+         ]
+@@ -83,7 +86,7 @@ class _Runtime:
+             mount=mount,
+             scope_ref=self.view_scope_ref,
+             account_ref=account_ref,
+-            operations=frozenset({"account.snapshot"}),
++            operations=frozenset({"account.snapshot", "account.head"}),
+             rpc_scope=self.view_scope,
+         )
+ 

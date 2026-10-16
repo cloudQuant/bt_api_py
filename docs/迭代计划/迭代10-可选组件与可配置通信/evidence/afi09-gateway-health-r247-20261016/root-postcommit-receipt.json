@@ -1,0 +1,86 @@
+{
+  "repo": "D:\\source_code\\ai-for-investor",
+  "parent": "80d9b8ad5eb48df9e2f01d944d57cee428950a12",
+  "head": "8943fc0fe15c0c34ed33d7a20e42637e5831e2a3",
+  "entries": [
+    {
+      "path": "src/backend/app/api/service_gateway.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\0.payload",
+      "sha256": "ea02ed47b4661afb1e81fadf2103b83f80594d4740da307b81888074f93fb552",
+      "blob": "5995d95772012af9732089a2bbf052b6568148bd",
+      "old_blob": null
+    },
+    {
+      "path": "src/backend/app/services/service_read/gateway_health.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\1.payload",
+      "sha256": "fc3c50eb589e6f99845b9c056867a41875dc4a02951faadd182a55c64fbcbc25",
+      "blob": "b50cf4c4ff07774d9f6f837745e2f37a20a1c48c",
+      "old_blob": null
+    },
+    {
+      "path": "src/backend/app/api/router.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\2.payload",
+      "sha256": "f38466ec861f3f4170cb378bcbfdd31da7a025158007ad95b9b9969554d1df64",
+      "blob": "64f5139cf9df9ca17e9311cdb5c1343117dd055f",
+      "old_blob": "88bf55b7cf17be1924b7f8c364489df4d57af53f"
+    },
+    {
+      "path": "src/backend/app/services/service_read/deployment.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\3.payload",
+      "sha256": "a55288273be772c96804c5423d368824513f8335766eff86863e54ead004c3b4",
+      "blob": "98a122c97c0d14f698e74c6325fdc0d42345f020",
+      "old_blob": "357b389c4673fb173433817058ff92b9c1494658"
+    },
+    {
+      "path": "src/backend/app/services/service_read/session.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\4.payload",
+      "sha256": "5d3a50e82b1b6f362810a87e5121254942cd607780f790635355a252369266e3",
+      "blob": "d0657aa398062106820bbfb36500630f43cbf5bb",
+      "old_blob": "d0d8c438d9747d5207bd85c5e666c0c20a2393fd"
+    },
+    {
+      "path": "src/backend/app/services/service_read/worker.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\5.payload",
+      "sha256": "f54e26e648e9002b457812e2c335ad889aaff4b6ead8525e09ab033d6062a946",
+      "blob": "9f70b155bc6d8030a5bac309e8f24ae71abcda06",
+      "old_blob": "81e3b824f3a0dd09cc7244e00f8ddbed8d269cb6"
+    },
+    {
+      "path": "src/backend/tests/test_service_read_authorized_http_integration.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\6.payload",
+      "sha256": "d803268e7933f5431d86684f8047727e300c30247c999797959891972495a716",
+      "blob": "16304ba4cf6292f50aa40c11c3161b3af68bd2c2",
+      "old_blob": "19813eee782733b65a35feb11caebaf51291f167"
+    },
+    {
+      "path": "src/backend/tests/test_service_read_session.py",
+      "payload": "D:\\bt_api_py\\.codex-tmp\\r247-filtered-commit-payloads\\7.payload",
+      "sha256": "18f06ca1865f1d636b5667de5b7cba7a90483a04c0f9d771bafff4bb43881613",
+      "blob": "4acc37aae8c8b7873287995033d3ad86bca8d247",
+      "old_blob": "5e87681d5b94dedd7064a79cc35efa5f2325647e"
+    }
+  ],
+  "index_empty": true,
+  "selected_checkout_before": {
+    "src/backend/app/api/service_gateway.py": "57eb3b985f755318a74f30da5ebd64cf69ea38ca115e7cd221fc0fc23d086c29",
+    "src/backend/app/services/service_read/gateway_health.py": "fc3c50eb589e6f99845b9c056867a41875dc4a02951faadd182a55c64fbcbc25",
+    "src/backend/app/api/router.py": "9a089649ad328ba4a3b6a5820bac13e948dfc015fcbe95908d17beac43e921d6",
+    "src/backend/app/services/service_read/deployment.py": "adb0b7d24d104fcb507d615fef9b69d9f20ebc0e863a8879baf6ed583e046290",
+    "src/backend/app/services/service_read/session.py": "e3af34b88fe36ea05286be5514bff9c1be6d22314c2246c6ee3ff6f79e39e2b3",
+    "src/backend/app/services/service_read/worker.py": "f86c774d0f26c80c0dabf455a6b84eaa7e861df102c813bc503d5eb92dc43e50",
+    "src/backend/tests/test_service_read_authorized_http_integration.py": "63ead7acfe3fae8d13f81644b627dd6465b3de0933245a9198fe3c620c39e493",
+    "src/backend/tests/test_service_read_session.py": "18f06ca1865f1d636b5667de5b7cba7a90483a04c0f9d771bafff4bb43881613"
+  },
+  "selected_checkout_after": {
+    "src/backend/app/api/service_gateway.py": "57eb3b985f755318a74f30da5ebd64cf69ea38ca115e7cd221fc0fc23d086c29",
+    "src/backend/app/services/service_read/gateway_health.py": "fc3c50eb589e6f99845b9c056867a41875dc4a02951faadd182a55c64fbcbc25",
+    "src/backend/app/api/router.py": "9a089649ad328ba4a3b6a5820bac13e948dfc015fcbe95908d17beac43e921d6",
+    "src/backend/app/services/service_read/deployment.py": "adb0b7d24d104fcb507d615fef9b69d9f20ebc0e863a8879baf6ed583e046290",
+    "src/backend/app/services/service_read/session.py": "e3af34b88fe36ea05286be5514bff9c1be6d22314c2246c6ee3ff6f79e39e2b3",
+    "src/backend/app/services/service_read/worker.py": "f86c774d0f26c80c0dabf455a6b84eaa7e861df102c813bc503d5eb92dc43e50",
+    "src/backend/tests/test_service_read_authorized_http_integration.py": "63ead7acfe3fae8d13f81644b627dd6465b3de0933245a9198fe3c620c39e493",
+    "src/backend/tests/test_service_read_session.py": "18f06ca1865f1d636b5667de5b7cba7a90483a04c0f9d771bafff4bb43881613"
+  },
+  "selected_checkout_unchanged": true,
+  "whole_worktree_stability_claim": false
+}
