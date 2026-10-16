@@ -1934,12 +1934,16 @@ def _owner_process(
         total_relayed = 0
         last_report = time.monotonic()
         next_relay_poll = time.monotonic()
+        next_relay_maintenance = time.monotonic()
         draining = False
         drain_deadline = 0.0
         while True:
             account_host.serve_once(timeout_ms=0)
             execution_host.serve_once(timeout_ms=0)
             now = time.monotonic()
+            if now >= next_relay_maintenance:
+                relay_runtime.maintain()
+                next_relay_maintenance = time.monotonic() + 0.5
             if now >= next_relay_poll or draining:
                 round_delivered = 0
                 for local_index, relay in relays.items():

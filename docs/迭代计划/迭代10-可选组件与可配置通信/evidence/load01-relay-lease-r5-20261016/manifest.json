@@ -1,0 +1,63 @@
+{
+  "r5/command.json": {
+    "bytes": 1497,
+    "sha256": "f0f984a249a694334d6c39db1c61f54aa56e2fd95f3eb3f541c149f4d5cbb668"
+  },
+  "r5/exit.txt": {
+    "bytes": 3,
+    "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+  },
+  "r5/junit.xml": {
+    "bytes": 912,
+    "sha256": "807a92b80930fc7ad0ad99329014067e98258cc9230a61b5ada99ba176afe6c6"
+  },
+  "r5/result.json": {
+    "bytes": 519,
+    "sha256": "e09eb0ebf002262ef0950bca2056e2fbe2ef4351468d53fc90999379150bb496"
+  },
+  "r5/runner.py": {
+    "bytes": 3204,
+    "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+  },
+  "r5/running.json": {
+    "bytes": 76,
+    "sha256": "43fbd245ae1474ae40d1c65574156ba2a61d7e25f2340538a7b98dd3c4f22009"
+  },
+  "r5/source-after.json": {
+    "bytes": 6171,
+    "sha256": "fc2a5290edafe1660b731e597d74e352844b804e4064a3f6885f94a2bcaac36c"
+  },
+  "r5/source-before.json": {
+    "bytes": 6171,
+    "sha256": "fc2a5290edafe1660b731e597d74e352844b804e4064a3f6885f94a2bcaac36c"
+  },
+  "r5/spec.json": {
+    "bytes": 11533,
+    "sha256": "d5e24680ebf2568eb3034d98e646a833698fa5c9f4e787b27199af8bc6199e48"
+  },
+  "r5/stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "r5/stdout.log": {
+    "bytes": 7542,
+    "sha256": "24c9e380721951ae3b933627d609569766c036819ab901d5715034e2b6220c64"
+  },
+  "r5/load01-pilot-result.json": {
+    "bytes": 1283975,
+    "sha256": "d688326440e93d6494c253a942994baf171318ef38f9f2042fba4285d12a423a"
+  },
+  "source/accepted-canonical-runner.py": {
+    "bytes": 191836,
+    "sha256": "489ff6a97d01ebeacca3c0b2022151c7c54805679ed85651b8773656d67d59af"
+  },
+  "diagnosis/root-readonly-diagnosis.md": {
+    "bytes": 23300,
+    "sha256": "102218f33845c88af1a18e92bd817cca7ad5092215f0b844bfd374252f2aad50"
+  },
+  "preparation/record.md": {
+    "bytes": 5047,
+    "sha256": "af63d03343d09dd07b708f54b67f91ac83dd80de577aca63c83fa7e6818215fa"
+  },
+  "archive_sha256": "cb9335dbadb485771843308c366ccf853adf4daa1e5441accbfd40f18d1ea76a"
+}
