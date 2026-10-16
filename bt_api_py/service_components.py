@@ -866,6 +866,11 @@ def _acquire_execution_owner_lock(
     """
 
     raw_path = getattr(store, "path", None)
+    if isinstance(raw_path, os.PathLike):
+        try:
+            raw_path = os.fspath(raw_path)
+        except (TypeError, ValueError):
+            raise ServiceComponentError("ORDER_OWNER_LOCK_UNAVAILABLE") from None
     if type(raw_path) is not str or not raw_path:
         raise ServiceComponentError("ORDER_OWNER_LOCK_UNAVAILABLE")
     if raw_path == ":memory:":
@@ -1380,10 +1385,12 @@ def build_component(
     tracked_by_caller = False
     execution_owner_lock: _ExecutionOwnerFileLock | _ExecutionOwnerMemoryLock | None = None
     execution_owner_lock_transferred = False
-    defer_resource_tracking = (
-        spec.component == "execution"
-        and spec.options.get("role") in {"account_owner", "group_account_owner"}
-        and "service.order_entry" in spec.bind_ports
+    defer_resource_tracking = "service.order_entry" in spec.bind_ports and (
+        (
+            spec.component == "execution"
+            and spec.options.get("role") in {"account_owner", "group_account_owner"}
+        )
+        or (spec.component == "risk" and spec.options.get("role") == "account_owner")
     )
     try:
         resources = resource_provider(
@@ -1598,6 +1605,10 @@ def build_component(
                     trusted_group_reservation_policies,
                 )
             elif spec.component == "risk" and spec.options.get("role") == "account_owner":
+                if "service.order_entry" in spec.bind_ports:
+                    # Share the account-owner sidecar exclusion with the
+                    # Execution adapter before recovery or provider work.
+                    execution_owner_lock = _acquire_execution_owner_lock(values["journal"])
                 constructor = getattr(module, "RiskOrderEntryService", None)
                 adapter = constructor(
                     values["bt_api"],
