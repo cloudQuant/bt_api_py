@@ -28,7 +28,9 @@ from bt_api_execution.group_contracts import group_leg_intent_id
 from bt_api_execution.group_order_contracts import (
     GroupAccountReservationSnapshot,
     GroupLegPermitReference,
+    GroupOrderEvent,
     GroupOrderIntent,
+    GroupOrderSnapshot,
     GroupReservationPhase,
 )
 
