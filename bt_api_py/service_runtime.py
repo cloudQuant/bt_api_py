@@ -91,7 +91,8 @@ PORT_OPERATIONS = MappingProxyType(
             {
                 "policy.read", "policy.draft", "policy.approve", "policy.publish", "policy.receipt",
                 "policy.budget.propose", "policy.budget.approve", "policy.budget.publish_member",
-                "policy.budget.confirm_member", "policy.budget.reject_member",
+                "policy.budget.confirm_member", "policy.budget.owner_confirm_member",
+                "policy.budget.reject_member",
                 "policy.budget.mark_unknown", "policy.budget.retract", "policy.budget.read",
             }
         ),

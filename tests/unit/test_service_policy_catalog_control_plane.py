@@ -68,6 +68,7 @@ _SYNC_SCOPE = WireScope(_DOMAIN, portfolio_ref="portfolio-01")
 _MANAGER_OPERATIONS = frozenset(
     {"policy.read", "policy.draft", "policy.approve", "policy.publish", "policy.receipt"}
 )
+_OWNER_CONFIRM_OPERATIONS = frozenset({"policy.budget.owner_confirm_member"})
 _SYNC_OPERATIONS = frozenset({"policy.read"})
 _POLICY_REF = "cfg06-policy-v2"
 _POLICY_CONTENT = {"limit": 1, "mode": "bounded"}
@@ -120,7 +121,11 @@ def _catalog_service_config(endpoint: str) -> dict[str, Any]:
     }
 
 
-def _catalog_authority(keys: dict[str, bytes]) -> TrustedServiceAuthority:
+def _catalog_authority(
+    keys: dict[str, bytes],
+    *,
+    manager_operations: frozenset[str] = _MANAGER_OPERATIONS,
+) -> TrustedServiceAuthority:
     manager_identity = WireIdentity(
         WireRole.APPLICATION_CLIENT, _MANAGER_PRINCIPAL, "cfg06-config-manager"
     )
@@ -154,14 +159,14 @@ def _catalog_authority(keys: dict[str, bytes]) -> TrustedServiceAuthority:
                             "service.risk_policy",
                             "cfg06-manager-policy-v1",
                             _MANAGER_SCOPE,
-                            _MANAGER_OPERATIONS,
+                            manager_operations,
                         ),
                         ResourceGrant(
                             _CATALOG_INSTANCE,
                             "service.risk_policy",
                             "cfg06-manager-read-v1",
                             _MANAGER_READ_SCOPE,
-                            _MANAGER_OPERATIONS,
+                            manager_operations,
                         ),
                     ),
                 ),
@@ -365,6 +370,58 @@ def _run_manager_script(
                     dict(body.get("result") or {}),
                 )
             )
+    except BaseException as exc:  # pragma: no cover - surfaced to the test
+        errors.append(exc)
+    finally:
+        if runtime is not None:
+            with suppress(BaseException):
+                runtime.close()
+        done.set()
+    return results, errors
+
+
+def _run_owner_confirm_operation(
+    endpoint: str, keys: dict[str, bytes], done: threading.Event
+) -> tuple[list[Any], list[BaseException]]:
+    """Exercise the dedicated member-confirm operation through a real Host."""
+
+    results: list[Any] = []
+    errors: list[BaseException] = []
+    runtime = None
+    try:
+        runtime = ServiceClientRuntime(
+            parse_client_config(_manager_client_config(endpoint)),
+            identity=WireIdentity(
+                WireRole.APPLICATION_CLIENT, _MANAGER_PRINCIPAL, "cfg06-config-manager"
+            ),
+            scope_resolver=lambda ref: {
+                "cfg06-manager-policy-v1": _MANAGER_SCOPE,
+                "cfg06-manager-read-v1": _MANAGER_READ_SCOPE,
+            }[ref],
+            peer_resolver=_peer_resolver,
+            transport_factory=ZmqTransportFactory(
+                {
+                    "cfg06-catalog-server-v1": ClientCurveKeys(
+                        keys["server_public"], keys["manager_public"], keys["manager_secret"]
+                    )
+                }
+            ),
+            requested_operations={
+                "application.risk_policy": _OWNER_CONFIRM_OPERATIONS
+            },
+        )
+        runtime.start()
+        results.append(
+            runtime.call(
+                "application.risk_policy",
+                "policy.budget.owner_confirm_member",
+                {
+                    "generation_ref": "cfg06-budget-generation-v1",
+                    "account_ref": "cfg06-account-a",
+                },
+                portfolio_ref="portfolio-01",
+            )
+        )
     except BaseException as exc:  # pragma: no cover - surfaced to the test
         errors.append(exc)
     finally:
@@ -587,6 +644,7 @@ def test_policy_catalog_real_registration_control_plane_and_outage(tmp_path) -> 
                 host.close()
         store.close()
 
+
     # Catalog outage: the closed catalog cannot be reached any more, yet the
     # confirmed policy still resolves offline from its durable pin.
     outage_runtime = ServiceClientRuntime(
@@ -623,6 +681,65 @@ def test_policy_catalog_real_registration_control_plane_and_outage(tmp_path) -> 
         assert pins.resolve(_POLICY_REF)["confirmed_utc"] == pins.resolve(_POLICY_REF)["confirmed_utc"]
     finally:
         pins.close()
+
+def test_policy_catalog_owner_confirm_operation_is_registered_over_host(tmp_path) -> None:
+    endpoint = _endpoint()
+    config = parse_service_config(_catalog_service_config(endpoint))
+    server_public, server_secret = zmq.curve_keypair()
+    manager_public, manager_secret = zmq.curve_keypair()
+    sync_public, sync_secret = zmq.curve_keypair()
+    keys = {
+        "server_public": server_public,
+        "server_secret": server_secret,
+        "manager_public": manager_public,
+        "manager_secret": manager_secret,
+        "sync_public": sync_public,
+        "sync_secret": sync_secret,
+    }
+
+    from bt_api_risk.service_component import PolicyCatalogStore
+
+    store = PolicyCatalogStore(str(tmp_path / "budget-owner-confirm-catalog.sqlite"))
+    def resources(component, _instance_id, options, _scope):
+        if component != "risk" or options.get("role") != "policy_catalog":
+            raise AssertionError("only the fixed policy_catalog route is selected")
+        return ComponentResources.borrowed({"catalog": store}, ready=lambda: True)
+
+    host = ServiceHost(
+        config,
+        _catalog_authority(keys, manager_operations=_OWNER_CONFIRM_OPERATIONS),
+        str(tmp_path / "budget-owner-confirm-registry.sqlite"),
+        resources,
+    )
+    try:
+        host.start()
+        operations = set(host.summary["components"][0]["capabilities"][0]["operations"])
+        assert "policy.budget.owner_confirm_member" in operations
+
+        done = threading.Event()
+        results: list[Any] = []
+        errors: list[BaseException] = []
+
+        def _run() -> None:
+            node_results, node_errors = _run_owner_confirm_operation(endpoint, keys, done)
+            results.extend(node_results)
+            errors.extend(node_errors)
+
+        client_thread = threading.Thread(target=_run, daemon=True)
+        client_thread.start()
+        _serve_until(host, done)
+        client_thread.join(10)
+        assert not client_thread.is_alive()
+        assert not errors, errors
+        assert len(results) == 1
+        assert results[0]["ok"] is False
+        assert results[0]["code"] == "CONFIRMATION_STORE_UNAVAILABLE"
+        assert host.summary["state"] == "started"
+    finally:
+        with suppress(BaseException):
+            host.close()
+        store.close()
+
 
 
 def test_group_policy_role_has_no_sdk_builtin_public_port(tmp_path) -> None:
