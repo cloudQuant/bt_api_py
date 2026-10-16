@@ -1,0 +1,99 @@
+{
+  "schema": "it10-mig04-certlib-build-dependencies-v2",
+  "source_revision": "be07a50ed3b4ddb5b419855827e7a965d5230b84",
+  "source_branch": "dev",
+  "python": "3.11.5 (Anaconda CPython; Windows AMD64)",
+  "index_url": "https://pypi.org/simple",
+  "inherited_manifest": "D:\\temp\\it10mig04-certlib-build-deps-20261016-r2-pypi.manifest.json",
+  "inherited_manifest_sha256": "d47eafc70f1455d445ef537e15e003920a5875ef3b3b7645cf1541c13336a32e",
+  "download_commands": [
+    [
+      "python",
+      "-m",
+      "pip",
+      "download",
+      "--disable-pip-version-check",
+      "--no-cache-dir",
+      "--index-url",
+      "https://pypi.org/simple",
+      "--only-binary=:all:",
+      "--no-deps",
+      "--dest",
+      "D:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi",
+      "build==1.2.2.post1",
+      "setuptools==75.8.0",
+      "wheel==0.43.0",
+      "pyproject-hooks==1.2.0",
+      "packaging==26.3",
+      "PyYAML==6.0.1"
+    ],
+    [
+      "python",
+      "-m",
+      "pip",
+      "download",
+      "--disable-pip-version-check",
+      "--no-cache-dir",
+      "--index-url",
+      "https://pypi.org/simple",
+      "--only-binary=:all:",
+      "--no-deps",
+      "--dest",
+      "D:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi",
+      "colorama==0.4.6"
+    ]
+  ],
+  "purpose": "offline build and artifact consumer preparation only; no package build, install, or test executed",
+  "wheelhouse": "D:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi",
+  "wheels": [
+    {
+      "package": "build",
+      "version": "1.2.2.post1",
+      "file": "build-1.2.2.post1-py3-none-any.whl",
+      "bytes": 22950,
+      "sha256": "1d61c0887fa860c01971625baae8bdd338e517b836a2f70dd1f7aa3a6b2fc5b5"
+    },
+    {
+      "package": "colorama",
+      "version": "0.4.6",
+      "file": "colorama-0.4.6-py2.py3-none-any.whl",
+      "bytes": 25335,
+      "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"
+    },
+    {
+      "package": "packaging",
+      "version": "26.3",
+      "file": "packaging-26.3-py3-none-any.whl",
+      "bytes": 129956,
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+    },
+    {
+      "package": "pyproject-hooks",
+      "version": "1.2.0",
+      "file": "pyproject_hooks-1.2.0-py3-none-any.whl",
+      "bytes": 10216,
+      "sha256": "9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913"
+    },
+    {
+      "package": "PyYAML",
+      "version": "6.0.1",
+      "file": "PyYAML-6.0.1-cp311-cp311-win_amd64.whl",
+      "bytes": 144699,
+      "sha256": "bf07ee2fef7014951eeb99f56f39c9bb4af143d8aa3c21b1677805985307da34"
+    },
+    {
+      "package": "setuptools",
+      "version": "75.8.0",
+      "file": "setuptools-75.8.0-py3-none-any.whl",
+      "bytes": 1228782,
+      "sha256": "e3982f444617239225d675215d51f6ba05f845d4eec313da4418fdbb56fb27e3"
+    },
+    {
+      "package": "wheel",
+      "version": "0.43.0",
+      "file": "wheel-0.43.0-py3-none-any.whl",
+      "bytes": 65775,
+      "sha256": "55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81"
+    }
+  ]
+}

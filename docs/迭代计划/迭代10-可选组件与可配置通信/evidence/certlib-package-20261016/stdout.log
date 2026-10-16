@@ -1,0 +1,182 @@
+MIG04_CERTLIB_RESULT=D:\temp\it10-mig04-certlib-r1-20261016-k4focatf\result.json
+{
+  "artifacts": {
+    "sdist": {
+      "path": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0.tar.gz",
+      "sha256": "deb5520156d2838f7def48e507f6963edf8ff0117e8b13f481f3700d886f0b26"
+    },
+    "wheel": {
+      "path": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0-py3-none-any.whl",
+      "sha256": "164ca44a402ba8153cf55890b9b954ce29becf57ae9bbbc8feefc283a007a2c3"
+    }
+  },
+  "build_interpreter": {
+    "executable": "C:\\Anaconda3\\python.exe",
+    "version": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]"
+  },
+  "build_wheelhouse_pins": {
+    "PyYAML-6.0.1-cp311-cp311-win_amd64.whl": "bf07ee2fef7014951eeb99f56f39c9bb4af143d8aa3c21b1677805985307da34",
+    "build-1.2.2.post1-py3-none-any.whl": "1d61c0887fa860c01971625baae8bdd338e517b836a2f70dd1f7aa3a6b2fc5b5",
+    "colorama-0.4.6-py2.py3-none-any.whl": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+    "packaging-26.3-py3-none-any.whl": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+    "pyproject_hooks-1.2.0-py3-none-any.whl": "9e5c6bfa8dcc30091c74b0cf803c81fdd29d94f01992a7707bc97babb1141913",
+    "setuptools-75.8.0-py3-none-any.whl": "e3982f444617239225d675215d51f6ba05f845d4eec313da4418fdbb56fb27e3",
+    "wheel-0.43.0-py3-none-any.whl": "55c570405f142630c6b9f72fe09d9b67cf1477fcf543ae5b8dcb1f5b7377da81"
+  },
+  "check_script": {
+    "path": "D:\\source_code\\backtrader\\.codex-tmp\\it10_mig04_certlib_sdist_wheel_check_r1_20261016.py",
+    "sha256": "0f743027349ffcb61c7eb6a770b78225b009c0489d17bdb99702b35bf0f1affe"
+  },
+  "commands": [
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\venv-build\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-index",
+        "--find-links",
+        "D:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi",
+        "build==1.2.2.post1",
+        "colorama==0.4.6",
+        "setuptools==75.8.0",
+        "wheel==0.43.0"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf",
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "Looking in links: d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi, d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\build-1.2.2.post1-py3-none-any.whl\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\colorama-0.4.6-py2.py3-none-any.whl\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\setuptools-75.8.0-py3-none-any.whl\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\wheel-0.43.0-py3-none-any.whl\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\packaging-26.3-py3-none-any.whl (from build==1.2.2.post1)\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\pyproject_hooks-1.2.0-py3-none-any.whl (from build==1.2.2.post1)\nInstalling collected packages: wheel, setuptools, pyproject_hooks, packaging, colorama, build\n  Attempting uninstall: setuptools\n    Found existing installation: setuptools 65.5.0\n    Uninstalling setuptools-65.5.0:\n      Successfully uninstalled setuptools-65.5.0\nSuccessfully installed build-1.2.2.post1 colorama-0.4.6 packaging-26.3 pyproject_hooks-1.2.0 setuptools-75.8.0 wheel-0.43.0\n"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\venv-build\\Scripts\\python.exe",
+        "-m",
+        "build",
+        "--no-isolation",
+        "--sdist",
+        "--wheel",
+        "--outdir",
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist",
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\project"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf",
+      "exit_code": 0,
+      "stderr": "warning: sdist: standard file not found: should have one of README, README.rst, README.txt, README.md\n\n",
+      "stdout": "* Getting build dependencies for sdist...\nrunning egg_info\ncreating bt_api_binance_certlib.egg-info\nwriting bt_api_binance_certlib.egg-info\\PKG-INFO\nwriting dependency_links to bt_api_binance_certlib.egg-info\\dependency_links.txt\nwriting requirements to bt_api_binance_certlib.egg-info\\requires.txt\nwriting top-level names to bt_api_binance_certlib.egg-info\\top_level.txt\nwriting manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\nreading manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\nwriting manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\n* Building sdist...\nrunning sdist\nrunning egg_info\nwriting bt_api_binance_certlib.egg-info\\PKG-INFO\nwriting dependency_links to bt_api_binance_certlib.egg-info\\dependency_links.txt\nwriting requirements to bt_api_binance_certlib.egg-info\\requires.txt\nwriting top-level names to bt_api_binance_certlib.egg-info\\top_level.txt\nreading manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\nwriting manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\nrunning check\ncreating bt_api_binance_certlib-0.1.0\ncreating bt_api_binance_certlib-0.1.0\\bt_api_binance_certlib.egg-info\ncopying files to bt_api_binance_certlib-0.1.0...\ncopying __init__.py -> bt_api_binance_certlib-0.1.0\ncopying binance_client.py -> bt_api_binance_certlib-0.1.0\ncopying context.py -> bt_api_binance_certlib-0.1.0\ncopying envfile.py -> bt_api_binance_certlib-0.1.0\ncopying monitor.py -> bt_api_binance_certlib-0.1.0\ncopying pyproject.toml -> bt_api_binance_certlib-0.1.0\ncopying runner.py -> bt_api_binance_certlib-0.1.0\ncopying validation.py -> bt_api_binance_certlib-0.1.0\ncopying .\\__init__.py -> bt_api_binance_certlib-0.1.0\\.\ncopying .\\binance_client.py -> bt_api_binance_certlib-0.1.0\\.\ncopying .\\context.py -> bt_api_binance_certlib-0.1.0\\.\ncopying .\\envfile.py -> bt_api_binance_certlib-0.1.0\\.\ncopying .\\monitor.py -> bt_api_binance_certlib-0.1.0\\.\ncopying .\\runner.py -> bt_api_binance_certlib-0.1.0\\.\ncopying .\\validation.py -> bt_api_binance_certlib-0.1.0\\.\ncopying bt_api_binance_certlib.egg-info\\PKG-INFO -> bt_api_binance_certlib-0.1.0\\bt_api_binance_certlib.egg-info\ncopying bt_api_binance_certlib.egg-info\\SOURCES.txt -> bt_api_binance_certlib-0.1.0\\bt_api_binance_certlib.egg-info\ncopying bt_api_binance_certlib.egg-info\\dependency_links.txt -> bt_api_binance_certlib-0.1.0\\bt_api_binance_certlib.egg-info\ncopying bt_api_binance_certlib.egg-info\\requires.txt -> bt_api_binance_certlib-0.1.0\\bt_api_binance_certlib.egg-info\ncopying bt_api_binance_certlib.egg-info\\top_level.txt -> bt_api_binance_certlib-0.1.0\\bt_api_binance_certlib.egg-info\ncopying bt_api_binance_certlib.egg-info\\SOURCES.txt -> bt_api_binance_certlib-0.1.0\\bt_api_binance_certlib.egg-info\nWriting bt_api_binance_certlib-0.1.0\\setup.cfg\nCreating tar archive\nremoving 'bt_api_binance_certlib-0.1.0' (and everything under it)\n* Getting build dependencies for wheel...\nrunning egg_info\nwriting bt_api_binance_certlib.egg-info\\PKG-INFO\nwriting dependency_links to bt_api_binance_certlib.egg-info\\dependency_links.txt\nwriting requirements to bt_api_binance_certlib.egg-info\\requires.txt\nwriting top-level names to bt_api_binance_certlib.egg-info\\top_level.txt\nreading manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\nwriting manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\n* Building wheel...\nrunning bdist_wheel\nrunning build\nrunning build_py\ncreating build\\lib\\certlib\ncopying .\\binance_client.py -> build\\lib\\certlib\ncopying .\\context.py -> build\\lib\\certlib\ncopying .\\envfile.py -> build\\lib\\certlib\ncopying .\\monitor.py -> build\\lib\\certlib\ncopying .\\runner.py -> build\\lib\\certlib\ncopying .\\validation.py -> build\\lib\\certlib\ncopying .\\__init__.py -> build\\lib\\certlib\ninstalling to build\\bdist.win-amd64\\wheel\nrunning install\nrunning install_lib\ncreating build\\bdist.win-amd64\\wheel\ncreating build\\bdist.win-amd64\\wheel\\certlib\ncopying build\\lib\\certlib\\binance_client.py -> build\\bdist.win-amd64\\wheel\\.\\certlib\ncopying build\\lib\\certlib\\context.py -> build\\bdist.win-amd64\\wheel\\.\\certlib\ncopying build\\lib\\certlib\\envfile.py -> build\\bdist.win-amd64\\wheel\\.\\certlib\ncopying build\\lib\\certlib\\monitor.py -> build\\bdist.win-amd64\\wheel\\.\\certlib\ncopying build\\lib\\certlib\\runner.py -> build\\bdist.win-amd64\\wheel\\.\\certlib\ncopying build\\lib\\certlib\\validation.py -> build\\bdist.win-amd64\\wheel\\.\\certlib\ncopying build\\lib\\certlib\\__init__.py -> build\\bdist.win-amd64\\wheel\\.\\certlib\nrunning install_egg_info\nrunning egg_info\nwriting bt_api_binance_certlib.egg-info\\PKG-INFO\nwriting dependency_links to bt_api_binance_certlib.egg-info\\dependency_links.txt\nwriting requirements to bt_api_binance_certlib.egg-info\\requires.txt\nwriting top-level names to bt_api_binance_certlib.egg-info\\top_level.txt\nreading manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\nwriting manifest file 'bt_api_binance_certlib.egg-info\\SOURCES.txt'\nCopying bt_api_binance_certlib.egg-info to build\\bdist.win-amd64\\wheel\\.\\bt_api_binance_certlib-0.1.0-py3.11.egg-info\nrunning install_scripts\ncreating build\\bdist.win-amd64\\wheel\\bt_api_binance_certlib-0.1.0.dist-info\\WHEEL\ncreating 'D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\.tmp-jwt_sd4n\\bt_api_binance_certlib-0.1.0-py3-none-any.whl' and adding 'build\\bdist.win-amd64\\wheel' to it\nadding 'certlib/__init__.py'\nadding 'certlib/binance_client.py'\nadding 'certlib/context.py'\nadding 'certlib/envfile.py'\nadding 'certlib/monitor.py'\nadding 'certlib/runner.py'\nadding 'certlib/validation.py'\nadding 'bt_api_binance_certlib-0.1.0.dist-info/METADATA'\nadding 'bt_api_binance_certlib-0.1.0.dist-info/WHEEL'\nadding 'bt_api_binance_certlib-0.1.0.dist-info/top_level.txt'\nadding 'bt_api_binance_certlib-0.1.0.dist-info/RECORD'\nremoving build\\bdist.win-amd64\\wheel\nSuccessfully built bt_api_binance_certlib-0.1.0.tar.gz and bt_api_binance_certlib-0.1.0-py3-none-any.whl\n"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\wheel\\env\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-index",
+        "--find-links",
+        "D:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi",
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0-py3-none-any.whl"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\consumer",
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "Looking in links: d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi, d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\nProcessing d:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0-py3-none-any.whl\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\pyyaml-6.0.1-cp311-cp311-win_amd64.whl (from bt-api-binance-certlib==0.1.0)\nInstalling collected packages: PyYAML, bt-api-binance-certlib\nSuccessfully installed PyYAML-6.0.1 bt-api-binance-certlib-0.1.0\n"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\wheel\\env\\Scripts\\python.exe",
+        "-I",
+        "-c",
+        "from __future__ import annotations\nimport importlib.metadata as metadata\nimport hashlib\nfrom contextlib import redirect_stdout\nfrom io import StringIO\nimport json\nfrom pathlib import Path\nimport re\nimport socket\nimport sys\n\nblocked = []\ndef deny_network(*args, **kwargs):\n    blocked.append(\"socket_operation\")\n    raise RuntimeError(\"network access is disabled in this acceptance check\")\nsocket.create_connection = deny_network\nsocket.getaddrinfo = deny_network\ndef audit(event, args):\n    if event.startswith(\"socket.\"):\n        blocked.append(event)\n        deny_network(event, args)\nsys.addaudithook(audit)\n\nimport certlib\nfrom certlib import envfile, runner\nfrom certlib import binance_client, context, monitor, validation\nimport yaml\n\ndist_name = 'bt-api-binance-certlib'\nexpected_sources = {'__init__.py': 'd00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa', 'binance_client.py': '95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6', 'context.py': 'cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9', 'envfile.py': 'de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d', 'monitor.py': '7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7', 'runner.py': '0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d', 'validation.py': '8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f'}\ndist = metadata.distribution(dist_name)\nnormalize = lambda value: \"-\".join(re.sub(r\"[-_.]+\", \"-\", value).lower().split(\"-\"))\nassert normalize(dist.metadata[\"Name\"]) == normalize(dist_name)\nassert dist.version == '0.1.0'\nsite_roots = [Path(value).resolve() for value in __import__(\"site\").getsitepackages()]\nmodule_origins = {\n    name: Path(module.__file__).resolve()\n    for name, module in {\n        \"certlib\": certlib,\n        \"certlib.runner\": runner,\n        \"certlib.binance_client\": binance_client,\n        \"certlib.context\": context,\n        \"certlib.envfile\": envfile,\n        \"certlib.monitor\": monitor,\n        \"certlib.validation\": validation,\n    }.items()\n}\nfor name, origin in module_origins.items():\n    assert any(origin.is_relative_to(root) for root in site_roots), (name, str(origin))\n    assert origin.name != \"\"\n    source_name = name.split(\".\", 1)[-1] + \".py\" if name != \"certlib\" else \"__init__.py\"\n    assert hashlib.sha256(origin.read_bytes()).hexdigest() == expected_sources[source_name], name\nfor source_name, digest in expected_sources.items():\n    installed_path = Path(dist.locate_file(\"certlib/\" + source_name)).resolve()\n    assert installed_path.is_file(), str(installed_path)\n    assert hashlib.sha256(installed_path.read_bytes()).hexdigest() == digest, source_name\npackages = metadata.packages_distributions().get(\"certlib\", [])\nassert [normalize(value) for value in packages] == [normalize(dist_name)], packages\nassert metadata.version(\"PyYAML\") == \"6.0.1\"\nassert any(Path(yaml.__file__).resolve().is_relative_to(root) for root in site_roots)\n\n# Keep the installed envfile.default_env_path implementation unchanged.  The\n# venv is deliberately nested so parents[5] is this new, checked-empty root.\nexpected_env_path = Path('D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\.env').resolve()\nassert envfile.default_env_path().resolve() == expected_env_path\nassert module_origins[\"certlib.envfile\"].parents[5] == expected_env_path.parent\nassert not expected_env_path.exists()\nprovider_calls = []\ndef deny_provider(*args, **kwargs):\n    provider_calls.append(\"make_client\")\n    raise RuntimeError(\"provider/client startup is disabled in this acceptance check\")\nrunner.make_client = deny_provider\nsys.argv[0] = 'D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\consumer\\\\binance_penetration\\\\cases\\\\MIG04\\\\run.py'\nrunner_output = StringIO()\nwith redirect_stdout(runner_output):\n    result = runner.main_case([\"--config\", 'D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\consumer\\\\binance_penetration\\\\cases\\\\MIG04\\\\config.yaml'])\nplan = json.loads(runner_output.getvalue())\nassert result == 0, result\nassert plan[\"status\"] == \"DRY\", plan\nassert plan[\"case\"] == \"MIG04\" and plan[\"venue\"] == \"binance\", plan\nassert plan[\"env_keys_missing\"] == [], plan\nassert plan[\"env_keys_optional_missing\"] == [\"MIG04_DRY_OPTIONAL_KEY\"], plan\nassert envfile.default_env_path().resolve() == expected_env_path\nassert not expected_env_path.exists()\nassert not blocked, blocked\nassert not provider_calls, provider_calls\nprint(\"CERTLIB_INSTALLED_DRY_ENTRY_SUBCHECK_OK\")\nprint(json.dumps({\n    \"distribution\": dist.metadata[\"Name\"],\n    \"version\": dist.version,\n    \"module_origins\": {key: str(value) for key, value in module_origins.items()},\n    \"site_roots\": [str(value) for value in site_roots],\n    \"package_owners\": packages,\n    \"network_attempts\": blocked,\n    \"provider_startups\": provider_calls,\n    \"env_path\": str(expected_env_path),\n    \"env_path_exists\": expected_env_path.exists(),\n    \"ordinary_entry_exit\": result,\n}, sort_keys=True))\n"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\consumer",
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "CERTLIB_INSTALLED_DRY_ENTRY_SUBCHECK_OK\n{\"distribution\": \"bt-api-binance-certlib\", \"env_path\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\.env\", \"env_path_exists\": false, \"module_origins\": {\"certlib\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\__init__.py\", \"certlib.binance_client\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\binance_client.py\", \"certlib.context\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\context.py\", \"certlib.envfile\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\envfile.py\", \"certlib.monitor\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\monitor.py\", \"certlib.runner\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\runner.py\", \"certlib.validation\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\validation.py\"}, \"network_attempts\": [], \"ordinary_entry_exit\": 0, \"package_owners\": [\"bt-api-binance-certlib\"], \"provider_startups\": [], \"site_roots\": [\"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\", \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\"], \"version\": \"0.1.0\"}\n"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\sdist\\env\\Scripts\\python.exe",
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-index",
+        "--find-links",
+        "D:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi",
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0.tar.gz"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\consumer-sdist",
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "Looking in links: d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi, d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\nProcessing d:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0.tar.gz\n  Installing build dependencies: started\n  Installing build dependencies: finished with status 'done'\n  Getting requirements to build wheel: started\n  Getting requirements to build wheel: finished with status 'done'\n  Preparing metadata (pyproject.toml): started\n  Preparing metadata (pyproject.toml): finished with status 'done'\nProcessing d:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi\\pyyaml-6.0.1-cp311-cp311-win_amd64.whl (from bt-api-binance-certlib==0.1.0)\nBuilding wheels for collected packages: bt-api-binance-certlib\n  Building wheel for bt-api-binance-certlib (pyproject.toml): started\n  Building wheel for bt-api-binance-certlib (pyproject.toml): finished with status 'done'\n  Created wheel for bt-api-binance-certlib: filename=bt_api_binance_certlib-0.1.0-py3-none-any.whl size=14954 sha256=d8e5308a9ec1a7871a10e20eb032d5e0cb1234048f21db6fbaac183264f3c0d1\n  Stored in directory: c:\\users\\yunji\\appdata\\local\\pip\\cache\\wheels\\18\\ff\\b2\\feb996dbe631682e180298b6c3fc0985c36e6fb106580334f2\nSuccessfully built bt-api-binance-certlib\nInstalling collected packages: PyYAML, bt-api-binance-certlib\nSuccessfully installed PyYAML-6.0.1 bt-api-binance-certlib-0.1.0\n"
+    },
+    {
+      "argv": [
+        "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\sdist\\env\\Scripts\\python.exe",
+        "-I",
+        "-c",
+        "from __future__ import annotations\nimport importlib.metadata as metadata\nimport hashlib\nfrom contextlib import redirect_stdout\nfrom io import StringIO\nimport json\nfrom pathlib import Path\nimport re\nimport socket\nimport sys\n\nblocked = []\ndef deny_network(*args, **kwargs):\n    blocked.append(\"socket_operation\")\n    raise RuntimeError(\"network access is disabled in this acceptance check\")\nsocket.create_connection = deny_network\nsocket.getaddrinfo = deny_network\ndef audit(event, args):\n    if event.startswith(\"socket.\"):\n        blocked.append(event)\n        deny_network(event, args)\nsys.addaudithook(audit)\n\nimport certlib\nfrom certlib import envfile, runner\nfrom certlib import binance_client, context, monitor, validation\nimport yaml\n\ndist_name = 'bt-api-binance-certlib'\nexpected_sources = {'__init__.py': 'd00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa', 'binance_client.py': '95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6', 'context.py': 'cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9', 'envfile.py': 'de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d', 'monitor.py': '7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7', 'runner.py': '0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d', 'validation.py': '8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f'}\ndist = metadata.distribution(dist_name)\nnormalize = lambda value: \"-\".join(re.sub(r\"[-_.]+\", \"-\", value).lower().split(\"-\"))\nassert normalize(dist.metadata[\"Name\"]) == normalize(dist_name)\nassert dist.version == '0.1.0'\nsite_roots = [Path(value).resolve() for value in __import__(\"site\").getsitepackages()]\nmodule_origins = {\n    name: Path(module.__file__).resolve()\n    for name, module in {\n        \"certlib\": certlib,\n        \"certlib.runner\": runner,\n        \"certlib.binance_client\": binance_client,\n        \"certlib.context\": context,\n        \"certlib.envfile\": envfile,\n        \"certlib.monitor\": monitor,\n        \"certlib.validation\": validation,\n    }.items()\n}\nfor name, origin in module_origins.items():\n    assert any(origin.is_relative_to(root) for root in site_roots), (name, str(origin))\n    assert origin.name != \"\"\n    source_name = name.split(\".\", 1)[-1] + \".py\" if name != \"certlib\" else \"__init__.py\"\n    assert hashlib.sha256(origin.read_bytes()).hexdigest() == expected_sources[source_name], name\nfor source_name, digest in expected_sources.items():\n    installed_path = Path(dist.locate_file(\"certlib/\" + source_name)).resolve()\n    assert installed_path.is_file(), str(installed_path)\n    assert hashlib.sha256(installed_path.read_bytes()).hexdigest() == digest, source_name\npackages = metadata.packages_distributions().get(\"certlib\", [])\nassert [normalize(value) for value in packages] == [normalize(dist_name)], packages\nassert metadata.version(\"PyYAML\") == \"6.0.1\"\nassert any(Path(yaml.__file__).resolve().is_relative_to(root) for root in site_roots)\n\n# Keep the installed envfile.default_env_path implementation unchanged.  The\n# venv is deliberately nested so parents[5] is this new, checked-empty root.\nexpected_env_path = Path('D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\.env').resolve()\nassert envfile.default_env_path().resolve() == expected_env_path\nassert module_origins[\"certlib.envfile\"].parents[5] == expected_env_path.parent\nassert not expected_env_path.exists()\nprovider_calls = []\ndef deny_provider(*args, **kwargs):\n    provider_calls.append(\"make_client\")\n    raise RuntimeError(\"provider/client startup is disabled in this acceptance check\")\nrunner.make_client = deny_provider\nsys.argv[0] = 'D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\consumer-sdist\\\\binance_penetration\\\\cases\\\\MIG04\\\\run.py'\nrunner_output = StringIO()\nwith redirect_stdout(runner_output):\n    result = runner.main_case([\"--config\", 'D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\consumer-sdist\\\\binance_penetration\\\\cases\\\\MIG04\\\\config.yaml'])\nplan = json.loads(runner_output.getvalue())\nassert result == 0, result\nassert plan[\"status\"] == \"DRY\", plan\nassert plan[\"case\"] == \"MIG04\" and plan[\"venue\"] == \"binance\", plan\nassert plan[\"env_keys_missing\"] == [], plan\nassert plan[\"env_keys_optional_missing\"] == [\"MIG04_DRY_OPTIONAL_KEY\"], plan\nassert envfile.default_env_path().resolve() == expected_env_path\nassert not expected_env_path.exists()\nassert not blocked, blocked\nassert not provider_calls, provider_calls\nprint(\"CERTLIB_INSTALLED_DRY_ENTRY_SUBCHECK_OK\")\nprint(json.dumps({\n    \"distribution\": dist.metadata[\"Name\"],\n    \"version\": dist.version,\n    \"module_origins\": {key: str(value) for key, value in module_origins.items()},\n    \"site_roots\": [str(value) for value in site_roots],\n    \"package_owners\": packages,\n    \"network_attempts\": blocked,\n    \"provider_startups\": provider_calls,\n    \"env_path\": str(expected_env_path),\n    \"env_path_exists\": expected_env_path.exists(),\n    \"ordinary_entry_exit\": result,\n}, sort_keys=True))\n"
+      ],
+      "cwd": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\consumer-sdist",
+      "exit_code": 0,
+      "stderr": "",
+      "stdout": "CERTLIB_INSTALLED_DRY_ENTRY_SUBCHECK_OK\n{\"distribution\": \"bt-api-binance-certlib\", \"env_path\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\.env\", \"env_path_exists\": false, \"module_origins\": {\"certlib\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\__init__.py\", \"certlib.binance_client\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\binance_client.py\", \"certlib.context\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\context.py\", \"certlib.envfile\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\envfile.py\", \"certlib.monitor\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\monitor.py\", \"certlib.runner\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\runner.py\", \"certlib.validation\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\validation.py\"}, \"network_attempts\": [], \"ordinary_entry_exit\": 0, \"package_owners\": [\"bt-api-binance-certlib\"], \"provider_startups\": [], \"site_roots\": [\"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\", \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\"], \"version\": \"0.1.0\"}\n"
+    }
+  ],
+  "distribution": "bt-api-binance-certlib",
+  "formal_mig04_acceptance": false,
+  "live_env_discovery": "not_assessed; installed default path remains checkout-layout-derived",
+  "package_source_status": "?? examples/live/000_live_certification/binance_penetration/certlib/pyproject.toml",
+  "scope": "certlib sdist/wheel install and installed dry entry only; not full MIG04 adjudication or live credential discovery",
+  "sdist_install": {
+    "artifact": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0.tar.gz",
+    "entry_exit_code": 0,
+    "entry_stderr": "",
+    "entry_stdout": "CERTLIB_INSTALLED_DRY_ENTRY_SUBCHECK_OK\n{\"distribution\": \"bt-api-binance-certlib\", \"env_path\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\.env\", \"env_path_exists\": false, \"module_origins\": {\"certlib\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\__init__.py\", \"certlib.binance_client\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\binance_client.py\", \"certlib.context\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\context.py\", \"certlib.envfile\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\envfile.py\", \"certlib.monitor\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\monitor.py\", \"certlib.runner\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\runner.py\", \"certlib.validation\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\validation.py\"}, \"network_attempts\": [], \"ordinary_entry_exit\": 0, \"package_owners\": [\"bt-api-binance-certlib\"], \"provider_startups\": [], \"site_roots\": [\"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\", \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\sdist\\\\env\\\\Lib\\\\site-packages\"], \"version\": \"0.1.0\"}\n",
+    "expected_env_path": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\.env",
+    "venv": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\sdist\\env"
+  },
+  "sdist_source_pins": {
+    "__init__.py": "d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa",
+    "binance_client.py": "95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6",
+    "context.py": "cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9",
+    "envfile.py": "de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d",
+    "monitor.py": "7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7",
+    "runner.py": "0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d",
+    "validation.py": "8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f"
+  },
+  "session": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf",
+  "source_branch": "dev",
+  "source_pins": {
+    "__init__.py": "d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa",
+    "binance_client.py": "95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6",
+    "context.py": "cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9",
+    "envfile.py": "de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d",
+    "monitor.py": "7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7",
+    "pyproject.toml": "7a54ffeefddb0b53f16f7d74247669f369bcde1930addff3b8c3a257c2f97e5c",
+    "runner.py": "0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d",
+    "validation.py": "8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f"
+  },
+  "source_revision": "be07a50ed3b4ddb5b419855827e7a965d5230b84",
+  "status": "PASS_CERTLIB_ARTIFACT_INSTALL_AND_OFFLINE_DRY_ENTRY_SUBCHECK",
+  "version": "0.1.0",
+  "wheel_install": {
+    "artifact": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\dist\\bt_api_binance_certlib-0.1.0-py3-none-any.whl",
+    "entry_exit_code": 0,
+    "entry_stderr": "",
+    "entry_stdout": "CERTLIB_INSTALLED_DRY_ENTRY_SUBCHECK_OK\n{\"distribution\": \"bt-api-binance-certlib\", \"env_path\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\.env\", \"env_path_exists\": false, \"module_origins\": {\"certlib\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\__init__.py\", \"certlib.binance_client\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\binance_client.py\", \"certlib.context\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\context.py\", \"certlib.envfile\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\envfile.py\", \"certlib.monitor\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\monitor.py\", \"certlib.runner\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\runner.py\", \"certlib.validation\": \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\\\\certlib\\\\validation.py\"}, \"network_attempts\": [], \"ordinary_entry_exit\": 0, \"package_owners\": [\"bt-api-binance-certlib\"], \"provider_startups\": [], \"site_roots\": [\"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\", \"D:\\\\temp\\\\it10-mig04-certlib-r1-20261016-k4focatf\\\\containers\\\\wheel\\\\env\\\\Lib\\\\site-packages\"], \"version\": \"0.1.0\"}\n",
+    "expected_env_path": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\.env",
+    "venv": "D:\\temp\\it10-mig04-certlib-r1-20261016-k4focatf\\containers\\wheel\\env"
+  },
+  "wheel_source_pins": {
+    "__init__.py": "d00e80e6c9129ece4d6f10bbe6c582addf6576d58e19ce012a8c551602097baa",
+    "binance_client.py": "95ff4186b3642ed9b6c4df2934e1f1aac740a0f302b8b882670f61ac78b90db6",
+    "context.py": "cc95002367f0c6241240e431f3b79c155793d260aa0897bb0e124c8a27c58ba9",
+    "envfile.py": "de3613ea601c87d2dcbd88b068375c270dc75c98aedd29e0f8fce132a6ecf30d",
+    "monitor.py": "7e3be314e2b24e11247207d62c6e31c9c1449a1a2804e66fde7f12fe3bede5f7",
+    "runner.py": "0c7754790655bfb4c0ece0dfb2787854cc27d8807b3d59b758dd5a1db2c2811d",
+    "validation.py": "8996f4c4e5a1e841d16ff60cc7b68e848d6da10933793855d709fe389c8fa78f"
+  },
+  "wheelhouse": "D:\\temp\\it10mig04-certlib-build-deps-20261016-r3-pypi"
+}
