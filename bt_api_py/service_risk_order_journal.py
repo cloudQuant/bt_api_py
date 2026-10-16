@@ -18,8 +18,9 @@ import time
 import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from decimal import Decimal, InvalidOperation
+from enum import Enum
 from fractions import Fraction
 from pathlib import Path
 from types import MappingProxyType
@@ -1049,123 +1050,18 @@ class RiskOrderJournal:
     ) -> tuple[str, str]:
         """Persist the exact positive-fill terminal reservation reference."""
 
-        self._assert_current(fence)
-        if (
-            type(claim) is not DispatchClaimBinding
-            or claim.scope != fence.scope
-            or type(order_event) is not RiskOrderJournalEvent
-            or type(fill_event) is not RiskOrderJournalEvent
-            or order_event.event_type != "ORDER_OBSERVATION"
-            or fill_event.event_type != "FILL_OBSERVATION"
-            or order_event.scope != fence.scope
-            or fill_event.scope != fence.scope
-            or order_event.principal_ref != principal_ref
-            or fill_event.principal_ref != principal_ref
-            or order_event.intent_id != intent_id
-            or fill_event.intent_id != intent_id
-            or order_event.revision >= fill_event.revision
-            or order_event.writer_fence_sha256 != fence.fence_sha256
-            or fill_event.writer_fence_sha256 != fence.fence_sha256
-        ):
-            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
-        _require_sha256(accepted_request_sha256, "accepted request digest")
-        _require_sha256(reconciliation_evidence_sha256, "reconciliation evidence digest")
-        command = self.get_command(fence.scope, principal_ref, intent_id)
-        if (
-            command is None
-            or command.state != "FILL_OBSERVATION"
-            or command.risk_intent_id != claim.intent_id
-            or command.permit_id != claim.permit_id
-            or command.order_request_sha256 != accepted_request_sha256
-        ):
-            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
-        stored_order_event = self.get_event(
-            fence.scope, principal_ref, intent_id, order_event.revision
+        reservation_id, reference_sha, _proof = self._store_terminal_exposure_reference(
+            fence,
+            principal_ref=principal_ref,
+            intent_id=intent_id,
+            claim=claim,
+            provider_order_id=provider_order_id,
+            accepted_request_sha256=accepted_request_sha256,
+            order_event=order_event,
+            fill_event=fill_event,
+            reconciliation_evidence_sha256=reconciliation_evidence_sha256,
+            proof_factory=None,
         )
-        stored_fill_event = self.get_event(
-            fence.scope, principal_ref, intent_id, fill_event.revision
-        )
-        if (
-            stored_order_event != order_event
-            or stored_fill_event != fill_event
-            or not _is_v2_order_event(order_event.payload)
-            or not _is_v2_fill_event(fill_event.payload)
-            or order_event.payload.get("exposure_state")
-            not in {OrderExposureState.FILLED.value, OrderExposureState.CANCELLED.value}
-            or Decimal(str(fill_event.payload.get("filled_quantity", "0"))) <= 0
-        ):
-            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
-        reservation_id = (
-            "risk-order-exposure:"
-            + sha256_text(
-                canonical_json(
-                    {
-                        "intent_id": claim.intent_id,
-                        "permit_id": claim.permit_id,
-                        "provider_order_id": provider_order_id,
-                        "scope_key": fence.scope.key,
-                    }
-                )
-            )[:32]
-        )
-        reference = {
-            "accepted_request_sha256": accepted_request_sha256,
-            # Provider-executed weighted average price over the immutable fill
-            # facts. Derived here so the durable terminal ACK can project the
-            # executed price without re-reading the provider.
-            "average_price": _weighted_average_price(fill_event.payload),
-            "claim": _claim_payload(claim),
-            "claim_digest": claim.claim_digest,
-            "dispatch_attempt_count": 1,
-            "exposure_proof_kind": "TERMINAL_EXPOSURE",
-            "fill_observation_record_sha256": fill_event.record_sha256,
-            "fill_observation_revision": fill_event.revision,
-            "filled_quantity": fill_event.payload.get("filled_quantity"),
-            "intent_hash": claim.intent_hash,
-            "intent_id": claim.intent_id,
-            "order_observation_record_sha256": order_event.record_sha256,
-            "order_observation_revision": order_event.revision,
-            "permit_id": claim.permit_id,
-            "provider_order_id": provider_order_id,
-            "reservation_id": reservation_id,
-            "reconciliation_evidence_sha256": reconciliation_evidence_sha256,
-            "schema": "bt-api-risk-order-terminal-exposure-reference-v1",
-            "scope_key": fence.scope.key,
-            "trade_count": fill_event.payload.get("trade_count"),
-            "writer_fence_sha256": fence.fence_sha256,
-        }
-        reference_json = canonical_json(reference)
-        reference_sha = sha256_text(reference_json)
-        with self._transaction() as connection:
-            self._assert_current_in(connection, fence)
-            prior = connection.execute(
-                "SELECT * FROM risk_order_exposure_references WHERE scope_key=? AND principal_ref=? AND intent_id=?",
-                (fence.scope.key, principal_ref, intent_id),
-            ).fetchone()
-            if prior is not None:
-                if (
-                    prior["reservation_id"] != reservation_id
-                    or prior["reference_sha256"] != reference_sha
-                    or prior["reference_json"] != reference_json
-                ):
-                    raise RiskOrderJournalError("EXPOSURE_REFERENCE_CONFLICT")
-                return reservation_id, reference_sha
-            connection.execute(
-                """INSERT INTO risk_order_exposure_references (
-                    scope_key, principal_ref, intent_id, reservation_id,
-                    reference_sha256, reference_json, created_revision, record_sha256
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    fence.scope.key,
-                    principal_ref,
-                    intent_id,
-                    reservation_id,
-                    reference_sha,
-                    reference_json,
-                    fill_event.revision,
-                    fill_event.record_sha256,
-                ),
-            )
         return reservation_id, reference_sha
 
     def load_terminal_exposure_source(
@@ -1204,12 +1100,20 @@ class RiskOrderJournal:
                 (fence.scope.key, principal_ref, intent_id),
             ).fetchall()
             events = tuple(self._event_from_row(row, fence.scope) for row in rows)
-            permit_id, order_event, fill_event, _unknown_event = (
-                _terminal_exposure_lifecycle(
+            source_command, source_events, source_fence, _ack_event = (
+                _terminal_exposure_source_projection(
                     parsed_command,
                     command,
                     events,
                     fence,
+                )
+            )
+            permit_id, order_event, fill_event, _unknown_event = (
+                _terminal_exposure_lifecycle(
+                    source_command,
+                    command,
+                    source_events,
+                    source_fence,
                 )
             )
             if (
@@ -1227,8 +1131,36 @@ class RiskOrderJournal:
             ):
                 raise RiskOrderJournalError("TERMINAL_EXPOSURE_REFERENCE_MISSING")
             reference = json.loads(ref_row["reference_json"])
+            position_effect = str(parsed_command.canonical_payload.get("position_effect", "OPEN"))
+            if position_effect == "CLOSE":
+                try:
+                    requested = Decimal(str(order_event.payload["quantity"]))
+                    filled = Decimal(str(fill_event.payload["filled_quantity"]))
+                except (KeyError, TypeError, ValueError, InvalidOperation):
+                    raise RiskOrderJournalError("TERMINAL_CLOSE_FULL_FILL_REQUIRED") from None
+                if (
+                    order_event.payload.get("exposure_state") != OrderExposureState.FILLED.value
+                    or not requested.is_finite()
+                    or not filled.is_finite()
+                    or requested <= 0
+                    or filled != requested
+                ):
+                    raise RiskOrderJournalError("TERMINAL_CLOSE_FULL_FILL_REQUIRED")
+            reference_prefix = "risk-order-close:" if position_effect == "CLOSE" else "risk-order-exposure:"
+            reference_schema = (
+                "bt-api-risk-order-terminal-close-reference-v1"
+                if position_effect == "CLOSE"
+                else "bt-api-risk-order-terminal-exposure-reference-v1"
+            )
             if (
-                reference.get("schema") != "bt-api-risk-order-terminal-exposure-reference-v1"
+                position_effect not in {"OPEN", "CLOSE"}
+                or reference.get("schema") != reference_schema
+                or reference.get("position_effect", position_effect) != position_effect
+                or (
+                    reference.get("close_proof_kind") != "TERMINAL_CLOSE"
+                    if position_effect == "CLOSE"
+                    else reference.get("exposure_proof_kind") != "TERMINAL_EXPOSURE"
+                )
                 or reference.get("scope_key") != fence.scope.key
                 or reference.get("intent_id") != command["risk_intent_id"]
                 or reference.get("permit_id") != permit_id
@@ -1239,7 +1171,7 @@ class RiskOrderJournal:
                 or reference.get("fill_observation_revision") != fill_event.revision
                 or reference.get("fill_observation_record_sha256") != fill_event.record_sha256
                 or reference.get("writer_fence_sha256") != fill_event.writer_fence_sha256
-                or ref_row["reservation_id"] != "risk-order-exposure:" + sha256_text(
+                or ref_row["reservation_id"] != reference_prefix + sha256_text(
                     canonical_json(
                         {
                             "intent_id": command["risk_intent_id"],
@@ -1274,10 +1206,14 @@ class RiskOrderJournal:
             type(receipt) is not DispatchExposureResolutionReceipt
             or type(proof) is not DispatchExposureResolutionProof
             or receipt.status
-            is not DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+            not in {
+                DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED,
+                DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED,
+            }
             or receipt.dispatch_latch_active is not False
             or receipt.proof_sha256 != proof.fingerprint
             or receipt.exposure_proof_sha256 != proof.observation.fingerprint
+            or receipt.position_effect != proof.observation.position_effect
             or proof.claim != receipt.claim
         ):
             raise RiskOrderJournalError("TERMINAL_EXPOSURE_RECEIPT_INVALID")
@@ -1416,8 +1352,10 @@ class RiskOrderJournal:
     ) -> None:
         if (
             type(receipt) is not DispatchExposureResolutionReceipt
-            or receipt.status
-            is not DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+            or receipt.status not in {
+                DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED,
+                DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED,
+            }
             or receipt.dispatch_latch_active is not False
             or type(receipt.claim) is not DispatchClaimBinding
             or (
@@ -1442,6 +1380,26 @@ class RiskOrderJournal:
             (fence.scope.key,),
         ).fetchone()
         parsed_command = self._command_from_row(connection, command, fence.scope)
+        position_effect = str(parsed_command.canonical_payload.get("position_effect", "OPEN"))
+        is_close = position_effect == "CLOSE"
+        if (
+            position_effect not in {"OPEN", "CLOSE"}
+            or receipt.position_effect != position_effect
+            or receipt.status
+            is not (
+                DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED
+                if is_close
+                else DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+            )
+            or (
+                is_close
+                and (
+                    receipt.final_state is not OrderExposureState.FILLED
+                    or receipt.filled_quantity != receipt.requested_quantity
+                )
+            )
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_RECEIPT_MISMATCH")
         if head is None or not self._verify_event_chains(
             connection,
             command,
@@ -1459,41 +1417,45 @@ class RiskOrderJournal:
         ack_events = tuple(event for event in events if event.event_type == "ACKED_TRACKED")
         if proof is None and len(ack_events) != 1:
             raise RiskOrderJournalError("TERMINAL_EXPOSURE_ACK_MISSING")
-        source_events = events
-        source_command = parsed_command
-        source_fence = fence
-        if ack_events:
-            if len(ack_events) != 1 or events[-1] is not ack_events[0] or len(events) < 2:
-                raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
-            origin = events[0]
-            if origin.writer_fence_sha256 != _fence_digest(
-                fence.scope, origin.writer_owner_id, origin.writer_fencing_token
-            ):
-                raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
-            source_fence = RiskOrderWriterFence(
-                fence.scope,
-                origin.writer_owner_id,
-                origin.writer_fencing_token,
-                origin.writer_fence_sha256,
-            )
-            if source_fence.fencing_token > fence.fencing_token or (
-                source_fence.fencing_token == fence.fencing_token
-                and (
-                    source_fence.owner_id != fence.owner_id
-                    or source_fence.fence_sha256 != fence.fence_sha256
-                )
-            ):
-                raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
-            latest_source_event = events[-2]
-            source_events = events[:-1]
-            source_command = replace(
+        source_command, source_events, source_fence, projected_ack = (
+            _terminal_exposure_source_projection(
                 parsed_command,
-                updated_at_ns=latest_source_event.payload.get("updated_at_ns"),
-                state=latest_source_event.event_type,
-                latest_revision=latest_source_event.revision,
-                latest_record_sha256=latest_source_event.record_sha256,
-                latest_event=latest_source_event.payload,
+                command,
+                events,
+                fence,
             )
+        )
+        if len(ack_events) != (1 if projected_ack is not None else 0):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+        persisted_proof: DispatchExposureResolutionProof | None = proof
+        proof_row = None
+        if is_close:
+            proof_row = connection.execute(
+                "SELECT * FROM risk_order_terminal_close_proofs "
+                "WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                (fence.scope.key, principal_ref, intent_id),
+            ).fetchone()
+            if proof_row is None:
+                raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_MISSING")
+            try:
+                proof_json = str(proof_row["proof_json"])
+                stored_proof_payload = json.loads(proof_json)
+                stored_proof = _terminal_close_proof_from_payload(
+                    stored_proof_payload,
+                    scope=fence.scope,
+                )
+            except (TypeError, ValueError, RiskOrderJournalError):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_PAYLOAD_INVALID") from None
+            if (
+                canonical_json(stored_proof_payload) != proof_json
+                or proof_row["proof_sha256"] != stored_proof.fingerprint
+                or stored_proof.claim != claim
+                or stored_proof.fingerprint != receipt.proof_sha256
+                or stored_proof.observation.fingerprint != receipt.exposure_proof_sha256
+                or (proof is not None and proof != stored_proof)
+            ):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_CONFLICT")
+            persisted_proof = stored_proof
         permit_id, order_event, fill_event, _unknown_event = (
             _terminal_exposure_lifecycle(
                 source_command,
@@ -1536,8 +1498,19 @@ class RiskOrderJournal:
         ):
             raise RiskOrderJournalError("TERMINAL_EXPOSURE_REFERENCE_MISSING")
         reference = json.loads(reservation["reference_json"])
+        reference_schema = (
+            "bt-api-risk-order-terminal-close-reference-v1"
+            if is_close
+            else "bt-api-risk-order-terminal-exposure-reference-v1"
+        )
+        reference_kind = (
+            reference.get("close_proof_kind") if is_close else reference.get("exposure_proof_kind")
+        )
+        expected_reference_kind = "TERMINAL_CLOSE" if is_close else "TERMINAL_EXPOSURE"
         if (
-            reference.get("schema") != "bt-api-risk-order-terminal-exposure-reference-v1"
+            reference.get("schema") != reference_schema
+            or reference_kind != expected_reference_kind
+            or reference.get("position_effect", position_effect) != position_effect
             or reference.get("reservation_id") != receipt.exposure_reservation_id
             or reservation["reservation_id"] != receipt.exposure_reservation_id
             or reservation["reference_sha256"] != receipt.exposure_reservation_sha256
@@ -1565,7 +1538,20 @@ class RiskOrderJournal:
             _reconciliation_evidence_sha256(parsed_command, order_event, fill_event)
         ):
             raise RiskOrderJournalError("TERMINAL_EXPOSURE_RECONCILIATION_MISMATCH")
-        if proof is not None:
+        if is_close and proof_row is not None and persisted_proof is not None:
+            observation = persisted_proof.observation
+            if (
+                int(proof_row["source_order_revision"]) != order_event.revision
+                or proof_row["source_order_record_sha256"] != order_event.record_sha256
+                or int(proof_row["source_fill_revision"]) != fill_event.revision
+                or proof_row["source_fill_record_sha256"] != fill_event.record_sha256
+                or proof_row["writer_owner_id"] != observation.writer_owner_id
+                or int(proof_row["writer_fencing_token"]) != observation.writer_fencing_token
+                or proof_row["writer_fence_sha256"] != observation.writer_fence_sha256
+            ):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_SOURCE_MISMATCH")
+        if persisted_proof is not None:
+            proof = persisted_proof
             observation = proof.observation
             stored_contract = (fill_event.payload.get("metadata_facts") or {}).get(
                 "provider_contract"
@@ -1620,13 +1606,42 @@ class RiskOrderJournal:
         if len(source_rows) != 1:
             return False
         source_event = self._event_from_row(source_rows[0], fence.scope)
+        source_token = source_event.writer_fencing_token
+        ack_token = event.writer_fencing_token
         if (
-            event.writer_owner_id != source_event.writer_owner_id
-            or event.writer_fencing_token != source_event.writer_fencing_token
-            or event.writer_fence_sha256 != source_event.writer_fence_sha256
+            source_event.writer_fence_sha256
+            != _fence_digest(
+                fence.scope, source_event.writer_owner_id, source_event.writer_fencing_token
+            )
+            or source_token > fence.fencing_token
+            or (
+                source_token == fence.fencing_token
+                and (
+                    source_event.writer_owner_id != fence.owner_id
+                    or source_event.writer_fence_sha256 != fence.fence_sha256
+                )
+            )
+            or event.writer_fence_sha256
+            != _fence_digest(fence.scope, event.writer_owner_id, ack_token)
+            or ack_token < source_token
+            or ack_token > fence.fencing_token
+            or (
+                ack_token == source_token
+                and (
+                    event.writer_owner_id != source_event.writer_owner_id
+                    or event.writer_fence_sha256 != source_event.writer_fence_sha256
+                )
+            )
+            or (
+                ack_token == fence.fencing_token
+                and (
+                    event.writer_owner_id != fence.owner_id
+                    or event.writer_fence_sha256 != fence.fence_sha256
+                )
+            )
         ):
-            # The terminal ACK must keep the source rows' original fence. The
-            # caller separately holds and validates the live account fence.
+            # Source rows keep their original fence. A later owner may append
+            # the ACK only while holding the current fence.
             return False
         reference_row = connection.execute(
             "SELECT reference_json FROM risk_order_exposure_references WHERE scope_key=? AND principal_ref=? AND intent_id=?",
@@ -1720,8 +1735,14 @@ class RiskOrderJournal:
                 if command_row is None:
                     return None
                 command = self._command_from_row(connection, command_row, fence.scope)
+                is_close = command.canonical_payload.get("position_effect", "OPEN") == "CLOSE"
                 if (
-                    command.state not in {"FILL_OBSERVATION", "UNKNOWN"}
+                    command.state
+                    not in (
+                        {"FILL_OBSERVATION", "UNKNOWN", "ACKED_TRACKED"}
+                        if is_close
+                        else {"FILL_OBSERVATION", "UNKNOWN"}
+                    )
                     or command.permit_id != claim.permit_id
                     or command.risk_intent_id != claim.intent_id
                     or command.order_request_sha256 != proof.observation.accepted_request_sha256
@@ -1747,12 +1768,20 @@ class RiskOrderJournal:
                 ).fetchall()
                 events = tuple(self._event_from_row(row, fence.scope) for row in rows)
                 try:
-                    _permit_id, order_event, fill_event, _unknown_event = (
-                        _terminal_exposure_lifecycle(
+                    source_command, source_events, source_fence, _ack_event = (
+                        _terminal_exposure_source_projection(
                             command,
                             command_row,
                             events,
                             fence,
+                        )
+                    )
+                    _permit_id, order_event, fill_event, _unknown_event = (
+                        _terminal_exposure_lifecycle(
+                            source_command,
+                            command_row,
+                            source_events,
+                            source_fence,
                             expected_claim=claim,
                         )
                     )
@@ -1795,16 +1824,47 @@ class RiskOrderJournal:
                     return None
                 reference = json.loads(reference_row["reference_json"])
                 observation = proof.observation
+                if is_close:
+                    proof_row = connection.execute(
+                        "SELECT * FROM risk_order_terminal_close_proofs "
+                        "WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                        (fence.scope.key, command.principal_ref, command.intent_id),
+                    ).fetchone()
+                    if proof_row is None:
+                        return None
+                    try:
+                        raw_proof_json = str(proof_row["proof_json"])
+                        stored_proof_payload = json.loads(raw_proof_json)
+                        stored_proof = _terminal_close_proof_from_payload(
+                            stored_proof_payload,
+                            scope=fence.scope,
+                        )
+                    except (TypeError, ValueError, RiskOrderJournalError):
+                        return None
+                    if (
+                        canonical_json(stored_proof_payload) != raw_proof_json
+                        or stored_proof != proof
+                        or proof_row["proof_sha256"] != proof.fingerprint
+                        or int(proof_row["source_order_revision"]) != order_event.revision
+                        or proof_row["source_order_record_sha256"] != order_event.record_sha256
+                        or int(proof_row["source_fill_revision"]) != fill_event.revision
+                        or proof_row["source_fill_record_sha256"] != fill_event.record_sha256
+                        or proof_row["writer_owner_id"] != observation.writer_owner_id
+                        or int(proof_row["writer_fencing_token"])
+                        != observation.writer_fencing_token
+                        or proof_row["writer_fence_sha256"] != observation.writer_fence_sha256
+                    ):
+                        return None
                 if not _terminal_exposure_source_matches(
                     observation=observation,
                     claim=claim,
-                    command=command,
+                    command=source_command,
                     order_event=order_event,
                     fill_event=fill_event,
                     reference=reference,
                     reference_id=str(reference_row["reservation_id"]),
                     reference_sha256=str(reference_row["reference_sha256"]),
-                    fence=fence,
+                    fence=source_fence,
                     reconciliation_evidence_sha256=reconciliation,
                 ):
                     return None
@@ -1828,9 +1888,9 @@ class RiskOrderJournal:
                     order_revision=observation.order_revision,
                     journal_revision=observation.journal_revision,
                     journal_record_sha256=observation.journal_record_sha256,
-                    writer_owner_id=fence.owner_id,
-                    writer_fencing_token=fence.fencing_token,
-                    writer_fence_sha256=fence.fence_sha256,
+                    writer_owner_id=observation.writer_owner_id,
+                    writer_fencing_token=observation.writer_fencing_token,
+                    writer_fence_sha256=observation.writer_fence_sha256,
                 )
         except (RiskOrderJournalError, sqlite3.Error, KeyError, TypeError, ValueError, InvalidOperation):
             return None
@@ -1891,6 +1951,8 @@ class RiskOrderJournal:
                     )
                 ):
                     return None
+                order_event = by_type["ORDER_OBSERVATION"][0]
+                fill_event = by_type["FILL_OBSERVATION"][0]
                 ack = by_type["ACKED_TRACKED"][0]
                 if any(
                     event.event_type not in {
@@ -3413,6 +3475,24 @@ class RiskOrderJournal:
                     FOREIGN KEY(scope_key, principal_ref, intent_id)
                       REFERENCES risk_order_commands(scope_key, principal_ref, intent_id)
                 );
+                CREATE TABLE IF NOT EXISTS risk_order_terminal_close_proofs (
+                    scope_key TEXT NOT NULL,
+                    principal_ref TEXT NOT NULL,
+                    intent_id TEXT NOT NULL,
+                    proof_sha256 TEXT NOT NULL,
+                    proof_json TEXT NOT NULL,
+                    source_order_revision INTEGER NOT NULL CHECK(source_order_revision > 0),
+                    source_order_record_sha256 TEXT NOT NULL,
+                    source_fill_revision INTEGER NOT NULL CHECK(source_fill_revision > 0),
+                    source_fill_record_sha256 TEXT NOT NULL,
+                    writer_owner_id TEXT NOT NULL,
+                    writer_fencing_token INTEGER NOT NULL CHECK(writer_fencing_token > 0),
+                    writer_fence_sha256 TEXT NOT NULL,
+                    created_at_ns INTEGER NOT NULL CHECK(created_at_ns > 0),
+                    PRIMARY KEY(scope_key, principal_ref, intent_id),
+                    FOREIGN KEY(scope_key, principal_ref, intent_id)
+                      REFERENCES risk_order_commands(scope_key, principal_ref, intent_id)
+                );
                 CREATE TABLE IF NOT EXISTS risk_order_gross_baselines (
                     scope_key TEXT NOT NULL,
                     account_revision INTEGER NOT NULL CHECK(account_revision > 0),
@@ -3448,6 +3528,14 @@ class RiskOrderJournal:
                 CREATE TRIGGER IF NOT EXISTS risk_order_exposure_refs_no_delete
                 BEFORE DELETE ON risk_order_exposure_references BEGIN
                     SELECT RAISE(ABORT, 'risk-order exposure references are immutable');
+                END;
+                CREATE TRIGGER IF NOT EXISTS risk_order_terminal_close_proofs_no_update
+                BEFORE UPDATE ON risk_order_terminal_close_proofs BEGIN
+                    SELECT RAISE(ABORT, 'risk-order terminal close proofs are immutable');
+                END;
+                CREATE TRIGGER IF NOT EXISTS risk_order_terminal_close_proofs_no_delete
+                BEFORE DELETE ON risk_order_terminal_close_proofs BEGIN
+                    SELECT RAISE(ABORT, 'risk-order terminal close proofs are immutable');
                 END;
                 CREATE TRIGGER IF NOT EXISTS risk_order_gross_baselines_no_update
                 BEFORE UPDATE ON risk_order_gross_baselines BEGIN
@@ -3829,6 +3917,335 @@ class RiskOrderJournal:
                 found_target = True
             expected_revision += 1
         return found_target and expected_revision == through_revision + 1
+
+    def store_terminal_close_resolution_source(
+        self,
+        fence: RiskOrderWriterFence,
+        *,
+        principal_ref: str,
+        intent_id: str,
+        claim: DispatchClaimBinding,
+        provider_order_id: str,
+        accepted_request_sha256: str,
+        order_event: RiskOrderJournalEvent,
+        fill_event: RiskOrderJournalEvent,
+        reconciliation_evidence_sha256: str,
+        proof_factory: Callable[[str, str], DispatchExposureResolutionProof],
+    ) -> tuple[str, str, DispatchExposureResolutionProof]:
+        """Atomically persist a CLOSE reference and its exact Risk proof."""
+
+        if not callable(proof_factory):
+            raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_REQUIRED")
+        reservation_id, reference_sha, proof = self._store_terminal_exposure_reference(
+            fence,
+            principal_ref=principal_ref,
+            intent_id=intent_id,
+            claim=claim,
+            provider_order_id=provider_order_id,
+            accepted_request_sha256=accepted_request_sha256,
+            order_event=order_event,
+            fill_event=fill_event,
+            reconciliation_evidence_sha256=reconciliation_evidence_sha256,
+            proof_factory=proof_factory,
+        )
+        if proof is None:
+            raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_MISSING")
+        return reservation_id, reference_sha, proof
+
+
+    def _store_terminal_exposure_reference(
+        self,
+        fence: RiskOrderWriterFence,
+        *,
+        principal_ref: str,
+        intent_id: str,
+        claim: DispatchClaimBinding,
+        provider_order_id: str,
+        accepted_request_sha256: str,
+        order_event: RiskOrderJournalEvent,
+        fill_event: RiskOrderJournalEvent,
+        reconciliation_evidence_sha256: str,
+        proof_factory: Callable[[str, str], DispatchExposureResolutionProof] | None,
+    ) -> tuple[str, str, DispatchExposureResolutionProof | None]:
+        """Build and atomically persist immutable terminal source material."""
+
+        self._assert_current(fence)
+        if (
+            type(claim) is not DispatchClaimBinding
+            or claim.scope != fence.scope
+            or type(order_event) is not RiskOrderJournalEvent
+            or type(fill_event) is not RiskOrderJournalEvent
+            or order_event.event_type != "ORDER_OBSERVATION"
+            or fill_event.event_type != "FILL_OBSERVATION"
+            or order_event.scope != fence.scope
+            or fill_event.scope != fence.scope
+            or order_event.principal_ref != principal_ref
+            or fill_event.principal_ref != principal_ref
+            or order_event.intent_id != intent_id
+            or fill_event.intent_id != intent_id
+            or order_event.revision >= fill_event.revision
+            or order_event.writer_fence_sha256 != fence.fence_sha256
+            or fill_event.writer_fence_sha256 != fence.fence_sha256
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+        _require_sha256(accepted_request_sha256, "accepted request digest")
+        _require_sha256(reconciliation_evidence_sha256, "reconciliation evidence digest")
+        command = self.get_command(fence.scope, principal_ref, intent_id)
+        if (
+            command is None
+            or command.state != "FILL_OBSERVATION"
+            or command.risk_intent_id != claim.intent_id
+            or command.permit_id != claim.permit_id
+            or command.order_request_sha256 != accepted_request_sha256
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+        position_effect = str(command.canonical_payload.get("position_effect", "OPEN"))
+        if position_effect not in {"OPEN", "CLOSE"}:
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+        stored_order_event = self.get_event(
+            fence.scope, principal_ref, intent_id, order_event.revision
+        )
+        stored_fill_event = self.get_event(
+            fence.scope, principal_ref, intent_id, fill_event.revision
+        )
+        if (
+            stored_order_event != order_event
+            or stored_fill_event != fill_event
+            or not _is_v2_order_event(order_event.payload)
+            or not _is_v2_fill_event(fill_event.payload)
+            or order_event.payload.get("exposure_state")
+            not in {OrderExposureState.FILLED.value, OrderExposureState.CANCELLED.value}
+            or Decimal(str(fill_event.payload.get("filled_quantity", "0"))) <= 0
+            or order_event.payload.get("position_effect", "OPEN") != position_effect
+            or fill_event.payload.get("position_effect", "OPEN") != position_effect
+            or command.canonical_payload.get("reduce_only", position_effect == "CLOSE")
+            is not (position_effect == "CLOSE")
+            or command.order_request.get("reduce_only") is not (position_effect == "CLOSE")
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+        is_close = position_effect == "CLOSE"
+        if is_close and proof_factory is None:
+            raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_REQUIRED")
+        if is_close:
+            try:
+                requested = Decimal(str(order_event.payload["quantity"]))
+                filled = Decimal(str(fill_event.payload["filled_quantity"]))
+            except (KeyError, TypeError, ValueError, InvalidOperation):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_FULL_FILL_REQUIRED") from None
+            if (
+                order_event.payload.get("exposure_state") != OrderExposureState.FILLED.value
+                or not requested.is_finite()
+                or not filled.is_finite()
+                or requested <= 0
+                or filled != requested
+            ):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_FULL_FILL_REQUIRED")
+        reservation_id = (
+            ("risk-order-close:" if is_close else "risk-order-exposure:")
+            + sha256_text(
+                canonical_json(
+                    {
+                        "intent_id": claim.intent_id,
+                        "permit_id": claim.permit_id,
+                        "provider_order_id": provider_order_id,
+                        "scope_key": fence.scope.key,
+                    }
+                )
+            )[:32]
+        )
+        reference = {
+            "accepted_request_sha256": accepted_request_sha256,
+            # Provider-executed weighted average price over the immutable fill
+            # facts. Derived here so the durable terminal ACK can project the
+            # executed price without re-reading the provider.
+            "average_price": _weighted_average_price(fill_event.payload),
+            "claim": _claim_payload(claim),
+            "claim_digest": claim.claim_digest,
+            "dispatch_attempt_count": 1,
+            **(
+                {"position_effect": "CLOSE", "close_proof_kind": "TERMINAL_CLOSE"}
+                if is_close
+                else {"exposure_proof_kind": "TERMINAL_EXPOSURE"}
+            ),
+            "fill_observation_record_sha256": fill_event.record_sha256,
+            "fill_observation_revision": fill_event.revision,
+            "filled_quantity": fill_event.payload.get("filled_quantity"),
+            "intent_hash": claim.intent_hash,
+            "intent_id": claim.intent_id,
+            "order_observation_record_sha256": order_event.record_sha256,
+            "order_observation_revision": order_event.revision,
+            "permit_id": claim.permit_id,
+            "provider_order_id": provider_order_id,
+            "reservation_id": reservation_id,
+            "reconciliation_evidence_sha256": reconciliation_evidence_sha256,
+            "schema": (
+                "bt-api-risk-order-terminal-close-reference-v1"
+                if is_close
+                else "bt-api-risk-order-terminal-exposure-reference-v1"
+            ),
+            "scope_key": fence.scope.key,
+            "trade_count": fill_event.payload.get("trade_count"),
+            "writer_fence_sha256": fence.fence_sha256,
+        }
+        reference_json = canonical_json(reference)
+        reference_sha = sha256_text(reference_json)
+        proof = None if proof_factory is None else proof_factory(reservation_id, reference_sha)
+        proof_json = None if proof is None else canonical_json(_terminal_close_proof_payload(proof))
+        proof_sha = None if proof is None else proof.fingerprint
+        if proof is not None:
+            observation = proof.observation
+            if (
+                position_effect != "CLOSE"
+                or proof.claim != claim
+                or proof.reconciliation_evidence_sha256 != reconciliation_evidence_sha256
+                or observation.position_effect != "CLOSE"
+                or observation.writer_owner_id != fence.owner_id
+                or observation.writer_fencing_token != fence.fencing_token
+                or observation.writer_fence_sha256 != fence.fence_sha256
+                or observation.order_revision != order_event.payload.get("order_revision")
+                or observation.journal_revision != fill_event.revision
+                or observation.journal_record_sha256 != fill_event.record_sha256
+                or observation.provider_order_id != provider_order_id
+                or observation.accepted_request_sha256 != accepted_request_sha256
+                or observation.exposure_reservation_id != reservation_id
+                or observation.exposure_reservation_sha256 != reference_sha
+                or observation.state.value != order_event.payload.get("exposure_state")
+                or observation.fill_trade_count != fill_event.payload.get("trade_count")
+            ):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_SOURCE_MISMATCH")
+        with self._transaction() as connection:
+            self._assert_current_in(connection, fence)
+            prior = connection.execute(
+                "SELECT * FROM risk_order_exposure_references WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                (fence.scope.key, principal_ref, intent_id),
+            ).fetchone()
+            if prior is not None:
+                if (
+                    prior["reservation_id"] != reservation_id
+                    or prior["reference_sha256"] != reference_sha
+                    or prior["reference_json"] != reference_json
+                ):
+                    raise RiskOrderJournalError("EXPOSURE_REFERENCE_CONFLICT")
+            else:
+                connection.execute(
+                    """INSERT INTO risk_order_exposure_references (
+                        scope_key, principal_ref, intent_id, reservation_id,
+                        reference_sha256, reference_json, created_revision, record_sha256
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        fence.scope.key,
+                        principal_ref,
+                        intent_id,
+                        reservation_id,
+                        reference_sha,
+                        reference_json,
+                        fill_event.revision,
+                        fill_event.record_sha256,
+                    ),
+                )
+            if proof is not None and proof_json is not None and proof_sha is not None:
+                prior_proof = connection.execute(
+                    "SELECT * FROM risk_order_terminal_close_proofs "
+                    "WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                    (fence.scope.key, principal_ref, intent_id),
+                ).fetchone()
+                if prior_proof is not None:
+                    if (
+                        prior_proof["proof_sha256"] != proof_sha
+                        or prior_proof["proof_json"] != proof_json
+                        or prior_proof["source_order_revision"] != order_event.revision
+                        or prior_proof["source_order_record_sha256"] != order_event.record_sha256
+                        or prior_proof["source_fill_revision"] != fill_event.revision
+                        or prior_proof["source_fill_record_sha256"] != fill_event.record_sha256
+                        or prior_proof["writer_owner_id"] != fence.owner_id
+                        or prior_proof["writer_fencing_token"] != fence.fencing_token
+                        or prior_proof["writer_fence_sha256"] != fence.fence_sha256
+                    ):
+                        raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_CONFLICT")
+                else:
+                    connection.execute(
+                        """INSERT INTO risk_order_terminal_close_proofs (
+                            scope_key, principal_ref, intent_id, proof_sha256, proof_json,
+                            source_order_revision, source_order_record_sha256,
+                            source_fill_revision, source_fill_record_sha256,
+                            writer_owner_id, writer_fencing_token, writer_fence_sha256,
+                            created_at_ns
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            fence.scope.key,
+                            principal_ref,
+                            intent_id,
+                            proof_sha,
+                            proof_json,
+                            order_event.revision,
+                            order_event.record_sha256,
+                            fill_event.revision,
+                            fill_event.record_sha256,
+                            fence.owner_id,
+                            fence.fencing_token,
+                            fence.fence_sha256,
+                            time.time_ns(),
+                        ),
+                    )
+        return reservation_id, reference_sha, proof
+
+
+    def load_terminal_close_resolution_proof(
+        self,
+        fence: RiskOrderWriterFence,
+        *,
+        principal_ref: str,
+        intent_id: str,
+    ) -> DispatchExposureResolutionProof | None:
+        """Load and re-attest the exact durable CLOSE proof before recovery."""
+
+        self._assert_current(fence)
+        with self._connection() as connection:
+            self._assert_current_in(connection, fence)
+            command_row = connection.execute(
+                "SELECT * FROM risk_order_commands WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                (fence.scope.key, principal_ref, intent_id),
+            ).fetchone()
+            if command_row is None:
+                return None
+            command = self._command_from_row(connection, command_row, fence.scope)
+            if command.canonical_payload.get("position_effect", "OPEN") != "CLOSE":
+                return None
+            proof_row = connection.execute(
+                "SELECT * FROM risk_order_terminal_close_proofs "
+                "WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+                (fence.scope.key, principal_ref, intent_id),
+            ).fetchone()
+            if proof_row is None:
+                return None
+            try:
+                raw_payload = str(proof_row["proof_json"])
+                payload = json.loads(raw_payload)
+                proof = _terminal_close_proof_from_payload(payload, scope=fence.scope)
+            except (TypeError, ValueError, RiskOrderJournalError):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_PAYLOAD_INVALID") from None
+            observation = proof.observation
+            if (
+                canonical_json(payload) != raw_payload
+                or proof.claim.intent_id != command.risk_intent_id
+                or proof.claim.permit_id != command.permit_id
+                or proof_row["proof_sha256"] != proof.fingerprint
+                or int(proof_row["source_fill_revision"]) != observation.journal_revision
+                or proof_row["source_fill_record_sha256"]
+                != observation.journal_record_sha256
+                or proof_row["writer_owner_id"] != observation.writer_owner_id
+                or int(proof_row["writer_fencing_token"]) != observation.writer_fencing_token
+                or proof_row["writer_fence_sha256"] != observation.writer_fence_sha256
+            ):
+                raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_SOURCE_MISMATCH")
+        verified = self._attest_dispatch_exposure_resolution(
+            proof,
+            proof.claim,
+            fence,
+        )
+        if verified is None:
+            raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_SOURCE_MISMATCH")
+        return proof
 
 
 def _claim_payload(claim: DispatchClaimBinding) -> dict[str, Any]:
@@ -5146,6 +5563,9 @@ def _fill_facts_from_event(
     revision_field = contract.get("fill_revision_field")
     fee_field = contract.get("fee_amount_field")
     fee_currency_field = contract.get("fee_currency_field")
+    position_effect = payload.get("position_effect", "OPEN")
+    if position_effect not in {"OPEN", "CLOSE"}:
+        raise RiskOrderJournalError("FILL_FACT_SOURCE_INVALID")
     facts: list[OrderFillFact] = []
     for record, raw_provenance in zip(
         payload["records"], payload["fill_row_provenance"], strict=True
@@ -5160,7 +5580,7 @@ def _fill_facts_from_event(
                 quantity=Decimal(str(record["size"])),
                 price=Decimal(str(record["price"])),
                 side=str(record["side"]).upper(),
-                position_effect="OPEN",
+                position_effect=position_effect,
                 fee_amount=Decimal(str(values[fee_field])),
                 fee_currency=str(values[fee_currency_field]).upper(),
                 source_record_sha256=source_record_sha256,
@@ -5218,16 +5638,16 @@ def _terminal_ack_payload(
 ) -> dict[str, Any]:
     if (
         type(receipt) is not DispatchExposureResolutionReceipt
-        or receipt.status is not DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+        or receipt.status not in {
+            DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED,
+            DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED,
+        }
         or not isinstance(reference, Mapping)
     ):
         raise RiskOrderJournalError("TERMINAL_EXPOSURE_RECEIPT_INVALID")
     payload = {
         "average_price": reference.get("average_price"),
         "dispatch_attempt_count": 1,
-        "exposure_proof_sha256": receipt.exposure_proof_sha256,
-        "exposure_reference_id": receipt.exposure_reservation_id,
-        "exposure_reference_sha256": receipt.exposure_reservation_sha256,
         "filled_quantity": _decimal_text(receipt.filled_quantity),
         "journal_revision": receipt.journal_revision,
         "order_revision": receipt.order_revision,
@@ -5239,6 +5659,23 @@ def _terminal_ack_payload(
         "risk_intent_id": receipt.claim.intent_id,
         "trade_count": receipt.trade_count,
     }
+    if receipt.position_effect == "CLOSE":
+        payload.update(
+            {
+                "close_proof_sha256": receipt.exposure_proof_sha256,
+                "close_reference_id": receipt.exposure_reservation_id,
+                "close_reference_sha256": receipt.exposure_reservation_sha256,
+                "position_effect": "CLOSE",
+            }
+        )
+    else:
+        payload.update(
+            {
+                "exposure_proof_sha256": receipt.exposure_proof_sha256,
+                "exposure_reference_id": receipt.exposure_reservation_id,
+                "exposure_reference_sha256": receipt.exposure_reservation_sha256,
+            }
+        )
     if type(payload["average_price"]) is not str or not payload["average_price"]:
         # A terminal positive-fill reference always carries the derived text;
         # refusing an absent value keeps the ACK from presenting a filled order
@@ -5284,6 +5721,9 @@ def _terminal_exposure_source_matches(
         metadata = source_facts["instrument_metadata"]
         contract = source_facts["provider_contract"]
         facts = _fill_facts_from_event(fills)
+        position_effect = str(command.canonical_payload.get("position_effect", "OPEN"))
+        expected_reduce_only = position_effect == "CLOSE"
+        accepted_order_request = command.order_request
         quote_currency, fx_rate = _verified_provider_fx_fact(
             source_facts, str(order.get("instrument"))
         )
@@ -5326,6 +5766,12 @@ def _terminal_exposure_source_matches(
             _trade_identity_declaration_matches(observation, contract),
             reference.get("claim") == _claim_payload(claim),
             reference.get("claim_digest") == claim.claim_digest,
+            position_effect in {"OPEN", "CLOSE"},
+            order.get("position_effect", position_effect) == position_effect,
+            fills.get("position_effect", position_effect) == position_effect,
+            command.canonical_payload.get("reduce_only", expected_reduce_only)
+            is expected_reduce_only,
+            accepted_order_request.get("reduce_only") is expected_reduce_only,
             reference.get("reservation_id") == reference_id,
             reference.get("provider_order_id") == order.get("provider_order_id"),
             reference.get("accepted_request_sha256") == command.order_request_sha256,
@@ -5341,6 +5787,14 @@ def _terminal_exposure_source_matches(
             observation.journal_revision == fill_event.revision,
             observation.journal_record_sha256 == fill_event.record_sha256,
             observation.state.value == order.get("exposure_state"),
+            (
+                position_effect != "CLOSE"
+                or (
+                    observation.state is OrderExposureState.FILLED
+                    and filled == requested
+                    and observation.leaves_quantity == 0
+                )
+            ),
             observation.requested_quantity == requested,
             observation.cumulative_filled_quantity == filled,
             observation.fill_trade_count == fills.get("trade_count"),
@@ -5358,7 +5812,7 @@ def _terminal_exposure_source_matches(
             observation.valuation_unit == valuation_unit,
             observation.notional_unit == valuation_unit,
             observation.order_side == str(order.get("side")).upper(),
-            observation.position_effect == "OPEN",
+            observation.position_effect == position_effect,
             observation.complete_order_snapshot is True,
             observation.complete_fill_history is True,
             observation.writer_owner_id == fence.owner_id,
@@ -5686,6 +6140,8 @@ def _bounded_observation(value: Mapping[str, Any]) -> dict[str, Any]:
         "filled_quantity",
         "trade_count",
         "provider_observation_sha256",
+        "position_effect",
+        "reduce_only",
         "public_state",
         "reason_code",
         "order_revision",
@@ -5719,3 +6175,285 @@ __all__ = [
     "canonical_json",
     "sha256_text",
 ]
+
+
+def _terminal_close_proof_payload(
+    proof: DispatchExposureResolutionProof,
+) -> dict[str, Any]:
+    """Serialize a typed CLOSE proof so UNKNOWN recovery reuses identical facts."""
+
+    if (
+        type(proof) is not DispatchExposureResolutionProof
+        or proof.observation.position_effect != "CLOSE"
+    ):
+        raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_REQUIRED")
+    observation = proof.observation
+    observation_payload: dict[str, Any] = {}
+    for item in fields(OrderExposureObservationProof):
+        name = item.name
+        value = getattr(observation, name)
+        if name == "scope":
+            observation_payload["scope_key"] = value.key
+        elif name == "fills":
+            observation_payload[name] = [
+                {
+                    fill_field.name: (
+                        _decimal_text(fill_value)
+                        if isinstance(fill_value, Decimal)
+                        else fill_value.value
+                        if isinstance(fill_value, Enum)
+                        else fill_value
+                    )
+                    for fill_field in fields(OrderFillFact)
+                    for fill_value in (getattr(fill, fill_field.name),)
+                }
+                for fill in value
+            ]
+        elif isinstance(value, Decimal):
+            observation_payload[name] = _decimal_text(value)
+        elif isinstance(value, Enum):
+            observation_payload[name] = value.value
+        else:
+            observation_payload[name] = value
+    return {
+        "claim": {
+            "cause_id": proof.claim.cause_id,
+            "claim_digest": proof.claim.claim_digest,
+            "claimed_at": proof.claim.claimed_at,
+            "intent_hash": proof.claim.intent_hash,
+            "intent_id": proof.claim.intent_id,
+            "permit_id": proof.claim.permit_id,
+            "scope": {
+                "account_id": proof.claim.scope.account_id,
+                "environment": proof.claim.scope.environment,
+                "provider": proof.claim.scope.provider,
+            },
+            "scope_key": proof.claim.scope.key,
+        },
+        "dispatch_attempt_count": proof.dispatch_attempt_count,
+        "evidence_class": proof.evidence_class.value,
+        "exposure_proof_sha256": observation.fingerprint,
+        "observation": observation_payload,
+        "proof_sha256": proof.fingerprint,
+        "reconciliation_evidence_sha256": proof.reconciliation_evidence_sha256,
+        "schema": "bt-api-risk-order-terminal-close-proof-v1",
+    }
+
+
+def _terminal_close_proof_from_payload(
+    payload: object,
+    *,
+    scope: AccountScope,
+) -> DispatchExposureResolutionProof:
+    """Restore only the exact finite JSON representation emitted above."""
+
+    outer_keys = {
+        "claim",
+        "dispatch_attempt_count",
+        "evidence_class",
+        "exposure_proof_sha256",
+        "observation",
+        "proof_sha256",
+        "reconciliation_evidence_sha256",
+        "schema",
+    }
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != outer_keys
+        or payload.get("schema") != "bt-api-risk-order-terminal-close-proof-v1"
+    ):
+        raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_PAYLOAD_INVALID")
+    claim_payload = payload.get("claim")
+    if (
+        not isinstance(claim_payload, dict)
+        or set(claim_payload)
+        != {
+            "cause_id",
+            "claim_digest",
+            "claimed_at",
+            "intent_hash",
+            "intent_id",
+            "permit_id",
+            "scope",
+            "scope_key",
+        }
+        or claim_payload.get("scope_key") != scope.key
+        or claim_payload.get("scope")
+        != {
+            "account_id": scope.account_id,
+            "environment": scope.environment,
+            "provider": scope.provider,
+        }
+    ):
+        raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_CLAIM_INVALID")
+    try:
+        claim = DispatchClaimBinding(
+            scope=scope,
+            permit_id=claim_payload["permit_id"],
+            intent_id=claim_payload["intent_id"],
+            intent_hash=claim_payload["intent_hash"],
+            cause_id=claim_payload["cause_id"],
+            claimed_at=claim_payload["claimed_at"],
+            claim_digest=claim_payload["claim_digest"],
+        )
+        raw_observation = payload["observation"]
+        expected_observation_keys = {
+            *(item.name for item in fields(OrderExposureObservationProof) if item.name != "scope"),
+            "scope_key",
+        }
+        raw_observation_keys = (
+            frozenset(raw_observation) if isinstance(raw_observation, dict) else frozenset()
+        )
+        if (
+            not isinstance(raw_observation, dict)
+            or raw_observation_keys
+            != frozenset(expected_observation_keys)
+            or raw_observation.get("scope_key") != scope.key
+        ):
+            raise ValueError("observation fields")
+        observation_values = dict(raw_observation)
+        observation_values.pop("scope_key")
+        observation_values["scope"] = scope
+        raw_fills = observation_values.get("fills")
+        if type(raw_fills) is not list:
+            raise ValueError("fill facts")
+        fill_keys = {item.name for item in fields(OrderFillFact)}
+        decimal_fill_fields = {"quantity", "price", "fee_amount"}
+        fills: list[OrderFillFact] = []
+        for raw_fill in raw_fills:
+            if not isinstance(raw_fill, dict) or set(raw_fill) != fill_keys:
+                raise ValueError("fill fact fields")
+            values = dict(raw_fill)
+            for name in decimal_fill_fields:
+                values[name] = Decimal(str(values[name]))
+            fills.append(OrderFillFact(**values))
+        observation_values["fills"] = tuple(fills)
+        observation_values["state"] = OrderExposureState(observation_values["state"])
+        decimal_observation_fields = {
+            "requested_quantity",
+            "cumulative_filled_quantity",
+            "leaves_quantity",
+            "filled_gross_notional",
+            "leaves_gross_notional",
+            "instrument_multiplier",
+        }
+        for name in decimal_observation_fields:
+            observation_values[name] = Decimal(str(observation_values[name]))
+        for name in ("leaves_valuation_price", "fx_rate"):
+            value = observation_values[name]
+            observation_values[name] = None if value is None else Decimal(str(value))
+        observation = OrderExposureObservationProof(**observation_values)
+        proof = DispatchExposureResolutionProof(
+            claim=claim,
+            evidence_class=DispatchEvidenceClass(payload["evidence_class"]),
+            dispatch_attempt_count=payload["dispatch_attempt_count"],
+            reconciliation_evidence_sha256=payload[
+                "reconciliation_evidence_sha256"
+            ],
+            observation=observation,
+        )
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_PAYLOAD_INVALID") from None
+    if (
+        proof.fingerprint != payload.get("proof_sha256")
+        or proof.observation.fingerprint != payload.get("exposure_proof_sha256")
+    ):
+        raise RiskOrderJournalError("TERMINAL_CLOSE_PROOF_DIGEST_MISMATCH")
+    return proof
+
+
+def _terminal_exposure_source_projection(
+    command: RiskOrderCommand,
+    command_row: sqlite3.Row,
+    events: tuple[RiskOrderJournalEvent, ...],
+    current_fence: RiskOrderWriterFence,
+) -> tuple[
+    RiskOrderCommand,
+    tuple[RiskOrderJournalEvent, ...],
+    RiskOrderWriterFence,
+    RiskOrderJournalEvent | None,
+]:
+    """Project immutable first-terminal source events across later writer leases.
+
+    The provider observations are written under one lease. Recovery can append
+    one UNKNOWN under that same lease and a later owner can append the durable
+    ACK after re-attesting the persisted proof. The source rows must remain on
+    their original fence; only a final ACK may carry a newer, valid fence.
+    """
+
+    if type(command) is not RiskOrderCommand or type(current_fence) is not RiskOrderWriterFence:
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+    if not events:
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+    ack_event = events[-1] if events[-1].event_type == "ACKED_TRACKED" else None
+    source_events = events[:-1] if ack_event is not None else events
+    if not source_events:
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+    origin = source_events[0]
+    source_fence = RiskOrderWriterFence(
+        current_fence.scope,
+        origin.writer_owner_id,
+        origin.writer_fencing_token,
+        origin.writer_fence_sha256,
+    )
+    if (
+        source_fence.fence_sha256
+        != _fence_digest(source_fence.scope, source_fence.owner_id, source_fence.fencing_token)
+        or source_fence.fencing_token > current_fence.fencing_token
+        or (
+            source_fence.fencing_token == current_fence.fencing_token
+            and (
+                source_fence.owner_id != current_fence.owner_id
+                or source_fence.fence_sha256 != current_fence.fence_sha256
+            )
+        )
+        or any(
+            event.writer_owner_id != source_fence.owner_id
+            or event.writer_fencing_token != source_fence.fencing_token
+            or event.writer_fence_sha256 != source_fence.fence_sha256
+            for event in source_events
+        )
+    ):
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+    if ack_event is not None:
+        if (
+            ack_event.event_type != "ACKED_TRACKED"
+            or ack_event.writer_fence_sha256
+            != _fence_digest(
+                current_fence.scope,
+                ack_event.writer_owner_id,
+                ack_event.writer_fencing_token,
+            )
+            or ack_event.writer_fencing_token < source_fence.fencing_token
+            or ack_event.writer_fencing_token > current_fence.fencing_token
+            or (
+                ack_event.writer_fencing_token == source_fence.fencing_token
+                and (
+                    ack_event.writer_owner_id != source_fence.owner_id
+                    or ack_event.writer_fence_sha256 != source_fence.fence_sha256
+                )
+            )
+            or (
+                ack_event.writer_fencing_token == current_fence.fencing_token
+                and (
+                    ack_event.writer_owner_id != current_fence.owner_id
+                    or ack_event.writer_fence_sha256 != current_fence.fence_sha256
+                )
+            )
+            or command.state != "ACKED_TRACKED"
+            or command.latest_revision != ack_event.revision
+            or command.latest_record_sha256 != ack_event.record_sha256
+            or command.updated_at_ns != ack_event.payload.get("updated_at_ns")
+            or dict(command.latest_event) != dict(ack_event.payload)
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_ACK_FENCE_INVALID")
+    latest_source_event = source_events[-1]
+    source_command = replace(
+        command,
+        updated_at_ns=latest_source_event.payload.get("updated_at_ns"),
+        state=latest_source_event.event_type,
+        latest_revision=latest_source_event.revision,
+        latest_record_sha256=latest_source_event.record_sha256,
+        latest_event=latest_source_event.payload,
+    )
+    return source_command, source_events, source_fence, ack_event

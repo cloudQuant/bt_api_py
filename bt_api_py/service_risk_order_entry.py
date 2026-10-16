@@ -26,6 +26,7 @@ from bt_api_risk import (
     DispatchClaimBinding,
     DispatchEvidenceClass,
     DispatchExposureResolutionProof,
+    DispatchExposureResolutionReceipt,
     DispatchExposureResolutionReceiptStatus,
     DispatchResolutionReceipt,
     DispatchResolutionReceiptStatus,
@@ -376,13 +377,15 @@ class RiskBtApiProviderContract:
             )
         ):
             raise RiskOrderEntryError("PROVIDER_CONTRACT_INVALID")
-        for name, expected in (
-            ("supported_order_types", ("LIMIT",)),
-            ("supported_position_effects", ("OPEN",)),
-        ):
+        for name, expected in (("supported_order_types", ("LIMIT",)),):
             value = getattr(self, name)
             if type(value) is not tuple or value != expected:
                 raise RiskOrderEntryError("PROVIDER_ORDER_CAPABILITY_UNSUPPORTED")
+        if (
+            type(self.supported_position_effects) is not tuple
+            or self.supported_position_effects not in (("OPEN",), ("OPEN", "CLOSE"))
+        ):
+            raise RiskOrderEntryError("PROVIDER_ORDER_CAPABILITY_UNSUPPORTED")
         if (
             type(self.supported_time_in_force) is not tuple
             or self.supported_time_in_force not in _SUPPORTED_PROVIDER_TIME_IN_FORCE
@@ -570,6 +573,7 @@ class RiskBtApiProviderContract:
 
 class _PositionEffect(StrEnum):
     OPEN = "OPEN"
+    CLOSE = "CLOSE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -811,6 +815,23 @@ class RiskOrderEntryService:
                         # query records are read history, not interrupted dispatch
                         # proof to replay during service startup.
                         continue
+                    if command.canonical_payload.get("position_effect", "OPEN") == "CLOSE":
+                        # A terminal CLOSE source proof is committed separately
+                        # from Risk's position resolution and journal ACK. On a
+                        # cold owner restart, replay that exact source-bound
+                        # proof before generic interrupted-claim recovery can
+                        # append another UNKNOWN under a new writer fence. That
+                        # extra event would make the immutable source suffix
+                        # unrecoverable. Missing/invalid proof remains UNKNOWN;
+                        # this path never contacts the provider.
+                        handled, recovered_close = self._recover_persisted_terminal_close(
+                            fence,
+                            command,
+                            target=target,
+                        )
+                        if handled:
+                            recovered.append(recovered_close)
+                            continue
                     try:
                         has_proof_ready = self._journal.has_proof_ready_history(
                             fence,
@@ -867,20 +888,14 @@ class RiskOrderEntryService:
         if not _has_exact_argument_fields(arguments, _ORDER_FIELDS):
             return _reply(False, "INVALID_REQUEST", {"found": False, "record": None})
         try:
-            parsed = _parse_order(arguments, target, scope=scope, principal_ref=principal_ref)
+            parsed = _parse_order(
+                arguments, target, contract=contract, scope=scope, principal_ref=principal_ref
+            )
         except RiskOrderEntryError as error:
-            code = error.code
-            if code == "METADATA_VERSION_MISMATCH":
-                code = "METADATA_VERSION_MISMATCH"
-            return _reply(False, code, {"found": False, "record": None})
-
+            return _reply(False, error.code, {"found": False, "record": None})
         with self._journal.writer_fence(target.account_scope) as fence:
             command, created = self._prepare_command(
-                fence,
-                principal_ref=principal_ref,
-                scope=scope,
-                target=target,
-                parsed=parsed,
+                fence, principal_ref=principal_ref, scope=scope, target=target, parsed=parsed
             )
             if not created:
                 command = self._resolve_duplicate(
@@ -934,8 +949,9 @@ class RiskOrderEntryService:
             client_order_id=parsed["client_order_id"],
             price=parsed["price"],
             time_in_force="GTC",
-            reduce_only=False,
+            reduce_only=bool(parsed["reduce_only"]),
             idempotency_key=parsed["client_order_id"],
+            **({} if parsed["quantity_unit"] is None else {"quantity_unit": parsed["quantity_unit"]}),
         )
         order_request = request.to_dict()
         order_request_sha256 = sha256_text(
@@ -1054,6 +1070,19 @@ class RiskOrderEntryService:
                 )
             )
         except Exception:
+            pass
+        try:
+            receipt = self._gate.dispatch_close_resolution_receipt(command.permit_id)
+            return (
+                receipt.status is DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED
+                and self._journal.has_resolved_terminal_exposure_history(
+                    fence,
+                    principal_ref=command.principal_ref,
+                    intent_id=command.intent_id,
+                    receipt=receipt,
+                )
+            )
+        except Exception:
             return False
 
     def _resolved_claim_for_query(
@@ -1099,6 +1128,25 @@ class RiskOrderEntryService:
             raise RiskOrderEntryError("ACKED_RISK_RECEIPT_INVALID") from error
         if (
             receipt.status is DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
+            and receipt.dispatch_latch_active is False
+            and receipt.claim.scope == command.scope
+            and receipt.claim.permit_id == permit_id
+            and receipt.claim.intent_id == command.risk_intent_id
+            and self._journal.has_resolved_terminal_exposure_history(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+                receipt=receipt,
+            )
+        ):
+            return receipt.claim
+
+        try:
+            receipt = self._gate.dispatch_close_resolution_receipt(permit_id)
+        except PermitInvalidError as error:
+            raise RiskOrderEntryError("ACKED_RISK_RECEIPT_INVALID") from error
+        if (
+            receipt.status is DispatchExposureResolutionReceiptStatus.TERMINAL_CLOSE_RESOLVED
             and receipt.dispatch_latch_active is False
             and receipt.claim.scope == command.scope
             and receipt.claim.permit_id == permit_id
@@ -1583,6 +1631,37 @@ class RiskOrderEntryService:
                 reason="OBSERVATION_JOURNAL_UNCERTAIN",
             )
 
+        if command.canonical_payload.get("position_effect", "OPEN") == "CLOSE":
+            close_filled = (
+                order_observation.get("exposure_state") == OrderExposureState.FILLED.value
+                and Decimal(str(fill_observation.get("filled_quantity", "0")))
+                == request.quantity
+                and Decimal(str(order_observation.get("filled_quantity", "0")))
+                == request.quantity
+            )
+            if allow_resolution and contract.exposure_ready and close_filled:
+                return self._resolve_terminal_exposure(
+                    fence,
+                    command,
+                    target=target,
+                    admission=admission,
+                    contract=contract,
+                    claim=claim,
+                    request=request,
+                    order=order,
+                    fills=fills,
+                    order_event=order_event,
+                    fill_event=fill_event,
+                    reconciliation_sha=reconciliation_sha,
+                )
+            return self._settle_and_unknown(
+                fence,
+                command,
+                admission=admission,
+                claim=claim,
+                reason="CLOSE_TERMINAL_FULL_FILL_UNPROVEN",
+            )
+
         if not _is_complete_open_zero_fill(order, fills, order_observation, fill_observation):
             if (
                 allow_resolution
@@ -1706,17 +1785,6 @@ class RiskOrderEntryService:
 
         try:
             admission.ensure_settled(claim.permit_id)
-            exposure_id, exposure_sha = self._journal.store_terminal_exposure_reference(
-                fence,
-                principal_ref=command.principal_ref,
-                intent_id=command.intent_id,
-                claim=claim,
-                provider_order_id=str(order["order_id"]),
-                accepted_request_sha256=command.order_request_sha256,
-                order_event=order_event,
-                fill_event=fill_event,
-                reconciliation_evidence_sha256=reconciliation_sha,
-            )
             facts = _v2_order_facts(
                 order,
                 fills,
@@ -1724,31 +1792,65 @@ class RiskOrderEntryService:
                 request=request,
                 contract=contract,
             )
-            observation = _order_exposure_proof(
-                command,
-                target=target,
-                contract=contract,
-                claim=claim,
-                facts=facts,
-                order_payload=order_event.payload,
-                fill_payload=fill_event.payload,
-                journal_revision=fill_event.revision,
-                journal_record_sha256=fill_event.record_sha256,
-                exposure_reservation_id=exposure_id,
-                exposure_reservation_sha256=exposure_sha,
-                writer_owner_id=fence.owner_id,
-                writer_fencing_token=fence.fencing_token,
-                writer_fence_sha256=fence.fence_sha256,
-                dispatch_proof_sha256=None,
-            )
-            proof = DispatchExposureResolutionProof(
-                claim=claim,
-                evidence_class=_evidence_class(claim.scope),
-                dispatch_attempt_count=1,
-                reconciliation_evidence_sha256=reconciliation_sha,
-                observation=observation,
-            )
-            receipt = admission.resolve_dispatch_exposure(proof)
+
+            def make_resolution_proof(
+                exposure_id: str, exposure_sha: str
+            ) -> DispatchExposureResolutionProof:
+                observation = _order_exposure_proof(
+                    command,
+                    target=target,
+                    contract=contract,
+                    claim=claim,
+                    facts=facts,
+                    order_payload=order_event.payload,
+                    fill_payload=fill_event.payload,
+                    journal_revision=fill_event.revision,
+                    journal_record_sha256=fill_event.record_sha256,
+                    exposure_reservation_id=exposure_id,
+                    exposure_reservation_sha256=exposure_sha,
+                    writer_owner_id=fence.owner_id,
+                    writer_fencing_token=fence.fencing_token,
+                    writer_fence_sha256=fence.fence_sha256,
+                    dispatch_proof_sha256=None,
+                )
+                return DispatchExposureResolutionProof(
+                    claim=claim,
+                    evidence_class=_evidence_class(claim.scope),
+                    dispatch_attempt_count=1,
+                    reconciliation_evidence_sha256=reconciliation_sha,
+                    observation=observation,
+                )
+
+            if command.canonical_payload.get("position_effect", "OPEN") == "CLOSE":
+                exposure_id, exposure_sha, proof = (
+                    self._journal.store_terminal_close_resolution_source(
+                        fence,
+                        principal_ref=command.principal_ref,
+                        intent_id=command.intent_id,
+                        claim=claim,
+                        provider_order_id=str(order["order_id"]),
+                        accepted_request_sha256=command.order_request_sha256,
+                        order_event=order_event,
+                        fill_event=fill_event,
+                        reconciliation_evidence_sha256=reconciliation_sha,
+                        proof_factory=make_resolution_proof,
+                    )
+                )
+                receipt = admission.resolve_dispatch_close(proof)
+            else:
+                exposure_id, exposure_sha = self._journal.store_terminal_exposure_reference(
+                    fence,
+                    principal_ref=command.principal_ref,
+                    intent_id=command.intent_id,
+                    claim=claim,
+                    provider_order_id=str(order["order_id"]),
+                    accepted_request_sha256=command.order_request_sha256,
+                    order_event=order_event,
+                    fill_event=fill_event,
+                    reconciliation_evidence_sha256=reconciliation_sha,
+                )
+                proof = make_resolution_proof(exposure_id, exposure_sha)
+                receipt = admission.resolve_dispatch_exposure(proof)
             self._journal.append_terminal_exposure_ack(
                 fence,
                 principal_ref=command.principal_ref,
@@ -1802,6 +1904,25 @@ class RiskOrderEntryService:
             )
             if command.state == "PREPARED":
                 return _command_reply(command, target.account_scope)
+            if (
+                command.state == "FILL_OBSERVATION"
+                and command.canonical_payload.get("position_effect", "OPEN") == "CLOSE"
+            ):
+                handled, recovered = self._recover_persisted_terminal_close(
+                    fence, command, target=target
+                )
+                if not handled:
+                    # A process may stop after persisting the complete source
+                    # fill but before the atomic close-reference/proof write.
+                    # Keep that observed state query-only; do not invent a new
+                    # provider observation to replace it.
+                    recovered = (
+                        self._journal.get_command(
+                            target.account_scope, principal_ref, intent_id
+                        )
+                        or command
+                    )
+                return _command_reply(recovered, target.account_scope)
             has_resolved_ack = command.state in {
                 "ACKED_TRACKED",
                 "PROVIDER_QUERY",
@@ -2021,6 +2142,12 @@ class RiskOrderEntryService:
     ) -> RiskOrderCommand:
         if command.permit_id is None:
             return command
+        if command.canonical_payload.get("position_effect", "OPEN") == "CLOSE":
+            handled, recovered = self._recover_persisted_terminal_close(
+                fence, command, target=target
+            )
+            if handled:
+                return recovered
         try:
             claim = self._gate.dispatch_claim_binding(command.permit_id)
             admission = self._admission_for_scope(target)
@@ -2183,7 +2310,9 @@ class RiskOrderEntryService:
             instrument=request.symbol,
             quantity=request.quantity,
             price=request.price or Decimal(0),
-            position_effect=_PositionEffect.OPEN,
+            position_effect=_PositionEffect(
+                str(command.canonical_payload.get("position_effect", ""))
+            ),
             metadata_version=str(command.canonical_payload["metadata_version"]),
             tags=MappingProxyType({INSTRUMENT_METADATA_DIGEST_TAG: metadata.digest}),
             payload_sha256=payload_sha256,
@@ -2214,39 +2343,96 @@ class RiskOrderEntryService:
                 return self._admission[scope]
         raise RiskOrderEntryError("RISK_ORDER_ACCOUNT_NOT_CONFIGURED")
 
+    def _recover_persisted_terminal_close(
+        self,
+        fence: RiskOrderWriterFence,
+        command: RiskOrderCommand,
+        *,
+        target: RiskOrderTarget,
+    ) -> tuple[bool, RiskOrderCommand]:
+        """Resolve a persisted exact CLOSE proof and append its ACK without provider I/O."""
+
+        try:
+            proof = self._journal.load_terminal_close_resolution_proof(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+            )
+        except Exception:
+            # A stored proof that fails source/readback checks is not permission
+            # to take another provider observation.
+            latest = self._journal.get_command(
+                target.account_scope, command.principal_ref, command.intent_id
+            )
+            return True, latest or command
+        if proof is None:
+            return False, command
+        try:
+            if command.permit_id is None or proof.claim.permit_id != command.permit_id:
+                raise RiskOrderEntryError("TERMINAL_CLOSE_PERMIT_MISMATCH")
+            admission = self._admission_for_scope(target)
+            # Risk resolution validates the settled reservation itself.  Do
+            # not require an active latch here: an earlier exact resolution
+            # may already have committed while the journal ACK was lost.
+            receipt = admission.resolve_dispatch_close(proof)
+            self._journal.append_terminal_exposure_ack(
+                fence,
+                principal_ref=command.principal_ref,
+                intent_id=command.intent_id,
+                receipt=receipt,
+                proof=proof,
+            )
+        except Exception:
+            # Keep the original source and proof for another read-only retry.
+            latest = self._journal.get_command(
+                target.account_scope, command.principal_ref, command.intent_id
+            )
+            return True, latest or command
+        latest = self._journal.get_command(
+            target.account_scope, command.principal_ref, command.intent_id
+        )
+        return True, latest or command
+
 
 def _parse_order(
     arguments: Mapping[str, Any],
     target: RiskOrderTarget,
     *,
+    contract: RiskBtApiProviderContract,
     scope: WireScope,
     principal_ref: str,
 ) -> dict[str, Any]:
     for name in ("intent_id", "signal_id", "instrument", "metadata_version"):
         if type(arguments.get(name)) is not str or not _REFERENCE.fullmatch(arguments[name]):
             raise RiskOrderEntryError("INVALID_REQUEST")
-    if type(arguments["position_effect"]) is not str or arguments["position_effect"] != "OPEN":
-        raise RiskOrderEntryError("OPEN_ORDERS_ONLY")
+    effect = arguments.get("position_effect")
     if (
-        type(arguments["order_type"]) is not str
-        or type(arguments["time_in_force"]) is not str
+        type(effect) is not str
+        or effect not in {"OPEN", "CLOSE"}
+        or effect not in contract.supported_position_effects
+    ):
+        raise RiskOrderEntryError("POSITION_EFFECT_UNSUPPORTED")
+    if (
+        type(arguments.get("order_type")) is not str
+        or type(arguments.get("time_in_force")) is not str
         or arguments["order_type"] != "LIMIT"
         or arguments["time_in_force"] != "GTC"
     ):
         raise RiskOrderEntryError("LIMIT_GTC_ONLY")
-    if type(arguments["side"]) is not str or arguments["side"] not in {"BUY", "SELL"}:
+    if type(arguments.get("side")) is not str or arguments["side"] not in {"BUY", "SELL"}:
         raise RiskOrderEntryError("INVALID_REQUEST")
-    if arguments["reduce_only"] is not False:
-        raise RiskOrderEntryError("OPEN_ORDERS_ONLY")
-    if not isinstance(arguments["tags"], Mapping) or arguments["tags"]:
+    reduce_only = effect == "CLOSE"
+    if arguments.get("reduce_only") is not reduce_only:
+        raise RiskOrderEntryError("POSITION_EFFECT_REDUCE_ONLY_MISMATCH")
+    if not isinstance(arguments.get("tags"), Mapping) or arguments["tags"]:
         raise RiskOrderEntryError("CLIENT_TAGS_UNSUPPORTED")
-    deadline = arguments["deadline_ns"]
+    deadline = arguments.get("deadline_ns")
     if deadline is not None and (type(deadline) is not int or deadline <= 0):
         raise RiskOrderEntryError("INVALID_REQUEST")
     if deadline is not None and time.time_ns() >= deadline:
         raise RiskOrderEntryError("DEADLINE_EXPIRED")
-    quantity = _positive_decimal(arguments["quantity"], "INVALID_REQUEST")
-    price = _positive_decimal(arguments["price"], "INVALID_REQUEST")
+    quantity = _positive_decimal(arguments.get("quantity"), "INVALID_REQUEST")
+    price = _positive_decimal(arguments.get("price"), "INVALID_REQUEST")
     metadata = target.registry.get(arguments["instrument"])
     if metadata is None:
         raise RiskOrderEntryError("INSTRUMENT_METADATA_UNREGISTERED")
@@ -2274,23 +2460,31 @@ def _parse_order(
         "intent_id": arguments["intent_id"],
         "metadata_version": arguments["metadata_version"],
         "order_type": "LIMIT",
-        "position_effect": "OPEN",
+        "position_effect": effect,
         "price": _decimal_text(price),
         "quantity": _decimal_text(quantity),
-        "reduce_only": False,
+        "reduce_only": reduce_only,
         "side": arguments["side"],
         "signal_id": arguments["signal_id"],
         "tags": {},
         "time_in_force": "GTC",
     }
+    # Close quantity is transported in base units; Risk independently binds
+    # the trusted instrument quantity unit and closable allocation.
+    quantity_unit = "base" if reduce_only else None
+    if quantity_unit is not None:
+        canonical_payload["quantity_unit"] = quantity_unit
     return {
         "canonical_payload": canonical_payload,
         "client_order_id": client_order_id,
         "intent_id": arguments["intent_id"],
         "instrument": arguments["instrument"],
         "metadata_version": arguments["metadata_version"],
+        "position_effect": effect,
         "price": price,
         "quantity": quantity,
+        "quantity_unit": quantity_unit,
+        "reduce_only": reduce_only,
         "side": arguments["side"],
     }
 
@@ -2556,13 +2750,20 @@ def _verify_observation_digest(value: Mapping[str, Any]) -> None:
 def _validate_recovery_observation_fields(
     order: Mapping[str, Any], fills: Mapping[str, Any]
 ) -> None:
+    order_keys=frozenset(order)
+    fill_keys=frozenset(fills)
+    close_order=_RECOVERY_ORDER_OBSERVATION_FIELDS | {"position_effect", "reduce_only"}
+    close_fill=_RECOVERY_FILL_OBSERVATION_FIELDS | {"position_effect"}
     if (
-        set(order) != _RECOVERY_ORDER_OBSERVATION_FIELDS
-        or set(fills) != _RECOVERY_FILL_OBSERVATION_FIELDS
-        or type(order.get("updated_at_ns")) is not int
-        or order.get("updated_at_ns") <= 0
-        or type(fills.get("updated_at_ns")) is not int
-        or fills.get("updated_at_ns") <= 0
+        not (
+            (order_keys == _RECOVERY_ORDER_OBSERVATION_FIELDS and fill_keys == _RECOVERY_FILL_OBSERVATION_FIELDS)
+            or (order_keys == close_order and fill_keys == close_fill
+                and order.get("position_effect") == "CLOSE"
+                and order.get("reduce_only") is True
+                and fills.get("position_effect") == "CLOSE")
+        )
+        or type(order.get("updated_at_ns")) is not int or order["updated_at_ns"] <= 0
+        or type(fills.get("updated_at_ns")) is not int or fills["updated_at_ns"] <= 0
     ):
         raise RiskOrderEntryError("RECOVERY_PROVIDER_OBSERVATION_INVALID")
 
@@ -2625,6 +2826,8 @@ def _validate_recovery_observation_source(
         price = Decimal(str(command.canonical_payload["price"]))
     except (KeyError, TypeError, ValueError, InvalidOperation):
         raise RiskOrderEntryError("RECOVERY_REQUEST_INVALID") from None
+    position_effect = command.canonical_payload.get("position_effect")
+    expected_reduce_only = position_effect == "CLOSE"
     if (
         request.symbol != metadata.instrument
         or request.account_id != target.provider_account_id
@@ -2633,13 +2836,14 @@ def _validate_recovery_observation_source(
         or request.side.value.upper() != command.canonical_payload.get("side")
         or request.order_type.value != "limit"
         or request.time_in_force != "GTC"
-        or request.reduce_only is not False
+        or position_effect not in {"OPEN", "CLOSE"}
+        or position_effect not in contract.supported_position_effects
+        or request.reduce_only is not expected_reduce_only
         or request.quantity != quantity
         or request.price != price
-        or command.canonical_payload.get("position_effect") != "OPEN"
         or command.canonical_payload.get("order_type") != "LIMIT"
         or command.canonical_payload.get("time_in_force") != "GTC"
-        or command.canonical_payload.get("reduce_only") is not False
+        or command.canonical_payload.get("reduce_only") is not expected_reduce_only
         or command.canonical_payload.get("tags") != {}
     ):
         raise RiskOrderEntryError("RECOVERY_REQUEST_INVALID")
@@ -2681,6 +2885,17 @@ def _validate_recovery_observation_source(
     order = dict(source.order_observation_event.payload)
     fills = dict(source.fill_observation_event.payload)
     _validate_recovery_observation_fields(order, fills)
+    if position_effect == "CLOSE":
+        if (
+            request.quantity_unit != "base"
+            or command.canonical_payload.get("quantity_unit") != "base"
+            or order.get("position_effect") != "CLOSE"
+            or order.get("reduce_only") is not True
+            or fills.get("position_effect") != "CLOSE"
+        ):
+            raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
+    elif any(key in order or key in fills for key in ("position_effect", "reduce_only")):
+        raise RiskOrderEntryError("RECOVERY_POSITION_EFFECT_MISMATCH")
     _verify_observation_digest(order)
     _verify_observation_digest(fills)
     if (
@@ -2872,6 +3087,8 @@ def _v2_order_facts(
 
     if not contract.exposure_ready:
         raise RiskOrderEntryError("PROVIDER_EXPOSURE_CONTRACT_UNAVAILABLE")
+    if type(order) is not NormalizedRecord or type(fills) is not NormalizedRecords:
+        raise RiskOrderEntryError("PROVIDER_EXPOSURE_OBSERVATION_INCOMPLETE")
     order_prov = _validate_provenance_snapshot(
         getattr(order, "normalization_provenance", None), "query_order"
     )
@@ -2905,15 +3122,19 @@ def _v2_order_facts(
         "unknown": OrderExposureState.UNKNOWN,
     }
     exposure_state = states.get(status or "", OrderExposureState.UNKNOWN)
+    position_effect = command.canonical_payload.get("position_effect", "OPEN")
     if (
-        type(order) is not NormalizedRecord
-        or type(fills) is not NormalizedRecords
-        or order.get("execution_unknown") is not False
+        order.get("execution_unknown") is not False
         or str(order.get("status")) != status
         or fills.source_alignment_valid is not True
         or len(fills.row_provenance) != len(fills)
         or not contract.complete_order_snapshot
         or not contract.complete_fill_history
+        or position_effect not in {"OPEN", "CLOSE"}
+        or position_effect not in contract.supported_position_effects
+        or command.canonical_payload.get("reduce_only", position_effect == "CLOSE")
+        is not (position_effect == "CLOSE")
+        or request.reduce_only is not (position_effect == "CLOSE")
     ):
         raise RiskOrderEntryError("PROVIDER_EXPOSURE_OBSERVATION_INCOMPLETE")
     raw_filled = _field_value(order_prov, "filled_quantity")
@@ -2947,123 +3168,14 @@ def _v2_order_facts(
     ):
         raw_prov = _validate_provenance_snapshot(raw_prov_value, "get_deals")
         values = raw_prov["source_values"]
-        trade_id = _first_source_value(values, ("trade_id", "fill_id", "deal_id", "tradeId", "id", "TradeID"))
-        provider_order_id = _first_source_value(
-            values, ("order_id", "external_order_id", "orderId", "ordId", "OrderSysID")
-        )
-        client_order_id = _first_source_value(
-            values, ("client_order_id", "clOrdId", "OrderRef")
-        )
-        account_id = _first_source_value(values, ("account_id", "AccountID", "InvestorID"))
-        instrument = _first_source_value(
-            values,
-            ("symbol", "symbol_name", "instrument", "instrument_id", "data_name", "instId", "InstrumentID", "trade_symbol"),
-        )
-        side_raw = _first_source_value(values, ("side", "order_side", "trade_side", "S"))
-        quantity_raw = _first_source_value(
-            values, ("quantity", "size", "trade_volume", "qty", "fillSz", "volume", "Volume")
-        )
-        price_raw = _first_source_value(
-            values, ("trade_price", "price", "fillPx", "Price")
-        )
-        revision = values.get(contract.fill_revision_field)
-        fee_raw = values.get(contract.fee_amount_field)
-        fee_currency = values.get(contract.fee_currency_field)
-        if (
-            type(trade_id) is not str
-            or not trade_id
-            or type(revision) is not int
-            or revision <= 0
-            or revision > fill_watermark
-            or str(provider_order_id) != str(order.get("order_id"))
-            or str(client_order_id) != command.client_order_id
-            or str(account_id) != command.provider_account_id
-            or str(instrument) != request.symbol
-            or str(side_raw).upper() != request.side.value.upper()
-            or type(fee_currency) is not str
-            or not fee_currency
-        ):
-            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_UNVERIFIED")
-        try:
-            fill_quantity = Decimal(str(quantity_raw))
-            fill_price = Decimal(str(price_raw))
-            fee_amount = Decimal(str(fee_raw))
-            normalized_fee = Decimal(str(normalized.get("fee")))
-        except (InvalidOperation, TypeError, ValueError):
-            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_INVALID") from None
-        if (
-            not fill_quantity.is_finite()
-            or fill_quantity <= 0
-            or not fill_price.is_finite()
-            or fill_price <= 0
-            or not fee_amount.is_finite()
-            or not normalized_fee.is_finite()
-            or normalized_fee != fee_amount
-            or str(normalized.get("trade_id")) != trade_id
-            or str(normalized.get("order_id")) != str(provider_order_id)
-            or str(normalized.get("client_order_id")) != command.client_order_id
-            or str(normalized.get("account_id")) != command.provider_account_id
-            or str(normalized.get("symbol")) != request.symbol
-            or str(normalized.get("side")).upper() != request.side.value.upper()
-            or str(normalized.get("fee_currency")).upper() != fee_currency.upper()
-        ):
-            raise RiskOrderEntryError("PROVIDER_FILL_SOURCE_MISMATCH")
-        # The row identity must survive a later observation with a newer
-        # envelope watermark.  The full provider-observation digest below
-        # continues to bind each envelope; this digest binds the immutable
-        # explicit source row only, so previously observed fills remain the
-        # same facts when another fill is appended.
-        digest = _fill_source_record_sha256(raw_prov)
-        fill_facts.append(
-            OrderFillFact(
-                trade_id=trade_id,
-                quantity=fill_quantity,
-                price=fill_price,
-                side=request.side.value.upper(),
-                position_effect="OPEN",
-                fee_amount=fee_amount,
-                fee_currency=fee_currency.upper(),
-                source_record_sha256=digest,
-                source_revision=revision,
-            )
-        )
-        fill_rows.append(
-            {
-                "normalization_provenance": raw_prov,
-                "record": {
-                    **_safe_normalized_fill(normalized),
-                    "source_record_sha256": digest,
-                    "source_revision": revision,
-                },
-                "source_revision": revision,
-            }
-        )
-    fill_tuple = tuple(sorted(fill_facts, key=lambda item: item.trade_id))
-    fill_qty = sum((item.quantity for item in fill_tuple), Decimal(0))
-    if fill_qty != filled or len({item.trade_id for item in fill_tuple}) != len(fill_tuple):
-        raise RiskOrderEntryError("PROVIDER_FILL_HISTORY_MISMATCH")
-    if exposure_state is OrderExposureState.ACKED and filled != 0:
-        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
-    if exposure_state is OrderExposureState.PARTIALLY_FILLED and not (
-        0 < filled < quantity
-    ):
-        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
-    if exposure_state is OrderExposureState.FILLED and filled != quantity:
-        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
-    if exposure_state is OrderExposureState.CANCELLED and filled > quantity:
-        raise RiskOrderEntryError("PROVIDER_ORDER_STATE_MISMATCH")
-    leaves = (
-        quantity - filled
-        if exposure_state in {OrderExposureState.ACKED, OrderExposureState.PARTIALLY_FILLED}
-        else Decimal(0)
-    )
-    return {
+        return {
         "fill_facts": fill_tuple,
         "fill_rows": fill_rows,
         "fill_watermark_revision": fill_watermark,
         "filled_quantity": filled,
         "leaves_quantity": leaves,
         "order_revision": order_revision,
+        "position_effect": position_effect,
         "valuation_price": source_price,
         "state": exposure_state,
     }
@@ -3301,6 +3413,10 @@ def _observation_payloads(
         ),
         "trade_count": len(fills) if v2_facts is not None else 0,
     }
+    if command.canonical_payload.get("position_effect", "OPEN") == "CLOSE":
+        order_observation["position_effect"] = "CLOSE"
+        order_observation["reduce_only"] = True
+        fill_observation["position_effect"] = "CLOSE"
     if v2_facts is not None:
         fill_observation["fill_row_provenance"] = [
             item["normalization_provenance"] for item in v2_facts["fill_rows"]
@@ -3644,7 +3760,7 @@ def _order_exposure_proof(
         provider_profile_version=contract.profile_id,
         normalizer_schema_version=contract.normalizer_schema,
         order_side=request.side.value.upper(),
-        position_effect="OPEN",
+        position_effect=str(facts.get("position_effect", "OPEN")),
         fills=tuple(facts["fill_facts"]),
         fill_trade_count=len(facts["fill_facts"]),
         fill_ids_sha256=fill_ids_sha256(tuple(facts["fill_facts"])),

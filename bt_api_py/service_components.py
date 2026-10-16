@@ -1666,7 +1666,10 @@ def build_component(
                             and type(record.principal_ref) is str
                             and bool(record.principal_ref)
                             and isinstance(record.latest_event, Mapping)
-                            and record.latest_event.get("public_state") == record.state
+                            and (
+                                (record.state == "UNKNOWN" and record.latest_event.get("public_state") == "UNKNOWN")
+                                or (record.state == "ACKED_TRACKED" and record.latest_event.get("public_state") in {"ACKED_TRACKED", "FILLED", "CANCELLED"})
+                            )
                             and (
                                 record.state == "UNKNOWN"
                                 or (
