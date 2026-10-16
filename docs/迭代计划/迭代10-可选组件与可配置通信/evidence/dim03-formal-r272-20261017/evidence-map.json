@@ -1,0 +1,200 @@
+{
+  "schema": "iteration10-dim03-formal-evidence-closure-v1",
+  "created_local_date": "2026-10-17",
+  "purpose": "Root adjudication input; not a formal tracker update or acceptance decision.",
+  "formal_dim03_pass_added": false,
+  "formal_pass_count_changed": false,
+  "plan_clause": {
+    "path": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md",
+    "line": 775,
+    "text": "多品种/产品竞争同一保证金池，策略及合约集中度，FX/Greeks 缺失或过期，过滤快照不误作全账户；两个 AccountKey 共享抵押品且无单一准入 owner 时拒绝写入。"
+  },
+  "clause_mapping": [
+    {
+      "requirement": "Margin-pool limit applies atomically to single and vector reservations; shared pool credit is not duplicated and separate pools remain independent.",
+      "rounds": ["R167", "R217", "R223"],
+      "evidence": [
+        {
+          "round": "R167",
+          "scope": "Risk DurableRiskGate / SQLite margin-pool limits; 114 fixed-source tests passed, including the seven new reservation nodes.",
+          "record": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-margin-pool-reservation-20261016/root-adjudication.md",
+          "record_sha256": "333743565c36d78cbcbfd2a9ff0f6a6f6f1fc89d07c731c95993de74a9beb8d6",
+          "result": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-margin-pool-reservation-20261016/qa/result.json",
+          "result_sha256": "7826dd8fae8574fd2497faff89118cca0cf9f431a0734678b976bf70736b05fe",
+          "evidence_level": "FIXED_SOURCE_MARGIN_POOL_RESERVATION_LIMITS_UNITS_WITH_RACE_SCENARIO_ONLY"
+        },
+        {
+          "round": "R217",
+          "scope": "Seven unique core cases across two runs; cross-scope/product ACTIVE, SETTLED and UNKNOWN aggregation, revision binding, no double counting, and REDUCE/CANCEL/terminal-release compatibility. The R1 fixture error is preserved; only that failed node was rerun in R2.",
+          "risk_commit": "71be56e29f867a5a5aaac60331f9eca46c7e09f0",
+          "record": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-core-20261016/round-record.md",
+          "record_sha256": "a864e301b666a08c6993003198d28df99b49378989a1b75be47211f52d2893d9",
+          "manifest": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-core-20261016/manifest.json",
+          "manifest_sha256": "040f75027920238c83cd6213721f70af6508acb8cbafed80d3ed96cb37741625",
+          "raw_archive": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-core-20261016/raw-evidence.zip",
+          "raw_archive_sha256": "55e877d4b4215a85afecc664a9e241c6d1b479c29dab33c2e282080072949b17",
+          "evidence_level": "CORE_SHARED_COLLATERAL_LOCAL_SQLITE_ONLY"
+        },
+        {
+          "round": "R223",
+          "scope": "Six startup/negative cases passed in R6 and two shared/isolated Host positive cases passed in R7; eight unique cases across the preserved runs. Journal request, owner-derived client ID, proof, provider receipt and terminal state were bound.",
+          "risk_commit": "647840a75b2071fcb5b4395f554190afe2fae082",
+          "sdk_commit": "98648af2ea3a24394537c9fbd414fb897fb38f11",
+          "record": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-host-20261016/round-record.md",
+          "record_sha256": "b87f82544682ceb8c0f7336337bc2544dc04b85d7fdb9ad39f0e966908481353",
+          "manifest": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-host-20261016/manifest.json",
+          "manifest_sha256": "aef21495664635b537cd4d854752d3b3fc9fb182dc2783e495a787f6a65a9e20",
+          "raw_archive": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-host-20261016/raw-evidence.zip",
+          "raw_archive_sha256": "12d784acf0fdf0c826e4f2f5d14857668fdfc8415da25ed2d19421a6ea934d97",
+          "evidence_level": "LOCAL_SYNTHETIC_PROVIDER_SERVICEHOST_RISK_SQLITE_ONLY"
+        }
+      ]
+    },
+    {
+      "requirement": "Strategy/underlying concentration and source-bound Greeks are reserved atomically; missing, stale, mismatched and legacy-incomplete facts fail closed.",
+      "round": "R237",
+      "scope": "Six accepted Risk SQLite cases: cross-contract underlying concentration, vector rollback, Greek source/profile mismatch, fresh source-bound Greeks, UNKNOWN reopen/count-once, and legacy reservation/baseline missing-dimension fail-closed.",
+      "record": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-concentration-greeks-r237-20261016/round-record.md",
+      "record_sha256": "bc595433434057dc7777b746c9fc6b9231eeb5967e8d0445c2f0cda36c691197",
+      "manifest": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-concentration-greeks-r237-20261016/manifest.json",
+      "manifest_sha256": "90140f3f50c45a6f5a9a4bf64cc9cc70c51f6b9d92fc13a5b1029dbbeb44c701",
+      "raw_archive": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-concentration-greeks-r237-20261016/raw-evidence.zip",
+      "raw_archive_sha256": "65e7236b2d1773d9e113873c4e3af6882d797c3324419ed3ef1fda4ea6e3bc03",
+      "author_result": "D:/temp/it10dim03-risk-dimensions-20261016-r3/result.json",
+      "author_result_sha256": "a52079308851321af132ad969d6f5cc7c08a7ec5495afa447ae2e41b9d7f33ae",
+      "evidence_level": "DIM03_RISK_CORE_CONCENTRATION_AND_SOURCE_BOUND_GREEKS_SYNTHETIC_SQLITE_ONLY"
+    },
+    {
+      "requirement": "Position revaluation uses complete trusted account snapshots, exact account/venue/instrument identity, and current metadata/mark/FX/Greeks; incomplete or filtered snapshots do not establish full-account exposure.",
+      "supporting_rounds": ["R257 author candidate", "R4", "R5", "filtered Host R1"],
+      "evidence": [
+        {
+          "round": "R257 author candidate",
+          "scope": "Fifteen author tests passed: full-snapshot revaluation, filtered coverage rejection, stale/missing FX/mark/metadata/Greeks, dimensions and summary consistency. This is candidate-run supporting evidence; it is not by itself the trusted Host-wiring proof.",
+          "output": "D:/temp/dim03-position-snapshot-candidate-qa-r257-20261016-r4b",
+          "candidate_manifest": "D:/temp/dim03-r257-partial-candidate-20261016-r4/manifest.json",
+          "candidate_manifest_sha256": "3ba01a58f9219dcc487d99c6aa1ad65f3b2d06dda45648ddfbbc80f1cddee4f0",
+          "result_sha256": "6a39ffe162052a0303c2c801c64a9d842d5d70165b11fee35757ca7fe79765b9",
+          "junit_sha256": "5d1f058ab45bca0593e66de8a8a7eeb5e5383719e24664a71240486be19e051a",
+          "pytest": "15 passed, exit 0, one existing pytest configuration warning; stderr empty"
+        },
+        {
+          "round": "R4",
+          "scope": "Three selected synthetic nodes; the normal Host installs/maintains the Gateway full-position baseline and the same instrument ID on a different venue is rejected. The third cross-AccountKey node failed due to STATE_STREAM_ACCOUNT_MISMATCH in its fixture and is not counted here.",
+          "output": "D:/temp/it10-dim03-venue-account-identity-r4-20261017",
+          "spec_sha256": "df8304814ada9a72f252473cb65f086e0bcef150a628b3faf795d0ad0c8a5186",
+          "result_sha256": "d9fdb863ff08a023ed6c8fc53b7e3fb213eadfca1b41c3a59815dc65990f80fb",
+          "junit_sha256": "00099088a370b2bef1cf18260ed3976a03f0cbaeea2311c1447beff651e3d958",
+          "pytest": "2 passed, 1 failed; all 348 source pins and six HEADs unchanged"
+        },
+        {
+          "round": "R5",
+          "scope": "Only the R4 failed AccountKey-revision test was rerun after correcting the fixture; it passed and asserted the existing SHFE key/revision is retained while the second full AccountKey is rejected.",
+          "output": "D:/temp/it10-dim03-venue-account-identity-r5-20261017",
+          "spec_sha256": "c75ee07b88a8ab85a1a80b3637823b2f9a7a4dd127ddba7ec43ce8ba4d9d59dd",
+          "result_sha256": "87410798d4eb0a305c9ecb7a17b648cb32eca7a08b2b4b5772f260821a3d88f1",
+          "junit_sha256": "254a12babe2d052b056f1d17712e03389cae53e24f5f768d5f098c90fca05242",
+          "pytest": "1 passed, exit 0, stderr empty; 27 source pins and six HEADs unchanged"
+        },
+        {
+          "round": "Filtered Host R1",
+          "scope": "One fixed-export Host negative passed: one filtered Gateway read, no Risk receipt/request, no registry/endpoint/database/baseline write, and owner/provider cleanup. The broad pytest.raises(Exception) assertion does not establish the exact exception class/code.",
+          "output": "D:/temp/iteration10-dim03-filtered-snapshot-host-author-r1-20261017",
+          "spec": "D:/bt_api_py/.codex-tmp/iteration10-dim03-filtered-snapshot-host-author-spec-r1-20261017.json",
+          "spec_sha256": "b169aabcfce7aed8e10d054bd5f6a6f088bd85037c2b25a48d99da854189f00f",
+          "result_sha256": "db67607adeff83f8de517389f6cfc8386a0cc0617ed2ce7896fd07bbf040e299",
+          "junit_sha256": "13fb507aff5c3bd9231cbd34dd6e9287a458125923aada350069031b4b8bdbfb",
+          "stdout_sha256": "6980e867fefba6eaf279b446270657bac4ee3415f4b308915244c828466841ae",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "pytest": "1 passed in 2.53s; direct pytest exit 0; Root confirmed acceptance; no rerun",
+          "source_export_manifest": "D:/bt_api_py/.codex-tmp/iteration10-dim03-filtered-snapshot-host-source-r1-20261017/source-export-manifest.json",
+          "source_export_manifest_bytes": 87274,
+          "source_export_manifest_sha256": "7865a714d5b0405f76f0ffbd514296be51e3a663bfd9d5330a21b6493f1d68b4",
+          "source_pin_count": 371,
+          "source_before_after_sha256": "b2eb409c9a8abe151f780e36fa9fd682e3acdfa1a45b356242996bf951ff080a",
+          "runner_note": "Outer focused runner exit 1 was only its post-run SDK HEAD-stability check: concurrent commit 2140c0d87f2e06bfd6a1094f56de3dc5fde52ed4 touched DIM08 paths and a Monitor gitlink only; selected candidate paths did not overlap and all 371 fixed source pins remained byte-identical. There is no separate persisted outer-exit file. The pytest child exited 0."
+        }
+      ]
+    },
+    {
+      "requirement": "Absent or expired FX rejects before dispatch; valuation and shared-pool accounting use the configured currency and resource scope.",
+      "round": "R232",
+      "scope": "Three fixed-source synthetic ServiceHost nodes passed. EUR 20 * USD/EUR 1.5 = USD 30; expired FX yields zero provider writes; missing FX rejects before registry creation.",
+      "record": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-fx-shared-pool-host-r232-20261016/round-record.md",
+      "record_sha256": "4e6619d439a1409d90ded027274e8159f0deb7d418d6453f78ee6e435a1ee326",
+      "manifest": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-fx-shared-pool-host-r232-20261016/manifest.json",
+      "manifest_sha256": "723f8c386cc0e3a257fb2dea2f59317599f7f1ddba1b0eebcf7ff6101cc33494",
+      "raw_archive": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-fx-shared-pool-host-r232-20261016/raw-evidence.zip",
+      "raw_archive_sha256": "212e8afaa4ad780ff4bab9b61d20ec3ec0b7efef7dc0246a8456fc0a94d32c7e",
+      "evidence_level": "DIM03_FX_SOURCE_BOUND_SHARED_COLLATERAL_HOST_LOCAL_SYNTHETIC_PROVIDER_ONLY"
+    }
+  ],
+  "source_closure": {
+    "rule": "Each test result remains bound to its own frozen source/export manifest and HEADs. These rounds are complementary evidence; do not describe them as one full-suite run against a single current checkout.",
+    "latest_filtered_host_export": {
+      "manifest": "D:/bt_api_py/.codex-tmp/iteration10-dim03-filtered-snapshot-host-source-r1-20261017/source-export-manifest.json",
+      "sha256": "7865a714d5b0405f76f0ffbd514296be51e3a663bfd9d5330a21b6493f1d68b4",
+      "source_pin_count": 371,
+      "candidate_test_sha256": {
+        "tests/integration/test_dim03_gateway_position_risk_host.py": "c38b4f10496f628a32666e0ed28e047e1eb102b6dc81a101edd18d147aa8d458",
+        "tests/unit/test_service_risk_position_snapshot_baseline.py": "aa1bff14afea3c9ac9fdde694962e7844d261e6ec98e77fc11ddeed2e6b92e3a"
+      },
+      "package_heads": {
+        "base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+        "gateway": "bb63f66a72ece960b431d7c7304df536053b5b1a",
+        "risk": "aab34eef177d47ebe308bcacee3a3156686107ee",
+        "execution": "5b83e7e584ff70f851e4b655ace781ab6b68fbf7",
+        "transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "parent_config_host_overlay_manifest_sha256": "b794291fe380b14180fb0ffc37b30dd5ba88a03ebf02f19c084dae0db1b5226c"
+    },
+    "prior_export_refs": [
+      {
+        "round": "R217",
+        "source_manifest": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-core-20261016/manifest.json",
+        "manifest_sha256": "040f75027920238c83cd6213721f70af6508acb8cbafed80d3ed96cb37741625",
+        "source_pin_count": 147,
+        "heads_unchanged": true
+      },
+      {
+        "round": "R223",
+        "source_manifest": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-shared-collateral-host-20261016/manifest.json",
+        "manifest_sha256": "aef21495664635b537cd4d854752d3b3fc9fb182dc2783e495a787f6a65a9e20"
+      },
+      {
+        "round": "R232",
+        "source_manifest": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim03-fx-shared-pool-host-r232-20261016/manifest.json",
+        "manifest_sha256": "723f8c386cc0e3a257fb2dea2f59317599f7f1ddba1b0eebcf7ff6101cc33494",
+        "source_pin_count": 376,
+        "heads_unchanged": true
+      },
+      {
+        "round": "R237",
+        "source_manifest_member": "raw-evidence.zip::source/r3-source-export-manifest.json",
+        "manifest_sha256": "e3460fa8ea803233dde04d8dfce2a902510d6661a9997e62f6a88a524786ab1b",
+        "source_pin_count": 142,
+        "heads_unchanged": true
+      },
+      {
+        "round": "R4",
+        "source_before_after": "D:/temp/it10-dim03-venue-account-identity-r4-20261017/source-before.json and source-after.json",
+        "source_pin_count": 348,
+        "source_before_after_equal": true
+      },
+      {
+        "round": "R5",
+        "source_before_after": "D:/temp/it10-dim03-venue-account-identity-r5-20261017/source-before.json and source-after.json",
+        "source_pin_count": 27,
+        "source_before_after_equal": true
+      }
+    ]
+  },
+  "known_limits": [
+    "All evidence listed here uses synthetic/local SQLite or synthetic ServiceHost providers; there is no real account, exchange/provider or external-network acceptance.",
+    "The Binance Account V3 adapter currently has no authoritative account-wide monotonic revision. Do not synthesize one from a Risk journal cursor or claim real Binance baseline acceptance; the production adapter must remain fail-closed for this proof until an authoritative revision source exists.",
+    "The filtered Host negative proves the specified no-write/no-dispatch effects for its fixture, but pytest.raises(Exception) does not prove an exact diagnostic class or code.",
+    "R4/R5, R257, R232 and the latest filtered Host run are distinct frozen source closures. Their evidence is complementary and not a single run of every case against one current HEAD.",
+    "No DIM03 formal PASS count or tracker change is made by this evidence manifest. Root owns the adjudication and any tracker/progress update."
+  ],
+  "root_adjudication_recommendation": "The plan clause's local synthetic contract behaviors now have complementary positive and negative evidence across the cited frozen rounds. Decide formal status from the clause and recorded boundaries; if accepted, state explicitly that real Binance/account/provider acceptance remains outside this proof and blocked by missing authoritative account-wide revision."
+}
