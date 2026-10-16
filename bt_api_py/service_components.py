@@ -777,7 +777,13 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             resource_keys=frozenset(
                 {"bt_api", "targets", "admission", "journal", "gate", "provider_contracts"}
             ),
-            optional_resource_keys=frozenset({"position_valuation_resolver"}),
+            optional_resource_keys=frozenset(
+                {
+                    "position_valuation_resolver",
+                    "account_policy_admission_resolver",
+                    "account_policy_scope",
+                }
+            ),
             public_ports=MappingProxyType(
                 {
                     "service.order_entry": frozenset({"orders.submit"}),
@@ -1231,7 +1237,13 @@ def _account_risk_policy_metadata(
 
     risk_owner = spec.component == "risk" and options.get("role") == "account_owner"
     if not risk_owner or "service.order_entry" not in spec.bind_ports:
-        if resources.risk_policy_bindings:
+        if resources.risk_policy_bindings or any(
+            key in resources.values
+            for key in (
+                "account_policy_admission_resolver",
+                "account_policy_scope",
+            )
+        ):
             raise ServiceComponentError("UNEXPECTED_RISK_POLICY_BINDING")
         return (), frozenset()
 
@@ -1305,6 +1317,19 @@ def _account_risk_policy_metadata(
             raise ServiceComponentError("RISK_POLICY_BINDING_INVALID")
         target_scopes.add(wire_scope)
 
+    _confirm_account_policy_startup_binding(
+        resources,
+        gate=gate,
+        configured_ref=configured_ref,
+        policy_id=policy_id,
+        fingerprint=fingerprint,
+        targets=targets,
+        target_scopes=target_scopes,
+        target_type=target_type,
+        account_scope_type=account_scope_type,
+        policy_type=policy_type,
+    )
+
     supplied = resources.risk_policy_bindings
     if configured_ref != policy_id and not supplied:
         raise ServiceComponentError("RISK_POLICY_BINDING_REQUIRED")
@@ -1339,6 +1364,160 @@ def _account_risk_policy_metadata(
         ),
         frozenset({"service.order_entry"}),
     )
+
+
+def _confirm_account_policy_startup_binding(
+    resources: ComponentResources,
+    *,
+    gate: object,
+    configured_ref: str,
+    policy_id: str,
+    fingerprint: str,
+    targets: Mapping[WireScope, object],
+    target_scopes: set[WireScope],
+    target_type: type,
+    account_scope_type: type,
+    policy_type: type,
+) -> None:
+    """Bind a confirmed document before exposing the account order route."""
+
+    resolver_present = "account_policy_admission_resolver" in resources.values
+    scope_present = "account_policy_scope" in resources.values
+    if resolver_present != scope_present:
+        raise ServiceComponentError("ACCOUNT_POLICY_RESOLUTION_INVALID")
+    if not resolver_present:
+        return
+
+    try:
+        risk_module = importlib.import_module("bt_api_risk")
+        admission_module = importlib.import_module("bt_api_risk.policy_admission")
+        resolver_type = getattr(
+            admission_module, "PolicyCatalogAccountAdmissionResolver", None
+        )
+        resolved_type = getattr(admission_module, "ResolvedAccountPolicy", None)
+        bound_type = getattr(admission_module, "BoundAccountPolicy", None)
+        binding_type = getattr(risk_module, "DurableRiskPolicyBinding", None)
+        resolver = resources.values["account_policy_admission_resolver"]
+        policy_scope = resources.values["account_policy_scope"]
+        durable_gate_type = getattr(risk_module, "DurableRiskGate", None)
+    except Exception:
+        raise ServiceComponentError("ACCOUNT_POLICY_RESOLUTION_UNAVAILABLE") from None
+    if (
+        not isinstance(resolver_type, type)
+        or type(resolver) is not resolver_type
+        or type(policy_scope) is not WireScope
+        or not isinstance(resolved_type, type)
+        or not isinstance(bound_type, type)
+        or not isinstance(binding_type, type)
+        or not isinstance(durable_gate_type, type)
+        or type(gate) is not durable_gate_type
+        or policy_scope.account_ref is None
+        or policy_scope.account_refs
+        or policy_scope.strategy_ref is not None
+        or policy_scope.run_id is not None
+        or policy_scope.manual_book_ref is not None
+        or policy_scope.group_id is not None
+        or policy_scope.leg_id is not None
+    ):
+        raise ServiceComponentError("ACCOUNT_POLICY_RESOLUTION_INVALID")
+
+    try:
+        target_account_scopes: set[object] = set()
+        account_refs = {wire_scope.account_ref for wire_scope in target_scopes}
+        execution_domains = {
+            wire_scope.execution_domain_ref for wire_scope in target_scopes
+        }
+        for wire_scope, target in targets.items():
+            account_scope = target.account_scope
+            provider_account_id = target.provider_account_id
+            if (
+                wire_scope not in target_scopes
+                or type(target) is not target_type
+                or type(account_scope) is not account_scope_type
+                or type(provider_account_id) is not str
+                or account_scope.account_id != provider_account_id
+            ):
+                raise TypeError("account target changed after scope validation")
+            target_account_scopes.add(account_scope)
+        if (
+            len(account_refs) != 1
+            or policy_scope.account_ref not in account_refs
+            or len(execution_domains) != 1
+            or policy_scope.execution_domain_ref != next(iter(execution_domains))
+            or len(target_account_scopes) != 1
+            or (
+                policy_scope.portfolio_ref is not None
+                and any(
+                    wire_scope.portfolio_ref != policy_scope.portfolio_ref
+                    for wire_scope in target_scopes
+                )
+            )
+        ):
+            raise TypeError("confirmed owner scope does not select this account")
+
+        account_ref = next(iter(account_refs))
+        account_scope = next(iter(target_account_scopes))
+        bound = resolver.resolve_confirmed_and_bind(
+            configured_ref,
+            account_ref,
+            scope=policy_scope,
+            account_scope=account_scope,
+            gate=gate,
+        )
+        resolved = bound.resolved
+        persisted = bound.binding
+        if (
+            type(bound) is not bound_type
+            or type(resolved) is not resolved_type
+            or type(persisted) is not binding_type
+            or resolved.policy_ref != configured_ref
+            or type(resolved.policy_version) is not str
+            or len(resolved.policy_version) != 64
+            or any(character not in "0123456789abcdef" for character in resolved.policy_version)
+            or resolved.account_ref != account_ref
+            or type(resolved.owner_principal) is not str
+            or not resolved.owner_principal
+            or type(resolved.confirmed_utc) is not str
+            or not resolved.confirmed_utc
+            or type(resolved.risk_policy) is not policy_type
+            or resolved.risk_policy.policy_id != policy_id
+            or resolved.risk_policy.fingerprint != fingerprint
+            or persisted.scope != account_scope
+            or persisted.policy_id != configured_ref
+            or persisted.policy_fingerprint != fingerprint
+            or persisted.ledger_identity_ref != gate.ledger_identity_ref
+        ):
+            raise TypeError("confirmed document and ledger binding differ")
+
+        admission = resources.values["admission"]
+        adapter_type = getattr(risk_module, "DurableRiskAdmissionAdapter", None)
+        if not isinstance(admission, Mapping) or set(admission) != target_scopes:
+            raise TypeError("account admission map does not match target scopes")
+        for adapter in admission.values():
+            if (
+                not isinstance(adapter_type, type)
+                or type(adapter) is not adapter_type
+                or adapter.is_bound_to(gate) is not True
+            ):
+                raise TypeError("account adapter does not use the bound gate")
+            adapter_binding = adapter.policy_binding
+            if (
+                adapter_binding.policy_id != configured_ref
+                or adapter_binding.policy_fingerprint != fingerprint
+            ):
+                raise TypeError("account adapter uses another policy")
+        current = gate.bind_policy(account_scope)
+        if (
+            current.scope != account_scope
+            or current.policy_id != configured_ref
+            or current.policy_fingerprint != fingerprint
+            or current.ledger_identity_ref != gate.ledger_identity_ref
+        ):
+            raise TypeError("persistent account policy readback changed")
+    except ServiceComponentError:
+        raise
+    except Exception:
+        raise ServiceComponentError("ACCOUNT_POLICY_NOT_EFFECTIVE") from None
 
 
 def build_component(
