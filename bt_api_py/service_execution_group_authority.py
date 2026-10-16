@@ -262,8 +262,10 @@ class ExecutionStoreGroupCompletionVerifier:
         """Validate the exact terminal result after this attempt's provider call.
 
         This is a separate phase check from ``_assert_current_execution_attempt``.
-        It accepts only FILLED or REJECTED rows whose complete immutable
-        provider outbox chain proves the same one-shot group intent and result.
+        It accepts only FILLED, CANCELLED or REJECTED rows whose complete
+        immutable provider outbox chain proves the same one-shot group intent
+        and result. CANCELLED is the IOC remainder cancel after a strictly
+        positive partial fill, so its chain carries two provider observations.
         The pre-dispatch verifier remains DISPATCHING-only.
         """
 
@@ -304,7 +306,12 @@ class ExecutionStoreGroupCompletionVerifier:
             or authorization.authorization_attempt_id != hold.hold_id
             or record.group_binding != binding
             or record.permit_reference != binding.permit_id
-            or record.state not in {ExecutionState.FILLED, ExecutionState.REJECTED}
+            or record.state
+            not in {
+                ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
+                ExecutionState.REJECTED,
+            }
             or type(record.dispatch_attempts) is not int
             or record.dispatch_attempts != 1
             or record.unknown_reason is not None
@@ -314,7 +321,7 @@ class ExecutionStoreGroupCompletionVerifier:
             or record.provider_order_id != record.provider_order_id.strip()
             or type(record.filled_quantity) is not Decimal
             or (
-                record.state is ExecutionState.FILLED
+                record.state in {ExecutionState.FILLED, ExecutionState.CANCELLED}
                 and (
                     type(record.average_price) is not Decimal
                     or not record.average_price.is_finite()
@@ -335,17 +342,123 @@ class ExecutionStoreGroupCompletionVerifier:
                 "execution record does not match a known result for the current group attempt"
             )
         if (
-            record.state is ExecutionState.FILLED and record.filled_quantity != intent.quantity
-        ) or (
-            record.state is ExecutionState.REJECTED
-            and (
-                record.filled_quantity != 0
-                or record.average_price is not None
-                or record.cumulative_commission is not None
+            (
+                record.state is ExecutionState.FILLED
+                and record.filled_quantity != intent.quantity
+            )
+            or (
+                record.state is ExecutionState.CANCELLED
+                and not (Decimal("0") < record.filled_quantity < intent.quantity)
+            )
+            or (
+                record.state is ExecutionState.REJECTED
+                and (
+                    record.filled_quantity != 0
+                    or record.average_price is not None
+                    or record.cumulative_commission is not None
+                )
             )
         ):
             raise GroupAuthorityUnavailableError(
                 "execution result quantity or economics are incomplete"
+            )
+        if not self._provider_result_provenance(record, binding, scope):
+            raise GroupAuthorityUnavailableError(
+                "execution result lacks an exact complete provider outbox history"
+            )
+        try:
+            current = self._store.get(intent.intent_id, scope=scope)
+            self._store.assert_writer_lease(scope, writer_lease)
+        except Exception as error:
+            raise GroupAuthorityUnavailableError(
+                "execution result changed or writer lease expired"
+            ) from error
+        if current != record:
+            raise GroupAuthorityUnavailableError(
+                "execution result changed during provider history verification"
+            )
+
+    def _assert_current_execution_partial(
+        self,
+        *,
+        hold: GroupDispatchHold,
+        intent: OrderIntent,
+        binding: GroupPermitBinding,
+        authorization: GroupLegAuthorization,
+        writer_lease: WriterLease,
+    ) -> None:
+        """Validate the evidenced positive partial fill of the live attempt.
+
+        The IOC remainder-cancel path persists the exact partial fill as one
+        intermediate PARTIALLY_FILLED row before the terminal CANCELLED
+        observation: the execution store has no direct DISPATCHING -> CANCELLED
+        edge, while DISPATCHING -> PARTIALLY_FILLED -> CANCELLED is allowed.
+        This phase accepts only that strictly positive, below-intent row with
+        complete one-shot provider fill evidence; the terminal result phase
+        remains ``_assert_current_execution_result``.
+        """
+
+        if (
+            type(hold) is not GroupDispatchHold
+            or type(intent) is not OrderIntent
+            or type(binding) is not GroupPermitBinding
+            or type(authorization) is not GroupLegAuthorization
+            or type(writer_lease) is not WriterLease
+        ):
+            raise GroupAuthorityUnavailableError("typed execution result facts are required")
+        exact = self._read_exact_hold(hold)
+        if exact is None:
+            raise GroupAuthorityUnavailableError(
+                "execution store does not contain the exact held authorization result"
+            )
+        scope, record, stored_binding, stored_authorization = exact
+        try:
+            stored_intent = self._store.get_intent(intent.intent_id, scope=scope)
+            binding.validate_order(intent)
+            authorization.validate_binding(binding)
+            authorization.validate_writer_lease(writer_lease)
+            self._store.assert_writer_lease(scope, writer_lease)
+        except Exception as error:
+            raise GroupAuthorityUnavailableError(
+                "execution result or current writer lease is invalid"
+            ) from error
+        if (
+            intent.scope != scope
+            or record.intent_id != intent.intent_id
+            or record.scope_key != scope.key
+            or record.payload_sha256 != intent.fingerprint
+            or type(stored_intent) is not OrderIntent
+            or stored_intent.to_payload() != intent.to_payload()
+            or stored_binding != binding
+            or stored_binding.fingerprint != binding.fingerprint
+            or stored_authorization != authorization
+            or authorization.authorization_attempt_id != hold.hold_id
+            or record.group_binding != binding
+            or record.permit_reference != binding.permit_id
+            or record.state is not ExecutionState.PARTIALLY_FILLED
+            or type(record.dispatch_attempts) is not int
+            or record.dispatch_attempts != 1
+            or record.unknown_reason is not None
+            or record.review_required
+            or type(record.provider_order_id) is not str
+            or not record.provider_order_id
+            or record.provider_order_id != record.provider_order_id.strip()
+            or type(record.filled_quantity) is not Decimal
+            or not record.filled_quantity.is_finite()
+            or not (Decimal("0") < record.filled_quantity < intent.quantity)
+            or type(record.average_price) is not Decimal
+            or not record.average_price.is_finite()
+            or record.average_price <= 0
+            or (
+                record.cumulative_commission is not None
+                and (
+                    type(record.cumulative_commission) is not Decimal
+                    or not record.cumulative_commission.is_finite()
+                )
+            )
+        ):
+            raise GroupAuthorityUnavailableError(
+                "execution record does not match an evidenced partial group attempt"
             )
         if not self._provider_result_provenance(record, binding, scope):
             raise GroupAuthorityUnavailableError(
@@ -428,13 +541,21 @@ class ExecutionStoreGroupCompletionVerifier:
             "dispatch_claimed",
             "provider_observation",
         )
+        # The IOC remainder cancel persists the evidenced partial fill as one
+        # intermediate observation before the terminal CANCELLED observation,
+        # so its exact chain carries two provider_observation rows.
+        if record.state is ExecutionState.CANCELLED:
+            expected_types = (*expected_types, "provider_observation")
         if (
-            len(matching) != len(expected_types)
-            or tuple(event.event_type for event in matching) != expected_types
+            tuple(event.event_type for event in matching) != expected_types
             or any(event.intent_id != record.intent_id for event in matching)
         ):
             return False
-        recorded, admitted, claimed, observed = matching
+        partial = None
+        if record.state is ExecutionState.CANCELLED:
+            recorded, admitted, claimed, partial, observed = matching
+        else:
+            recorded, admitted, claimed, observed = matching
         if (
             recorded.state is not ExecutionState.PENDING_ADMISSION
             or recorded.payload
@@ -484,7 +605,17 @@ class ExecutionStoreGroupCompletionVerifier:
             return False
         if (record.cumulative_commission is None) != (currency is None):
             return False
-        return recorded.sequence < admitted.sequence < claimed.sequence < observed.sequence
+        if partial is not None and (
+            partial.state is not ExecutionState.PARTIALLY_FILLED
+            or partial.payload != payload
+            or partial.created_at_ns > observed.created_at_ns
+        ):
+            return False
+        if recorded.sequence >= admitted.sequence or admitted.sequence >= claimed.sequence:
+            return False
+        if partial is None:
+            return claimed.sequence < observed.sequence
+        return claimed.sequence < partial.sequence < observed.sequence
 
     def inspect_terminal_replay(
         self,
@@ -1483,8 +1614,20 @@ class ExecutionGroupAuthorityGuard:
                         authorization=authorization,
                         writer_lease=writer_lease,
                     )
+                elif execution_record.state is ExecutionState.PARTIALLY_FILLED:
+                    # The IOC remainder-cancel path exposes an intermediate,
+                    # fully evidenced partial fill before the facade commits
+                    # the terminal CANCELLED observation.
+                    verifier._assert_current_execution_partial(
+                        hold=persisted_hold,
+                        intent=intent,
+                        binding=binding,
+                        authorization=authorization,
+                        writer_lease=writer_lease,
+                    )
                 elif execution_record.state in {
                     ExecutionState.FILLED,
+                    ExecutionState.CANCELLED,
                     ExecutionState.REJECTED,
                 }:
                     verifier._assert_current_execution_result(

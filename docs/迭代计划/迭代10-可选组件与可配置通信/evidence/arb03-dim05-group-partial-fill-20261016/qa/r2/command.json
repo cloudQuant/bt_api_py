@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\qa-harness\\pytest.ini",
+    "--rootdir",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\candidate\\sdk",
+    "-q",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\it10arb03dim05-20261016-r2\\junit.xml",
+    "--basetemp=D:\\temp\\it10arb03dim05-20261016-r2\\pytest-tmp",
+    "tests/integration/test_arb03_dim05_group_partial_fill_service.py::test_arb03_partial_cancel_first_leg_and_rejected_hedge_recovery",
+    "tests/integration/test_arb03_dim05_group_partial_fill_service.py::test_dim05_single_account_dual_contract_partial_fill_hedge_paired"
+  ],
+  "cwd": "D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\candidate\\sdk",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\candidate\\sdk;D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\candidate\\base\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\candidate\\execution\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\candidate\\risk\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-arb03-dim05-fixed-source-r1\\candidate\\transport\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T03:06:43.842002+00:00"
+}

@@ -4,6 +4,10 @@ Extracted from the SQLite-backed fixture definitions in
 ``test_service_risk_order_exposure_integration.py`` at source SHA-256
 CD6640BDEBFF44A8E4073A0BEBA3A6D378E0E3968B4B05FAD7BD4328A5E65275.
 The account id is explicit here so this fixture has no test-module dependency.
+
+Initial states are ``filled`` (full fill), ``open`` (zero fill), ``rejected``
+(zero fill) or ``<raw_status>:<quantity>`` such as ``cancelled:1.5`` for a
+strictly positive partial fill carried by one fill row.
 """
 
 from __future__ import annotations
@@ -106,10 +110,15 @@ class _V2SyntheticBtApiFeed:
         order_id = "provider-" + client_order_id
         with sqlite3.connect(self._ledger_path) as connection:
             sequence = int(connection.execute("SELECT COUNT(*) FROM provider_writes").fetchone()[0])
-            state = (
+            state_token = (
                 self._initial_states[sequence] if sequence < len(self._initial_states) else "open"
             )
-            filled = quantity if state == "filled" else "0"
+            # ``<status>:<quantity>`` models a terminal status that carries a
+            # strictly positive partial fill (e.g. an IOC remainder cancel).
+            state, _, partial_quantity = state_token.partition(":")
+            filled = (
+                quantity if state == "filled" else (partial_quantity if partial_quantity else "0")
+            )
             row: dict[str, Any] = {
                 "account_id": self._provider_account,
                 "client_order_id": client_order_id,
@@ -123,7 +132,7 @@ class _V2SyntheticBtApiFeed:
                 "symbol": symbol,
             }
             fills = []
-            if state == "filled":
+            if filled != "0":
                 row["avg_price"] = order_price
                 fills.append(
                     self._fill(
@@ -133,7 +142,7 @@ class _V2SyntheticBtApiFeed:
                         symbol=symbol,
                         side=side,
                         trade_id="fill-" + client_order_id + "-1",
-                        quantity=quantity,
+                        quantity=filled,
                         price=order_price,
                         revision=1,
                         fee="-0.05",

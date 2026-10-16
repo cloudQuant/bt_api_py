@@ -1499,14 +1499,24 @@ class GroupProofSource:
         ):
             raise GroupProofSourceError("GROUP_RISK_RECEIPT_MISMATCH")
         if type(risk_receipt) is DispatchExposureResolutionReceipt:
+            try:
+                final_state = ExecutionState(risk_receipt.final_state.value)
+            except (TypeError, ValueError):
+                raise GroupProofSourceError("GROUP_RISK_RECEIPT_MISMATCH") from None
+            expected_filled = (
+                intent.quantity
+                if final_state is ExecutionState.FILLED
+                else status.filled_quantity
+            )
             if (
                 risk_receipt.status
                 is not DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
                 or risk_receipt.dispatch_latch_active
                 or risk_receipt.claim.claim_digest != claim_projection.claim_digest
-                or risk_receipt.final_state is not OrderExposureState.FILLED
+                or final_state not in {ExecutionState.FILLED, ExecutionState.CANCELLED}
+                or status.state is not final_state
                 or risk_receipt.requested_quantity != intent.quantity
-                or risk_receipt.filled_quantity != intent.quantity
+                or risk_receipt.filled_quantity != expected_filled
                 or risk_receipt.trade_count != status.trade_count
                 or risk_receipt.order_revision != status.order_revision
                 or risk_receipt.journal_revision != source_event.revision
@@ -1515,7 +1525,6 @@ class GroupProofSource:
             resolution_kind = "TERMINAL_EXPOSURE_RESOLVED"
             proof_sha256 = risk_receipt.proof_sha256
             exposure_proof_sha256 = risk_receipt.exposure_proof_sha256
-            final_state = ExecutionState.FILLED
             requested_quantity = risk_receipt.requested_quantity
             filled_quantity = risk_receipt.filled_quantity
             trade_count = risk_receipt.trade_count
@@ -1553,7 +1562,11 @@ class GroupProofSource:
             requested_quantity = intent.quantity
             filled_quantity = Decimal("0")
             trade_count = 0
-            order_revision = None
+            # The coordinator compares this field against the child status
+            # whenever the status carries one, and the frozen source validator
+            # requires the status to echo the provider order revision even for
+            # a zero-fill rejection, so the receipt must echo it as well.
+            order_revision = status.order_revision
             journal_revision = proof.journal_revision
             exposure_reservation_id = None
             exposure_reservation_sha256 = None
@@ -1692,11 +1705,7 @@ class GroupProofSource:
             or proof_payload.get("claim_digest") != claim.claim.claim_digest
             or proof_payload.get("contract_sha256") != target.provider_contract.fingerprint
             or proof_payload.get("proof_kind")
-            != (
-                "FILLED"
-                if source_event.payload.get("state") == ExecutionState.FILLED.value
-                else "REJECTED_NO_FILL"
-            )
+            != _source_proof_kind(source_event.payload.get("state"))
         ):
             raise GroupProofSourceError("GROUP_PROOF_BINDING_MISMATCH")
         source = dict(source_event.payload)
@@ -1717,7 +1726,10 @@ class GroupProofSource:
             raise GroupProofSourceError("GROUP_EXECUTION_OBSERVATION_MISMATCH")
         try:
             risk_receipt = self._risk_receipt(
-                target, permit, positive=state is ExecutionState.FILLED
+                target,
+                permit,
+                positive=state
+                in {ExecutionState.FILLED, ExecutionState.CANCELLED},
             )
         except GroupProofSourceError as error:
             if error.code in {
@@ -1808,7 +1820,7 @@ class GroupProofSource:
         *,
         claim: DispatchClaimBinding,
     ) -> Iterator[VerifiedDispatchExposureResolution | None]:
-        """Verify a same-call FILLED proof while the two owner fences remain held."""
+        """Verify a same-call positive-fill terminal proof under both owner fences."""
 
         session = _ACTIVE_SESSION.get()
         if (
@@ -1824,12 +1836,14 @@ class GroupProofSource:
         events = self._events(session.target, session.intent.intent_id)
         source_event = _one_event(events, "SOURCE_OBSERVED")
         proof_event = _one_event(events, "PROOF_READY")
+        expected_kind = _source_proof_kind(source_event.payload.get("state"))
         if (
             proof_event.revision <= source_event.revision
             or proof_event.payload.get("source_revision") != source_event.revision
             or proof_event.payload.get("source_record_sha256") != source_event.record_sha256
             or proof_event.payload.get("proof_sha256") != proof.fingerprint
-            or proof_event.payload.get("proof_kind") != "FILLED"
+            or expected_kind not in {"FILLED", "CANCELLED_PARTIAL"}
+            or proof_event.payload.get("proof_kind") != expected_kind
             or proof_event.payload.get("claim_digest") != claim.claim_digest
             or proof.claim != claim
         ):
@@ -1939,6 +1953,22 @@ def _one_event(
     if len(matches) != 1:
         raise GroupProofSourceError("GROUP_SOURCE_EVENT_CHAIN_INVALID")
     return matches[0]
+
+
+def _source_proof_kind(state_value: object) -> str | None:
+    """Map one persisted terminal source state to its durable proof kind.
+
+    ``CANCELLED_PARTIAL`` is the IOC remainder-cancel form: the provider
+    terminated the order after a strictly positive partial fill.
+    """
+
+    if state_value == ExecutionState.FILLED.value:
+        return "FILLED"
+    if state_value == ExecutionState.CANCELLED.value:
+        return "CANCELLED_PARTIAL"
+    if state_value == ExecutionState.REJECTED.value:
+        return "REJECTED_NO_FILL"
+    return None
 
 
 class GroupProofDispatchSession:
@@ -2255,12 +2285,43 @@ class GroupProofDispatchSession:
             facts = self._validate_provider_source(order, fills)
             self._facts = facts
             state = facts["state"]
-            if state not in {ExecutionState.FILLED, ExecutionState.REJECTED}:
+            # The only accepted CANCELLED terminal form is the IOC remainder
+            # cancel after a strictly positive partial fill. A zero-fill
+            # cancel (or any other non-terminal fact) remains UNKNOWN.
+            if state not in {
+                ExecutionState.FILLED,
+                ExecutionState.REJECTED,
+                ExecutionState.CANCELLED,
+            } or (
+                state is ExecutionState.CANCELLED
+                and not (Decimal("0") < facts["filled_quantity"] < facts["quantity"])
+            ):
                 self._record_source(facts, state=state)
                 self._mark_unknown("GROUP_ORDER_NOT_TERMINAL")
                 raise GroupProofSourceError("GROUP_ORDER_OUTCOME_UNKNOWN")
             status = self._status_from_facts(facts, state)
             self._status = status
+            if state is ExecutionState.CANCELLED:
+                # The execution store does not allow DISPATCHING -> CANCELLED
+                # directly, but it does allow DISPATCHING -> PARTIALLY_FILLED
+                # -> CANCELLED. Persist the exact evidenced partial fill first,
+                # then return the terminal observation for the facade commit.
+                partial = self._provider_observation(
+                    self._status_from_facts(facts, ExecutionState.PARTIALLY_FILLED)
+                )
+                try:
+                    self.target.execution_store.record_observation(
+                        partial,
+                        scope=self.target.execution_scope,
+                        source="provider",
+                        writer_lease=self._writer_lease,
+                    )
+                except Exception:
+                    self._mark_unknown("GROUP_PARTIAL_EVIDENCE_COMMIT_UNCERTAIN")
+                    raise GroupProofSourceError(
+                        "GROUP_PARTIAL_EVIDENCE_COMMIT_UNCERTAIN"
+                    ) from None
+                self._assert_current()
             self._source_event = self._record_source(facts, state=state, status=status)
             return self._provider_observation(status)
         except GroupProofSourceError as error:
@@ -2570,7 +2631,11 @@ class GroupProofDispatchSession:
 
     def _status_from_facts(self, facts: Mapping[str, Any], state: ExecutionState):
         average_price = None
-        if state is ExecutionState.FILLED:
+        if state in {
+            ExecutionState.FILLED,
+            ExecutionState.PARTIALLY_FILLED,
+            ExecutionState.CANCELLED,
+        }:
             total_qty = sum((item.quantity for item in facts["fill_facts"]), Decimal(0))
             if total_qty <= 0:
                 raise GroupProofSourceError("GROUP_SOURCE_FILL_TOTAL_MISMATCH")
@@ -2583,7 +2648,11 @@ class GroupProofDispatchSession:
                     )
                     / total_qty
                 )
-        reason = "PROVIDER_REJECTED" if state is ExecutionState.REJECTED else None
+        # The frozen GroupChildOrderStatus/ProviderObservation contracts require
+        # ``^[a-z][a-z0-9_]{0,127}$`` reason codes (authority.py enforces the
+        # same shape on the outbox payload), so the rejected observation must
+        # use the lowercase snake form.
+        reason = "provider_rejected" if state is ExecutionState.REJECTED else None
         return GroupChildOrderStatus(
             intent_id=self.intent.intent_id,
             state=state,
@@ -2748,7 +2817,12 @@ class GroupProofDispatchSession:
         ):
             raise GroupProofSourceError("GROUP_SOURCE_EVENT_BINDING_MISMATCH")
         if (
-            payload.get("state") not in {ExecutionState.FILLED.value, ExecutionState.REJECTED.value}
+            payload.get("state")
+            not in {
+                ExecutionState.FILLED.value,
+                ExecutionState.CANCELLED.value,
+                ExecutionState.REJECTED.value,
+            }
             or payload.get("request") != self._request.to_dict()
             or type(payload.get("normalized_order")) is not dict
             or payload.get("normalized_order")
@@ -2986,6 +3060,9 @@ class GroupProofDispatchSession:
         if payload["state"] == ExecutionState.FILLED.value:
             if filled_quantity != quantity or not rows:
                 raise GroupProofSourceError("GROUP_SOURCE_FILL_TOTAL_MISMATCH")
+        elif payload["state"] == ExecutionState.CANCELLED.value:
+            if not (Decimal("0") < filled_quantity < quantity) or not rows:
+                raise GroupProofSourceError("GROUP_SOURCE_FILL_TOTAL_MISMATCH")
         elif filled_quantity != 0 or rows:
             raise GroupProofSourceError("GROUP_SOURCE_REJECTED_WITH_FILL")
         metadata = self.target.risk_target.registry.get(self.intent.instrument)
@@ -3054,7 +3131,10 @@ class GroupProofDispatchSession:
     ) -> DispatchExposureResolutionProof:
         self._validate_source_event(source_event)
         payload = source_event.payload
-        if payload.get("state") != ExecutionState.FILLED.value:
+        if payload.get("state") not in {
+            ExecutionState.FILLED.value,
+            ExecutionState.CANCELLED.value,
+        }:
             raise GroupProofSourceError("GROUP_POSITIVE_PROOF_NOT_FILLED")
         fills: list[OrderFillFact] = []
         for row in payload["fill_records"]:
@@ -3100,7 +3180,12 @@ class GroupProofDispatchSession:
             )
         fill_tuple = tuple(sorted(fills, key=lambda item: item.trade_id))
         fill_qty = sum((item.quantity for item in fill_tuple), Decimal(0))
-        if fill_qty != self.intent.quantity or len(fill_tuple) != payload.get("trade_count"):
+        expected_filled = (
+            self.intent.quantity
+            if payload["state"] == ExecutionState.FILLED.value
+            else _decimal(payload.get("filled_quantity"), "GROUP_SOURCE_FILL_INVALID", nonnegative=True)
+        )
+        if fill_qty != expected_filled or len(fill_tuple) != payload.get("trade_count"):
             raise GroupProofSourceError("GROUP_SOURCE_FILL_TOTAL_MISMATCH")
         claim = self._claim_receipt.claim
         metadata = self.target.risk_target.registry.get(self.intent.instrument)
@@ -3191,7 +3276,11 @@ class GroupProofDispatchSession:
                 observation_sha256=payload["observation_sha256"],
                 fill_history_sha256=payload["fill_history_sha256"],
                 source_alias_map_sha256=_ALIAS_MAP_SHA256,
-                state=OrderExposureState.FILLED,
+                state=(
+                    OrderExposureState.CANCELLED
+                    if payload["state"] == ExecutionState.CANCELLED.value
+                    else OrderExposureState.FILLED
+                ),
                 requested_quantity=self.intent.quantity,
                 cumulative_filled_quantity=fill_qty,
                 leaves_quantity=Decimal("0"),
@@ -3314,7 +3403,12 @@ class GroupProofDispatchSession:
             not self._attempt_started
             or self._source_event is None
             or type(record) is not ExecutionRecord
-            or record.state not in {ExecutionState.FILLED, ExecutionState.REJECTED}
+            or record.state
+            not in {
+                ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
+                ExecutionState.REJECTED,
+            }
             or record.dispatch_attempts != 1
             or self._status is None
             or record.state is not self._status.state
@@ -3327,9 +3421,9 @@ class GroupProofDispatchSession:
             raise GroupProofSourceError("GROUP_EXECUTION_RESULT_UNPROVEN")
         self._assert_current()
         claim = self._claim_receipt.claim
-        if record.state is ExecutionState.FILLED:
+        if record.state in {ExecutionState.FILLED, ExecutionState.CANCELLED}:
             proof = self._build_exposure_proof(self._source_event)
-            kind = "FILLED"
+            kind = _source_proof_kind(self._source_event.payload.get("state"))
             proof_sha256 = proof.fingerprint
         else:
             proof = self._build_terminal_proof(self._source_event)
@@ -3352,14 +3446,15 @@ class GroupProofDispatchSession:
         )
         self._assert_current()
         try:
-            if record.state is ExecutionState.FILLED:
+            if record.state in {ExecutionState.FILLED, ExecutionState.CANCELLED}:
                 self.source._runtime_bundle.risk_admission.resolve_dispatch_exposure(proof)
             else:
                 self.source._runtime_bundle.risk_admission.resolve_dispatch_freeze(proof)
             receipt = self.source._risk_receipt(
                 self.target,
                 self.permit,
-                positive=record.state is ExecutionState.FILLED,
+                positive=record.state
+                in {ExecutionState.FILLED, ExecutionState.CANCELLED},
             )
             self._assert_current()
             resolution = self.source._resolution_projection(
@@ -3464,7 +3559,12 @@ class GroupProofDispatchSession:
         if (
             type(receipt) is not GroupLegOrderReceipt
             or receipt.resolution is None
-            or receipt.status.state not in {ExecutionState.FILLED, ExecutionState.REJECTED}
+            or receipt.status.state
+            not in {
+                ExecutionState.FILLED,
+                ExecutionState.CANCELLED,
+                ExecutionState.REJECTED,
+            }
             or receipt.status.state is not record.state
             or receipt.status.intent_id != self.intent.intent_id
             or receipt.status.filled_quantity != record.filled_quantity

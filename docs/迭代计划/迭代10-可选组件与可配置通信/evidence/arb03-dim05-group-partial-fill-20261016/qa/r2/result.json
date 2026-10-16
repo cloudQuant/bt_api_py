@@ -1,0 +1,24 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T03:07:15.198557+00:00",
+  "source_count": 2336,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "abf1cd562dcb5413924931b02f3318abc6e46a38",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "dc8bd7a3682d00cfaef4f15261607043c6d24fca",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "089b5efd71ebd0398c73e9aab370d674d88b41ba",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "abf1cd562dcb5413924931b02f3318abc6e46a38",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "dc8bd7a3682d00cfaef4f15261607043c6d24fca",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "089b5efd71ebd0398c73e9aab370d674d88b41ba",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "b0cfab732f22291ee6bf5d0a7ebc8f83cd1bd6e042873787272755301d84ff87",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FIXED_SOURCE_SYNTHETIC_PROVIDER_ARB03_PARTIAL_CANCEL_REJECTED_HEDGE_RECOVERY_AND_DIM05_SINGLE_ACCOUNT_DUAL_CONTRACT_PAIRED_SCENARIO_ONLY"
+}
