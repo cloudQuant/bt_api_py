@@ -1440,11 +1440,13 @@ def _confirm_account_policy_startup_binding(
         or policy_scope.account_refs
         or policy_scope.strategy_ref is not None
         or policy_scope.run_id is not None
-        or policy_scope.manual_book_ref is not None
         or policy_scope.group_id is not None
         or policy_scope.leg_id is not None
     ):
         raise ServiceComponentError("ACCOUNT_POLICY_RESOLUTION_INVALID")
+
+    if policy_scope.manual_book_ref is not None and target_scopes != {policy_scope}:
+        raise ServiceComponentError("ACCOUNT_POLICY_SCOPE_MISMATCH")
 
     try:
         target_account_scopes: set[object] = set()

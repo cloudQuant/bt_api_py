@@ -13,6 +13,7 @@ from bt_api_risk.core.admission import (
     AccountScope,
     DurableRiskGate,
     IntentAction,
+    RiskPolicy,
     RiskIntent,
 )
 from bt_api_risk.core.instrument import InstrumentRiskMetadata, InstrumentRiskRegistry
@@ -257,4 +258,96 @@ def test_account_owner_refuses_confirmed_policy_scope_for_another_account(tmp_pa
         assert mismatch.value.code == "ACCOUNT_POLICY_NOT_EFFECTIVE"
     finally:
         resources.close()
+        confirmed.close()
+
+def test_manual_account_policy_accepts_only_its_exact_single_target_scope(tmp_path):
+    account_ref = "policy-manual-account"
+    policy_ref = "manual-account-policy-v1"
+    manual_book_ref = "manual-book-a"
+    policy_scope = WireScope(
+        _DOMAIN, account_ref=account_ref, manual_book_ref=manual_book_ref
+    )
+    confirmed = ConfirmedPolicyStore(str(tmp_path / "manual-confirmed.sqlite3"))
+    receipt, content = _confirmed_receipt(account_ref, policy_ref, "25")
+    receipt["owner_scope"]["manual_book_ref"] = manual_book_ref
+    confirmed.confirm_document(receipt, content)
+    resolver = PolicyCatalogAccountAdmissionResolver(None, confirmed)
+    account_scope = AccountScope("paper", account_ref, "demo")
+    resolved = resolver.resolve_confirmed(
+        policy_ref, account_ref, scope=policy_scope
+    )
+    gate = DurableRiskGate(
+        str(tmp_path / "manual-single-risk.sqlite3"), resolved.risk_policy
+    )
+    resources, _ = _resource_set(
+        gate=gate,
+        target=_target(account_scope),
+        scope=policy_scope,
+        resolver=resolver,
+        policy_scope=policy_scope,
+        account_scope=account_scope,
+    )
+    try:
+        bindings, ports = _bind_confirmed_account_policy(resources, policy_ref)
+        assert ports == frozenset({"service.order_entry"})
+        assert len(bindings) == 1
+        assert bindings[0].scope == policy_scope
+        assert gate.bind_policy(account_scope).policy_fingerprint == (
+            resolved.risk_policy.fingerprint
+        )
+    finally:
+        resources.close()
+        gate.close()
+        confirmed.close()
+
+
+def test_manual_account_policy_rejects_an_additional_manual_target_without_rebinding(
+    tmp_path,
+):
+    account_ref = "policy-manual-account"
+    policy_ref = "manual-account-policy-v1"
+    policy_scope = WireScope(
+        _DOMAIN, account_ref=account_ref, manual_book_ref="manual-book-a"
+    )
+    confirmed = ConfirmedPolicyStore(str(tmp_path / "manual-multi-confirmed.sqlite3"))
+    receipt, content = _confirmed_receipt(account_ref, policy_ref, "25")
+    receipt["owner_scope"]["manual_book_ref"] = "manual-book-a"
+    confirmed.confirm_document(receipt, content)
+    resolver = PolicyCatalogAccountAdmissionResolver(None, confirmed)
+    account_scope = AccountScope("paper", account_ref, "demo")
+    initial_policy = RiskPolicy(
+        policy_id=policy_ref,
+        max_increase_notional=Decimal("5"),
+        max_increase_count=2,
+        notional_unit="USD",
+    )
+    gate = DurableRiskGate(
+        str(tmp_path / "manual-multi-risk.sqlite3"), initial_policy
+    )
+    scope_a = policy_scope
+    scope_b = WireScope(
+        _DOMAIN, account_ref=account_ref, manual_book_ref="manual-book-b"
+    )
+    resources = ComponentResources.borrowed(
+        {
+            "gate": gate,
+            "targets": {
+                scope_a: _target(account_scope),
+                scope_b: _target(account_scope),
+            },
+            "account_policy_admission_resolver": resolver,
+            "account_policy_scope": policy_scope,
+        },
+        ready=lambda: True,
+    )
+    try:
+        with pytest.raises(ServiceComponentError) as mismatch:
+            _bind_confirmed_account_policy(resources, policy_ref)
+        assert mismatch.value.code == "ACCOUNT_POLICY_SCOPE_MISMATCH"
+        assert gate.bind_policy(account_scope).policy_fingerprint == (
+            initial_policy.fingerprint
+        )
+    finally:
+        resources.close()
+        gate.close()
         confirmed.close()
