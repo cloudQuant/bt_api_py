@@ -38,7 +38,12 @@ from bt_api_base.service_protocol import (
 )
 from .service_migration_gate import (
     MigrationGateError,
+    MigrationStartSnapshot,
+    enable_migration_cutover,
+    migration_start_guard as acquire_migration_start_guard,
     record_migration_write_attempt,
+    STATUS_COMMITTED,
+    STATUS_ENABLED,
 )
 
 _CONTROL_SCHEMA = "sdk.service.control"
@@ -51,6 +56,8 @@ _MAX_OPERATIONS_PER_REQUEST = 64
 # Keep room for the result wrapper and the transport envelope's header under
 # the wire protocol's 1 MiB message limit.
 _MAX_RESULT_BYTES = 900 * 1024
+_MIGRATION_WRITE_DISABLED = "MIGRATION_WRITE_DISABLED"
+_MIGRATION_WRITE_ENABLEMENT_INVALID = "MIGRATION_WRITE_ENABLEMENT_INVALID"
 _APPROVED_TARGET_OPERATION = ("service.order_entry", "orders.submit_approved_target")
 _PAPER_OWNER_OPERATION = ("service.order_entry", "orders.submit")
 _PAPER_LEGACY_IMPORT_PORT = "service.paper_legacy_import"
@@ -80,6 +87,7 @@ SERVICE_ERROR_CODES = frozenset(
         "DUPLICATE_ACTIVE_RUN",
         "HANDLER_FAILED",
         "INVALID_REQUEST",
+        "MIGRATION_WRITE_DISABLED",
         "NOT_REGISTERED",
         "OK",
         "POLICY_REQUIREMENT_UNMET",
@@ -706,6 +714,7 @@ class ServiceRegistry:
         account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = (),
         account_risk_policy_required_routes: frozenset[tuple[str, str]] = frozenset(),
         migration_deployment_epoch: str | None = None,
+        migration_start_guard: MigrationStartSnapshot | None = None,
     ) -> None:
         if not _text(service_id):
             raise ValueError("service_id is invalid")
@@ -954,6 +963,8 @@ class ServiceRegistry:
         self._clock = clock
         self._reply_size_checker = reply_size_checker
         self._migration_deployment_epoch = migration_deployment_epoch
+        self._migration_writes_enabled = True
+        self._migration_write_enablement_sha256: str | None = None
         self._capabilities = capability_map
         self._grants = trusted_grants
         self._trusted_group_write_policies = trusted_group_write_policies
@@ -970,10 +981,39 @@ class ServiceRegistry:
         self._epoch = uuid.uuid4().hex
         db_path = str(path)
         self._migration_state_path = None if db_path == ":memory:" else Path(db_path)
+        if self._migration_state_path is None and migration_deployment_epoch is not None:
+            raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)
+        owned_migration_guard = None
+        marker = None
         self._db: sqlite3.Connection | None = None
         self._owner_key: str | None = None
         self._owner_file: Any = None
         try:
+            migration_snapshot = migration_start_guard
+            if self._migration_state_path is not None:
+                if migration_snapshot is None:
+                    owned_migration_guard = acquire_migration_start_guard(
+                        self._migration_state_path,
+                        deployment_epoch=migration_deployment_epoch,
+                    )
+                    try:
+                        migration_snapshot = owned_migration_guard.__enter__()
+                    except BaseException:
+                        owned_migration_guard = None
+                        raise
+                marker = migration_snapshot.require_active(
+                    self._migration_state_path,
+                    migration_deployment_epoch,
+                )
+            elif migration_snapshot is not None:
+                marker = migration_snapshot.require_active(path, migration_deployment_epoch)
+                if marker is not None:
+                    raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)
+            if marker is not None and marker.status == STATUS_COMMITTED:
+                # The destination can start and serve reads, but no business
+                # writer or persistent background task may proceed until the
+                # operator explicitly enables it after target-side checks.
+                self._migration_writes_enabled = False
             self._acquire_owner_lock(db_path)
             self._db = sqlite3.connect(
                 db_path,
@@ -1006,7 +1046,11 @@ class ServiceRegistry:
                     "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                     (self._epoch,),
                 )
-        except BaseException:
+            if owned_migration_guard is not None:
+                guard_to_exit = owned_migration_guard
+                owned_migration_guard = None
+                guard_to_exit.__exit__(None, None, None)
+        except BaseException as startup_error:
             self._ready = False
             cleanup_failed = False
             if self._db is not None:
@@ -1023,6 +1067,15 @@ class ServiceRegistry:
                     self._release_owner_lock()
                 except BaseException:
                     cleanup_failed = True
+            if owned_migration_guard is not None:
+                guard_to_exit = owned_migration_guard
+                owned_migration_guard = None
+                try:
+                    guard_to_exit.__exit__(
+                        type(startup_error), startup_error, startup_error.__traceback__
+                    )
+                except BaseException:
+                    cleanup_failed = True
             if cleanup_failed:
                 raise ServiceRegistryStartupCleanupError(self) from None
             self._closed = True
@@ -1035,6 +1088,8 @@ class ServiceRegistry:
     def _record_migration_write_attempt(self, *, fact_kind: str) -> bool:
         """Seal before an authorized write, bound to the deployment epoch."""
 
+        if not self._migration_writes_enabled:
+            raise MigrationGateError(_MIGRATION_WRITE_DISABLED)
         state_path = self._migration_state_path
         if state_path is None:
             return False
@@ -1043,6 +1098,60 @@ class ServiceRegistry:
             deployment_epoch=self._migration_deployment_epoch,
             fact_kind=fact_kind,
         )
+
+    @property
+    def migration_writes_enabled(self) -> bool:
+        """Whether this process has passed the explicit MIG03 write enable."""
+
+        with self._lock:
+            return self._migration_writes_enabled
+
+    def enable_migration_writes(
+        self,
+        *,
+        migration_id: str,
+        deployment_epoch: str,
+        readiness_sha256: str,
+    ) -> None:
+        """Enable a committed destination only after operator readback checks.
+
+        The readiness digest binds the operator's checked read/projection,
+        policy and local readiness evidence. This method verifies that the
+        active durable marker is still the same unsealed destination and that
+        this Registry is ready; it does not treat an arbitrary reference as
+        proof of external fencing.
+        """
+
+        if (
+            type(migration_id) is not str
+            or not migration_id
+            or type(deployment_epoch) is not str
+            or not deployment_epoch
+            or type(readiness_sha256) is not str
+            or len(readiness_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in readiness_sha256)
+        ):
+            raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)
+        with self._lock:
+            self._ensure_open()
+            if (
+                not self._ready
+                or self._migration_state_path is None
+                or deployment_epoch != self._migration_deployment_epoch
+            ):
+                raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)
+            try:
+                marker = enable_migration_cutover(
+                    self._migration_state_path,
+                    migration_id=migration_id,
+                    deployment_epoch=deployment_epoch,
+                )
+            except MigrationGateError:
+                raise
+            if marker.status != STATUS_ENABLED:
+                raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)
+            self._migration_writes_enabled = True
+            self._migration_write_enablement_sha256 = readiness_sha256
 
     @property
     def ready(self) -> bool:
@@ -2559,7 +2668,12 @@ class ServiceRegistry:
         if write_fact_kind is not None:
             try:
                 self._record_migration_write_attempt(fact_kind=write_fact_kind)
-            except (MigrationGateError, OSError):
+            except MigrationGateError as error:
+                if error.code == _MIGRATION_WRITE_DISABLED:
+                    return self._failure(_MIGRATION_WRITE_DISABLED)
+                # Marker/epoch/lock uncertainty must prevent handler entry.
+                return self._failure("UNAVAILABLE")
+            except OSError:
                 # Marker/epoch/lock uncertainty must prevent handler entry.
                 return self._failure("UNAVAILABLE")
         try:

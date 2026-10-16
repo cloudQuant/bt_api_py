@@ -18,6 +18,16 @@ _SOURCE_EPOCH = "source-epoch"
 _DESTINATION_EPOCH = "destination-epoch"
 
 
+def _enable_destination(state: Path) -> None:
+    marker = gate.read_migration_marker(state)
+    assert marker is not None and marker.status == gate.STATUS_COMMITTED
+    gate.enable_migration_cutover(
+        state,
+        migration_id=marker.migration_id,
+        deployment_epoch=marker.destination_epoch,
+    )
+
+
 def _python_process(code: str, *args: str) -> subprocess.Popen[str]:
     return subprocess.Popen(
         [sys.executable, "-c", code, *args],
@@ -58,8 +68,13 @@ def test_late_rollback_rereads_sealed_marker_before_removing_it(tmp_path: Path) 
     state = tmp_path / "registry.sqlite3"
     ready = tmp_path / "rollback-read-committed"
     resume = tmp_path / "resume-rollback"
-    gate.arm_migration_cutover(
+    marker = gate.arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
+    )
+    gate.enable_migration_cutover(
+        state,
+        migration_id=marker.migration_id,
+        deployment_epoch=_DESTINATION_EPOCH,
     )
 
     rollback_code = r"""
@@ -72,7 +87,7 @@ state, ready, resume = map(Path, sys.argv[1:])
 real_lock = gate._marker_state_lock
 @contextmanager
 def paused_lock(path):
-    ready.write_text('read old COMMITTED marker', encoding='utf-8')
+    ready.write_text('pause before acquiring lock for ENABLED marker', encoding='utf-8')
     deadline = time.monotonic() + 10
     while not resume.exists() and time.monotonic() < deadline:
         time.sleep(0.005)
@@ -90,9 +105,14 @@ except gate.MigrationGateError as exc:
     rollback = _python_process(rollback_code, str(state), str(ready), str(resume))
     try:
         _wait_for_file(ready, rollback)
-        # This process seals after rollback has already read COMMITTED but
-        # before it acquires the shared transition lock.
-        assert gate.record_migration_first_write(state, fact_kind="dispatch") is True
+        # This process seals after rollback is poised to acquire the shared
+        # transition lock. The rollback must reread ENABLED/SEALED while
+        # holding that same lock and must never remove the marker.
+        assert gate.record_migration_write_attempt(
+            state,
+            deployment_epoch=_DESTINATION_EPOCH,
+            fact_kind="dispatch",
+        ) is True
         resume.write_text("continue", encoding="utf-8")
         stdout, stderr = _finish(rollback)
     finally:
@@ -232,6 +252,7 @@ def test_lock_wait_is_bounded_and_released_after_contention(tmp_path: Path) -> N
     gate.arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
+    _enable_destination(state)
     holder_code = r"""
 import sys, time
 from pathlib import Path
@@ -273,6 +294,128 @@ except gate.MigrationGateError as exc:
     assert gate.record_migration_first_write(state, fact_kind="dispatch") is True
 
 
+def test_first_arm_waits_for_live_start_guard_and_retries_after_release(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "registry.sqlite3"
+    start_guard_ready = tmp_path / "start-guard-held"
+    release_start = tmp_path / "release-start-guard"
+    arm_timeout_result = tmp_path / "arm-timeout-result.json"
+    retry_arm = tmp_path / "retry-arm-after-start"
+    start_code = r"""
+import json, sys, time
+from pathlib import Path
+from bt_api_py import service_migration_gate as gate
+
+state, ready, release = map(Path, sys.argv[1:])
+with gate.migration_start_guard(state, deployment_epoch='source-epoch'):
+    ready.write_text('startup holds the persistent marker lock', encoding='utf-8')
+    deadline = time.monotonic() + 10
+    while not release.exists() and time.monotonic() < deadline:
+        time.sleep(0.005)
+    if not release.exists():
+        raise RuntimeError('start guard release timed out')
+print(json.dumps({'start_guard': 'released'}))
+"""
+    arm_code = r"""
+import json, sys, time
+from pathlib import Path
+from bt_api_py import service_migration_gate as gate
+
+state, first_result_path, retry = map(Path, sys.argv[1:])
+gate._MIGRATION_LOCK_TIMEOUT_SECONDS = 0.1
+try:
+    gate.arm_migration_cutover(
+        state, source_epoch='source-epoch', new_epoch='destination-epoch'
+    )
+    first = {'result': 'unexpected-success'}
+except gate.MigrationGateError as exc:
+    first = {'result': 'error', 'code': exc.code}
+first_result_path.write_text(json.dumps(first, sort_keys=True), encoding='utf-8')
+deadline = time.monotonic() + 10
+while not retry.exists() and time.monotonic() < deadline:
+    time.sleep(0.005)
+if not retry.exists():
+    raise RuntimeError('arm retry signal timed out')
+gate._MIGRATION_LOCK_TIMEOUT_SECONDS = 5.0
+try:
+    marker = gate.arm_migration_cutover(
+        state, source_epoch='source-epoch', new_epoch='destination-epoch'
+    )
+    result = {
+        'result': 'armed',
+        'status': marker.status,
+        'source': marker.source_epoch,
+        'destination': marker.destination_epoch,
+    }
+except gate.MigrationGateError as exc:
+    result = {'result': 'error', 'code': exc.code}
+print(json.dumps({'first': first, 'retry': result}, sort_keys=True))
+"""
+
+    def marker_is_absent() -> bool:
+        try:
+            gate.marker_path(state).stat()
+        except FileNotFoundError:
+            return True
+        return False
+
+    startup = _python_process(
+        start_code, str(state), str(start_guard_ready), str(release_start)
+    )
+    arm = None
+    try:
+        _wait_for_file(start_guard_ready, startup)
+        assert marker_is_absent()
+        arm = _python_process(
+            arm_code, str(state), str(arm_timeout_result), str(retry_arm)
+        )
+        _wait_for_file(arm_timeout_result, arm)
+        assert json.loads(arm_timeout_result.read_text(encoding="utf-8")) == {
+            "result": "error",
+            "code": gate.CODE_MIGRATION_GATE_LOCK_TIMEOUT,
+        }
+        # The failed contender cannot publish while the real start guard owns
+        # the cross-process lock. Releasing startup permits the same operation
+        # to arm normally, proving this is bounded serialization, not a veto.
+        assert marker_is_absent()
+        release_start.write_text("continue", encoding="utf-8")
+        startup_stdout, startup_stderr = _finish(startup)
+        retry_arm.touch()
+        arm_stdout, arm_stderr = _finish(arm)
+    finally:
+        release_start.touch()
+        if startup.poll() is None:
+            startup.kill()
+            startup.communicate()
+        if arm is not None and arm.poll() is None:
+            retry_arm.touch()
+            arm.kill()
+            arm.communicate()
+
+    assert startup_stderr == ""
+    assert json.loads(startup_stdout) == {"start_guard": "released"}
+    assert arm_stderr == ""
+    assert json.loads(arm_stdout) == {
+        "first": {
+            "result": "error",
+            "code": gate.CODE_MIGRATION_GATE_LOCK_TIMEOUT,
+        },
+        "retry": {
+            "result": "armed",
+            "status": gate.STATUS_COMMITTED,
+            "source": "source-epoch",
+            "destination": "destination-epoch",
+        },
+    }
+    marker = gate.read_migration_marker(state)
+    assert marker is not None
+    assert (marker.source_epoch, marker.destination_epoch) == (
+        "source-epoch",
+        "destination-epoch",
+    )
+
+
 def test_pre_replace_write_failure_preserves_old_file_and_allows_recovery(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -280,6 +423,7 @@ def test_pre_replace_write_failure_preserves_old_file_and_allows_recovery(
     gate.arm_migration_cutover(
         state, source_epoch=_SOURCE_EPOCH, new_epoch=_DESTINATION_EPOCH
     )
+    _enable_destination(state)
     path = gate.marker_path(state)
     old_bytes = path.read_bytes()
     real_replace = os.replace
@@ -306,13 +450,14 @@ import sys, time
 from pathlib import Path
 from bt_api_py.service_migration_gate import (
     arm_migration_cutover,
+    enable_migration_cutover,
     record_migration_first_write,
     rollback_migration_cutover,
 )
 
 state, ready, first_committed, reader_ack = map(Path, sys.argv[1:])
 ready.write_text('writing', encoding='utf-8')
-arm_migration_cutover(
+marker = arm_migration_cutover(
     state,
     source_epoch='cycle-source',
     new_epoch='cycle-destination',
@@ -334,11 +479,16 @@ for _ in range(100):
     time.sleep(0.001)
     rollback_migration_cutover(state, deployment_epoch='cycle-source')
     time.sleep(0.001)
-arm_migration_cutover(
+marker = arm_migration_cutover(
     state,
     source_epoch='cycle-source',
     new_epoch='cycle-destination',
     migration_id='cycle-migration',
+)
+enable_migration_cutover(
+    state,
+    migration_id=marker.migration_id,
+    deployment_epoch='cycle-destination',
 )
 record_migration_first_write(state, fact_kind='dispatch')
 """
@@ -369,6 +519,7 @@ record_migration_first_write(state, fact_kind='dispatch')
                 assert marker.destination_epoch == "cycle-destination"
                 assert (marker.status, marker.first_write_fact_kind) in {
                     (gate.STATUS_COMMITTED, None),
+                    (gate.STATUS_ENABLED, None),
                     (gate.STATUS_SEALED, "dispatch"),
                 }
                 seen.add(marker.status)

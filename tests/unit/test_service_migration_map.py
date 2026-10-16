@@ -13,8 +13,8 @@ files under a tmpdir:
   legacy identities can never share one strategy/order/run ref, so no
   duplicate credit or order target exists);
 * conflict refusal and the partition invariant stay intact under incr-B's
-  sealed cutover epoch facts (real ``service_migration_gate`` marker armed on
-  the same state path);
+  sealed cutover epoch facts (real ``service_migration_gate`` marker enabled
+  on the same state path);
 * unmapped identities resolve to UNALLOCATED/待对账 and stay unallocated
   across reopen: never auto re-credit, never re-order, never
   rename-then-recredit;
@@ -38,6 +38,7 @@ from bt_api_py.service_migration_gate import (
     REFUSAL_REVERSE_MIGRATION_REFUSED,
     MigrationGateError,
     arm_migration_cutover,
+    enable_migration_cutover,
     enforce_migration_start,
     record_migration_first_write,
 )
@@ -225,6 +226,11 @@ def test_conflict_refusal_and_partition_invariant_under_sealed_cutover_epoch(
     try:
         marker = arm_migration_cutover(path, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH)
         assert marker.sealed is False
+        marker = enable_migration_cutover(
+            path,
+            migration_id=marker.migration_id,
+            deployment_epoch=_NEW_EPOCH,
+        )
         assert record_migration_first_write(path, fact_kind="ownership") is True
 
         # The new epoch registers its authoritative mapping...

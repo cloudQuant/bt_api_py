@@ -45,6 +45,7 @@ from .service_deployment import validate_deployment
 from .service_migration_gate import (
     MigrationGateError,
     enforce_migration_start,
+    migration_start_guard,
     record_migration_write_attempt,
 )
 from .service_registry import (
@@ -344,13 +345,24 @@ class ServiceHost:
         if self._state != "new":
             raise ServiceHostError("INVALID_HOST_STATE")
         self._owner_thread = threading.get_ident()
+        migration_guard = None
+        migration_start_snapshot = None
         try:
-            # Iteration-10 MIG03 / plan section 11.3 step 6: a sealed cutover
-            # marker refuses the old deployment/epoch before any start side
-            # effect (the registry open itself would write a new service
-            # epoch, drop prior sessions, and release write claims).  Without
-            # an armed marker this check is a pure no-op.
-            self._enforce_migration_gate()
+            # Hold the persistent marker lock through every startup side
+            # effect. Otherwise an old Host could pass a marker-absent check,
+            # then race the first arm while it is still constructing its
+            # Registry or provider resources. Already-running writers still
+            # require the offline boundary's real quiescence proof.
+            if str(self._registry_path) != ":memory:":
+                migration_guard = migration_start_guard(
+                    self._registry_path,
+                    deployment_epoch=self._migration_deployment_epoch,
+                )
+                try:
+                    migration_start_snapshot = migration_guard.__enter__()
+                except MigrationGateError as exc:
+                    migration_guard = None
+                    raise ServiceHostError(exc.code) from None
             self._validate_authority_references()
             self._validate_outbound_bindings()
 
@@ -689,6 +701,7 @@ class ServiceHost:
                         trusted_paper_legacy_import_policies
                     ),
                     migration_deployment_epoch=self._migration_deployment_epoch,
+                    migration_start_guard=migration_start_snapshot,
                 )
             except ServiceRegistryStartupCleanupError as exc:
                 self._registry = exc.registry
@@ -730,10 +743,24 @@ class ServiceHost:
                 raise ServiceHostError("COMPONENT_NOT_READY")
             self._registry.set_ready(True)
             self._state = "started"
+            if migration_guard is not None:
+                guard_to_exit = migration_guard
+                migration_guard = None
+                try:
+                    guard_to_exit.__exit__(None, None, None)
+                except MigrationGateError as exc:
+                    raise ServiceHostError(exc.code) from None
             return self
         except BaseException as exc:
             failure_code = self._start_error_code(exc)
             cleanup_failures = self._shutdown_resources()
+            if migration_guard is not None:
+                guard_to_exit = migration_guard
+                migration_guard = None
+                try:
+                    guard_to_exit.__exit__(type(exc), exc, exc.__traceback__)
+                except BaseException:
+                    cleanup_failures = (*cleanup_failures, "MIGRATION_GATE_RELEASE_FAILED")
             self._start_failure = failure_code
             self._last_cleanup_failures = cleanup_failures
             self._cleanup_history.extend(cleanup_failures)
@@ -1592,6 +1619,68 @@ class ServiceHost:
 
         return self._state == "started" and self._all_components_ready()
 
+    def migration_consumer_inventory(self) -> tuple[object, ...]:
+        """Return the parsed-config and trusted-authority consumer snapshot.
+
+        The snapshot is available only from a started Host so configured
+        outbound bindings use the same trusted scope/peer resolvers and
+        requested-operation policy that the production runtime uses. It is a
+        preflight input for MIG03, not evidence that the consumers have stopped.
+        """
+
+        self._check_owner_thread()
+        if self._state != "started":
+            raise ServiceHostError("HOST_NOT_STARTED")
+        bundle = self._trusted_clients
+        if self._config.clients and bundle is None:
+            raise ServiceHostError("TRUSTED_CLIENTS_REQUIRED")
+        try:
+            from .service_migration_boundary import derive_service_consumer_inventory
+
+            return derive_service_consumer_inventory(
+                self._config,
+                self._authority.grants,
+                authority=self._authority,
+                requested_operations=(
+                    None if bundle is None else bundle.requested_operations
+                ),
+                scope_resolver=None if bundle is None else bundle.scope_resolver,
+                peer_resolver=None if bundle is None else bundle.peer_resolver,
+            )
+        except Exception as exc:
+            if isinstance(exc, ServiceHostError):
+                raise
+            raise ServiceHostError("MIGRATION_CONSUMER_INVENTORY_UNAVAILABLE") from None
+
+    def enable_migration_writes(
+        self,
+        *,
+        migration_id: str,
+        readiness_sha256: str,
+    ) -> None:
+        """Explicitly enable a ready destination after operator readback.
+
+        The caller must first verify destination-side reads/projections and
+        policy against the source inventory. The Registry then checks the
+        durable cutover identity and its own readiness before releasing the
+        local writer latch.
+        """
+
+        self._check_owner_thread()
+        registry = self._registry
+        if self._state != "started" or registry is None:
+            raise ServiceHostError("HOST_NOT_STARTED")
+        if not self.healthy or not registry.ready:
+            raise ServiceHostError("COMPONENT_NOT_READY")
+        try:
+            registry.enable_migration_writes(
+                migration_id=migration_id,
+                deployment_epoch=self._migration_deployment_epoch,
+                readiness_sha256=readiness_sha256,
+            )
+        except MigrationGateError as exc:
+            raise ServiceHostError(exc.code) from None
+
     def maintain(self) -> RegistrationSummary:
         """Synchronously maintain due upstream leases on the owner thread."""
 
@@ -1733,6 +1822,7 @@ class ServiceHost:
         registry = self._registry
         if registry is None:
             return
+        migration_writes_enabled = registry.migration_writes_enabled
         active_market_registrations = 0
         prepared_by_instance = {item.spec.instance_id: item for item in self._prepared}
         for component in self._components:
@@ -1757,13 +1847,15 @@ class ServiceHost:
                 continue
             active_ids: frozenset[str] | None = None
             try:
-                if maintain is not None:
+                if maintain is not None and not (
+                    analytics_task_writer and not migration_writes_enabled
+                ):
                     active_ids = registry.active_registration_ids(instance_id=component.instance_id)
                     if type(active_ids) is not frozenset or any(
                         type(registration_id) is not str for registration_id in active_ids
                     ):
                         raise TypeError("invalid registry registration projection")
-                    if analytics_task_writer:
+                    if analytics_task_writer and migration_writes_enabled:
                         self._record_migration_write_attempt(fact_kind="dispatch")
                     maintain(active_ids)
                 if maintain_registrations is not None:
@@ -1779,7 +1871,7 @@ class ServiceHost:
                         type(context) is not ActiveRegistrationContext for context in contexts
                     ):
                         raise TypeError("invalid registry registration context projection")
-                    for context in contexts:
+                    for context in contexts if migration_writes_enabled else ():
                         operation = None
                         if (
                             context.port == "service.order_entry"
@@ -1823,9 +1915,31 @@ class ServiceHost:
                         type(context) is not ActiveRegistrationContext for context in contexts
                     ):
                         raise TypeError("invalid registry registration context projection")
-                    if group_registration_writer:
-                        self._record_migration_write_attempt(fact_kind="ownership")
-                    maintain_registrations(contexts)
+                    if group_registration_writer and not migration_writes_enabled:
+                        # The coordinator has an explicit read-only refresh
+                        # mode. Keep registrations visible for query routes,
+                        # but do not recover a persisted group until the
+                        # destination has passed readback and write enablement.
+                        if (
+                            spec is not None
+                            and spec.component == "execution"
+                            and role == "group_coordinator"
+                        ):
+                            maintain_registrations(contexts, recover=False)
+                        else:
+                            # Other grouped owners currently combine view
+                            # refresh and recovery in this callback. Until
+                            # they expose a read-only refresh API, leave their
+                            # view empty and keep recovery stopped.
+                            refresh_registrations = getattr(
+                                component, "refresh_registrations", None
+                            )
+                            if callable(refresh_registrations):
+                                refresh_registrations(contexts)
+                    else:
+                        if group_registration_writer:
+                            self._record_migration_write_attempt(fact_kind="ownership")
+                        maintain_registrations(contexts)
             except Exception:
                 self._component_maintenance_faults.add(component.instance_id)
             else:

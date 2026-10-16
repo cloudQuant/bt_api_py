@@ -1,0 +1,619 @@
+{
+  "_schema": "bt_api_py-dev-commit-spec-v1",
+  "_status": "ROOT_REVIEW_AND_QUEUE_PENDING; NOT_STAGED; NOT_COMMITTED",
+  "_round": null,
+  "_round_note": "Root assigns the round number after the current SDK queue.",
+  "_repository": "D:/bt_api_py",
+  "_branch": "dev",
+  "_qa_head": "3b8025b7f81ad664d7da80796497fcb7419eedb3",
+  "_delivery_parent_observed": "afc11f3af919851f262a4b1929fac9f4f4a4289d",
+  "_accepted_evidence_level": "LOCAL_SYNTHETIC_MIG03_FIRST_WRITE_COMPATIBILITY_SAFETY",
+  "_commit_scope_paths": [
+    "bt_api_py/service_migration_gate.py",
+    "tests/unit/test_service_migration_gate.py",
+    "tests/unit/test_service_migration_gate_atomicity.py",
+    "tests/unit/test_service_migration_map.py",
+    "tests/unit/test_service_migration_drill.py",
+    "tests/integration/test_service_migration_boundary_enable.py",
+    "bt_api_py/service_host.py",
+    "bt_api_py/service_registry.py",
+    "bt_api_py/service_execution_group.py",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-legacy-firstwrite-compat-20261017-r2/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-legacy-firstwrite-compat-20261017-r2/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03-legacy-firstwrite-compat-20261017-r2/round-record.md"
+  ],
+  "_excluded_parallel_paths": [
+    "all AFI08 STOP_NEW Registry schema/method/dispatch and Monitor Host adapter hunks",
+    "all AFI12 Paper legacy import hunks",
+    "all DIM04 compensation hunks",
+    "all DIM09 group recovery/budget/roll-exit hunks except the exact recover=False method delta",
+    "bt_api_py/service_migration_boundary.py (read-only accepted dependency; unchanged)",
+    "all other lane-owned paths and already-staged index entries"
+  ],
+  "_qa": {
+    "python": "C:/Anaconda3/python.exe",
+    "pytest_options": [
+      "-q",
+      "--noconftest",
+      "-c D:/bt_api_py/.codex-tmp/iteration10-resume-sync-pytest.ini"
+    ],
+    "cwd": "D:/bt_api_py",
+    "qa_runs": [
+      {
+        "id": "r1-precase",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r1",
+        "command_argv": [
+          "",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_gate.py",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_late_rollback_rereads_sealed_marker_before_removing_it",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_lock_wait_is_bounded_and_released_after_contention",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_pre_replace_write_failure_preserves_old_file_and_allows_recovery",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_atomic_file_readers_observe_only_complete_marker_documents",
+          "tests/unit/test_service_migration_map.py::test_conflict_refusal_and_partition_invariant_under_sealed_cutover_epoch"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": null,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": null,
+        "source_sha256_after": null
+      },
+      {
+        "id": "r2-initial-unit",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r2",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_gate.py",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_late_rollback_rereads_sealed_marker_before_removing_it",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_lock_wait_is_bounded_and_released_after_contention",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_pre_replace_write_failure_preserves_old_file_and_allows_recovery",
+          "tests/unit/test_service_migration_gate_atomicity.py::test_atomic_file_readers_observe_only_complete_marker_documents",
+          "tests/unit/test_service_migration_map.py::test_conflict_refusal_and_partition_invariant_under_sealed_cutover_epoch"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 1,
+        "stdout_bytes": 5719,
+        "stdout_sha256": "f33c4abee528c9ae8de812ea389958fa033fc2a6f814c71ab3dd1b2ebc70c73f",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "tests/unit/test_service_migration_gate.py": "0F24866DC94C1EB8605821965C177C2ADE0FCBD8B97B9313CC58A40BF64AE1C1",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        },
+        "source_sha256_after": {
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "tests/unit/test_service_migration_gate.py": "0F24866DC94C1EB8605821965C177C2ADE0FCBD8B97B9313CC58A40BF64AE1C1",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        }
+      },
+      {
+        "id": "r3-unit-fix",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r3",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_gate.py::test_no_marker_is_a_benign_noop",
+          "tests/unit/test_service_migration_gate.py::test_pre_first_write_old_epoch_start_allowed_and_rollback_restores_unchanged",
+          "tests/unit/test_service_migration_gate.py::test_service_host_start_unchanged_without_marker_or_before_first_write"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 0,
+        "stdout_bytes": 100,
+        "stdout_sha256": "49a0ba74b14fec5aeeeaa912f77ead6924a4061df7f5a2aea595aa1243cc812c",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "tests/unit/test_service_migration_gate.py": "D0EF6A462E7148F0AF21EA4C6ABB54BFBDDAD99ABAA5A32768A03507EA5E4708",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E"
+        },
+        "source_sha256_after": {
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "tests/unit/test_service_migration_gate_atomicity.py": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3",
+          "tests/unit/test_service_migration_gate.py": "D0EF6A462E7148F0AF21EA4C6ABB54BFBDDAD99ABAA5A32768A03507EA5E4708",
+          "tests/unit/test_service_migration_map.py": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E"
+        }
+      },
+      {
+        "id": "r4-host",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r4-host",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/integration/test_service_migration_boundary_enable.py::test_legacy_first_write_cannot_enable_restarted_destination_host"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 0,
+        "stdout_bytes": 684,
+        "stdout_sha256": "46da4915e845b43bc057de2451788da40c022161361cf96d13b4dd2e1dcb314f",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/integration/test_service_migration_boundary_enable.py": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3"
+        }
+      },
+      {
+        "id": "r5-drill-fixture",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r5-drill",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_drill.py::test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_epoch_after_first_new_write",
+          "tests/unit/test_service_migration_drill.py::test_controlled_migration_rollback_window_and_import_failure_negatives"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 1,
+        "stdout_bytes": 1640,
+        "stdout_sha256": "bebd68da3c03d301d14b52a0d0fe5faca5060d458d44782315771c6f46e416e3",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "8C4370C3C6B8E8D762B4A8D9EE5CC1720B71432FEB18FFE66C62797A71DDAC7B",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3"
+        }
+      },
+      {
+        "id": "r6-drill-fixture",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r6-drill",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_drill.py::test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_epoch_after_first_new_write",
+          "tests/unit/test_service_migration_drill.py::test_controlled_migration_rollback_window_and_import_failure_negatives"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 1,
+        "stdout_bytes": 18650,
+        "stdout_sha256": "439b40698bdf5429636463ee2e2959240a023acd1227983acf2048439137ae3c",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_drill.py": "89B0820D7A394A1648E27ADCE1A8200390FECCB4C632A33451EA172CDAD7B005",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "tests/unit/test_service_migration_drill.py": "89B0820D7A394A1648E27ADCE1A8200390FECCB4C632A33451EA172CDAD7B005",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_risk_order_entry.py": "F191815A3EB38297558A6119BA48278DFF73C9B75F3AE00352B083CAC289F985",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E"
+        }
+      },
+      {
+        "id": "r7-drill-fix",
+        "original_output_directory": "D:\\temp\\iteration10-mig03-compat-firstwrite-local-20261017-r7-drill",
+        "command_argv": [
+          "C:\\Anaconda3\\python.exe",
+          "-m",
+          "pytest",
+          "-q",
+          "--noconftest",
+          "-c",
+          "D:\\bt_api_py\\.codex-tmp\\iteration10-resume-sync-pytest.ini",
+          "tests/unit/test_service_migration_drill.py::test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_epoch_after_first_new_write"
+        ],
+        "cwd": "D:\\bt_api_py",
+        "exit_code": 0,
+        "stdout_bytes": 101,
+        "stdout_sha256": "17ac47d061fc597a6e146368cacd86b8e7503219164c02b88bc4fa26fd7a6acf",
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "source_sha256_before": {
+          "bt_api_py/service_risk_order_entry.py": "24D733CB5F4103C2FD758ABC10E2D371948B89645E4F3503609F564C8BA44584",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "C66BBDFBF34E741CDCA3F04D711C6393938F97351A922CAC4CB1DB59811625C6",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        },
+        "source_sha256_after": {
+          "bt_api_py/service_risk_order_entry.py": "24D733CB5F4103C2FD758ABC10E2D371948B89645E4F3503609F564C8BA44584",
+          "bt_api_py/service_host.py": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E",
+          "bt_api_py/service_migration_gate.py": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E",
+          "tests/unit/test_service_migration_drill.py": "C66BBDFBF34E741CDCA3F04D711C6393938F97351A922CAC4CB1DB59811625C6",
+          "bt_api_py/service_execution.py": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3",
+          "bt_api_py/service_migration_boundary.py": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C",
+          "bt_api_py/service_registry.py": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+        }
+      }
+    ],
+    "pre_case_r1_note": "No pytest execution; PowerShell's `python` function had null .Source.",
+    "final_checks": [
+      "py_compile passed",
+      "scoped git diff --check passed"
+    ]
+  },
+  "_review": {
+    "reviewer": "/root/resume_pass_audit_reg_risk_cfg",
+    "conclusion": "GO_STATIC for the six migration gate/test paths only",
+    "reviewed_six_source_pins_matched": true,
+    "host_registry_group_partial_review": "PENDING_ROOT_REVIEW",
+    "review_artifact_note": "The original gate/test review arrived as a collaboration message and is summarized in the archive. The three partial patches are reconstructed separately from HEAD and owner-approved fragments; no review of these partial payloads is claimed yet."
+  },
+  "_limitations": [
+    "Local synthetic Host/Registry/store evidence only; no real provider/account cutover.",
+    "Does not prove configured consumer quiescence, complete formal MIG03 inventory, or actual external writer/session revocation.",
+    "The recover=False group coordinator branch is included as a required read-only-startup dependency but was not independently asserted by the retained R3/R4/R7 selectors.",
+    "The Host and Registry delivery payloads are exact partial hunks; whole mixed working files must not be staged.",
+    "No formal acceptance tracker count changes in this round.",
+    "Root must apply/partial-stage only the nine selected production/test source hunks/files and the three packet files after the SDK commit queue reaches this round."
+  ],
+  "source_files": {
+    "bt_api_py/service_migration_gate.py": {
+      "bytes": 35384,
+      "sha256": "8FDAEED23E74E31C1B360DD6D4139AF21805C0322467D7726BF469FCEAB8020E"
+    },
+    "tests/unit/test_service_migration_gate.py": {
+      "bytes": 20467,
+      "sha256": "D0EF6A462E7148F0AF21EA4C6ABB54BFBDDAD99ABAA5A32768A03507EA5E4708"
+    },
+    "tests/unit/test_service_migration_gate_atomicity.py": {
+      "bytes": 19793,
+      "sha256": "3139BACA3A494377E68D0C58B41BFEDDDE550F3D3C0BFF81A5EE64758F437341"
+    },
+    "tests/unit/test_service_migration_map.py": {
+      "bytes": 16807,
+      "sha256": "74CE31AD28059B2677C9A328332F903EE0BA8850D6F46126AA4F037BA073295E"
+    },
+    "tests/unit/test_service_migration_drill.py": {
+      "bytes": 92159,
+      "sha256": "C66BBDFBF34E741CDCA3F04D711C6393938F97351A922CAC4CB1DB59811625C6"
+    },
+    "tests/integration/test_service_migration_boundary_enable.py": {
+      "bytes": 44904,
+      "sha256": "FC287425254D85F8BA7554582E70E1AEC78565CCABBD79B53ACD81AE28E586A3"
+    }
+  },
+  "required_test_dependencies": {
+    "bt_api_py/service_host.py": {
+      "bytes": 103121,
+      "sha256": "25A07D5C6B14108BA699D2B86A59C99ACACBD77E1A2C4F411F6F7E0D7350AB7E"
+    },
+    "bt_api_py/service_registry.py": {
+      "bytes": 136807,
+      "sha256": "260127E4D947364B627CE46BE75F53E66A1E7BDE1723811B422826141030A9D2"
+    },
+    "bt_api_py/service_migration_boundary.py": {
+      "bytes": 67870,
+      "sha256": "9B98FBEB2BF7E93C647E10C41435F7F193A833F81D0A420B945F2D5EC909F38C"
+    },
+    "bt_api_py/service_risk_order_entry.py": {
+      "bytes": 264208,
+      "sha256": "24D733CB5F4103C2FD758ABC10E2D371948B89645E4F3503609F564C8BA44584"
+    },
+    "bt_api_py/service_execution.py": {
+      "bytes": 28531,
+      "sha256": "31EBB0DC6B4994A4B5363627E6DCFC13BA00A1B2A772AB7E81C4C3D0140B7FE3"
+    }
+  },
+  "raw_archive_members": {
+    "qa/r1-precase/result.json": {
+      "bytes": 928,
+      "sha256": "9128B4843517EC69054505C2CE6B0641D7F99E437979663BAFD70DCA8418206A"
+    },
+    "qa/r2-initial-unit/result.json": {
+      "bytes": 9797,
+      "sha256": "04CA6860C5E22330A81D35EFE4335AEA43F97DEFB3C0ABC2A7431ADE6D0E30EA"
+    },
+    "qa/r2-initial-unit/source-before.json": {
+      "bytes": 1426,
+      "sha256": "F16CA5C3803E3FC394D617061C4B60DEBAA3845F3D47667F48486DC004C5178D"
+    },
+    "qa/r2-initial-unit/stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "qa/r2-initial-unit/stdout.txt": {
+      "bytes": 5719,
+      "sha256": "F33C4ABEE528C9AE8DE812EA389958FA033FC2A6F814C71AB3DD1B2EBC70C73F"
+    },
+    "qa/r3-unit-fix/result.json": {
+      "bytes": 2661,
+      "sha256": "5FCA71C6FBD190C5C7991FABAA78A767A3BE2F2DB3E82AE583421F764E40BD5F"
+    },
+    "qa/r3-unit-fix/stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "qa/r3-unit-fix/stdout.txt": {
+      "bytes": 100,
+      "sha256": "49A0BA74B14FEC5AEEEAA912F77EAD6924A4061DF7F5A2AEA595AA1243CC812C"
+    },
+    "qa/r4-host/result.json": {
+      "bytes": 2337,
+      "sha256": "DE34E495993C784BF3C4ED3EB87623E9D0EEC529CF5DE700DBD18FF1FBBF02F8"
+    },
+    "qa/r4-host/stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "qa/r4-host/stdout.txt": {
+      "bytes": 684,
+      "sha256": "46DA4915E845B43BC057DE2451788DA40C022161361CF96D13B4DD2E1DCB314F"
+    },
+    "qa/r5-drill-fixture/result.json": {
+      "bytes": 3881,
+      "sha256": "6879CDDB016FBC93FAF97E6064A3144D08F99679F21F533FBD34B1120333C0B4"
+    },
+    "qa/r5-drill-fixture/stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "qa/r5-drill-fixture/stdout.txt": {
+      "bytes": 1640,
+      "sha256": "BEBD68DA3C03D301D14B52A0D0FE5FACA5060D458D44782315771C6F46E416E3"
+    },
+    "qa/r6-drill-fixture/result.json": {
+      "bytes": 21847,
+      "sha256": "EFADC14ECD184E65B959377EA5C17A21403C5FE668DE3683E3DDF1DE197B715F"
+    },
+    "qa/r6-drill-fixture/stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "qa/r6-drill-fixture/stdout.txt": {
+      "bytes": 18650,
+      "sha256": "439B40698BDF5429636463EE2E2959240A023ACD1227983ACF2048439137AE3C"
+    },
+    "qa/r7-drill-fix/result.json": {
+      "bytes": 2159,
+      "sha256": "F469A27A1A7869595E41559BAE756A558E0190CE4FE1CF8A11FF573723F2DC38"
+    },
+    "qa/r7-drill-fix/stderr.txt": {
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    "qa/r7-drill-fix/stdout.txt": {
+      "bytes": 101,
+      "sha256": "17AC47D061FC597A6E146368CACD86B8E7503219164C02B88BC4FA26FD7A6ACF"
+    },
+    "review/review-summary.json": {
+      "bytes": 1733,
+      "sha256": "C0D1D9C701CB86709723548134ED279E43CB4A25C1EFC25A4FF46163BA5E5965"
+    },
+    "source-patches/partial-source-pins.json": {
+      "bytes": 1536,
+      "sha256": "37EC4688BC2CF0CDE54E878D55057FCF299B0C851766BC5A18AFFB06B7E6B615"
+    },
+    "source-patches/service_execution_group.py.mig03.partial.patch": {
+      "bytes": 1253,
+      "sha256": "0CAEF076348D6FDA6AB67FF74F75C9BEF15E7E9523B1793FB2FC3AA3ABFB4D8C"
+    },
+    "source-patches/service_host.py.mig03.partial.patch": {
+      "bytes": 10379,
+      "sha256": "80E2D76C600461E88838BDA27189EEC2B5E24147615452C386BD6169BE495A95"
+    },
+    "source-patches/service_registry.py.mig03.partial.patch": {
+      "bytes": 8807,
+      "sha256": "A6289385F43C98E9E2117D81368865C291BEF922B5C184DFE645CE172D19CFE1"
+    },
+    "source/partial-scope.md": {
+      "bytes": 1517,
+      "sha256": "BD01367D9467976BC62BF7E8DC8A0818687D9A0D515536B8522E5D6E2A22279F"
+    },
+    "source/source-pins.json": {
+      "bytes": 2033,
+      "sha256": "AD48C7A6B339CD7D63D3CE47EC4D20DF59F7AFA62A040DBC61356939B33E1CEF"
+    }
+  },
+  "archive": {
+    "bytes": 32301,
+    "sha256": "D504D9806FC77845932CE8B9BCD377C4BB4E0B2719C52B0C03C5C56056F480FF"
+  },
+  "round_record": {
+    "bytes": 2939,
+    "sha256": "31C61354D2CE25D9B888C4BBA31BD7FBFDFC04E23EA98DC96D286B645CB8B108"
+  },
+  "_partial_source_payloads": {
+    "bt_api_py/service_execution_group.py": {
+      "head_blob_sha256": "90e9f4e8c61efd43af1db033b28bbd186813599b2e88591e1b9b191b5f8b34ff",
+      "live_working_tree_sha256": "ed88114d37c1ed93a32d36fa2fb07c2e0d428c9ce3a344e74a58b6e252a7e880",
+      "patch_bytes": 1253,
+      "selected_patch_sha256": "0caef076348d6fda6ab67ff74f75c9bef15e7e9523b1793fb2fc3aa3abfb4d8c",
+      "patch_member": "source-patches/service_execution_group.py.mig03.partial.patch",
+      "selection": "owner-confirmed recover=False signature/type check/conditional recovery required so read-only destination startup can refresh group registrations without recovery writes",
+      "whole_live_file_is_not_payload": true
+    },
+    "bt_api_py/service_host.py": {
+      "head_blob_sha256": "7e0589130f07af06e21fe216151d00c009a813f2a6bcbdd2477158c6aacbabce",
+      "live_working_tree_sha256": "25a07d5c6b14108ba699d2b86a59c99acacbd77e1a2c4f411f6f7e0d7350ab7e",
+      "patch_bytes": 10379,
+      "selected_patch_sha256": "80e2d76c600461e88838bda27189eec2b5e24147615452c386bd6169be495a95",
+      "patch_member": "source-patches/service_host.py.mig03.partial.patch",
+      "selection": "persistent start guard handoff/release; parsed/trusted consumer inventory and explicit enable methods; read-only suppression of persistent group/analytics tasks until ENABLED",
+      "whole_live_file_is_not_payload": true
+    },
+    "bt_api_py/service_registry.py": {
+      "head_blob_sha256": "fd80f893c138fbfe33663befe91cfa4f431faf8cb04565543768bdd1c462120c",
+      "live_working_tree_sha256": "260127e4d947364b627ce46be75f53e66a1e7bde1723811b422826141030a9d2",
+      "patch_bytes": 8807,
+      "selected_patch_sha256": "a6289385f43c98e9e2117d81368865c291bef922b5c184dfe645ce172d19cfe1",
+      "patch_member": "source-patches/service_registry.py.mig03.partial.patch",
+      "selection": "durable marker snapshot validation and latch; explicit enable API; disabled write rejection before handlers",
+      "whole_live_file_is_not_payload": true
+    }
+  },
+  "partial_source_payloads": {
+    "bt_api_py/service_execution_group.py": {
+      "head_blob_sha256": "90e9f4e8c61efd43af1db033b28bbd186813599b2e88591e1b9b191b5f8b34ff",
+      "live_working_tree_sha256": "ed88114d37c1ed93a32d36fa2fb07c2e0d428c9ce3a344e74a58b6e252a7e880",
+      "patch_bytes": 1253,
+      "selected_patch_sha256": "0caef076348d6fda6ab67ff74f75c9bef15e7e9523b1793fb2fc3aa3abfb4d8c",
+      "patch_member": "source-patches/service_execution_group.py.mig03.partial.patch",
+      "selection": "exact recover=False signature/type check/conditional recovery hunk only",
+      "whole_live_file_is_not_payload": true
+    },
+    "bt_api_py/service_host.py": {
+      "head_blob_sha256": "7e0589130f07af06e21fe216151d00c009a813f2a6bcbdd2477158c6aacbabce",
+      "live_working_tree_sha256": "25a07d5c6b14108ba699d2b86a59c99acacbd77e1a2c4f411f6f7e0d7350ab7e",
+      "patch_bytes": 10379,
+      "selected_patch_sha256": "80e2d76c600461e88838bda27189eec2b5e24147615452c386bd6169be495a95",
+      "patch_member": "source-patches/service_host.py.mig03.partial.patch",
+      "selection": "persistent start guard handoff/release; parsed/trusted consumer inventory and explicit enable methods; read-only suppression of persistent group/analytics tasks until ENABLED",
+      "whole_live_file_is_not_payload": true
+    },
+    "bt_api_py/service_registry.py": {
+      "head_blob_sha256": "fd80f893c138fbfe33663befe91cfa4f431faf8cb04565543768bdd1c462120c",
+      "live_working_tree_sha256": "260127e4d947364b627ce46be75f53e66a1e7bde1723811b422826141030a9d2",
+      "patch_bytes": 8807,
+      "selected_patch_sha256": "a6289385f43c98e9e2117d81368865c291bef922b5c184dfe645ce172d19cfe1",
+      "patch_member": "source-patches/service_registry.py.mig03.partial.patch",
+      "selection": "durable marker snapshot validation and latch; explicit enable API; disabled write rejection before handlers",
+      "whole_live_file_is_not_payload": true
+    }
+  },
+  "_partial_stage_policy": {
+    "whole_file_paths": [
+      "bt_api_py/service_migration_gate.py",
+      "tests/unit/test_service_migration_gate.py",
+      "tests/unit/test_service_migration_gate_atomicity.py",
+      "tests/unit/test_service_migration_map.py",
+      "tests/unit/test_service_migration_drill.py",
+      "tests/integration/test_service_migration_boundary_enable.py"
+    ],
+    "partial_hunk_paths": {
+      "bt_api_py/service_host.py": "Apply source-patches/service_host.py.mig03.partial.patch against base HEAD only.",
+      "bt_api_py/service_registry.py": "Apply source-patches/service_registry.py.mig03.partial.patch against base HEAD only.",
+      "bt_api_py/service_execution_group.py": "Apply source-patches/service_execution_group.py.mig03.partial.patch against base HEAD only."
+    },
+    "never_stage_live_mixed_files_whole": true
+  },
+  "_manifest_history": {
+    "supersedes_manifest_sha256": "d31bc0e4dbfad1e302879f029196e082ed97509a26e9cac23a00338fb6d32eeb",
+    "superseded_delivery_parent": "1ee1c1ea9aefa961f0c555d0487f03bac2511521",
+    "reason": "R2 partial production payloads were rebased from 1ee1c1e to current delivery parent afc11f3 after intervening accepted Paper commit; original raw QA archive remains unchanged."
+  },
+  "_rebase_validation": {
+    "base_head": "afc11f3af919851f262a4b1929fac9f4f4a4289d",
+    "method": "isolated pristine copies from git show HEAD:path; original selected partial patches applied with only two context collisions resolved by inserting the same MIG03-owned additions into current surrounding source; no shared worktree/index writes during rebase validation",
+    "checks": [
+      "git apply --check for all three rebased patches on pristine current-HEAD copies",
+      "apply output byte-for-byte matched pinned target files",
+      "py_compile passed for all three selected target files"
+    ],
+    "qa_rerun": false,
+    "note": "Previously consumed R3/R4/R7 PASS selectors are retained; no QA rerun for this base-only patch-context rebase."
+  },
+  "_rebased_partial_source_payloads": {
+    "bt_api_py/service_host.py": {
+      "base_head": "afc11f3af919851f262a4b1929fac9f4f4a4289d",
+      "base_bytes": 91932,
+      "base_sha256": "00c7450c3e45781333088d8c9eeacf6b688bf820595c722f3ac0ed4b89106b1f",
+      "target_bytes": 97429,
+      "target_sha256": "b80b441d3f8a73c4c13c6f618654c046ffae6d6e091212927bdf31527267d9bf",
+      "patch_bytes": 10381,
+      "patch_sha256": "3683abe29b86de524865e256b09251f139f33bbf44b709ccecf2d7611b7c1af0",
+      "patch_text_utf8": "--- a/bt_api_py/service_host.py\n+++ b/bt_api_py/service_host.py\n@@ -45,6 +45,7 @@\n from .service_migration_gate import (\n     MigrationGateError,\n     enforce_migration_start,\n+    migration_start_guard,\n     record_migration_write_attempt,\n )\n from .service_registry import (\n@@ -344,13 +345,24 @@\n         if self._state != \"new\":\n             raise ServiceHostError(\"INVALID_HOST_STATE\")\n         self._owner_thread = threading.get_ident()\n-        try:\n-            # Iteration-10 MIG03 / plan section 11.3 step 6: a sealed cutover\n-            # marker refuses the old deployment/epoch before any start side\n-            # effect (the registry open itself would write a new service\n-            # epoch, drop prior sessions, and release write claims).  Without\n-            # an armed marker this check is a pure no-op.\n-            self._enforce_migration_gate()\n+        migration_guard = None\n+        migration_start_snapshot = None\n+        try:\n+            # Hold the persistent marker lock through every startup side\n+            # effect. Otherwise an old Host could pass a marker-absent check,\n+            # then race the first arm while it is still constructing its\n+            # Registry or provider resources. Already-running writers still\n+            # require the offline boundary's real quiescence proof.\n+            if str(self._registry_path) != \":memory:\":\n+                migration_guard = migration_start_guard(\n+                    self._registry_path,\n+                    deployment_epoch=self._migration_deployment_epoch,\n+                )\n+                try:\n+                    migration_start_snapshot = migration_guard.__enter__()\n+                except MigrationGateError as exc:\n+                    migration_guard = None\n+                    raise ServiceHostError(exc.code) from None\n             self._validate_authority_references()\n             self._validate_outbound_bindings()\n \n@@ -689,6 +701,7 @@\n                         trusted_paper_legacy_import_policies\n                     ),\n                     migration_deployment_epoch=self._migration_deployment_epoch,\n+                    migration_start_guard=migration_start_snapshot,\n                 )\n             except ServiceRegistryStartupCleanupError as exc:\n                 self._registry = exc.registry\n@@ -730,10 +743,24 @@\n                 raise ServiceHostError(\"COMPONENT_NOT_READY\")\n             self._registry.set_ready(True)\n             self._state = \"started\"\n+            if migration_guard is not None:\n+                guard_to_exit = migration_guard\n+                migration_guard = None\n+                try:\n+                    guard_to_exit.__exit__(None, None, None)\n+                except MigrationGateError as exc:\n+                    raise ServiceHostError(exc.code) from None\n             return self\n         except BaseException as exc:\n             failure_code = self._start_error_code(exc)\n             cleanup_failures = self._shutdown_resources()\n+            if migration_guard is not None:\n+                guard_to_exit = migration_guard\n+                migration_guard = None\n+                try:\n+                    guard_to_exit.__exit__(type(exc), exc, exc.__traceback__)\n+                except BaseException:\n+                    cleanup_failures = (*cleanup_failures, \"MIGRATION_GATE_RELEASE_FAILED\")\n             self._start_failure = failure_code\n             self._last_cleanup_failures = cleanup_failures\n             self._cleanup_history.extend(cleanup_failures)\n@@ -1592,6 +1619,68 @@\n \n         return self._state == \"started\" and self._all_components_ready()\n \n+    def migration_consumer_inventory(self) -> tuple[object, ...]:\n+        \"\"\"Return the parsed-config and trusted-authority consumer snapshot.\n+\n+        The snapshot is available only from a started Host so configured\n+        outbound bindings use the same trusted scope/peer resolvers and\n+        requested-operation policy that the production runtime uses. It is a\n+        preflight input for MIG03, not evidence that the consumers have stopped.\n+        \"\"\"\n+\n+        self._check_owner_thread()\n+        if self._state != \"started\":\n+            raise ServiceHostError(\"HOST_NOT_STARTED\")\n+        bundle = self._trusted_clients\n+        if self._config.clients and bundle is None:\n+            raise ServiceHostError(\"TRUSTED_CLIENTS_REQUIRED\")\n+        try:\n+            from .service_migration_boundary import derive_service_consumer_inventory\n+\n+            return derive_service_consumer_inventory(\n+                self._config,\n+                self._authority.grants,\n+                authority=self._authority,\n+                requested_operations=(\n+                    None if bundle is None else bundle.requested_operations\n+                ),\n+                scope_resolver=None if bundle is None else bundle.scope_resolver,\n+                peer_resolver=None if bundle is None else bundle.peer_resolver,\n+            )\n+        except Exception as exc:\n+            if isinstance(exc, ServiceHostError):\n+                raise\n+            raise ServiceHostError(\"MIGRATION_CONSUMER_INVENTORY_UNAVAILABLE\") from None\n+\n+    def enable_migration_writes(\n+        self,\n+        *,\n+        migration_id: str,\n+        readiness_sha256: str,\n+    ) -> None:\n+        \"\"\"Explicitly enable a ready destination after operator readback.\n+\n+        The caller must first verify destination-side reads/projections and\n+        policy against the source inventory. The Registry then checks the\n+        durable cutover identity and its own readiness before releasing the\n+        local writer latch.\n+        \"\"\"\n+\n+        self._check_owner_thread()\n+        registry = self._registry\n+        if self._state != \"started\" or registry is None:\n+            raise ServiceHostError(\"HOST_NOT_STARTED\")\n+        if not self.healthy or not registry.ready:\n+            raise ServiceHostError(\"COMPONENT_NOT_READY\")\n+        try:\n+            registry.enable_migration_writes(\n+                migration_id=migration_id,\n+                deployment_epoch=self._migration_deployment_epoch,\n+                readiness_sha256=readiness_sha256,\n+            )\n+        except MigrationGateError as exc:\n+            raise ServiceHostError(exc.code) from None\n+\n     def maintain(self) -> RegistrationSummary:\n         \"\"\"Synchronously maintain due upstream leases on the owner thread.\"\"\"\n \n@@ -1733,6 +1822,7 @@\n         registry = self._registry\n         if registry is None:\n             return\n+        migration_writes_enabled = registry.migration_writes_enabled\n         active_market_registrations = 0\n         prepared_by_instance = {item.spec.instance_id: item for item in self._prepared}\n         for component in self._components:\n@@ -1757,13 +1847,15 @@\n                 continue\n             active_ids: frozenset[str] | None = None\n             try:\n-                if maintain is not None:\n+                if maintain is not None and not (\n+                    analytics_task_writer and not migration_writes_enabled\n+                ):\n                     active_ids = registry.active_registration_ids(instance_id=component.instance_id)\n                     if type(active_ids) is not frozenset or any(\n                         type(registration_id) is not str for registration_id in active_ids\n                     ):\n                         raise TypeError(\"invalid registry registration projection\")\n-                    if analytics_task_writer:\n+                    if analytics_task_writer and migration_writes_enabled:\n                         self._record_migration_write_attempt(fact_kind=\"dispatch\")\n                     maintain(active_ids)\n                 if maintain_registrations is not None:\n@@ -1779,7 +1871,7 @@\n                         type(context) is not ActiveRegistrationContext for context in contexts\n                     ):\n                         raise TypeError(\"invalid registry registration context projection\")\n-                    for context in contexts:\n+                    for context in contexts if migration_writes_enabled else ():\n                         operation = None\n                         if (\n                             context.port == \"service.order_entry\"\n@@ -1823,9 +1915,31 @@\n                         type(context) is not ActiveRegistrationContext for context in contexts\n                     ):\n                         raise TypeError(\"invalid registry registration context projection\")\n-                    if group_registration_writer:\n-                        self._record_migration_write_attempt(fact_kind=\"ownership\")\n-                    maintain_registrations(contexts)\n+                    if group_registration_writer and not migration_writes_enabled:\n+                        # The coordinator has an explicit read-only refresh\n+                        # mode. Keep registrations visible for query routes,\n+                        # but do not recover a persisted group until the\n+                        # destination has passed readback and write enablement.\n+                        if (\n+                            spec is not None\n+                            and spec.component == \"execution\"\n+                            and role == \"group_coordinator\"\n+                        ):\n+                            maintain_registrations(contexts, recover=False)\n+                        else:\n+                            # Other grouped owners currently combine view\n+                            # refresh and recovery in this callback. Until\n+                            # they expose a read-only refresh API, leave their\n+                            # view empty and keep recovery stopped.\n+                            refresh_registrations = getattr(\n+                                component, \"refresh_registrations\", None\n+                            )\n+                            if callable(refresh_registrations):\n+                                refresh_registrations(contexts)\n+                    else:\n+                        if group_registration_writer:\n+                            self._record_migration_write_attempt(fact_kind=\"ownership\")\n+                        maintain_registrations(contexts)\n             except Exception:\n                 self._component_maintenance_faults.add(component.instance_id)\n             else:\n",
+      "whole_live_file_is_not_payload": true
+    },
+    "bt_api_py/service_registry.py": {
+      "base_head": "afc11f3af919851f262a4b1929fac9f4f4a4289d",
+      "base_bytes": 116995,
+      "base_sha256": "1175390fb2087c14d52042642812366d0f66c87c6b88f281b555f0cd84013e8b",
+      "target_bytes": 122265,
+      "target_sha256": "d255972e0b0ddfe1d0179bf2d8013152083a9c501010b23ebf3e2d97bb237839",
+      "patch_bytes": 8810,
+      "patch_sha256": "7566dd50eaaf6923192a964124951ba9fd01d167880d69ea999797742e015ba2",
+      "patch_text_utf8": "--- a/bt_api_py/service_registry.py\n+++ b/bt_api_py/service_registry.py\n@@ -38,7 +38,12 @@\n )\n from .service_migration_gate import (\n     MigrationGateError,\n+    MigrationStartSnapshot,\n+    enable_migration_cutover,\n+    migration_start_guard as acquire_migration_start_guard,\n     record_migration_write_attempt,\n+    STATUS_COMMITTED,\n+    STATUS_ENABLED,\n )\n \n _CONTROL_SCHEMA = \"sdk.service.control\"\n@@ -51,6 +56,8 @@\n # Keep room for the result wrapper and the transport envelope's header under\n # the wire protocol's 1 MiB message limit.\n _MAX_RESULT_BYTES = 900 * 1024\n+_MIGRATION_WRITE_DISABLED = \"MIGRATION_WRITE_DISABLED\"\n+_MIGRATION_WRITE_ENABLEMENT_INVALID = \"MIGRATION_WRITE_ENABLEMENT_INVALID\"\n _APPROVED_TARGET_OPERATION = (\"service.order_entry\", \"orders.submit_approved_target\")\n _PAPER_OWNER_OPERATION = (\"service.order_entry\", \"orders.submit\")\n _PAPER_LEGACY_IMPORT_PORT = \"service.paper_legacy_import\"\n@@ -80,6 +87,7 @@\n         \"DUPLICATE_ACTIVE_RUN\",\n         \"HANDLER_FAILED\",\n         \"INVALID_REQUEST\",\n+        \"MIGRATION_WRITE_DISABLED\",\n         \"NOT_REGISTERED\",\n         \"OK\",\n         \"POLICY_REQUIREMENT_UNMET\",\n@@ -706,6 +714,7 @@\n         account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = (),\n         account_risk_policy_required_routes: frozenset[tuple[str, str]] = frozenset(),\n         migration_deployment_epoch: str | None = None,\n+        migration_start_guard: MigrationStartSnapshot | None = None,\n     ) -> None:\n         if not _text(service_id):\n             raise ValueError(\"service_id is invalid\")\n@@ -954,6 +963,8 @@\n         self._clock = clock\n         self._reply_size_checker = reply_size_checker\n         self._migration_deployment_epoch = migration_deployment_epoch\n+        self._migration_writes_enabled = True\n+        self._migration_write_enablement_sha256: str | None = None\n         self._capabilities = capability_map\n         self._grants = trusted_grants\n         self._trusted_group_write_policies = trusted_group_write_policies\n@@ -970,10 +981,39 @@\n         self._epoch = uuid.uuid4().hex\n         db_path = str(path)\n         self._migration_state_path = None if db_path == \":memory:\" else Path(db_path)\n+        if self._migration_state_path is None and migration_deployment_epoch is not None:\n+            raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)\n+        owned_migration_guard = None\n+        marker = None\n         self._db: sqlite3.Connection | None = None\n         self._owner_key: str | None = None\n         self._owner_file: Any = None\n         try:\n+            migration_snapshot = migration_start_guard\n+            if self._migration_state_path is not None:\n+                if migration_snapshot is None:\n+                    owned_migration_guard = acquire_migration_start_guard(\n+                        self._migration_state_path,\n+                        deployment_epoch=migration_deployment_epoch,\n+                    )\n+                    try:\n+                        migration_snapshot = owned_migration_guard.__enter__()\n+                    except BaseException:\n+                        owned_migration_guard = None\n+                        raise\n+                marker = migration_snapshot.require_active(\n+                    self._migration_state_path,\n+                    migration_deployment_epoch,\n+                )\n+            elif migration_snapshot is not None:\n+                marker = migration_snapshot.require_active(path, migration_deployment_epoch)\n+                if marker is not None:\n+                    raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)\n+            if marker is not None and marker.status == STATUS_COMMITTED:\n+                # The destination can start and serve reads, but no business\n+                # writer or persistent background task may proceed until the\n+                # operator explicitly enables it after target-side checks.\n+                self._migration_writes_enabled = False\n             self._acquire_owner_lock(db_path)\n             self._db = sqlite3.connect(\n                 db_path,\n@@ -1006,7 +1046,11 @@\n                     \"ON CONFLICT(key) DO UPDATE SET value=excluded.value\",\n                     (self._epoch,),\n                 )\n-        except BaseException:\n+            if owned_migration_guard is not None:\n+                guard_to_exit = owned_migration_guard\n+                owned_migration_guard = None\n+                guard_to_exit.__exit__(None, None, None)\n+        except BaseException as startup_error:\n             self._ready = False\n             cleanup_failed = False\n             if self._db is not None:\n@@ -1023,6 +1067,15 @@\n                     self._release_owner_lock()\n                 except BaseException:\n                     cleanup_failed = True\n+            if owned_migration_guard is not None:\n+                guard_to_exit = owned_migration_guard\n+                owned_migration_guard = None\n+                try:\n+                    guard_to_exit.__exit__(\n+                        type(startup_error), startup_error, startup_error.__traceback__\n+                    )\n+                except BaseException:\n+                    cleanup_failed = True\n             if cleanup_failed:\n                 raise ServiceRegistryStartupCleanupError(self) from None\n             self._closed = True\n@@ -1035,6 +1088,8 @@\n     def _record_migration_write_attempt(self, *, fact_kind: str) -> bool:\n         \"\"\"Seal before an authorized write, bound to the deployment epoch.\"\"\"\n \n+        if not self._migration_writes_enabled:\n+            raise MigrationGateError(_MIGRATION_WRITE_DISABLED)\n         state_path = self._migration_state_path\n         if state_path is None:\n             return False\n@@ -1043,6 +1098,60 @@\n             deployment_epoch=self._migration_deployment_epoch,\n             fact_kind=fact_kind,\n         )\n+\n+    @property\n+    def migration_writes_enabled(self) -> bool:\n+        \"\"\"Whether this process has passed the explicit MIG03 write enable.\"\"\"\n+\n+        with self._lock:\n+            return self._migration_writes_enabled\n+\n+    def enable_migration_writes(\n+        self,\n+        *,\n+        migration_id: str,\n+        deployment_epoch: str,\n+        readiness_sha256: str,\n+    ) -> None:\n+        \"\"\"Enable a committed destination only after operator readback checks.\n+\n+        The readiness digest binds the operator's checked read/projection,\n+        policy and local readiness evidence. This method verifies that the\n+        active durable marker is still the same unsealed destination and that\n+        this Registry is ready; it does not treat an arbitrary reference as\n+        proof of external fencing.\n+        \"\"\"\n+\n+        if (\n+            type(migration_id) is not str\n+            or not migration_id\n+            or type(deployment_epoch) is not str\n+            or not deployment_epoch\n+            or type(readiness_sha256) is not str\n+            or len(readiness_sha256) != 64\n+            or any(character not in \"0123456789abcdef\" for character in readiness_sha256)\n+        ):\n+            raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)\n+        with self._lock:\n+            self._ensure_open()\n+            if (\n+                not self._ready\n+                or self._migration_state_path is None\n+                or deployment_epoch != self._migration_deployment_epoch\n+            ):\n+                raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)\n+            try:\n+                marker = enable_migration_cutover(\n+                    self._migration_state_path,\n+                    migration_id=migration_id,\n+                    deployment_epoch=deployment_epoch,\n+                )\n+            except MigrationGateError:\n+                raise\n+            if marker.status != STATUS_ENABLED:\n+                raise MigrationGateError(_MIGRATION_WRITE_ENABLEMENT_INVALID)\n+            self._migration_writes_enabled = True\n+            self._migration_write_enablement_sha256 = readiness_sha256\n \n     @property\n     def ready(self) -> bool:\n@@ -2559,7 +2668,12 @@\n         if write_fact_kind is not None:\n             try:\n                 self._record_migration_write_attempt(fact_kind=write_fact_kind)\n-            except (MigrationGateError, OSError):\n+            except MigrationGateError as error:\n+                if error.code == _MIGRATION_WRITE_DISABLED:\n+                    return self._failure(_MIGRATION_WRITE_DISABLED)\n+                # Marker/epoch/lock uncertainty must prevent handler entry.\n+                return self._failure(\"UNAVAILABLE\")\n+            except OSError:\n                 # Marker/epoch/lock uncertainty must prevent handler entry.\n                 return self._failure(\"UNAVAILABLE\")\n         try:\n",
+      "whole_live_file_is_not_payload": true
+    },
+    "bt_api_py/service_execution_group.py": {
+      "base_head": "afc11f3af919851f262a4b1929fac9f4f4a4289d",
+      "base_bytes": 102443,
+      "base_sha256": "90e9f4e8c61efd43af1db033b28bbd186813599b2e88591e1b9b191b5f8b34ff",
+      "target_bytes": 102652,
+      "target_sha256": "558a029f65e44f2642f3c42a327b4dd96c698a895a090a3c7a5cee3adc25368c",
+      "patch_bytes": 1253,
+      "patch_sha256": "0caef076348d6fda6ab67ff74f75c9bef15e7e9523b1793fb2fc3aa3abfb4d8c",
+      "patch_text_utf8": "--- a/bt_api_py/service_execution_group.py\n+++ b/bt_api_py/service_execution_group.py\n@@ -514,7 +514,14 @@\n         with self._lock:\n             return not self._closed and bool(self._targets)\n \n-    def maintain_registrations(self, contexts: tuple[ActiveRegistrationContext, ...]) -> None:\n+    def maintain_registrations(\n+        self,\n+        contexts: tuple[ActiveRegistrationContext, ...],\n+        *,\n+        recover: bool = True,\n+    ) -> None:\n+        if type(recover) is not bool:\n+            raise ServiceExecutionGroupError(\"REGISTRATION_RECOVERY_MODE_INVALID\")\n         if type(contexts) is not tuple:\n             raise ServiceExecutionGroupError(\"REGISTRATION_SNAPSHOT_INVALID\")\n         retained: dict[str, ActiveRegistrationContext] = {}\n@@ -536,7 +543,8 @@\n             # An empty view is valid at Host startup and never mutates or\n             # revokes persistent accepted groups or authority records.\n             self._registrations = MappingProxyType(retained)\n-        self._maintain_one_recoverable_group()\n+        if recover:\n+            self._maintain_one_recoverable_group()\n \n     def _maintain_one_recoverable_group(self) -> None:\n         \"\"\"Advance at most one durably accepted group from the Host owner loop.\"\"\"\n",
+      "whole_live_file_is_not_payload": true
+    }
+  }
+}

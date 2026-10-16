@@ -514,7 +514,14 @@ class GroupCoordinatorService:
         with self._lock:
             return not self._closed and bool(self._targets)
 
-    def maintain_registrations(self, contexts: tuple[ActiveRegistrationContext, ...]) -> None:
+    def maintain_registrations(
+        self,
+        contexts: tuple[ActiveRegistrationContext, ...],
+        *,
+        recover: bool = True,
+    ) -> None:
+        if type(recover) is not bool:
+            raise ServiceExecutionGroupError("REGISTRATION_RECOVERY_MODE_INVALID")
         if type(contexts) is not tuple:
             raise ServiceExecutionGroupError("REGISTRATION_SNAPSHOT_INVALID")
         retained: dict[str, ActiveRegistrationContext] = {}
@@ -536,7 +543,8 @@ class GroupCoordinatorService:
             # An empty view is valid at Host startup and never mutates or
             # revokes persistent accepted groups or authority records.
             self._registrations = MappingProxyType(retained)
-        self._maintain_one_recoverable_group()
+        if recover:
+            self._maintain_one_recoverable_group()
 
     def _maintain_one_recoverable_group(self) -> None:
         """Advance at most one durably accepted group from the Host owner loop."""

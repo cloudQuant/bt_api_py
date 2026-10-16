@@ -9,19 +9,20 @@ currently seals conservatively at the authorized handler-entry/write-attempt
 boundary, before exact downstream commit is known. Before the barrier a
 controlled rollback with the complete old deployment stays permitted.
 
-This module implements the missing machine gate as a small durable JSON
-marker beside the state it protects (by default the SDK registry database),
-shaped after the execution-journal cutover transaction in
-``bt_api_py/_execution_session.py``: an explicit COMMITTED status, atomic
-publish, and a destination-exists style conflict refusal. Registry
-``service_epoch`` values remain per-process lease facts. Production write
-attempts are bound to the explicit stable deployment epoch supplied by the
-Host, never to a random process epoch.
+This module implements the machine gate as a small durable JSON marker beside
+the state it protects (by default the SDK registry database). A persistent
+sidecar lock serializes startup initialization and marker transitions, even
+before the first marker exists. Registry ``service_epoch`` values remain
+per-process lease facts. Production write attempts are bound to the explicit
+stable deployment epoch supplied by the Host, never to a random process
+epoch.
 
 Lifecycle:
 
 * ``arm_migration_cutover(state, source_epoch=..., new_epoch=...)`` records a
   COMMITTED cutover marker (the state was taken over by ``new_epoch``).
+* ``enable_migration_cutover`` durably enables the destination only after the
+  operator has checked the new read projection, policies, and readiness.
 * ``record_migration_write_attempt(state, deployment_epoch=...,
   fact_kind=...)`` seals the marker immediately before an authorized
   production write handler or internal writer is entered. This is a
@@ -30,22 +31,26 @@ Lifecycle:
 * ``record_migration_first_write`` remains as a low-level compatibility
   primitive. Production write boundaries use the epoch-bound write-attempt
   API.
-* ``enforce_migration_start(state, deployment_epoch=...)`` is the start gate:
-  with no marker nothing changes; a COMMITTED marker keeps the rollback window
-  open; a SEALED marker refuses every deployment/epoch except the accepted
-  cutover epoch or an explicitly accepted reverse migration, raising
-  ``MigrationGateError`` with code ``REVERSE_MIGRATION_REFUSED`` ("no accepted
-  reverse migration exists" is the default refusal).
-* ``rollback_migration_cutover(state, deployment_epoch=...)`` removes the
-  marker before sealing (controlled rollback; afterwards behavior is fully
-  unchanged) and refuses after sealing unless
-  ``accept_reverse_migration`` recorded an accepted reverse conversion.
+* ``migration_start_guard`` is held through Host resource and Registry
+  initialization. With no marker it preserves normal startup. COMMITTED
+  admits only the declared source or destination in read-only mode; ENABLED
+  and SEALED admit only the destination; REVERSED admits only the separately
+  accepted reverse epoch.
+* ``rollback_migration_cutover(state, deployment_epoch=...)`` removes only an
+  unenabled COMMITTED marker for its exact source epoch. After ENABLED it
+  never removes the marker. A separately accepted reverse conversion moves
+  SEALED to durable REVERSED instead of reopening the unarmed fast path.
 * ``accept_reverse_migration(state, accepted_epoch=..., reference=...)``
-  records the operator-approved reverse conversion (absent by default).
+  records a reverse conversion approval after the trusted operator has
+  verified the conversion. The marker reference is an identifier, not proof
+  by itself. A new stable epoch distinct from both earlier epochs is required.
 
-The write-attempt API is benign on a state that was never armed: no marker
-file, no behavior change, and no lock acquisition. Concurrent initial arming
-is an offline cutover concern and is not fenced by that fast path.
+The write-attempt API remains a benign, lock-free no-op on a state that was
+never armed. That path alone does not fence an already-running writer from a
+first arm; the offline boundary protocol must stop and verify all existing
+writers before arming. Startup itself always takes the persistent sidecar
+lock, including when the marker is absent, so initial arming cannot race
+through an in-progress Host/Registry initialization.
 """
 
 from __future__ import annotations
@@ -56,7 +61,7 @@ import os
 import time
 import uuid
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
@@ -65,7 +70,9 @@ MIGRATION_MARKER_SUFFIX = ".migration-cutover.json"
 MIGRATION_MARKER_SCHEMA_VERSION = 1
 
 STATUS_COMMITTED = "COMMITTED"
+STATUS_ENABLED = "ENABLED"
 STATUS_SEALED = "SEALED"
+STATUS_REVERSED = "REVERSED"
 
 BUSINESS_WRITE_FACT_KINDS = frozenset(
     {"dispatch", "order", "ownership", "reservation", "idempotency", "cursor"}
@@ -80,9 +87,11 @@ CODE_MIGRATION_GATE_LOCK_TIMEOUT = "MIGRATION_GATE_LOCK_TIMEOUT"
 CODE_MIGRATION_GATE_LOCK_FAILURE = "MIGRATION_GATE_LOCK_FAILURE"
 CODE_MARKER_DURABILITY_UNCERTAIN = "CUTOVER_MARKER_DURABILITY_UNCERTAIN"
 CODE_MIGRATION_GATE_EPOCH_MISMATCH = "MIGRATION_GATE_EPOCH_MISMATCH"
+CODE_MIGRATION_WRITE_ENABLEMENT_INVALID = "MIGRATION_WRITE_ENABLEMENT_INVALID"
 
 _MIGRATION_LOCK_TIMEOUT_SECONDS = 5.0
 _MIGRATION_LOCK_POLL_SECONDS = 0.01
+_START_GUARD_CAPABILITY = object()
 
 
 class MigrationGateError(RuntimeError):
@@ -110,13 +119,45 @@ class MigrationCutoverMarker:
     def sealed(self) -> bool:
         """True once the authorized write-attempt barrier has been crossed."""
 
-        return self.status == STATUS_SEALED
+        return self.status in {STATUS_SEALED, STATUS_REVERSED}
+
+
+@dataclass(frozen=True, slots=True)
+class MigrationStartSnapshot:
+    """Active proof token for one guarded Host/Registry startup interval."""
+
+    state_path: str
+    deployment_epoch: str | None
+    marker: MigrationCutoverMarker | None
+    _capability: object = field(repr=False)
+    _active_state: list[bool] = field(repr=False)
+
+    def require_active(
+        self,
+        state_path: str | os.PathLike[str],
+        deployment_epoch: str | None,
+    ) -> MigrationCutoverMarker | None:
+        """Reject detached or foreign tokens before Registry initialization."""
+
+        if (
+            type(self) is not MigrationStartSnapshot
+            or self._capability is not _START_GUARD_CAPABILITY
+            or self._active_state != [True]
+            or self.state_path != _normalized_state_path(state_path)
+            or self.deployment_epoch != deployment_epoch
+        ):
+            raise MigrationGateError(CODE_MIGRATION_WRITE_ENABLEMENT_INVALID)
+        return self.marker
 
 
 def marker_path(state_path: str | os.PathLike[str]) -> Path:
     """Return the durable marker location beside one protected state file."""
 
     return Path(str(state_path) + MIGRATION_MARKER_SUFFIX)
+
+
+def _normalized_state_path(state_path: str | os.PathLike[str]) -> str:
+    return os.path.normcase(os.path.abspath(os.fspath(state_path)))
 
 
 def read_migration_marker(state_path: str | os.PathLike[str]) -> MigrationCutoverMarker | None:
@@ -201,6 +242,7 @@ def arm_migration_cutover(
                 and existing.destination_epoch == new_epoch
                 and (migration_id is None or existing.migration_id == migration_id)
             ):
+                _fsync_parent_directory(marker_path(state_path))
                 return existing
             raise MigrationGateError(CODE_CUTOVER_MARKER_CONFLICT)
         marker = MigrationCutoverMarker(
@@ -219,13 +261,15 @@ def record_migration_first_write(
     fact_kind: str,
     recorded_at: str | None = None,
 ) -> bool:
-    """Seal the marker as a compatibility-level first-write operation.
+    """Seal an explicitly enabled marker through the legacy API.
 
-    Returns ``True`` only for the call that performed the COMMITTED -> SEALED
-    transition; repeated calls are idempotent and keep the first recorded
-    fact. Without an armed marker this remains a benign no-op returning
-    ``False``. Production boundaries use the epoch-bound
-    :func:`record_migration_write_attempt` instead.
+    Returns ``True`` only for the call that performed ENABLED -> SEALED;
+    repeated calls are idempotent and keep the first recorded fact. A
+    COMMITTED marker is deliberately rejected: otherwise this compatibility
+    API could skip the destination's durable read-ready/explicit-enable
+    barrier and a restarted Host would treat SEALED as writable. Without an
+    armed marker this remains a benign no-op returning ``False``. Production
+    boundaries use the epoch-bound :func:`record_migration_write_attempt`.
     """
 
     if fact_kind not in BUSINESS_WRITE_FACT_KINDS:
@@ -240,6 +284,8 @@ def record_migration_first_write(
         marker = _read_migration_marker_unlocked(state_path)
         if marker is None or marker.sealed:
             return False
+        if marker.status != STATUS_ENABLED:
+            raise MigrationGateError(CODE_MIGRATION_WRITE_ENABLEMENT_INVALID)
         sealed = MigrationCutoverMarker(
             migration_id=marker.migration_id,
             source_epoch=marker.source_epoch,
@@ -269,7 +315,7 @@ def record_migration_write_attempt(
     declared destination deployment or an explicitly accepted reverse
     deployment. A process-local registry epoch is not a substitute.
 
-    ``True`` means this call published COMMITTED -> SEALED before the writer
+    ``True`` means this call published ENABLED -> SEALED before the writer
     was entered. It records an attempted write boundary only; downstream
     handler or journal commit requires separate service evidence.
 
@@ -283,30 +329,34 @@ def record_migration_write_attempt(
         raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
     if recorded_at is not None:
         _require_text(recorded_at)
-    # Preserve the ordinary unarmed fast path. Concurrent initial arming is
-    # part of the offline cutover protocol and is not fenced by this no-op.
+    # Preserve the ordinary unarmed fast path. It is not a substitute for the
+    # offline quiescence proof required before a first arm.
     if not _marker_exists(marker_path(state_path)):
         return False
     with _marker_state_lock(state_path):
         marker = _read_migration_marker_unlocked(state_path)
         if marker is None:
             return False
+        expected_epoch = (
+            marker.accepted_reverse_epoch
+            if marker.status == STATUS_REVERSED
+            else marker.destination_epoch
+        )
         if (
             type(deployment_epoch) is not str
             or not deployment_epoch
-            or (
-                deployment_epoch != marker.destination_epoch
-                and deployment_epoch != marker.accepted_reverse_epoch
-            )
+            or deployment_epoch != expected_epoch
         ):
             raise MigrationGateError(CODE_MIGRATION_GATE_EPOCH_MISMATCH)
-        if marker.sealed:
+        if marker.status in {STATUS_SEALED, STATUS_REVERSED}:
             # A prior replace may have made SEALED visible but failed the
             # parent-directory fsync. Reconfirm durability on every later
             # writer attempt before using the existing one-way seal to admit
             # the handler.
             _fsync_parent_directory(marker_path(state_path))
             return False
+        if marker.status != STATUS_ENABLED:
+            raise MigrationGateError(CODE_MIGRATION_WRITE_ENABLEMENT_INVALID)
         sealed = MigrationCutoverMarker(
             migration_id=marker.migration_id,
             source_epoch=marker.source_epoch,
@@ -321,6 +371,50 @@ def record_migration_write_attempt(
         return True
 
 
+def enable_migration_cutover(
+    state_path: str | os.PathLike[str],
+    *,
+    migration_id: str,
+    deployment_epoch: str,
+) -> MigrationCutoverMarker:
+    """Durably enable the declared destination under the marker transition lock.
+
+    The durable ENABLED phase closes the pre-write rollback window before a
+    Registry opens its process-local write latch. It is intentionally a
+    one-way phase: a later first write seals it, while rollback cannot remove
+    an ENABLED marker.
+    """
+
+    _require_text(migration_id)
+    _require_epoch(deployment_epoch)
+    with _marker_state_lock(state_path):
+        marker = _read_migration_marker_unlocked(state_path)
+        if (
+            marker is None
+            or marker.migration_id != migration_id
+            or marker.destination_epoch != deployment_epoch
+        ):
+            raise MigrationGateError(CODE_MIGRATION_WRITE_ENABLEMENT_INVALID)
+        if marker.status == STATUS_ENABLED:
+            # A prior replace may have made ENABLED visible before directory
+            # fsync failed. Never trust that phase until durability is
+            # confirmed again.
+            _fsync_parent_directory(marker_path(state_path))
+            return marker
+        if marker.status != STATUS_COMMITTED:
+            raise MigrationGateError(CODE_MIGRATION_WRITE_ENABLEMENT_INVALID)
+        enabled = MigrationCutoverMarker(
+            migration_id=marker.migration_id,
+            source_epoch=marker.source_epoch,
+            destination_epoch=marker.destination_epoch,
+            status=STATUS_ENABLED,
+            accepted_reverse_epoch=marker.accepted_reverse_epoch,
+            accepted_reverse_reference=marker.accepted_reverse_reference,
+        )
+        _write_marker(state_path, enabled)
+        return enabled
+
+
 def enforce_migration_start(
     state_path: str | os.PathLike[str],
     *,
@@ -329,23 +423,70 @@ def enforce_migration_start(
     """Refuse starting an old deployment/epoch against a sealed cutover state.
 
     * no marker: return (the state was never armed; nothing changes);
-    * COMMITTED (pre-first-write): return (controlled rollback window is
-      unchanged; any deployment may still return);
-    * SEALED: only ``destination_epoch`` or an explicitly accepted reverse
-      epoch is allowed; everything else, including an undeclared start,
-      raises ``MigrationGateError(REVERSE_MIGRATION_REFUSED)`` because no
-      accepted reverse migration exists by default.
+    * COMMITTED: only the declared source or destination may start, read-only;
+    * ENABLED or SEALED: only the declared destination epoch may start;
+    * REVERSED: only the newly accepted reverse epoch may start.
     """
 
     if deployment_epoch is not None:
         _require_epoch(deployment_epoch)
-    marker = read_migration_marker(state_path)
-    if marker is None or not marker.sealed:
+    with migration_start_guard(state_path, deployment_epoch=deployment_epoch):
         return
-    if deployment_epoch == marker.destination_epoch:
+
+
+@contextmanager
+def migration_start_guard(
+    state_path: str | os.PathLike[str], *, deployment_epoch: str | None
+) -> Iterator[MigrationStartSnapshot]:
+    """Serialize Host/Registry initialization against arm, enable and rollback.
+
+    The persistent sidecar is acquired even when no marker exists. This is
+    necessary for a first arm to wait until an already-starting old Host has
+    initialized its Registry epoch. It does not claim to stop an already-live
+    owner; the migration procedure must still prove real owner quiescence.
+    """
+
+    if deployment_epoch is not None:
+        _require_epoch(deployment_epoch)
+    with _marker_state_lock(state_path):
+        marker = _read_migration_marker_unlocked(state_path)
+        _validate_start_epoch(marker, deployment_epoch)
+        if marker is not None:
+            # Never allow a visible marker whose parent-directory durability
+            # is uncertain to authorize process startup.
+            _fsync_parent_directory(marker_path(state_path))
+        active_state = [True]
+        token = MigrationStartSnapshot(
+            state_path=_normalized_state_path(state_path),
+            deployment_epoch=deployment_epoch,
+            marker=marker,
+            _capability=_START_GUARD_CAPABILITY,
+            _active_state=active_state,
+        )
+        try:
+            yield token
+        finally:
+            active_state[0] = False
+
+
+def _validate_start_epoch(
+    marker: MigrationCutoverMarker | None, deployment_epoch: str | None
+) -> None:
+    if marker is None:
+        return
+    if marker.status == STATUS_COMMITTED:
+        if deployment_epoch in {marker.source_epoch, marker.destination_epoch}:
+            return
+        raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
+    if marker.status == STATUS_ENABLED:
+        if deployment_epoch == marker.destination_epoch:
+            return
+        raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
+    if marker.status == STATUS_SEALED and deployment_epoch == marker.destination_epoch:
         return
     if (
-        marker.accepted_reverse_epoch is not None
+        marker.status == STATUS_REVERSED
+        and marker.accepted_reverse_epoch is not None
         and deployment_epoch == marker.accepted_reverse_epoch
     ):
         return
@@ -357,14 +498,13 @@ def rollback_migration_cutover(
     *,
     deployment_epoch: str | None = None,
 ) -> bool:
-    """Complete a controlled rollback by removing the cutover marker.
+    """Rollback before enable, or durably switch to a verified reverse epoch.
 
-    Before the first new write this is always permitted and returns ``True``
-    (the old complete deployment restores the state; afterwards no marker
-    exists and behavior is fully unchanged).  After sealing it returns
-    ``False`` when no active marker exists, and refuses
-    ``REVERSE_MIGRATION_REFUSED`` unless ``accept_reverse_migration`` recorded
-    an accepted reverse epoch (optionally named by ``deployment_epoch``).
+    Only the exact source epoch may remove a COMMITTED pre-enable marker.
+    ENABLED is irreversible through this API. SEALED may transition to
+    REVERSED only after a trusted caller records a verified reverse conversion
+    and supplies its new stable epoch; the marker remains durable. Repeating
+    that exact REVERSED request is an idempotent no-op returning ``False``.
     """
 
     if deployment_epoch is not None:
@@ -375,14 +515,37 @@ def rollback_migration_cutover(
         marker = _read_migration_marker_unlocked(state_path)
         if marker is None:
             return False
-        if not marker.sealed:
+        if marker.status == STATUS_COMMITTED:
+            if deployment_epoch != marker.source_epoch:
+                raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
             _remove_marker(state_path)
             return True
-        if marker.accepted_reverse_epoch is None:
+        if marker.status == STATUS_ENABLED:
             raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
-        if deployment_epoch is not None and deployment_epoch != marker.accepted_reverse_epoch:
+        if marker.status == STATUS_REVERSED:
+            if deployment_epoch != marker.accepted_reverse_epoch:
+                raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
+            _fsync_parent_directory(marker_path(state_path))
+            return False
+        if (
+            marker.status != STATUS_SEALED
+            or marker.accepted_reverse_epoch is None
+            or marker.accepted_reverse_epoch in {marker.source_epoch, marker.destination_epoch}
+        ):
             raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
-        _remove_marker(state_path)
+        if deployment_epoch != marker.accepted_reverse_epoch:
+            raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
+        reversed_marker = MigrationCutoverMarker(
+            migration_id=marker.migration_id,
+            source_epoch=marker.source_epoch,
+            destination_epoch=marker.destination_epoch,
+            status=STATUS_REVERSED,
+            first_write_fact_kind=marker.first_write_fact_kind,
+            first_write_recorded_at=marker.first_write_recorded_at,
+            accepted_reverse_epoch=marker.accepted_reverse_epoch,
+            accepted_reverse_reference=marker.accepted_reverse_reference,
+        )
+        _write_marker(state_path, reversed_marker)
         return True
 
 
@@ -392,11 +555,12 @@ def accept_reverse_migration(
     accepted_epoch: str,
     reference: str,
 ) -> MigrationCutoverMarker:
-    """Record an accepted reverse state conversion for the sealed state.
+    """Record a trusted operator's verified reverse conversion on SEALED.
 
-    ``reference`` names the accepted reverse conversion evidence.  Recording
-    it (an operator decision, absent by default) is what allows the named
-    epoch to start again or roll back after sealing.
+    The caller must complete and verify reverse state conversion before this
+    call. ``reference`` is an audit identifier only; the API cannot establish
+    that the referenced work actually occurred. The accepted epoch must be a
+    new stable epoch, distinct from both source and destination.
     """
 
     _require_epoch(accepted_epoch)
@@ -407,13 +571,28 @@ def accept_reverse_migration(
         marker = _read_migration_marker_unlocked(state_path)
         if marker is None:
             raise MigrationGateError(CODE_NO_ACTIVE_CUTOVER)
+        if not marker.sealed:
+            raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
         if accepted_epoch == marker.destination_epoch:
             raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
+        if accepted_epoch in {marker.source_epoch, marker.destination_epoch}:
+            raise MigrationGateError(CODE_INVALID_MIGRATION_GATE_ARGUMENT)
+        if marker.status == STATUS_REVERSED:
+            if (
+                marker.accepted_reverse_epoch == accepted_epoch
+                and marker.accepted_reverse_reference == reference
+            ):
+                _fsync_parent_directory(marker_path(state_path))
+                return marker
+            raise MigrationGateError(CODE_CUTOVER_MARKER_CONFLICT)
+        if marker.status != STATUS_SEALED:
+            raise MigrationGateError(REFUSAL_REVERSE_MIGRATION_REFUSED)
         if marker.accepted_reverse_epoch is not None:
             if (
                 marker.accepted_reverse_epoch == accepted_epoch
                 and marker.accepted_reverse_reference == reference
             ):
+                _fsync_parent_directory(marker_path(state_path))
                 return marker
             raise MigrationGateError(CODE_CUTOVER_MARKER_CONFLICT)
         updated = MigrationCutoverMarker(
@@ -480,7 +659,7 @@ def _marker_from_document(document: Any) -> MigrationCutoverMarker:
         ):
             raise ValueError
         status = document["status"]
-        if status not in {STATUS_COMMITTED, STATUS_SEALED}:
+        if status not in {STATUS_COMMITTED, STATUS_ENABLED, STATUS_SEALED, STATUS_REVERSED}:
             raise ValueError
         migration_id = document["migration_id"]
         source_epoch = document["source_epoch"]
@@ -503,7 +682,7 @@ def _marker_from_document(document: Any) -> MigrationCutoverMarker:
                 raise ValueError
         else:
             raise ValueError
-        if (fact_kind is None) != (status == STATUS_COMMITTED):
+        if (fact_kind is None) != (status in {STATUS_COMMITTED, STATUS_ENABLED}):
             raise ValueError
         accepted_reverse = document.get("accepted_reverse_migration")
         if accepted_reverse is None:
@@ -519,6 +698,13 @@ def _marker_from_document(document: Any) -> MigrationCutoverMarker:
             if type(reference) is not str or not reference:
                 raise ValueError
         else:
+            raise ValueError
+        if status in {STATUS_COMMITTED, STATUS_ENABLED} and accepted_epoch is not None:
+            raise ValueError
+        if status == STATUS_REVERSED and (
+            accepted_epoch is None
+            or accepted_epoch in {source_epoch, destination_epoch}
+        ):
             raise ValueError
     except Exception:
         raise MigrationGateError(CODE_CUTOVER_MARKER_UNREADABLE) from None

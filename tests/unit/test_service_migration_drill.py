@@ -84,6 +84,7 @@ from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedService
 from bt_api_py.service_migration_gate import (
     REFUSAL_REVERSE_MIGRATION_REFUSED,
     MigrationGateError,
+    STATUS_ENABLED,
     arm_migration_cutover,
     enforce_migration_start,
     marker_path,
@@ -104,6 +105,10 @@ _SERVICE_PRINCIPAL = "mig03b-service-principal"
 _STRATEGY = "mig03b-strategy"
 _STRATEGY_PRINCIPAL = "mig03b-strategy-principal"
 _ACCOUNT = "mig03b-paper-account"
+# Stable deployment identities are distinct from the random service epochs
+# minted by each Registry process during the drill.
+_OLD_DEPLOYMENT_EPOCH = "mig03-integrated-old-deployment-r1"
+_NEW_DEPLOYMENT_EPOCH = "mig03-integrated-new-deployment-r1"
 _STRATEGY_IDENTITY = WireIdentity(WireRole.STRATEGY_CLIENT, _STRATEGY_PRINCIPAL, _STRATEGY)
 _SERVICE_IDENTITY = WireIdentity(WireRole.SERVICE, _SERVICE_PRINCIPAL, _SERVICE_ID)
 _EXEC_INSTANCE = "mig03b-execution-owner"
@@ -400,6 +405,32 @@ def _risk_rows(path: str, intent_id: str) -> dict[str, tuple[tuple[Any, ...], ..
                     (f"dispatch-inflight:{intent_id}",),
                 ).fetchall()
             ),
+        }
+    finally:
+        connection.close()
+
+
+def _risk_policy_projection(path: str) -> dict[str, Any]:
+    """Read the durable risk-policy binding without mutating its database."""
+
+    connection = sqlite3.connect(path, timeout=5.0)
+    try:
+        connection.execute("PRAGMA query_only = ON")
+        row = connection.execute(
+            "SELECT policy_id,policy_hash,max_increase_notional,max_increase_count,"
+            "permit_ttl_seconds,require_strategy_allocation,notional_unit "
+            "FROM risk_policy_bindings WHERE scope_key=?",
+            (_ACCOUNT_SCOPE.key,),
+        ).fetchone()
+        assert row is not None
+        return {
+            "policy_id": row[0],
+            "policy_fingerprint": row[1],
+            "max_increase_notional": row[2],
+            "max_increase_count": row[3],
+            "permit_ttl_seconds": row[4],
+            "require_strategy_allocation": row[5],
+            "notional_unit": row[6],
         }
     finally:
         connection.close()
@@ -783,6 +814,7 @@ def _host_process(
                     ),
                 },
                 "service_epoch": host._registry.service_epoch,
+                "migration_writes_enabled": host._registry.migration_writes_enabled,
             }
 
         phase = "host_start"
@@ -803,6 +835,13 @@ def _host_process(
             if not control.poll():
                 continue
             command = control.recv()
+            if len(command) == 3 and command[0] == "enable":
+                host.enable_migration_writes(
+                    migration_id=command[1],
+                    readiness_sha256=command[2],
+                )
+                control.send(("enabled", host._registry.migration_writes_enabled))
+                continue
             if command == ("facts",):
                 phase = "capture_facts"
                 control.send(("facts", capture_facts()))
@@ -1251,6 +1290,8 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
     tmp_path,
 ) -> None:
     parent_source_origins = _assert_fixed_source_origins()
+    old_deployment_epoch = _OLD_DEPLOYMENT_EPOCH
+    destination_epoch = _NEW_DEPLOYMENT_EPOCH
     context = multiprocessing.get_context("spawn")
     endpoint = _endpoint()
     server_public, server_secret = zmq.curve_keypair()
@@ -1289,7 +1330,7 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
             (
                 config,
                 keys,
-                None,
+                old_deployment_epoch,
                 registry_path,
                 execution_path,
                 risk_path,
@@ -1302,9 +1343,10 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         ready1 = _receive_host_message(host1)
         assert ready1[0] == "ready" and ready1[1] == endpoint, ready1
         assert ready1[3] == parent_source_origins
-        assert ready1[4] is None
+        assert ready1[4] == old_deployment_epoch
         epoch1 = ready1[2]
         observation["epoch_old"] = epoch1
+        observation["deployment_epoch_old"] = old_deployment_epoch
 
         runtime1 = _new_runtime(endpoint, keys, session_id="mig03b-client-session-original")
         runtimes.append(runtime1)
@@ -1425,6 +1467,23 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
             (_STRATEGY_PRINCIPAL, _JOURNAL_ACCOUNT_SCOPE, _JOURNAL_STRATEGY_SCOPE, journal_epoch, 2, 2),
         )
 
+        # Arm only after every old writer has closed and before the destination
+        # Host opens its Registry. The first destination process must therefore
+        # start under the committed read-only barrier, rather than inheriting
+        # an unarmed process-local writer latch.
+        marker = arm_migration_cutover(
+            registry_path,
+            source_epoch=old_deployment_epoch,
+            new_epoch=destination_epoch,
+        )
+        assert marker.status == "COMMITTED"
+        armed_bytes = marker_path(registry_path).read_bytes()
+        observation["cutover"] = {
+            "migration_id": marker.migration_id,
+            "source_epoch": old_deployment_epoch,
+            "destination_epoch": destination_epoch,
+        }
+
         # ---- P3: the new epoch takes over the same durable facts ----------
         host2 = _start_host_process(
             context,
@@ -1432,7 +1491,7 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
             (
                 config,
                 keys,
-                None,
+                destination_epoch,
                 registry_path,
                 execution_path,
                 risk_path,
@@ -1445,15 +1504,18 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         ready2 = _receive_host_message(host2)
         assert ready2[0] == "ready" and ready2[1] == endpoint, ready2
         assert ready2[3] == parent_source_origins
+        assert ready2[4] == destination_epoch
         epoch2 = ready2[2]
         assert epoch2 != epoch1
         observation["epoch_new"] = epoch2
+        observation["deployment_epoch_new"] = destination_epoch
         facts_new_owner = _host_command(host2, "facts")[1]
         assert facts_new_owner["service_epoch"] == epoch2
         assert facts_new_owner["active_registration_ids"] == {
             _EXEC_INSTANCE: (),
             _GW_INSTANCE: (),
         }
+        assert facts_new_owner["migration_writes_enabled"] is False
         assert _business_projection(facts_new_owner) == _business_projection(facts_old_epoch)
         assert _journal_projection(gateway_path) == journal_after_old_epoch
         observation["business_facts"]["new_owner_takeover"] = facts_new_owner
@@ -1464,15 +1526,6 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         assert _business_projection(_host_command(host2, "facts")[1]) == _business_projection(
             facts_old_epoch
         )
-
-        marker = arm_migration_cutover(registry_path, source_epoch=epoch1, new_epoch=epoch2)
-        assert marker.status == "COMMITTED"
-        armed_bytes = marker_path(registry_path).read_bytes()
-        observation["cutover"] = {
-            "migration_id": marker.migration_id,
-            "source_epoch": epoch1,
-            "destination_epoch": epoch2,
-        }
 
         # Double-owner negative: a second complete execution owner on the same
         # store must die on the real cross-process owner lock, before any
@@ -1543,6 +1596,34 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
             new_epoch_ids["broker.order_query"][0],
         }
         assert set(active_new[_GW_INSTANCE]) == {new_epoch_ids["store.account"][0]}
+
+        # Enable only after the destination has re-read the preserved order,
+        # policy, registration, and source-state projections. The digest is
+        # the test's local readback evidence, not an external fence receipt.
+        readiness_evidence = repr(
+            {
+                "migration_id": marker.migration_id,
+                "source_epoch": old_deployment_epoch,
+                "destination_epoch": destination_epoch,
+                "source_business": _business_projection(facts_old_epoch),
+                "destination_business": _business_projection(facts_after_reregister),
+                "migrated_order": (
+                    migrated_order.intent_id,
+                    migrated_order.state,
+                    migrated_order.dispatch_attempts,
+                    migrated_order.permit_reference,
+                ),
+                "risk_policy": _risk_policy_projection(risk_path),
+                "gateway": _journal_projection(gateway_path),
+            }
+        ).encode("utf-8", errors="strict")
+        readiness_sha256 = hashlib.sha256(readiness_evidence).hexdigest()
+        enabled = _host_command(
+            host2, "enable", marker.migration_id, readiness_sha256
+        )
+        assert enabled == ("enabled", True)
+        enabled_marker = read_migration_marker(registry_path)
+        assert enabled_marker is not None and enabled_marker.status == STATUS_ENABLED
 
         # ---- P5: idempotency, cursor continuity and renamed-scope denials --
         client2 = _execution_client(runtime_duplicate)
@@ -1688,12 +1769,13 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         assert len(_sqlite_rows(execution_path)["execution_records"]) == 1
         observation["renamed_scope_denials"] = ["SCOPE_DENIED", "SCOPE_DENIED"]
 
-        # ---- P6: the first new business write seals the cutover -----------
+        # ---- P6: a subsequent first order write preserves state -----------
         # The migrated dispatch-inflight freeze and reservation stay effective
         # in the new epoch: the new risk-increasing intent is safely rejected
         # by the durable gate (no second reservation, no double quota, no
-        # provider dispatch), and its order record is the first new durable
-        # write of the destination epoch.
+        # provider dispatch). Earlier idempotent submit attempts already
+        # sealed the destination before handler entry, so this order is not
+        # used to claim an exact durable-commit seal boundary.
         second_order = client2.submit(
             **_submit_arguments(_NEW_INTENT_ID, "mig03b-signal-002", quantity="1", price="50000")
         )
@@ -1725,25 +1807,26 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         observation["business_facts"]["first_new_write"] = facts_first_new_write
 
         sealed_now = record_migration_first_write(registry_path, fact_kind="order")
-        assert sealed_now is True
+        assert sealed_now is False
         assert record_migration_first_write(registry_path, fact_kind="order") is False
         sealed_marker = read_migration_marker(registry_path)
         assert sealed_marker is not None and sealed_marker.sealed
-        assert sealed_marker.first_write_fact_kind == "order"
-        assert sealed_marker.source_epoch == epoch1
-        assert sealed_marker.destination_epoch == epoch2
+        assert sealed_marker.first_write_fact_kind == "dispatch"
+        assert sealed_marker.source_epoch == old_deployment_epoch
+        assert sealed_marker.destination_epoch == destination_epoch
         sealed_bytes = marker_path(registry_path).read_bytes()
         assert sealed_bytes != armed_bytes
         observation["first_write_seal"] = {
             "fact_kind": sealed_marker.first_write_fact_kind,
             "recorded_at": sealed_marker.first_write_recorded_at,
+            "barrier": "pre-handler-write-attempt",
         }
 
         # ---- P7: sealed state refuses the old deployment and rollback -----
         refused_record = _start_host_process(
             context,
             _refusal_process,
-            (config, keys, registry_path, epoch1),
+            (config, keys, registry_path, old_deployment_epoch),
             label="mig03b-old-deployment-refused",
         )
         refusal_records.append(refused_record)
@@ -1765,7 +1848,9 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         assert refusal_facts["provider_calls"] == ()
         assert marker_path(registry_path).read_bytes() == sealed_bytes
         with pytest.raises(MigrationGateError) as rollback_refused:
-            rollback_migration_cutover(registry_path, deployment_epoch=epoch1)
+            rollback_migration_cutover(
+                registry_path, deployment_epoch=old_deployment_epoch
+            )
         assert rollback_refused.value.code == REFUSAL_REVERSE_MIGRATION_REFUSED
         with pytest.raises(MigrationGateError) as undeclared_refused:
             enforce_migration_start(registry_path)
@@ -1794,7 +1879,7 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
             (
                 config,
                 keys,
-                epoch2,
+                destination_epoch,
                 registry_path,
                 execution_path,
                 risk_path,
@@ -1807,7 +1892,7 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         ready3 = _receive_host_message(host2b)
         assert ready3[0] == "ready" and ready3[1] == endpoint, ready3
         assert ready3[3] == parent_source_origins
-        assert ready3[4] == epoch2
+        assert ready3[4] == destination_epoch
         epoch3 = ready3[2]
         assert epoch3 not in {epoch1, epoch2}
         with pytest.raises(ServiceExecutionError) as stale_epoch_two:
@@ -1865,7 +1950,7 @@ def test_two_epoch_controlled_migration_drill_preserves_facts_and_refuses_old_ep
         assert _provider_count(provider_journal_path, _NEW_INTENT_ID) == 0
         sealed_final = read_migration_marker(registry_path)
         assert sealed_final is not None and sealed_final.sealed
-        assert sealed_final.destination_epoch == epoch2
+        assert sealed_final.destination_epoch == destination_epoch
     finally:
         active_exception = sys.exc_info()[1]
         for runtime in reversed(runtimes):
@@ -1912,6 +1997,8 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
     tmp_path,
 ) -> None:
     parent_source_origins = _assert_fixed_source_origins()
+    old_deployment_epoch = _OLD_DEPLOYMENT_EPOCH
+    destination_epoch = _NEW_DEPLOYMENT_EPOCH
     context = multiprocessing.get_context("spawn")
     endpoint = _endpoint()
     server_public, server_secret = zmq.curve_keypair()
@@ -1949,7 +2036,7 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
             (
                 config,
                 keys,
-                None,
+                old_deployment_epoch,
                 registry_path,
                 execution_path,
                 risk_path,
@@ -1962,6 +2049,7 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
         ready1 = _receive_host_message(host1)
         assert ready1[0] == "ready" and ready1[1] == endpoint, ready1
         assert ready1[3] == parent_source_origins
+        assert ready1[4] == old_deployment_epoch
         epoch1 = ready1[2]
 
         runtime1 = _new_runtime(endpoint, keys, session_id="mig03b-rollback-session")
@@ -1995,14 +2083,32 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
         journal_after_old_epoch = _journal_projection(gateway_path)
         assert read_migration_marker(registry_path) is None
 
-        # ---- P2: new owner, armed marker, import failure -----------------
+        # Arm before the destination starts so the real Registry comes up
+        # read-only in the pre-enable rollback window.
+        arm_migration_cutover(
+            registry_path,
+            source_epoch=old_deployment_epoch,
+            new_epoch=destination_epoch,
+        )
+        armed_bytes = marker_path(registry_path).read_bytes()
+        with pytest.raises(MigrationGateError) as conflicting_arm:
+            arm_migration_cutover(
+                registry_path,
+                source_epoch=old_deployment_epoch,
+                new_epoch="ab" * 16,
+            )
+        assert conflicting_arm.value.code == "CUTOVER_MARKER_CONFLICT"
+        assert marker_path(registry_path).read_bytes() == armed_bytes
+        observation["conflicting_rearm_negative"] = "CUTOVER_MARKER_CONFLICT"
+
+        # ---- P2: read-only new owner and blocked import attempts ---------
         host2 = _start_host_process(
             context,
             _host_process,
             (
                 config,
                 keys,
-                None,
+                destination_epoch,
                 registry_path,
                 execution_path,
                 risk_path,
@@ -2014,6 +2120,7 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
         hosts.append(host2)
         ready2 = _receive_host_message(host2)
         assert ready2[0] == "ready" and ready2[1] == endpoint, ready2
+        assert ready2[4] == destination_epoch
         epoch2 = ready2[2]
         assert epoch2 != epoch1
         assert _business_projection(_host_command(host2, "facts")[1]) == _business_projection(
@@ -2023,53 +2130,43 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
             _execution_client(runtime_duplicate).query(_INTENT_ID)
         assert stale_epoch.value.code == "STALE_EPOCH"
 
-        arm_migration_cutover(registry_path, source_epoch=epoch1, new_epoch=epoch2)
-        armed_bytes = marker_path(registry_path).read_bytes()
-        with pytest.raises(MigrationGateError) as conflicting_arm:
-            arm_migration_cutover(registry_path, source_epoch=epoch1, new_epoch="ab" * 16)
-        assert conflicting_arm.value.code == "CUTOVER_MARKER_CONFLICT"
-        assert marker_path(registry_path).read_bytes() == armed_bytes
-        observation["conflicting_rearm_negative"] = "CUTOVER_MARKER_CONFLICT"
-
         runtime_duplicate.recover()
         recovered_ids = _registration_ids(runtime_duplicate)
         assert {item[1] for item in recovered_ids.values()} == {epoch2}
         client2 = _execution_client(runtime_duplicate)
 
-        # Import idempotency: the identical per-ID fact re-import returns the
-        # same durable record without a second dispatch.
-        replay = client2.submit(
-            **_submit_arguments(_INTENT_ID, "mig03b-signal-001", quantity="2", price="50000")
-        )
-        assert replay.state == "UNKNOWN"
+        replay = client2.query(_INTENT_ID)
+        assert replay is not None and replay.state == "UNKNOWN"
         assert replay.permit_reference == first_order.permit_reference
         assert replay.dispatch_attempts == 1
-        # Import failure: the same ID with different content is refused and
-        # carries the existing record; nothing is zero-filled or overwritten.
-        with pytest.raises(ServiceExecutionError) as import_failure:
+        # A write-like import/replay attempt is fenced until explicit enable;
+        # it cannot reach the execution handler during the rollback window.
+        with pytest.raises(ServiceExecutionError) as disabled_import:
             client2.submit(
                 **_submit_arguments(_INTENT_ID, "mig03b-signal-001", quantity="9", price="50000")
             )
-        assert import_failure.value.code == "INTENT_CONFLICT"
-        assert import_failure.value.record is not None
-        assert import_failure.value.record.permit_reference == first_order.permit_reference
-        facts_after_import_failure = _host_command(host2, "facts")[1]
-        assert facts_after_import_failure["provider_dispatch_counts"] == {
+        assert disabled_import.value.code == "MIGRATION_WRITE_DISABLED"
+        facts_after_denial = _host_command(host2, "facts")[1]
+        assert facts_after_denial["provider_dispatch_counts"] == {
             "intent_1": 1,
             "intent_2": 0,
         }
-        assert _business_projection(facts_after_import_failure) == _business_projection(
+        assert _business_projection(facts_after_denial) == _business_projection(
             facts_old_epoch
         )
-        observation["business_facts"]["after_import_failure"] = facts_after_import_failure
+        observation["business_facts"]["after_import_failure"] = facts_after_denial
 
         # Pre-seal rollback window: the old deployment may still return.
-        enforce_migration_start(registry_path, deployment_epoch=epoch1)
+        enforce_migration_start(
+            registry_path, deployment_epoch=old_deployment_epoch
+        )
         observation["pre_seal_window"] = "old_deployment_start_permitted"
         _close_host_normally(host2)
 
         # ---- P3: controlled rollback before the first new write ----------
-        assert rollback_migration_cutover(registry_path, deployment_epoch=epoch1) is True
+        assert rollback_migration_cutover(
+            registry_path, deployment_epoch=old_deployment_epoch
+        ) is True
         assert not marker_path(registry_path).exists()
         observation["rollback"] = "marker_removed_before_seal"
 
@@ -2080,7 +2177,7 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
             (
                 config,
                 keys,
-                epoch1,
+                old_deployment_epoch,
                 registry_path,
                 execution_path,
                 risk_path,
@@ -2092,7 +2189,7 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
         hosts.append(host3)
         ready3 = _receive_host_message(host3)
         assert ready3[0] == "ready" and ready3[1] == endpoint, ready3
-        assert ready3[4] == epoch1
+        assert ready3[4] == old_deployment_epoch
         epoch3 = ready3[2]
         assert epoch3 not in {epoch1, epoch2}
         with pytest.raises(ServiceExecutionError) as stale_epoch_two:
@@ -2122,7 +2219,9 @@ def test_controlled_migration_rollback_window_and_import_failure_negatives(
         assert _risk_rows(risk_path, _INTENT_ID) == facts_old_epoch["risk_rows_intent_1"]
         assert _provider_count(provider_journal_path, _INTENT_ID) == 1
         assert read_migration_marker(registry_path) is None
-        assert rollback_migration_cutover(registry_path, deployment_epoch=epoch1) is False
+        assert rollback_migration_cutover(
+            registry_path, deployment_epoch=old_deployment_epoch
+        ) is False
         enforce_migration_start(registry_path)
     finally:
         active_exception = sys.exc_info()[1]

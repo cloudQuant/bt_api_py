@@ -1,11 +1,12 @@
-"""Focused tests for the MIG03 increment-A migration cutover gate (11.3 step 6).
+"""Focused tests for the MIG03 migration cutover gate (11.3 step 6).
 
-Covers the four required proofs:
+Covers the marker lifecycle used by the destination write-enable gate:
 
 * without a marker nothing changes (benign no-op passthrough);
-* before the first new business write the controlled rollback path (old
-  deployment/epoch start plus marker removal) is still allowed and untouched;
-* after the first new business write the old deployment/epoch start is refused
+* COMMITTED permits the exact source rollback and starts the destination
+  read-only; ENABLED follows explicit destination readiness and cannot roll
+  back by removing the marker;
+* after the first new write attempt, the old deployment/epoch start is refused
   with the specific machine-checkable code ``REVERSE_MIGRATION_REFUSED``;
 * the refusal is durable across a process restart (fresh interpreter) and the
   accepted cutover epoch still passes.
@@ -29,10 +30,14 @@ from bt_api_py.service_config import parse_service_config
 from bt_api_py.service_host import ServiceHost, ServiceHostError, TrustedServiceAuthority
 from bt_api_py.service_migration_gate import (
     BUSINESS_WRITE_FACT_KINDS,
+    CODE_MIGRATION_WRITE_ENABLEMENT_INVALID,
     REFUSAL_REVERSE_MIGRATION_REFUSED,
+    STATUS_ENABLED,
+    STATUS_REVERSED,
     MigrationGateError,
     accept_reverse_migration,
     arm_migration_cutover,
+    enable_migration_cutover,
     enforce_migration_start,
     marker_path,
     read_migration_marker,
@@ -43,10 +48,11 @@ from bt_api_py.service_registry import PrincipalGrant
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Synthetic registry service_epoch facts: the old deployment epoch (host A)
-# and the cutover/new owner epoch (host B, section 11.3 step 5).
+# Stable deployment epochs (distinct from each Registry's per-process
+# ``service_epoch`` lease fact).
 _OLD_EPOCH = "0f8d3b6c9a1e4f2d8b7a6c5d4e3f2a10"
 _NEW_EPOCH = "1a2b3c4d5e6f708192a3b4c5d6e7f801"
+_REVERSE_EPOCH = "2b3c4d5e6f708192a3b4c5d6e7f8019a"
 
 _SCOPE = WireScope("paper:demo", account_ref="account-a", strategy_ref="strategy-a")
 _CLIENT_IDENTITY = WireIdentity(WireRole.STRATEGY_CLIENT, "curve-principal", "strategy-client-a")
@@ -54,6 +60,34 @@ _CLIENT_IDENTITY = WireIdentity(WireRole.STRATEGY_CLIENT, "curve-principal", "st
 
 def _state(tmp_path: Path) -> Path:
     return tmp_path / "registry.sqlite3"
+
+
+def _enable_destination(state: Path) -> None:
+    marker = read_migration_marker(state)
+    assert marker is not None and marker.status == "COMMITTED"
+    enabled = enable_migration_cutover(
+        state,
+        migration_id=marker.migration_id,
+        deployment_epoch=marker.destination_epoch,
+    )
+    assert enabled.status == STATUS_ENABLED
+
+
+def test_compatibility_first_write_refuses_committed_marker_without_mutation(
+    tmp_path,
+) -> None:
+    state = _state(tmp_path)
+    committed = arm_migration_cutover(
+        state, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH
+    )
+    marker_bytes = marker_path(state).read_bytes()
+
+    with pytest.raises(MigrationGateError) as refused:
+        record_migration_first_write(state, fact_kind="dispatch")
+
+    assert refused.value.code == CODE_MIGRATION_WRITE_ENABLEMENT_INVALID
+    assert marker_path(state).read_bytes() == marker_bytes
+    assert read_migration_marker(state) == committed
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +107,9 @@ def test_no_marker_is_a_benign_noop(tmp_path) -> None:
 
     assert not marker_path(state).exists()
     assert state.read_bytes() == b"state-bytes"
-    assert sorted(entry.name for entry in tmp_path.iterdir()) == ["registry.sqlite3"]
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == sorted(
+        ["registry.sqlite3", marker_path(state).name + ".lock"]
+    )
 
 
 def test_arm_is_durable_idempotent_and_conflicting_arm_refuses(tmp_path) -> None:
@@ -107,7 +143,9 @@ def test_pre_first_write_old_epoch_start_allowed_and_rollback_restores_unchanged
     # Rollback window: the old deployment/epoch start is permitted, unchanged,
     # and the start check itself is read-only.
     assert enforce_migration_start(state, deployment_epoch=_OLD_EPOCH) is None
-    assert enforce_migration_start(state, deployment_epoch=None) is None
+    with pytest.raises(MigrationGateError) as undeclared_start:
+        enforce_migration_start(state, deployment_epoch=None)
+    assert undeclared_start.value.code == REFUSAL_REVERSE_MIGRATION_REFUSED
     assert read_migration_marker(state) == armed
 
     # Complete restore by the old complete deployment removes the marker.
@@ -126,6 +164,7 @@ def test_pre_first_write_old_epoch_start_allowed_and_rollback_restores_unchanged
 def test_first_business_write_seals_and_old_epoch_start_is_refused(tmp_path) -> None:
     state = _state(tmp_path)
     armed = arm_migration_cutover(state, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH)
+    _enable_destination(state)
 
     assert {
         "dispatch",
@@ -178,37 +217,60 @@ def test_first_business_write_seals_and_old_epoch_start_is_refused(tmp_path) -> 
     assert read_migration_marker(state) == marker
 
 
-def test_accepted_reverse_migration_is_required_to_restore_old_epoch(tmp_path) -> None:
+def test_trusted_operator_reverse_record_is_not_conversion_proof(tmp_path) -> None:
     state = _state(tmp_path)
     arm_migration_cutover(state, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH)
+    _enable_destination(state)
     record_migration_first_write(
         state, fact_kind="ownership", recorded_at="2026-10-16T00:00:01Z"
     )
 
+    # This low-level gate test supplies only an operator audit identifier. The
+    # API records a trusted operator's assertion; it cannot inspect or prove
+    # that reverse conversion, state reconciliation, or writer handoff ran.
     accepted = accept_reverse_migration(
-        state, accepted_epoch=_OLD_EPOCH, reference="reverse-plan-2026-10-16"
+        state, accepted_epoch=_REVERSE_EPOCH, reference="reverse-plan-2026-10-16"
     )
-    assert accepted.accepted_reverse_epoch == _OLD_EPOCH
+    assert accepted.accepted_reverse_epoch == _REVERSE_EPOCH
     assert accepted.accepted_reverse_reference == "reverse-plan-2026-10-16"
     assert accepted.sealed
 
-    # The accepted reverse epoch may start again; unknown epochs stay refused.
-    assert enforce_migration_start(state, deployment_epoch=_OLD_EPOCH) is None
+    # An operator record alone does not change the start barrier. Only after
+    # the caller claims the separately verified reverse conversion through the
+    # API does the marker durably move to REVERSED. The old source epoch itself
+    # is never reopened by this protocol.
+    with pytest.raises(MigrationGateError) as source_still_refused:
+        enforce_migration_start(state, deployment_epoch=_OLD_EPOCH)
+    assert source_still_refused.value.code == REFUSAL_REVERSE_MIGRATION_REFUSED
+    assert enforce_migration_start(state, deployment_epoch=_NEW_EPOCH) is None
     with pytest.raises(MigrationGateError) as still_refused:
         enforce_migration_start(state, deployment_epoch="unknown-epoch")
     assert still_refused.value.code == REFUSAL_REVERSE_MIGRATION_REFUSED
 
-    # A wrong epoch cannot roll back even with an accepted reverse epoch.
+    # A wrong epoch cannot complete the reverse marker transition.
     with pytest.raises(MigrationGateError):
         rollback_migration_cutover(state, deployment_epoch="unknown-epoch")
+    assert read_migration_marker(state) == accepted
 
-    # With the accepted reverse conversion, the complete rollback proceeds.
-    assert rollback_migration_cutover(state, deployment_epoch=_OLD_EPOCH) is True
-    assert read_migration_marker(state) is None
+    # This verifies marker plumbing after an explicit operator authorization,
+    # not an executed or accepted reverse migration.
+    assert rollback_migration_cutover(state, deployment_epoch=_REVERSE_EPOCH) is True
+    reversed_marker = read_migration_marker(state)
+    assert reversed_marker is not None and reversed_marker.status == STATUS_REVERSED
+    assert reversed_marker.accepted_reverse_epoch == _REVERSE_EPOCH
+    assert rollback_migration_cutover(state, deployment_epoch=_REVERSE_EPOCH) is False
+    assert enforce_migration_start(state, deployment_epoch=_REVERSE_EPOCH) is None
+    for deployment_epoch in (_OLD_EPOCH, _NEW_EPOCH):
+        with pytest.raises(MigrationGateError) as refused:
+            enforce_migration_start(state, deployment_epoch=deployment_epoch)
+        assert refused.value.code == REFUSAL_REVERSE_MIGRATION_REFUSED
 
-    with pytest.raises(MigrationGateError) as no_active:
-        accept_reverse_migration(state, accepted_epoch=_OLD_EPOCH, reference="reverse-plan")
-    assert no_active.value.code == "NO_ACTIVE_CUTOVER"
+    with pytest.raises(MigrationGateError) as conflicting_reverse:
+        accept_reverse_migration(
+            state, accepted_epoch=_REVERSE_EPOCH, reference="different-plan"
+        )
+    assert conflicting_reverse.value.code == "CUTOVER_MARKER_CONFLICT"
+    assert read_migration_marker(state) == reversed_marker
 
 
 def test_corrupt_or_foreign_marker_fails_closed(tmp_path) -> None:
@@ -278,6 +340,7 @@ def _gate_probe(state: Path, deployment_epoch: str | None) -> dict[str, Any]:
 def test_refusal_and_rollback_refusal_are_durable_across_process_restart(tmp_path) -> None:
     state = _state(tmp_path)
     arm_migration_cutover(state, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH)
+    _enable_destination(state)
     record_migration_first_write(
         state, fact_kind="cursor", recorded_at="2026-10-16T00:00:02Z"
     )
@@ -387,6 +450,7 @@ def test_service_host_start_refuses_sealed_old_epoch_with_specific_code(tmp_path
     # The same state file the old deployment would open.
     state.write_bytes(b"old-state-bytes")
     arm_migration_cutover(state, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH)
+    _enable_destination(state)
     record_migration_first_write(
         state, fact_kind="dispatch", recorded_at="2026-10-16T00:00:03Z"
     )
@@ -406,21 +470,22 @@ def test_service_host_start_refuses_sealed_old_epoch_with_specific_code(tmp_path
 
 
 @pytest.mark.parametrize(
-    ("marker", "deployment_epoch"),
+    ("marker", "deployment_epoch", "expected_code"),
     [
-        (None, None),
-        ("committed", _OLD_EPOCH),
-        ("committed", None),
-        ("sealed", _NEW_EPOCH),
+        (None, None, "UNSUPPORTED_PUBLIC_PORT"),
+        ("committed", _OLD_EPOCH, "UNSUPPORTED_PUBLIC_PORT"),
+        ("committed", None, REFUSAL_REVERSE_MIGRATION_REFUSED),
+        ("sealed", _NEW_EPOCH, "UNSUPPORTED_PUBLIC_PORT"),
     ],
 )
 def test_service_host_start_unchanged_without_marker_or_before_first_write(
-    tmp_path, marker, deployment_epoch
+    tmp_path, marker, deployment_epoch, expected_code
 ) -> None:
     state = _state(tmp_path)
     if marker is not None:
         arm_migration_cutover(state, source_epoch=_OLD_EPOCH, new_epoch=_NEW_EPOCH)
         if marker == "sealed":
+            _enable_destination(state)
             record_migration_first_write(
                 state, fact_kind="dispatch", recorded_at="2026-10-16T00:00:04Z"
             )
@@ -429,10 +494,10 @@ def test_service_host_start_unchanged_without_marker_or_before_first_write(
     with pytest.raises(ServiceHostError) as exc_info:
         host.start()
 
-    # The gate did not interfere: the pre-existing early validation failure is
-    # observed exactly as before the wiring (no marker => no behavior change;
-    # pre-first-write rollback window and the declared cutover epoch pass too).
-    assert exc_info.value.code == "UNSUPPORTED_PUBLIC_PORT"
+    # The gate permits the unarmed path and the declared source/destination
+    # epochs through to the pre-existing validation failure. An undeclared
+    # epoch against COMMITTED is refused before any Host side effect.
+    assert exc_info.value.code == expected_code
     assert calls == []
     if marker is None:
         assert not marker_path(state).exists()
