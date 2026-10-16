@@ -34,6 +34,8 @@ from bt_api_py.service_host import (
     ServiceHostError,
     TrustedServiceAuthority,
     TrustedServiceClients,
+    _account_read_metadata_omission_allowed,
+    _matches_account_read_metadata_omission,
 )
 from bt_api_py.service_registry import (
     PrincipalGrant,
@@ -427,6 +429,7 @@ def _account_worker_setup(
     tmp_path: Path,
     *,
     fail_read: bool = False,
+    expose_instrument_metadata: bool = False,
     failed_close_attempts: int = 0,
     invalid_worker_mapping: bool = False,
     refresh_interval_seconds: float = 10.0,
@@ -533,6 +536,8 @@ def _account_worker_setup(
             return True
 
     provider = Provider()
+    if expose_instrument_metadata:
+        provider.read_instrument_metadata = lambda *_args, **_kwargs: None
     journal = GatewayEventJournal(tmp_path / "account-state.sqlite3")
     guard_directory = tmp_path / "account-guards"
     guard_directory.mkdir(exist_ok=True)
@@ -2048,6 +2053,120 @@ def test_market_publisher_close_failure_retains_hub_until_explicit_retry(tmp_pat
     assert events == ["rpc.close", "publisher.close", "publisher.close"]
 
 
+def test_account_read_metadata_capability_omission_allows_exact_worker_without_method(
+    tmp_path,
+):
+    from bt_api_gateway.service_component import GatewayReadService, SUPPORTED_OPERATIONS
+
+    planned = ServiceCapability(
+        "gateway-session",
+        "service.account_read",
+        SUPPORTED_OPERATIONS,
+        frozenset(),
+    )
+    omitted = ServiceCapability(
+        "gateway-session",
+        "service.account_read",
+        SUPPORTED_OPERATIONS - {"account.instrument_metadata"},
+        frozenset(),
+    )
+
+    no_metadata_path = tmp_path / "without-metadata"
+    no_metadata_path.mkdir()
+    no_metadata = _account_worker_setup(no_metadata_path)
+    no_metadata_resources = no_metadata[6]
+    no_metadata_worker = no_metadata[3]
+    try:
+        assert no_metadata_worker.instrument_metadata_available is False
+        no_metadata_adapter = GatewayReadService(
+            no_metadata_resources.values["journal"],
+            accounts=no_metadata_resources.values["accounts"],
+            principals=no_metadata_resources.values["principals"],
+            state_worker=no_metadata_worker,
+        )
+        assert no_metadata_adapter.supported_operations == omitted.operations
+        assert _account_read_metadata_omission_allowed(
+            "gateway", "account_session_worker", no_metadata_resources
+        ) is True
+        assert _matches_account_read_metadata_omission(
+            ServiceCapability(
+                "gateway-session",
+                "service.account_read",
+                no_metadata_adapter.supported_operations,
+                frozenset(),
+            ),
+            planned,
+            {"gateway-session"},
+        ) is True
+        assert _account_read_metadata_omission_allowed(
+            "execution", "account_session_worker", no_metadata_resources
+        ) is False
+        assert _account_read_metadata_omission_allowed(
+            "gateway", "market_hub", no_metadata_resources
+        ) is False
+        changed_writes = ServiceCapability(
+            "gateway-session",
+            "service.account_read",
+            omitted.operations,
+            frozenset({"account.snapshot"}),
+        )
+        assert _matches_account_read_metadata_omission(
+            changed_writes, planned, {"gateway-session"}
+        ) is False
+    finally:
+        no_metadata_resources.close_resource()
+
+
+def test_account_read_metadata_capability_omission_rejects_worker_with_method(
+    tmp_path,
+):
+    from bt_api_gateway.service_component import GatewayReadService, SUPPORTED_OPERATIONS
+
+    planned = ServiceCapability(
+        "gateway-session",
+        "service.account_read",
+        SUPPORTED_OPERATIONS,
+        frozenset(),
+    )
+    omitted = ServiceCapability(
+        "gateway-session",
+        "service.account_read",
+        SUPPORTED_OPERATIONS - {"account.instrument_metadata"},
+        frozenset(),
+    )
+    has_metadata_path = tmp_path / "with-metadata"
+    has_metadata_path.mkdir()
+    has_metadata = _account_worker_setup(
+        has_metadata_path, expose_instrument_metadata=True
+    )
+    has_metadata_resources = has_metadata[6]
+    has_metadata_worker = has_metadata[3]
+    try:
+        assert has_metadata_worker.instrument_metadata_available is True
+        has_metadata_adapter = GatewayReadService(
+            has_metadata_resources.values["journal"],
+            accounts=has_metadata_resources.values["accounts"],
+            principals=has_metadata_resources.values["principals"],
+            state_worker=has_metadata_worker,
+        )
+        assert has_metadata_adapter.supported_operations == planned.operations
+        assert _account_read_metadata_omission_allowed(
+            "gateway", "account_session_worker", has_metadata_resources
+        ) is False
+        assert _matches_account_read_metadata_omission(
+            ServiceCapability(
+                "gateway-session",
+                "service.account_read",
+                omitted.operations,
+                frozenset(),
+            ),
+            planned,
+            set(),
+        ) is False
+    finally:
+        has_metadata_resources.close_resource()
+
+
 def test_account_session_worker_shares_one_read_across_strategies_and_survives_one_unregister(
     tmp_path,
 ):
@@ -2064,6 +2183,9 @@ def test_account_session_worker_shares_one_read_across_strategies_and_survives_o
     ) = _account_worker_setup(tmp_path)
     from bt_api_gateway.service_component import SUPPORTED_OPERATIONS
 
+    expected_account_read_operations = SUPPORTED_OPERATIONS - {
+        "account.instrument_metadata"
+    }
     try:
         host.start()
         assert worker.ready is True
@@ -2072,7 +2194,7 @@ def test_account_session_worker_shares_one_read_across_strategies_and_survives_o
         registry = host._registry
         assert registry is not None and registry.ready is True
         account_read_capability = host._components[0].capabilities[0]
-        assert account_read_capability.operations == SUPPORTED_OPERATIONS
+        assert account_read_capability.operations == expected_account_read_operations
         assert account_read_capability.write_operations == frozenset()
 
         registered: dict[str, tuple[dict[str, Any], WireScope]] = {}
@@ -2094,7 +2216,7 @@ def test_account_session_worker_shares_one_read_across_strategies_and_survives_o
                         "instance_id": "gateway-session",
                         "port": "service.account_read",
                         "scope_ref": grant_ref,
-                        "operations": tuple(sorted(SUPPORTED_OPERATIONS)),
+                        "operations": tuple(sorted(expected_account_read_operations)),
                     },
                     schema_id="sdk.service.control",
                     identity=_CLIENT_IDENTITY,

@@ -69,6 +69,63 @@ from .service_runtime import RegisteredBinding, RegistrationSummary, ServiceClie
 _SAFE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
+def _account_read_metadata_omission_allowed(
+    component: str,
+    role: object,
+    resources: ComponentResources,
+) -> bool:
+    """Allow the one account-read operation the resolved provider cannot serve.
+
+    ``build_component`` has already validated this resource as the exact
+    GatewayAccountSessionWorker for the selected account-session component.
+    Re-check its exact type and provider fact here so the Host plan exception
+    is derived from the resolved trusted object, never from manifest options.
+    """
+
+    if (
+        component != "gateway"
+        or role != "account_session_worker"
+        or type(resources) is not ComponentResources
+    ):
+        return False
+    worker = resources.internal_ports.get("service.provider_session")
+    module = sys.modules.get("bt_api_gateway.account_session_worker")
+    worker_type = getattr(module, "GatewayAccountSessionWorker", None)
+    if not isinstance(worker_type, type) or type(worker) is not worker_type:
+        return False
+    try:
+        provider = worker._provider
+        provider_exposes_metadata = callable(
+            getattr(provider, "read_instrument_metadata", None)
+        )
+        metadata_available = worker.instrument_metadata_available
+    except Exception:
+        return False
+    return (
+        type(metadata_available) is bool
+        and metadata_available is False
+        and provider_exposes_metadata is False
+    )
+
+
+def _matches_account_read_metadata_omission(
+    actual: ServiceCapability,
+    planned: ServiceCapability,
+    allowed_instance_ids: set[str],
+) -> bool:
+    """Match only the exact read-only account metadata capability omission."""
+
+    return (
+        actual.instance_id == planned.instance_id
+        and actual.port == planned.port == "service.account_read"
+        and planned.instance_id in allowed_instance_ids
+        and actual.operations
+        == planned.operations - {"account.instrument_metadata"}
+        and actual.write_operations == planned.write_operations
+        and actual.market_wire_version == planned.market_wire_version
+    )
+
+
 class ServiceHostError(RuntimeError):
     """Finite, value-free host lifecycle error."""
 
@@ -556,6 +613,7 @@ class ServiceHost:
                 TrustedPaperLegacyImportPolicy
             ] = []
             owner_reduce_omission_allowed: set[str] = set()
+            account_read_metadata_omission_allowed: set[str] = set()
             for item in self._prepared:
                 dependency_ref = (
                     item.options.get("provider_session_ref")
@@ -626,6 +684,12 @@ class ServiceHost:
                 ):
                     raise ServiceHostError("RESOURCE_TRACKING_FAILED")
                 pending_resources = self._pending_resources[-1][2]
+                if _account_read_metadata_omission_allowed(
+                    item.spec.component,
+                    item.spec.options.get("role"),
+                    pending_resources,
+                ):
+                    account_read_metadata_omission_allowed.add(item.spec.instance_id)
                 if (
                     item.spec.component == "execution"
                     and item.spec.options.get("role") == "account_owner"
@@ -691,6 +755,11 @@ class ServiceHost:
                         planned.port == "service.market_source"
                         and actual.operations == planned.operations - {"market.history"}
                         and actual.write_operations == planned.write_operations
+                    )
+                    or _matches_account_read_metadata_omission(
+                        actual,
+                        planned,
+                        account_read_metadata_omission_allowed,
                     )
                     or (
                         planned.port == "service.order_query"
