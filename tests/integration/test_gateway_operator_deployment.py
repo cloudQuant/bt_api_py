@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 import zmq
 from bt_api_base.account_protocol import AccountKey, AccountResourceKey
+from bt_api_base.market_history_protocol import MarketHistoryRequest
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_gateway.event_journal import GatewayEventJournal
@@ -20,16 +21,24 @@ from bt_api_gateway.router import GatewayCommandKind, GatewayPrincipal
 from bt_api_gateway.service_component import GatewayServiceAccountScope
 from bt_api_gateway.session_guard import LocalAccountSessionGuard
 from bt_api_okx.containers.tickers import OkxTickerData
+from bt_api_okx.feeds.live_okx.swap import OkxRequestDataSwap
+from bt_api_okx.market_history_provider import OkxMarketHistoryProvider
 from bt_api_okx.market_provider import BoundedOkxTickerQueue
 
 from bt_api_py.gateway_operator import (
     GatewayAccountSessionBinding,
+    GatewayMarketBinding,
     GatewayOkxMarketBinding,
     GatewayOperatorDeployment,
+    GatewayOperatorDeploymentError,
 )
 from bt_api_py.service_config import parse_client_config, parse_service_config
 from bt_api_py.service_host import ServiceHostError, TrustedServiceAuthority
-from bt_api_py.service_market import ServiceMarketClient, ZmqMarketTransportFactory
+from bt_api_py.service_market import (
+    ServiceMarketClient,
+    ServiceMarketError,
+    ZmqMarketTransportFactory,
+)
 from bt_api_py.service_registry import PrincipalGrant, ResourceGrant
 from bt_api_py.service_runtime import (
     ClientCurveKeys,
@@ -49,6 +58,8 @@ _PRINCIPAL_REF = "principal:operator-gateway"
 _MARKET_OPERATIONS = frozenset(
     {"market.subscribe", "market.unsubscribe", "market.snapshot", "market.head", "market.read_after"}
 )
+_HISTORY_OPERATION = "market.history"
+_HISTORY_OPERATIONS = frozenset({_HISTORY_OPERATION})
 _ACCOUNT_OPERATIONS = frozenset(
     {
         "account.ack",
@@ -72,6 +83,20 @@ _KEY = MarketSubscriptionKey(
         native_symbol="BTC-USDT-SWAP",
     ),
     channel="tickers",
+)
+_HISTORY_KEY = MarketSubscriptionKey(
+    source_ref="okx-public-market-r1",
+    entitlement_ref="public-history-r1",
+    instrument=MarketInstrumentKey(
+        provider="okx",
+        venue="OKX",
+        environment="live",
+        product_type="SWAP",
+        instrument_id="BTC-USDT-SWAP",
+        native_symbol="BTC-USDT-SWAP",
+    ),
+    channel="bar",
+    timeframe="1m",
 )
 
 
@@ -197,7 +222,13 @@ class _SyntheticOkxStream:
         self.stop_calls += 1
 
 
-def _market_authority(config, server_keys, client_public):
+def _market_authority(
+    config,
+    server_keys,
+    client_public,
+    *,
+    operations: frozenset[str] = _MARKET_OPERATIONS,
+):
     service_identity = WireIdentity(WireRole.SERVICE, "principal:operator-service", _SERVICE_ID)
     service_scope = WireScope(_DOMAIN_REF)
     strategy_identity = WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL_REF, _STRATEGY_REF)
@@ -206,7 +237,7 @@ def _market_authority(config, server_keys, client_public):
         "service.market_source",
         _SCOPE_REF,
         WireScope(_DOMAIN_REF, account_ref=_ACCOUNT_REF, strategy_ref=_STRATEGY_REF),
-        _MARKET_OPERATIONS,
+        operations,
     )
     authority = TrustedServiceAuthority(
         identity=service_identity,
@@ -333,6 +364,288 @@ def test_operator_factory_runs_okx_projection_through_real_service_host(tmp_path
         assert not owner.is_alive(), "operator Host owner thread did not close"
     assert deployment.state == "closed"
     assert streams[0].stop_calls == 1
+
+
+class _NoSubscriptionMarketProvider:
+    def __init__(self) -> None:
+        self.subscribe_calls: list[object] = []
+        self.unsubscribe_calls: list[object] = []
+        self.close_calls = 0
+        self.owner_threads: list[int] = []
+
+    def subscribe(self, key: MarketSubscriptionKey, *, generation: str) -> object:
+        self.owner_threads.append(threading.get_ident())
+        self.subscribe_calls.append((key, generation))
+        raise AssertionError("history-only client must not subscribe to the live stream")
+
+    def unsubscribe(self, handle: object) -> bool:
+        self.owner_threads.append(threading.get_ident())
+        self.unsubscribe_calls.append(handle)
+        return True
+
+    def close(self) -> None:
+        self.owner_threads.append(threading.get_ident())
+        self.close_calls += 1
+
+
+class _SyntheticHistoryHttpLeaf(OkxRequestDataSwap):
+    def __init__(self) -> None:
+        super().__init__(None, environment="production")
+        self.http_calls: list[dict[str, Any]] = []
+        self.disconnect_calls = 0
+
+    def http_request(
+        self,
+        method: str,
+        url: str,
+        headers: Any = None,
+        body: Any = None,
+        timeout: float = 10,
+        max_retries: int = 3,
+    ) -> dict[str, Any]:
+        self.http_calls.append(
+            {
+                "thread_id": threading.get_ident(),
+                "method": method,
+                "url": url,
+                "headers": dict(headers or {}),
+                "body": body,
+                "timeout": timeout,
+                "max_retries": max_retries,
+            }
+        )
+        return {
+            "code": "0",
+            "msg": "",
+            "data": [
+                [
+                    "1767225600000",
+                    "100.0",
+                    "102.0",
+                    "99.0",
+                    "101.0",
+                    "10",
+                    "1000",
+                    "1000",
+                    "1",
+                ],
+                [
+                    "1767225660000",
+                    "101.0",
+                    "103.0",
+                    "100.0",
+                    "102.0",
+                    "12",
+                    "1200",
+                    "1200",
+                    "1",
+                ],
+            ],
+        }
+
+    def disconnect(self) -> None:
+        self.disconnect_calls += 1
+        super().disconnect()
+
+
+class _FailFirstHistoryClose:
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    def fetch(self, _request: MarketHistoryRequest, _timeout: float) -> object:
+        raise AssertionError("close-retry test must not fetch history")
+
+    def close(self) -> None:
+        self.close_calls += 1
+        if self.close_calls == 1:
+            raise RuntimeError("synthetic first close uncertainty")
+
+
+@pytest.mark.integration
+def test_history_only_client_fetches_okx_bars_through_operator_host_without_subscribing(
+    tmp_path: Path,
+) -> None:
+    rpc_bind, market_bind = _free_endpoint(), _free_endpoint()
+    config = parse_service_config(_market_service_config(rpc_bind, market_bind))
+    server_keys = zmq.curve_keypair()
+    client_public, client_secret = zmq.curve_keypair()
+    authority, service_identity = _market_authority(
+        config, server_keys, client_public, operations=_HISTORY_OPERATIONS
+    )
+    live_provider = _NoSubscriptionMarketProvider()
+    history_clients: list[_SyntheticHistoryHttpLeaf] = []
+    factory_threads: list[int] = []
+
+    def make_history_provider() -> OkxMarketHistoryProvider:
+        factory_threads.append(threading.get_ident())
+        leaf = _SyntheticHistoryHttpLeaf()
+        history_clients.append(leaf)
+        return OkxMarketHistoryProvider(leaf)
+
+    deployment = GatewayOperatorDeployment(
+        config,
+        authority,
+        tmp_path / "operator-market-history-registry.sqlite3",
+        resource_provider=lambda *_args: pytest.fail("market role must use operator factory"),
+        market_binding=GatewayMarketBinding(
+            key_universe=(_KEY,),
+            principal_allowed_keys={_PRINCIPAL_REF: frozenset({_KEY})},
+            provider_factory=lambda: live_provider,
+            history_key_universe=(_HISTORY_KEY,),
+            principal_allowed_history_keys={
+                _PRINCIPAL_REF: frozenset({_HISTORY_KEY})
+            },
+            history_provider_factory=make_history_provider,
+            history_timeout_seconds=2.0,
+        ),
+    )
+
+    startup: queue.Queue[tuple[str, object, object]] = queue.Queue()
+    stop = threading.Event()
+    owner_id: list[int] = []
+
+    def serve_host() -> None:
+        owner_id.append(threading.get_ident())
+        try:
+            deployment.start()
+            startup.put(("started", deployment.endpoint, deployment.market_endpoint))
+            while not stop.is_set():
+                deployment.serve_once(10)
+        except BaseException as exc:
+            startup.put(("error", getattr(exc, "code", "HOST_START_FAILED"), None))
+        finally:
+            if deployment.state not in {"closed", "failed"}:
+                with suppress(BaseException):
+                    deployment.close()
+
+    owner = threading.Thread(target=serve_host, name="gateway-history-host", daemon=True)
+    owner.start()
+    runtime: ServiceClientRuntime | None = None
+    market: ServiceMarketClient | None = None
+    try:
+        startup_state = startup.get(timeout=10)
+        assert startup_state[0] == "started", startup_state
+        rpc_endpoint, market_endpoint = startup_state[1], startup_state[2]
+        assert isinstance(rpc_endpoint, str) and isinstance(market_endpoint, str)
+
+        client_config = parse_client_config(
+            _market_client_config(rpc_endpoint, market_endpoint)
+        )
+        client_security = ClientCurveKeys(server_keys[0], client_public, client_secret)
+        rpc_transport_factory = ZmqTransportFactory({_SECURITY_REF: client_security})
+        runtime = ServiceClientRuntime(
+            client_config,
+            identity=WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL_REF, _STRATEGY_REF),
+            scope_resolver=lambda _ref: WireScope(
+                _DOMAIN_REF, account_ref=_ACCOUNT_REF, strategy_ref=_STRATEGY_REF
+            ),
+            peer_resolver=lambda _service_id: service_identity,
+            transport_factory=rpc_transport_factory,
+            run_id="operator-history-run-1",
+            requested_operations={"store.market": _HISTORY_OPERATIONS},
+        )
+        runtime.start()
+        market = ServiceMarketClient(
+            runtime,
+            "store.market",
+            _HISTORY_KEY,
+            stream_scope=WireScope(_DOMAIN_REF),
+        )
+        with pytest.raises(ServiceMarketError) as start_error:
+            market.start()
+        assert start_error.value.code == "HISTORY_ONLY_CLIENT"
+
+        request = MarketHistoryRequest(
+            _HISTORY_KEY,
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:02:00Z",
+            10,
+        )
+        page = market.history(request)
+        assert page.request == request
+        assert page.complete is True
+        assert page.next_start_time_utc is None
+        assert [bar.open_time_utc for bar in page.bars] == [
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:01:00Z",
+        ]
+        assert [bar.volume for bar in page.bars] == ["10", "12"]
+        assert market._state == "new"
+        assert live_provider.subscribe_calls == []
+        assert live_provider.unsubscribe_calls == []
+        assert len(history_clients) == 1
+        assert len(history_clients[0].http_calls) == 1
+        http_call = history_clients[0].http_calls[0]
+        assert http_call["method"] == "GET"
+        assert http_call["url"].startswith(
+            "https://openapi.okx.com/api/v5/market/history-candles?"
+        )
+        assert "instId=BTC-USDT-SWAP" in http_call["url"]
+        assert "bar=1m" in http_call["url"]
+        assert "limit=300" in http_call["url"]
+        assert not any(key.startswith("OK-ACCESS-") for key in http_call["headers"])
+        assert http_call["max_retries"] == 1
+        assert http_call["timeout"] <= 2.0
+        assert factory_threads == owner_id
+        assert http_call["thread_id"] == owner_id[0]
+    finally:
+        if market is not None:
+            with suppress(Exception):
+                market.close()
+        if runtime is not None:
+            with suppress(Exception):
+                runtime.close()
+        stop.set()
+        owner.join(10)
+        assert not owner.is_alive(), "operator history owner thread did not close"
+
+    assert deployment.state == "closed"
+    assert live_provider.subscribe_calls == []
+    assert live_provider.close_calls == 1
+    assert live_provider.owner_threads == owner_id
+    assert len(history_clients) == 1
+    assert history_clients[0].disconnect_calls == 1
+
+
+def test_operator_retries_only_unconfirmed_history_cleanup(tmp_path: Path) -> None:
+    config = parse_service_config(_market_service_config(_free_endpoint(), _free_endpoint()))
+    server_keys = zmq.curve_keypair()
+    client_public, _client_secret = zmq.curve_keypair()
+    authority, _service_identity = _market_authority(
+        config, server_keys, client_public, operations=_HISTORY_OPERATIONS
+    )
+    stream_provider = _NoSubscriptionMarketProvider()
+    history_provider = _FailFirstHistoryClose()
+    deployment = GatewayOperatorDeployment(
+        config,
+        authority,
+        tmp_path / "operator-history-close-registry.sqlite3",
+        resource_provider=lambda *_args: pytest.fail("market role must use operator factory"),
+        market_binding=GatewayMarketBinding(
+            key_universe=(_KEY,),
+            principal_allowed_keys={_PRINCIPAL_REF: frozenset({_KEY})},
+            provider_factory=lambda: stream_provider,
+            history_key_universe=(_HISTORY_KEY,),
+            principal_allowed_history_keys={
+                _PRINCIPAL_REF: frozenset({_HISTORY_KEY})
+            },
+            history_provider_factory=lambda: history_provider,
+            history_timeout_seconds=2.0,
+        ),
+    )
+    deployment._bind_owner_thread()
+    resources = deployment._build_market_resources(WireScope(_DOMAIN_REF))
+
+    with pytest.raises(GatewayOperatorDeploymentError) as first_close:
+        resources.close()
+    assert first_close.value.code == "MARKET_HISTORY_PROVIDER_CLOSE_UNCONFIRMED"
+    assert history_provider.close_calls == 1
+    assert stream_provider.close_calls == 1
+
+    resources.close()
+    resources.close()
+    assert history_provider.close_calls == 2
+    assert stream_provider.close_calls == 1
 
 
 def _account_service_config(rpc_bind: str) -> dict[str, Any]:

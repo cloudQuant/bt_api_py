@@ -45,6 +45,7 @@ _BOOTSTRAP_OPERATIONS = frozenset(
     }
 )
 _HISTORY_OPERATION = "market.history"
+_HISTORY_OPERATIONS = frozenset({_HISTORY_OPERATION})
 _ALL_OPERATIONS = _BOOTSTRAP_OPERATIONS | {_HISTORY_OPERATION}
 _KEY = MarketSubscriptionKey(
     source_ref="history-source",
@@ -74,6 +75,7 @@ class _HistoryService:
     def __init__(self) -> None:
         self.registrations: set[str] = set()
         self.history_calls: list[dict[str, object]] = []
+        self.subscription_calls: list[str] = []
         self.history_response: object = None
 
     def handle(self, context, arguments, operation: str):
@@ -82,6 +84,9 @@ class _HistoryService:
             if self.history_response is None:
                 raise AssertionError("history response was not configured")
             return self.history_response
+
+        if operation in {"market.subscribe", "market.unsubscribe"}:
+            self.subscription_calls.append(operation)
 
         key = MarketSubscriptionKey.from_dict(arguments["key"])
         stream_id = key.stream_id
@@ -200,7 +205,12 @@ def _page(request: MarketHistoryRequest = _REQUEST) -> MarketHistoryPage:
     )
 
 
-def _make_client(tmp_path, *, history_granted: bool = True):
+def _make_client(
+    tmp_path,
+    *,
+    history_granted: bool = True,
+    subscriber_factory=None,
+):
     capability_operations = _ALL_OPERATIONS
     granted_operations = _ALL_OPERATIONS if history_granted else _BOOTSTRAP_OPERATIONS
     capability = ServiceCapability(
@@ -281,7 +291,13 @@ def _make_client(tmp_path, *, history_granted: bool = True):
         transport_factory=lambda _profile, _peer: transport,
         run_id="history-run-1",
         requested_operations={
-            "store.market": (_ALL_OPERATIONS if history_granted else _BOOTSTRAP_OPERATIONS)
+            "store.market": (
+                _BOOTSTRAP_OPERATIONS | _HISTORY_OPERATIONS
+                if history_granted
+                else _BOOTSTRAP_OPERATIONS
+            )
+            if subscriber_factory is not None
+            else (_HISTORY_OPERATIONS if history_granted else _BOOTSTRAP_OPERATIONS)
         },
     )
     runtime.start()
@@ -289,11 +305,10 @@ def _make_client(tmp_path, *, history_granted: bool = True):
         runtime,
         "store.market",
         _KEY,
-        subscriber_factory=_SubscriberFactory(),
+        subscriber_factory=subscriber_factory,
         stream_scope=_PUBLIC_SCOPE,
         head_check_interval_seconds=10.0,
     )
-    client.start()
     service.history_response = _page().to_dict()
     return client, runtime, registry, service, transport
 
@@ -323,13 +338,52 @@ def test_history_routes_exact_request_and_preserves_live_cursor(tmp_path):
     client, runtime, registry, service, _transport = _make_client(tmp_path)
     try:
         before = _live_cursor_state(client)
+        assert client._state == "new"
+        assert client._get_history_binding().operations == _HISTORY_OPERATIONS
+        with pytest.raises(ServiceMarketError) as start_error:
+            client.start()
+        assert start_error.value.code == "HISTORY_ONLY_CLIENT"
         page = client.history(_REQUEST)
         assert page == _page()
         assert page.request == _REQUEST
         assert service.history_calls == [_REQUEST.to_dict()]
+        assert service.subscription_calls == []
+        assert client._state == "new"
         assert _live_cursor_state(client) == before
     finally:
         _close_all(client, runtime, registry)
+
+
+def test_explicit_bar_subscriber_still_starts_as_a_stream(tmp_path):
+    class _Subscriber:
+        def __init__(self):
+            self.closed = False
+
+        def receive(self, _timeout_ms):
+            return None
+
+        def close(self):
+            self.closed = True
+
+    subscriber = _Subscriber()
+    factory_calls = []
+
+    def subscriber_factory(binding, stream_scope):
+        factory_calls.append((binding, stream_scope))
+        return subscriber
+
+    client, runtime, registry, service, _transport = _make_client(
+        tmp_path, subscriber_factory=subscriber_factory
+    )
+    try:
+        bootstrap = client.start()
+        assert bootstrap.stream_id == _KEY.stream_id
+        assert client._state == "started"
+        assert len(factory_calls) == 1
+        assert service.subscription_calls == ["market.subscribe"]
+    finally:
+        _close_all(client, runtime, registry)
+    assert subscriber.closed is True
 
 
 def test_history_without_explicit_grant_fails_without_rpc(tmp_path):
@@ -340,12 +394,13 @@ def test_history_without_explicit_grant_fails_without_rpc(tmp_path):
             client.history(_REQUEST)
         assert error.value.code == "HISTORY_UNAVAILABLE"
         assert service.history_calls == []
+        assert service.subscription_calls == []
         assert _live_cursor_state(client) == before
     finally:
         _close_all(client, runtime, registry)
 
 
-def test_history_requires_exact_subscription_key_and_started_client(tmp_path):
+def test_history_requires_exact_trusted_bar_key(tmp_path):
     client, runtime, registry, service, _transport = _make_client(tmp_path)
     try:
         before = _live_cursor_state(client)
@@ -354,18 +409,10 @@ def test_history_requires_exact_subscription_key_and_started_client(tmp_path):
             client.history(wrong_key_request)
         assert error.value.code == "HISTORY_KEY_MISMATCH"
         assert service.history_calls == []
+        assert service.subscription_calls == []
         assert _live_cursor_state(client) == before
     finally:
         _close_all(client, runtime, registry)
-
-    registry = None
-    runtime = None
-    client = ServiceMarketClient.__new__(ServiceMarketClient)
-    client._owner_thread_id = __import__("threading").get_ident()
-    client._state = "new"
-    with pytest.raises(ServiceMarketError) as error:
-        client.history(_REQUEST)
-    assert error.value.code == "CLIENT_NOT_STARTED"
 
 
 def test_history_rejects_mismatched_reply_and_page_over_limit(tmp_path):

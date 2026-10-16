@@ -65,6 +65,7 @@ class GatewayOperatorDeploymentError(RuntimeError):
             "ACCOUNT_RESOURCE_WIRING_FAILED",
             "MARKET_HUB_BUILD_FAILED",
             "MARKET_PROVIDER_CLOSE_UNCONFIRMED",
+            "MARKET_HISTORY_PROVIDER_CLOSE_UNCONFIRMED",
             "INVALID_STOP_EVENT",
             "INVALID_POLL_INTERVAL",
         }
@@ -75,6 +76,18 @@ class GatewayOperatorDeploymentError(RuntimeError):
             code = "GATEWAY_OPERATOR_DEPLOYMENT_FAILED"
         self.code = code
         super().__init__(code)
+
+
+class _RetryableMarketCleanup:
+    """Retain an owner-thread market cleanup callback until it succeeds."""
+
+    __slots__ = ("_callback",)
+
+    def __init__(self, callback: Callable[[], None]) -> None:
+        self._callback = callback
+
+    def close(self) -> None:
+        self._callback()
 
 
 @dataclass(frozen=True, slots=True)
@@ -640,6 +653,11 @@ class GatewayOperatorDeployment:
             or type(scope) is not WireScope
         ):
             raise GatewayOperatorDeploymentError("INVALID_MARKET_BINDING")
+        provider: object | None = None
+        history_provider: object | None = None
+        hub: object | None = None
+        cleanup_callback: Callable[[], None] | None = None
+        ownership_transferred = False
         try:
             from bt_api_gateway.market_hub import GatewayMarketHub
 
@@ -652,6 +670,15 @@ class GatewayOperatorDeployment:
                 key_universe = frozenset(binding.key_universe)
                 principal_allowed_keys = binding.principal_allowed_keys
                 max_provider_events = binding.max_provider_events_per_maintain
+                history_key_universe = binding.history_key_universe
+                principal_allowed_history_keys = binding.principal_allowed_history_keys
+                history_timeout_seconds = binding.history_timeout_seconds
+                if binding.history_provider_factory is not None:
+                    history_provider = binding.history_provider_factory()
+                    if not callable(getattr(history_provider, "fetch", None)):
+                        raise TypeError(
+                            "history provider does not implement the Gateway history port"
+                        )
             else:
                 assert okx_binding is not None
                 from bt_api_okx.market_provider import OkxTickerQueueMarketProvider
@@ -664,6 +691,12 @@ class GatewayOperatorDeployment:
                 key_universe = frozenset(okx_binding.key_universe)
                 principal_allowed_keys = okx_binding.principal_allowed_keys
                 max_provider_events = okx_binding.max_provider_events_per_maintain
+                history_key_universe = ()
+                principal_allowed_history_keys = {}
+                history_timeout_seconds = None
+            if history_provider is provider:
+                history_provider = None
+                raise TypeError("stream and history providers must have separate ownership")
             hub = GatewayMarketHub(
                 provider,
                 key_universe=key_universe,
@@ -671,25 +704,96 @@ class GatewayOperatorDeployment:
                 service_identity=self._authority.identity,
                 service_scope=self._authority.scope,
                 max_provider_events_per_maintain=max_provider_events,
+                history_provider=history_provider,
+                history_timeout_seconds=history_timeout_seconds,
+                history_key_universe=(history_key_universe or None),
+                principal_allowed_history_keys=(
+                    principal_allowed_history_keys or None
+                ),
             )
 
-            def close_market_resources() -> None:
-                try:
-                    hub.close()
-                except Exception:
-                    _close_market_provider(provider)
-                    raise
-                _close_market_provider(provider)
+            hub_closed = False
+            history_provider_closed = history_provider is None
+            provider_closed = provider is None
 
-            return ComponentResources.owned(
+            def close_market_resources() -> None:
+                nonlocal hub_closed, history_provider_closed, provider_closed
+                hub_error: BaseException | None = None
+                if not hub_closed:
+                    try:
+                        hub.close()  # type: ignore[attr-defined]
+                        hub_closed = True
+                    except BaseException as exc:
+                        hub_error = exc
+                history_error: BaseException | None = None
+                if history_provider is not None and not history_provider_closed:
+                    try:
+                        _close_market_history_provider(history_provider)
+                        history_provider_closed = True
+                    except BaseException as exc:
+                        history_error = exc
+                provider_error: BaseException | None = None
+                if hub_closed and not provider_closed:
+                    try:
+                        _close_market_provider(provider)
+                        provider_closed = True
+                    except BaseException as exc:
+                        provider_error = exc
+                if hub_error is not None:
+                    raise hub_error
+                if history_error is not None:
+                    raise history_error
+                if provider_error is not None:
+                    raise provider_error
+
+            cleanup_callback = close_market_resources
+            resources = ComponentResources.owned(
                 {"hub": hub},
                 ready=lambda: hub.ready is True,
                 close=close_market_resources,
             )
+            ownership_transferred = True
+            return resources
         except BaseException as exc:
+            cleanup_failed = False
+            if not ownership_transferred and hub is not None:
+                if cleanup_callback is None:
+                    self._retain_unclaimed_provider(hub)
+                    cleanup_failed = True
+                else:
+                    try:
+                        cleanup_callback()
+                    except BaseException:
+                        self._retain_unclaimed_provider(
+                            _RetryableMarketCleanup(cleanup_callback)
+                        )
+                        cleanup_failed = True
+            elif not ownership_transferred:
+                if history_provider is not None:
+                    try:
+                        _close_market_history_provider(history_provider)
+                    except BaseException:
+                        self._retain_unclaimed_provider(history_provider)
+                        cleanup_failed = True
+                if provider is not None and provider is not history_provider:
+                    try:
+                        _close_market_provider(provider)
+                    except BaseException:
+                        self._retain_unclaimed_provider(provider)
+                        cleanup_failed = True
+            if cleanup_failed and isinstance(exc, Exception):
+                raise GatewayOperatorDeploymentError(
+                    "UNCLAIMED_PROVIDER_CLOSE_UNCONFIRMED"
+                ) from None
             if isinstance(exc, Exception):
                 raise GatewayOperatorDeploymentError("MARKET_HUB_BUILD_FAILED") from None
             raise
+
+    def _retain_unclaimed_provider(self, provider: object) -> None:
+        with self._cleanup_lock:
+            if all(current is not provider for current in self._unclaimed_providers):
+                self._unclaimed_providers.append(provider)
+            self._last_cleanup_code = "UNCLAIMED_PROVIDER_CLOSE_UNCONFIRMED"
 
     def _build_account_resources(self, options: Mapping[str, Any]) -> ComponentResources:
         binding = self._account_session
@@ -833,6 +937,21 @@ def _close_market_provider(provider: object) -> None:
         raise GatewayOperatorDeploymentError("MARKET_PROVIDER_CLOSE_UNCONFIRMED") from None
     if result is False:
         raise GatewayOperatorDeploymentError("MARKET_PROVIDER_CLOSE_UNCONFIRMED")
+
+
+def _close_market_history_provider(provider: object) -> None:
+    """Close an optional operator-owned history client after the Hub stops."""
+    close = getattr(provider, "close", None)
+    if not callable(close):
+        return
+    try:
+        result = close()
+    except Exception:
+        raise GatewayOperatorDeploymentError(
+            "MARKET_HISTORY_PROVIDER_CLOSE_UNCONFIRMED"
+        ) from None
+    if result is False or (result is not None and result is not True):
+        raise GatewayOperatorDeploymentError("MARKET_HISTORY_PROVIDER_CLOSE_UNCONFIRMED")
 
 
 __all__ = [

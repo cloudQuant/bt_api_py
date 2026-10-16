@@ -52,11 +52,12 @@ _MARKET_OPERATIONS = frozenset(
     }
 )
 _BOOTSTRAP_OPERATIONS = _MARKET_OPERATIONS
+_HISTORY_OPERATION = "market.history"
+_HISTORY_OPERATIONS = frozenset({_HISTORY_OPERATION})
 _MAX_POLL_TIMEOUT_MS = 60_000
 _MAX_QUEUE_CAPACITY = 100_000
 _MAX_QUEUE_BYTES = 64 * 1024 * 1024
 _MAX_READ_AFTER_LIMIT = 1_000
-_HISTORY_OPERATION = "market.history"
 MARKET_WIRE_VERSION_LEGACY = 1
 MARKET_WIRE_VERSION_TOPIC_FILTERED = 2
 _SUPPORTED_MARKET_WIRE_VERSIONS = frozenset(
@@ -218,7 +219,7 @@ class ServiceMarketClient:
         mount: str,
         key: MarketSubscriptionKey,
         *,
-        subscriber_factory: Any,
+        subscriber_factory: Any = None,
         stream_scope: WireScope,
         queue_capacity: int = 1_024,
         queue_max_bytes: int = 4 * 1024 * 1024,
@@ -231,8 +232,12 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_MOUNT")
         if type(key) is not MarketSubscriptionKey:
             raise ServiceMarketError("INVALID_MARKET_KEY")
-        if not callable(subscriber_factory) and not callable(
-            getattr(subscriber_factory, "create_topic_v2", None)
+        if subscriber_factory is None and key.channel != "bar":
+            raise ServiceMarketError("INVALID_SUBSCRIBER_FACTORY")
+        if (
+            subscriber_factory is not None
+            and not callable(subscriber_factory)
+            and not callable(getattr(subscriber_factory, "create_topic_v2", None))
         ):
             raise ServiceMarketError("INVALID_SUBSCRIBER_FACTORY")
         if type(stream_scope) is not WireScope:
@@ -327,6 +332,8 @@ class ServiceMarketClient:
 
     def start(self) -> MarketBootstrap:
         self._assert_owner()
+        if self.key.channel == "bar" and self._subscriber_factory is None:
+            raise ServiceMarketError("HISTORY_ONLY_CLIENT")
         if self._state == "started":
             if self._last_bootstrap is None:
                 raise ServiceMarketError("INVALID_CLIENT_STATE")
@@ -441,34 +448,45 @@ class ServiceMarketClient:
         return None
 
     def history(self, request: MarketHistoryRequest) -> MarketHistoryPage:
-        """Read one bounded historical bar page without changing the live cursor."""
+        """Read one bounded history page without starting or changing a live stream."""
 
         self._assert_owner()
-        if self._state != "started":
-            raise ServiceMarketError("CLIENT_NOT_STARTED")
-        if self._resync_required:
-            raise ServiceMarketError("RESYNC_REQUIRED")
-        if self._recovery_required:
-            raise ServiceMarketError("RECOVERY_REQUIRED")
-        if not self.healthy:
-            raise ServiceMarketError("CLIENT_UNHEALTHY")
         if type(request) is not MarketHistoryRequest:
             raise ServiceMarketError("INVALID_HISTORY_REQUEST")
         if request.key != self.key:
             raise ServiceMarketError("HISTORY_KEY_MISMATCH")
+        if self.key.channel != "bar":
+            raise ServiceMarketError("HISTORY_ONLY_CLIENT_REQUIRED")
+        if self._state == "started":
+            if self._resync_required:
+                raise ServiceMarketError("RESYNC_REQUIRED")
+            if self._recovery_required:
+                raise ServiceMarketError("RECOVERY_REQUIRED")
+            if not self.healthy:
+                raise ServiceMarketError("CLIENT_UNHEALTHY")
+        elif self._state != "new":
+            raise ServiceMarketError("CLIENT_NOT_AVAILABLE")
 
         self._maintain_runtime()
-        binding = self._check_binding()
+        if self._state == "started":
+            binding = self._check_binding()
+        else:
+            binding = self._get_history_binding()
+            self._check_public_domain(binding)
         if _HISTORY_OPERATION not in binding.operations:
             raise ServiceMarketError("HISTORY_UNAVAILABLE")
 
-        result = self._rpc(_HISTORY_OPERATION, request.to_dict())
+        result = self._rpc(_HISTORY_OPERATION, request.to_dict(), binding=binding)
 
         # Lease maintenance can run while the RPC is in flight. Do not accept
         # a page across a service restart or any other binding replacement.
         try:
             self._maintain_runtime()
-            current_binding = self._get_binding()
+            if self._state == "started":
+                current_binding = self._check_binding()
+            else:
+                current_binding = self._get_history_binding()
+                self._check_public_domain(current_binding)
         except ServiceMarketError:
             self._recovery_required = True
             raise
@@ -997,8 +1015,15 @@ class ServiceMarketClient:
         elif reason is not None:
             raise ServiceMarketError("INVALID_READ_AFTER_REPLY")
 
-    def _rpc(self, operation: str, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
-        binding = self._require_binding()
+    def _rpc(
+        self,
+        operation: str,
+        arguments: Mapping[str, Any],
+        *,
+        binding: ServiceMarketBindingView | None = None,
+    ) -> Mapping[str, Any]:
+        if binding is None:
+            binding = self._require_binding()
         write_operation = operation in {"market.subscribe", "market.unsubscribe"}
         previous_remote_active = self._remote_active
         previous_remote_unknown = self._remote_unknown
@@ -1125,13 +1150,26 @@ class ServiceMarketClient:
             raise ServiceMarketError("INVALID_SUBSCRIBER")
         return subscriber
 
-    def _get_binding(self) -> ServiceMarketBindingView:
+    def _get_binding(
+        self, *, required_operations: frozenset[str] = _BOOTSTRAP_OPERATIONS
+    ) -> ServiceMarketBindingView:
         try:
             return self._runtime.market_binding_view(
-                self.mount, required_operations=_BOOTSTRAP_OPERATIONS
+                self.mount, required_operations=required_operations
             )
         except ServiceRuntimeError as error:
             raise ServiceMarketError("RUNTIME_BINDING_UNAVAILABLE", cause_code=error.code) from None
+
+    def _get_history_binding(self) -> ServiceMarketBindingView:
+        try:
+            return self._get_binding(required_operations=_HISTORY_OPERATIONS)
+        except ServiceMarketError as error:
+            if (
+                error.code == "RUNTIME_BINDING_UNAVAILABLE"
+                and error.cause_code == "MARKET_BINDING_UNAVAILABLE"
+            ):
+                raise ServiceMarketError("HISTORY_UNAVAILABLE") from None
+            raise
 
     def _maintain_runtime(self) -> None:
         try:
