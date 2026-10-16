@@ -1,0 +1,302 @@
+{
+  "schema_version": 1,
+  "round_id": "iteration10-scn01-c01-typed-account-facts-r261-2026-10-16",
+  "repositories": {
+    "base": {
+      "path": "D:/bt_api_py/bt_api/bt_api_base",
+      "branch": "dev",
+      "parent": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "parent_gitlink": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "accepted_commit": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0"
+    },
+    "gateway": {
+      "path": "D:/bt_api_py/bt_api/bt_api_gateway",
+      "branch": "dev",
+      "parent": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "parent_gitlink": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "accepted_commit": "6d26789d9a03ad486c07153af1590be855b090a2"
+    },
+    "sdk": {
+      "path": "D:/bt_api_py",
+      "branch": "dev",
+      "parent": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "parent_gitlink": null,
+      "parent_gitlinks": {
+        "bt_api/bt_api_base": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+        "bt_api/bt_api_gateway": "6d26789d9a03ad486c07153af1590be855b090a2"
+      },
+      "source_baseline_parent": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "delivery_parent": "c61d6bcfc34e1781c6930f523195c9cbec5bc1e3"
+    }
+  },
+  "candidate_sources": [
+    {
+      "repository": "D:/bt_api_py/bt_api/bt_api_base",
+      "branch": "dev",
+      "parent": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "path": "src/bt_api_base/account_certification_protocol.py",
+      "kind": "new_path",
+      "role": "typed allowlisted account-configuration and exchange-server-time observations",
+      "sha256": "5bf274561a4b8b5f48feabda8d0075910f056de7c268a16e47b5a499bf20be20",
+      "size_bytes": 6143,
+      "accepted_commit": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0"
+    },
+    {
+      "repository": "D:/bt_api_py/bt_api/bt_api_base",
+      "branch": "dev",
+      "parent": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "path": "tests/test_account_certification_protocol.py",
+      "kind": "new_path",
+      "role": "typed schema roundtrip, unknown preservation, strict boolean/integer and UTC validation",
+      "sha256": "e4bba3bb5b70d143ab193ea4584e3eccc8d5670313ce9267bbcb99be20276ea5",
+      "size_bytes": 2104,
+      "accepted_commit": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0"
+    },
+    {
+      "repository": "D:/bt_api_py/bt_api/bt_api_gateway",
+      "branch": "dev",
+      "parent": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "path": "src/bt_api_gateway/account_certification.py",
+      "kind": "new_path",
+      "role": "code-owned provider fact collector with generation binding, local timeout measurement and allowlisted DTO projection",
+      "sha256": "2e58ff4d0e49adebe5b39619ebbdce1c3ddbe1bc6a28bb15d3cbf4c1249e5604",
+      "size_bytes": 5433,
+      "accepted_commit": "6d26789d9a03ad486c07153af1590be855b090a2"
+    },
+    {
+      "repository": "D:/bt_api_py/bt_api/bt_api_gateway",
+      "branch": "dev",
+      "parent": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "path": "tests/test_account_certification.py",
+      "kind": "new_path",
+      "role": "collector tests for identity, receipt clock, provider server time, missing/malformed/late facts and extra-field rejection",
+      "sha256": "daae920cc47a79e0c90624a624b30d29ccd6e03ac83bcbea7e59cfd782a0d30a",
+      "size_bytes": 4963,
+      "accepted_commit": "6d26789d9a03ad486c07153af1590be855b090a2"
+    },
+    {
+      "repository": "D:/bt_api_py",
+      "branch": "dev",
+      "parent": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "path": "bt_api_py/service_account_certification.py",
+      "kind": "new_path",
+      "role": "read-only SDK caller for explicitly registered account configuration and exchange-time operations",
+      "sha256": "b8d059b39bd035444b68a9eab7a678c7ad4c0b0734961c7eafc8dc0745db020e",
+      "size_bytes": 7511
+    },
+    {
+      "repository": "D:/bt_api_py",
+      "branch": "dev",
+      "parent": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "path": "tests/unit/test_service_account_certification.py",
+      "kind": "new_path",
+      "role": "caller tests for explicit routing, typed response, identity/generation and binding stability",
+      "sha256": "57c6614f0b8a566cdfaf8b0675b98f8aa3f240e54910dd695a3a13cd81cbed60",
+      "size_bytes": 4525
+    },
+    {
+      "repository": "D:/bt_api_py/bt_api/bt_api_gateway",
+      "branch": "dev",
+      "parent": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "path": "src/bt_api_gateway/account_session_worker.py",
+      "kind": "selected_hunk",
+      "old_blob": "d21d8208387e37ad579788d9f18c575889acfadd",
+      "role": "delegate facts only from fresh active owner-thread generation",
+      "sha256": "dd2216b0e3095141fd9b9f9da683c5bc9615c94431cafb9e2871c67b0475762e",
+      "size_bytes": 43431,
+      "accepted_commit": "6d26789d9a03ad486c07153af1590be855b090a2"
+    },
+    {
+      "repository": "D:/bt_api_py/bt_api/bt_api_gateway",
+      "branch": "dev",
+      "parent": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "path": "src/bt_api_gateway/service_component.py",
+      "kind": "selected_hunk",
+      "old_blob": "27a9cf148e96cb77c2e9563bc1bc4b29d7658ff5",
+      "role": "two read operations; journal ACL check before provider access; finite errors",
+      "sha256": "8d8f147e171cf28cdc73add75780aa814bb20890b0aacd7cf033a02377ded43a",
+      "size_bytes": 37312,
+      "accepted_commit": "6d26789d9a03ad486c07153af1590be855b090a2"
+    },
+    {
+      "repository": "D:/bt_api_py/bt_api/bt_api_gateway",
+      "branch": "dev",
+      "parent": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "path": "tests/test_service_component.py",
+      "kind": "selected_hunk",
+      "old_blob": "9f251257fb639a4b4ecf46f2caa96111380bbb64",
+      "role": "pin the expanded fixed gateway supported-operation set",
+      "sha256": "6aa244f283b6f4611f4b12906603a18456dabcf2ffe0656b52f374b5ce2b94fb",
+      "size_bytes": 34543,
+      "accepted_commit": "6d26789d9a03ad486c07153af1590be855b090a2"
+    },
+    {
+      "repository": "D:/bt_api_py",
+      "branch": "dev",
+      "parent": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "path": "bt_api_py/service_runtime.py",
+      "kind": "selected_hunk",
+      "old_blob": "df86148f466a313b79a1325b759b427c01b59091",
+      "role": "explicit code-owned account-read action names",
+      "mixed_worktree_has_excluded_concurrent_hunks": true
+    },
+    {
+      "repository": "D:/bt_api_py",
+      "branch": "dev",
+      "parent": "489354905d914d6a1f2c4fc5353553e3b82ae814",
+      "path": "bt_api_py/service_components.py",
+      "kind": "selected_hunk",
+      "old_blob": "4b6e056e8e64445ef22e80e2c4260de358659077",
+      "role": "Gateway builtin account-read public action names only; excludes all concurrent Monitor/Risk/group hunks",
+      "mixed_worktree_has_excluded_concurrent_hunks": true
+    }
+  ],
+  "selected_hunk_patches": {
+    "gateway-selected-hunks.patch": {
+      "sha256": "053fbbe8e55c52b28a91f0ce577b6a5eee3244bb8f281d4fbe9b154db239a9c6",
+      "size_bytes": 6675
+    },
+    "sdk-selected-hunks.patch": {
+      "sha256": "08562ba1dd8f9c5769d4d74a9c7e17a0cc55fb61061cde04ab84560576b85c3e",
+      "size_bytes": 1011
+    }
+  },
+  "excluded_concurrent_changes": [
+    "Base market_protocol.py and tests/test_market_protocol.py (MIG01)",
+    "Gateway market_hub.py and tests/test_market_hub.py/tests/test_market_history_service.py (MIG01)",
+    "SDK service_components.py Monitor/Risk/group hunks and service_runtime.py Monitor hunk (AFI08/other owners)",
+    "SDK service_registry.py (MIG03/AFI08)"
+  ],
+  "stage_commit_performed": true,
+  "changed_paths": [
+    {
+      "repository": "base",
+      "path": "src/bt_api_base/account_certification_protocol.py",
+      "kind": "new_path"
+    },
+    {
+      "repository": "base",
+      "path": "tests/test_account_certification_protocol.py",
+      "kind": "new_path"
+    },
+    {
+      "repository": "gateway",
+      "path": "src/bt_api_gateway/account_certification.py",
+      "kind": "new_path"
+    },
+    {
+      "repository": "gateway",
+      "path": "tests/test_account_certification.py",
+      "kind": "new_path"
+    },
+    {
+      "repository": "sdk",
+      "path": "bt_api_py/service_account_certification.py",
+      "kind": "new_path"
+    },
+    {
+      "repository": "sdk",
+      "path": "tests/unit/test_service_account_certification.py",
+      "kind": "new_path"
+    },
+    {
+      "repository": "gateway",
+      "path": "src/bt_api_gateway/account_session_worker.py",
+      "kind": "selected_hunk"
+    },
+    {
+      "repository": "gateway",
+      "path": "src/bt_api_gateway/service_component.py",
+      "kind": "selected_hunk"
+    },
+    {
+      "repository": "gateway",
+      "path": "tests/test_service_component.py",
+      "kind": "selected_hunk"
+    },
+    {
+      "repository": "sdk",
+      "path": "bt_api_py/service_runtime.py",
+      "kind": "selected_hunk"
+    },
+    {
+      "repository": "sdk",
+      "path": "bt_api_py/service_components.py",
+      "kind": "selected_hunk"
+    }
+  ],
+  "sdk_delivery_partial_scope": {
+    "branch": "dev",
+    "parent": "c61d6bcfc34e1781c6930f523195c9cbec5bc1e3",
+    "whole_files": [
+      "bt_api_py/service_account_certification.py",
+      "tests/unit/test_service_account_certification.py"
+    ],
+    "selected_hunk_files": [
+      "bt_api_py/service_runtime.py",
+      "bt_api_py/service_components.py"
+    ],
+    "gitlinks": {
+      "bt_api/bt_api_base": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+      "bt_api/bt_api_gateway": "6d26789d9a03ad486c07153af1590be855b090a2"
+    },
+    "evidence_packet": "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/",
+    "exclude_concurrent_hunks": [
+      "bt_api_py/service_runtime.py Monitor hunk",
+      "bt_api_py/service_components.py Monitor/Risk/group hunks",
+      "bt_api_py/service_registry.py AFI08/MIG03 hunks"
+    ],
+    "status": "READY_FOR_ROOT_EXACT_PARTIAL_COMMIT"
+  },
+  "delivery_commits": {
+    "base": {
+      "parent": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "head": "4812cad42e67d2aad3ad5306a08f1aeef6bbf6f0",
+      "scope": [
+        "src/bt_api_base/account_certification_protocol.py",
+        "tests/test_account_certification_protocol.py"
+      ],
+      "postcommit_index_empty": true
+    },
+    "gateway": {
+      "parent": "59b164ab7f89c6428ae6546103aad6058dab4c16",
+      "head": "6d26789d9a03ad486c07153af1590be855b090a2",
+      "scope": [
+        "src/bt_api_gateway/account_certification.py",
+        "tests/test_account_certification.py",
+        "src/bt_api_gateway/account_session_worker.py",
+        "src/bt_api_gateway/service_component.py",
+        "tests/test_service_component.py"
+      ],
+      "postcommit_index_empty": true
+    }
+  },
+  "stage_commit_note": "Only the exact Base and Gateway child payloads were committed; the SDK partial parent commit is the next coordinated step.",
+  "byte_preservation": {
+    "path": ".gitattributes",
+    "exact_rule_count": 21,
+    "rule_paths": [
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/author-command.json",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/author-result.json",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/base.log",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/base/src/bt_api_base/account_certification_protocol.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/base/tests/test_account_certification_protocol.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/gateway/src/bt_api_gateway/account_certification.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/gateway/tests/test_account_certification.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/sdk/bt_api_py/service_account_certification.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/sdk/tests/unit/test_service_account_certification.py",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/gateway-selected-hunks.patch",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/gateway.log",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/manifest.json",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/raw-evidence.zip",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/round-record.md",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/ruff-base.log",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/ruff-gateway.log",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/ruff-sdk-owned.log",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-client.log",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-runtime.log",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-selected-hunks.patch",
+      "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/source-delta.json"
+    ]
+  }
+}

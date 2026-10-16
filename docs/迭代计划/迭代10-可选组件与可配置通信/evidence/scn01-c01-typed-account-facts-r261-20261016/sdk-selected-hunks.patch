@@ -1,0 +1,24 @@
+diff --git a/bt_api_py/service_runtime.py b/bt_api_py/service_runtime.py
+--- a/bt_api_py/service_runtime.py
++++ b/bt_api_py/service_runtime.py
+@@ -56,6 +56,8 @@ PORT_OPERATIONS = MappingProxyType(
+                 "account.read_after",
+                 "account.ack",
+                 "account.progress",
++                "account.configuration",
++                "account.server_time_probe",
+             }
+         ),
+         "service.order_entry": frozenset(
+diff --git a/bt_api_py/service_components.py b/bt_api_py/service_components.py
+--- a/bt_api_py/service_components.py
++++ b/bt_api_py/service_components.py
+@@ -450,6 +450,8 @@ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
+                             "account.head",
+                             "account.ack",
+                             "account.progress",
++                            "account.configuration",
++                            "account.server_time_probe",
+                         }
+                     )
+                 }

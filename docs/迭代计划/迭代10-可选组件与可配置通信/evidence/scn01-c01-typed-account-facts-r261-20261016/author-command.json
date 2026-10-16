@@ -1,0 +1,82 @@
+{
+  "commands": [
+    {
+      "name": "base-protocol",
+      "argv": [
+        "C:/anaconda3/python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "no:asyncio",
+        "tests/test_account_certification_protocol.py"
+      ],
+      "cwd": "D:/bt_api_py/bt_api/bt_api_base"
+    },
+    {
+      "name": "gateway-collector-and-regressions",
+      "argv": [
+        "C:/anaconda3/python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "no:asyncio",
+        "tests/test_account_certification.py",
+        "tests/test_service_component.py",
+        "tests/test_account_session_worker.py"
+      ],
+      "cwd": "D:/bt_api_py/bt_api/bt_api_gateway"
+    },
+    {
+      "name": "sdk-facts-client",
+      "argv": [
+        "C:/anaconda3/python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "no:asyncio",
+        "tests/unit/test_service_account_certification.py"
+      ],
+      "cwd": "D:/bt_api_py"
+    },
+    {
+      "name": "sdk-runtime-regressions",
+      "argv": [
+        "C:/anaconda3/python.exe",
+        "-B",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "no:asyncio",
+        "tests/unit/test_service_runtime.py",
+        "tests/unit/test_service_runtime_startup_lease.py",
+        "tests/unit/test_service_runtime_renewal_retry.py"
+      ],
+      "cwd": "D:/bt_api_py"
+    }
+  ],
+  "capture": "direct combined stdout/stderr files in this packet",
+  "network_or_provider_actions": 0,
+  "real_account_actions": 0,
+  "credential_or_private_file_reads": 0,
+  "service_host_started": false,
+  "evidence_note": "Provider leaves and SDK runtime are synthetic in these source-focused tests; no real provider/account acceptance."
+}

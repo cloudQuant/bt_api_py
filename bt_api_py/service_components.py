@@ -450,6 +450,8 @@ _BUILTINS: Mapping[str, _Builtin] = MappingProxyType(
                             "account.head",
                             "account.ack",
                             "account.progress",
+                            "account.configuration",
+                            "account.server_time_probe",
                         }
                     )
                 }

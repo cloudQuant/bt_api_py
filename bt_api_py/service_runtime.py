@@ -56,6 +56,8 @@ PORT_OPERATIONS = MappingProxyType(
                 "account.read_after",
                 "account.ack",
                 "account.progress",
+                "account.configuration",
+                "account.server_time_probe",
             }
         ),
         "service.order_entry": frozenset(

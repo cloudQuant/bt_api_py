@@ -1,0 +1,74 @@
+{
+  "status": "PASS_SOURCE_FOCUSED",
+  "evidence_level": "AUTHOR_SOURCE_FAKE_TYPED_ACCOUNT_FACTS_COMPONENT_ONLY",
+  "suites": [
+    {
+      "name": "base-protocol",
+      "collected": 6,
+      "passed": 6,
+      "failed": 0,
+      "duration_seconds": 0.34,
+      "warning_count": 1,
+      "warning": "Existing pytest config warning: asyncio_default_fixture_loop_scope is unknown when the unrelated asyncio plugin is disabled."
+    },
+    {
+      "name": "gateway-collector-and-regressions",
+      "collected": 81,
+      "passed": 81,
+      "failed": 0,
+      "duration_seconds": 16.27,
+      "warning_count": 0
+    },
+    {
+      "name": "sdk-facts-client",
+      "collected": 5,
+      "passed": 5,
+      "failed": 0,
+      "duration_seconds": 0.47,
+      "warning_count": 1,
+      "warning": "Existing pytest config warning: asyncio_default_fixture_loop_scope is unknown when the unrelated asyncio plugin is disabled."
+    },
+    {
+      "name": "sdk-runtime-regressions",
+      "collected": 48,
+      "passed": 48,
+      "failed": 0,
+      "duration_seconds": 6.96,
+      "warning_count": 1,
+      "warning": "Existing pytest config warning: asyncio_default_fixture_loop_scope is unknown when the unrelated asyncio plugin is disabled."
+    }
+  ],
+  "tests_collected": 140,
+  "tests_passed": 140,
+  "tests_failed": 0,
+  "pytest_duration_seconds": 23.0,
+  "pytest_warning_count": 3,
+  "ruff": [
+    {
+      "name": "base",
+      "command": "python -m ruff check src/bt_api_base/account_certification_protocol.py tests/test_account_certification_protocol.py",
+      "passed": true
+    },
+    {
+      "name": "gateway",
+      "command": "python -m ruff check src/bt_api_gateway/account_certification.py src/bt_api_gateway/account_session_worker.py src/bt_api_gateway/service_component.py tests/test_account_certification.py tests/test_service_component.py",
+      "passed": true
+    },
+    {
+      "name": "sdk-owned-paths",
+      "command": "python -m ruff check bt_api_py/service_runtime.py bt_api_py/service_account_certification.py tests/unit/test_service_account_certification.py",
+      "passed": true,
+      "note": "service_components.py is a concurrent shared file with unrelated lint findings in excluded Monitor/Risk/group hunks; its selected Gateway hunk is preserved separately."
+    }
+  ],
+  "formal_status": {
+    "scn01_before": "40/68",
+    "scn01_after": "40/68",
+    "new_formal_case_passes": 0
+  },
+  "not_established": [
+    "No local ServiceHost composition or C01Strategy invocation in this source round.",
+    "No real provider, account, or credential acceptance.",
+    "No SCN01 formal case PASS or SCN02 unified-directory acceptance."
+  ]
+}

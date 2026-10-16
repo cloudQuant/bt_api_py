@@ -1,0 +1,167 @@
+diff --git a/src/bt_api_gateway/account_session_worker.py b/src/bt_api_gateway/account_session_worker.py
+index d21d820..1f6695a 100644
+--- a/src/bt_api_gateway/account_session_worker.py
++++ b/src/bt_api_gateway/account_session_worker.py
+@@ -18,6 +18,10 @@ from datetime import datetime
+ from types import MappingProxyType
+ from typing import Callable, Optional, Protocol
+ 
++from bt_api_base.account_certification_protocol import (
++    AccountConfigurationObservation,
++    ExchangeServerTimeObservation,
++)
+ from bt_api_base.account_protocol import (
+     MAX_ACCOUNT_ROWS,
+     AccountKey,
+@@ -25,6 +29,11 @@ from bt_api_base.account_protocol import (
+     AccountResourceKey,
+ )
+ 
++from .account_certification import (
++    GatewayCertificationFactsError,
++    collect_account_configuration,
++    collect_exchange_server_time,
++)
+ from .account_view_projection import (
+     AccountViewProjectionError,
+     GatewayAccountViewPolicy,
+@@ -399,6 +408,53 @@ class GatewayAccountSessionWorker:
+         self._freshness_invalidated = True
+         self._state = "closed"
+ 
++    def read_account_configuration(self) -> AccountConfigurationObservation:
++        """Collect one current, typed configuration fact from the active session."""
++
++        generation = self._active_fact_generation()
++        try:
++            return collect_account_configuration(
++                self._provider,
++                account_key_id=self._account_key.account_key_id,
++                generation=generation,
++                timeout=self._request_timeout,
++                assert_owned=lambda: self._assert_current_generation_owned(generation),
++                monotonic_clock=self._monotonic_clock,
++                wall_clock=self._clock,
++            )
++        except GatewayCertificationFactsError as exc:
++            raise GatewayAccountSessionWorkerError(exc.code) from None
++
++    def read_exchange_server_time(self) -> ExchangeServerTimeObservation:
++        """Collect provider server time without substituting a local clock sample."""
++
++        generation = self._active_fact_generation()
++        try:
++            return collect_exchange_server_time(
++                self._provider,
++                account_key_id=self._account_key.account_key_id,
++                generation=generation,
++                timeout=self._request_timeout,
++                assert_owned=lambda: self._assert_current_generation_owned(generation),
++                monotonic_clock=self._monotonic_clock,
++                wall_clock=self._clock,
++            )
++        except GatewayCertificationFactsError as exc:
++            raise GatewayAccountSessionWorkerError(exc.code) from None
++
++    def _active_fact_generation(self) -> str:
++        self._check_owner()
++        generation = self._generation
++        if (
++            self._state != "ready"
++            or generation is None
++            or not self._connect_attempted
++            or self.read_status().get("ready") is not True
++        ):
++            raise GatewayAccountSessionWorkerError("SESSION_NOT_READY")
++        self._assert_current_generation_owned(generation)
++        return generation
++
+     def _refresh_impl(self) -> GatewayAccountSnapshot:
+         self._freshness_invalidated = True
+         self._state = "refreshing"
+diff --git a/src/bt_api_gateway/service_component.py b/src/bt_api_gateway/service_component.py
+index 27a9cf1..6cf1618 100644
+--- a/src/bt_api_gateway/service_component.py
++++ b/src/bt_api_gateway/service_component.py
+@@ -39,13 +39,31 @@ _ACCOUNT_SESSION_WORKER_PORTS = frozenset(
+ )
+ _DEFAULT_READ_LIMIT = 100
+ _UNSAMPLED_SOURCE_CURSOR = object()
++_CERTIFICATION_FACT_ERROR_CODES = frozenset(
++    {
++        "CLOCK_INVALID",
++        "CLOCK_UNAVAILABLE",
++        "MONOTONIC_CLOCK_REGRESSED",
++        "PROVIDER_CONFIGURATION_INVALID",
++        "PROVIDER_FACT_READ_FAILED",
++        "PROVIDER_FACT_UNAVAILABLE",
++        "PROVIDER_RESPONSE_LATE",
++        "PROVIDER_SERVER_TIME_INVALID",
++        "PROVIDER_RESULT_GENERATION_STALE",
++        "SESSION_NOT_READY",
++        "SESSION_OWNERSHIP_LOST",
++        "WORKER_WRONG_THREAD",
++    }
++)
+ 
+ SUPPORTED_OPERATIONS = frozenset(
+     {
+         "account.ack",
++        "account.configuration",
+         "account.head",
+         "account.progress",
+         "account.read_after",
++        "account.server_time_probe",
+         "account.snapshot",
+     }
+ )
+@@ -264,6 +282,33 @@ class GatewayReadService:
+         if any(type(key) is not str for key in arguments):
+             raise GatewayServiceError("INVALID_ARGUMENTS")
+ 
++        if operation in {"account.configuration", "account.server_time_probe"}:
++            _reject_unknown_arguments(arguments, frozenset())
++            # Resolving a wire scope is routing only. Perform the same journal
++            # ACL check as the ordinary account snapshot before touching the
++            # provider session.
++            self._journal.read_after(
++                principal,
++                account.journal_account_scope,
++                journal_strategy_scope,
++                cursor=None,
++                limit=1,
++            )
++            if self._state_worker is None:
++                raise GatewayServiceError("PROVIDER_FACT_UNAVAILABLE")
++            try:
++                observation = (
++                    self._state_worker.read_account_configuration()
++                    if operation == "account.configuration"
++                    else self._state_worker.read_exchange_server_time()
++                )
++            except Exception as exc:
++                code = getattr(exc, "code", None)
++                if type(code) is not str or code not in _CERTIFICATION_FACT_ERROR_CODES:
++                    code = "PROVIDER_FACT_READ_FAILED"
++                raise GatewayServiceError(code) from None
++            return MappingProxyType({"observation": observation.to_dict()})
++
+         if operation == "account.read_after":
+             _reject_unknown_arguments(
+                 arguments, frozenset({"cursor", "limit", "track_delivery", "stream_epoch"})
+diff --git a/tests/test_service_component.py b/tests/test_service_component.py
+index 9f25125..3aacbbc 100644
+--- a/tests/test_service_component.py
++++ b/tests/test_service_component.py
+@@ -897,9 +897,11 @@ def test_supported_operations_are_finite_and_service_borrows_journal(tmp_path) -
+         frozenset(
+             {
+                 "account.ack",
++                "account.configuration",
+                 "account.head",
+                 "account.progress",
+                 "account.read_after",
++                "account.server_time_probe",
+                 "account.snapshot",
+             }
+         )

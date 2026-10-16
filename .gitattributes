@@ -32,3 +32,25 @@ docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-r
 docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/qa/r229-corrected-root-pass/stdout.log -text
 docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/round-record.md -text
 docs/迭代计划/迭代10-可选组件与可配置通信/evidence/dim09-owner-recovery-r229-20261016/manifest.json -text
+# R261 packet byte pins
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/author-command.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/author-result.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/base.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/base/src/bt_api_base/account_certification_protocol.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/base/tests/test_account_certification_protocol.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/gateway/src/bt_api_gateway/account_certification.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/gateway/tests/test_account_certification.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/sdk/bt_api_py/service_account_certification.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/candidate-source/sdk/tests/unit/test_service_account_certification.py -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/gateway-selected-hunks.patch -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/gateway.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/manifest.json -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/raw-evidence.zip -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/round-record.md -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/ruff-base.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/ruff-gateway.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/ruff-sdk-owned.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-client.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-runtime.log -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/sdk-selected-hunks.patch -text
+docs/迭代计划/迭代10-可选组件与可配置通信/evidence/scn01-c01-typed-account-facts-r261-20261016/source-delta.json -text
