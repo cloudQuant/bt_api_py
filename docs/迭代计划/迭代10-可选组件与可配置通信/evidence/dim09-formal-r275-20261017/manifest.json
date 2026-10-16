@@ -1,0 +1,88 @@
+{
+  "case": "DIM09",
+  "decision": "FORMAL_PASS",
+  "formal_total": "49/68",
+  "source_commit": "3cf8cadfe2a165093068c8f96d7579af95ddb02b",
+  "source_count": 392,
+  "source_pins_rechecked": true,
+  "pytest": {
+    "passed": 3,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "exit": 0,
+    "duration_seconds": 22.43,
+    "warnings": 1
+  },
+  "new_evidence_level": "IN_PROCESS_REAL_HANDLERS_AND_SQLITE_WITH_SYNTHETIC_PROVIDER",
+  "new_spawned_host_claim": false,
+  "bindings": [
+    {
+      "path": "tests/integration/_dim09_three_leg_fixtures.py",
+      "checkout_sha256": "4ef818cfd66e7546a4978525154904cd7c170c9e378b64fc325936832955c9dd",
+      "commit_blob_sha256": "4ef818cfd66e7546a4978525154904cd7c170c9e378b64fc325936832955c9dd",
+      "raw_equal": true,
+      "normalized_equal": true
+    },
+    {
+      "path": "tests/integration/test_dim09_terminal_leg_and_dimension_gap.py",
+      "checkout_sha256": "4e83099c957c03de0f892a2a45785c38183bda0d9e91cc6f978bc11f81fc4a2a",
+      "commit_blob_sha256": "4e83099c957c03de0f892a2a45785c38183bda0d9e91cc6f978bc11f81fc4a2a",
+      "raw_equal": true,
+      "normalized_equal": true
+    }
+  ],
+  "raw_files": [
+    {
+      "name": "command.json",
+      "bytes": 1635,
+      "sha256": "f4e476cc19560cd4f6c3c895849da4d53124502486762607d894bfd99ead9180"
+    },
+    {
+      "name": "exit.txt",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "name": "junit.xml",
+      "bytes": 745,
+      "sha256": "61d490a46b0e5ff58ba4a0490704c947a2c10aae297afa9962506db1c2a5d769"
+    },
+    {
+      "name": "result.json",
+      "bytes": 464,
+      "sha256": "7bdfed209622b26f2430c11ef7f9f7515068d4679b42700fa5049b2f41a6e959"
+    },
+    {
+      "name": "runner.py",
+      "bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    {
+      "name": "source-before.json",
+      "bytes": 69748,
+      "sha256": "0ea36d0fed3a329ba8664f780edc5effcd0e179bf3cfeeeb2b8748a6952894b9"
+    },
+    {
+      "name": "source-after.json",
+      "bytes": 69748,
+      "sha256": "0ea36d0fed3a329ba8664f780edc5effcd0e179bf3cfeeeb2b8748a6952894b9"
+    },
+    {
+      "name": "spec.json",
+      "bytes": 76295,
+      "sha256": "654c686331b72eb71d34f5b47158ac120051cc5b53f3b419f95acb773bfb36c6"
+    },
+    {
+      "name": "stdout.log",
+      "bytes": 632,
+      "sha256": "d9b76a3c5eb4665cb5ada8ff3d3e78814f686da07440e08dfa5397a1601f3538"
+    },
+    {
+      "name": "stderr.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "archive_sha256": "00ccd601c18e37383aee633242f13154665e21a178ba7f5ef9c6ad1421640c3c"
+}
