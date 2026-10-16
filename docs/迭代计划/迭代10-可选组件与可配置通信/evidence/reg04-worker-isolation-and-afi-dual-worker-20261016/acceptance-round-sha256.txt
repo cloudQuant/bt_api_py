@@ -1,0 +1,3 @@
+ee1c673fecd4e89533a047bd8287bca4bfb98d545bd682cb0dd11492cbdc7445 *scope-decision-old-id-mapping.md
+2de057c929051a2919a2f693bc4d8541dd01256cae6f4ddf4ff80d5602a24800 *root-adjudication-addendum.md
+e1eb30bd9429467fa99f05e1db15003e1175640fb1d1c8aad3a9535b00d6c881 *acceptance-audit-r1/audit.md
