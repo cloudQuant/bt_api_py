@@ -40,7 +40,8 @@ from __future__ import annotations
 
 import hashlib
 import time
-from contextlib import ExitStack
+from collections.abc import Mapping
+from contextlib import ExitStack, contextmanager
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
@@ -147,8 +148,91 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+@contextmanager
+def _synthetic_plugin_discovery():
+    """Restrict only installed provider discovery during synthetic BtApi setup."""
+
+    import importlib
+
+    from bt_api_base.plugins.loader import PluginLoader
+
+    bt_api_module = importlib.import_module("bt_api_py.bt_api")
+    original_discover = PluginLoader.__dict__["_discover_entry_points"]
+    original_plugins_loaded = bt_api_module._plugins_loaded
+    discovered_groups: list[str] = []
+    restricted_groups: list[str] = []
+    facts: dict[str, Any] = {
+        "original_plugins_loaded": original_plugins_loaded,
+        "discovered_groups": (),
+        "restricted_groups": (),
+        "delegated_groups": (),
+        "loader_descriptor_restored": False,
+        "plugins_loaded_flag_restored": False,
+    }
+
+    def discover(self, group: str):
+        discovered_groups.append(group)
+        if group == "bt_api.plugins":
+            restricted_groups.append(group)
+            return []
+        return original_discover(self, group)
+
+    setattr(PluginLoader, "_discover_entry_points", discover)
+    bt_api_module._plugins_loaded = False
+    try:
+        yield facts
+    finally:
+        setattr(PluginLoader, "_discover_entry_points", original_discover)
+        bt_api_module._plugins_loaded = original_plugins_loaded
+        facts.update(
+            discovered_groups=tuple(discovered_groups),
+            restricted_groups=tuple(restricted_groups),
+            delegated_groups=tuple(
+                group for group in discovered_groups if group != "bt_api.plugins"
+            ),
+            loader_descriptor_restored=(
+                PluginLoader.__dict__["_discover_entry_points"] is original_discover
+            ),
+            plugins_loaded_flag_restored=(
+                bt_api_module._plugins_loaded is original_plugins_loaded
+            ),
+        )
+
+
 class _ThreeLegMappedFeed(_V2SyntheticBtApiFeed):
     """The synthetic leaf, pinned to the exact typed v3 child order shape."""
+
+    def __init__(
+        self,
+        ledger_path: str,
+        initial_states: tuple[str, ...],
+        provider_account: str,
+        *,
+        expected_provider_orders: tuple[tuple[str, Decimal, Decimal, str], ...] | None = None,
+    ) -> None:
+        super().__init__(ledger_path, initial_states, provider_account)
+        if expected_provider_orders is not None and (
+            type(expected_provider_orders) is not tuple
+            or len(expected_provider_orders) != 3
+            or any(
+                type(item) is not tuple
+                or len(item) != 4
+                or type(item[0]) is not str
+                or not item[0]
+                or type(item[1]) is not Decimal
+                or not item[1].is_finite()
+                or item[1] <= 0
+                or type(item[2]) is not Decimal
+                or not item[2].is_finite()
+                or item[2] <= 0
+                or type(item[3]) is not str
+                or item[3] not in {"buy-limit", "sell-limit"}
+                for item in expected_provider_orders
+            )
+        ):
+            raise TypeError("expected provider order terms must be a typed ordered tuple")
+        self._expected_provider_orders = expected_provider_orders
+        self._provider_order_index = 0
 
     def make_order(
         self,
@@ -161,11 +245,19 @@ class _ThreeLegMappedFeed(_V2SyntheticBtApiFeed):
         **kwargs: Any,
     ) -> dict[str, Any]:
         # Check the arguments the real DirectBackend/FeedAdapter actually
-        # deliver from the typed Binance mapper before recording a write.
-        assert symbol == _V2_INSTRUMENT
-        assert Decimal(str(volume)) == Decimal("1"), volume
-        assert Decimal(str(price)) == Decimal("100"), price
-        assert order_type in {"buy-limit", "sell-limit"}
+        # deliver from the typed mapper before recording a write. The default
+        # remains the historical one-instrument fixture; ratio/multiplier
+        # cases provide an exact, ordered expected-call tuple.
+        if self._expected_provider_orders is None:
+            assert symbol == _V2_INSTRUMENT
+            assert Decimal(str(volume)) == Decimal("1"), volume
+            assert Decimal(str(price)) == Decimal("100"), price
+            assert order_type in {"buy-limit", "sell-limit"}
+        else:
+            assert self._provider_order_index < len(self._expected_provider_orders)
+            expected = self._expected_provider_orders[self._provider_order_index]
+            assert (symbol, Decimal(str(volume)), Decimal(str(price)), order_type) == expected
+            self._provider_order_index += 1
         assert client_order_id.startswith("grp-") and len(client_order_id) == 44
         assert kwargs == {
             "offset": "open",
@@ -326,7 +418,7 @@ def _registration(
 
 
 def _budget_binding(
-    metadata: InstrumentRiskMetadata,
+    metadata: InstrumentRiskMetadata | tuple[InstrumentRiskMetadata, ...],
     *,
     portfolio_ref: str = _PORTFOLIO,
 ) -> tuple[PortfolioGroupBudgetPolicy, Any]:
@@ -339,7 +431,7 @@ def _budget_binding(
         max_active_gross_notional=Decimal("10000000"),
         max_active_groups=100,
     )
-    registry = InstrumentRiskRegistry((metadata,))
+    registry = InstrumentRiskRegistry(metadata if type(metadata) is tuple else (metadata,))
     return policy, partial(
         build_instrument_risk_group_budget_quote,
         registry=registry,
@@ -358,6 +450,9 @@ class Dim09ThreeLegCluster:
         group_admission: Any = None,
         drop_submit_replies_for: tuple[str, ...] = (),
         supports_close: bool = False,
+        instrument_metadata: tuple[InstrumentRiskMetadata, ...] | None = None,
+        base_units_per_order_unit_by_instrument: Mapping[str, Decimal] | None = None,
+        expected_provider_orders: tuple[tuple[str, Decimal, Decimal, str], ...] | None = None,
     ) -> None:
         if type(supports_close) is not bool:
             raise TypeError("supports_close must be bool")
@@ -372,6 +467,9 @@ class Dim09ThreeLegCluster:
                 group_admission,
                 drop_submit_replies_for,
                 supports_close,
+                instrument_metadata,
+                base_units_per_order_unit_by_instrument,
+                expected_provider_orders,
             )
         except BaseException:
             self.close()
@@ -386,6 +484,9 @@ class Dim09ThreeLegCluster:
         group_admission: Any,
         drop_submit_replies_for: tuple[str, ...],
         supports_close: bool,
+        instrument_metadata: tuple[InstrumentRiskMetadata, ...] | None,
+        base_units_per_order_unit_by_instrument: Mapping[str, Decimal] | None,
+        expected_provider_orders: tuple[tuple[str, Decimal, Decimal, str], ...] | None,
     ) -> None:
         tmp_path = self.tmp_path
         now_ns = time.time_ns()
@@ -408,24 +509,53 @@ class Dim09ThreeLegCluster:
             strategy_ref=_STRATEGY,
             portfolio_ref=_PORTFOLIO,
         )
-        metadata = InstrumentRiskMetadata(
-            instrument=_V2_INSTRUMENT,
-            metadata_version=_V2_METADATA_VERSION,
-            as_of_ns=now_ns - 1_000_000_000,
-            expires_at_ns=now_ns + 3_600_000_000_000,
-            tick_size=Decimal("0.01"),
-            quantity_step=Decimal("0.001"),
-            contract_multiplier=Decimal("1"),
-            max_gross_notional=Decimal("100000"),
-            taker_fee_bps=Decimal("0"),
-            fixed_fee=Decimal("0"),
-            max_slippage_bps=Decimal("0"),
-            quantity_unit="base",
-            valuation_unit="USD",
-            quote_currency="USD",
-        )
+        if instrument_metadata is None:
+            metadata_records = (
+                InstrumentRiskMetadata(
+                    instrument=_V2_INSTRUMENT,
+                    metadata_version=_V2_METADATA_VERSION,
+                    as_of_ns=now_ns - 1_000_000_000,
+                    expires_at_ns=now_ns + 3_600_000_000_000,
+                    tick_size=Decimal("0.01"),
+                    quantity_step=Decimal("0.001"),
+                    contract_multiplier=Decimal("1"),
+                    max_gross_notional=Decimal("100000"),
+                    taker_fee_bps=Decimal("0"),
+                    fixed_fee=Decimal("0"),
+                    max_slippage_bps=Decimal("0"),
+                    quantity_unit="base",
+                    valuation_unit="USD",
+                    quote_currency="USD",
+                ),
+            )
+        else:
+            if (
+                type(instrument_metadata) is not tuple
+                or not instrument_metadata
+                or any(type(item) is not InstrumentRiskMetadata for item in instrument_metadata)
+                or len({item.instrument for item in instrument_metadata})
+                != len(instrument_metadata)
+            ):
+                raise TypeError("instrument_metadata must be a unique typed tuple")
+            metadata_records = instrument_metadata
+        metadata = metadata_records[0]
         self.metadata = metadata
-        registry = InstrumentRiskRegistry((metadata,))
+        self.instrument_metadata = MappingProxyType(
+            {item.instrument: item for item in metadata_records}
+        )
+        if base_units_per_order_unit_by_instrument is None:
+            base_unit_scales = {item.instrument: Decimal("1") for item in metadata_records}
+        else:
+            if not isinstance(base_units_per_order_unit_by_instrument, Mapping):
+                raise TypeError("base-unit scales must be a mapping")
+            base_unit_scales = dict(base_units_per_order_unit_by_instrument)
+            if set(base_unit_scales) != set(self.instrument_metadata) or any(
+                type(value) is not Decimal or not value.is_finite() or value <= 0
+                for value in base_unit_scales.values()
+            ):
+                raise TypeError("base-unit scales must cover every configured instrument")
+        self.base_units_per_order_unit_by_instrument = MappingProxyType(base_unit_scales)
+        registry = InstrumentRiskRegistry(metadata_records)
         provider_account = _V2_PROVIDER_ACCOUNT
         risk_scope = AccountScope("fixture", provider_account, "simulation")
         self.risk_scope = risk_scope
@@ -437,7 +567,10 @@ class Dim09ThreeLegCluster:
             registry=registry,
         )
         self.provider = _ThreeLegMappedFeed(
-            str(tmp_path / "dim09-provider.sqlite3"), tuple(initial_states), provider_account
+            str(tmp_path / "dim09-provider.sqlite3"),
+            tuple(initial_states),
+            provider_account,
+            expected_provider_orders=expected_provider_orders,
         )
 
         # FIXTURE___SPOT is synthetic and intentionally absent from the
@@ -479,7 +612,12 @@ class Dim09ThreeLegCluster:
         }
         monkeypatch.setitem(MAPPERS, "FIXTURE___SPOT", fixture_mapper)
 
-        bt_api = BtApi(debug=False)
+        with _synthetic_plugin_discovery() as plugin_discovery_facts:
+            bt_api = BtApi(debug=False)
+        self.synthetic_plugin_discovery_facts = plugin_discovery_facts
+        assert plugin_discovery_facts["restricted_groups"] == ("bt_api.plugins",)
+        assert plugin_discovery_facts["loader_descriptor_restored"] is True
+        assert plugin_discovery_facts["plugins_loaded_flag_restored"] is True
         self._stack.callback(bt_api.close)
         bt_api.exchange_feeds["FIXTURE___SPOT"] = self.provider
 
@@ -522,7 +660,12 @@ class Dim09ThreeLegCluster:
             fill_watermark_field="fill_watermark",
             fee_amount_field="fee_amount",
             fee_currency_field="fee_currency",
-            quote_currency_by_instrument=((_V2_INSTRUMENT, "USD"),),
+            quote_currency_by_instrument=tuple(
+                sorted(
+                    (item.instrument, item.quote_currency or item.valuation_unit or "USD")
+                    for item in metadata_records
+                )
+            ),
         )
         proof_target = GroupProofTarget(
             execution_scope=execution_scope,
@@ -753,15 +896,16 @@ class Dim09ThreeLegCluster:
             order_scope_ref=entry_scope_ref,
             query_scope_ref=query_scope_ref,
             instruments={
-                metadata.instrument: GroupInstrumentRule(
-                    metadata=metadata,
-                    base_units_per_order_unit=Decimal("1"),
+                item.instrument: GroupInstrumentRule(
+                    metadata=item,
+                    base_units_per_order_unit=base_unit_scales[item.instrument],
                     allowed_order_types=frozenset({OrderType.LIMIT}),
                 )
+                for item in metadata_records
             },
         )
         budget_policy, budget_quote_builder = _budget_binding(
-            metadata, portfolio_ref=self.strategy_template.portfolio_ref
+            metadata_records, portfolio_ref=self.strategy_template.portfolio_ref
         )
         self.portfolio_budget_policy = budget_policy
         self.coordinator_target = GroupCoordinatorTarget(
@@ -808,20 +952,27 @@ class Dim09ThreeLegCluster:
         *,
         group_id: str,
         deadline_ns: int | None = None,
+        instrument: str | None = None,
+        quantity: Decimal = Decimal("1"),
+        price: Decimal = Decimal("100"),
     ) -> dict[str, Any]:
         deadline = self.deadline_ns if deadline_ns is None else deadline_ns
+        selected_instrument = self.metadata.instrument if instrument is None else instrument
+        metadata = self.instrument_metadata.get(selected_instrument)
+        if metadata is None:
+            raise ValueError("leg instrument is not present in trusted test metadata")
         return OrderIntent.limit(
             intent_id=group_leg_intent_id(group_id, leg_id),
             scope=self.execution_scope,
             signal_id=f"dim09-signal-{leg_id}",
-            instrument=self.metadata.instrument,
+            instrument=selected_instrument,
             side=side,
-            quantity=Decimal("1"),
-            price=Decimal("100"),
+            quantity=quantity,
+            price=price,
             time_in_force=TimeInForce.IOC,
-            metadata_version=self.metadata.metadata_version,
+            metadata_version=metadata.metadata_version,
             deadline_ns=deadline,
-            tags={INSTRUMENT_METADATA_DIGEST_TAG: self.metadata.digest},
+            tags={INSTRUMENT_METADATA_DIGEST_TAG: metadata.digest},
         ).to_payload()
 
     def bound_intent_id(self, group_id: str, leg_id: str) -> str:
@@ -834,10 +985,25 @@ class Dim09ThreeLegCluster:
         leg_ids: tuple[str, ...] = LEG_IDS,
         sides: tuple[Side, ...] = LEG_SIDES,
         ratios: tuple[str, ...] = LEG_RATIOS,
+        leg_instruments: tuple[str, ...] | None = None,
+        quantities: tuple[Decimal, ...] | None = None,
+        prices: tuple[Decimal, ...] | None = None,
         deadline_ns: int | None = None,
         version: object = 3,
     ) -> dict[str, Any]:
         deadline = self.deadline_ns if deadline_ns is None else deadline_ns
+        instruments = (
+            tuple(self.metadata.instrument for _ in LEG_IDS)
+            if leg_instruments is None
+            else leg_instruments
+        )
+        leg_quantities = tuple(Decimal("1") for _ in LEG_IDS) if quantities is None else quantities
+        leg_prices = tuple(Decimal("100") for _ in LEG_IDS) if prices is None else prices
+        if any(
+            type(items) is not tuple or len(items) != 3
+            for items in (instruments, leg_quantities, leg_prices)
+        ):
+            raise ValueError("v3 leg instruments, quantities, and prices require three items")
         return {
             "version": version,
             "group_id": group_id,
@@ -849,10 +1015,24 @@ class Dim09ThreeLegCluster:
                     "account_ref": _ACCOUNT,
                     "ratio": ratio,
                     "intent": self.leg_intent(
-                        leg_id, side, group_id=group_id, deadline_ns=deadline
+                        leg_id,
+                        side,
+                        group_id=group_id,
+                        deadline_ns=deadline,
+                        instrument=instrument,
+                        quantity=quantity,
+                        price=price,
                     ),
                 }
-                for leg_id, side, ratio in zip(leg_ids, sides, ratios)
+                for leg_id, side, ratio, instrument, quantity, price in zip(
+                    leg_ids,
+                    sides,
+                    ratios,
+                    instruments,
+                    leg_quantities,
+                    leg_prices,
+                    strict=True,
+                )
             ],
         }
 
