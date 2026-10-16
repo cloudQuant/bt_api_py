@@ -940,6 +940,7 @@ class ExecutionGroupAuthority:
         completion_verifier: GroupDispatchCompletionVerifier | None = None,
         reconciliation_verifier: GroupDispatchReconciliationVerifier | None = None,
         monotonic_clock_ns: Callable[[], int] = time.monotonic_ns,
+        wall_clock_ns: Callable[[], int] = time.time_ns,
     ) -> None:
         if not callable(completion_verifier) and completion_verifier is not None:
             raise TypeError("completion_verifier must be callable")
@@ -950,11 +951,14 @@ class ExecutionGroupAuthority:
             raise ValueError("a persistent authority database path is required")
         if not callable(monotonic_clock_ns):
             raise TypeError("monotonic_clock_ns must be callable")
+        if not callable(wall_clock_ns):
+            raise TypeError("wall_clock_ns must be callable")
         self._path = Path(raw_path).resolve()
         self._completion_verifier = completion_verifier
         self._verifier = reconciliation_verifier
         self._reconciliation_source: object | None = None
         self._monotonic_clock_ns = monotonic_clock_ns
+        self._wall_clock_ns = wall_clock_ns
         self._state_lock = threading.RLock()
         self._key_locks_lock = threading.Lock()
         self._key_locks: dict[str, threading.RLock] = {}
@@ -1078,12 +1082,22 @@ class ExecutionGroupAuthority:
                         hold_json TEXT NOT NULL,
                         proof_sha256 TEXT NOT NULL
                     );
+                    CREATE TABLE IF NOT EXISTS execution_group_authority_deadline_clock (
+                        singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                        wall_anchor_ns INTEGER NOT NULL CHECK(wall_anchor_ns >= 0),
+                        monotonic_anchor_ns INTEGER NOT NULL CHECK(monotonic_anchor_ns >= 0),
+                        last_wall_ns INTEGER NOT NULL CHECK(last_wall_ns >= 0),
+                        last_monotonic_ns INTEGER NOT NULL CHECK(last_monotonic_ns >= 0),
+                        effective_now_ns INTEGER NOT NULL CHECK(effective_now_ns >= 0),
+                        trusted INTEGER NOT NULL CHECK(trusted IN (0, 1))
+                    );
                     """
                 )
                 connection.execute("BEGIN IMMEDIATE")
                 row = connection.execute(
                     "SELECT value FROM execution_group_authority_meta WHERE key='schema_version'"
                 ).fetchone()
+                existing_authority_database = row is not None
                 if row is None:
                     connection.execute(
                         "INSERT INTO execution_group_authority_meta(key, value) VALUES(?, ?)",
@@ -1091,6 +1105,38 @@ class ExecutionGroupAuthority:
                     )
                 elif row["value"] != str(_SCHEMA_VERSION):
                     raise GroupAuthorityUnavailableError("unsupported authority schema")
+                clock_row = connection.execute(
+                    "SELECT singleton FROM execution_group_authority_deadline_clock "
+                    "WHERE singleton=1"
+                ).fetchone()
+                if clock_row is None:
+                    wall_now_ns = self._wall_clock_ns()
+                    monotonic_now_ns = self._monotonic_clock_ns()
+                    if (
+                        type(wall_now_ns) is not int
+                        or type(monotonic_now_ns) is not int
+                        or not 0 <= wall_now_ns <= _SQLITE_MAX_INT
+                        or not 0 <= monotonic_now_ns <= _SQLITE_MAX_INT
+                    ):
+                        raise GroupAuthorityUnavailableError("authority deadline clock is invalid")
+                    # An existing database has no recoverable clock history,
+                    # even if it currently has no dispatch hold: a delayed
+                    # coordinator request could still arrive after a rollback.
+                    # Only a genuinely fresh database can trust a new anchor.
+                    connection.execute(
+                        "INSERT INTO execution_group_authority_deadline_clock "
+                        "(singleton, wall_anchor_ns, monotonic_anchor_ns, last_wall_ns, "
+                        "last_monotonic_ns, effective_now_ns, trusted) "
+                        "VALUES(1, ?, ?, ?, ?, ?, ?)",
+                        (
+                            wall_now_ns,
+                            monotonic_now_ns,
+                            wall_now_ns,
+                            monotonic_now_ns,
+                            wall_now_ns,
+                            0 if existing_authority_database else 1,
+                        ),
+                    )
                 connection.commit()
         except ExecutionGroupAuthorityError:
             raise
@@ -1098,6 +1144,69 @@ class ExecutionGroupAuthority:
             raise GroupAuthorityUnavailableError(
                 "authority database initialization failed"
             ) from error
+
+    def _advance_deadline_clock(self, connection: sqlite3.Connection) -> int | None:
+        """Advance durable expiry time, failing closed on either clock rollback.
+
+        Group deadlines are absolute Unix nanoseconds.  The persisted local
+        monotonic anchor carries elapsed time across authority-process restarts
+        on the same host, while the wall-clock high-water mark prevents a
+        backward wall jump from reviving a deadline already observed expired.
+        """
+
+        row = connection.execute(
+            "SELECT * FROM execution_group_authority_deadline_clock WHERE singleton=1"
+        ).fetchone()
+        if row is None or row["trusted"] != 1:
+            return None
+        try:
+            wall_now_ns = self._wall_clock_ns()
+            monotonic_now_ns = self._monotonic_clock_ns()
+        except Exception:
+            connection.execute(
+                "UPDATE execution_group_authority_deadline_clock SET trusted=0 WHERE singleton=1"
+            )
+            return None
+        persisted = (
+            row["wall_anchor_ns"],
+            row["monotonic_anchor_ns"],
+            row["last_wall_ns"],
+            row["last_monotonic_ns"],
+            row["effective_now_ns"],
+        )
+        if (
+            any(type(value) is not int or not 0 <= value <= _SQLITE_MAX_INT for value in persisted)
+            or type(wall_now_ns) is not int
+            or type(monotonic_now_ns) is not int
+            or not 0 <= wall_now_ns <= _SQLITE_MAX_INT
+            or not 0 <= monotonic_now_ns <= _SQLITE_MAX_INT
+        ):
+            connection.execute(
+                "UPDATE execution_group_authority_deadline_clock SET trusted=0 WHERE singleton=1"
+            )
+            return None
+        wall_anchor_ns, monotonic_anchor_ns, last_wall_ns, last_monotonic_ns, effective_ns = (
+            persisted
+        )
+        if wall_now_ns < last_wall_ns or monotonic_now_ns < last_monotonic_ns:
+            connection.execute(
+                "UPDATE execution_group_authority_deadline_clock SET trusted=0 WHERE singleton=1"
+            )
+            return None
+        monotonic_elapsed_ns = monotonic_now_ns - monotonic_anchor_ns
+        monotonic_wall_now_ns = wall_anchor_ns + monotonic_elapsed_ns
+        if monotonic_wall_now_ns > _SQLITE_MAX_INT:
+            connection.execute(
+                "UPDATE execution_group_authority_deadline_clock SET trusted=0 WHERE singleton=1"
+            )
+            return None
+        effective_now_ns = max(wall_now_ns, monotonic_wall_now_ns, effective_ns)
+        connection.execute(
+            "UPDATE execution_group_authority_deadline_clock SET last_wall_ns=?, "
+            "last_monotonic_ns=?, effective_now_ns=? WHERE singleton=1",
+            (wall_now_ns, monotonic_now_ns, effective_now_ns),
+        )
+        return effective_now_ns
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -2170,9 +2279,6 @@ class ExecutionGroupAuthorityGuard:
                                 )
                         return
 
-                now_ns = owner._monotonic_clock_ns()
-                if type(now_ns) is not int or now_ns < 0 or binding.deadline_ns <= now_ns:
-                    raise GroupCoordinatorDenied("group authorization deadline has expired")
                 attempt_id = uuid.uuid4().hex
                 hold = self._create_hold(
                     authority_key=authority_key,
@@ -2302,30 +2408,44 @@ class ExecutionGroupAuthorityGuard:
             execution_writer_lease_fingerprint=lease_fingerprint,
             account_writer_epoch=writer_lease.fencing_token,
         )
+        expired = False
+        stale_registration = False
+        unresolved_hold = False
         with self._owner._transaction() as connection:
-            row = self._owner._stored_coordinator(connection, authority_key)
-            if (
-                row is None
-                or not row["active"]
-                or row["registration_id"] != context.registration_id
-                or row["principal_ref"] != context.principal_ref
-                or row["identity_json"] != _json(_identity_payload(context.identity))
-                or row["wire_scope_json"] != _json(_wire_scope_payload(context.scope))
-                or row["execution_scope_key"] != execution_scope.key
-                or row["risk_scope_fingerprint"] != binding.risk_scope_fingerprint
-                or row["portfolio_ref"] != binding.portfolio_ref
-                or row["account_ref"] != binding.account_ref
-                or row["strategy_id"] != binding.strategy_id
-            ):
-                raise GroupCoordinatorDenied("coordinator registration is stale or revoked")
-            if self._owner._has_holds(connection, authority_key):
-                raise GroupAuthorityBusyError("an unresolved group dispatch hold blocks retry")
-            hold = replace(hold, coordinator_generation=int(row["generation"]))
-            connection.execute(
-                "INSERT INTO group_dispatch_holds(hold_id, authority_key, hold_json) "
-                "VALUES(?, ?, ?)",
-                (hold.hold_id, authority_key, _json(_hold_payload(hold))),
-            )
+            now_ns = self._owner._advance_deadline_clock(connection)
+            if now_ns is None or binding.deadline_ns <= now_ns:
+                expired = True
+            else:
+                row = self._owner._stored_coordinator(connection, authority_key)
+                if (
+                    row is None
+                    or not row["active"]
+                    or row["registration_id"] != context.registration_id
+                    or row["principal_ref"] != context.principal_ref
+                    or row["identity_json"] != _json(_identity_payload(context.identity))
+                    or row["wire_scope_json"] != _json(_wire_scope_payload(context.scope))
+                    or row["execution_scope_key"] != execution_scope.key
+                    or row["risk_scope_fingerprint"] != binding.risk_scope_fingerprint
+                    or row["portfolio_ref"] != binding.portfolio_ref
+                    or row["account_ref"] != binding.account_ref
+                    or row["strategy_id"] != binding.strategy_id
+                ):
+                    stale_registration = True
+                elif self._owner._has_holds(connection, authority_key):
+                    unresolved_hold = True
+                else:
+                    hold = replace(hold, coordinator_generation=int(row["generation"]))
+                    connection.execute(
+                        "INSERT INTO group_dispatch_holds(hold_id, authority_key, hold_json) "
+                        "VALUES(?, ?, ?)",
+                        (hold.hold_id, authority_key, _json(_hold_payload(hold))),
+                    )
+        if expired:
+            raise GroupCoordinatorDenied("group authorization deadline has expired")
+        if stale_registration:
+            raise GroupCoordinatorDenied("coordinator registration is stale or revoked")
+        if unresolved_hold:
+            raise GroupAuthorityBusyError("an unresolved group dispatch hold blocks retry")
         self._owner._mark_hold_active(hold.hold_id)
         return hold
 
