@@ -1,0 +1,8 @@
+# DIM04 owner-scoped multi-order cancel test
+
+- Repository/branch: `D:\bt_api_py`, `dev`; base HEAD `bb14c9bdb13de46498fecbe16517bbb80e170db7`.
+- Scope: `tests/integration/test_dim04_strategy_multi_order_cancel.py` and this record.
+- Fixture correction: preserve runless strategy templates as registration/Risk target keys, but use concrete run-scoped `WireScope` values for the two dispatch routes; assert the persisted Risk commands retain each strategy's exact run. Production scope/proof validation is unchanged.
+- Focused synthetic ServiceHost result: `test_strategy_owner_cancel_cancels_all_own_run_orders_only`, 1 passed, exit 0, 10.87 s. The test verifies two owner-run orders selected/cancelled once, exact terminal Risk cancel proofs, deterministic replay without another dispatch, and a peer strategy/run order left ACKED and uncancelled. Teardown assertions verify Host finished/closed, no live Host thread or cleanup error, and normal resource closes.
+- Raw evidence: stdout `D:\temp\iteration10-dim04-owner-cancel-bad3547-r6-20261017.stdout.txt` (1,118 B, SHA-256 `9F43AB394C2C0E3BE920231F1D8899C90134193A9AA272747711BDF3D48C4859`); stderr empty (SHA-256 `E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855`); JUnit `D:\temp\iteration10-dim04-owner-cancel-bad3547-r6-20261017.junit.xml` (373 B, SHA-256 `43B8A80F7D20452E88C5B00C04CAC9F7DF9E416F683649F871D450F31A62D320`). Two warnings: existing unknown pytest asyncio option and Windows Proactor/ZeroMQ selector fallback.
+- Evidence level: local synthetic ServiceHost + SQLite Risk/Execution/provider evidence only; not real-account acceptance and not a DIM04 formal PASS. R1–R5 failures remain preserved and are not overwritten.
