@@ -1,0 +1,27 @@
+{
+  "workstream": "ARB04 iteration 10",
+  "date": "2026-10-16",
+  "plan_anchor": "D:/bt_api_py/docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md:770",
+  "scenario": "group two-leg submit-reply loss over the real CURVE service chain with durable journal; UNKNOWN must not resubmit or release; recovery by original business ID exactly once; late fill must not be adopted/compensated; no blind reverse",
+  "test_file": "tests/integration/test_arb04_group_reply_loss_service.py",
+  "support_file": "tests/integration/_arb04_group_reply_loss_support.py",
+  "fault_injection": "coordinator child transport_factory wrapper: forward the real orders.submit_group_leg request, then discard the real reply and raise btn transport RequestOutcomeUnknownError(message_id, response_timeout)",
+  "runs": [
+    {
+      "name": "run1",
+      "cwd": "D:/bt_api_py",
+      "env": {
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": "D:\\bt_api_py;D:\\bt_api_py\\bt_api\\bt_api_base\\src;D:\\bt_api_py\\bt_api\\bt_api_execution\\src;D:\\bt_api_py\\bt_api\\bt_api_risk\\src;D:\\bt_api_py\\bt_api\\bt_api_transport_zmq\\src"
+      },
+      "command": "C:/anaconda3/python.exe -m pytest tests/integration/test_arb04_group_reply_loss_service.py -q -p no:cacheprovider --basetemp=D:/temp/it10arb04-bas1 --junitxml=D:/temp/it10arb04-20261016-r1/run1-junit.xml"
+    },
+    {
+      "name": "run2",
+      "cwd": "D:/bt_api_py",
+      "env": "same as run1",
+      "command": "C:/anaconda3/python.exe -m pytest tests/integration/test_arb04_group_reply_loss_service.py -q -p no:cacheprovider --basetemp=D:/temp/it10arb04-bas2 --junitxml=D:/temp/it10arb04-20261016-r1/run2-junit.xml"
+    }
+  ]
+}

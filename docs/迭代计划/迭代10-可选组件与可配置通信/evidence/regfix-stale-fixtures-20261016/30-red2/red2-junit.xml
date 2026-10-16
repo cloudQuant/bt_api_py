@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="3.030" timestamp="2026-10-16T11:47:41.908666" hostname="yun"><testcase classname="tests.unit.test_service_host_integration" name="test_spawned_curve_host_serves_four_sqlite_read_adapters_and_closes_normally" time="2.003" /></testsuite></testsuites>

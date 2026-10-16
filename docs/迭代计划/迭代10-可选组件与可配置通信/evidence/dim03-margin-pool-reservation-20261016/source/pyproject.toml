@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bt_api_risk"
+version = "0.1.0"
+description = "Risk management module extracted from bt_api_py"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+]
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "cloudQuant", email = "yunjinqi@gmail.com"},
+]
+dependencies = [
+    "bt_api_base>=0.15.8,<0.16",
+    "pydantic>=2.0.0",
+    "typing-extensions>=4.8.0",
+]
+
+[project.optional-dependencies]
+# Analytics-only numerics (RiskManager / RiskCalculator). The account
+# admission path, the risk service component and RiskAssessor never import
+# these modules, so base installs keep serving admission and policy roles.
+analytics = [
+    "numpy>=1.26.0",
+]
+# Machine-learning models (AnomalyDetector / RiskEnsembleModel).
+ml = [
+    "scikit-learn>=1.0.0",
+]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    ".venv",
+    "venv",
+    "*.bak",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "C4", "SIM", "TCH", "RUF100", "S", "PERF", "PIE790"]
+ignore = ["E501", "B008", "N802", "N803", "S101", "TC002", "TC003", "TC001", "PERF203", "N806", "S301", "PERF401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S106", "S105", "S311", "E402", "PERF401", "N806", "S108"]
+"examples/**" = ["S106", "S105", "S311", "E402", "PERF401", "N806", "S108"]
+"scripts/**" = ["S106", "S105", "S311", "E402", "PERF401", "N806", "S108"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: Unit tests (fast, no external dependencies)",
+    "integration: Integration tests (may require external services)",
+]

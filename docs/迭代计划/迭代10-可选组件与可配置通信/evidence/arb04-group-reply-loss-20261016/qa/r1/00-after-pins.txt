@@ -1,0 +1,31 @@
+== it10 ARB04 evidence run r1 (after) ==
+Fri Oct 16 11:38:13     2026
+
+--- D:/bt_api_py
+d85ec636cb9d588afa8bf0ce52b1fd86c19e363c
+ M bt_api/bt_api_risk
+ M bt_api_py/service_registry.py
+ M bt_api_py/service_runtime.py
+ M tests/unit/test_load01_hundred_strategy_30min.py
+?? %SystemDrive%/
+?? .codex-tmp/
+?? 0
+?? bt_api_py/service_group_monitor.py
+?? "docs/\350\277\255\344\273\243\350\256\241\345\210\222/\350\277\255\344\273\24310-\345\217\257\351\200\211\347\273\204\344\273\266\344\270\216\345\217\257\351\205\215\347\275\256\351\200\232\344\277\241/risk-order-exposure-sdk-round-r20.md"
+?? tests/integration/_arb04_group_reply_loss_support.py
+?? tests/integration/_group_policy_host_fixtures.py
+?? tests/integration/test_arb04_group_reply_loss_service.py
+?? tests/integration/test_arb06_group_monitor_relay_service.py
+?? tests/unit/test_service_risk_order_journal_decimal_match.py
+--- D:/bt_api_py/bt_api/bt_api_base
+b4aabd1e17b9c7252fa7b4d266932087d99b5517
+--- D:/bt_api_py/bt_api/bt_api_execution
+dc8bd7a3682d00cfaef4f15261607043c6d24fca
+--- D:/bt_api_py/bt_api/bt_api_risk
+c7fc809b5b3fbcf0a19b06f9082cb010a095174e
+ M src/bt_api_risk/core/admission.py
+?? .codex-tmp/
+?? tests/test_margin_pool_reservations.py
+?? tests/test_trade_identity_claims.py
+--- D:/bt_api_py/bt_api/bt_api_transport_zmq
+a397fdb460d2deb22e67ceb4963992ef63dbbb0e

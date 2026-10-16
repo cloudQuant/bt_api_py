@@ -1,0 +1,1246 @@
+commit 52127cba26f8cd2da8c3d77259ea1b4611b5ecdd
+Author: yunjinqi <yunjinqi@qq.com>
+Date:   Fri Oct 16 11:55:41 2026 +0800
+
+    test(arb04): group reply loss keeps UNKNOWN un-resubmitted and un-released
+    
+    Two integration tests over the real spawned CURVE chain (coordinator + two
+    account hosts, real SQLite stores, synthetic provider leaves): the first
+    orders.submit_group_leg reply is discarded after the account host executed
+    it, raising the transport's genuine RequestOutcomeUnknownError. Proven: no
+    resend (wire submit counts frozen at exactly 1), no early budget release,
+    no reservations.release ever on the wire, recovery by the original business
+    id exactly once (PAIRED, residual 0, hedge sized once), late fill refused
+    without adoption or blind reverse. Independent review GO-with-disclosures;
+    staging re-run at dcad4003 green (2+2 ARB04, ARB03/R121 regressions).
+    
+    Disclosures (clause not fully closed): cancel-under-reply-loss design-only;
+    true network disconnect/recovery and duplicate fill-report not exercised;
+    late-fill adoption deliberately unimplemented (refusal half only).
+
+diff --git a/tests/integration/_arb04_group_reply_loss_support.py b/tests/integration/_arb04_group_reply_loss_support.py
+new file mode 100644
+index 00000000..ac4e4527
+--- /dev/null
++++ b/tests/integration/_arb04_group_reply_loss_support.py
+@@ -0,0 +1,677 @@
++"""Reply-loss fault injection support for the ARB04 real-chain group scenario.
++
++The coordinator host builds its upstream clients from a
++``TrustedServiceClients.transport_factory``. This module wraps the real
++``ZmqTransportFactory`` so that, for an armed operation and one configured
++number of occurrences, the request is genuinely forwarded to the account host
++(which performs its full durable work) and only the *reply* is then discarded:
++the wrapper raises the transport's own ``RequestOutcomeUnknownError`` exactly
++as a lost socket reply would. The coordinator therefore observes a real
++submit-reply loss, not a stubbed failure.
++
++Wire-level per-account operation counters and the drop bookkeeping live in the
++coordinator child process and are exposed through the child's control pipe
++(``fault-stats`` command), so tests can prove at the wire level that no second
++submit was ever sent after the loss.
++"""
++
++from __future__ import annotations
++
++import multiprocessing
++import time
++from collections.abc import Mapping
++from contextlib import suppress
++from decimal import Decimal
++from typing import Any
++
++import zmq
++from bt_api_base.service_protocol import WireEnvelope, WireIdentity, WireRole, WireScope
++from bt_api_execution import (
++    GroupOrderSnapshot,
++    OrderType,
++    SqliteOrderGroupStore,
++    risk_account_scope_fingerprint,
++)
++from bt_api_risk import AccountScope
++from bt_api_transport_zmq.service_v2 import RequestOutcomeUnknownError
++
++from bt_api_py.service_components import ComponentResources
++from bt_api_py.service_config import parse_client_config, parse_service_config
++from bt_api_py.service_execution_group import (
++    GroupAccountRoute,
++    GroupCoordinatorTarget,
++    GroupInstrumentRule,
++)
++from bt_api_py.service_execution_group_client import GroupOriginRunBindingStore
++from bt_api_py.service_host import (
++    ServiceHost,
++    TrustedServiceAuthority,
++    TrustedServiceClients,
++)
++from bt_api_py.service_registry import (
++    PrincipalGrant,
++    ResourceGrant,
++)
++from bt_api_py.service_runtime import (
++    ClientCurveKeys,
++    ServiceClientRuntime,
++    ZmqTransportFactory,
++)
++from tests.integration.test_arb03_dim05_group_partial_fill_service import (
++    _COORDINATOR_INSTANCE_ID,
++    _COORDINATOR_PRINCIPAL,
++    _COORDINATOR_SCOPE_REF,
++    _COORDINATOR_SERVICE_ID,
++    _DOMAIN,
++    _PORTFOLIO,
++    _REQUEST_TIMEOUT_MS,
++    _RUN,
++    _STRATEGY,
++    _STRATEGY_PRINCIPAL,
++    _account_host_process,
++    _account_service_config,
++    _budget_binding,
++    _coordinator_service_config,
++    _endpoint,
++    _execution_scope,
++    _metadata,
++    _owner_scope,
++    _receive,
++    _route_refs,
++    _stable_strategy_scope,
++    _stop_process,
++    _strategy_client_config,
++    _submit_and_query,
++)
++
++
++class _WireFaultState:
++    """Process-local reply-loss bookkeeping shared by every created transport."""
++
++    def __init__(self, operation: str, remaining_drops: int) -> None:
++        assert type(operation) is str and operation
++        assert type(remaining_drops) is int and remaining_drops >= 0
++        self.operation = operation
++        self.remaining = remaining_drops
++        self.dropped = 0
++        self.counts: dict[tuple[str, str], int] = {}
++
++    def count(self, account_ref: str, operation: str) -> None:
++        key = (account_ref, operation)
++        self.counts[key] = self.counts.get(key, 0) + 1
++
++    def statistics(self) -> tuple[tuple[tuple[str, str, int], ...], int, int]:
++        items = tuple(
++            (account_ref, operation, count)
++            for (account_ref, operation), count in sorted(self.counts.items())
++        )
++        return items, self.dropped, self.remaining
++
++
++class _ReplyLossTransport:
++    """Forward one request to the real transport, then drop the armed reply."""
++
++    def __init__(
++        self, inner: Any, state: _WireFaultState, account_ref: str
++    ) -> None:
++        self._inner = inner
++        self._state = state
++        self._account_ref = account_ref
++
++    def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
++        operation = request.header.operation
++        self._state.count(self._account_ref, operation)
++        reply = self._inner.request(request, timeout=timeout)
++        if operation == self._state.operation and self._state.remaining > 0:
++            # The upstream handler executed and answered; this reply is
++            # discarded on the wire exactly like a lost socket response.
++            self._state.remaining -= 1
++            self._state.dropped += 1
++            raise RequestOutcomeUnknownError(
++                request.header.message_id, "response_timeout"
++            )
++        return reply
++
++    def close(self) -> None:
++        self._inner.close()
++
++
++class _ReplyLossTransportFactory:
++    """Wrap a transport factory with per-account reply-loss accounting."""
++
++    def __init__(
++        self,
++        inner: Any,
++        state: _WireFaultState,
++        account_by_endpoint: Mapping[str, str],
++    ) -> None:
++        self._inner = inner
++        self._state = state
++        self._account_by_endpoint = dict(account_by_endpoint)
++
++    def __call__(self, profile: Mapping[str, Any], expected_peer: WireIdentity) -> Any:
++        endpoint = profile["endpoints"].get("rpc_connect")
++        account_ref = self._account_by_endpoint.get(str(endpoint), str(endpoint))
++        return _ReplyLossTransport(self._inner(profile, expected_peer), self._state, account_ref)
++
++
++def _arb04_coordinator_host_process(
++    control,
++    raw_config: dict[str, Any],
++    raw_account_configs: dict[str, dict[str, Any]],
++    registry_path: str,
++    group_store_path: str,
++    run_bindings_path: str,
++    account_endpoints: dict[str, str],
++    account_server_public: dict[str, bytes],
++    coordinator_server_public: bytes,
++    coordinator_server_secret: bytes,
++    coordinator_client_public: bytes,
++    coordinator_client_secret: bytes,
++    strategy_client_public: bytes,
++    metadata_reference_ns: int,
++    accounts: tuple[str, ...],
++    rule_specs: dict[str, dict[str, str]],
++    fault_operation: str,
++    fault_drops: int,
++) -> None:
++    """ARB03 coordinator host with an armed wire reply-loss factory."""
++
++    config = parse_service_config(raw_config)
++    account_configs = {
++        account: parse_service_config(raw_account_configs[account]) for account in accounts
++    }
++    service_identity = WireIdentity(
++        WireRole.SERVICE, _COORDINATOR_PRINCIPAL, _COORDINATOR_SERVICE_ID
++    )
++    strategy_identity = WireIdentity(WireRole.STRATEGY_CLIENT, _STRATEGY_PRINCIPAL, _STRATEGY)
++    strategy_scope = _stable_strategy_scope(accounts)
++    account_scope_by_ref: dict[str, WireScope] = {}
++    peer_by_service: dict[str, WireIdentity] = {}
++    security_profiles: dict[str, ClientCurveKeys] = {}
++    for account_ref in accounts:
++        reservation_ref, entry_ref, query_ref = _route_refs(account_ref)
++        account_scope = _owner_scope(account_ref)
++        for scope_ref in (reservation_ref, entry_ref, query_ref):
++            account_scope_by_ref[scope_ref] = account_scope
++        account_service_id = account_configs[account_ref].service_id
++        peer_by_service[account_service_id] = WireIdentity(
++            WireRole.SERVICE,
++            f"group-owner-service-principal-{account_ref}",
++            account_service_id,
++        )
++        security_profiles[f"coordinator-client-security-{account_ref}"] = ClientCurveKeys(
++            server_key=account_server_public[account_ref],
++            public_key=coordinator_client_public,
++            secret_key=coordinator_client_secret,
++        )
++
++    fault_state = _WireFaultState(fault_operation, fault_drops)
++    trusted_clients = TrustedServiceClients(
++        scope_resolver=lambda scope_ref: account_scope_by_ref[scope_ref],
++        peer_resolver=lambda service_id: peer_by_service[service_id],
++        transport_factory=_ReplyLossTransportFactory(
++            ZmqTransportFactory(security_profiles),
++            fault_state,
++            {endpoint: account_ref for account_ref, endpoint in account_endpoints.items()},
++        ),
++        requested_operations={
++            "upstream.orders": frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"}),
++            "upstream.order_query": frozenset({"orders.query_group_leg"}),
++            "upstream.account_reservations": frozenset(
++                {
++                    "reservations.reserve",
++                    "reservations.query",
++                    "reservations.release",
++                }
++            ),
++        },
++    )
++    route_targets: dict[str, GroupAccountRoute] = {}
++    for account_ref in accounts:
++        provider_account = f"provider-{account_ref}"
++        risk_scope = AccountScope("fixture", provider_account, "simulation")
++        execution_scope = _execution_scope(account_ref)
++        reservation_ref, entry_ref, query_ref = _route_refs(account_ref)
++        instruments: dict[str, GroupInstrumentRule] = {}
++        for instrument, base_units in rule_specs[account_ref].items():
++            metadata = _metadata(instrument, metadata_reference_ns)
++            instruments[instrument] = GroupInstrumentRule(
++                metadata=metadata,
++                base_units_per_order_unit=Decimal(base_units),
++                allowed_order_types=frozenset({OrderType.LIMIT}),
++            )
++        route_targets[account_ref] = GroupAccountRoute(
++            execution_scope=execution_scope,
++            risk_scope_fingerprint=risk_account_scope_fingerprint(risk_scope.key),
++            reservation_scope_ref=reservation_ref,
++            order_scope_ref=entry_ref,
++            query_scope_ref=query_ref,
++            instruments=instruments,
++        )
++    budget_instruments = tuple(
++        sorted({instrument for account in accounts for instrument in rule_specs[account]})
++    )
++    budget_policy, budget_quote_builder = _budget_binding(
++        tuple(_metadata(instrument, metadata_reference_ns) for instrument in budget_instruments)
++    )
++    coordinator_target = GroupCoordinatorTarget(
++        scope_ref=_COORDINATOR_SCOPE_REF,
++        accounts=route_targets,
++        max_group_lifetime_ns=300_000_000_000,
++        portfolio_budget_policy=budget_policy,
++        budget_quote_builder=budget_quote_builder,
++    )
++    resources: dict[str, object] = {}
++    host: ServiceHost | None = None
++
++    def resource_provider(component, _instance_id, _options, _scope):
++        if component != "execution":
++            raise AssertionError("coordinator host must contain only its fixed component")
++        group_store = SqliteOrderGroupStore(group_store_path)
++        run_bindings = GroupOriginRunBindingStore(run_bindings_path)
++        resources.update({"store": group_store, "run_bindings": run_bindings})
++        return ComponentResources.borrowed(
++            {
++                "store": group_store,
++                "targets": {strategy_scope: coordinator_target},
++                "run_bindings": run_bindings,
++            },
++            ready=lambda: True,
++        )
++
++    try:
++        host = ServiceHost(
++            config,
++            TrustedServiceAuthority(
++                identity=service_identity,
++                scope=WireScope(_DOMAIN),
++                scope_ref=config.scope_ref,
++                scope_version="coordinator-scope-v1",
++                security_ref="coordinator-server-security-v1",
++                security_version="coordinator-curve-v1",
++                registration_policy_ref=config.registration_policy_ref,
++                registration_policy_version="coordinator-registration-v1",
++                service_requirements_ref=config.service_requirements_ref,
++                service_requirements_version="coordinator-requirements-v1",
++                curve_public_key=coordinator_server_public,
++                curve_secret_key=coordinator_server_secret,
++                principals={strategy_client_public: _STRATEGY_PRINCIPAL},
++                grants={
++                    _STRATEGY_PRINCIPAL: (
++                        PrincipalGrant(
++                            strategy_identity,
++                            (
++                                ResourceGrant(
++                                    _COORDINATOR_INSTANCE_ID,
++                                    "service.order_group_entry",
++                                    _COORDINATOR_SCOPE_REF,
++                                    strategy_scope,
++                                    frozenset({"groups.submit", "groups.query"}),
++                                ),
++                            ),
++                        ),
++                    )
++                },
++            ),
++            registry_path,
++            resource_provider,
++            service_directory={
++                _COORDINATOR_SERVICE_ID: config,
++                **{
++                    account_configs[account].service_id: account_configs[account]
++                    for account in accounts
++                },
++            },
++            trusted_clients=trusted_clients,
++        )
++        host.start()
++        upstream = host.upstream
++        if upstream is None or not upstream.healthy:
++            raise AssertionError("coordinator Host upstream did not become healthy")
++        upstream_bindings = tuple(
++            (
++                binding.mount,
++                binding.scope.account_ref,
++                binding.scope_ref,
++                binding.registration_id,
++                tuple(sorted(binding.operations)),
++            )
++            for binding in upstream.bindings
++            if binding.active
++        )
++        control.send(("ready", host.endpoint, upstream_bindings))
++        while True:
++            if control.poll(0):
++                command = control.recv()
++                if command == "close":
++                    host.close()
++                    control.send(("closed", host.state, upstream.state))
++                    return
++                if command == "fault-stats":
++                    counts, dropped, remaining = fault_state.statistics()
++                    control.send(("fault-stats", counts, dropped, remaining))
++            host.serve_once(15)
++    except BaseException as error:
++        if host is not None and host.state not in {"closed", "failed"}:
++            with suppress(BaseException):
++                host.close()
++        with suppress(Exception):
++            control.send(("error", getattr(error, "code", type(error).__name__)))
++        raise
++    finally:
++        if host is not None and host.state != "closed":
++            with suppress(BaseException):
++                host.close()
++        for name in ("run_bindings", "store"):
++            resource = resources.get(name)
++            close = getattr(resource, "close", None)
++            if callable(close):
++                close()
++        control.close()
++
++
++class Arb04GroupCluster:
++    """Spawned account/coordinator hosts plus the strategy client runtime.
++
++    Identical to the ARB03 cluster except that the coordinator host is the
++    reply-loss variant and the wire fault state is inspectable.
++    """
++
++    def __init__(
++        self,
++        tmp_path,
++        *,
++        accounts: tuple[str, ...],
++        instruments: dict[str, tuple[str, ...]],
++        initial_states: dict[str, tuple[str, ...]],
++        expected_orders: dict[str, tuple[tuple[str, str, str, str], ...]],
++        rule_specs: dict[str, dict[str, str]],
++        fault_operation: str = "orders.submit_group_leg",
++        fault_drops: int = 1,
++    ) -> None:
++        self.accounts = accounts
++        self.instruments = instruments
++        self.initial_states = initial_states
++        self.expected_orders = expected_orders
++        self.rule_specs = rule_specs
++        self.fault_operation = fault_operation
++        self.fault_drops = fault_drops
++        self.metadata_reference_ns = time.time_ns()
++        self.account_paths: dict[str, dict[str, str]] = {
++            account: {
++                name: str(tmp_path / f"{account}-{name}.sqlite3")
++                for name in (
++                    "registry",
++                    "provider",
++                    "execution",
++                    "risk_order_journal",
++                    "proof",
++                    "risk_gate",
++                    "accepted",
++                    "group_authority",
++                )
++            }
++            for account in accounts
++        }
++        self.coordinator_paths = {
++            "registry": str(tmp_path / "coordinator-registry.sqlite3"),
++            "groups": str(tmp_path / "coordinator-groups.sqlite3"),
++            "run_bindings": str(tmp_path / "coordinator-run-bindings.sqlite3"),
++        }
++        self.account_endpoints = {account: _endpoint() for account in accounts}
++        self.account_server_keys = {account: zmq.curve_keypair() for account in accounts}
++        self.coordinator_server_public, self.coordinator_server_secret = zmq.curve_keypair()
++        self.coordinator_client_public, self.coordinator_client_secret = zmq.curve_keypair()
++        self.strategy_client_public, self.strategy_client_secret = zmq.curve_keypair()
++        self.account_configs = {
++            account: _account_service_config(
++                account,
++                self.account_endpoints[account],
++                f"account-server-security-{account}",
++            )
++            for account in accounts
++        }
++        self.coordinator_endpoint = _endpoint()
++        self.coordinator_raw = _coordinator_service_config(
++            self.coordinator_endpoint,
++            "coordinator-server-security-v1",
++            self.account_configs,
++            self.account_endpoints,
++            accounts,
++        )
++        self.account_processes: dict[str, Any] = {}
++        self.account_controls: dict[str, Any] = {}
++        self.coordinator_process: Any = None
++        self.coordinator_control: Any = None
++        self.strategy_runtime: ServiceClientRuntime | None = None
++        self.strategy_started = False
++        self.upstream_bindings: tuple[tuple[Any, ...], ...] = ()
++
++    def __enter__(self) -> Arb04GroupCluster:
++        try:
++            self._start_all()
++        except BaseException:
++            with suppress(BaseException):
++                self.close()
++            raise
++        return self
++
++    def __exit__(self, _exc_type, _exc, _traceback) -> bool:
++        self.close()
++        return False
++
++    def _start_all(self) -> None:
++        account_context = multiprocessing.get_context("spawn")
++        for account_ref in self.accounts:
++            parent_control, child_control = account_context.Pipe(duplex=True)
++            process = account_context.Process(
++                name=f"group-account-host-{account_ref}",
++                target=_account_host_process,
++                args=(
++                    child_control,
++                    self.account_configs[account_ref],
++                    self.account_paths[account_ref]["registry"],
++                    self.account_paths[account_ref],
++                    account_ref,
++                    self.account_server_keys[account_ref][0],
++                    self.account_server_keys[account_ref][1],
++                    self.coordinator_client_public,
++                    self.metadata_reference_ns,
++                    self.initial_states[account_ref],
++                    self.instruments[account_ref],
++                    self.expected_orders[account_ref],
++                ),
++            )
++            try:
++                process.start()
++            except BaseException:
++                child_control.close()
++                parent_control.close()
++                raise
++            child_control.close()
++            self.account_processes[account_ref] = process
++            self.account_controls[account_ref] = parent_control
++            startup = _receive(parent_control)
++            assert startup[0] == "ready", startup
++            assert startup[1] == self.account_endpoints[account_ref]
++
++        coordinator_context = multiprocessing.get_context("spawn")
++        coordinator_parent, coordinator_child = coordinator_context.Pipe(duplex=True)
++        self.coordinator_process = coordinator_context.Process(
++            name="group-coordinator-host",
++            target=_arb04_coordinator_host_process,
++            args=(
++                coordinator_child,
++                self.coordinator_raw,
++                self.account_configs,
++                self.coordinator_paths["registry"],
++                self.coordinator_paths["groups"],
++                self.coordinator_paths["run_bindings"],
++                self.account_endpoints,
++                {
++                    account: self.account_server_keys[account][0]
++                    for account in self.accounts
++                },
++                self.coordinator_server_public,
++                self.coordinator_server_secret,
++                self.coordinator_client_public,
++                self.coordinator_client_secret,
++                self.strategy_client_public,
++                self.metadata_reference_ns,
++                self.accounts,
++                self.rule_specs,
++                self.fault_operation,
++                self.fault_drops,
++            ),
++        )
++        try:
++            self.coordinator_process.start()
++        except BaseException:
++            coordinator_child.close()
++            coordinator_parent.close()
++            self.coordinator_control = None
++            self.coordinator_process = None
++            raise
++        coordinator_child.close()
++        self.coordinator_control = coordinator_parent
++        coordinator_ready = _receive(self.coordinator_control)
++        assert coordinator_ready[0] == "ready", coordinator_ready
++        assert coordinator_ready[1] == self.coordinator_endpoint
++        self.upstream_bindings = coordinator_ready[2]
++        expected_upstream = (
++            {("upstream.orders", account, _route_refs(account)[1]) for account in self.accounts}
++            | {
++                ("upstream.order_query", account, _route_refs(account)[2])
++                for account in self.accounts
++            }
++            | {
++                ("upstream.account_reservations", account, _route_refs(account)[0])
++                for account in self.accounts
++            }
++        )
++        expected_upstream_operations = {
++            "upstream.orders": frozenset({"orders.submit_group_leg", "orders.resolve_group_leg"}),
++            "upstream.order_query": frozenset({"orders.query_group_leg"}),
++            "upstream.account_reservations": frozenset(
++                {"reservations.reserve", "reservations.query", "reservations.release"}
++            ),
++        }
++        assert len(self.upstream_bindings) == len(expected_upstream) == 3 * len(self.accounts)
++        assert all(
++            registration_id
++            and operations == tuple(sorted(expected_upstream_operations[mount]))
++            for mount, _account, _scope_ref, registration_id, operations in self.upstream_bindings
++        )
++        assert {
++            (mount, account, scope_ref)
++            for mount, account, scope_ref, _registration_id, _operations in self.upstream_bindings
++        } == expected_upstream
++
++        order_registration_ids = {
++            account: next(
++                registration_id
++                for mount, bound_account, _scope_ref, registration_id, _operations in (
++                    self.upstream_bindings
++                )
++                if mount == "upstream.orders" and bound_account == account
++            )
++            for account in self.accounts
++        }
++        for account_ref in self.accounts:
++            control = self.account_controls[account_ref]
++            control.send(("activate", order_registration_ids[account_ref]))
++            activation = _receive(control)
++            assert activation[0] == "activated", activation
++            assert activation[1] == order_registration_ids[account_ref]
++            assert type(activation[2]) is int and activation[2] > 0
++
++        strategy_identity = WireIdentity(WireRole.STRATEGY_CLIENT, _STRATEGY_PRINCIPAL, _STRATEGY)
++        coordinator_identity = WireIdentity(
++            WireRole.SERVICE, _COORDINATOR_PRINCIPAL, _COORDINATOR_SERVICE_ID
++        )
++        strategy_runtime = ServiceClientRuntime(
++            parse_client_config(
++                _strategy_client_config(self.coordinator_endpoint, "strategy-client-security-v1")
++            ),
++            identity=strategy_identity,
++            scope_resolver=lambda _scope_ref: _stable_strategy_scope(self.accounts),
++            peer_resolver=lambda _service_id: coordinator_identity,
++            transport_factory=ZmqTransportFactory(
++                {
++                    "strategy-client-security-v1": ClientCurveKeys(
++                        server_key=self.coordinator_server_public,
++                        public_key=self.strategy_client_public,
++                        secret_key=self.strategy_client_secret,
++                    )
++                }
++            ),
++            run_id=_RUN,
++            requested_operations={
++                "broker.order_groups": frozenset({"groups.submit", "groups.query"})
++            },
++        )
++        self.strategy_runtime = strategy_runtime
++        strategy_receipt = strategy_runtime.start()
++        self.strategy_started = True
++        assert strategy_receipt.degraded_count == 0
++        assert len(strategy_receipt.bindings) == 1
++        strategy_binding = strategy_receipt.bindings[0]
++        assert strategy_binding.mount == "broker.order_groups"
++        assert strategy_binding.scope.account_refs == self.accounts
++        assert strategy_binding.scope.run_id == _RUN
++        assert strategy_binding.operations == frozenset({"groups.submit", "groups.query"})
++
++    def submit_group(self, request: dict[str, Any]) -> GroupOrderSnapshot:
++        assert self.strategy_runtime is not None
++        return _submit_and_query(self.strategy_runtime, request)
++
++    def status(self, account_ref: str) -> tuple[Any, ...]:
++        control = self.account_controls[account_ref]
++        control.send(("status",))
++        status = _receive(control)
++        assert status[0] == "status", status
++        return status
++
++    def fault_stats(self) -> tuple[dict[tuple[str, str], int], int, int]:
++        control = self.coordinator_control
++        assert control is not None
++        control.send("fault-stats")
++        stats = _receive(control)
++        assert stats[0] == "fault-stats", stats
++        counts = {(account, operation): count for account, operation, count in stats[1]}
++        return counts, stats[2], stats[3]
++
++    def close(self) -> None:
++        cleanup_failures: list[BaseException] = []
++        if self.strategy_runtime is not None and self.strategy_started:
++            runtime = self.strategy_runtime
++            try:
++                runtime.close()
++                assert runtime.state == "closed"
++                assert runtime.unregister_uncertainties == 0
++            except BaseException as error:
++                cleanup_failures.append(error)
++            finally:
++                self.strategy_started = False
++        if self.coordinator_process is not None and self.coordinator_control is not None:
++            try:
++                _stop_process(self.coordinator_process, self.coordinator_control)
++            except BaseException as error:
++                cleanup_failures.append(error)
++            finally:
++                self.coordinator_process = None
++                self.coordinator_control = None
++        for account_ref in reversed(self.accounts):
++            process = self.account_processes.pop(account_ref, None)
++            control = self.account_controls.pop(account_ref, None)
++            if process is not None and control is not None:
++                try:
++                    _stop_process(process, control)
++                except BaseException as error:
++                    cleanup_failures.append(error)
++        if cleanup_failures:
++            raise AssertionError(
++                "one or more normal Host shutdowns failed: "
++                + "; ".join(type(error).__name__ for error in cleanup_failures)
++            ) from cleanup_failures[0]
+diff --git a/tests/integration/test_arb04_group_reply_loss_service.py b/tests/integration/test_arb04_group_reply_loss_service.py
+new file mode 100644
+index 00000000..dc601214
+--- /dev/null
++++ b/tests/integration/test_arb04_group_reply_loss_service.py
+@@ -0,0 +1,537 @@
++"""Fixed-source integration test for ARB04 group reply-loss/UNKNOWN semantics.
++
++Plan anchor: iteration 10 plan line 770 (socket reply loss with a durable
++journal; recovery by the original business ID; no resubmission, no early
++release while UNKNOWN; no compensating/blind reverse order before the facts
++are confirmed).
++
++Both tests run the full spawned CURVE service chain (strategy client ->
++coordinator host -> account hosts -> real SQLite stores and the synthetic
++SQLite provider leaves). The coordinator host's real ZMQ transport factory is
++wrapped so the reply of the first ``orders.submit_group_leg`` request is
++discarded *after* the account host executed the request and answered; the
++coordinator then observes the transport's genuine
++``RequestOutcomeUnknownError`` exactly as after a lost socket reply.
++
++Test A: the account-side fact was already durable and terminal before the
++reply was lost. The recovery must read it back through the ORIGINAL business
++ID (``orders.query_group_leg`` for the original child intent), pair the group
++exactly once and never resubmit, never release the budget hold early and never
++send a compensating order.
++
++Test B: the account-side fact is genuinely non-terminal at reply-loss time and
++a fill arrives at the provider only later (a late fill injected into the
++provider ledger after the UNKNOWN). The system must freeze honestly: still
++UNKNOWN after a replay, no re-observation, no resubmission, no early release,
++no blind reverse. The missing re-observation path is reported as the residual
++gap, not papered over.
++"""
++
++from __future__ import annotations
++
++import json
++import sqlite3
++from decimal import Decimal
++from pathlib import Path
++
++from bt_api_execution import (
++    ExecutionState,
++    GroupBudgetReservationState,
++    GroupLegPhase,
++    GroupOrderState,
++    Side,
++    SqliteExecutionStore,
++    SqliteOrderGroupStore,
++    group_leg_intent_id,
++)
++from bt_api_py.service_execution_group_authority import (
++    ExecutionGroupAuthority,
++    ExecutionStoreGroupCompletionVerifier,
++)
++
++from tests.integration._arb04_group_reply_loss_support import Arb04GroupCluster
++from tests.integration.test_arb03_dim05_group_partial_fill_service import (
++    _PORTFOLIO,
++    _assert_holds_resolved,
++    _assert_provider_writes,
++    _execution_scope,
++    _group_request,
++    _leg_outbox,
++    _provider_snapshot,
++    _risk_legs,
++)
++from tests.unit._service_group_provider_fixtures import _V2_INSTRUMENT
++
++_ARB04_ACCOUNTS = ("account-a", "account-b")
++_GROUP_REPLY_LOSS_TERMINAL = "group-arb04-reply-loss-terminal-01"
++_GROUP_REPLY_LOSS_LATE_FILL = "group-arb04-reply-loss-late-fill-02"
++
++
++def _pending_hold_intents(account_paths: dict[str, dict[str, str]], account_ref: str):
++    execution_scope = _execution_scope(account_ref)
++    authority_store = SqliteExecutionStore(account_paths[account_ref]["execution"])
++    authority = ExecutionGroupAuthority(
++        account_paths[account_ref]["group_authority"],
++        completion_verifier=ExecutionStoreGroupCompletionVerifier(
++            authority_store,
++            execution_scopes=(execution_scope,),
++        ),
++    )
++    try:
++        return tuple(hold.intent_id for hold in authority.pending_holds())
++    finally:
++        authority.close()
++        authority_store.close()
++
++
++def _inject_late_fill(ledger_path: Path) -> str:
++    """Make the acknowledged zero-fill provider order fill, after the fact."""
++
++    with sqlite3.connect(ledger_path) as connection:
++        row = connection.execute(
++            "SELECT client_order_id, order_json, fills_json FROM provider_orders"
++        ).fetchone()
++        assert row is not None, "provider order row is missing"
++        client_order_id, order_json, fills_json = row
++        order = json.loads(order_json)
++        assert order["status"] == "open", order
++        assert str(order["filled"]) == "0", order
++        assert json.loads(fills_json) == [], fills_json
++        order["status"] = "filled"
++        order["filled"] = order["quantity"]
++        order["order_revision"] = 2
++        order["avg_price"] = order["price"]
++        late_fill = {
++            "account_id": order["account_id"],
++            "client_order_id": client_order_id,
++            "fee_amount": "-0.10",
++            "fee_currency": "USD",
++            "fill_revision": 2,
++            "order_id": order["order_id"],
++            "quantity": order["quantity"],
++            "side": order["side"],
++            "symbol": order["symbol"],
++            "trade_id": "fill-" + client_order_id + "-2",
++            "trade_price": order["price"],
++        }
++        connection.execute(
++            "UPDATE provider_orders SET order_json=?, fills_json=? WHERE client_order_id=?",
++            (
++                json.dumps(order, sort_keys=True, separators=(",", ":")),
++                json.dumps([late_fill], sort_keys=True, separators=(",", ":")),
++                client_order_id,
++            ),
++        )
++    return client_order_id
++
++
++def test_arb04_reply_loss_first_leg_recovered_by_original_id_without_resubmit_or_release(
++    tmp_path: Path,
++) -> None:
++    """A lost submit reply must recover via the original business ID, once."""
++
++    with Arb04GroupCluster(
++        tmp_path,
++        accounts=_ARB04_ACCOUNTS,
++        instruments={account: (_V2_INSTRUMENT,) for account in _ARB04_ACCOUNTS},
++        initial_states={"account-a": ("cancelled:1.5",), "account-b": ("filled",)},
++        expected_orders={
++            "account-a": ((_V2_INSTRUMENT, "2", "100", "buy-limit"),),
++            "account-b": ((_V2_INSTRUMENT, "3", "100", "sell-limit"),),
++        },
++        rule_specs={
++            "account-a": {_V2_INSTRUMENT: "2"},
++            "account-b": {_V2_INSTRUMENT: "1"},
++        },
++        fault_operation="orders.submit_group_leg",
++        fault_drops=1,
++    ) as cluster:
++        request = _group_request(
++            _GROUP_REPLY_LOSS_TERMINAL,
++            cluster.metadata_reference_ns,
++            (
++                ("leg-a", "account-a", Side.BUY, Decimal("2"), _V2_INSTRUMENT),
++                ("leg-b", "account-b", Side.SELL, Decimal("4"), _V2_INSTRUMENT),
++            ),
++        )
++
++        # Call 1: the account host receives and fully executes the first-leg
++        # submit, but its reply is lost on the wire.
++        unknown = cluster.submit_group(request)
++        assert unknown.state is GroupOrderState.RECOVERY_REQUIRED
++        assert unknown.error_code is None
++        assert unknown.budget_reservation is not None
++        assert unknown.budget_reservation.state is GroupBudgetReservationState.HELD
++
++        leg_a = next(leg for leg in unknown.legs if leg.leg_id == "leg-a")
++        leg_b = next(leg for leg in unknown.legs if leg.leg_id == "leg-b")
++        assert leg_a.phase is GroupLegPhase.UNKNOWN
++        assert leg_a.submitted_intent is not None
++        assert leg_a.submitted_intent.quantity == Decimal("2")
++        assert leg_a.child_status is None
++        assert leg_a.claim_receipt is None
++        assert leg_a.resolution_receipt is None
++        assert leg_b.phase is GroupLegPhase.READY
++        assert leg_b.submitted_intent is None
++        assert leg_b.child_status is None
++
++        counts, dropped, remaining = cluster.fault_stats()
++        assert counts[("account-a", "orders.submit_group_leg")] == 1
++        assert counts.get(("account-b", "orders.submit_group_leg")) is None
++        assert dropped == 1
++        assert remaining == 0
++
++        # The account-side fact is already durable, terminal and fully
++        # observed; the coordinator has none of it because the reply was lost.
++        status_a = cluster.status("account-a")
++        assert len(status_a[1]) == 1
++        assert status_a[2] == {"order_queries": 1, "fill_queries": 1}
++        assert status_a[4] == ()
++        # No provider write and no fill observation happened on account-b.
++        status_b = cluster.status("account-b")
++        assert status_b[1] == ()
++        assert status_b[2] == {"order_queries": 0, "fill_queries": 0}
++        assert status_b[3] == ()
++        assert status_b[4] == cluster.expected_orders["account-b"]
++
++        # Call 2: exact replay; recovery reads the durable fact back through
++        # the original child intent id and pairs the group.
++        paired = cluster.submit_group(request)
++        assert paired.state is GroupOrderState.PAIRED
++        assert paired.error_code is None
++        assert paired.residual_base_units == Decimal("0")
++        leg_a = next(leg for leg in paired.legs if leg.leg_id == "leg-a")
++        leg_b = next(leg for leg in paired.legs if leg.leg_id == "leg-b")
++        assert leg_a.child_status is not None
++        assert leg_a.child_status.state is ExecutionState.CANCELLED
++        assert leg_a.child_status.filled_quantity == Decimal("1.5")
++        assert leg_a.claim_receipt is not None
++        assert leg_a.resolution_receipt is not None
++        assert leg_a.resolution_receipt.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED"
++        assert leg_b.submitted_intent is not None
++        assert leg_b.submitted_intent.quantity == Decimal("3")
++        assert leg_b.child_status is not None
++        assert leg_b.child_status.state is ExecutionState.FILLED
++        assert leg_b.child_status.filled_quantity == Decimal("3")
++        assert leg_b.resolution_receipt is not None
++        assert leg_b.resolution_receipt.resolution_kind == "TERMINAL_EXPOSURE_RESOLVED"
++
++        # Call 3: a further duplicate replay changes nothing, on the wire too.
++        replayed = cluster.submit_group(request)
++        assert replayed == paired
++        counts, dropped, remaining = cluster.fault_stats()
++        assert counts[("account-a", "orders.submit_group_leg")] == 1
++        assert counts[("account-b", "orders.submit_group_leg")] == 1
++        assert counts[("account-a", "orders.query_group_leg")] == 2
++        assert counts[("account-b", "orders.query_group_leg")] == 1
++        assert dropped == 1
++        assert remaining == 0
++        assert counts.get(("account-a", "reservations.release")) is None
++        assert counts.get(("account-b", "reservations.release")) is None
++
++        status_a = cluster.status("account-a")
++        assert len(status_a[1]) == 1
++        assert status_a[2] == {"order_queries": 1, "fill_queries": 1}
++        assert status_a[4] == ()
++        status_b = cluster.status("account-b")
++        assert len(status_b[1]) == 1
++        assert status_b[2] == {"order_queries": 1, "fill_queries": 1}
++        assert status_b[4] == ()
++
++    intent_a = group_leg_intent_id(_GROUP_REPLY_LOSS_TERMINAL, "leg-a")
++    intent_b = group_leg_intent_id(_GROUP_REPLY_LOSS_TERMINAL, "leg-b")
++
++    persisted_groups = SqliteOrderGroupStore(cluster.coordinator_paths["groups"])
++    try:
++        persisted = persisted_groups.get(_PORTFOLIO, _GROUP_REPLY_LOSS_TERMINAL)
++        assert persisted == replayed
++        events = persisted_groups.events(_PORTFOLIO, _GROUP_REPLY_LOSS_TERMINAL)
++    finally:
++        persisted_groups.close()
++
++    unknown_observations = tuple(
++        event
++        for event in events
++        if event.event_type == "FIRST_LEG_STATUS_OBSERVED"
++        and event.payload.get("state") == "UNKNOWN"
++    )
++    assert len(unknown_observations) == 1
++    unknown_payload = unknown_observations[0].payload
++    assert unknown_payload["leg_id"] == "leg-a"
++    assert unknown_payload["state"] == "UNKNOWN"
++    assert unknown_payload["code"] == "ORDER_SUBMIT_OUTCOME_UNKNOWN"
++    assert unknown_payload.get("budget_state") == GroupBudgetReservationState.HELD.value
++    assert (
++        len(tuple(event for event in events if event.event_type == "FIRST_LEG_SUBMIT_STARTED"))
++        == 1
++    )
++    assert (
++        len(tuple(event for event in events if event.event_type == "HEDGE_LEG_SUBMIT_STARTED"))
++        == 1
++    )
++    sized = tuple(event for event in events if event.event_type == "HEDGE_LEG_SIZED")
++    assert len(sized) == 1
++    assert sized[0].payload["quantity"] == "3.000"
++    assert len(tuple(event for event in events if event.event_type == "GROUP_PAIRED")) == 1
++    assert not tuple(event for event in events if event.event_type == "GROUP_RECOVERY_REQUIRED")
++
++    execution_scope_a = _execution_scope("account-a")
++    execution_scope_b = _execution_scope("account-b")
++    store_a = SqliteExecutionStore(cluster.account_paths["account-a"]["execution"])
++    try:
++        record_a = store_a.get(intent_a, scope=execution_scope_a)
++        assert record_a is not None
++        assert record_a.state is ExecutionState.CANCELLED
++        assert record_a.filled_quantity == Decimal("1.5")
++        assert record_a.average_price == Decimal("100")
++        assert record_a.cumulative_commission == Decimal("-0.05")
++        assert record_a.dispatch_attempts == 1
++        assert record_a.unknown_reason is None
++        assert record_a.review_required is False
++        events_a = _leg_outbox(store_a, execution_scope_a, intent_a)
++        assert tuple(event.event_type for event in events_a) == (
++            "intent_recorded",
++            "intent_admitted",
++            "dispatch_claimed",
++            "provider_observation",
++            "provider_observation",
++        )
++        assert events_a[4].state is ExecutionState.CANCELLED
++        assert events_a[4].payload["filled_quantity"] == "1.5"
++    finally:
++        store_a.close()
++
++    store_b = SqliteExecutionStore(cluster.account_paths["account-b"]["execution"])
++    try:
++        record_b = store_b.get(intent_b, scope=execution_scope_b)
++        assert record_b is not None
++        assert record_b.state is ExecutionState.FILLED
++        assert record_b.filled_quantity == Decimal("3")
++        assert record_b.dispatch_attempts == 1
++        assert record_b.unknown_reason is None
++        events_b = _leg_outbox(store_b, execution_scope_b, intent_b)
++        assert tuple(event.event_type for event in events_b) == (
++            "intent_recorded",
++            "intent_admitted",
++            "dispatch_claimed",
++            "provider_observation",
++        )
++        assert events_b[3].state is ExecutionState.FILLED
++    finally:
++        store_b.close()
++
++    assert _risk_legs(cluster.account_paths, "account-a", _GROUP_REPLY_LOSS_TERMINAL) == (
++        ("leg-a", True, True),
++    )
++    assert _risk_legs(cluster.account_paths, "account-b", _GROUP_REPLY_LOSS_TERMINAL) == (
++        ("leg-b", True, True),
++    )
++    for account_ref in _ARB04_ACCOUNTS:
++        _assert_holds_resolved(cluster.account_paths, account_ref, _GROUP_REPLY_LOSS_TERMINAL)
++        _assert_provider_writes(Path(cluster.account_paths[account_ref]["provider"]), 1)
++    assert _pending_hold_intents(cluster.account_paths, "account-a") == ()
++    assert _pending_hold_intents(cluster.account_paths, "account-b") == ()
++
++
++def test_arb04_late_fill_after_reply_loss_stays_unknown_without_blind_reverse(
++    tmp_path: Path,
++) -> None:
++    """A genuinely late fill must not be adopted, resent, released or reversed."""
++
++    with Arb04GroupCluster(
++        tmp_path,
++        accounts=_ARB04_ACCOUNTS,
++        instruments={account: (_V2_INSTRUMENT,) for account in _ARB04_ACCOUNTS},
++        initial_states={"account-a": ("open",), "account-b": ("filled",)},
++        expected_orders={
++            "account-a": ((_V2_INSTRUMENT, "2", "100", "buy-limit"),),
++            "account-b": ((_V2_INSTRUMENT, "3", "100", "sell-limit"),),
++        },
++        rule_specs={
++            "account-a": {_V2_INSTRUMENT: "2"},
++            "account-b": {_V2_INSTRUMENT: "1"},
++        },
++        fault_operation="orders.submit_group_leg",
++        fault_drops=1,
++    ) as cluster:
++        request = _group_request(
++            _GROUP_REPLY_LOSS_LATE_FILL,
++            cluster.metadata_reference_ns,
++            (
++                ("leg-a", "account-a", Side.BUY, Decimal("2"), _V2_INSTRUMENT),
++                ("leg-b", "account-b", Side.SELL, Decimal("4"), _V2_INSTRUMENT),
++            ),
++        )
++
++        # Call 1: the first-leg order is acknowledged but non-terminal at the
++        # provider, and the reply is lost on the wire.
++        unknown = cluster.submit_group(request)
++        assert unknown.state is GroupOrderState.RECOVERY_REQUIRED
++        assert unknown.error_code is None
++        assert unknown.budget_reservation is not None
++        assert unknown.budget_reservation.state is GroupBudgetReservationState.HELD
++        leg_a = next(leg for leg in unknown.legs if leg.leg_id == "leg-a")
++        leg_b = next(leg for leg in unknown.legs if leg.leg_id == "leg-b")
++        assert leg_a.phase is GroupLegPhase.UNKNOWN
++        assert leg_a.submitted_intent is not None
++        assert leg_a.child_status is None
++        assert leg_b.phase is GroupLegPhase.READY
++        assert leg_b.submitted_intent is None
++
++        counts, dropped, remaining = cluster.fault_stats()
++        assert counts[("account-a", "orders.submit_group_leg")] == 1
++        assert counts.get(("account-b", "orders.submit_group_leg")) is None
++        assert dropped == 1
++        assert remaining == 0
++
++        intent_a = group_leg_intent_id(_GROUP_REPLY_LOSS_LATE_FILL, "leg-a")
++        status_a = cluster.status("account-a")
++        assert len(status_a[1]) == 1
++        assert status_a[2] == {"order_queries": 1, "fill_queries": 1}
++        assert tuple(hold.intent_id for hold in status_a[3]) == (intent_a,)
++        assert status_a[4] == ()
++        # Account-b never saw any order work, only its reservation claim.
++        status_b = cluster.status("account-b")
++        assert status_b[1] == ()
++        assert status_b[2] == {"order_queries": 0, "fill_queries": 0}
++        assert status_b[3] == ()
++        assert status_b[4] == cluster.expected_orders["account-b"]
++
++        # The fill arrives at the provider only now, after the UNKNOWN.
++        late_client_order_id = _inject_late_fill(
++            Path(cluster.account_paths["account-a"]["provider"])
++        )
++        assert late_client_order_id.startswith("grp-")
++
++        # Call 2: the replay is recovered by the ORIGINAL child intent and the
++        # journal still proves nothing terminal; the group must stay UNKNOWN.
++        recovered = cluster.submit_group(request)
++        assert recovered.state is GroupOrderState.RECOVERY_REQUIRED
++        assert recovered.error_code == "order_outcome_unknown"
++        assert recovered.budget_reservation is not None
++        assert recovered.budget_reservation.state is GroupBudgetReservationState.HELD
++        leg_a = next(leg for leg in recovered.legs if leg.leg_id == "leg-a")
++        leg_b = next(leg for leg in recovered.legs if leg.leg_id == "leg-b")
++        assert leg_a.phase is GroupLegPhase.UNKNOWN
++        assert leg_a.child_status is not None
++        assert leg_a.child_status.state is ExecutionState.UNKNOWN
++        assert leg_a.child_status.filled_quantity == Decimal("0")
++        assert leg_a.claim_receipt is not None
++        assert leg_a.resolution_receipt is None
++        assert leg_b.phase is GroupLegPhase.READY
++        assert leg_b.submitted_intent is None
++        assert leg_b.child_status is None
++        assert recovered.state is not GroupOrderState.PAIRED
++        assert recovered.residual_base_units != Decimal("0")
++
++        counts, dropped, remaining = cluster.fault_stats()
++        # No second submit and no second provider observation ever happened.
++        assert counts[("account-a", "orders.submit_group_leg")] == 1
++        assert counts.get(("account-b", "orders.submit_group_leg")) is None
++        assert counts[("account-a", "orders.query_group_leg")] == 2
++        assert counts.get(("account-a", "orders.resolve_group_leg")) is None
++        assert counts.get(("account-b", "orders.resolve_group_leg")) is None
++        assert counts.get(("account-a", "reservations.release")) is None
++        assert counts.get(("account-b", "reservations.release")) is None
++        assert dropped == 1
++        assert remaining == 0
++
++        status_a = cluster.status("account-a")
++        assert len(status_a[1]) == 1
++        assert status_a[2] == {"order_queries": 1, "fill_queries": 1}
++        assert tuple(hold.intent_id for hold in status_a[3]) == (intent_a,)
++        status_b = cluster.status("account-b")
++        assert status_b[1] == ()
++        assert status_b[2] == {"order_queries": 0, "fill_queries": 0}
++        assert status_b[3] == ()
++        assert status_b[4] == cluster.expected_orders["account-b"]
++
++    persisted_groups = SqliteOrderGroupStore(cluster.coordinator_paths["groups"])
++    try:
++        persisted = persisted_groups.get(_PORTFOLIO, _GROUP_REPLY_LOSS_LATE_FILL)
++        assert persisted == recovered
++        events = persisted_groups.events(_PORTFOLIO, _GROUP_REPLY_LOSS_LATE_FILL)
++    finally:
++        persisted_groups.close()
++
++    submits = tuple(event for event in events if event.event_type == "FIRST_LEG_SUBMIT_STARTED")
++    assert len(submits) == 1
++    observations = tuple(
++        event for event in events if event.event_type == "FIRST_LEG_STATUS_OBSERVED"
++    )
++    assert len(observations) == 2
++    first_payload = observations[0].payload
++    assert first_payload["leg_id"] == "leg-a"
++    assert first_payload["state"] == "UNKNOWN"
++    assert first_payload["code"] == "ORDER_SUBMIT_OUTCOME_UNKNOWN"
++    second_payload = observations[1].payload
++    assert second_payload["leg_id"] == "leg-a"
++    assert second_payload["state"] == "UNKNOWN"
++    assert "code" not in second_payload
++    recovery_events = tuple(
++        event for event in events if event.event_type == "GROUP_RECOVERY_REQUIRED"
++    )
++    assert len(recovery_events) == 1
++    assert recovery_events[0].payload["code"] == "ORDER_OUTCOME_UNKNOWN"
++    for absent in (
++        "HEDGE_LEG_SUBMIT_STARTED",
++        "HEDGE_LEG_SIZED",
++        "GROUP_PAIRED",
++        "GROUP_DISPATCH_RESOLUTION_RECORDED",
++    ):
++        assert not tuple(event for event in events if event.event_type == absent), absent
++
++    # The late fill is durable at the provider, but was never adopted: no
++    # re-observation exists, so the record stays honestly UNKNOWN.
++    with sqlite3.connect(cluster.account_paths["account-a"]["provider"]) as connection:
++        late_order = json.loads(
++            connection.execute(
++                "SELECT order_json FROM provider_orders WHERE client_order_id=?",
++                (late_client_order_id,),
++            ).fetchone()[0]
++        )
++    assert late_order["status"] == "filled"
++    assert late_order["order_revision"] == 2
++    assert late_order["filled"] == late_order["quantity"]
++
++    execution_scope_a = _execution_scope("account-a")
++    store_a = SqliteExecutionStore(cluster.account_paths["account-a"]["execution"])
++    try:
++        record_a = store_a.get(intent_a, scope=execution_scope_a)
++        assert record_a is not None
++        assert record_a.state is ExecutionState.UNKNOWN
++        assert record_a.filled_quantity == Decimal("0")
++        assert record_a.dispatch_attempts == 1
++        assert record_a.review_required is True
++        assert record_a.unknown_reason is not None
++        events_a = _leg_outbox(store_a, execution_scope_a, intent_a)
++        assert tuple(event.event_type for event in events_a) == (
++            "intent_recorded",
++            "intent_admitted",
++            "dispatch_claimed",
++            "dispatch_unknown",
++        )
++    finally:
++        store_a.close()
++
++    intent_b = group_leg_intent_id(_GROUP_REPLY_LOSS_LATE_FILL, "leg-b")
++    store_b = SqliteExecutionStore(cluster.account_paths["account-b"]["execution"])
++    try:
++        assert store_b.get(intent_b, scope=_execution_scope("account-b")) is None
++        assert _leg_outbox(store_b, _execution_scope("account-b"), intent_b) == ()
++    finally:
++        store_b.close()
++
++    assert _risk_legs(cluster.account_paths, "account-a", _GROUP_REPLY_LOSS_LATE_FILL) == (
++        ("leg-a", True, False),
++    )
++    assert _risk_legs(cluster.account_paths, "account-b", _GROUP_REPLY_LOSS_LATE_FILL) == (
++        ("leg-b", False, False),
++    )
++    # Both dispatch holds stay pending: nothing was resolved or released.
++    assert _pending_hold_intents(cluster.account_paths, "account-a") == (intent_a,)
++    assert _pending_hold_intents(cluster.account_paths, "account-b") == ()
++    _assert_provider_writes(Path(cluster.account_paths["account-a"]["provider"]), 1)
++    writes_b, counters_b = _provider_snapshot(Path(cluster.account_paths["account-b"]["provider"]))
++    assert writes_b == ()
++    assert counters_b == {"order_queries": 0, "fill_queries": 0}

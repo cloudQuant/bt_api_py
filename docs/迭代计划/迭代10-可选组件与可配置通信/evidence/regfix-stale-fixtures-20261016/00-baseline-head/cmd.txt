@@ -1,0 +1,3 @@
+# cwd: D:/temp/it10regfix-20261016-r1/00-baseline-head/export (pristine HEAD ed09b3ca export; submodules at HEAD gitlinks)
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="<export>;<export>/bt_api/bt_api_base/src;<export>/bt_api/bt_api_execution/src;<export>/bt_api/bt_api_risk/src;<export>/bt_api/bt_api_transport_zmq/src" C:/anaconda3/python.exe -m pytest tests/unit/test_service_config_scoped_execution_routes.py -p no:cacheprovider --basetemp=<EV>/bt-red1 --noconftest --import-mode=importlib --junitxml=<EV>/red1-junit.xml > <EV>/red1-stdout.log 2> <EV>/red1-stderr.log; echo $? > <EV>/red1-exit.txt
+# then same for tests/unit/test_service_host_integration.py (bt-red2, red2-junit.xml, red2-stdout.log, red2-exit.txt)

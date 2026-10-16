@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="4.100" timestamp="2026-10-16T11:46:34.307208" hostname="yun"><testcase classname="tests.unit.test_service_host_integration" name="test_spawned_curve_host_serves_four_sqlite_read_adapters_and_closes_normally" time="2.326"><failure message="AssertionError: ('error', 'RESOURCE_KEYS_MISMATCH')&#10;assert 'error' == 'ready'&#10;  &#10;  - ready&#10;  + error">tests\unit\test_service_host_integration.py:507: in test_spawned_curve_host_serves_four_sqlite_read_adapters_and_closes_normally
+    assert startup[0] == "ready", startup
+E   AssertionError: ('error', 'RESOURCE_KEYS_MISMATCH')
+E   assert 'error' == 'ready'
+E     
+E     - ready
+E     + error</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,9 @@
+# 第167轮根裁定：DIM03 保证金池预留限额（risk `e2bedb3` + 父仓 gitlink `ee01865a`）
+
+- 裁定：GO（增量）。DIM01–DIM09 组仍部分，不新增正式 PASS（28/68）。依据：固定来源 r4 114 passed/exit 0 + 独立静态复核 8 项全过。
+- 范围（risk 子包提交 `e2bedb3`，3 文件）：`src/bt_api_risk/core/admission.py`（live diff +252/-27：`RiskIntent.resource`（可选 `AccountResourceKey`）与 fingerprint 纳入、`set_margin_pool_limit`（版本化 ceiling，同当前版本同事实幂等、改事实 ValueError、已用版本不可重放）、`_assert_margin_pool_limit` 在同一 `BEGIN IMMEDIATE` 事务内对 `reserve()` 与 `reserve_group_vector()` 每一腿断言（等值允许、严格 `>` 拒绝）、四个 fail-closed 码 MARGIN_POOL_UNCONFIGURED / NOTIONAL_UNIT_MISMATCH / MARGIN_POOL_UNIT_USAGE_UNAVAILABLE / MARGIN_POOL_LIMIT_EXHAUSTED、加性护栏迁移（risk_reservations 两可空列 + 两新表 IF NOT EXISTS + 索引；旧行 NULL 不进任何池计账）；resource=None 时全路径与 HEAD 字节等价，无任何新校验可触发）、新增 `tests/test_margin_pool_reservations.py`（7 节点，真实 SQLite/子进程竞争，含两进程竞态恰一授予（durable 1,0,0,0）、整向量回滚、池隔离、UNCONFIGURED 双路径、单发与组共享同池信用）、`pyproject.toml`（`bt_api_base>=0.15.5` → `>=0.15.8`：AccountResourceKey API 需要，PyPI 仅到 0.15.5、本机已装 0.15.8，与根仓要求一致；metadata-only，改后 `test_durable_risk_gate` 63 passed/15.94s）。父仓 `ee01865a` 更新 risk gitlink `c7fc809b → e2bedb3`。
+- 验收（固定来源 r4 `D:/temp/it10dim03-fixed-source-20261016-r4`）：exit 0；114 passed（43.61s）；junit sha `56d92231…`；spec sha `085587e8…`；result sha `7826dd8f…`（pytest_exit 0）；144 sources unchanged；heads before：root `d85ec636`、risk `c7fc809b`（diff base 恰为 HEAD 字节 `859a072c…`）。
+- 独立复核（`.codex-tmp/dim03-review-status.md` sha `c761a2f8…`；归档 review/independent-review.md）：8 项全过（哈希/加性语义/事务内断言/失败码/迁移幂等/测试非空洞）。披露：两防御性码（NOTIONAL_UNIT_MISMATCH、MARGIN_POOL_UNIT_USAGE_UNAVAILABLE）仅外来/篡改行可达且未被 7 测试覆盖；"同事实"比较按 `_decimal_text` 字符串，`300` vs `300.0` 会拒绝（偏向 fail-closed，D6）；旧格式 DB 行重读路径仅静态覆盖（无迁移前 DB 文件测试）。
+- 条款映射：DIM03 保证金池维度（第163轮登记"保证金池属 DIM03 AccountResourceKey 线"）在预留路径落地：单发/组向量共享同池信用、加性迁移不触碰既有约束与序列化严格性。
+- 提交：risk `e2bedb3`（3 文件）+ 父仓 `ee01865a`（gitlink）+ 本证据目录（qa r4 + 独立复核 + 源码 4 件与 live patch）+ 进度/汇总文档。
+- 证据等级：FIXED_SOURCE_MARGIN_POOL_RESERVATION_LIMITS_UNITS_WITH_RACE_SCENARIO_ONLY。

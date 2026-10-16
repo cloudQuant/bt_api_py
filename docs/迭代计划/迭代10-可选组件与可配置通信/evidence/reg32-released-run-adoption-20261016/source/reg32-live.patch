@@ -1,0 +1,236 @@
+commit ed09b3cab8a6ae9d16d726a61d49bf223f736e31
+Author: yunjinqi <yunjinqi@qq.com>
+Date:   Fri Oct 16 11:45:37 2026 +0800
+
+    fix(registry): adopt released strategy write runs through durable re-claim
+    
+    - _claim_strategy_write: an active claim now refuses plainly (DUPLICATE_ACTIVE_RUN,
+      empty result); when every other run is released and exactly one exists, refuse
+      with result.strategy_write_run_id so the caller can adopt; racing adopters
+      serialize inside BEGIN IMMEDIATE
+    - service_runtime: ServiceRuntimeError.result (default {}); _rpc attaches the
+      control-failure result; strategy-port registration retries once with the adopted
+      run id; definitive control rejections unchanged
+    - Evidence: tests/unit/test_service_risk_only_order_integration.py 20 passed on this
+      tree (D:/temp/it10reg32-20261016-r2 run1, exit 0); independent review GO
+      (.codex-tmp/reg32-review-status.md sha256 68b240ef77d96d4090132ea6dc6795f38e06999c7659ccc5b987ded8035e6972)
+    - Pre-existing reds on dev HEAD, not caused by this change: test_service_config_scoped_execution_routes.py
+      (test-local close_clients stub rejects the allowed_call_errors kwarg) and
+      test_service_host_integration.py (account_owner RESOURCE_KEYS_MISMATCH; test predates
+      the 4-key builtin); repairs in flight
+
+diff --git a/bt_api_py/service_registry.py b/bt_api_py/service_registry.py
+index 95900448..a812b006 100644
+--- a/bt_api_py/service_registry.py
++++ b/bt_api_py/service_registry.py
+@@ -1343,6 +1343,10 @@ class ServiceRegistry:
+     def _failure(code: str) -> Mapping[str, Any]:
+         return {"ok": False, "code": code, "result": {}}
+ 
++    @staticmethod
++    def _failure_with_result(code: str, result: Mapping[str, Any]) -> Mapping[str, Any]:
++        return {"ok": False, "code": code, "result": dict(result)}
++
+     @staticmethod
+     def _payload_fields(
+         request: WireEnvelope, expected: frozenset[str]
+@@ -1879,6 +1883,8 @@ class ServiceRegistry:
+                         request.header.scope, now, registration_id
+                     )
+                     if claim_error is not None:
++                        if isinstance(claim_error, tuple):
++                            return self._failure_with_result(claim_error[0], claim_error[1])
+                         return self._failure(claim_error)
+ 
+             identity_json = json.dumps(
+@@ -1929,23 +1935,39 @@ class ServiceRegistry:
+ 
+     def _claim_strategy_write(
+         self, scope: WireScope, now: float, registration_id: str
+-    ) -> str | None:
++    ) -> str | tuple[str, Mapping[str, Any]] | None:
+         if scope.strategy_ref is None or scope.run_id is None:
+             return "SCOPE_DENIED"
+         accounts = (scope.account_ref,) if scope.account_ref is not None else scope.account_refs
+         if not accounts:
+             return "SCOPE_DENIED"
+-        for account_ref in accounts:
+-            row = self._db.execute(
++        rows = tuple(
++            self._db.execute(
+                 "SELECT run_id, active_registration_id FROM strategy_write_claims "
+                 "WHERE execution_domain_ref=? "
+                 "AND strategy_ref=? AND account_ref=?",
+                 (scope.execution_domain_ref, scope.strategy_ref, account_ref),
+             ).fetchone()
+-            if row is not None and row["run_id"] != scope.run_id:
+-                return "DUPLICATE_ACTIVE_RUN"
+-            if row is not None and row["active_registration_id"] is not None:
+-                return "DUPLICATE_ACTIVE_RUN"
++            for account_ref in accounts
++        )
++        if any(row is not None and row["active_registration_id"] is not None for row in rows):
++            return "DUPLICATE_ACTIVE_RUN"
++        durable_runs = {row["run_id"] for row in rows if row is not None}
++        if len(durable_runs) > 1:
++            return "DUPLICATE_ACTIVE_RUN"
++        if durable_runs and scope.run_id not in durable_runs:
++            # Every claim for this exact scope is released: the previous
++            # session unregistered, its lease expired, or its process died
++            # with an earlier service epoch. All released claims name one
++            # other logical run; report it so a fresh client session can
++            # adopt that durable run instead of minting a competing one.
++            # Registration still requires the exact matching run id, so two
++            # simultaneously-live runs can never share the scope, and active
++            # or conflicting claim vectors stay a plain refusal.
++            return (
++                "DUPLICATE_ACTIVE_RUN",
++                {"strategy_write_run_id": next(iter(durable_runs))},
++            )
+         for account_ref in accounts:
+             self._db.execute(
+                 "INSERT OR IGNORE INTO strategy_write_claims "
+diff --git a/bt_api_py/service_runtime.py b/bt_api_py/service_runtime.py
+index 6b503e9c..0219d301 100644
+--- a/bt_api_py/service_runtime.py
++++ b/bt_api_py/service_runtime.py
+@@ -127,6 +127,10 @@ class ServiceRuntimeError(RuntimeError):
+ 
+     def __init__(self, code: str) -> None:
+         self.code = code
++        # Optional exact rejection detail from a control reply (for example
++        # the released durable strategy-write run a registration may adopt).
++        # Never carries remote error text or configuration values.
++        self.result: Mapping[str, Any] = {}
+         super().__init__(code)
+ 
+ 
+@@ -1238,33 +1242,56 @@ class ServiceClientRuntime:
+         registration_key = hashlib.sha256(
+             (self.client_session_id + ":" + digest + ":" + port).encode()
+         ).hexdigest()
+-        timing: dict[str, Any] = {}
+-        try:
+-            result, request_started = self._rpc(
+-                binding["service_id"],
+-                binding["transport_ref"],
+-                scope,
+-                "service.register",
+-                {
+-                    "registration_key": registration_key,
+-                    "client_session_id": self.client_session_id,
+-                    "instance_id": binding["instance_id"],
+-                    "port": port,
+-                    "scope_ref": binding["scope_ref"],
+-                    "operations": sorted(operations),
+-                },
+-                timeout=timeout,
+-                include_started_at=True,
+-                timing=timing,
+-            )
+-        except BaseException:
+-            if (
+-                timing.get("request_started") is not None
+-                and not timing.get("server_rejected", False)
+-                and not timing.get("request_not_sent", False)
+-            ):
+-                self._record_unknown_registration(registration_key)
+-            raise
++        payload = {
++            "registration_key": registration_key,
++            "client_session_id": self.client_session_id,
++            "instance_id": binding["instance_id"],
++            "port": port,
++            "scope_ref": binding["scope_ref"],
++            "operations": sorted(operations),
++        }
++        attempt_scope = scope
++        for attempt in ("initial", "adopted"):
++            timing: dict[str, Any] = {}
++            try:
++                result, request_started = self._rpc(
++                    binding["service_id"],
++                    binding["transport_ref"],
++                    attempt_scope,
++                    "service.register",
++                    payload,
++                    timeout=timeout,
++                    include_started_at=True,
++                    timing=timing,
++                )
++            except ServiceRuntimeError as error:
++                adopted_run_id = self._released_run_adoption_run_id(error, attempt_scope)
++                if attempt == "initial" and adopted_run_id is not None:
++                    # The exact scope's durable strategy-write claim is
++                    # released (previous session unregistered, expired, or
++                    # died with an earlier service epoch) and names one other
++                    # logical run. Adopt that durable run instead of minting a
++                    # competing one; a live claim never yields this signal, so
++                    # two simultaneously-live runs stay impossible.
++                    attempt_scope = replace(scope, run_id=adopted_run_id)
++                    continue
++                if (
++                    timing.get("request_started") is not None
++                    and not timing.get("server_rejected", False)
++                    and not timing.get("request_not_sent", False)
++                ):
++                    self._record_unknown_registration(registration_key)
++                raise
++            except BaseException:
++                if (
++                    timing.get("request_started") is not None
++                    and not timing.get("server_rejected", False)
++                    and not timing.get("request_not_sent", False)
++                ):
++                    self._record_unknown_registration(registration_key)
++                raise
++            scope = attempt_scope
++            break
+         registration_id = None
+         service_epoch = None
+         placeholder = None
+@@ -1610,11 +1637,15 @@ class ServiceClientRuntime:
+                 or code == "HANDLER_FAILED"
+             ):
+                 raise ServiceCallOutcomeUnknownError(request.header.message_id, operation)
+-            raise ServiceRuntimeError(
++            failure = ServiceRuntimeError(
+                 code
+                 if isinstance(code, str) and code in SERVICE_ERROR_CODES
+                 else "REMOTE_REQUEST_REJECTED"
+             )
++            details = body.get("result")
++            if isinstance(details, Mapping) and details:
++                failure.result = dict(details)
++            raise failure
+         result = body.get("result")
+         if not isinstance(result, Mapping):
+             if not control:
+@@ -1670,6 +1701,27 @@ class ServiceClientRuntime:
+             "UNKNOWN_OPERATION",
+         }
+ 
++    def _released_run_adoption_run_id(
++        self, error: ServiceRuntimeError, scope: WireScope
++    ) -> str | None:
++        """Return the released durable run this registration may adopt.
++
++        Only a strategy client, only an exact DUPLICATE_ACTIVE_RUN rejection,
++        and only a server-proved released claim (the registry reports the
++        durable run id exclusively after the previous session unregistered,
++        expired, or lost its epoch) may adopt another logical run.
++        """
++
++        if (
++            error.code != "DUPLICATE_ACTIVE_RUN"
++            or self.identity.role is not WireRole.STRATEGY_CLIENT
++        ):
++            return None
++        run_id = error.result.get("strategy_write_run_id")
++        if type(run_id) is not str or not run_id or run_id == scope.run_id:
++            return None
++        return run_id
++
+     def _unregister_binding(self, binding: RegisteredBinding) -> bool:
+         if binding.remote_lease_inactive:
+             self._unregister_uncertainties.pop(binding.registration_id, None)

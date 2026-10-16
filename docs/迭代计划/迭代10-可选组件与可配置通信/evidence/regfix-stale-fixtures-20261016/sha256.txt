@@ -1,0 +1,6 @@
+# BEFORE (dev HEAD ed09b3ca, working tree)
+a110d471a92712ef8158a181267a2b0afb7de152af47afe2561ef8be8359d9d4 *D:/bt_api_py/tests/unit/test_service_config_scoped_execution_routes.py
+2d3eddba315c50bc45cc930c7ad82aee4fb6650a0d21d5430bd52cf7a45b5078 *D:/bt_api_py/tests/unit/test_service_host_integration.py
+# AFTER (post-fix working tree)
+306258ae45915abc836f6bc819b921b1b7883762775cea3724b28f183358b093 *D:/bt_api_py/tests/unit/test_service_config_scoped_execution_routes.py
+97330020c3b60ea17224ef6271ca8f9c5c68de0d053dc92572b87285fb33db7d *D:/bt_api_py/tests/unit/test_service_host_integration.py

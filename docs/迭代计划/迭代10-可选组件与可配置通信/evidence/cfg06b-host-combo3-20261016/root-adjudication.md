@@ -1,0 +1,11 @@
+# 第171轮根裁定：CFG06b 宿主组合3矩阵与公共访问拒绝负面（提交 `160c36b5`）
+
+- 裁定：GO（增量）。CFG06 仍部分，不新增正式 PASS（28/68）。依据：r1 两轮 5/5 + 回归 14/14，staging 提交树两轮 standalone 5/5 + 14/14，独立复核 GO-with-disclosures 且条款 (a)-(e) 全部为实测证据。
+- 范围（2 新文件，+1303，提交 `160c36b5`）：`tests/integration/test_group_policy_host_combo3.py`（sha `d3e91b94…`）+ `tests/integration/_group_policy_host_fixtures.py`（sha `9ba0c856…`）。五节点：单 GroupPolicyService 闸门对象（子进程内对 execution `borrowed.values.get("group_admission")` 与 risk `internal_ports.get("service.group_admission")` 逐部件 `is` 身份断言后经控制管道上报，测试对 5 元身份向量做精确相等）；准入组到达 PAIRED（error_code None、residual 0、2 腿、1 预留、run 绑定 = portfolio/group id/coordinator principal、durable store == 返回快照、provider 写恰 2 与计数器 {2,2}、risk claims resolved）；三拒绝码（VERSION_REJECTED / SCOPE_DENIED / DENIED）精确 dict 相等 + 每次零派发证明（run-binding 空、无组快照、provider 写 ()、计数器 0/0、pending_holds ()、feed 期望未消耗）；公共访问拒绝 5 类（真实线 discover 恰一能力不含门；raw wire register 于协调器端口与 internal 端口均 CAPABILITY_UNAVAILABLE；真实 live 会话 registration_id+epoch raw `sdk.service.call` 仍 CAPABILITY_UNAVAILABLE；SDK 静态 INVALID_ACTION_REQUEST；实例固定客户端线发现拒绝）；policy-only host 在任何监听器前 NO_SUPPORTED_PUBLIC_PORTS（provider 哨兵未被调用）。
+- 验收证据：
+  - r1 `D:/temp/it10cfghost-20261016-r1`（仅 stdout/exit，无 junit 为本线约定）：run-1 smoke 1 passed/5.79s；run-2 debug 1 failed（list vs tuple 期望修复前）如实保留；run-3 5/5（20.43s）；run-4 5/5（20.57s）；run-5 gate/bundle 回归 14/14（4.47s）。
+  - staging `D:/temp/it10cfghost-staging-20261016-r1`（提交树 root `dcad4003`）：run-a 在与 ARB04 套件并发资源争抢下 1 failed/4 passed（该失败如实保留；失败模式为 `reservation_outcome_unknown`，非旧 list/tuple 问题）；run-c/run-d 独立复跑各 5/5（20.43s / 19.45s）；run-b 回归 14/14；pins before==after。
+- 独立复核 GO-with-disclosures（`.codex-tmp/cfg06b-combo3-review-status.md`；归档 review/independent-review.md）：两文件哈希与 15 件证据哈希复算一致；每个断言码有产品代码路径印证；disclosure：`--noconftest --import-mode=importlib` 下依赖仓库根入 sys.path 的 import 式耦合（有已提交先例）、临时端口 TOCTOU 继承自 ARB03 夹具、run-2→run-3 单行期望修复披露、证据产出于现已提交的产品字节（mtime 证明）。
+- 条款映射：CFG06 第165轮披露的两项缺口——"宿主组合 3（group_coordinator + group_policy + 最小账户委托的真实 ServiceHost+CURVE 矩阵）"与"公共访问拒绝负面"——关闭于本 5 节点矩阵；仍缺 combo-3 固定来源 QA 轮（第165轮 D2 要求：CFG06 正式轮须重建 139-pin spec 并复跑两新测试）与完整应用/analytics 矩阵。
+- 提交：`160c36b5` = 上述 2 文件 + 本证据目录（qa r1 15 件 + staging 14 件 + 独立复核 + live patch）+ 进度/汇总文档。
+- 证据等级：FIXED_SOURCE_SPAWNED_HOSTS_CURVE_GROUP_POLICY_COMBO3_AND_PUBLIC_DENIAL_SCENARIO_ONLY。

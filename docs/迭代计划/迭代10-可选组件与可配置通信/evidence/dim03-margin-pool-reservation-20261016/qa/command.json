@@ -1,0 +1,41 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pytest",
+    "-c",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-fixed-source-r4\\qa-harness\\pytest.ini",
+    "--rootdir",
+    "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-fixed-source-r4\\candidate\\risk",
+    "-q",
+    "--noconftest",
+    "-p",
+    "no:cacheprovider",
+    "--junitxml=D:\\temp\\it10dim03-fixed-source-20261016-r4\\junit.xml",
+    "--basetemp=D:\\temp\\it10dim03-fixed-source-20261016-r4\\pytest-tmp",
+    "tests/test_margin_pool_reservations.py",
+    "tests/test_group_vector_reservations.py",
+    "tests/test_integer_clock_freshness.py",
+    "tests/test_dispatch_exposure_resolution.py",
+    "tests/test_admission_import_boundary.py",
+    "tests/test_durable_risk_gate.py"
+  ],
+  "cwd": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-fixed-source-r4\\candidate\\risk",
+  "environment": {
+    "PYTHONPATH": "D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-fixed-source-r4\\candidate\\risk\\src;D:\\bt_api_py\\.codex-tmp\\iteration10-dim03-fixed-source-r4\\candidate\\base\\src",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1"
+  },
+  "unset_environment": [
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTEST_ADDOPTS",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_PLUGINS",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTHONNOUSERSITE"
+  ],
+  "started_utc": "2026-10-16T03:28:24.786832+00:00"
+}

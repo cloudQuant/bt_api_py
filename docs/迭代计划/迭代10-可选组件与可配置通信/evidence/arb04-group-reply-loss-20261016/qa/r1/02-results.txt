@@ -1,0 +1,44 @@
+it10 ARB04 evidence summary (2026-10-16, r1)
+==============================================
+
+Verdicts (all pytest runs from D:/bt_api_py, PYTEST_DISABLE_PLUGIN_AUTOLOAD=1, -p no:cacheprovider):
+- run1  test_arb04_group_reply_loss_service.py : exit 0, 2 passed, 0 failed, 0 errors (17.8s)
+- run2  test_arb04_group_reply_loss_service.py : exit 0, 2 passed, 0 failed, 0 errors (18.2s)
+  determinism: identical test IDs/results; only timestamps/durations differ.
+- regression test_arb03_dim05_group_partial_fill_service.py : exit 0, 2 passed (15.1s)
+- regression test_service_execution_group_local_process.py : exit 0, 1 passed (10.2s)
+
+Pins: 00-before-pins.txt / 00-after-pins.txt (5 repos; HEADs unchanged across the runs;
+other workstreams' pre-existing dirty files are excluded from attribution).
+
+What the two ARB04 tests prove (all over the real spawned CURVE chain, real SQLite
+stores, synthetic provider leaves; the fault discards the REAL reply of the first
+orders.submit_group_leg after the account host executed it and answered):
+
+Test A (terminal-fact-late-to-coordinator):
+- reply loss -> coordinator RECOVERY_REQUIRED, error_code None, leg-a phase UNKNOWN,
+  child_status/claim/resolution None; group budget_reservation HELD (no early release);
+  coordinator journal: FIRST_LEG_STATUS_OBSERVED {"leg_id":"leg-a","state":"UNKNOWN",
+  "code":"ORDER_SUBMIT_OUTCOME_UNKNOWN"}; exactly one FIRST_LEG_SUBMIT_STARTED ever.
+- account-a already terminal: record CANCELLED filled 1.5, dispatch_attempts 1,
+  outbox 5 events; account-b untouched (0 provider writes).
+- exact replay -> recovery queries the ORIGINAL child intent (orders.query_group_leg),
+  account-a wire submits stay exactly 1 (no resubmission), PAIRED, hedge "3.000" sized
+  once, residual 0; both legs risk (claimed, resolved); holds resolved.
+- duplicate replay: snapshot identical; wire counts frozen; provider writes stay 1/1;
+  no reservations.release ever observed on the wire.
+
+Test B (genuine provider-late fill):
+- account-a order acknowledged "open" (0 fill) + reply loss -> UNKNOWN as above.
+- LATE FILL injected into the provider ledger after the UNKNOWN (status filled,
+  revision 2).
+- replay -> STILL RECOVERY_REQUIRED, error "order_outcome_unknown", child_status UNKNOWN
+  filled 0, record stays UNKNOWN filled 0 (dispatch_attempts 1, review_required),
+  authority dispatch hold stays pending, budget hold HELD, risk (claimed, resolved=False).
+- NO resubmission (wire submits: account-a 1, account-b 0), NO re-observation
+  (provider counters frozen at {order_queries:1, fill_queries:1}), NO release
+  (no reservations.release on the wire, hold pending durably), NO reverse
+  (account-b provider writes 0; account-a writes still exactly the one forward buy).
+- This is the honest residual gap: no production path can commit a fact that first
+  appears at the provider after ATTEMPT_UNKNOWN (pure-journal read;
+  allowed_event_sequences forbid re-observation). Reported as a finding, not papered over.
