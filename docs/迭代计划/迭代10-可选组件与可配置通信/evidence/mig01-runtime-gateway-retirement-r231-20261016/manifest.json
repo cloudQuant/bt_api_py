@@ -1,0 +1,188 @@
+{
+  "schema": "iteration10-mig01-runtime-gateway-retirement-r231-evidence-v1",
+  "round": "R231",
+  "status": "READY_FOR_ROOT_SCOPED_REVIEW_AND_THREE_FILE_COMMIT",
+  "captured_utc": "2026-10-16T13:06:15.908965+00:00",
+  "formal_mig01_pass": false,
+  "parent_repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "root_qa_head_before_and_after": "33c381007abcfc437044c67f4c752a788944846d",
+    "parent_commit_sha": null,
+    "commit_status": "PENDING_ROOT_REVIEW_AND_SCOPED_COMMIT",
+    "staging_or_commit_performed_by_author": false
+  },
+  "base_repository": {
+    "path": "D:\\bt_api_py\\bt_api\\bt_api_base",
+    "branch": "dev",
+    "root_qa_head_before_and_after": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+    "changed_by_this_round": false
+  },
+  "source_commit_inventory": {
+    "exact_path_count": 3,
+    "candidate_paths": [
+      {
+        "path": "bt_api_py/runtime_plugins/__init__.py",
+        "repository": "D:\\bt_api_py",
+        "branch": "dev",
+        "change_type": "modified",
+        "purpose": "retired runtime-plugin import/export boundary",
+        "size_bytes": 5053,
+        "sha256": "536b5b6f48b6ca3f53feb4aa4a773c0e71798bad530854a33f7c5aaa779e8e8f"
+      },
+      {
+        "path": "bt_api_py/runtime_plugins/gateway_dispatch.py",
+        "repository": "D:\\bt_api_py",
+        "branch": "dev",
+        "change_type": "modified",
+        "purpose": "fail-closed legacy gateway dispatch API",
+        "size_bytes": 2736,
+        "sha256": "c582824b34e076f3b63595438854f9c27add2c9b0c8e9cd058a3087cfea7e606"
+      },
+      {
+        "path": "tests/test_runtime_gateway_dispatch_binding.py",
+        "repository": "D:\\bt_api_py",
+        "branch": "dev",
+        "change_type": "modified",
+        "purpose": "focused retirement and import-boundary tests",
+        "size_bytes": 5447,
+        "sha256": "c90f35549d73b21b1d7705bbe5a9d5618567b07c81faa10f7d3e68ec21a7bf2d"
+      }
+    ],
+    "scope_is_exact": true,
+    "unrelated_worktree_changes_included": false
+  },
+  "root_executed_qa": {
+    "round": "R2",
+    "output_path": "D:\\temp\\iteration10-mig01-runtime-gateway-retirement-root-20261016-r2",
+    "pytest_exit": 0,
+    "junit": {
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pytest_summary": "5 passed in 2.10s",
+    "pytest_elapsed_seconds_from_junit": 1.689,
+    "finished_utc": "2026-10-16T13:00:32.887209+00:00",
+    "evidence_level": "MIG01_RUNTIME_GATEWAY_WRITER_RETIREMENT_SOURCE_NO_HOST",
+    "source_count": 18,
+    "sources_unchanged": true,
+    "heads_unchanged": true,
+    "heads_before": {
+      "D:\\bt_api_py": "33c381007abcfc437044c67f4c752a788944846d",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960"
+    },
+    "heads_after": {
+      "D:\\bt_api_py": "33c381007abcfc437044c67f4c752a788944846d",
+      "D:\\bt_api_py\\bt_api\\bt_api_base": "cc6036c89c534a17d93e6b793f930c576b4aa960"
+    },
+    "stdout_sha256": "7e444cf10b3e1e84d32d0b4373f8fcb6a9f6f53cf55178dc34f4ea72d3d8f496",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "spec": {
+      "path": "D:\\temp\\iteration10-mig01-runtime-gateway-retirement-root-20261016-r2\\spec.json",
+      "size_bytes": 6198,
+      "sha256": "90f30d7489d4072644caf95240dd834539552b12cf50ae911763f17403e997c0"
+    },
+    "focused_runner_source": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\iteration10-focused-qa.py",
+      "size_bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "focused_runner_output_copy": {
+      "path": "D:\\temp\\iteration10-mig01-runtime-gateway-retirement-root-20261016-r2\\runner.py",
+      "size_bytes": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "result": {
+      "path": "D:\\temp\\iteration10-mig01-runtime-gateway-retirement-root-20261016-r2\\result.json",
+      "size_bytes": 774,
+      "sha256": "a7b26d1449e9bcd96e03c39ea0af1e5440679dc80966b9cc679dca16ee70e3ea"
+    },
+    "import_mode_limit": "The fresh subprocess explicitly enables BT_API_PY_LIGHT_IMPORT=1; this does not establish default-bootstrap behavior.",
+    "host_service_provider_account_calls": false,
+    "wheel_build_or_install": false
+  },
+  "independent_static_review": {
+    "verdict": "GO_STATIC",
+    "scope": "Frozen runtime_plugins retirement candidate; reviewer reported no additional source blocker.",
+    "qa_or_host_run_by_reviewer": false,
+    "separate_review_artifact_archived": false
+  },
+  "archive": {
+    "path": "raw-evidence.zip",
+    "size_bytes": 8826,
+    "sha256": "9026496d5b24b007591b32ec0ac1f197b985d4ca6891d993dd5fd5e79d99b56f",
+    "entry_count": 11,
+    "raw_root_output_count": 11,
+    "original_qa_bytes_verified": true,
+    "entries": [
+      {
+        "path": "raw/R2/command.json",
+        "size_bytes": 1590,
+        "sha256": "85cd0eeb0139ea2855b1320a15ee5af9f3779635d41d360bfabdab1c9f6a10df"
+      },
+      {
+        "path": "raw/R2/exit.txt",
+        "size_bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "raw/R2/junit.xml",
+        "size_bytes": 994,
+        "sha256": "d5eedd66229c2ae569f36694dbafb1dd04e9cdcb637fc27c6202413e143f6b00"
+      },
+      {
+        "path": "raw/R2/result.json",
+        "size_bytes": 774,
+        "sha256": "a7b26d1449e9bcd96e03c39ea0af1e5440679dc80966b9cc679dca16ee70e3ea"
+      },
+      {
+        "path": "raw/R2/runner.py",
+        "size_bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "raw/R2/running.json",
+        "size_bytes": 76,
+        "sha256": "75fe39c3db62c79cd7daa076fabb4bfaac79a7fe4dbcc5650a6da398313b59fa"
+      },
+      {
+        "path": "raw/R2/source-after.json",
+        "size_bytes": 2394,
+        "sha256": "e323b9421686a57a7a2c0591aaef02e1d0f2c67da55f265dc57f2b842afed07c"
+      },
+      {
+        "path": "raw/R2/source-before.json",
+        "size_bytes": 2394,
+        "sha256": "e323b9421686a57a7a2c0591aaef02e1d0f2c67da55f265dc57f2b842afed07c"
+      },
+      {
+        "path": "raw/R2/spec.json",
+        "size_bytes": 6198,
+        "sha256": "90f30d7489d4072644caf95240dd834539552b12cf50ae911763f17403e997c0"
+      },
+      {
+        "path": "raw/R2/stderr.log",
+        "size_bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "raw/R2/stdout.log",
+        "size_bytes": 205,
+        "sha256": "7e444cf10b3e1e84d32d0b4373f8fcb6a9f6f53cf55178dc34f4ea72d3d8f496"
+      }
+    ]
+  },
+  "round_record": {
+    "path": "round-record.md",
+    "size_bytes": 6231,
+    "sha256": "3136f34775305f594693fc3e26b8ae53132b3e85c80bbc44958e611e68ac7613"
+  },
+  "evidence_boundary": "One focused source-only R2 run validates five retirement checks under explicit light-import for the subprocess check. No Host/service-v2/wheel/install/provider/account acceptance; formal MIG01 remains incomplete.",
+  "remaining_formal_scope": [
+    "§11.1: remove SDK forwarding and Base gateway directories, active exports/start paths and old wire at the migration version boundary; provide offline conversion and explicit refusal for non-equivalent inputs.",
+    "§11.2: migrate required behavior, delete both old runtime implementations and active dependencies, and pass install/normal-entry/optional-component regression.",
+    "§11.3 / MIG01 / MIG04: version and extras matrix, wheel/sdist contents and metadata, isolated normal-direct and selected-ZMQ installs, normal cross-repository calls, AFI P9B/P9C/P9D consumers, and explicit old-input migration behavior."
+  ]
+}
