@@ -1,0 +1,203 @@
+{
+  "format": "iteration10-mig04-evidence-manifest-v1",
+  "round": "R211",
+  "status": "ROOT_FORMAL_MIG04_PASS_FROZEN_BINANCE_COMBINATION",
+  "recommendation": "GO_MIG04_FOR_FROZEN_BINANCE_DISTRIBUTION_COMBINATION_ONLY",
+  "formal_case": {
+    "recorded_before": "37/68",
+    "recorded_after": "38/68",
+    "tracker_updated_by_this_round": true
+  },
+  "repository_snapshot": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "head_at_packet_creation": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+    "statement": "Delivery parent; five-path documentation/evidence round. Current source outside frozen wheels is not implicitly accepted."
+  },
+  "deliverables": [
+    {
+      "path": "root-adjudication.md",
+      "bytes": 7066,
+      "sha256": "81fbf3aa799d554c6e898114404e7c0b424dcc3f0d737990b8f3ffb4d5c99fd7"
+    },
+    {
+      "path": "raw-evidence.zip",
+      "bytes": 145341,
+      "sha256": "ce3dfceb4f1524457da8209a0456c736b33f6d0ed789868d0de031f918ad2ca1"
+    }
+  ],
+  "bundle": {
+    "archive_path": "raw-evidence.zip",
+    "archive_bytes": 145341,
+    "archive_sha256": "ce3dfceb4f1524457da8209a0456c736b33f6d0ed789868d0de031f918ad2ca1",
+    "payload_member_count": 45,
+    "total_member_count_including_internal_manifest": 46,
+    "internal_manifest": {
+      "archive_member": "bundle-manifest.json",
+      "external_source_path": "D:\\bt_api_py\\.codex-tmp\\mig04-r211-raw-bundle-20261016\\bundle-manifest.json",
+      "bytes": 8232,
+      "sha256": "2f4a5d8285764513cdada76c9019ca839728c94fdff9322f3acdf49b1e89a6eb",
+      "status": "45 payload entries, each verified against zip member bytes and SHA-256"
+    },
+    "excludes_duplicate_R161_R197_build_artifacts": true,
+    "preserves_original_consumer_steps_01_05_and_R1_R8_failure_history": true
+  },
+  "frozen_combination": [
+    {
+      "distribution": "ai-for-investor-backend",
+      "version": "0.1.0",
+      "wheel_sha256": "287ee6fcef1ff50f0d51600e951285741596cc3a1d365906dbb0d7afcb0fa234",
+      "source_revision": "34f59117ac9a2e73f00b6908cfeeb11fa53f5610"
+    },
+    {
+      "distribution": "backtrader",
+      "version": "1.4.0",
+      "wheel_sha256": "d825efaeb82245fe91dbfcce213e85f6bacf43a1ef27f5c5955463f20ab0749d",
+      "source_revision": "b002afa2da66ca6d14f1623280109be8e653a1b6"
+    },
+    {
+      "distribution": "bt_api_base",
+      "version": "0.15.8",
+      "wheel_sha256": "840090fbc13e7b1fefdc686805ec8685a5e5a7dfd39ace3e7a5763922fd5dbb0",
+      "source_revision": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+    },
+    {
+      "distribution": "bt_api_binance",
+      "version": "2.0.1",
+      "wheel_sha256": "7cac597539bfa6a2a6fa6249e9983df1494d30c4f427898346f22940c9b89a23",
+      "source_revision": "b438a277c92a22851a16be0be1a8c8ee9f852b79"
+    },
+    {
+      "distribution": "bt_api_py",
+      "version": "0.15.5",
+      "wheel_sha256": "6ed0ccc39991ef715f33a8a816c41ee6244b4490b911c2204eba4486a04377b8",
+      "source_revision": "466977392985ef1d7fa9b282a220096c8d19dff8"
+    },
+    {
+      "distribution": "bt-api-binance-certlib",
+      "version": "0.1.0",
+      "wheel_sha256": "164ca44a402ba8153cf55890b9b954ce29becf57ae9bbbc8feefc283a007a2c3",
+      "sdist_sha256": "deb5520156d2838f7def48e507f6963edf8ff0117e8b13f481f3700d886f0b26",
+      "source_revision": "be07a50ed3b4ddb5b419855827e7a965d5230b84",
+      "metadata_commit": "223d5b68a55bb167e2d310f9565b511093b01742",
+      "pyproject_sha256": "7a54ffeefddb0b53f16f7d74247669f369bcde1930addff3b8c3a257c2f97e5c"
+    }
+  ],
+  "evidence_references": [
+    {
+      "name": "R161 root adjudication",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\mig04-release-combo-20261016\\root-adjudication.md",
+      "bytes": 3476,
+      "sha256": "66c0e559e7aec954a8fcb4f0168145fad2114cb86aa947b6d5e112e5aa48158b"
+    },
+    {
+      "name": "R161 independent review",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\mig04-release-combo-20261016\\independent-review.md",
+      "bytes": 18037,
+      "sha256": "b3652fc2a43e0cf2925fb893c500fe6e0429ffd09eb300b228eba7225fa03d7b"
+    },
+    {
+      "name": "R161 exact wheel inventory",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\mig04-release-combo-20261016\\logs\\02b-wheels-sha256.txt",
+      "bytes": 1154,
+      "sha256": "a4541478c73f44bf6272fe9ac14bdaebee4c6d0dab90f1a7be7a8ed4f3a2c5e8"
+    },
+    {
+      "name": "R161 clean-cwd installed-origin supplement",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\mig04-release-combo-20261016\\supplement\\45b-consumers-origins-clean-cwd.log",
+      "bytes": 918,
+      "sha256": "9e32d85066da6c9f6274d49115634890d856b12311686cb8cacea9ac390175d7"
+    },
+    {
+      "name": "R197 result",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\certlib-package-20261016\\result.json",
+      "bytes": 35065,
+      "sha256": "5f01d34159f66d997e570fa0ae256fd99a2b7bb1d0e945c2647485d35c595624"
+    },
+    {
+      "name": "R197 round record",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\certlib-package-20261016\\round-record.md",
+      "bytes": 1374,
+      "sha256": "cc30bc0b2988a6c613ae37e289d7eb19479995a75e51cb6291a40a3e215550c1"
+    },
+    {
+      "name": "R197 build/install checker",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\certlib-package-20261016\\build-install-check.py",
+      "bytes": 30235,
+      "sha256": "0f743027349ffcb61c7eb6a770b78225b009c0489d17bdb99702b35bf0f1affe"
+    },
+    {
+      "name": "R197 sdist",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\certlib-package-20261016\\bt_api_binance_certlib-0.1.0.tar.gz",
+      "bytes": 12656,
+      "sha256": "deb5520156d2838f7def48e507f6963edf8ff0117e8b13f481f3700d886f0b26"
+    },
+    {
+      "name": "R197 wheel",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\certlib-package-20261016\\bt_api_binance_certlib-0.1.0-py3-none-any.whl",
+      "bytes": 14954,
+      "sha256": "164ca44a402ba8153cf55890b9b954ce29becf57ae9bbbc8feefc283a007a2c3"
+    },
+    {
+      "name": "original consumer R1 result",
+      "path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\result.json",
+      "bytes": 15219,
+      "sha256": "b72809d9b2eb45b68e34323caf55eabdd66b444a49eb211bec31a0b28c56972a"
+    },
+    {
+      "name": "original consumer lock",
+      "path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\consumer-dependencies.lock",
+      "bytes": 2421,
+      "sha256": "29b79469307509553d26842d69c2539460d663d3bcbcfba8bcf9529d7b69ac51"
+    },
+    {
+      "name": "original consumer 121-wheel manifest",
+      "path": "D:\\temp\\it10-mig04-certlib-consumer-r1-20261016\\wheelhouse-sha256.json",
+      "bytes": 13681,
+      "sha256": "d806e5961c794f077167312f191855ebe1319d169190fd28b1c97c06cbccd7d3"
+    },
+    {
+      "name": "R9 step06 result",
+      "path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r9-20261016\\result.json",
+      "bytes": 37968,
+      "sha256": "bed622ddd04b72cbdf00577b29d96b6b06e82adf6963a7ba5f0fe4dfc1bc69ae"
+    },
+    {
+      "name": "R9 step06 preflight",
+      "path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r9-20261016\\preflight.json",
+      "bytes": 22298,
+      "sha256": "75a71f8047d4166826e30845ad66568cbb10917559cbb752b1fbe2a049336d90"
+    },
+    {
+      "name": "R9 step06 installed child",
+      "path": "D:\\temp\\it10-mig04-certlib-consumer-step06-supplement-r9-20261016\\step06_installed_crossrepo_child.py",
+      "bytes": 35539,
+      "sha256": "420becd8db1cc6bd0985b493308227460a083eb156a40e2d87d961f30b186245"
+    },
+    {
+      "name": "R9 executed root runner",
+      "path": "D:\\bt_api_py\\.codex-tmp\\it10_mig04_certlib_consumer_step06_supplement_r9_20261016.py",
+      "bytes": 105800,
+      "sha256": "4027fb70a067eff3e9bb2aa69526cf7c1603930b6b5ea5b98e4fd31b0e448354"
+    }
+  ],
+  "acceptance_facts": {
+    "r197": "Real sdist and wheel built and installed offline in separate fresh virtual environments; installed normal dry entry exit 0; seven module hashes pinned; live credential discovery not measured.",
+    "consumer_r1": "Steps 01-05 each exit 0 with empty stderr and exact locked wheelhouse; original aggregate remains HOLD because the then-current step06 failed.",
+    "r9": "Only step06 reran in the existing fresh consumer venv; exit 0, no timeout; same installed site-packages consumer/provider/certlib origins and fixed wheel hashes. Steps 01-05 and old wheels were not rerun or rebuilt.",
+    "local_probes": "R9 records exact local platform/CPU/hostname/IPv6 capability probes; these are not provider actions and do not support network-absence claims."
+  },
+  "boundaries": [
+    "Acceptance recommendation is limited to the frozen specified Binance distribution combination and historical R161 coverage.",
+    "No automatic acceptance of current or future working-tree source that is absent from pinned wheel artifacts.",
+    "Windows / Python 3.11.5; service/wire coverage is synthetic with zero client traffic; registry coverage is minimal SQLite use.",
+    "No CTP, SimNow, real-account/provider behavior, live credential discovery, full network isolation, DIST01/02 or ARB05 real two-machine scenario acceptance.",
+    "No network_absence_claim; no candidate provider action from the recorded local OS probes."
+  ],
+  "root_verification": {
+    "external_references": 16,
+    "zip_payloads": 45,
+    "all_bytes_and_sha256_match": true,
+    "no_accepted_qa_repeated": true
+  }
+}
