@@ -100,6 +100,7 @@ class GatewayAccountSessionBinding:
     max_staleness_seconds: float = 5.0
     request_timeout_seconds: float = 2.0
     quota_admission: object | None = field(default=None, repr=False, compare=False)
+    quota_domain_binding: object | None = field(default=None, repr=False, compare=False)
     _dispatch_quota_admission: Callable[
         [str, Optional[str], Optional[str], Optional[str], str, int], None
     ] | None = field(
@@ -119,10 +120,24 @@ class GatewayAccountSessionBinding:
             from bt_api_gateway.quota_admission import (
                 GatewayQuotaAdmission,
                 GatewayQuotaDispatchAdmission,
+                GatewayQuotaDomainBinding,
             )
             from bt_api_gateway.router import GatewayPrincipal
             from bt_api_gateway.service_component import GatewayServiceAccountScope
             from bt_api_gateway.session_guard import LocalAccountSessionGuard
+
+            if self.quota_admission is not None and self.quota_domain_binding is not None:
+                raise ValueError
+            if (
+                self.quota_domain_binding is not None
+                and type(self.quota_domain_binding) is not GatewayQuotaDomainBinding
+            ):
+                raise ValueError
+            effective_admission = (
+                self.quota_domain_binding.admission
+                if self.quota_domain_binding is not None
+                else self.quota_admission
+            )
 
             if (
                 type(self.journal) is not GatewayEventJournal
@@ -132,8 +147,8 @@ class GatewayAccountSessionBinding:
                 or self.guard.account_key_digest
                 != hashlib.sha256(self.account_key.account_key_id.encode("ascii")).hexdigest()
                 or (
-                    self.quota_admission is not None
-                    and type(self.quota_admission) is not GatewayQuotaAdmission
+                    effective_admission is not None
+                    and type(effective_admission) is not GatewayQuotaAdmission
                 )
             ):
                 raise ValueError
@@ -192,8 +207,15 @@ class GatewayAccountSessionBinding:
                 self,
                 "_dispatch_quota_admission",
                 None
-                if self.quota_admission is None
-                else GatewayQuotaDispatchAdmission(self.quota_admission),
+                if effective_admission is None
+                else GatewayQuotaDispatchAdmission(
+                    effective_admission,
+                    assert_domain_current=(
+                        None
+                        if self.quota_domain_binding is None
+                        else self.quota_domain_binding.assert_current  # type: ignore[attr-defined]
+                    ),
+                ),
             )
         except GatewayOperatorDeploymentError:
             raise
@@ -212,6 +234,14 @@ class GatewayAccountSessionBinding:
         """
 
         return self._dispatch_quota_admission
+
+    @property
+    def effective_quota_admission(self) -> object | None:
+        """Return the one explicitly bound provider-domain admission owner."""
+
+        if self.quota_domain_binding is not None:
+            return self.quota_domain_binding.admission  # type: ignore[attr-defined]
+        return self.quota_admission
 
 
 @dataclass(frozen=True, slots=True)
@@ -682,7 +712,7 @@ class GatewayOperatorDeployment:
         try:
             from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
 
-            if binding.quota_admission is not None:
+            if binding.effective_quota_admission is not None:
                 from bt_api_gateway.quota_admission import (
                     GatewayQuotaProviderSession,
                     GatewayQuotaSubject,
@@ -690,8 +720,14 @@ class GatewayOperatorDeployment:
 
                 provider = GatewayQuotaProviderSession(
                     provider,
-                    binding.quota_admission,  # type: ignore[arg-type]
+                    binding.effective_quota_admission,  # type: ignore[arg-type]
                     GatewayQuotaSubject(account_ref=binding.account_scope.account_ref),
+                    assert_session_owned=binding.guard.assert_owned,
+                    assert_domain_current=(
+                        None
+                        if binding.quota_domain_binding is None
+                        else binding.quota_domain_binding.assert_current  # type: ignore[attr-defined]
+                    ),
                 )
 
             worker = GatewayAccountSessionWorker(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import multiprocessing
 import socket
 import sqlite3
+import threading
 import time
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -22,6 +23,8 @@ from bt_api_gateway.quota_admission import (
     GatewayQuotaAdmission,
     GatewayQuotaAdmissionError,
     GatewayQuotaDispatchAdmission,
+    GatewayQuotaDomainBinding,
+    GatewayQuotaDomainConfig,
     GatewayQuotaOperation,
     GatewayQuotaProviderSession,
     GatewayQuotaSubject,
@@ -469,9 +472,52 @@ class _Provider:
         self.calls.append("read_account_configuration")
         return {"canTrade": True, "canDeposit": None, "canWithdraw": None, "dualSidePosition": None}
 
+    def read_instrument_metadata(
+        self,
+        *,
+        instrument_id: str,
+        exchange_id: str,
+        generation: str,
+        timeout: float,
+    ) -> dict[str, str]:
+        assert generation == self.generation and timeout > 0.0
+        self.calls.append(f"read_instrument_metadata:{exchange_id}:{instrument_id}")
+        return {"instrument_id": instrument_id, "exchange_id": exchange_id}
+
     def close(self) -> None:
         self.calls.append("close")
         self.generation = None
+
+
+@pytest.mark.integration
+def test_instrument_metadata_is_charged_as_ctp_query(tmp_path: Path) -> None:
+    account_key = AccountKey("synthetic", "loopback", "paper", "quota-metadata-account")
+    provider = _Provider(account_key)
+    limiter = _quota(
+        tmp_path / "instrument-metadata-quota.sqlite3",
+        capacity=8,
+        window_seconds=60.0,
+        reserved_capacity=2,
+    )
+    session = GatewayQuotaProviderSession(
+        provider,
+        limiter,
+        GatewayQuotaSubject("account:quota-metadata"),
+    )
+
+    session.connect(account_key=account_key, generation="generation:metadata", timeout=1.0)
+    result = session.read_instrument_metadata(
+        instrument_id="cu2611",
+        exchange_id="SHFE",
+        generation="generation:metadata",
+        timeout=1.0,
+    )
+
+    assert result == {"instrument_id": "cu2611", "exchange_id": "SHFE"}
+    assert provider.calls == ["connect", "read_instrument_metadata:SHFE:cu2611"]
+    with sqlite3.connect(tmp_path / "instrument-metadata-quota.sqlite3") as connection:
+        operations = [row[0] for row in connection.execute("SELECT operation FROM grants")]
+    assert operations == ["login", "ctp_query"]
 
 
 @pytest.mark.integration
@@ -569,11 +615,19 @@ def test_operator_host_applies_quota_to_account_login_and_reads(tmp_path: Path) 
     )
     guard_directory = tmp_path / "quota-session-guard"
     guard_directory.mkdir()
-    limiter = _quota(
-        tmp_path / "operator-provider-quota.sqlite3",
-        capacity=8,
-        window_seconds=60.0,
-        reserved_capacity=2,
+    domain_binding = GatewayQuotaDomainBinding(
+        GatewayQuotaDomainConfig(
+            database_path=tmp_path / "operator-provider-quota.sqlite3",
+            quota_domain_ref="synthetic:operator-provider-domain-v1",
+            capacity_per_window=8,
+            window_seconds=60.0,
+            reserved_capacity=2,
+            max_queue=32,
+            max_queue_per_subject=8,
+            max_backoff_seconds=2.0,
+            max_queue_wait_seconds=10.0,
+            poll_interval_seconds=0.005,
+        )
     )
     binding = GatewayAccountSessionBinding(
         account_session_ref="session:quota-account-v1",
@@ -586,7 +640,7 @@ def test_operator_host_applies_quota_to_account_login_and_reads(tmp_path: Path) 
         ),
         required_coverage=(AccountResourceKey("SWAP", "cross"),),
         principals={_PRINCIPAL_REF: principal},
-        quota_admission=limiter,
+        quota_domain_binding=domain_binding,
     )
 
     class Owner:
@@ -609,7 +663,7 @@ def test_operator_host_applies_quota_to_account_login_and_reads(tmp_path: Path) 
         facts = deployment.account_session_worker.read_account_configuration()
         assert facts.can_trade is True
         assert provider.calls == ["connect", "read_account", "read_account_configuration"]
-        assert limiter.status()["grants_in_window"] == 3
+        assert domain_binding.admission.status()["grants_in_window"] == 3
         with sqlite3.connect(tmp_path / "operator-provider-quota.sqlite3") as connection:
             operations = [row[0] for row in connection.execute("SELECT operation FROM grants")]
         assert operations == ["login", "query", "query"]
@@ -678,6 +732,107 @@ def test_account_binding_exposes_one_explicit_dispatch_callback(tmp_path: Path) 
         is None
     )
     assert limiter.status()["grants_in_window"] == 1
+
+
+@pytest.mark.integration
+def test_dispatch_callback_rechecks_domain_after_admission_wait(tmp_path: Path) -> None:
+    database_path = tmp_path / "dispatch-domain-recheck.sqlite3"
+    domain = GatewayQuotaDomainBinding(
+        GatewayQuotaDomainConfig(
+            database_path=database_path,
+            quota_domain_ref="synthetic:dispatch-domain-recheck-v1",
+            capacity_per_window=1,
+            window_seconds=0.25,
+            reserved_capacity=0,
+            max_queue=8,
+            max_queue_per_subject=4,
+            max_backoff_seconds=1.0,
+            max_queue_wait_seconds=3.0,
+            poll_interval_seconds=0.005,
+        )
+    )
+    account_key = AccountKey("synthetic", "loopback", "paper", "quota-domain-recheck")
+    journal = GatewayEventJournal(tmp_path / "dispatch-domain-recheck-journal.sqlite3")
+    account_scope = GatewayServiceAccountScope(
+        _ACCOUNT_REF,
+        _DOMAIN_REF,
+        "journal:dispatch-domain-recheck",
+        strategy_scope_map={_STRATEGY_REF: "state:dispatch-domain-recheck-strategy"},
+        account_read_strategy_scope="state:dispatch-domain-recheck-account",
+    )
+    principal = GatewayPrincipal(
+        _PRINCIPAL_REF,
+        frozenset({"journal:dispatch-domain-recheck"}),
+        frozenset(
+            {"state:dispatch-domain-recheck-account", "state:dispatch-domain-recheck-strategy"}
+        ),
+        frozenset({GatewayCommandKind.READ}),
+    )
+    guard_directory = tmp_path / "dispatch-domain-recheck-guard"
+    guard_directory.mkdir()
+    binding = GatewayAccountSessionBinding(
+        account_session_ref="session:dispatch-domain-recheck-v1",
+        journal=journal,
+        account_key=account_key,
+        account_scope=account_scope,
+        state_scope="state:dispatch-domain-recheck-account",
+        guard=LocalAccountSessionGuard(
+            guard_directory, account_key.account_key_id, "quota-domain-recheck-test"
+        ),
+        required_coverage=(AccountResourceKey("SWAP", "cross"),),
+        principals={_PRINCIPAL_REF: principal},
+        quota_domain_binding=domain,
+    )
+    callback = binding.dispatch_quota_admission
+    assert type(callback) is GatewayQuotaDispatchAdmission
+
+    domain.admission.admit(
+        GatewayQuotaSubject("account:dispatch-domain-recheck"),
+        GatewayQuotaOperation.QUERY,
+        time.monotonic_ns() + 1_000_000_000,
+    )
+    mutation_done = threading.Event()
+    mutation_errors: list[str] = []
+
+    def mutate_persisted_domain_while_queued() -> None:
+        try:
+            end = time.monotonic() + 2.0
+            while time.monotonic() < end:
+                if domain.admission.pending_waiter_count == 1:
+                    with sqlite3.connect(database_path, timeout=1.0) as connection:
+                        connection.execute(
+                            "UPDATE quota_domains SET capacity = capacity + 1"
+                        )
+                    mutation_done.set()
+                    return
+                time.sleep(0.005)
+            mutation_errors.append("WAITER_NOT_REGISTERED")
+        except Exception as exc:
+            mutation_errors.append(type(exc).__name__)
+
+    mutator = threading.Thread(target=mutate_persisted_domain_while_queued, daemon=True)
+    mutator.start()
+    try:
+        with pytest.raises(GatewayQuotaAdmissionError) as denied:
+            callback(
+                _ACCOUNT_REF,
+                _STRATEGY_REF,
+                "run:dispatch-domain-recheck",
+                "BTC-PERP",
+                "OPEN",
+                time.monotonic_ns() + 2_000_000_000,
+            )
+        assert denied.value.code == "DOMAIN_CONFIGURATION_MISMATCH"
+        mutator.join(5.0)
+        assert not mutator.is_alive()
+        assert mutation_done.is_set()
+        assert mutation_errors == []
+        assert domain.admission.pending_waiter_count == 0
+    finally:
+        mutator.join(5.0)
+        if mutation_done.is_set():
+            with sqlite3.connect(database_path, timeout=1.0) as connection:
+                connection.execute("UPDATE quota_domains SET capacity = capacity - 1")
 
 
 @pytest.mark.integration
