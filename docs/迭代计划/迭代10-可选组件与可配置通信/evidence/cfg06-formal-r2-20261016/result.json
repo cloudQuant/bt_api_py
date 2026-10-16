@@ -1,0 +1,24 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T06:10:48.196901+00:00",
+  "source_count": 147,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "ee3b05c2ed81ea27598dab1c60bb6f6d3339324d",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "adb6ec58308149faa93c02920b72f98ac3796056",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "f5c030644dea06ce91afbaacf94e11e353538186",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "ee3b05c2ed81ea27598dab1c60bb6f6d3339324d",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "adb6ec58308149faa93c02920b72f98ac3796056",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_execution": "f5c030644dea06ce91afbaacf94e11e353538186",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "710200c89b6c9fa7a187948eb1326498a5aa5652aa57ae80e50d1915562f3600",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "FIXED_SOURCE_CFG06_FORMAL_COMBO3_HOST_MATRIX_WITH_POLICY_UNITS_AND_REGRESSION"
+}
