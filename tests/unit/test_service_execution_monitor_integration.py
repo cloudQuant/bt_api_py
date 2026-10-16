@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 import multiprocessing
 import sqlite3
+import time
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,11 @@ from bt_api_execution import ExecutionScope
 from bt_api_execution.journal_reader import ExecutionJournalReader
 from bt_api_monitor.durable import DurableOutbox
 from bt_api_monitor.service_ingress import MonitorIngressTarget
+from bt_api_monitor.threshold_service import (
+    THRESHOLD_ALERT_EVENT_TYPE,
+    TrustedThresholdTarget,
+    create_monitor_threshold_resource_provider,
+)
 
 from bt_api_py.service_components import ComponentResources
 from bt_api_py.service_config import parse_service_config
@@ -199,7 +206,9 @@ def _relay_config(endpoint: str):
     )
 
 
-def _monitor_host_process(control, raw_config, registry_path, outbox_path, keys):
+def _monitor_host_process(
+    control, raw_config, registry_path, outbox_path, keys, threshold_document=None
+):
     config = parse_service_config(raw_config)
     identity = WireIdentity(WireRole.SERVICE, _MONITOR_PRINCIPAL, _MONITOR_ID)
     grant = ResourceGrant(
@@ -234,6 +243,7 @@ def _monitor_host_process(control, raw_config, registry_path, outbox_path, keys)
     )
     outbox = None
     host = None
+    threshold_provider = None
     try:
         outbox = DurableOutbox(outbox_path)
 
@@ -248,24 +258,53 @@ def _monitor_host_process(control, raw_config, registry_path, outbox_path, keys)
                 ready=lambda: True,
             )
 
-        host = ServiceHost(config, authority, registry_path, resource_provider)
+        host_resource_provider = resource_provider
+        if threshold_document is not None:
+            trusted_target = TrustedThresholdTarget(
+                "execution-relay",
+                _MONITOR_SCOPE,
+                MonitorIngressTarget(_OUTBOX_SCOPE, _EVENT_TYPES),
+                producer_identity=WireIdentity(
+                    WireRole.SERVICE, _RELAY_PRINCIPAL, _RELAY_ID
+                ),
+                source_provider=_EXECUTION_SCOPE.provider,
+                source_environment=_EXECUTION_SCOPE.environment,
+            )
+            threshold_provider = create_monitor_threshold_resource_provider(
+                resource_provider,
+                monitor_instance_id=_MONITOR_INSTANCE,
+                config_document=threshold_document,
+                trusted_targets={trusted_target.target_ref: trusted_target},
+                poll_interval_seconds=0.02,
+            )
+            host_resource_provider = threshold_provider
+        host = ServiceHost(config, authority, registry_path, host_resource_provider)
         host.start()
-        control.send(("ready", host.endpoint, host.state))
+        ready = ("ready", host.endpoint, host.state)
+        if threshold_provider is not None:
+            ready += (dict(threshold_provider.status),)
+        control.send(ready)
         while True:
             host.serve_once(timeout_ms=25)
             if not control.poll():
                 continue
             if control.recv() == ("close",):
                 host.close()
-                control.send(("closed", host.state))
+                closed = ("closed", host.state)
+                if threshold_provider is not None:
+                    closed += (dict(threshold_provider.status),)
+                control.send(closed)
                 return
             raise AssertionError("unknown execution monitor host command")
     except BaseException as exc:
         if host is not None and host.state not in {"closed", "failed"}:
             with suppress(BaseException):
                 host.close()
+        failure = ("error", getattr(exc, "code", type(exc).__name__))
+        if threshold_provider is not None:
+            failure += (dict(threshold_provider.status),)
         with suppress(Exception):
-            control.send(("error", getattr(exc, "code", type(exc).__name__)))
+            control.send(failure)
         raise
     finally:
         control.close()
@@ -472,6 +511,76 @@ def _read_monitor_events(path: str):
     rows, has_more = outbox.read_page_types(_OUTBOX_SCOPE, _EVENT_TYPES, 0, 100)
     assert has_more is False
     return tuple(rows)
+
+
+def _execution_threshold_config() -> bytes:
+    policy = {
+        "max_rule_configs": 8,
+        "max_dimension_groups": 8,
+        "max_window_events": 16,
+        "max_label_bytes": 8_192,
+        "max_alert_rows": 8,
+        "alert_retention_seconds": 3_600,
+    }
+    rules = []
+    for rule_id, event_type, selector, threshold_count in (
+        (
+            "execution-submit-admission",
+            _EXECUTION_EVENT_TYPE,
+            ("execution", "intent_recorded"),
+            2,
+        ),
+        (
+            "execution-cancel-admission",
+            _CANCELLATION_EVENT_TYPE,
+            ("cancellation", "cancel_intent_recorded"),
+            1,
+        ),
+    ):
+        stream, business_event_type = selector
+        rules.append(
+            {
+                "rule_id": rule_id,
+                "rule_version": 1,
+                "target_ref": "execution-relay",
+                "event_type": event_type,
+                "window_seconds": 3_600,
+                "threshold_count": threshold_count,
+                "dimension_fields": ["account_ref", "strategy_ref"],
+                "max_dimension_keys": 1,
+                "max_window_events": 8,
+                "allowed_lateness_seconds": 3_600,
+                "late_event_policy": "ignore",
+                "trading_day_field": None,
+                "execution_event_selector": {
+                    "schema": "sdk.execution_monitor_projection.v2",
+                    "stream": stream,
+                    "business_event_type": business_event_type,
+                    "state": "PENDING_ADMISSION",
+                },
+            }
+        )
+    document = {
+        "schema_version": 1,
+        "consumer_id": "execution-admission-thresholds-v1",
+        "outbox_max_events": 128,
+        "outbox_max_bytes": 262_144,
+        "storage_policy": policy,
+        "rules": rules,
+    }
+    return json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def _read_monitor_rows(path: str):
+    outbox = DurableOutbox(path, read_only=True)
+    rows, has_more = outbox.read_page_types(
+        _OUTBOX_SCOPE,
+        (_EXECUTION_EVENT_TYPE, _CANCELLATION_EVENT_TYPE, THRESHOLD_ALERT_EVENT_TYPE),
+        0,
+        100,
+    )
+    assert has_more is False
+    return tuple(rows), outbox
 
 
 def _monitor_payload_keys(value: Any) -> set[str]:
@@ -729,11 +838,23 @@ def test_spawned_execution_journal_relay_replays_after_local_checkpoint_failure(
         monitor_host = _start_process(
             context,
             _monitor_host_process,
-            (monitor_raw, monitor_registry_path, monitor_outbox_path, monitor_keys),
+            (
+                monitor_raw,
+                monitor_registry_path,
+                monitor_outbox_path,
+                monitor_keys,
+                _execution_threshold_config(),
+            ),
             "execution-monitor-ingress-host-r2",
         )
         records.append(monitor_host)
-        assert _receive(monitor_host["pipe"])[0] == "ready"
+        threshold_ready = _receive(monitor_host["pipe"])
+        assert threshold_ready[:3] == ("ready", monitor_endpoint, "started")
+        assert threshold_ready[3]["state"] == "ready"
+        assert threshold_ready[3]["ready"] is True
+        assert threshold_ready[3]["process_id"] is not None
+        assert threshold_ready[3]["start_count"] == 1
+        assert threshold_ready[3]["outstanding_pipe_count"] == 1
 
         relay_process = _start_process(
             context,
@@ -843,11 +964,88 @@ def test_spawned_execution_journal_relay_replays_after_local_checkpoint_failure(
         assert provider_counts_after_relay[1] == ("intent-1", "intent-2")
         assert provider_counts_after_relay[2] == ("cancel-1",)
 
+        submit_facts = [
+            event
+            for event in persisted
+            if event.event.data["payload"]["business_event_type"] == "intent_recorded"
+            and event.event.data["payload"]["state"] == "PENDING_ADMISSION"
+        ]
+        cancel_facts = [
+            event
+            for event in persisted
+            if event.event.data["payload"]["business_event_type"]
+            == "cancel_intent_recorded"
+            and event.event.data["payload"]["state"] == "PENDING_ADMISSION"
+        ]
+        assert len(submit_facts) == 2
+        assert len(cancel_facts) == 1
+        assert sum(event.event.event_type == _EXECUTION_EVENT_TYPE for event in persisted) > len(
+            submit_facts
+        )
+        assert sum(event.event.event_type == _CANCELLATION_EVENT_TYPE for event in persisted) > len(
+            cancel_facts
+        )
+
+        deadline = time.monotonic() + 5.0
+        threshold_rows = ()
+        while time.monotonic() < deadline:
+            all_rows, monitor_outbox = _read_monitor_rows(monitor_outbox_path)
+            threshold_rows = tuple(
+                row
+                for row in all_rows
+                if row.event.event_type == THRESHOLD_ALERT_EVENT_TYPE
+            )
+            threshold_checkpoint = monitor_outbox.checkpoint(
+                "execution-admission-thresholds-v1", _OUTBOX_SCOPE
+            )
+            if (
+                len(threshold_rows) == 2
+                and all_rows
+                and threshold_checkpoint == all_rows[-1].sequence
+            ):
+                break
+            time.sleep(0.02)
+        assert len(threshold_rows) == 2
+        assert {row.event.data["rule_id"] for row in threshold_rows} == {
+            "execution-submit-admission",
+            "execution-cancel-admission",
+        }
+        alerts_by_rule = {row.event.data["rule_id"]: row for row in threshold_rows}
+        submit_alert = alerts_by_rule["execution-submit-admission"].event.data
+        cancel_alert = alerts_by_rule["execution-cancel-admission"].event.data
+        assert submit_alert["source_event_type"] == _EXECUTION_EVENT_TYPE
+        assert submit_alert["observed_count"] == 2
+        assert submit_alert["threshold_count"] == 2
+        assert submit_alert["dimensions"] == {
+            "account_ref": _ACCOUNT,
+            "strategy_ref": _STRATEGY,
+        }
+        assert submit_alert["source_event_id"] in {
+            event.event.data["source_event_id"] for event in submit_facts
+        }
+        assert cancel_alert["source_event_type"] == _CANCELLATION_EVENT_TYPE
+        assert cancel_alert["observed_count"] == 1
+        assert cancel_alert["threshold_count"] == 1
+        assert cancel_alert["dimensions"] == {
+            "account_ref": _ACCOUNT,
+            "strategy_ref": _STRATEGY,
+        }
+        assert cancel_alert["source_event_id"] in {
+            event.event.data["source_event_id"] for event in cancel_facts
+        }
+
         relay_closed = _close_normally(relay_process, expected_tag="closed")
         assert relay_closed[1:] == ("closed", 0, 0)
         relay_process = None
         monitor_closed = _close_normally(monitor_host, expected_tag="closed")
-        assert monitor_closed == ("closed", "closed")
+        assert monitor_closed[:2] == ("closed", "closed")
+        threshold_closed = monitor_closed[2]
+        assert threshold_closed["state"] == "closed"
+        assert threshold_closed["ready"] is False
+        assert threshold_closed["process_id"] is None
+        assert threshold_closed["restart_count"] == 0
+        assert threshold_closed["outstanding_pipe_count"] == 0
+        assert threshold_closed["closed"] is True
         monitor_host = None
         strategy_closed = _close_normally(strategy, expected_tag="closed")
         assert strategy_closed == ("closed", "closed")
