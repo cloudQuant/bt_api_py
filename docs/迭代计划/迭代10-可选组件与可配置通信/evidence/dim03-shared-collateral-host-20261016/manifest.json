@@ -1,0 +1,330 @@
+{
+  "accepted_node_partition": {
+    "six_negative_nodes": "R6 six passed startup/refusal nodes; their test-function ASTs are byte-semantically unchanged in the current source",
+    "two_positive_nodes": "R7 two passed provider/composition nodes against the current source"
+  },
+  "archive": {
+    "bytes": 151282,
+    "entries": {
+      "r6/qa-output/command.json": {
+        "bytes": 2522,
+        "sha256": "969ff62783684b73882aef6e7d83e8d90e44ea392f61d478617ebeaee8538790"
+      },
+      "r6/qa-output/exit.txt": {
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      "r6/qa-output/junit.xml": {
+        "bytes": 3023,
+        "sha256": "2818bb444ef273f8014b23ac9851067056c5b9b4e7ceaa577b6a4aafac099cf2"
+      },
+      "r6/qa-output/result.json": {
+        "bytes": 1337,
+        "sha256": "81625a70a992417880225eaf630c396c0fc82711bc4f8e554437bb962a5a5ef1"
+      },
+      "r6/qa-output/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "r6/qa-output/running.json": {
+        "bytes": 76,
+        "sha256": "21f34beed6d51ae88f3efd68b8e68901cc2f6c4eb805a8f6cea979a7e282c2f6"
+      },
+      "r6/qa-output/source-after.json": {
+        "bytes": 75796,
+        "sha256": "853faf44155d1c99265c83eff8b8653884ee59a3da5dd26f1b483c71313aeb17"
+      },
+      "r6/qa-output/source-before.json": {
+        "bytes": 75796,
+        "sha256": "853faf44155d1c99265c83eff8b8653884ee59a3da5dd26f1b483c71313aeb17"
+      },
+      "r6/qa-output/spec.json": {
+        "bytes": 81932,
+        "sha256": "0ef8506f1f89a09f67c630bd3c94d76130f9822a2762e5c3edad2fdbba4ed9fc"
+      },
+      "r6/qa-output/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "r6/qa-output/stdout.log": {
+        "bytes": 2469,
+        "sha256": "023db316142832230a2905717037402f2b8122a8f20e10937ff599685e188fe3"
+      },
+      "r7/qa-output/command.json": {
+        "bytes": 2135,
+        "sha256": "ec5e4daa83af543babb708882f3905eeb141915040088bc32d6ce4e3041cefc8"
+      },
+      "r7/qa-output/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "r7/qa-output/junit.xml": {
+        "bytes": 549,
+        "sha256": "fdac705516ad00b74200c3317fb4403262a8c913f50c0d7e8779a2b563114247"
+      },
+      "r7/qa-output/result.json": {
+        "bytes": 1337,
+        "sha256": "05d774d1e68a519dfd0d1a5c4bf7792138d389abe962527da8295834da03635b"
+      },
+      "r7/qa-output/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "r7/qa-output/running.json": {
+        "bytes": 75,
+        "sha256": "f61bdaaa7cd7d4b3890ef07cc7b702ebdb628e68920159934ee00f10c454a6c7"
+      },
+      "r7/qa-output/source-after.json": {
+        "bytes": 75796,
+        "sha256": "9effcb3187955c37d527bb0ce44096f4b85341287acef811182b449ee1facaaa"
+      },
+      "r7/qa-output/source-before.json": {
+        "bytes": 75796,
+        "sha256": "9effcb3187955c37d527bb0ce44096f4b85341287acef811182b449ee1facaaa"
+      },
+      "r7/qa-output/spec.json": {
+        "bytes": 82496,
+        "sha256": "20de4a91c459cb13ca7f8692a934cca11d17d8dab8b488a2e3483ed7433a1e9f"
+      },
+      "r7/qa-output/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "r7/qa-output/stdout.log": {
+        "bytes": 997,
+        "sha256": "92a59c2cb1bc984a0eb5757b82f061695b44f399a1ccaf68aaf91296420fb9f7"
+      },
+      "risk/one-path-postcommit-receipt.json": {
+        "bytes": 537,
+        "sha256": "c24a96c7e9057247d789a9cf0098a39711603706306af510d176a63b6cf9f1a8"
+      },
+      "source/ast-equivalence.json": {
+        "bytes": 7547,
+        "sha256": "a0a3749696b643e8b5178b83efd154a962395e6488fa9ba8a4c64bedbe684f29"
+      },
+      "source/current-test_dim03_shared_collateral_composition.py": {
+        "bytes": 39958,
+        "sha256": "7802856366954e2fd2da635b5c109fecbe7b7c8c37ce1daa67418a1f741b146a"
+      },
+      "source/r6-test_dim03_shared_collateral_composition.py": {
+        "bytes": 33662,
+        "sha256": "a9cf21a88955c93fe0c8df73ab2c74a35931c8fd66a5a70a2be83c1b60383d7a"
+      },
+      "source/r7-test_dim03_shared_collateral_composition.py": {
+        "bytes": 39958,
+        "sha256": "7802856366954e2fd2da635b5c109fecbe7b7c8c37ce1daa67418a1f741b146a"
+      }
+    },
+    "path": "raw-evidence.zip",
+    "sha256": "12d784acf0fdf0c826e4f2f5d14857668fdfc8415da25ed2d19421a6ea934d97"
+  },
+  "base_sdk_head_at_r6": "55104dfa2701c2228410b3f57603a583658b15a3",
+  "delivery_state": "Risk one-path source commit is complete. SDK scoped commit, Risk gitlink update, progress record and final SDK commit identity remain Root controlled.",
+  "formal_dim03_pass": false,
+  "non_claims": [
+    "No formal DIM03 case PASS is claimed by this packet.",
+    "Local synthetic provider and host composition do not establish external provider, account, or real deployment acceptance.",
+    "The R6/R7 fixed source export is the accepted execution source; other current working-tree changes are not covered by this QA."
+  ],
+  "qa_runs": [
+    {
+      "cases": [
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": "AssertionError: assert ['risk-c20e77...d05bf168260c'] == ['dim03-shared-first']\n  \n  At index 0 diff: 'risk-c20e77f9271a391e35bd046e1386d05bf168260c' != 'dim03-shared-first'\n  Use -v to get more diff",
+          "name": "test_shared_domain_caps_two_accounts_across_products_on_one_host",
+          "seconds": "0.693",
+          "status": "FAIL"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": "AssertionError: assert ['risk-b98743...a6ad4f791a35'] == ['dim03-isolated-account-a']\n  \n  At index 0 diff: 'risk-b98743ea543967d4fc6a0ca63c3fa6ad4f791a35' != 'dim03-isolated-account-a'\n  Use -v to get more diff",
+          "name": "test_undeclared_isolated_accounts_keep_independent_legacy_limits",
+          "seconds": "0.711",
+          "status": "FAIL"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_unmapped_multi_account_targets_reject_host_before_registry",
+          "seconds": "0.305",
+          "status": "PASS"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_shared_domain_startup_rejects_incomplete_trusted_owner[undeclared-third-account-in-shared-pool]",
+          "seconds": "0.324",
+          "status": "PASS"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_shared_domain_startup_rejects_incomplete_trusted_owner[different-risk-ledger]",
+          "seconds": "0.486",
+          "status": "PASS"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_shared_domain_startup_rejects_incomplete_trusted_owner[owner-missing]",
+          "seconds": "0.314",
+          "status": "PASS"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_shared_domain_startup_rejects_incomplete_trusted_owner[incomplete-resource-map]",
+          "seconds": "0.321",
+          "status": "PASS"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_unconfigured_shared_margin_pool_rejects_host_before_registry",
+          "seconds": "0.302",
+          "status": "PASS"
+        }
+      ],
+      "errors": 0,
+      "failed": 2,
+      "heads_after": {
+        "D:\\bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_before": {
+        "D:\\bt_api_py": "55104dfa2701c2228410b3f57603a583658b15a3",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "label": "R6-all8 at SDK R221",
+      "output_directory": "D:\\temp\\iteration10-dim03-shared-collateral-host-root-qa-r6-all8-r221-20261016",
+      "passed": 6,
+      "pytest_exit": 1,
+      "skipped": 0,
+      "source_count": 368,
+      "sources_unchanged": true,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "023db316142832230a2905717037402f2b8122a8f20e10937ff599685e188fe3"
+    },
+    {
+      "cases": [
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_shared_domain_caps_two_accounts_across_products_on_one_host",
+          "seconds": "0.932",
+          "status": "PASS"
+        },
+        {
+          "classname": "tests.integration.test_dim03_shared_collateral_composition",
+          "failure_message": null,
+          "name": "test_undeclared_isolated_accounts_keep_independent_legacy_limits",
+          "seconds": "0.957",
+          "status": "PASS"
+        }
+      ],
+      "errors": 0,
+      "failed": 0,
+      "heads_after": {
+        "D:\\bt_api_py": "00cd647b57defb533d43eeb8cca16be195d6489e",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "heads_before": {
+        "D:\\bt_api_py": "00cd647b57defb533d43eeb8cca16be195d6489e",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_execution": "cb66b480b5cc9a2d56ab5c27f9cc6c9f87a81a2e",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "label": "R7-two-positive at SDK R222",
+      "output_directory": "D:\\temp\\iteration10-dim03-shared-collateral-host-root-qa-r7-two-positive-r221-20261016",
+      "passed": 2,
+      "pytest_exit": 0,
+      "skipped": 0,
+      "source_count": 368,
+      "sources_unchanged": true,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "92a59c2cb1bc984a0eb5757b82f061695b44f399a1ccaf68aaf91296420fb9f7"
+    }
+  ],
+  "r6_failure_disposition": "Preserved. The two R6 failures were invalid fixture assertions equating the caller intent string with production's owner-derived risk-<digest> client_order_id. R7 adds persisted journal/provider binding assertions and supersedes only these two failed positive nodes.",
+  "risk_head_at_qa": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+  "risk_instrument_source_overlay_sha256": "0cdb6c3de49bb50d53bcf4586ee6c47c481db89d69506c3a68262fc921ab7416",
+  "risk_source_commit": "647840a75b2071fcb5b4395f554190afe2fae082",
+  "risk_source_commit_receipt": {
+    "bytes": 537,
+    "path_in_archive": "risk/one-path-postcommit-receipt.json",
+    "sha256": "c24a96c7e9057247d789a9cf0098a39711603706306af510d176a63b6cf9f1a8"
+  },
+  "risk_source_parent": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+  "round": "R223",
+  "scope": "DIM03_TRUSTED_COMPOSER_HOST_LOCAL_SYNTHETIC_PROVIDER_ONLY",
+  "sdk_head_at_r7": "00cd647b57defb533d43eeb8cca16be195d6489e",
+  "source_ast_evidence": "raw-evidence.zip:source/ast-equivalence.json",
+  "source_pins": {
+    "bt_api/bt_api_risk/src/bt_api_risk/core/instrument.py": {
+      "bytes": 57792,
+      "sha256": "0cdb6c3de49bb50d53bcf4586ee6c47c481db89d69506c3a68262fc921ab7416"
+    },
+    "bt_api_py/service_components.py": {
+      "bytes": 106442,
+      "sha256": "f095112a51fc63f9b02dfabfe4c50bd50501c785ccde91599e613b4e072b5dfa"
+    },
+    "bt_api_py/service_host.py": {
+      "bytes": 87016,
+      "sha256": "8823961936921d5e9f3291d4f90d0f666a648a3793fb971a0a684b294e275623"
+    },
+    "bt_api_py/service_risk_order_entry.py": {
+      "bytes": 157824,
+      "sha256": "80f85f5243fe83ca25d2d7d0151fbde191a34f7d5752f5457e9e6136e62429aa"
+    },
+    "tests/integration/test_dim03_shared_collateral_composition.py": {
+      "bytes": 39958,
+      "sha256": "7802856366954e2fd2da635b5c109fecbe7b7c8c37ce1daa67418a1f741b146a"
+    }
+  },
+  "source_scope": [
+    {
+      "bytes": 57792,
+      "commit": "647840a75b2071fcb5b4395f554190afe2fae082",
+      "parent": "ae9075ebd6f2bda2802edcb41a2dc66c859478fc",
+      "path": "src/bt_api_risk/core/instrument.py",
+      "repository": "Risk dev",
+      "sha256": "0cdb6c3de49bb50d53bcf4586ee6c47c481db89d69506c3a68262fc921ab7416"
+    },
+    {
+      "bytes": 106442,
+      "path": "bt_api_py/service_components.py",
+      "repository": "bt_api_py dev",
+      "sha256": "f095112a51fc63f9b02dfabfe4c50bd50501c785ccde91599e613b4e072b5dfa"
+    },
+    {
+      "bytes": 87016,
+      "path": "bt_api_py/service_host.py",
+      "repository": "bt_api_py dev",
+      "sha256": "8823961936921d5e9f3291d4f90d0f666a648a3793fb971a0a684b294e275623"
+    },
+    {
+      "bytes": 157824,
+      "path": "bt_api_py/service_risk_order_entry.py",
+      "repository": "bt_api_py dev",
+      "sha256": "80f85f5243fe83ca25d2d7d0151fbde191a34f7d5752f5457e9e6136e62429aa"
+    },
+    {
+      "bytes": 39958,
+      "path": "tests/integration/test_dim03_shared_collateral_composition.py",
+      "repository": "bt_api_py dev",
+      "sha256": "7802856366954e2fd2da635b5c109fecbe7b7c8c37ce1daa67418a1f741b146a"
+    }
+  ],
+  "unique_accepted_node_count": 8
+}

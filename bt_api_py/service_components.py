@@ -19,11 +19,13 @@ import os
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final, Protocol
+from typing import TYPE_CHECKING, Any, Final, Protocol
 
+from bt_api_base.account_protocol import AccountResourceKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 
 from .service_registry import (
@@ -37,6 +39,10 @@ from .service_registry import (
     TrustedGroupResolutionPolicy,
     TrustedGroupWritePolicy,
 )
+
+if TYPE_CHECKING:
+    from bt_api_risk.core.admission import AccountScope
+    from .service_risk_order_entry import RiskOrderTarget
 
 
 class ServiceComponentError(ValueError):
@@ -78,6 +84,26 @@ class TrustedRiskPolicyBinding:
             raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
         if self.policy is None:
             raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
+
+
+@dataclass(frozen=True, slots=True)
+class TrustedSharedCollateralDomain:
+    """Operator-resolved collateral-domain declaration for one Host.
+
+    The manifest labels and expected members describe the trusted deployment
+    configuration; they do not authenticate an owner.  ``owner_gate`` and
+    every target in ``member_targets`` are object-identity pins supplied by
+    the trusted resource provider and are checked against the fully built
+    component graph before the Registry or listener starts.
+    """
+
+    domain_id: str
+    revision: str
+    member_scopes: tuple[AccountScope, ...]
+    member_targets: tuple[tuple[WireScope, RiskOrderTarget], ...]
+    max_notional: Decimal | None
+    owner_instance_id: str | None
+    owner_gate: object | None = field(default=None, repr=False, compare=False)
 
 
 class BorrowedServiceClient:
@@ -151,6 +177,7 @@ class ComponentResources:
     internal_ports: Mapping[str, object] = field(default_factory=dict)
     ownership: ResourceOwnership = ResourceOwnership.BORROWED
     risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = ()
+    shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = ()
     _release_once: Callable[[], None] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -167,6 +194,11 @@ class ComponentResources:
             for binding in self.risk_policy_bindings
         ):
             raise ServiceComponentError("INVALID_RISK_POLICY_BINDING")
+        if type(self.shared_collateral_domains) is not tuple or any(
+            type(domain) is not TrustedSharedCollateralDomain
+            for domain in self.shared_collateral_domains
+        ):
+            raise ServiceComponentError("INVALID_SHARED_COLLATERAL_DECLARATION")
         if self.ownership is ResourceOwnership.BORROWED:
             if self.close_resource is not _borrowed_noop:
                 raise ServiceComponentError("BORROWED_RESOURCE_REQUIRES_EXPLICIT_NOOP")
@@ -197,6 +229,7 @@ class ComponentResources:
         ready: Callable[[], bool],
         internal_ports: Mapping[str, object] | None = None,
         risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
+        shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = (),
     ) -> ComponentResources:
         """Describe operator-owned objects whose lifetime remains external."""
 
@@ -206,6 +239,7 @@ class ComponentResources:
             internal_ports={} if internal_ports is None else internal_ports,
             ownership=ResourceOwnership.BORROWED,
             risk_policy_bindings=risk_policy_bindings,
+            shared_collateral_domains=shared_collateral_domains,
             close_resource=_borrowed_noop,
         )
 
@@ -218,6 +252,7 @@ class ComponentResources:
         close: Callable[[], None],
         internal_ports: Mapping[str, object] | None = None,
         risk_policy_bindings: tuple[TrustedRiskPolicyBinding, ...] = (),
+        shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = (),
     ) -> ComponentResources:
         """Describe host-owned objects and their explicit cleanup callback."""
 
@@ -227,6 +262,7 @@ class ComponentResources:
             internal_ports={} if internal_ports is None else internal_ports,
             ownership=ResourceOwnership.OWNED,
             risk_policy_bindings=risk_policy_bindings,
+            shared_collateral_domains=shared_collateral_domains,
             close_resource=close,
         )
 
@@ -303,6 +339,16 @@ class ServiceComponent:
     )
     account_risk_policy_bindings: tuple[AccountRiskPolicyBinding, ...] = ()
     account_risk_policy_required_ports: frozenset[str] = frozenset()
+    shared_collateral_domains: tuple[TrustedSharedCollateralDomain, ...] = field(
+        default=(), repr=False, compare=False
+    )
+    risk_owner_gate: object | None = field(default=None, repr=False, compare=False)
+    risk_owner_targets: Mapping[WireScope, object] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+    risk_owner_admission: Mapping[WireScope, object] = field(
+        default_factory=dict, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if type(self.capabilities) is not tuple or any(
@@ -345,8 +391,34 @@ class ServiceComponent:
             raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
         if self.account_risk_policy_required_ports and not self.account_risk_policy_bindings:
             raise ServiceComponentError("INVALID_ACCOUNT_RISK_POLICY_BINDINGS")
+        if type(self.shared_collateral_domains) is not tuple or any(
+            type(domain) is not TrustedSharedCollateralDomain
+            for domain in self.shared_collateral_domains
+        ):
+            raise ServiceComponentError("INVALID_SHARED_COLLATERAL_DECLARATION")
+        if not isinstance(self.risk_owner_targets, Mapping) or not isinstance(
+            self.risk_owner_admission, Mapping
+        ):
+            raise ServiceComponentError("INVALID_SHARED_COLLATERAL_OWNER")
+        owner_targets = dict(self.risk_owner_targets)
+        owner_admission = dict(self.risk_owner_admission)
+        if any(
+            type(scope) is not WireScope or target is None
+            for scope, target in owner_targets.items()
+        ) or any(
+            type(scope) is not WireScope or admission is None
+            for scope, admission in owner_admission.items()
+        ):
+            raise ServiceComponentError("INVALID_SHARED_COLLATERAL_OWNER")
+        if self.risk_owner_gate is None:
+            if owner_targets or owner_admission:
+                raise ServiceComponentError("INVALID_SHARED_COLLATERAL_OWNER")
+        elif not owner_targets or set(owner_targets) != set(owner_admission):
+            raise ServiceComponentError("INVALID_SHARED_COLLATERAL_OWNER")
         object.__setattr__(self, "handlers", MappingProxyType(handlers))
         object.__setattr__(self, "internal_ports", MappingProxyType(internal))
+        object.__setattr__(self, "risk_owner_targets", MappingProxyType(owner_targets))
+        object.__setattr__(self, "risk_owner_admission", MappingProxyType(owner_admission))
 
 
 @dataclass(frozen=True, slots=True)
@@ -2074,6 +2146,14 @@ def build_component(
             readiness = group_component_readiness
 
         component_resources = _resources_with_execution_owner_lock(resources, execution_owner_lock)
+        risk_owner_gate: object | None = None
+        risk_owner_targets: Mapping[WireScope, object] = {}
+        risk_owner_admission: Mapping[WireScope, object] = {}
+        if spec.component == "risk" and spec.options.get("role") == "account_owner":
+            if "service.order_entry" in spec.bind_ports:
+                risk_owner_gate = resources.values.get("gate")
+                risk_owner_targets = resources.values.get("targets", {})  # type: ignore[assignment]
+                risk_owner_admission = resources.values.get("admission", {})  # type: ignore[assignment]
         component = ServiceComponent(
             component=spec.component,
             instance_id=spec.instance_id,
@@ -2086,6 +2166,10 @@ def build_component(
             maintain_registrations=maintain_registrations,
             account_risk_policy_bindings=account_risk_policy_bindings,
             account_risk_policy_required_ports=account_risk_policy_required_ports,
+            shared_collateral_domains=resources.shared_collateral_domains,
+            risk_owner_gate=risk_owner_gate,
+            risk_owner_targets=risk_owner_targets,
+            risk_owner_admission=risk_owner_admission,
         )
         if on_resources is not None and defer_resource_tracking:
             # The owner lock and resource close callback must be tracked as one
@@ -2156,6 +2240,7 @@ __all__ = [
     "ServiceComponentError",
     "ServiceResourceProvider",
     "TrustedRiskPolicyBinding",
+    "TrustedSharedCollateralDomain",
     "build_component",
     "component_specs",
     "order_components",

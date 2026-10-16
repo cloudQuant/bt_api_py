@@ -12,12 +12,13 @@ import re
 import time
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any
 
+from bt_api_base.account_protocol import AccountResourceKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_risk import (
     INSTRUMENT_METADATA_DIGEST_TAG,
@@ -277,6 +278,7 @@ class RiskOrderTarget:
     provider_account_id: str
     registry: InstrumentRiskRegistry
     fx_rates_by_instrument: tuple[InstrumentRiskFxRate, ...] = ()
+    resource_by_instrument: Mapping[str, AccountResourceKey] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if type(self.account_scope) is not AccountScope:
@@ -291,6 +293,18 @@ class RiskOrderTarget:
             raise RiskOrderEntryError("TARGET_PROVIDER_ACCOUNT_REQUIRED")
         if type(self.registry) is not InstrumentRiskRegistry:
             raise RiskOrderEntryError("TARGET_METADATA_REGISTRY_REQUIRED")
+        if not isinstance(self.resource_by_instrument, Mapping):
+            raise RiskOrderEntryError("TARGET_RESOURCE_BINDING_INVALID")
+        resources: dict[str, AccountResourceKey] = {}
+        for instrument, resource in self.resource_by_instrument.items():
+            if (
+                type(instrument) is not str
+                or instrument not in self.registry.instruments
+                or type(resource) is not AccountResourceKey
+            ):
+                raise RiskOrderEntryError("TARGET_RESOURCE_BINDING_INVALID")
+            resources[instrument] = resource
+        object.__setattr__(self, "resource_by_instrument", MappingProxyType(resources))
         if type(self.fx_rates_by_instrument) is not tuple:
             raise RiskOrderEntryError("TARGET_FX_RATES_INVALID")
         seen_fx_instruments: set[str] = set()

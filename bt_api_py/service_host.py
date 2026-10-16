@@ -34,6 +34,7 @@ from .service_components import (
     ServiceComponent,
     ServiceComponentError,
     ServiceResourceProvider,
+    TrustedSharedCollateralDomain,
     build_component,
     component_specs,
     order_components,
@@ -581,6 +582,7 @@ class ServiceHost:
                 built_by_instance[component.instance_id] = component
 
             self._validate_group_runtime_bundle_sharing()
+            self._validate_shared_collateral_composition()
 
             component_capabilities = tuple(
                 capability
@@ -894,6 +896,390 @@ class ServiceHost:
                 raise
             except Exception:
                 raise ServiceHostError("GROUP_RUNTIME_BUNDLE_INVALID") from None
+
+    def _validate_shared_collateral_composition(self) -> None:
+        """Bind a declared shared pool to one complete, real Risk owner."""
+
+        declarations = tuple(
+            (component, declaration)
+            for component in self._components
+            for declaration in component.shared_collateral_domains
+        )
+        has_risk_owner_targets = any(
+            component.risk_owner_targets for component in self._components
+        )
+        if not declarations and not has_risk_owner_targets:
+            return
+        try:
+            from bt_api_base.account_protocol import AccountResourceKey
+            from bt_api_risk import (
+                AccountScope,
+                DurableRiskAdmissionAdapter,
+                DurableRiskGate,
+                InstrumentRiskAdmissionMapper,
+            )
+            from bt_api_py.service_risk_order_entry import RiskOrderTarget
+            from decimal import Decimal
+        except Exception:
+            raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_UNAVAILABLE") from None
+
+        def typed_scopes(domain: TrustedSharedCollateralDomain) -> tuple[AccountScope, ...]:
+            if type(domain.member_scopes) is not tuple:
+                return ()
+            values = tuple(
+                scope for scope in domain.member_scopes if type(scope) is AccountScope
+            )
+            return tuple({scope.key: scope for scope in values}.values())
+
+        def target_pools(target: RiskOrderTarget) -> frozenset[str]:
+            resources = target.resource_by_instrument
+            if not isinstance(resources, Mapping):
+                return frozenset()
+            return frozenset(
+                resource.margin_pool
+                for resource in resources.values()
+                if type(resource) is AccountResourceKey
+            )
+
+        if not declarations:
+            scopes_by_pool: dict[str, set[AccountScope]] = {}
+            target_scopes = {
+                target.account_scope
+                for component in self._components
+                for target in component.risk_owner_targets.values()
+                if type(target) is RiskOrderTarget
+                and type(target.account_scope) is AccountScope
+            }
+            require_complete_resource_maps = len(target_scopes) > 1
+            for component in self._components:
+                if not component.risk_owner_targets:
+                    continue
+                if type(component.risk_owner_gate) is not DurableRiskGate:
+                    raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+                for wire_scope, target in component.risk_owner_targets.items():
+                    if (
+                        type(target) is not RiskOrderTarget
+                        or type(target.account_scope) is not AccountScope
+                    ):
+                        raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+                    adapter = component.risk_owner_admission.get(wire_scope)
+                    mapper = getattr(adapter, "_map_intent", None)
+                    if (
+                        type(adapter) is not DurableRiskAdmissionAdapter
+                        or adapter._gate is not component.risk_owner_gate
+                        or type(mapper) is not InstrumentRiskAdmissionMapper
+                        or mapper.scope != target.account_scope
+                        or mapper.registry is not target.registry
+                        or dict(mapper.resource_by_instrument)
+                        != dict(target.resource_by_instrument)
+                    ):
+                        raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+                    resources = mapper.resource_by_instrument
+                    if not isinstance(resources, Mapping) or any(
+                        type(resource) is not AccountResourceKey
+                        for resource in resources.values()
+                    ):
+                        raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+                    if (require_complete_resource_maps or resources) and (
+                        set(resources) != set(target.registry.instruments)
+                    ):
+                        raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+                    for pool in target_pools(target):
+                        scopes_by_pool.setdefault(pool, set()).add(target.account_scope)
+            if any(len(scopes) > 1 for scopes in scopes_by_pool.values()):
+                # The trusted mapper has already established that multiple
+                # AccountKeys use the same pool. Without one complete domain
+                # declaration, this Host cannot grant independent budgets.
+                raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+            return
+
+        def owners_for(
+            scopes: frozenset[AccountScope], pools: frozenset[str] = frozenset()
+        ) -> tuple[ServiceComponent, ...]:
+            return tuple(
+                component
+                for component in self._components
+                if type(component.risk_owner_gate) is DurableRiskGate
+                and any(
+                    type(target) is RiskOrderTarget
+                    and (
+                        target.account_scope in scopes
+                        or bool(target_pools(target).intersection(pools))
+                    )
+                    for target in component.risk_owner_targets.values()
+                )
+            )
+
+        def quarantine(
+            domain: TrustedSharedCollateralDomain,
+            scopes: tuple[AccountScope, ...],
+            owners: tuple[ServiceComponent, ...],
+        ) -> None:
+            if (
+                type(domain.domain_id) is not str
+                or _SAFE_REF.fullmatch(domain.domain_id) is None
+                or type(domain.revision) is not str
+                or _SAFE_REF.fullmatch(domain.revision) is None
+                or not scopes
+            ):
+                return
+            gates: list[DurableRiskGate] = []
+            if type(domain.owner_gate) is DurableRiskGate:
+                gates.append(domain.owner_gate)
+            gates.extend(
+                component.risk_owner_gate
+                for component in owners
+                if type(component.risk_owner_gate) is DurableRiskGate
+            )
+            for component in owners:
+                for adapter in component.risk_owner_admission.values():
+                    candidate_gate = getattr(adapter, "_gate", None)
+                    if type(candidate_gate) is DurableRiskGate:
+                        gates.append(candidate_gate)
+            unique_gates: list[DurableRiskGate] = []
+            for gate in gates:
+                if not any(existing is gate for existing in unique_gates):
+                    unique_gates.append(gate)
+            for gate in unique_gates:
+                try:
+                    gate.declare_shared_collateral_domain(
+                        domain.domain_id,
+                        domain.revision,
+                        scopes,
+                        (),
+                        max_notional=None,
+                        ledger_identity_ref=None,
+                        manifest_complete=False,
+                    )
+                except Exception:
+                    # Startup still fails closed.  A failed quarantine write
+                    # must not be mistaken for an installed ready domain.
+                    continue
+
+        domain_id_counts: dict[str, int] = {}
+        for _component, domain in declarations:
+            if type(domain.domain_id) is str:
+                domain_id_counts[domain.domain_id] = domain_id_counts.get(domain.domain_id, 0) + 1
+        duplicate_domain_ids = {
+            domain_id for domain_id, count in domain_id_counts.items() if count > 1
+        }
+        validated_domains: list[
+            tuple[
+                TrustedSharedCollateralDomain,
+                tuple[AccountScope, ...],
+                tuple[ServiceComponent, ...],
+                ServiceComponent,
+                set[tuple[AccountScope, AccountResourceKey]],
+                tuple[AccountScope, ...],
+            ]
+        ] = []
+        incomplete_domains: list[
+            tuple[
+                TrustedSharedCollateralDomain,
+                tuple[AccountScope, ...],
+                tuple[ServiceComponent, ...],
+                tuple[AccountScope, ...],
+            ]
+        ] = []
+        for declaring_component, domain in declarations:
+            scopes = typed_scopes(domain)
+            scope_set = frozenset(scopes)
+            scope_owners = owners_for(scope_set)
+            shared_pools = {
+                resource.margin_pool
+                for component in scope_owners
+                for target in component.risk_owner_targets.values()
+                if type(target) is RiskOrderTarget and target.account_scope in scope_set
+                for resource in target.resource_by_instrument.values()
+                if type(resource) is AccountResourceKey
+            }
+            if type(domain.member_targets) is tuple:
+                shared_pools.update(
+                    resource.margin_pool
+                    for item in domain.member_targets
+                    if type(item) is tuple
+                    and len(item) == 2
+                    and type(item[1]) is RiskOrderTarget
+                    for resource in item[1].resource_by_instrument.values()
+                    if type(resource) is AccountResourceKey
+                )
+            owners = owners_for(scope_set, frozenset(shared_pools))
+            quarantine_scopes = set(scopes)
+            for component in owners:
+                for target in component.risk_owner_targets.values():
+                    if (
+                        type(target) is RiskOrderTarget
+                        and target_pools(target).intersection(shared_pools)
+                    ):
+                        quarantine_scopes.add(target.account_scope)
+            normalized_quarantine_scopes = tuple(
+                sorted(quarantine_scopes, key=lambda item: item.key)
+            )
+
+            complete = (
+                type(domain.domain_id) is str
+                and domain.domain_id not in duplicate_domain_ids
+                and _SAFE_REF.fullmatch(domain.domain_id) is not None
+                and type(domain.revision) is str
+                and _SAFE_REF.fullmatch(domain.revision) is not None
+                and len(scopes) >= 2
+                and type(domain.member_scopes) is tuple
+                and len(scopes) == len(domain.member_scopes)
+                and type(domain.max_notional) is Decimal
+                and domain.max_notional.is_finite()
+                and domain.max_notional >= 0
+                and type(domain.owner_instance_id) is str
+                and _SAFE_REF.fullmatch(domain.owner_instance_id) is not None
+                and type(domain.owner_gate) is DurableRiskGate
+                and len(owners) == 1
+            )
+            owner = owners[0] if len(owners) == 1 else None
+            complete = bool(
+                complete
+                and owner is not None
+                and owner is declaring_component
+                and owner.instance_id == domain.owner_instance_id
+                and owner.risk_owner_gate is domain.owner_gate
+            )
+
+            actual_targets: dict[WireScope, RiskOrderTarget] = {}
+            if owner is not None:
+                for wire_scope, target in owner.risk_owner_targets.items():
+                    if type(target) is not RiskOrderTarget:
+                        if complete:
+                            complete = False
+                        continue
+                    if target.account_scope in scope_set:
+                        actual_targets[wire_scope] = target
+            pooled_target_scopes = {
+                target.account_scope
+                for component in owners
+                for target in component.risk_owner_targets.values()
+                if type(target) is RiskOrderTarget
+                and target_pools(target).intersection(shared_pools)
+            }
+            if pooled_target_scopes != scope_set:
+                complete = False
+            declared_targets: dict[WireScope, RiskOrderTarget] = {}
+            if type(domain.member_targets) is tuple:
+                for item in domain.member_targets:
+                    if (
+                        type(item) is not tuple
+                        or len(item) != 2
+                        or type(item[0]) is not WireScope
+                        or type(item[1]) is not RiskOrderTarget
+                        or item[0] in declared_targets
+                    ):
+                        complete = False
+                        continue
+                    declared_targets[item[0]] = item[1]
+            else:
+                complete = False
+            if set(declared_targets) != set(actual_targets) or any(
+                declared_targets[wire_scope] is not target
+                for wire_scope, target in actual_targets.items()
+                if wire_scope in declared_targets
+            ):
+                complete = False
+            if {target.account_scope for target in actual_targets.values()} != scope_set:
+                complete = False
+
+            resources_by_scope: dict[AccountScope, Mapping[str, AccountResourceKey]] = {}
+            members: set[tuple[AccountScope, AccountResourceKey]] = set()
+            if owner is not None:
+                for wire_scope, target in actual_targets.items():
+                    adapter = owner.risk_owner_admission.get(wire_scope)
+                    mapper = getattr(adapter, "_map_intent", None)
+                    if (
+                        type(adapter) is not DurableRiskAdmissionAdapter
+                        or adapter._gate is not domain.owner_gate
+                        or type(mapper) is not InstrumentRiskAdmissionMapper
+                        or mapper.scope != target.account_scope
+                        or mapper.registry is not target.registry
+                        or dict(mapper.resource_by_instrument)
+                        != dict(target.resource_by_instrument)
+                    ):
+                        complete = False
+                        continue
+                    resource_map = target.resource_by_instrument
+                    if set(resource_map) != set(target.registry.instruments) or any(
+                        type(resource) is not AccountResourceKey
+                        for resource in resource_map.values()
+                    ):
+                        complete = False
+                        continue
+                    previous = resources_by_scope.get(target.account_scope)
+                    if previous is not None and dict(previous) != dict(resource_map):
+                        complete = False
+                    resources_by_scope[target.account_scope] = resource_map
+                    members.update(
+                        (target.account_scope, resource) for resource in resource_map.values()
+                    )
+            if set(resources_by_scope) != scope_set or not members:
+                complete = False
+
+            if not complete or owner is None:
+                incomplete_domains.append(
+                    (domain, scopes, owners, normalized_quarantine_scopes)
+                )
+                continue
+            validated_domains.append(
+                (domain, scopes, owners, owner, members, normalized_quarantine_scopes)
+            )
+
+        if incomplete_domains:
+            for domain, scopes, owners, quarantine_scopes in incomplete_domains:
+                quarantine(domain, quarantine_scopes, owners)
+            raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+
+        member_domains: dict[tuple[str, str, str], str] = {}
+        overlapping_domain_ids: set[str] = set()
+        for domain, _scopes, _owners, _owner, members, _quarantine_scopes in validated_domains:
+            for scope, resource in members:
+                key = (scope.key, resource.product_type, resource.margin_pool)
+                previous_domain_id = member_domains.get(key)
+                if previous_domain_id is not None and previous_domain_id != domain.domain_id:
+                    overlapping_domain_ids.update((previous_domain_id, domain.domain_id))
+                else:
+                    member_domains[key] = domain.domain_id
+        if overlapping_domain_ids:
+            still_validated = []
+            for item in validated_domains:
+                domain, scopes, owners, _owner, _members, quarantine_scopes = item
+                if domain.domain_id in overlapping_domain_ids:
+                    incomplete_domains.append((domain, scopes, owners, quarantine_scopes))
+                else:
+                    still_validated.append(item)
+            validated_domains = still_validated
+            for domain, scopes, owners, quarantine_scopes in incomplete_domains:
+                quarantine(domain, quarantine_scopes, owners)
+            raise ServiceHostError("SHARED_COLLATERAL_COMPOSITION_INCOMPLETE")
+
+        for domain, scopes, _owners, owner, members, _quarantine_scopes in validated_domains:
+            try:
+                ledger_identity_ref = owner.risk_owner_gate.ledger_identity_ref
+                ready = owner.risk_owner_gate.declare_shared_collateral_domain(
+                    domain.domain_id,
+                    domain.revision,
+                    scopes,
+                    tuple(
+                        sorted(
+                            members,
+                            key=lambda item: (
+                                item[0].key,
+                                item[1].product_type,
+                                item[1].margin_pool,
+                            ),
+                        )
+                    ),
+                    max_notional=domain.max_notional,
+                    ledger_identity_ref=ledger_identity_ref,
+                    manifest_complete=True,
+                )
+            except Exception:
+                raise ServiceHostError("SHARED_COLLATERAL_DOMAIN_INSTALL_FAILED") from None
+            if ready is not True:
+                raise ServiceHostError("SHARED_COLLATERAL_DOMAIN_NOT_READY")
 
     def _track_resources(self, item: PreparedComponent, resources: ComponentResources) -> None:
         """Retain resources before binding a validated market publisher."""
