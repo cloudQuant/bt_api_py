@@ -1,23 +1,22 @@
-"""Direct/ZMQ BtApi transport contract tests (Task 1.2)."""
+"""Direct/ZMQ BtApi transport contract tests (Task 1.2).
+
+MIG01-R1: the legacy ZMQ forwarding startup entry point is retired.  ZMQ
+construction must fail closed with the typed migration error before any
+socket/thread is created — never a silent fallback to the direct backend.
+"""
 
 from __future__ import annotations
 
-from decimal import Decimal
-from unittest.mock import Mock
+import threading
 
 import pytest
 
 from bt_api_py import (
     BtApi,
-    Consistency,
     ForwardingConfig,
     TransportMode,
 )
-from bt_api_py._contracts.errors import (
-    CapabilityNotSupportedError,
-    LiveQueryFailedError,
-)
-from bt_api_py._contracts.models import AccountSnapshot
+from bt_api_py._contracts.errors import LegacyForwardingRetiredError
 
 
 def _forwarding_config() -> ForwardingConfig:
@@ -30,30 +29,27 @@ def _forwarding_config() -> ForwardingConfig:
     )
 
 
-def _zmq_bt_api_with_failing_client() -> tuple[BtApi, Mock]:
-    api = BtApi(transport_mode=TransportMode.ZMQ, forwarding_config=_forwarding_config())
-    client = Mock()
-    client.connected = False
-    api._backend._client = client  # inject a failing transport for determinism
-    return api, client
-
-
 def test_direct_is_default_transport_mode() -> None:
     api = BtApi()
     assert api.transport_mode is TransportMode.DIRECT
 
 
-def test_zmq_bt_api_live_query_never_turns_transport_failure_into_zero_balance() -> None:
-    api, client = _zmq_bt_api_with_failing_client()
-    client.get_balance.side_effect = RuntimeError("transport down")
-    with pytest.raises(LiveQueryFailedError):
-        api.get_account("SIM___SPOT", consistency=Consistency.LIVE)
+def test_zmq_transport_mode_raises_retired_migration_error() -> None:
+    threads_before = threading.active_count()
+
+    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
+        BtApi(transport_mode=TransportMode.ZMQ, forwarding_config=_forwarding_config())
+
+    assert excinfo.value.target == "transport_mode=ZMQ"
+    # No socket/thread side effect and no silent direct-backend fallback.
+    assert threading.active_count() == threads_before
 
 
-def test_zmq_bt_api_get_request_api_raises_capability_error() -> None:
-    api = BtApi(transport_mode=TransportMode.ZMQ, forwarding_config=_forwarding_config())
-    with pytest.raises(CapabilityNotSupportedError):
-        api.get_request_api("SIM___SPOT")
+def test_zmq_transport_mode_without_forwarding_config_still_raises_migration_error() -> None:
+    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
+        BtApi(transport_mode="zmq")
+
+    assert excinfo.value.target == "transport_mode=ZMQ"
 
 
 def test_direct_get_request_api_returns_none_for_unknown_exchange() -> None:
@@ -75,17 +71,3 @@ def test_bt_api_exposes_explicit_async_methods() -> None:
     ):
         method = getattr(api, name, None)
         assert callable(method), f"missing explicit async method {name}"
-
-
-def test_zmq_cached_account_query_returns_stale_snapshot() -> None:
-    api, client = _zmq_bt_api_with_failing_client()
-    cached = {"cash": 100.0, "value": 200.0, "equity": 200.0, "available_cash": 100.0}
-    client.get_balance.side_effect = RuntimeError("transport down")
-    api._backend._cache.put("get_account:SIM___SPOT", cached)
-
-    snapshot = api.get_account("SIM___SPOT", consistency=Consistency.CACHE_OK)
-
-    assert isinstance(snapshot, AccountSnapshot)
-    assert snapshot.freshness.stale is True
-    assert snapshot.freshness.source == "cache"
-    assert snapshot.cash == Decimal("100")

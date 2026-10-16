@@ -85,6 +85,7 @@ from bt_api_py._contracts import (
     FundingSnapshot,
     InstrumentSpec,
     KlineSnapshot,
+    LegacyForwardingRetiredError,
     LegacyOrderApiError,
     LiveQueryFailedError,
     NormalizedApiError,
@@ -168,9 +169,12 @@ from bt_api_py.cross_venue import (
     signed_funding_cashflow,
 )
 
-# Legacy exports remain available until the explicit migration boundary, but
-# ordinary clients/config validation must not import their ZMQ implementation.
-_FORWARDING_EXPORTS = frozenset(
+# The legacy forwarding/gateway runtime exports are retired from the public
+# surface.  The names stay enumerable for migration tooling (see ``__all__``),
+# but resolving one raises ``LegacyForwardingRetiredError`` instead of
+# importing the legacy ZMQ runtime; ordinary clients/config validation must
+# never silently resolve these names.
+_RETIRED_FORWARDING_EXPORTS = frozenset(
     {
         "MAX_MESSAGE_BYTES",
         "BtApiForwardingAdapter",
@@ -219,11 +223,11 @@ _SIMNOW_EXPORTS = frozenset(
 
 
 def __getattr__(name: str):
-    if name in _FORWARDING_EXPORTS or name == "GatewayClient":
-        module_name = "bt_api_py.gateway" if name == "GatewayClient" else "bt_api_py.forwarding"
-        value = getattr(_import_module(module_name), name)
-        globals()[name] = value
-        return value
+    if name in _RETIRED_FORWARDING_EXPORTS or name == "GatewayClient":
+        raise LegacyForwardingRetiredError(
+            name,
+            detail="use BtApi with the direct transport",
+        )
     if name == "BtApi":
         from bt_api_py.bt_api import BtApi as _BtApi
 
@@ -324,6 +328,8 @@ __all__ = [
     "list_registered_adapters",
     "load_adapter",
     "register_adapter",
+    # Retired legacy forwarding/gateway exports: still enumerable, but any
+    # resolution raises LegacyForwardingRetiredError (no legacy runtime import).
     "ForwardingClient",
     "GatewayClient",
     "ForwardingRuntime",
@@ -374,6 +380,7 @@ __all__ = [
     "CommandResultUnknownError",
     "ProtocolCorrelationError",
     "AuthorizationError",
+    "LegacyForwardingRetiredError",
     "LegacyOrderApiError",
     # Provider-neutral cross-venue execution-planning primitives. They consume
     # the contracts above and do not create a second SDK client or strategy.

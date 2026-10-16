@@ -132,11 +132,30 @@ class LegacyOrderApiError(BtApiContractError):
         self.detail = detail
 
 
+class LegacyForwardingRetiredError(BtApiContractError):
+    """Raised when a retired legacy forwarding/gateway entry point is used.
+
+    The legacy ZMQ forwarding runtime and the package-level forwarding /
+    ``GatewayClient`` exports are retired from the SDK public surface.  The
+    migration target is ``BtApi`` on the direct transport; the deprecated
+    surfaces fail closed instead of silently resolving to the legacy runtime.
+    """
+
+    def __init__(self, target: str, *, detail: str = "") -> None:
+        message = f"legacy forwarding entry point retired: {target}"
+        if detail:
+            message = f"{message} — {detail}"
+        super().__init__(message)
+        self.target = target
+        self.detail = detail
+
+
 __all__ = [
     "AuthorizationError",
     "BtApiContractError",
     "CapabilityNotSupportedError",
     "CommandResultUnknownError",
+    "LegacyForwardingRetiredError",
     "LegacyOrderApiError",
     "LiveQueryFailedError",
     "NormalizedApiError",

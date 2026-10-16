@@ -1,0 +1,45 @@
+{
+  "pytest_exit": 0,
+  "finished_utc": "2026-10-16T02:38:13.723845+00:00",
+  "source_count": 7,
+  "sources_unchanged": true,
+  "heads_before": {
+    "D:\\bt_api_py": "5ff3da11b9541fc7b94c12d12ba0ed910525eba1",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_after": {
+    "D:\\bt_api_py": "5ff3da11b9541fc7b94c12d12ba0ed910525eba1",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517"
+  },
+  "heads_unchanged": true,
+  "stdout_sha256": "ff80a781b13c20daf78eb7a306e930862ef33568b68e16b2e88e12fb325022a2",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence_level": "MIG01_R1_SDK_RETIRED_ENTRYPOINTS_FIXED_SOURCE_NO_HOST",
+  "scan": {
+    "residual_total": 168,
+    "files_with_residuals": 36,
+    "legacy_dirs": {
+      "D:/bt_api_py/bt_api_py/forwarding": {
+        "exists": true,
+        "python_files": 14
+      },
+      "D:/bt_api_py/bt_api_py/gateway": {
+        "exists": true,
+        "python_files": 4
+      },
+      "D:/bt_api_py/bt_api/bt_api_base/src/bt_api_base/gateway": {
+        "exists": true,
+        "python_files": 16
+      }
+    },
+    "wheel_legacy_entries": 19,
+    "egg_info_legacy_lines": 90,
+    "ci_workflow_files": 3,
+    "behavior": 0,
+    "scan_files": {
+      "scan-residual.json": "a5df9ab5da8a9e0ab69c9074a482908e893a9fa5dc8ac3b6f2b27e0db8923910",
+      "scan-artifacts.json": "18c9885cfeefc85cb64f748e1b6e3bebd1298263a0174c97e7eba857c84eba9d",
+      "scan-behavior.json": "e5dd9848323773b027326afcd2f8e298d7ce1e80e1621300abaee60b0e7b1b7b"
+    }
+  }
+}

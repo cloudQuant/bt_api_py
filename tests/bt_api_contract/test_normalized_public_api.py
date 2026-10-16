@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from bt_api_py import BtApi, NormalizedApiError
-from bt_api_py._contracts import CapabilityNotSupportedError
+from bt_api_py._contracts import CapabilityNotSupportedError, LegacyForwardingRetiredError
 from bt_api_py._contracts.models import (
     CancelOrderRequest,
     ForwardingConfig,
@@ -779,12 +779,10 @@ def test_poll_events_default_scans_at_most_one_hundred_raw_items(api):
     assert source.qsize() == 1
 
 
-def test_zmq_initialization_never_creates_direct_feed_and_lifecycle_routes(monkeypatch):
+def test_zmq_initialization_retired_and_never_creates_direct_feed(monkeypatch):
     monkeypatch.setattr("bt_api_py.bt_api._ensure_plugins_loaded", lambda: None)
-    monkeypatch.setattr(
-        "bt_api_py.bt_api.ExchangeRegistry.create_feed",
-        Mock(side_effect=AssertionError("direct feed")),
-    )
+    create_feed = Mock(side_effect=AssertionError("direct feed"))
+    monkeypatch.setattr("bt_api_py.bt_api.ExchangeRegistry.create_feed", create_feed)
     config = ForwardingConfig(
         command_endpoint="inproc://c",
         market_endpoint="inproc://m",
@@ -792,21 +790,11 @@ def test_zmq_initialization_never_creates_direct_feed_and_lifecycle_routes(monke
         account_id="a",
         strategy_id="s",
     )
-    api = BtApi({"MT5___FX": {}}, debug=False, transport_mode="zmq", forwarding_config=config)
-    client = SimpleNamespace(
-        subscribe=Mock(),
-        disconnect=Mock(),
-        poll_broker_update=Mock(return_value=None),
-        poll_orderbook=Mock(
-            return_value={"bids": [[1, 2]], "asks": [[2, 3]], "timestamp": 1700000000}
-        ),
-    )
-    api._backend._client = client
-    api.subscribe("MT5___FX___EURUSD", [{"topic": "depth"}])
-    assert api.list_exchanges() == ["MT5___FX"] and not api.exchange_feeds
-    assert api.poll_event("MT5___FX")["quantity_unit"] == "lots"
-    api.close()
-    client.disconnect.assert_called_once()
+    with pytest.raises(LegacyForwardingRetiredError) as excinfo:
+        BtApi({"MT5___FX": {}}, debug=False, transport_mode="zmq", forwarding_config=config)
+    assert excinfo.value.target == "transport_mode=ZMQ"
+    # The constrained entry keeps its meaning: no silent direct fallback.
+    create_feed.assert_not_called()
 
 
 def test_zmq_native_intent_rejected_before_dispatch():

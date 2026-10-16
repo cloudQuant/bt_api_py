@@ -38,6 +38,7 @@ from bt_api_base.registry import ExchangeRegistry
 
 from ._contracts.errors import (
     CapabilityNotSupportedError,
+    LegacyForwardingRetiredError,
     LegacyOrderApiError,
     NormalizedApiError,
 )
@@ -928,8 +929,11 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
             exchange_kwargs: 交易所配置 dict，key 为 exchange_name，value 为对应参数。
             debug: 是否开启 debug 模式，控制日志输出。
             event_bus: 事件总线实例，用于 BarEvent/OrderEvent 等回调；None 则创建默认实例。
-            transport_mode: direct（默认，直接持有 Feed）或 zmq（经转发网关）。
-            forwarding_config: ZMQ 模式下的转发网关端点与 scope 配置。
+            transport_mode: direct（默认，直接持有 Feed）。zmq 模式已退役：
+                传入 ZMQ 会在建立任何 socket/线程前抛出
+                LegacyForwardingRetiredError。
+            forwarding_config: ZMQ 模式的历史配置输入；该模式退役后仅保留
+                作显式拒绝输入（ForwardingConfig 仍可构造）。
             execution_config: Optional durable execution session. None preserves
                 legacy behavior; configured writes require typed normalized calls.
         """
@@ -3643,11 +3647,13 @@ class BtApi(DataDownloaderMixin, BalanceManagerMixin):
         self, transport_mode: TransportMode, forwarding_config: ForwardingConfig | None
     ) -> Any:
         if transport_mode is TransportMode.ZMQ:
-            if forwarding_config is None:
-                raise ValueError("transport_mode=ZMQ requires forwarding_config")
-            from .forwarding.btapi_backend import ZmqBtApiBackend
-
-            return ZmqBtApiBackend(forwarding_config)
+            # Retired entry point: fail closed before any socket/thread is
+            # created.  Keep the typed error so callers can distinguish the
+            # retirement from ordinary validation errors.
+            raise LegacyForwardingRetiredError(
+                "transport_mode=ZMQ",
+                detail="the legacy ZMQ forwarding backend was retired; use TransportMode.DIRECT",
+            )
         from ._direct_backend import DirectBackend
 
         return DirectBackend(
