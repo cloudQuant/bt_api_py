@@ -1,0 +1,9 @@
+# MIG03 configured-consumer cutover R13
+
+This local synthetic integration round passed the single affected selector `test_mig03_spawned_consumers_group_and_cursor_cross_cutover` (1 passed, 69.93s, pytest exit 0). It exercises parent-observed local process shutdown/join, a configured consumer inventory, nonempty group state with origin bindings/reservations, cursor handoff, destination readback and explicit write enable. The migrated UNKNOWN order keeps its Risk in-flight freeze, so the destination's attempted new order is rejected and does not call the provider.
+
+The evidence is bound to 2,212 pinned source files from the fixed composite export and the exact test source. The SDK export carries 21 selected SDK overlays, 10 Execution overlays and 7 Risk overlays; the R13 runner also used the fixed AFI export. The QA result says all source pins were unchanged. Its runner did not bind repository HEAD, so this is not a live current-HEAD suite result.
+
+The proposed narrow code closure is the dedicated `service_migration_boundary.py` module, the new cutover integration file and its fixed-export source-origin helper in `test_service_migration_integration.py`. The Host/Registry explicit-enable and legacy compatibility behavior is already in committed `7b9c530e`; other mixed worktree changes are excluded. The exact pins and runner output are in `manifest.json` and `raw-evidence.zip`.
+
+Evidence level: `SOURCE_FAKE_LOCAL_SYNTHETIC_MIG03_CONFIGURED_CONSUMER_GROUP_CURSOR_CUTOVER`. No external provider/account or external fencing operation occurred. The scheduler stop is a controlled local task fixture, not a live AFI database-writer stop. STOP_NEW receipt conservation is not covered by R13 and remains a separate focused check. MIG03 remains partial; this round does not claim formal MIG03 PASS.

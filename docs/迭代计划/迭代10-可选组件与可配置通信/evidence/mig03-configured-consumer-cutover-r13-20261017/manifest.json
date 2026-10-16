@@ -1,0 +1,120 @@
+{
+  "schema": "iteration10-mig03-configured-consumer-cutover-r13-v1",
+  "status": "PREPARED_FOR_ROOT_REVIEW_NOT_STAGED_OR_COMMITTED",
+  "repository": {
+    "path": "D:/bt_api_py",
+    "branch": "dev",
+    "delivery_parent_observed": "baa6ec817ff93449b5010d627a68b642e2e1e31e",
+    "qa_head_guard": "none; runner spec.repositories was empty"
+  },
+  "selected_scope": [
+    {
+      "path": "bt_api_py/service_migration_boundary.py",
+      "bytes": 74312,
+      "sha256": "64538ed78e6f1bf2a1b548f4bd2f685c9a6e21c2df8c35febd6b17b0e491b29e"
+    },
+    {
+      "path": "tests/integration/test_service_migration_boundary_cutover.py",
+      "bytes": 55801,
+      "sha256": "807dd026c59fa2648c92bb113ad7d0ae6adcd79892d9b4eead2f5819cc1a5011"
+    },
+    {
+      "path": "tests/unit/test_service_migration_integration.py",
+      "bytes": 61274,
+      "sha256": "b6cd437009afc472dbd1b29508a8acef61c82974978438859bdedc4653cc2c19"
+    }
+  ],
+  "run": {
+    "spec_path": "D:/bt_api_py/.codex-tmp/iteration10-mig03-cutover-root-spec-r13-20261017.json",
+    "spec_sha256": "23d53c602721c060037fdc8919a3e580508c8343d0402e82d7b5ffc0fa62b65a",
+    "runner_path": ".codex-tmp/iteration10-focused-qa.py",
+    "runner_sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+    "command": "C:\\Anaconda3\\python.exe .codex-tmp/iteration10-focused-qa.py D:\\bt_api_py\\.codex-tmp\\iteration10-mig03-cutover-root-spec-r13-20261017.json",
+    "cwd": "D:\\temp\\m03-cutover-test-root-r10-20261017",
+    "output": "D:/temp/m03-cutover-root-r13-20261017",
+    "selector": "D:\\temp\\m03-cutover-test-root-r10-20261017\\tests\\integration\\test_service_migration_boundary_cutover.py::test_mig03_spawned_consumers_group_and_cursor_cross_cutover",
+    "pytest_exit": 0,
+    "summary": "1 passed in 69.93s",
+    "source_count": 2212,
+    "sources_unchanged": true,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "f8a33980051d2b849a4c4be2cc4c412c8c4186b79094377cc74fd8c25f392161",
+    "evidence_level": "SOURCE_FAKE_LOCAL_SYNTHETIC_MIG03_CONFIGURED_CONSUMER_GROUP_CURSOR_CUTOVER"
+  },
+  "fixed_runtime_snapshot": {
+    "sdk_base": "0c846d4572b524b87b80ae009a54d0ebdd395314",
+    "capture_manifest": "D:/temp/dim09-compensation-owner-source-r3-20261017/capture-manifest.json",
+    "capture_manifest_sha256": "8bece6de6bcbd5074668593add40ee2c0a0f27b5696ef1bac42d7a7859a31c0c",
+    "export_spec": "D:/bt_api_py/.codex-tmp/dim09-compensation-owner-host-spec-r4-20261017.json",
+    "export_spec_sha256": "93e099cb719888e04d23ae64773451fb4d2b6fbac553fbe579ccbf9b8491adea",
+    "sdk_candidate_overlay_count": 21,
+    "execution_candidate_overlay_count": 10,
+    "risk_candidate_overlay_count": 7,
+    "afi_export_root": "D:/temp/iteration10-mig03-boundary-inventory-afi-source-ac52830-typedvalues-r1",
+    "afi_export_spec_sha256": "416688bf6cf7aed8527ed147febce3b0ecb48212600f3d692d905cf98edfadeb"
+  },
+  "prior_evidence_refs": [
+    "R188: docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03b-drill-20261016/run-03-final/mig03b-drill-observation.json",
+    "R209/R210: docs/迭代计划/迭代10-可选组件与可配置通信/evidence/mig03c-map-20261016/",
+    "R220/R235: committed MIG03 boundary inventory and first-write support (66e4f7df; 7b9c530e)"
+  ],
+  "limitations": [
+    "Local synthetic fixed-source integration evidence only; no external provider/account or external fencing proof.",
+    "R13 exercised the fixed composite source export, not a live current-HEAD full-suite run; the result is bound to the 2212 exact source hashes in the archived before/after maps.",
+    "The AFI scheduler task was started/stopped through the local controlled await fixture; this does not prove a live AFI database writer stopped.",
+    "R13 does not exercise AFI08 STOP_NEW receipt conservation through migration; that remains a separate focused node.",
+    "MIG03 remains partial; no formal tracker count or full MIG03 PASS is claimed."
+  ],
+  "archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 325811,
+    "sha256": "753687d1bb73a1914fa832cb53c5b782c0dacf1ebdb4f9648989c9b3093f906e",
+    "members": {
+      "command.json": {
+        "bytes": 2564,
+        "sha256": "b856986a884fc8da9b408de66747c5eacf57844d25a2ab1d5c6af72a7d5080fb"
+      },
+      "spec.json": {
+        "bytes": 500194,
+        "sha256": "23d53c602721c060037fdc8919a3e580508c8343d0402e82d7b5ffc0fa62b65a"
+      },
+      "runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "running.json": {
+        "bytes": 76,
+        "sha256": "e8549537aa07c019710407b2fdf892eeddcb26a9259c4ea1f985596646df6549"
+      },
+      "source-before.json": {
+        "bytes": 478114,
+        "sha256": "4075c6557c70e178aa16271fada26f8f9565cb3e3a09429946ed07bb17164e19"
+      },
+      "source-after.json": {
+        "bytes": 478114,
+        "sha256": "4075c6557c70e178aa16271fada26f8f9565cb3e3a09429946ed07bb17164e19"
+      },
+      "stdout.log": {
+        "bytes": 192,
+        "sha256": "f8a33980051d2b849a4c4be2cc4c412c8c4186b79094377cc74fd8c25f392161"
+      },
+      "stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "result.json": {
+        "bytes": 484,
+        "sha256": "332835680aad1f6415d07c1f0839ced5261c2bdcc27aaa3005e779d4fcbaa16e"
+      },
+      "exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "junit.xml": {
+        "bytes": 377,
+        "sha256": "d569b419e76fcdeeff1b0b3b8956dabdfa71e49befc15582ea0868072eb86246"
+      }
+    }
+  },
+  "staging": "not staged; no commit"
+}

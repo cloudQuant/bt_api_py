@@ -94,6 +94,18 @@ def _assert_integrated_source_origins() -> dict[str, str]:
     base_source_root = os.environ.get("BTAPI_MIG03_FIXED_BASE_SOURCE_ROOT")
     assert base_source_root, "Root QA must provide the fixed Base export source root"
     base_package_root = Path(base_source_root).resolve() / "bt_api_base"
+    execution_source_root = os.environ.get("BTAPI_MIG03_FIXED_EXECUTION_SOURCE_ROOT")
+    execution_package_root = (
+        Path(execution_source_root).resolve() / "bt_api_execution"
+        if execution_source_root is not None
+        else repository / "bt_api/bt_api_execution/src/bt_api_execution"
+    )
+    gateway_source_root = os.environ.get("BTAPI_MIG03_FIXED_GATEWAY_SOURCE_ROOT")
+    gateway_package_root = (
+        Path(gateway_source_root).resolve() / "bt_api_gateway"
+        if gateway_source_root is not None
+        else repository / "bt_api/bt_api_gateway/src/bt_api_gateway"
+    )
 
     symbols = (
         (drill.ServiceHost, repository / "bt_api_py/service_host.py"),
@@ -110,14 +122,8 @@ def _assert_integrated_source_origins() -> dict[str, str]:
             risk_package_root / "order_admission.py",
         ),
         (drill.DurableRiskGate, risk_package_root / "core/admission.py"),
-        (
-            drill.SqliteExecutionStore,
-            repository / "bt_api/bt_api_execution/src/bt_api_execution/store.py",
-        ),
-        (
-            drill.GatewayEventJournal,
-            repository / "bt_api/bt_api_gateway/src/bt_api_gateway/event_journal.py",
-        ),
+        (drill.SqliteExecutionStore, execution_package_root / "store.py"),
+        (drill.GatewayEventJournal, gateway_package_root / "event_journal.py"),
     )
     actual_origins: dict[str, str] = {}
     for symbol, expected in symbols:
