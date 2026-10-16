@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "evidence_round": "AFI04 Risk portfolio analytics V2 service component",
+  "evidence_level": "OFFLINE_V2_SERVICE_AND_INDEPENDENT_PROCESS_COMPONENT_ONLY",
+  "risk_repository": {
+    "path": "bt_api/bt_api_risk",
+    "branch": "dev",
+    "commit": "dc30c1c118cf587538150fc5016c8956e30c60a9",
+    "parent": "6c81653e2a586f47c17cba5f898f23a247b1905d",
+    "scope_count": 4,
+    "postcommit_receipt": {
+      "path": ".codex-tmp/iteration10-afi04-risk-v2-postcommit.json",
+      "bytes": 850,
+      "sha256": "7c0241ae1fe3b0d7f4880d87c11173232f343c8f95bc5a1d3ce539527e22cb34"
+    }
+  },
+  "qa_repositories_at_run": {
+    "D:\\bt_api_py": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+    "D:\\bt_api_py\\bt_api\\bt_api_risk": "6c81653e2a586f47c17cba5f898f23a247b1905d",
+    "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+    "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+  },
+  "qa_runs": [
+    {
+      "run": "risk_v2_unit_and_v1_store_compatibility",
+      "output": "D:\\temp\\iteration10-afi04-v2-unit-root-20261016-r1",
+      "pytest_exit": 0,
+      "passed": 6,
+      "duration_seconds": 1.11,
+      "stderr_empty": true,
+      "warnings": 0,
+      "source_pin_count": 24,
+      "sources_unchanged": true,
+      "repository_heads_at_run": {
+        "D:\\bt_api_py": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "6c81653e2a586f47c17cba5f898f23a247b1905d",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "stdout_sha256": "c9cc1052d4642394d8c0ba702dc43708ff89d947aedbc9d7177ea6af97f9105f",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit_archive_member_prefix": "unit/",
+      "evidence_level": "OFFLINE_TYPED_FACTS_RISK_V2_UNIT_AND_V1_TASK_SERVICE_COMPATIBILITY_ONLY"
+    },
+    {
+      "run": "independent_risk_host_sdk_client_process",
+      "output": "D:\\temp\\iteration10-afi04-v2-process-root-20261016-r1",
+      "pytest_exit": 0,
+      "passed": 1,
+      "duration_seconds": 5.34,
+      "stderr_empty": true,
+      "warnings": 0,
+      "source_pin_count": 24,
+      "sources_unchanged": true,
+      "repository_heads_at_run": {
+        "D:\\bt_api_py": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+        "D:\\bt_api_py\\bt_api\\bt_api_risk": "6c81653e2a586f47c17cba5f898f23a247b1905d",
+        "D:\\bt_api_py\\bt_api\\bt_api_base": "b4aabd1e17b9c7252fa7b4d266932087d99b5517",
+        "D:\\bt_api_py\\bt_api\\bt_api_transport_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e"
+      },
+      "stdout_sha256": "5060517ccc782dd058a473ae957a528ab25604830b501f7781a30acd8a99e2db",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "junit_archive_member_prefix": "process/",
+      "evidence_level": "OFFLINE_V2_INDEPENDENT_RISK_SERVICE_HOST_AND_SDK_CLIENT_PROCESS_INTEGRATION_ONLY"
+    }
+  ],
+  "source_pins": {
+    "bt_api/bt_api_risk/src/bt_api_risk/portfolio_analytics_v2.py": {
+      "sha256": "12f5d467eca0bd40a2b7992fc297f1402e39b03becd1d49d13287fc4d504de9b",
+      "bytes": 44071
+    },
+    "bt_api/bt_api_risk/src/bt_api_risk/service_analytics.py": {
+      "sha256": "f2109a69b4c5f21a5181b970f34457cc3b4e92a003fd545de035e33d0d2ba5ac",
+      "bytes": 43916
+    },
+    "bt_api/bt_api_risk/tests/test_portfolio_analytics_v2.py": {
+      "sha256": "0d60f87b1291478a9bf61d94fc057f3cbf5fda92ef70b8c9cef04ee040cbe4e7",
+      "bytes": 11096
+    },
+    "tests/integration/test_service_portfolio_analytics_v2_process.py": {
+      "sha256": "2bdef233d0f3f2cc6b090e90c9c7be7ecb6c33e1c3f5e27fdc1a0a5d3f01a959",
+      "bytes": 25633
+    }
+  },
+  "archive": {
+    "file": "raw-evidence.zip",
+    "bytes": 19755,
+    "sha256": "de993af7fdd352848d5b66f0079621949c6313626de90c1875fa0bf89fe8f0e2",
+    "raw_qa_file_count": 22,
+    "review_summary_entry_count": 1,
+    "zip_entry_count": 23,
+    "members": {
+      "unit/command.json": {
+        "bytes": 1344,
+        "sha256": "e32ee89c40bafb7524c133110b9b5bd6036eb9289c9fd28c0497167b0d95150d"
+      },
+      "unit/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "unit/junit.xml": {
+        "bytes": 1151,
+        "sha256": "6cfafd81290a9cd349e4942fa76c6d650a4ccb6bf58d61a626fdafb9e614a0ca"
+      },
+      "unit/result.json": {
+        "bytes": 1157,
+        "sha256": "05fb9c780076e60e38ade0f78fe919edc5baddeb5a0dbc15c52a216001c9a28d"
+      },
+      "unit/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "unit/running.json": {
+        "bytes": 76,
+        "sha256": "88243d60f3d44784b5025817b2255239766a0381ac4ba1ebf4b9da90e1f259a7"
+      },
+      "unit/source-after.json": {
+        "bytes": 3416,
+        "sha256": "ef070711cf00084140eaddfb8c5cf554783b8d3fa026df5761bf66222c1af622"
+      },
+      "unit/source-before.json": {
+        "bytes": 3416,
+        "sha256": "ef070711cf00084140eaddfb8c5cf554783b8d3fa026df5761bf66222c1af622"
+      },
+      "unit/spec.json": {
+        "bytes": 6522,
+        "sha256": "2d8afd0bc3de2af9cfa3dcb7bf4bab3b4aabd4cd906c66f7dbaf62df2f3237c0"
+      },
+      "unit/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "unit/stdout.log": {
+        "bytes": 186,
+        "sha256": "c9cc1052d4642394d8c0ba702dc43708ff89d947aedbc9d7177ea6af97f9105f"
+      },
+      "process/command.json": {
+        "bytes": 1294,
+        "sha256": "e78620d4b9ecc587c0c78289a2a70e1ffc3dd4bc5a31210ec560029ef63a7974"
+      },
+      "process/exit.txt": {
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      "process/junit.xml": {
+        "bytes": 388,
+        "sha256": "38e3f4bd472a58711ba2fad6bb5c7b2f1c9eb91a54d78fc1270226f6eef1b8ce"
+      },
+      "process/result.json": {
+        "bytes": 1166,
+        "sha256": "291f966ff4a26ce014cf58a3921fa632cc0aca3df0f8c9e48cc445d037e4d6c2"
+      },
+      "process/runner.py": {
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      "process/running.json": {
+        "bytes": 76,
+        "sha256": "e2be1341051fd922855e56fc0d2169f57e9b2e35c5b7d1220007983b17030f84"
+      },
+      "process/source-after.json": {
+        "bytes": 3416,
+        "sha256": "ef070711cf00084140eaddfb8c5cf554783b8d3fa026df5761bf66222c1af622"
+      },
+      "process/source-before.json": {
+        "bytes": 3416,
+        "sha256": "ef070711cf00084140eaddfb8c5cf554783b8d3fa026df5761bf66222c1af622"
+      },
+      "process/spec.json": {
+        "bytes": 6373,
+        "sha256": "affb1f47f2a722a586f30a4f11b1c4acb668d83325be520045cc0cab4e8b757e"
+      },
+      "process/stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "process/stdout.log": {
+        "bytes": 189,
+        "sha256": "5060517ccc782dd058a473ae957a528ab25604830b501f7781a30acd8a99e2db"
+      },
+      "review-message-summary.md": {
+        "bytes": 1810,
+        "sha256": "8f9443ed04de58b1e2852431245ab878dc0e07cd575c71ccb83e162e80a074fd"
+      }
+    }
+  },
+  "independent_static_review": {
+    "disposition": "GO_STATIC",
+    "reviewer_agent": "/root/review_afi_financial",
+    "provenance": "Completed collaboration review message; no standalone original review file was supplied.",
+    "summary_archive_member": "review-message-summary.md",
+    "tests_host_or_account_run_by_reviewer": false,
+    "non_blocking_note": "The integration test asserts provenance cuts, but not every metric result timestamp field directly; the reviewed source binds result timestamps to their dataset cuts."
+  },
+  "parent_delivery_scope": [
+    "bt_api/bt_api_risk",
+    "tests/integration/test_service_portfolio_analytics_v2_process.py",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-portfolio-analytics-v2-20261016/raw-evidence.zip",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-portfolio-analytics-v2-20261016/manifest.json",
+    "docs/迭代计划/迭代10-可选组件与可配置通信/evidence/afi04-portfolio-analytics-v2-20261016/round-record.md"
+  ],
+  "not_claimed": [
+    "AFI04 formal PASS",
+    "hard execution-deadline enforcement",
+    "task cancellation semantics",
+    "provider or real-account analytics",
+    "trusted FX provenance",
+    "market-data freshness or account completeness"
+  ],
+  "sdk_repository": {
+    "path": "D:\\bt_api_py",
+    "branch": "dev",
+    "source_qa_head": "937350b138ea952a14e1ab08539dc295efb1d0a4",
+    "gitlink_before_delivery": "6c81653e2a586f47c17cba5f898f23a247b1905d",
+    "gitlink_target": "dc30c1c118cf587538150fc5016c8956e30c60a9",
+    "parent_delivery_commit": "not_assigned_by_root"
+  }
+}
