@@ -573,6 +573,32 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 }
             ),
         ),
+        ("risk", "policy_catalog"): _Builtin(
+            module_name="bt_api_risk.service_component",
+            operations_attribute=("SUPPORTED_OPERATIONS",),
+            resource_keys=frozenset({"catalog"}),
+            public_ports=MappingProxyType(
+                {
+                    "service.risk_policy": frozenset(
+                        {
+                            "policy.read",
+                            "policy.draft",
+                            "policy.approve",
+                            "policy.publish",
+                            "policy.receipt",
+                        }
+                    )
+                }
+            ),
+            internal_ports=frozenset(),
+            write_operations_by_port=MappingProxyType(
+                {
+                    "service.risk_policy": frozenset(
+                        {"policy.draft", "policy.approve", "policy.publish"}
+                    )
+                }
+            ),
+        ),
         ("risk", "account_owner"): _Builtin(
             module_name="bt_api_py.service_risk_order_entry",
             operations_attribute=("SUPPORTED_OPERATIONS",),
@@ -1394,6 +1420,13 @@ def build_component(
                         recovery_result_valid = False
                     if not recovery_result_valid:
                         raise ServiceComponentError("ORDER_RECOVERY_INVALID")
+            elif spec.component == "risk" and spec.options.get("role") == "policy_catalog":
+                store_type = getattr(module, "PolicyCatalogStore", None)
+                catalog = values["catalog"]
+                if not isinstance(store_type, type) or type(catalog) is not store_type:
+                    raise ServiceComponentError("POLICY_CATALOG_STORE_INVALID")
+                constructor = getattr(module, "PolicyCatalogService", None)
+                adapter = constructor(catalog)
             elif spec.component == "risk":
                 constructor = getattr(module, "RiskReadService", None)
                 adapter = constructor(values["gate"], values["targets"])
@@ -1625,6 +1658,15 @@ def build_component(
                 ):
                     raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
                 operations = operations.intersection(configured_operations)
+            if spec.component == "risk" and spec.options.get("role") == "policy_catalog":
+                configured_operations = getattr(adapter, "supported_operations", None)
+                if type(
+                    configured_operations
+                ) is not frozenset or configured_operations != frozenset(
+                    prepared.module.SUPPORTED_OPERATIONS
+                ):
+                    raise ServiceComponentError("BUILTIN_COMPONENT_INVALID")
+                operations = operations.intersection(configured_operations)
             if spec.component == "execution" and spec.options.get("role") in {
                 "group_coordinator",
                 "group_account_owner",
@@ -1772,20 +1814,18 @@ def build_component(
                             arguments=arguments,
                         )
                     except Exception as error:
-                        if (
-                            type(error)
-                            is getattr(prepared.module, "MonitorControlServiceError", None)
-                            and error.code in {
-                                "CONTROL_NOT_AUTHORIZED",
-                                "CALLER_DELEGATION_NOT_GRANTED",
-                                "APPLICATION_ROLE_REQUIRED",
-                                "INVALID_IDENTITY",
-                                "IDENTITY_MISMATCH",
-                                "INVALID_SCOPE",
-                                "UNSUPPORTED_SCOPE",
-                                "SCOPE_NOT_GRANTED",
-                            }
-                        ):
+                        if type(error) is getattr(
+                            prepared.module, "MonitorControlServiceError", None
+                        ) and error.code in {
+                            "CONTROL_NOT_AUTHORIZED",
+                            "CALLER_DELEGATION_NOT_GRANTED",
+                            "APPLICATION_ROLE_REQUIRED",
+                            "INVALID_IDENTITY",
+                            "IDENTITY_MISMATCH",
+                            "INVALID_SCOPE",
+                            "UNSUPPORTED_SCOPE",
+                            "SCOPE_NOT_GRANTED",
+                        }:
                             # These failures precede ledger admission/effects.
                             # Owner, storage and ACK failures stay UNKNOWN.
                             raise ServiceOperationDeniedError() from None
@@ -2002,6 +2042,7 @@ __all__ = [
     "ServiceComponent",
     "ServiceComponentError",
     "ServiceResourceProvider",
+    "TrustedRiskPolicyBinding",
     "build_component",
     "component_specs",
     "order_components",

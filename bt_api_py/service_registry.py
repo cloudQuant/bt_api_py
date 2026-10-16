@@ -2207,14 +2207,10 @@ class ServiceRegistry:
                 return self._failure("REPLY_TOO_LARGE")
             return self._failure("HANDLER_FAILED")
         except Exception as error:
-            if (
-                type(error) is ServiceOperationDeniedError
-                and (capability.port, operation)
-                in {
-                    ("service.market_source", "market.subscribe"),
-                    ("service.monitor_control", "monitor.control"),
-                }
-            ):
+            if type(error) is ServiceOperationDeniedError and (capability.port, operation) in {
+                ("service.market_source", "market.subscribe"),
+                ("service.monitor_control", "monitor.control"),
+            }:
                 return self._failure("SCOPE_DENIED")
             return self._failure("HANDLER_FAILED")
 
