@@ -64,3 +64,7 @@ tests/integration/test_service_migration_afi12_scheduler_stop_new_composition.py
 tests/integration/test_service_migration_boundary_cutover.py -text
 tests/integration/test_service_migration_boundary_inventory.py -text
 tests/unit/test_service_migration_boundary.py -text
+
+# DIM07 R5 reserved cancel quota local synthetic acceptance
+docs/ITERATION10_DIM07_GATEWAY_CANCEL_QUOTA_R5_20261017.md -text
+tests/integration/test_dim07_gateway_quota_cancel_owner.py -text
