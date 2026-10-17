@@ -1,0 +1,49 @@
+{
+  "round": "Iteration10 LOAD01 buffered market poll progress",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "6b625dc08e1c9bbaa39a3d95f601c5fd9523e3fe",
+  "commit_lookup": "git log -1 -- docs/evidence/iteration10-market-buffered-poll-20261018/round-record.json",
+  "scope": [
+    "bt_api_py/service_market.py",
+    "tests/unit/test_service_market_buffered_poll_progress.py",
+    "docs/evidence/iteration10-market-buffered-poll-20261018/round-record.json"
+  ],
+  "source_pins": {
+    "bt_api_py/service_market.py": "70d19bad4883d156138464985fd532d0bf374986661531585d8949de4511bdf7",
+    "tests/unit/test_service_market_buffered_poll_progress.py": "dd5bb87844023b85a1347269747f592756d8e453dcf489341641e3dfb70f1cb3"
+  },
+  "change": "After normal runtime maintenance and binding checks, poll delivers validated queued events before periodic head/replay. The same ordering applies after receive and ingest. No lease, sequence, epoch, capacity, recovery or close validation is removed.",
+  "acceptance": {
+    "evidence_level": "SDK_BUFFERED_POLL_SOURCE_REGRESSION_REAL_RUNTIME_REGISTRY_WITH_FAKE_TRANSPORT_NO_HOST",
+    "first_run": {
+      "output": "D:\\temp\\load01-market-buffered-poll-qa-20261018",
+      "result_sha256": "00539c7853dbff56c3cfbcfe6e2e45f827d3549b18bbcea7248f3ed0340be1d7",
+      "outcome": "7 passed; 1 failed in 2.02s",
+      "failure": "Receive fake advanced the logical clock on every call, causing two valid head checks in the next poll. Original source and result preserved."
+    },
+    "targeted_followup": {
+      "output": "D:\\temp\\load01-market-buffered-poll-r2-qa-20261018",
+      "result_sha256": "c32ef79fa34888d5f6cc5c68422ef17bf02eca324a1002a0dd374a0d4ca5aa17",
+      "outcome": "1 passed in 1.46s",
+      "change": "Only the failed test fake now advances the clock on its first receive. Production unchanged; previously passed seven nodes were not repeated."
+    },
+    "independent_review": "GO_STATIC by review_afi_financial for production and narrow fixture repair; no reviewer execution",
+    "source_pins_unchanged_each_run": 392,
+    "not_proven": [
+      "Native multi-strategy throughput or memory improvement",
+      "Formal LOAD01 acceptance",
+      "Single RPC latency bound",
+      "Bounded replay pagination"
+    ]
+  },
+  "formal_pass_count_before": 62,
+  "formal_pass_count_after": 62,
+  "preservation": {
+    "existing_dev": true,
+    "new_worktree": false,
+    "runtime_WIP_excluded": true,
+    "load_profile_runner_WIP_excluded": true
+  },
+  "next": "Bound poll-originated replay pages without changing full start/recover bootstrap; then compare small-scale native consumption and private memory."
+}

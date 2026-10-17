@@ -701,7 +701,10 @@ class ServiceMarketClient:
         self._maintain_runtime()
         self._check_binding()
 
-        if self._queue and (self._recovery_required or self._resync_required):
+        # Events already admitted to the bounded queue have passed epoch,
+        # sequence, and size validation. Deliver that work before another
+        # periodic head/replay round trip can delay it.
+        if self._queue:
             return self._dequeue()
         if self._resync_required:
             raise ServiceMarketError("RESYNC_REQUIRED")
@@ -732,6 +735,9 @@ class ServiceMarketClient:
         self._check_binding()
         if event is not None:
             self._ingest_event(event)
+
+        if self._queue:
+            return self._dequeue()
 
         now = self._now()
         if now >= self._next_head_check and not self._resync_required:
