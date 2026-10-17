@@ -368,6 +368,9 @@ class GroupRollExitAuthorizationSourceV1:
                 operation=operation,
             )
             facts = authorization.source
+            authorization_revision = self._authorization_plan_revision(
+                source, authorization, operation=operation
+            )
             origin = source.origin_binding
             snapshot = source.group_snapshot
             progress = source.source_progress
@@ -406,7 +409,7 @@ class GroupRollExitAuthorizationSourceV1:
                 "origin_run_id": origin.origin_run_id,
                 "group_id": snapshot.request.group_id,
                 "group_version": snapshot.request.version,
-                "group_revision": snapshot.revision,
+                "group_revision": authorization_revision,
                 "group_fingerprint": snapshot.request.fingerprint,
                 "source_risk_reservation_fingerprint": risk_reservations[0].group_fingerprint,
                 "source_risk_intent_fingerprint": risk_legs[0].actual_intent_hash,
@@ -432,7 +435,7 @@ class GroupRollExitAuthorizationSourceV1:
                 raise GroupRollExitAuthorizationSourceError("GROUP_ROLL_EXIT_SOURCE_BINDING_MISMATCH")
             if (
                 facts.group_fingerprint != snapshot.request.fingerprint
-                or facts.group_revision != snapshot.revision
+                or facts.group_revision != authorization_revision
                 or facts.source_execution_scope != self._execution_scope
                 or facts.source_position_side != intent.position_side
                 or facts.source_position_bucket != intent.position_bucket
@@ -445,6 +448,55 @@ class GroupRollExitAuthorizationSourceV1:
             raise
         except Exception:
             raise GroupRollExitAuthorizationSourceError("GROUP_ROLL_EXIT_AUTHORIZATION_UNAVAILABLE") from None
+
+    def _authorization_plan_revision(
+        self,
+        source: GroupRollExitAcceptedSourceV1,
+        authorization: GroupRollExitAuthorizationV1,
+        *,
+        operation: str,
+    ) -> int:
+        """Bind an advanced group to this authorization's durable plan prefix."""
+
+        snapshot = source.group_snapshot
+        revision = authorization.source.group_revision
+        if revision == snapshot.revision:
+            # Preparation and read-only query may precede a durable plan.
+            # Submission requires the plan/start evidence checked below.
+            if operation == "orders.submit_group_roll_exit":
+                raise GroupRollExitAuthorizationSourceError("GROUP_ROLL_EXIT_SOURCE_BINDING_MISMATCH")
+            return revision
+        from .service_execution_group import _owner_roll_exit_actions
+
+        history = self._group_store.events(
+            snapshot.request.portfolio_ref, snapshot.request.group_id
+        )
+        if _group_event_chain_digest(history, snapshot) != source.group_event_chain_digest:
+            raise GroupRollExitAuthorizationSourceError("GROUP_ROLL_EXIT_SOURCE_BINDING_MISMATCH")
+        actions = _owner_roll_exit_actions(snapshot, history)
+        matches = tuple(item for item in actions if item["action_id"] == authorization.action_id)
+        allowed_phases = {"PLANNED", "PREPARED", "STARTED", "OBSERVED", "RESOLVED"}
+        if operation == "orders.submit_group_roll_exit":
+            allowed_phases = {"STARTED", "OBSERVED", "RESOLVED"}
+        if (
+            len(matches) != 1
+            or matches[0]["plan_index"] - 1 != revision
+            or matches[0]["authorization_sha256"] != authorization.authorization_sha256
+            or matches[0]["authorization"].to_payload() != authorization.to_payload()
+            or matches[0]["phase"] not in allowed_phases
+            or any(
+                event.event_type not in {
+                    "GROUP_ROLL_EXIT_PLAN_RECORDED",
+                    "GROUP_ROLL_EXIT_SUBMIT_STARTED",
+                    "GROUP_ROLL_EXIT_STATUS_OBSERVED",
+                    "GROUP_ROLL_EXIT_RESOLVED",
+                    "GROUP_ROLL_EXIT_CLOSED",
+                }
+                for event in history[revision + 1:]
+            )
+        ):
+            raise GroupRollExitAuthorizationSourceError("GROUP_ROLL_EXIT_SOURCE_BINDING_MISMATCH")
+        return revision
 
     def _validate_registration_pair(
         self,
