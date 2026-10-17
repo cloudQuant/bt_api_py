@@ -1,0 +1,36 @@
+{
+  "round": "Terminal market publication watermark and strategy delivery catch-up",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "delivery_parent": "611b288a7b64cbc487a803fba1a10fbd98c108df",
+  "original_helper_test_base": "307edc66edd97159929b80b967587d26a6b8c412",
+  "evidence_level": "SOURCE_HELPER_TESTS_PLUS_STATIC_MERGE",
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/test_load01_terminal_watermark.py"
+  ],
+  "selected_sha256": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": "f705ac9734797476608ede7507b0c32229659a0436b55bff72b266a3c77a563f",
+    "tests/unit/test_load01_terminal_watermark.py": "8d744d1cf29718a8b9213beaa497d869d3514a9d8f01be5ce8d40f988f86a740"
+  },
+  "behavior": [
+    "After publication stops, capture actual Gateway hub epoch/sequence heads on the publisher thread",
+    "Each strategy must attest direct client.poll receipts at the exact target, empty queues and pending recovery, valid runtime state and counters",
+    "Validate capture, receipt, acknowledgement and parent collection against a ten-second catch-up bound",
+    "Compare final strategy cursors and final market heads before completing normal shutdown"
+  ],
+  "verification": {
+    "author_report": "10 direct AST-extracted helper behavior tests passed under C:/Anaconda3/python.exe",
+    "historical_raw_output_exit_time": "Not captured; no raw log, exact exit code or duration is claimed",
+    "independent_review": "load01_terminal_watermark_review: GO, bounded source/helper and static merge only",
+    "root_static_checks": "Exact selected/live hashes; deterministic git merge-file reproduces preserved live WIP; canonical test only changes SOURCE path; all eight helper source segments unchanged; N6 summary retained",
+    "prior_tests_repeated_for_delivery": false,
+    "layout_selector": "One author AST-layout selector result preserved as static-only diagnostic; omitted from persistent tests"
+  },
+  "limitations": [
+    "No runtime Host, native process, 100-strategy or formal LOAD01 acceptance",
+    "N6 quota completion and terminal cursor guard coexist by static merge proof only"
+  ],
+  "formal_pass_count": 62,
+  "formal_total": 68
+}

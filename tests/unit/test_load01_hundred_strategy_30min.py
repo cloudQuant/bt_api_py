@@ -2386,6 +2386,19 @@ def _market_host_process(
                 command = control.recv()
                 if command == ("status",):
                     control.send(("status", _market_status(provider, hub)))
+                elif (
+                    isinstance(command, tuple)
+                    and len(command) == 2
+                    and command[0] == "terminal-watermark"
+                    and type(command[1]) is int
+                ):
+                    control.send(
+                        (
+                            "terminal-watermark",
+                            command[1],
+                            _market_terminal_status(provider, hub, stop_event),
+                        )
+                    )
                 elif command == ("close",):
                     stop_event.set()
                     host.close()
@@ -2395,7 +2408,7 @@ def _market_host_process(
                             os.getpid(),
                             host.state,
                             host.summary["cleanup_failures"],
-                            _market_status(provider, hub),
+                            _market_terminal_status(provider, hub, stop_event),
                         )
                     )
                     return
@@ -2421,6 +2434,324 @@ def _market_host_process(
         control.close()
 
 
+def _normalize_load01_market_watermarks(
+    watermarks: Any, expected_stream_ids: tuple[str, ...]
+) -> dict[str, dict[str, Any]]:
+    expected = tuple(sorted(expected_stream_ids))
+    if (
+        any(type(stream_id) is not str or not stream_id for stream_id in expected)
+        or len(expected) != len(set(expected))
+        or type(watermarks) is not dict
+        or set(watermarks) != set(expected)
+    ):
+        raise AssertionError("LOAD01 terminal watermark topic coverage was invalid")
+    normalized: dict[str, dict[str, Any]] = {}
+    for stream_id in expected:
+        row = watermarks[stream_id]
+        if type(row) is not dict or set(row) != {"epoch", "sequence"}:
+            raise AssertionError("LOAD01 terminal watermark row shape was invalid")
+        epoch = row["epoch"]
+        sequence = row["sequence"]
+        if type(epoch) is not str or not epoch or type(sequence) is not int or sequence < 0:
+            raise AssertionError("LOAD01 terminal watermark value was invalid")
+        normalized[stream_id] = {"epoch": epoch, "sequence": sequence}
+    return normalized
+
+
+def _validate_load01_terminal_market_message(
+    message: Any, *, expected_token: int, expected_stream_ids: tuple[str, ...]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if (
+        type(expected_token) is not int
+        or type(message) is not tuple
+        or len(message) != 3
+        or type(message[0]) is not str
+        or message[0] != "terminal-watermark"
+        or type(message[1]) is not int
+        or message[1] != expected_token
+        or type(message[2]) is not dict
+    ):
+        raise AssertionError("LOAD01 market terminal watermark response schema was invalid")
+    status = message[2]
+    watermark = _validate_load01_terminal_market_status(status, expected_stream_ids)
+    return status, watermark
+
+
+def _validate_load01_strategy_watermark_message(
+    message: Any, *, expected_index: int, expected_pid: int, expected_token: int
+) -> dict[str, Any]:
+    if (
+        type(expected_index) is not int
+        or type(expected_pid) is not int
+        or type(expected_token) is not int
+        or type(message) is not tuple
+        or len(message) != 5
+        or type(message[0]) is not str
+        or message[0] != "market-watermark-result"
+        or type(message[1]) is not int
+        or message[1] != expected_index
+        or type(message[2]) is not int
+        or message[2] != expected_pid
+        or type(message[3]) is not int
+        or message[3] != expected_token
+        or type(message[4]) is not dict
+    ):
+        raise AssertionError("LOAD01 strategy terminal ACK response schema was invalid")
+    result = message[4]
+    expected_result_fields = {
+        "complete",
+        "failures",
+        "targets",
+        "receipts",
+        "last_sequences",
+        "last_epochs",
+        "client_states",
+        "runtime_state",
+        "counter_deltas",
+        "caught_up_at_monotonic_ns",
+        "ack_sent_monotonic_ns",
+    }
+    if set(result) != expected_result_fields:
+        raise AssertionError("LOAD01 strategy terminal ACK map schema was invalid")
+    caught_up_ns = result["caught_up_at_monotonic_ns"]
+    sent_ns = result["ack_sent_monotonic_ns"]
+    if (
+        type(caught_up_ns) is not int
+        or caught_up_ns < 0
+        or type(sent_ns) is not int
+        or sent_ns < caught_up_ns
+    ):
+        raise AssertionError("LOAD01 strategy terminal ACK timestamps were invalid")
+    return result
+
+
+def _validate_load01_terminal_market_status(
+    status: Any, expected_stream_ids: tuple[str, ...]
+) -> dict[str, Any]:
+    if type(status) is not dict or status.get("source_publishing_stopped") is not True:
+        raise AssertionError("LOAD01 market publisher had not stopped at its terminal watermark")
+    expected_status_fields = {
+        "provider_starts",
+        "provider_stops",
+        "active_provider_keys",
+        "source_sequences",
+        "source_payload_bytes",
+        "source_payload_bytes_by_topic",
+        "first_publish_ns",
+        "last_publish_ns",
+        "hub_readiness",
+        "source_publishing_stopped",
+        "hub_watermarks",
+        "watermark_captured_monotonic_ns",
+    }
+    if set(status) != expected_status_fields:
+        raise AssertionError("LOAD01 terminal market status map schema was invalid")
+    captured_ns = status.get("watermark_captured_monotonic_ns")
+    if type(captured_ns) is not int or captured_ns < 0:
+        raise AssertionError("LOAD01 terminal watermark capture time was invalid")
+    source_sequences = status.get("source_sequences")
+    if (
+        type(source_sequences) is not dict
+        or set(source_sequences) != set(expected_stream_ids)
+        or any(type(value) is not int or value < 0 for value in source_sequences.values())
+    ):
+        raise AssertionError("LOAD01 provider source sequence coverage was invalid")
+    watermarks = _normalize_load01_market_watermarks(
+        status.get("hub_watermarks"), expected_stream_ids
+    )
+    for stream_id, row in watermarks.items():
+        if source_sequences[stream_id] != row["sequence"]:
+            raise AssertionError("LOAD01 provider counter differed from Gateway head")
+    return {"captured_monotonic_ns": captured_ns, "watermarks": watermarks}
+
+
+def _load01_market_client_terminal_state(client):
+    return {
+        "queue_count": client.queue_count,
+        "queue_bytes": client.queue_bytes,
+        "healthy": client.healthy,
+        "recovery_required": client.recovery_required,
+        "resync_required": client.resync_required,
+        "unsubscription_uncertain": client.unsubscription_uncertain,
+        "pending_poll_replay": client._pending_poll_replay is not None,
+        "pending_poll_gap_event": client._pending_poll_gap_event is not None,
+        "pending_resync": client._pending_resync is not None,
+    }
+
+
+def _load01_market_watermark_time_failures(
+    *, receipts, barrier_captured_monotonic_ns, caught_up_at_monotonic_ns
+):
+    failures = []
+    if type(receipts) is not dict:
+        receipts = {}
+    for stream_id, receipt in receipts.items():
+        if type(receipt) is not dict:
+            continue
+        received_ns = receipt.get("received_monotonic_ns")
+        if type(received_ns) is not int or received_ns < 0:
+            failures.append(f"receipt_time_invalid:{stream_id}")
+        elif (
+            type(caught_up_at_monotonic_ns) is int
+            and received_ns > caught_up_at_monotonic_ns
+        ):
+            failures.append(f"receipt_after_ack:{stream_id}")
+    if type(barrier_captured_monotonic_ns) is not int or barrier_captured_monotonic_ns < 0:
+        failures.append("barrier_capture_time_invalid")
+    if type(caught_up_at_monotonic_ns) is not int or caught_up_at_monotonic_ns < 0:
+        failures.append("catchup_ack_time_invalid")
+    elif type(barrier_captured_monotonic_ns) is int and (
+        caught_up_at_monotonic_ns < barrier_captured_monotonic_ns
+        or caught_up_at_monotonic_ns - barrier_captured_monotonic_ns > 10_000_000_000
+    ):
+        failures.append("catchup_outside_ten_second_window")
+    return tuple(failures)
+
+
+def _load01_market_terminal_cursors_match(terminal_result, final_strategy):
+    if type(terminal_result) is not dict or type(final_strategy) is not dict:
+        return False
+    for final_field, ack_field in (
+        ("last_sequences", "last_sequences"),
+        ("last_epochs", "last_epochs"),
+        ("market_delivery_receipts", "receipts"),
+    ):
+        final_value = final_strategy.get(final_field)
+        ack_value = terminal_result.get(ack_field)
+        if type(final_value) is not dict or type(ack_value) is not dict:
+            return False
+        if final_value != ack_value:
+            return False
+    return True
+
+
+def _load01_market_watermark_completion_failures(
+    *,
+    targets,
+    expected_stream_ids,
+    receipts,
+    last_sequences,
+    last_epochs,
+    client_states,
+    runtime_state,
+    counter_deltas,
+    barrier_captured_monotonic_ns,
+    caught_up_at_monotonic_ns,
+    check_ack_time=True,
+):
+    failures = []
+    expected = tuple(sorted(expected_stream_ids))
+    try:
+        normalized_targets = _normalize_load01_market_watermarks(targets, expected)
+    except AssertionError:
+        normalized_targets = {}
+        failures.append("target_coverage_or_shape_invalid")
+    for label, mapping in (
+        ("receipt", receipts),
+        ("sequence_cursor", last_sequences),
+        ("epoch_cursor", last_epochs),
+        ("client_state", client_states),
+    ):
+        if type(mapping) is not dict or set(mapping) != set(expected):
+            failures.append(f"{label}_coverage_invalid")
+    if type(receipts) is not dict:
+        receipts = {}
+    if type(last_sequences) is not dict:
+        last_sequences = {}
+    if type(last_epochs) is not dict:
+        last_epochs = {}
+    if type(client_states) is not dict:
+        client_states = {}
+    for stream_id in expected:
+        target = normalized_targets.get(stream_id)
+        if target is None:
+            continue
+        target_epoch = target["epoch"]
+        target_sequence = target["sequence"]
+        receipt = receipts.get(stream_id)
+        if type(receipt) is not dict:
+            failures.append(f"receipt_missing:{stream_id}")
+        else:
+            receipt_epoch = receipt.get("epoch")
+            receipt_sequence = receipt.get("sequence")
+            if receipt_epoch != target_epoch:
+                failures.append(f"receipt_epoch_mismatch:{stream_id}")
+            if type(receipt_sequence) is not int or receipt_sequence != target_sequence:
+                kind = (
+                    "receipt_past_target"
+                    if type(receipt_sequence) is int and receipt_sequence > target_sequence
+                    else "receipt_behind_target"
+                )
+                failures.append(f"{kind}:{stream_id}")
+        cursor_epoch = last_epochs.get(stream_id)
+        if cursor_epoch != target_epoch:
+            failures.append(f"cursor_epoch_mismatch:{stream_id}")
+        cursor_sequence = last_sequences.get(stream_id)
+        if type(cursor_sequence) is not int or cursor_sequence != target_sequence:
+            kind = (
+                "cursor_past_target"
+                if type(cursor_sequence) is int and cursor_sequence > target_sequence
+                else "cursor_behind_target"
+            )
+            failures.append(f"{kind}:{stream_id}")
+        state = client_states.get(stream_id)
+        if type(state) is not dict:
+            failures.append(f"client_state_missing:{stream_id}")
+            continue
+        for field in ("queue_count", "queue_bytes"):
+            value = state.get(field)
+            if type(value) is not int or value < 0:
+                failures.append(f"{field}_invalid:{stream_id}")
+            elif value != 0:
+                failures.append(f"{field}_nonzero:{stream_id}")
+        if state.get("healthy") is not True:
+            failures.append(f"healthy_false:{stream_id}")
+        for field in (
+            "recovery_required",
+            "resync_required",
+            "unsubscription_uncertain",
+            "pending_poll_replay",
+            "pending_poll_gap_event",
+            "pending_resync",
+        ):
+            if state.get(field) is not False:
+                failures.append(f"{field}_true_or_missing:{stream_id}")
+    if type(runtime_state) is not dict:
+        failures.append("runtime_state_missing")
+    else:
+        if runtime_state.get("healthy") is not True:
+            failures.append("runtime_unhealthy")
+        if (
+            type(runtime_state.get("active_bindings")) is not int
+            or type(runtime_state.get("expected_bindings")) is not int
+            or runtime_state.get("expected_bindings") <= 0
+            or runtime_state.get("active_bindings") != runtime_state.get("expected_bindings")
+        ):
+            failures.append("runtime_binding_count_changed")
+        if type(runtime_state.get("cleanup_failures")) is not int or runtime_state["cleanup_failures"] != 0:
+            failures.append("runtime_cleanup_failure")
+        if (
+            type(runtime_state.get("unregister_uncertainties")) is not int
+            or runtime_state["unregister_uncertainties"] != 0
+        ):
+            failures.append("runtime_unregister_uncertain")
+    if type(counter_deltas) is not dict:
+        failures.append("counter_deltas_missing")
+    else:
+        for name in ("duplicates", "gap_count", "gap_events", "epoch_changes"):
+            if type(counter_deltas.get(name)) is not int or counter_deltas[name] != 0:
+                failures.append(f"counter_delta_nonzero:{name}")
+    if check_ack_time:
+        failures.extend(
+            _load01_market_watermark_time_failures(
+                receipts=receipts,
+                barrier_captured_monotonic_ns=barrier_captured_monotonic_ns,
+                caught_up_at_monotonic_ns=caught_up_at_monotonic_ns,
+            )
+        )
+    return tuple(failures)
+
+
 def _market_status(provider: _CountedMarketProvider, hub: GatewayMarketHub) -> dict[str, Any]:
     return {
         "provider_starts": dict(provider.starts),
@@ -2432,6 +2763,22 @@ def _market_status(provider: _CountedMarketProvider, hub: GatewayMarketHub) -> d
         "first_publish_ns": provider.first_publish_ns,
         "last_publish_ns": provider.last_publish_ns,
         "hub_readiness": dict(hub.readiness),
+    }
+
+
+def _market_terminal_status(provider, hub, stop_event):
+    hub_watermarks = {}
+    for key in sorted(provider.keys, key=lambda item: item.stream_id):
+        head = hub.head(key)
+        hub_watermarks[key.stream_id] = {
+            "epoch": head["epoch"],
+            "sequence": head["head"],
+        }
+    return {
+        **_market_status(provider, hub),
+        "source_publishing_stopped": stop_event.is_set(),
+        "hub_watermarks": hub_watermarks,
+        "watermark_captured_monotonic_ns": time.monotonic_ns(),
     }
 
 
@@ -3524,6 +3871,10 @@ def _strategy_process(
     account_refresh_duration_ms: float | None = None
     registration_lease_snapshot: dict[str, Any] | None = None
     market_receives: Counter[str] = Counter()
+    market_delivery_receipts: dict[str, dict[str, Any]] = {}
+    market_watermark_request: dict[str, Any] | None = None
+    market_watermark_result_sent = False
+    last_market_watermark_check_ns = 0
     last_sequences: dict[str, int] = {}
     last_epochs: dict[str, str] = {}
     e2e_samples: list[float] = []
@@ -3644,13 +3995,13 @@ def _strategy_process(
             }
         )
 
-    def read_market_events(*, pause: bool) -> None:
+    def read_market_events(*, pause: bool) -> str | None:
         nonlocal market_seen, duplicate_events, unrecovered_gap_count
         nonlocal unrecovered_gap_events, market_epoch_changes, max_queue_count
         nonlocal max_queue_bytes, max_market_poll_ms, market_poll_failure
         stream_id = market_poll_scheduler.next_stream_id(enabled=not pause)
         if stream_id is None:
-            return
+            return None
         key = next(key for key in subscribed_market_keys if key.stream_id == stream_id)
         client = markets[stream_id]
         poll_started_monotonic = time.monotonic()
@@ -3679,7 +4030,7 @@ def _strategy_process(
         max_queue_count = max(max_queue_count, client.queue_count)
         max_queue_bytes = max(max_queue_bytes, client.queue_bytes)
         if event is None:
-            return
+            return None
         epoch = event.header.stream_epoch
         sequence = event.header.sequence
         last_sequence = last_sequences[stream_id]
@@ -3695,6 +4046,11 @@ def _strategy_process(
             unrecovered_gap_count += 1
             unrecovered_gap_events += sequence - last_sequence - 1
         last_sequences[stream_id] = sequence
+        market_delivery_receipts[stream_id] = {
+            "epoch": epoch,
+            "sequence": sequence,
+            "received_monotonic_ns": time.monotonic_ns(),
+        }
         market_receives[stream_id] += 1
         market_seen += 1
         if market_seen % 128 == 0:
@@ -3708,6 +4064,144 @@ def _strategy_process(
                     slot = randomizer.randrange(market_seen)
                     if slot < market_sample_cap:
                         e2e_samples[slot] = latency
+        return stream_id
+
+    def snapshot_market_watermark_result(*, force: bool = False) -> None:
+        nonlocal market_watermark_result_sent, last_market_watermark_check_ns
+        request = market_watermark_request
+        if request is None or market_watermark_result_sent:
+            return
+        snapshot_started_ns = time.monotonic_ns()
+        deadline_ns = request["barrier_captured_monotonic_ns"] + 10_000_000_000
+        targets = request["targets"]
+        receipts_at_target = True
+        impossible_receipt = False
+        for stream_id, row in targets.items():
+            receipt = market_delivery_receipts.get(stream_id)
+            if type(receipt) is not dict:
+                receipts_at_target = False
+                continue
+            if receipt.get("epoch") != row["epoch"]:
+                receipts_at_target = False
+                impossible_receipt = True
+            elif type(receipt.get("sequence")) is not int:
+                receipts_at_target = False
+                impossible_receipt = True
+            elif receipt["sequence"] != row["sequence"]:
+                receipts_at_target = False
+                impossible_receipt |= receipt["sequence"] > row["sequence"]
+        if (
+            not receipts_at_target
+            and not impossible_receipt
+            and snapshot_started_ns < deadline_ns
+        ):
+            return
+        if (
+            receipts_at_target
+            and not force
+            and snapshot_started_ns - last_market_watermark_check_ns < 50_000_000
+            and snapshot_started_ns < deadline_ns
+        ):
+            return
+        last_market_watermark_check_ns = snapshot_started_ns
+        client_states = {
+            stream_id: _load01_market_client_terminal_state(markets[stream_id])
+            for stream_id in targets
+        }
+        runtime_state = {
+            "healthy": runtime.healthy,
+            "active_bindings": len(runtime.bindings),
+            "expected_bindings": initial_bindings,
+            "cleanup_failures": runtime.cleanup_failures,
+            "unregister_uncertainties": runtime.unregister_uncertainties,
+        }
+        counter_deltas = {
+            "duplicates": duplicate_events - request["duplicates"],
+            "gap_count": unrecovered_gap_count - request["gap_count"],
+            "gap_events": unrecovered_gap_events - request["gap_events"],
+            "epoch_changes": market_epoch_changes - request["epoch_changes"],
+        }
+        receipts = {
+            stream_id: dict(market_delivery_receipts[stream_id])
+            for stream_id in targets
+            if stream_id in market_delivery_receipts
+        }
+        sequence_cursors = {
+            stream_id: last_sequences.get(stream_id) for stream_id in targets
+        }
+        epoch_cursors = {stream_id: last_epochs.get(stream_id) for stream_id in targets}
+        failures = _load01_market_watermark_completion_failures(
+            targets=targets,
+            expected_stream_ids=tuple(targets),
+            receipts=receipts,
+            last_sequences=sequence_cursors,
+            last_epochs=epoch_cursors,
+            client_states=client_states,
+            runtime_state=runtime_state,
+            counter_deltas=counter_deltas,
+            barrier_captured_monotonic_ns=request["barrier_captured_monotonic_ns"],
+            caught_up_at_monotonic_ns=0,
+            check_ack_time=False,
+        )
+        ack_ns = time.monotonic_ns()
+        failures += _load01_market_watermark_time_failures(
+            receipts=receipts,
+            barrier_captured_monotonic_ns=request["barrier_captured_monotonic_ns"],
+            caught_up_at_monotonic_ns=ack_ns,
+        )
+        transient_prefixes = (
+            "receipt_coverage_invalid",
+            "receipt_missing:",
+            "receipt_behind_target:",
+            "cursor_behind_target:",
+            "queue_count_nonzero:",
+            "queue_bytes_nonzero:",
+            "pending_poll_replay_true_or_missing:",
+            "pending_poll_gap_event_true_or_missing:",
+        )
+        hard_failures = tuple(
+            failure
+            for failure in failures
+            if not failure.startswith(transient_prefixes)
+        )
+        deadline_expired = ack_ns >= deadline_ns
+        if hard_failures or not failures or deadline_expired:
+            final_failures = failures if deadline_expired else hard_failures
+            if deadline_expired:
+                final_failures = tuple(
+                    dict.fromkeys((*final_failures, "catchup_deadline_expired"))
+                )
+            snapshot = {
+                "complete": not final_failures,
+                "failures": final_failures,
+                "targets": {stream_id: dict(row) for stream_id, row in targets.items()},
+                "receipts": receipts,
+                "last_sequences": sequence_cursors,
+                "last_epochs": epoch_cursors,
+                "client_states": client_states,
+                "runtime_state": runtime_state,
+                "counter_deltas": counter_deltas,
+                "caught_up_at_monotonic_ns": ack_ns,
+            }
+            sent_ns = time.monotonic_ns()
+            snapshot["ack_sent_monotonic_ns"] = sent_ns
+            if sent_ns > deadline_ns:
+                snapshot["complete"] = False
+                snapshot["failures"] = tuple(
+                    dict.fromkeys(
+                        (*snapshot["failures"], "catchup_deadline_expired_before_send")
+                    )
+                )
+            control.send(
+                (
+                    "market-watermark-result",
+                    index,
+                    os.getpid(),
+                    request["token"],
+                    snapshot,
+                )
+            )
+            market_watermark_result_sent = True
 
     def run_order_cycle(cycle: int) -> None:
         nonlocal order_cycles, order_failures
@@ -4237,6 +4731,8 @@ def _strategy_process(
                     index=index,
                     market_receives=market_receives,
                     last_sequences=last_sequences,
+                    last_epochs=last_epochs,
+                    market_delivery_receipts=market_delivery_receipts,
                     order_cycles=order_cycles,
                     account_reads=account_reads,
                     e2e_samples=e2e_samples,
@@ -4273,7 +4769,7 @@ def _strategy_process(
 
             if control.poll(0):
                 command = control.recv()
-                if command in {("close",), ("close", "diagnostic")}:
+                if command == ("close",) or command == ("close", "diagnostic"):
                     if command == ("close", "diagnostic"):
                         _send_load01_rpc_diagnostic(
                             control,
@@ -4283,13 +4779,42 @@ def _strategy_process(
                             "emergency",
                         )
                     break
-                raise AssertionError("unknown LOAD01 strategy control")
+                if (
+                    isinstance(command, tuple)
+                    and len(command) == 4
+                    and command[0] == "catch-up-to-watermark"
+                ):
+                    if (
+                        market_watermark_request is not None
+                        or not stop_event.is_set()
+                        or type(command[1]) is not int
+                        or command[1] <= 0
+                        or type(command[2]) is not int
+                        or command[2] < 0
+                    ):
+                        raise AssertionError("LOAD01 terminal market request was invalid")
+                    targets = _normalize_load01_market_watermarks(
+                        command[3], subscribed_stream_ids
+                    )
+                    market_watermark_request = {
+                        "token": command[1],
+                        "barrier_captured_monotonic_ns": command[2],
+                        "targets": targets,
+                        "duplicates": duplicate_events,
+                        "gap_count": unrecovered_gap_count,
+                        "gap_events": unrecovered_gap_events,
+                        "epoch_changes": market_epoch_changes,
+                    }
+                    snapshot_market_watermark_result(force=True)
+                else:
+                    raise AssertionError("unknown LOAD01 strategy control")
             # Business work, control handling and progress publication happen
             # before one round-robin market poll. This prevents a serial sweep
             # of all twenty clients from running ahead of due work; one slow
             # synchronous poll can still pause this strategy loop, and its
             # duration is measured and preserved in diagnostics below.
             read_market_events(pause=pause_market)
+            snapshot_market_watermark_result()
             if slow_pause_observed is not None and elapsed >= 45:
                 slow_pause_observed.setdefault("pause_ended_seconds", elapsed)
             time.sleep(0.0005)
@@ -4321,6 +4846,8 @@ def _strategy_process(
             index=index,
             market_receives=market_receives,
             last_sequences=last_sequences,
+            last_epochs=last_epochs,
+            market_delivery_receipts=market_delivery_receipts,
             order_cycles=order_cycles,
             account_reads=account_reads,
             e2e_samples=e2e_samples,
@@ -4798,6 +5325,8 @@ def _strategy_stats(
     index,
     market_receives,
     last_sequences,
+    last_epochs,
+    market_delivery_receipts,
     order_cycles,
     account_reads,
     e2e_samples,
@@ -4843,6 +5372,11 @@ def _strategy_stats(
         "market_events": sum(market_receives.values()),
         "market_by_stream": dict(market_receives),
         "last_sequences": dict(last_sequences),
+        "last_epochs": dict(last_epochs),
+        "market_delivery_receipts": {
+            stream_id: dict(receipt)
+            for stream_id, receipt in market_delivery_receipts.items()
+        },
         "order_cycles": order_cycles,
         "order_cycles_by_account": {
             _ACCOUNT_REFS[account_index]: int(order_cycles_by_account[account_index])
@@ -6576,6 +7110,155 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             progress, expected_clients_per_strategy=expected_clients_per_strategy
         )
 
+        phase = "market-terminal-watermark"
+        terminal_token = time.monotonic_ns()
+        market_record["pipe"].send(("terminal-watermark", terminal_token))
+        try:
+            terminal_message = _collect_expected(
+                {0: market_record},
+                "terminal-watermark",
+                10.0,
+                "market terminal watermark",
+                progress,
+            )[0]
+            if type(terminal_message) is not tuple or len(terminal_message) != 3:
+                raise AssertionError("LOAD01 market terminal watermark identity failed")
+            terminal_market_status, terminal_watermark = (
+                _validate_load01_terminal_market_message(
+                    terminal_message,
+                    expected_token=terminal_token,
+                    expected_stream_ids=tuple(key.stream_id for key in market_keys),
+                )
+            )
+        except Exception as exc:
+            report["market_terminal_watermark"] = {
+                "state": "failed",
+                "error_code": _safe_diagnostic_code(exc),
+            }
+            _write_report(output_path, report)
+            raise
+        terminal_capture_ns = terminal_watermark["captured_monotonic_ns"]
+        terminal_deadline_ns = terminal_capture_ns + 10_000_000_000
+        report["market_terminal_watermark"] = {
+            "state": "captured",
+            "source_publishing_stopped": True,
+            "captured_monotonic_ns": terminal_capture_ns,
+            "source_sequences": dict(terminal_market_status["source_sequences"]),
+            "hub_watermarks": terminal_watermark["watermarks"],
+        }
+        phase = "market-terminal-catchup"
+        terminal_strategy_targets = {
+            index: {
+                stream_id: terminal_watermark["watermarks"][stream_id]
+                for stream_id in strategy_market_streams[index]
+            }
+            for index in strategy_records
+        }
+        for index, record in strategy_records.items():
+            record["pipe"].send(
+                (
+                    "catch-up-to-watermark",
+                    terminal_token,
+                    terminal_capture_ns,
+                    terminal_strategy_targets[index],
+                )
+            )
+        remaining_seconds = max(
+            0.0, (terminal_deadline_ns - time.monotonic_ns()) / 1_000_000_000
+        )
+        if remaining_seconds <= 0:
+            report["market_terminal_catchup"] = {
+                "state": "timed_out_before_strategy_wait",
+                "barrier_captured_monotonic_ns": terminal_capture_ns,
+                "deadline_monotonic_ns": terminal_deadline_ns,
+                "strategy_results": {},
+            }
+            _write_report(output_path, report)
+            raise TimeoutError("LOAD01 terminal market catch-up exceeded ten seconds")
+        try:
+            terminal_catchup_messages = _collect_expected(
+                strategy_records,
+                "market-watermark-result",
+                remaining_seconds,
+                "market terminal strategy catch-up",
+                progress,
+            )
+        except Exception as exc:
+            report["market_terminal_catchup"] = {
+                "state": "timed_out_or_failed",
+                "barrier_captured_monotonic_ns": terminal_capture_ns,
+                "deadline_monotonic_ns": terminal_deadline_ns,
+                "error_code": _safe_diagnostic_code(exc),
+                "strategy_results": {},
+            }
+            _write_report(output_path, report)
+            raise
+        collected_at_ns = time.monotonic_ns()
+        terminal_catchup_by_index = {}
+        terminal_catchup_failures: dict[int, tuple[str, ...]] = {}
+        for index, message in terminal_catchup_messages.items():
+            failures = []
+            expected_targets = terminal_strategy_targets[index]
+            try:
+                result = _validate_load01_strategy_watermark_message(
+                    message,
+                    expected_index=index,
+                    expected_pid=strategy_records[index]["pid"],
+                    expected_token=terminal_token,
+                )
+            except AssertionError:
+                failures.append("strategy_terminal_ack_identity_invalid")
+                terminal_catchup_by_index[index] = {
+                    "message_shape": len(message) if type(message) is tuple else None
+                }
+                terminal_catchup_failures[index] = tuple(failures)
+                continue
+            if result.get("targets") != expected_targets:
+                failures.append("strategy_terminal_targets_mismatch")
+            if result["ack_sent_monotonic_ns"] > terminal_deadline_ns:
+                failures.append("strategy_ack_sent_after_ten_second_deadline")
+            if result["ack_sent_monotonic_ns"] > collected_at_ns:
+                failures.append("strategy_ack_timestamp_after_parent_collection")
+            checked = _load01_market_watermark_completion_failures(
+                targets=expected_targets,
+                expected_stream_ids=tuple(strategy_market_streams[index]),
+                receipts=result.get("receipts"),
+                last_sequences=result.get("last_sequences"),
+                last_epochs=result.get("last_epochs"),
+                client_states=result.get("client_states"),
+                runtime_state=result.get("runtime_state"),
+                counter_deltas=result.get("counter_deltas"),
+                barrier_captured_monotonic_ns=terminal_capture_ns,
+                caught_up_at_monotonic_ns=result.get("caught_up_at_monotonic_ns"),
+            )
+            failures.extend(checked)
+            if result.get("complete") is not True:
+                failures.append("strategy_reported_incomplete")
+            reported_failures = result.get("failures")
+            if type(reported_failures) not in (tuple, list) or any(
+                type(item) is not str for item in reported_failures
+            ):
+                failures.append("strategy_failure_codes_invalid")
+            elif reported_failures:
+                failures.extend(reported_failures)
+            terminal_catchup_by_index[index] = result
+            if failures:
+                terminal_catchup_failures[index] = tuple(dict.fromkeys(failures))
+        if collected_at_ns > terminal_deadline_ns:
+            terminal_catchup_failures[-1] = ("parent_collection_after_ten_second_deadline",)
+        report["market_terminal_catchup"] = {
+            "state": "complete" if not terminal_catchup_failures else "failed",
+            "barrier_captured_monotonic_ns": terminal_capture_ns,
+            "deadline_monotonic_ns": terminal_deadline_ns,
+            "collected_at_monotonic_ns": collected_at_ns,
+            "catchup_elapsed_ms": max(0.0, (collected_at_ns - terminal_capture_ns) / 1_000_000),
+            "strategy_results": terminal_catchup_by_index,
+            "failure_codes_by_strategy": terminal_catchup_failures,
+        }
+        _write_report(output_path, report)
+        if terminal_catchup_failures:
+            raise AssertionError("LOAD01 terminal market catch-up did not prove delivery")
+
         phase = "normal-strategy-shutdown"
         for record in strategy_records.values():
             record["pipe"].send(("close",))
@@ -6643,6 +7326,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     "pending_waiters_after_collection": quota_wave_admission.pending_waiter_count,
                 }
             )
+        for index, terminal_result in terminal_catchup_by_index.items():
+            final_strategy = strategy_results[index]
+            if not _load01_market_terminal_cursors_match(terminal_result, final_strategy):
+                raise AssertionError(
+                    f"LOAD01 strategy market cursor changed after terminal ACK: {index}"
+                )
         phase = "normal-market-shutdown"
         market_record["pipe"].send(("close",))
         market_closed = _collect_expected(
@@ -6661,6 +7350,19 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             or market_status["active_provider_keys"]
         ):
             raise AssertionError("LOAD01 market source sharing or normal final release failed")
+        final_terminal_watermark = _validate_load01_terminal_market_status(
+            market_status,
+            tuple(key.stream_id for key in market_keys),
+        )
+        if (
+            final_terminal_watermark["watermarks"] != terminal_watermark["watermarks"]
+            or market_status["source_sequences"] != terminal_market_status["source_sequences"]
+        ):
+            raise AssertionError("LOAD01 market terminal watermark changed during normal close")
+        report["market_terminal_watermark"]["final_close_captured_monotonic_ns"] = (
+            final_terminal_watermark["captured_monotonic_ns"]
+        )
+        _write_report(output_path, report)
         phase = "normal-owner-and-durable-relay-shutdown"
         for record in owner_records.values():
             record["pipe"].send(("close",))
