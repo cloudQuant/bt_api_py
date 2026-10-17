@@ -1,0 +1,2274 @@
+{
+  "round": "R279",
+  "case": "ARB04",
+  "decision": "ROOT_ACCEPTED_FORMAL_PASS_WITH_FAILED_PYTEST_DISCLOSURE",
+  "decision_date": "2026-10-17",
+  "formal_clause": "Iteration 10 plan §770 / ARB04",
+  "formal_total_before_arb04": "52/68 after AFI06 R278 is accepted and recorded by Root.",
+  "formal_total_after_arb04": "53/68 with Root's ARB04 acceptance; the global tracker remains unchanged in this packet.",
+  "source_repository": "D:/bt_api_py, dev",
+  "source_head_at_packet_preparation": "394eacc58e2c61769e0c9b807284f6468137c8af",
+  "source_head_note": "This is packet-creation-time metadata, not the R3 execution source pin or the post-adjudication source commit.",
+  "source_commits": {
+    "preexisting_arb04_runtime_support": "2c2bb6abe4c83b21d77f8884ab7d2d589f47721",
+    "this_round_test_fixture_and_oracle_correction": "3e452f824bfdd5484c450f405533c219d9604d97",
+    "this_round_parent": "9874cba96a30475c6bd24e816278218df0e433c8"
+  },
+  "evidence_level": "ROOT_ACCEPTED_LOCAL_SYNTHETIC_PROVIDER_REAL_SERVICEHOST_SQLITE_AND_LOCAL_SOCKET_BUSINESS_EVIDENCE; original failed pytest results preserved with read-only SQLite posthoc evidence",
+  "archive_creation_time_note": "raw-evidence.zip preserves packet-preparation-time records and pins. Its internal source-scope record predates commit 3e452f82; this outer manifest and root-adjudication.md provide the post-commit source distinction and Root adjudication without rewriting execution history.",
+  "raw_evidence_zip": {
+    "path": "raw-evidence.zip",
+    "size": 1404412,
+    "sha256": "21EB8B6985999C27768597365A1095CF91A891E401592C70331FCE7157771D82",
+    "member_count": 433
+  },
+  "runs": [
+    {
+      "round": "R170",
+      "output_path": "D:\\temp\\it10arb04-20261016-r1",
+      "selector_or_scope": "two accepted reply-loss nodes and ARB03/R121 regressions",
+      "exit_text": null,
+      "result_sha256": null,
+      "stdout_sha256": null,
+      "stderr_sha256": null,
+      "junit_sha256": null,
+      "summary": "Root accepted prior sourcefake/service-host evidence; raw adjudication and review are in ZIP."
+    },
+    {
+      "round": "R2",
+      "output_path": "D:\\temp\\iteration10-arb04-duplicate-fill-focused-20261017-r2",
+      "selector_or_scope": "test_arb04_duplicate_provider_fill_replay_is_durable_idempotent",
+      "exit_text": "1",
+      "result_sha256": "4E0E5DCD7A631CA9BB5550F2706CF25F4516A701EF59729EBFF6A8E615BACD7D",
+      "stdout_sha256": "A1EF05416D705E0FF803798DBE1AD9B71BF5679CE12349DC027C603AB929D20A",
+      "stderr_sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "junit_sha256": "50A301B215189D7DB691AB8E0A2140B9135132963924F4DA1DE0AEBE7390A0E5",
+      "summary": "pytest remains failed at a post-run wrong-database/table oracle; original offline adjudication included."
+    },
+    {
+      "round": "R3",
+      "output_path": "D:\\temp\\iteration10-arb04-late-fill-focused-20261017-r3",
+      "selector_or_scope": "test_arb04_unknown_late_fill_explicit_query_resolves_original_hold_once",
+      "exit_text": "1",
+      "result_sha256": "3464D7C879ED57C2F2176E9593B9A0442B036BDA62D7A8BFE6897C80EC7D3EA2",
+      "stdout_sha256": "882603C213026C048102BBA1877F6C15E14723790174E9DECE3E72BF5B954459",
+      "stderr_sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "junit_sha256": "A1E43E3948A200E09582F6F4FBEA0CB9DABB11D81640949686499322E17A9B0D",
+      "summary": "pytest remains failed at final invalid provider_cancel_dispatches SQL oracle; earlier business assertions ran; read-only SQLite posthoc included."
+    },
+    {
+      "round": "R8",
+      "output_path": "D:\\temp\\iteration10-arb04-socket-disconnect-focused-20261017-r8",
+      "selector_or_scope": "test_arb04_group_cancel_real_socket_close_reconnects_for_original_resolution",
+      "exit_text": "1",
+      "result_sha256": "7229D877083A02499F0FC0594A50830B84B46283267662DC9A29BA24E8D21167",
+      "stdout_sha256": "4AC6F3B7472727E2F779BB9D52AA99B27D25A67BF7D1BBBBD9FF4332DEC52097",
+      "stderr_sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "junit_sha256": "FD2D3EFD5294716609D824E94AE33D886AF18D37FD9FA0091689644567A26E16",
+      "summary": "pytest remains failed at observer-counter oracle; socket SQLite sidecar included."
+    }
+  ],
+  "source_correction": {
+    "executed_r3_test_sha256": "B250E5C99E2BEC61CEA7B2028FAA8A987568E4FEC042153A5C23EE7FAEC710AC",
+    "candidate_test_sha256": "25560B99246B2FBA539153C777A0AEA0D3640C9A9934F8026BDF273F5FBDDC55",
+    "candidate_test_execution_status": "NOT_EXECUTED; R3 executed the source pinned by executed_r3_test_sha256 and its original failed result is preserved.",
+    "only_r3_delta": "replace final provider_cancel_dispatches SQL assertion with a two-line comment; no rerun",
+    "selected_head_patch": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\arb04-r279-selected-source-current-head.patch",
+      "size": 77294,
+      "sha256": "699BBABC4897339FCD5757EC7EF315517EECA37BF2FAF46EF88FFFF3830DEEA5"
+    },
+    "r3_oracle_patch": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\arb04-r279-r3-oracle-correction.patch",
+      "size": 751,
+      "sha256": "E23AB134AF5521BD7CEDF681B8784DF679BAC0217EE83D16492239540D5F502B"
+    },
+    "source_manifest": {
+      "path": "D:\\bt_api_py\\.codex-tmp\\arb04-r279-source-manifest-20261017.json",
+      "size": 3154,
+      "sha256": "DACC5894793CD50836AAB6052C6743D73B54BDCDEDEC6270654299B4CD2BC16E"
+    }
+  },
+  "review": {
+    "independent_reviewer": "dim05_roll_exit_review",
+    "conclusion": "Root accepted the local synthetic §770 business evidence from R170/R2/R3/R8 with each failed pytest result disclosed and sidecar facts limited to what they observe. No broader external venue/link recovery claim.",
+    "root_correction": "R3 account-level group-authority dispatch holds are zero, but coordinator budget_state remains HELD in PAIRED. R8 cancel record remains UNKNOWN; target order is terminal CANCELLED/no-fill and original-order Risk proof resolves the hold."
+  },
+  "limitations": [
+    "R2 duplicate-fill and R8 socket-disconnect pytest results remain failed; original raw JUnit/result bytes are not rewritten.",
+    "R3 pytest remains 1 failed at final invalid provider_cancel_dispatches SQL oracle; preceding business assertions ran and copied-SQLite read-only posthoc facts cover persisted state.",
+    "R3 group is PAIRED with residual zero and budget_state HELD; it is neither CLOSED nor a claim of full budget release.",
+    "R8 cancel record remains UNKNOWN; only target order terminal CANCELLED/no-fill was proven and its Risk proof resolved the hold.",
+    "Provider leaves are synthetic. No real venue/account/network or broad external recovery is proven.",
+    "The author-local cancel-reply-loss Host result lacks raw/JUnit and is not required.",
+    "R194 is ARB03 and R204 is BT02; neither is credited to ARB04.",
+    "No test or Host rerun was performed to obtain a green result. Formal tracker/progress files are unchanged."
+  ],
+  "archive_members": [
+    {
+      "path": "R170-accepted-source-evidence/accepted-group-projection-import-r1-20261017.md",
+      "size": 4050,
+      "sha256": "3EEE208A22DAE2A9A94192B8DAFA856F99F5D9376329AA51C77FCACA8184E1E2"
+    },
+    {
+      "path": "R170-accepted-source-evidence/duplicate-fill-r2-offline-adjudication.md",
+      "size": 5559,
+      "sha256": "5D3E118A40F83B08EF6E33E6C34A0692418355ED85B1BCEE6DC046778BE88127"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/00-after-pins.txt",
+      "size": 1337,
+      "sha256": "90F3023FD8150BA5699738C2F7A4B3FA93D04E7A97BD27608FB1436403D5B6F7"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/00-before-pins.txt",
+      "size": 1266,
+      "sha256": "0A4CE0BFD9DA1A4D0BF6034F5FBE6C9ED9EC8A06022A7E4247A45A71F73F9CB1"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/01-command.json",
+      "size": 1751,
+      "sha256": "41BA4466190D4DEAFD4C4C5A828267F328E483E551F87D1495BB9AEC156578D9"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/02-results.txt",
+      "size": 2984,
+      "sha256": "53F8EFBC5463AE0CC320A7E8CD635B1F8FD7F50DFC5F2678011698B7AA8F72FB"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-arb03-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-arb03-junit.xml",
+      "size": 556,
+      "sha256": "938007C27DF96E06CF2F166F7658A035A794FBFE81EC576B6CC2C3C3DA245660"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-arb03-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-arb03-stdout.txt",
+      "size": 633,
+      "sha256": "8A2DA86416704E51590A5586CA586124D22A44B2B6E7973E760941BEF5EB0098"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-r121-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-r121-junit.xml",
+      "size": 393,
+      "sha256": "AEDCC59F978C3E6E098C69190D227B04608972509DF089C2A43F599FDB4BA5E3"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-r121-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/regression-r121-stdout.txt",
+      "size": 632,
+      "sha256": "FD1EE7A766322C4427DB1260106AD34EBBECABC95B93DD791D31DDC390A63D89"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run1-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run1-junit.xml",
+      "size": 569,
+      "sha256": "4859B7A319E0CA0ECE26CD7C410DDBC6790EADBC5E770419DF4D76F6DFFE40A6"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run1-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run1-stdout.txt",
+      "size": 632,
+      "sha256": "A89FE8D7198DE5B69C800D721FF296C7035F4D3A8CE6910E485301834CBBE91E"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run2-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run2-junit.xml",
+      "size": 569,
+      "sha256": "8CCB9F32C4146F8CAAF6C3A6EE1BB7F972421A0B2ABFCE7F067C73CAFA63076F"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run2-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/r1/run2-stdout.txt",
+      "size": 632,
+      "sha256": "53993F4D5C876E916486D65B93B666196DE17CFCCC404BA5A012E01EBF82174E"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/00-after-pins.txt",
+      "size": 272,
+      "sha256": "E269BE8AEA46B374BB6720B697D80318301DF9425AD346DBC48F169736B29988"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/00-before-pins.txt",
+      "size": 272,
+      "sha256": "E269BE8AEA46B374BB6720B697D80318301DF9425AD346DBC48F169736B29988"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-arb03-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-arb03-junit.xml",
+      "size": 556,
+      "sha256": "FA8E08A64CF7886C57439D9DC6C08F777C0BCC602955AE7CAC831934A7438728"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-arb03-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-arb03-stdout.txt",
+      "size": 641,
+      "sha256": "A03C1E5B66CC918993BD45755C3FC3EA78A89CFE9F8D0CC272D7533141FD355E"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-r121-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-r121-junit.xml",
+      "size": 394,
+      "sha256": "B0EAFD4E7C0163D7FB27C6864D09A000F045AC9F95F470C054885530A4C8B438"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-r121-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/regression-r121-stdout.txt",
+      "size": 640,
+      "sha256": "06C5E40C2CD0E464A204F6984A471A6A29C8E56D5AB7F5E93AEE200B15F7E9DF"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run1-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run1-junit.xml",
+      "size": 569,
+      "sha256": "4B67A409AE044CC9C9932104C52E386518DEBCC2238635CF1CFEC8DDED73B7DC"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run1-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run1-stdout.txt",
+      "size": 632,
+      "sha256": "C1F2B1D678B191D75B6827C3E76B6B5DA22C3EC86D0266DE66F97FDE447B5EDB"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run2-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run2-junit.xml",
+      "size": 569,
+      "sha256": "545D79F4AB4A34604593E8A3FA266C4BF319BE33DF6232DA112B6B2713C3241F"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run2-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-accepted-source-evidence/qa/staging/run2-stdout.txt",
+      "size": 632,
+      "sha256": "78214C72808D519BCB047C360FA74FB79C31DDBEB59F84090DD5B5638E9594C2"
+    },
+    {
+      "path": "R170-accepted-source-evidence/review/independent-review.md",
+      "size": 17040,
+      "sha256": "DAA2B122EF1BBE22AB0D5E2590D5F7E0F6ACD1840DF62F4AA9B3AADF58CD1432"
+    },
+    {
+      "path": "R170-accepted-source-evidence/root-adjudication.md",
+      "size": 3220,
+      "sha256": "302AF06DF9A26DD2BE2F97C9BD5CB8727606BDF8F726D9A0F4E27FC908CA8E67"
+    },
+    {
+      "path": "R170-accepted-source-evidence/source/arb04-live.patch",
+      "size": 54857,
+      "sha256": "5DC01B453DB28DCD8D43BCFCC05EEDE1AA659F0DBCE67D1886B77F23695BF4B4"
+    },
+    {
+      "path": "R170-accepted-source-evidence/source/author-status.md",
+      "size": 7707,
+      "sha256": "079A3B2CBE3A910B1DD56D3912ABC91F6FB8F094FFAFED13237C3A80A74566FF"
+    },
+    {
+      "path": "R170-original-focused-run/00-after-pins.txt",
+      "size": 1337,
+      "sha256": "90F3023FD8150BA5699738C2F7A4B3FA93D04E7A97BD27608FB1436403D5B6F7"
+    },
+    {
+      "path": "R170-original-focused-run/00-before-pins.txt",
+      "size": 1266,
+      "sha256": "0A4CE0BFD9DA1A4D0BF6034F5FBE6C9ED9EC8A06022A7E4247A45A71F73F9CB1"
+    },
+    {
+      "path": "R170-original-focused-run/01-command.json",
+      "size": 1751,
+      "sha256": "41BA4466190D4DEAFD4C4C5A828267F328E483E551F87D1495BB9AEC156578D9"
+    },
+    {
+      "path": "R170-original-focused-run/02-results.txt",
+      "size": 2984,
+      "sha256": "53F8EFBC5463AE0CC320A7E8CD635B1F8FD7F50DFC5F2678011698B7AA8F72FB"
+    },
+    {
+      "path": "R170-original-focused-run/regression-arb03-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-original-focused-run/regression-arb03-junit.xml",
+      "size": 556,
+      "sha256": "938007C27DF96E06CF2F166F7658A035A794FBFE81EC576B6CC2C3C3DA245660"
+    },
+    {
+      "path": "R170-original-focused-run/regression-arb03-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-original-focused-run/regression-arb03-stdout.txt",
+      "size": 633,
+      "sha256": "8A2DA86416704E51590A5586CA586124D22A44B2B6E7973E760941BEF5EB0098"
+    },
+    {
+      "path": "R170-original-focused-run/regression-r121-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-original-focused-run/regression-r121-junit.xml",
+      "size": 393,
+      "sha256": "AEDCC59F978C3E6E098C69190D227B04608972509DF089C2A43F599FDB4BA5E3"
+    },
+    {
+      "path": "R170-original-focused-run/regression-r121-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-original-focused-run/regression-r121-stdout.txt",
+      "size": 632,
+      "sha256": "FD1EE7A766322C4427DB1260106AD34EBBECABC95B93DD791D31DDC390A63D89"
+    },
+    {
+      "path": "R170-original-focused-run/run1-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-original-focused-run/run1-junit.xml",
+      "size": 569,
+      "sha256": "4859B7A319E0CA0ECE26CD7C410DDBC6790EADBC5E770419DF4D76F6DFFE40A6"
+    },
+    {
+      "path": "R170-original-focused-run/run1-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-original-focused-run/run1-stdout.txt",
+      "size": 632,
+      "sha256": "A89FE8D7198DE5B69C800D721FF296C7035F4D3A8CE6910E485301834CBBE91E"
+    },
+    {
+      "path": "R170-original-focused-run/run2-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-original-focused-run/run2-junit.xml",
+      "size": 569,
+      "sha256": "8CCB9F32C4146F8CAAF6C3A6EE1BB7F972421A0B2ABFCE7F067C73CAFA63076F"
+    },
+    {
+      "path": "R170-original-focused-run/run2-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-original-focused-run/run2-stdout.txt",
+      "size": 632,
+      "sha256": "53993F4D5C876E916486D65B93B666196DE17CFCCC404BA5A012E01EBF82174E"
+    },
+    {
+      "path": "R170-staging-focused-run/00-after-pins.txt",
+      "size": 272,
+      "sha256": "E269BE8AEA46B374BB6720B697D80318301DF9425AD346DBC48F169736B29988"
+    },
+    {
+      "path": "R170-staging-focused-run/00-before-pins.txt",
+      "size": 272,
+      "sha256": "E269BE8AEA46B374BB6720B697D80318301DF9425AD346DBC48F169736B29988"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "B0B761617753E821C0FF8AF86453947435D747513EFF542B9631B3ACE86952DE"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "CBF6956ED1EEFBA2172632E8C4B2EFC8F3AD893C15B76D762A21E574AF7B97CB"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "1BA009244D84407CDBDE3C44B3309F7992843AAA52F92366D7A54D31A168CAF7"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-proof.sqlite3",
+      "size": 36864,
+      "sha256": "874DAC4F34E21D963570B27B60EDA1316551FD31286CD4E7DF21B0032F7D8B5E"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "98E2E03C5384E8833FAFA86585A012222B9DEBC8C9C7E665EC280B486AEBBDC8"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "4BA65F050CF3AD8C1D9F0318AFC470BE21BE29D223F2EF46E68DC21AF8FAA8AF"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "40BBAAD42B1C1A62BC837C952DF96F0E1879EA1F85698BF0A82A9599003D7CDD"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "427825E898FCE357A792768B2907F5E58123BDFB80D733046929892A922E5797"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "1EC8E3D0CF4A8FB6BBEA3883B96BEACA3DA7978E8FE40F6C884716535FA2AC20"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-execution.sqlite3",
+      "size": 524288,
+      "sha256": "D69D4EEBDE49A17C65357BFA5074DD49C02CAC584E11D6194D807862AE5F8A3E"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "113F58D6B33264F53D610D86383BBA3F88C9A10D5BF6F1E4EE41B48DBAEF5404"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-proof.sqlite3",
+      "size": 20480,
+      "sha256": "D1FA129127EE60CBF259EB9A1FB66EF74C267245FD62F40C919F5286CE8D5D8C"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "72AC8FA06D8FD836557693F612C210BA3E810FB5AEA531A48F535AE200D7724B"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "8338161CCCD98D5D2D4270A5FF1F319DE239F1E15BBFDC47DC5816499F992D45"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "28FC32B6A333693FD296561BD574646295CB962BE24695E15DF5EA1899BF6BE0"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/account-b-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "8553D53D9D8B7A931C75741CC596AF808A0976BA9524D393F632F3B4943F5D50"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/coordinator-groups.sqlite3",
+      "size": 61440,
+      "sha256": "52AD50110BE8A094644A4B5BF38C581F7DDC16CDFD281E9CE03A951BB1614AA8"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "E1E53272AE5C138ADDE865C6C7D71C1E4A258B37AE8FEB16B2541608BAB76C8A"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_late_fill_after_rep0/coordinator-run-bindings.sqlite3",
+      "size": 12288,
+      "sha256": "A5E91AB0D1705654BB1B9276F2D0107F416D3765A925730E320C8C108CF8F790"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "07C33C8F1B08C13D375EA14C196B78676765E5E5DB1842E005D0C9F20D4EF734"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "DF1AC0665DB069107D452C959442E49E7EB66662DA8309E60495B3708AF6F0CD"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "98710CCDBABED6FF6C7656FDD8C3B11C2AB7FA447BFA4CD7B85AD295DB719378"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-proof.sqlite3",
+      "size": 40960,
+      "sha256": "A032567F00BF7B23CEE6D2E8E004D107E891482D7C2657A2C0CBA5548CB47C4F"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "50BAB4DF18208960E92CBB9A29994EC4E66367AFC1391FF4977DB0AA03782D23"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "D278126E0FF37C654A86CA0E9D796681F023C996846D7C23DCC5C0620ACBC401"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "E7EAEB03B8401E5BE27F22E482DA809F8C8EC964B8939585DC653CD909DED454"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "427825E898FCE357A792768B2907F5E58123BDFB80D733046929892A922E5797"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "C61452E77AAE10D20224F5BDE660EC3FA4A4C2CE9135FEC34C26CE7252705E6C"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-execution.sqlite3",
+      "size": 524288,
+      "sha256": "DFBCDD54E9CD4E484539B0CB8F1B8527FCCB67F838270F59686B76A0AF78DC1F"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "CBA1C8DE1A3FA23E8873AFC23D64BB96A821FF9076A31FEA7A156407BD227428"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-proof.sqlite3",
+      "size": 40960,
+      "sha256": "368692EDFFA908965B0BB91B27B4A7A1E79F93280A3F1EDE7289EE7176C1D366"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "C9C24754FF30F9D42C740D951DBAB5A1ACF33BEA7B86EA9BE86779A133F3307D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "52E933DE68C7AA15BA21721501413A450651D3D96041921096AC49B79C3E6C31"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "A1C7257CB48372F30BEDA4927BB22D2B53966FD55C991DDF85DED8962789D275"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "04F27CA4CCBE12A02CE4AA17D8A533AF3BAF4C77E0A431A2D86C439C4D22969D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/account-b-risk_order_journal.sqlite3.df5ec0455c7746c0e8c9182e66c65ec6c9cfca8813b5c04a3b28eaad7800a99e.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/coordinator-groups.sqlite3",
+      "size": 77824,
+      "sha256": "649E89BF8C113320AB9A9E313D5CF8D3FECACEBF069084D836672A9FDF1676A9"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "96E8612AA3401C05C9BAD58A5FD8B656A9FDC3ED9E5562164675FB77861DA69C"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas1/test_arb04_reply_loss_first_le0/coordinator-run-bindings.sqlite3",
+      "size": 12288,
+      "sha256": "5B9F6302F1F511323C2B46D4A60CF932CCD46C4CFD7DEF92CD5D1ED7C5797A48"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "DB0BD0A0AC3D25819D5E1EAA317C33CC111F519158260DF2D0E1D40B55ED0D54"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "B38B4E50E97D5D7AB876B3F7CC0C39754A7F8B056DCB80C2477611C9CF297302"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "87523AB3FD5A843692436AACCE7D1833B0DFE2D8EFD256C73B119049910960E4"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-proof.sqlite3",
+      "size": 36864,
+      "sha256": "333EF556EADBB6F9BCB7293723EEA81A1DAF6F55CB93EDA5605FE5D1105AA6C7"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "5576F94F96AC82EBBA375F16F1A13D8F28DEAD6A4922DA9ED7C21F9CC2D648D8"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "93AE1E2843D42C3E3E49C38D260648222290EAFF808666DFC34175B4369B05AB"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "5CD9389140A7072B5CF0DB2171F5081D87E5D393801BB5149B175C76DE286FF4"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "427825E898FCE357A792768B2907F5E58123BDFB80D733046929892A922E5797"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "BE3F37953BA3C4AEB22DBADC274A1A6AD6D33135E939EB84F49541898E51B980"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-execution.sqlite3",
+      "size": 524288,
+      "sha256": "918EEEC7D053C6C906967307BDC3EB90EF252CDA8E2104618C17030EF37FE986"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "686C53620565C97E118907F8B573D212FF62CC28F39896539464024B5C759B83"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-proof.sqlite3",
+      "size": 20480,
+      "sha256": "436FE70CCAC987BF0DA074421F026A55385356DF564EE23260003E666519FBC9"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "72AC8FA06D8FD836557693F612C210BA3E810FB5AEA531A48F535AE200D7724B"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "05E57AB1D4E2C205CF9D33FF93C4A5DE61A26DA44A24B05C1AD2675F4F38B319"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "AF5196337DF0FA51C4C024BB424FD231F3A9E79D4830DED37F224D2C879F4901"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/account-b-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "8553D53D9D8B7A931C75741CC596AF808A0976BA9524D393F632F3B4943F5D50"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/coordinator-groups.sqlite3",
+      "size": 61440,
+      "sha256": "277669EAB74ECD3FAF79BAC7F3CFA7DD9CF60C65E1816AC30F398C73FE470779"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "38BABBAF4AF650807B022116935926847FB3B6B05CBE2012FC43F8F7E0540F16"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_late_fill_after_rep0/coordinator-run-bindings.sqlite3",
+      "size": 12288,
+      "sha256": "BE072C800B003096536618CA6313896D5F3122DE5EF6EC40F64C441373A28AD0"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "7D858F50D546444A0CC442F04C2AC8ED812C57BB1BE1A24D1D6B5CCC07BC3628"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "74995F56F2320923DC7FF63DFDC5F57417B546D08BADA7804E52597A56C78C39"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "FC20C3BBA1FBB5F331A2429732CCB03E7FE3FA2FC25E3F68059F773F422CF152"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-proof.sqlite3",
+      "size": 40960,
+      "sha256": "49DD1C4B10F58ED65444BF63C677EF82600C92D357EA820E6FC146E0864BB45A"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "4B0182E0698CF82AD6BE4FD9842A661EC57EE77CF897124729EB59BA5B4902EC"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "D5CB07FB20BBBE739A8D2A39856D6281C9EE615FA952E205EC4AEC6225CB5039"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "6D356E59C23A51EC61A7ED2DC5DDE53DF391602BF7DA807BD58609FCA17924AC"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "427825E898FCE357A792768B2907F5E58123BDFB80D733046929892A922E5797"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "6E41094FAAE99582F6111BD7DE55E9864C4C815697673146F3D4D70153178526"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-execution.sqlite3",
+      "size": 524288,
+      "sha256": "F16F6CA4C214A775A6ABE92C15D96CA942A446C8C24B9A0E42F98A6EF74F229F"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "1AD26FCB295350293C5CF84FBFC2723622BC227CF83ECE72A25070029995E464"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-proof.sqlite3",
+      "size": 40960,
+      "sha256": "8F9D824C50A16A8E4B08D88E0FC9030EF3CFAE3FF5C39E4EBA4C56957C5E4107"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "734003DDD19BBC0103F8A065271DC56C757CA34A7B1127E23AC8DC6458ECD54D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "FF7203C4FCE36B7DA9CD2349D504B8ED5D09F690A5073E50C689279BEB32C0C1"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "70A479F541FE9DD3C07E6A2A27F5570AF47B64220C3B061E6DA0E70FF021FC5A"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "04F27CA4CCBE12A02CE4AA17D8A533AF3BAF4C77E0A431A2D86C439C4D22969D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/account-b-risk_order_journal.sqlite3.df5ec0455c7746c0e8c9182e66c65ec6c9cfca8813b5c04a3b28eaad7800a99e.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/coordinator-groups.sqlite3",
+      "size": 77824,
+      "sha256": "96FBCFB9F45A8DE94384895B308FF6AC6F90445563434293B500250CAE23BC05"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "11694B065F0EFAA4C8B8D5AD3AC2473DA39C19B0DEFA13A5ED0E47F5B2F921F1"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas2/test_arb04_reply_loss_first_le0/coordinator-run-bindings.sqlite3",
+      "size": 12288,
+      "sha256": "6EBE75F4A65501D54DA7EE328F8330CD886E48D28B75808DD7CA956C90BF183E"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "DB4F0964AE0BEAE63B288003AEB19FAC78A3648353503FF4908F35768A24FD55"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "1961D46045AEA2F75E007FB1FFA00D48D3EE9CEA73CC25E3EBEBDB21CBC96E9F"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "1B4A52E913DDB9380A331496A8DF1B7F6ED941115CA880DB799E3FAB3DE48C64"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-proof.sqlite3",
+      "size": 40960,
+      "sha256": "477B31B7F134E636B61E63EABE2F024C85F3373AAA43E4BFB8499AE92255891F"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "D0652F586C3319B1AFBEAF772B2193C5A49801B7DA198142A6719DAC0ECAC15A"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "C78C21B3EDECC526B1A22BABF29A98AFC40E5C76819E905E34AD2222E80E4321"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "EBFB5309D4EC9C9861DB0ABF4EA1C9CF4541E64BFB668C93CDF5E3F1EEABE4F7"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "B0C80CF77636A1C85563266534BEADA10097BD24536D02B3A84296831A754608"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "BD10992BCEC6FD2C2F756AF13270260AD9AEB36F5338D06977039208BE9AD39E"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-execution.sqlite3",
+      "size": 524288,
+      "sha256": "40193ECA843BD59BCDCA3432AEE41256520F120C7DF6EC22A57FD710802F735A"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "30C961CFEB7A3E1848AA98CD2BF347CCCBE104599B93697409D2D282D83DE7A7"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-proof.sqlite3",
+      "size": 40960,
+      "sha256": "7ADA2CFE236EA5F9DA3BE4AC5E802A72BD02A9678D47588A95DE019B50F5A714"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "077716C5BFAB8D821E290F60A386BF4CF8E653D00CA6BC0BA127848AD862B320"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "211CDF0E64EF3FAE3D3131BC7805798E9D37E330C3068CFE2025DC92F2ED26E3"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "785193837140E04CCD9BC9F96DAABE4627C0AB76A6FD915FCBC9F82B2C387361"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "04F27CA4CCBE12A02CE4AA17D8A533AF3BAF4C77E0A431A2D86C439C4D22969D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/account-b-risk_order_journal.sqlite3.df5ec0455c7746c0e8c9182e66c65ec6c9cfca8813b5c04a3b28eaad7800a99e.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/coordinator-groups.sqlite3",
+      "size": 77824,
+      "sha256": "8E2073F90C0E4D493CE97F3D62FAA504E4A61D04920E9B5D03E9501F19417F1D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "63D2A4ABC19C40EAE118D1D05336F0357B797860A8D14E1F787F7C266A61E1A2"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_arb03_partial_cancel_firs0/coordinator-run-bindings.sqlite3",
+      "size": 12288,
+      "sha256": "1A8F5C94CFA3E8A7F9435B7E9D0D20F34B93102EEAF2FE6A0C31377E7BF4AE32"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "0AA571985C204B3565402F77B0F00D3A2E81F72E666BBEED8596B13630677C05"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "4DC14D14D9D55E4672E01DE1360C16075C0D0A7A3F1C30BF2A69D0DB3AA9A718"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "FFE82D64C9E77B6BB6EE62438D63CB0C08DA4B614C5DB168E3B992BCB95319AF"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-proof.sqlite3",
+      "size": 61440,
+      "sha256": "00C170324D2C4041B14C1F691E65F7FEB8967DBB62A77ADB9D21461688536444"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "D50AE79066BDDCF40A869A9F49C6D2374C168923233C4114742E2778B2223021"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "6147E230DD8446B02A14E9DA156500F8A6BDC9BD12E59377F7CEF1C96C55B0E9"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "9ACF11289072D49B8B294DC71CAA417FBEF9407B9A0302591F98CDA0119EEB18"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "48F50147B4963B60B4FD498EA9F28C8FEAC8A3C074C34EB2A323F6EBAB2CCB41"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/coordinator-groups.sqlite3",
+      "size": 69632,
+      "sha256": "28FF25A3C3130D7E54865EC47156AA6E5821909748C0AF3E0F46BAD88FD3A43B"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "9E7FC7256A548110487ADCF16F307569D87992B9817B6849D1F071D71BF90210"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas3/test_dim05_single_account_dual0/coordinator-run-bindings.sqlite3",
+      "size": 12288,
+      "sha256": "62CD71486C24CA2523F4815188724974A080ABB05743124D6897FC718D0FF04F"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-accepted.sqlite3",
+      "size": 28672,
+      "sha256": "B79C6265AB4AB7746BE2F5C759B2ED3CA960C4A414DABE2FEE3374DF5F5F975E"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "8598CB31B44B0D75D83BD2E5B72A0C70449DA3A8D4102F1398647C288457E7E1"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "4C9F02A5D8BA4A47997DBCC1B969781342A6FF1890EF2B57441E59A286E00268"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-proof.sqlite3",
+      "size": 61440,
+      "sha256": "54BC51B493093C6E36FB060FE451A7C95E7F5C0653A53D77C27DDC99603E0F0F"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "4B4DFA68FD662407C1C491CE2955B2FABF411C317D98ED9EA472DD2FBEAAF520"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "CD2FEDBECDABAE5D4BF2F4ADBB30AB984E09D6BE9ED862142DC6BCDAD9909E24"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "4602247B4BB4F35223925F8847D9C2ED10A71F1EA1751A7DDA1A57A352A58AD8"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "48F50147B4963B60B4FD498EA9F28C8FEAC8A3C074C34EB2A323F6EBAB2CCB41"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-accepted.sqlite3",
+      "size": 28672,
+      "sha256": "DF5EA510E5BD5C04A9520D7C93638ED04416BF83146EC0C7F0E3C29B04BA0804"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-execution.sqlite3",
+      "size": 524288,
+      "sha256": "7A31489F87669B9070BD6743174E454B04734EEEE79C42574424C3CC0155EFB7"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-group_authority.sqlite3",
+      "size": 40960,
+      "sha256": "8019F1983A4B426AD8B4BB1BA7463B8A206D286777136E38E3A1AC2685AAA83E"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-proof.sqlite3",
+      "size": 49152,
+      "sha256": "7F247BFC9DB8DA9FA7783099CB429342A47C5FF6DA2ED24E24761C39BCCB79B8"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "55E633543455D186144E8362D0AA585171E45D241C9BA8C67B2804198082C354"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "119CA5EC05455043E9593AE37485B2471B542A196C1150785DB34519D7694943"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-risk_gate.sqlite3",
+      "size": 253952,
+      "sha256": "B598C88D59FEBE693CACF4963BC20CFD5C46276780282460B355533978ACC049"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-risk_order_journal.sqlite3",
+      "size": 77824,
+      "sha256": "7AD857B6439929B05AE367D38AD381ABCDFF5A29DB754A06304C1D982B1B4CBB"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/account-b-risk_order_journal.sqlite3.df5ec0455c7746c0e8c9182e66c65ec6c9cfca8813b5c04a3b28eaad7800a99e.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/coordinator-groups.sqlite3",
+      "size": 102400,
+      "sha256": "60E95D51A79DBECCAC135B84A4D1B217692343D5952B9F6057C427B57D457106"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "0497995F3DDA0E63F97EBA03AF1345746D99C0BAFC7065CB777EBF8FAB6D6FDD"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R170-staging-focused-run/bas4/test_spawned_curve_group_hosts0/coordinator-run-bindings.sqlite3",
+      "size": 20480,
+      "sha256": "9CE76AAB11C89BBC8185A604E784A44BC105AC48A801806F9E212106D6148C36"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-arb03-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-arb03-junit.xml",
+      "size": 556,
+      "sha256": "FA8E08A64CF7886C57439D9DC6C08F777C0BCC602955AE7CAC831934A7438728"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-arb03-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-arb03-stdout.txt",
+      "size": 641,
+      "sha256": "A03C1E5B66CC918993BD45755C3FC3EA78A89CFE9F8D0CC272D7533141FD355E"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-r121-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-r121-junit.xml",
+      "size": 394,
+      "sha256": "B0EAFD4E7C0163D7FB27C6864D09A000F045AC9F95F470C054885530A4C8B438"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-r121-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-staging-focused-run/regression-r121-stdout.txt",
+      "size": 640,
+      "sha256": "06C5E40C2CD0E464A204F6984A471A6A29C8E56D5AB7F5E93AEE200B15F7E9DF"
+    },
+    {
+      "path": "R170-staging-focused-run/run1-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-staging-focused-run/run1-junit.xml",
+      "size": 569,
+      "sha256": "4B67A409AE044CC9C9932104C52E386518DEBCC2238635CF1CFEC8DDED73B7DC"
+    },
+    {
+      "path": "R170-staging-focused-run/run1-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-staging-focused-run/run1-stdout.txt",
+      "size": 632,
+      "sha256": "C1F2B1D678B191D75B6827C3E76B6B5DA22C3EC86D0266DE66F97FDE447B5EDB"
+    },
+    {
+      "path": "R170-staging-focused-run/run2-exit.txt",
+      "size": 2,
+      "sha256": "9A271F2A916B0B6EE6CECB2426F0B3206EF074578BE55D9BC94F6F3FE3AB86AA"
+    },
+    {
+      "path": "R170-staging-focused-run/run2-junit.xml",
+      "size": 569,
+      "sha256": "545D79F4AB4A34604593E8A3FA266C4BF319BE33DF6232DA112B6B2713C3241F"
+    },
+    {
+      "path": "R170-staging-focused-run/run2-stderr.txt",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R170-staging-focused-run/run2-stdout.txt",
+      "size": 632,
+      "sha256": "78214C72808D519BCB047C360FA74FB79C31DDBEB59F84090DD5B5638E9594C2"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/command.json",
+      "size": 1879,
+      "sha256": "AA70F352E04F432DB4FCFB0EA1DD5862986EF0B5F2A178914607CFC6A8737DAE"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/exit.txt",
+      "size": 3,
+      "sha256": "F1B2F662800122BED0FF255693DF89C4487FBDCF453D3524A42D4EC20C3D9C04"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/heads-after.json",
+      "size": 4,
+      "sha256": "E3566B3A06430868D71E9287DFD6C6C520A3DA027AABEA01951D407EE131DC2F"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/heads-before.json",
+      "size": 4,
+      "sha256": "E3566B3A06430868D71E9287DFD6C6C520A3DA027AABEA01951D407EE131DC2F"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/junit.xml",
+      "size": 8449,
+      "sha256": "50A301B215189D7DB691AB8E0A2140B9135132963924F4DA1DE0AEBE7390A0E5"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "82DDED8E6303407F6DD678CF1D534C1F2534EBFF9FF9C3A6B6EEEEECFDF64032"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-accepted.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-accepted.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "E43C346237D7B866D6303A354A78ADF86DBFBEC598924DDE1A2BA853E406B0FE"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-execution.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-execution.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-group_authority.sqlite3",
+      "size": 53248,
+      "sha256": "4E94E1628F2D2F277DA1694FAE2112ECA86AB97E53152B143AF7F7F49DCED16D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-group_authority.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-group_authority.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-proof.sqlite3",
+      "size": 36864,
+      "sha256": "F5DF339E98C885243891D51E571A531C1F4A72A726E26963831793E5FE218DEE"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-proof.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-proof.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "C74E87EE6294299BC8B9C9B9910A7C31E7BFAA5DA6994A03DC530DAF29E816F6"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-registry.sqlite3",
+      "size": 49152,
+      "sha256": "1BD0F232BA65C34AA00214EC19B0A06A0D0E077DFD5B780AF3BB669E3DCCC134"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-registry.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-registry.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-risk_gate.sqlite3",
+      "size": 421888,
+      "sha256": "5C49E55C9F66881179344A287C890E9C1CB0289B81152DDE1C9B9D4BBA0920D9"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-risk_gate.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-risk_gate.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-risk_order_journal.sqlite3",
+      "size": 90112,
+      "sha256": "8E86A3B9B7A72909435C3570BFD8C4F16D2139A71DF6D94231F7CFB0FEC222D1"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "B82AAEF0DDCB8FE2913F485F8609F82542F906EE86DF8BF850830A102CFB0E15"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-accepted.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-accepted.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-execution.sqlite3",
+      "size": 520192,
+      "sha256": "17E2CE012E9426C94026C99D9B99BCED6FF64D5E38A3FE8806A0A7C1C387D008"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-execution.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-execution.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-group_authority.sqlite3",
+      "size": 53248,
+      "sha256": "AF33F0B1ED004EAB3514833BCAD8B74DB1B3699CD5E56741FD9F7A7B6DA7C0C3"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-group_authority.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-group_authority.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-proof.sqlite3",
+      "size": 16384,
+      "sha256": "AC44DEF69A7A56D28DC4CB6EFEC7C07E60B1A19E20035AF21071269B5BBE3FD4"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-proof.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-proof.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "72AC8FA06D8FD836557693F612C210BA3E810FB5AEA531A48F535AE200D7724B"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-registry.sqlite3",
+      "size": 49152,
+      "sha256": "537DA2103819CCA4B8CEED935756C0F89D94BBEB150D7A60010F3C2F0CC73D35"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-registry.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-registry.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-risk_gate.sqlite3",
+      "size": 421888,
+      "sha256": "09EB1FD97B39AB667939562A347C417893D1F75C302FD6D2F19BE5014120D398"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-risk_gate.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-risk_gate.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/account-b-risk_order_journal.sqlite3",
+      "size": 90112,
+      "sha256": "A84F816F46ECF5D1389269D4722D870CA3701ADFBA4A132161224E79C843F8CD"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-groups.sqlite3",
+      "size": 57344,
+      "sha256": "86D454BB3590C3A6A4405F3ABE2ECF9BFE882C9ED92748403A666400823CEE2C"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-groups.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-groups.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-registry.sqlite3",
+      "size": 49152,
+      "sha256": "25AAF94270E72A61CFD772E2ADD0F46F68FEF8653DB5669DCB5485CD0D03401F"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-registry.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-registry.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-run-bindings.sqlite3",
+      "size": 49152,
+      "sha256": "4C700A92645E79926398C69BF8E475C5062041C6575C07DEE83DDB709C0275A8"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-run-bindings.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/pytest-tmp/test_arb04_duplicate_provider_0/coordinator-run-bindings.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/result.json",
+      "size": 574,
+      "sha256": "4E0E5DCD7A631CA9BB5550F2706CF25F4516A701EF59729EBFF6A8E615BACD7D"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/runner.py",
+      "size": 3517,
+      "sha256": "9DC003ECB1E8C94FE54D9783FBB0C4EEF98E73B2B6751173D00305A715808965"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/running.json",
+      "size": 76,
+      "sha256": "3F8C9F39A5D05FF1EB74AAFBB23791E029753A918C5B0366B5D655DCF02AEDFE"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/source-after.json",
+      "size": 73601,
+      "sha256": "D87605305978E3CCD4D612F2EB23B50403D788D93E10A25D616276EF1E17546C"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/source-before.json",
+      "size": 73601,
+      "sha256": "D87605305978E3CCD4D612F2EB23B50403D788D93E10A25D616276EF1E17546C"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/spec.json",
+      "size": 77690,
+      "sha256": "64F297794EE38EF8F10048FD469D4AD7A2C74E2E3F9EF60A308F62C708E14CE3"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/stderr.log",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R2-duplicate-fill-failed-run/stdout.log",
+      "size": 10747,
+      "sha256": "A1EF05416D705E0FF803798DBE1AD9B71BF5679CE12349DC027C603AB929D20A"
+    },
+    {
+      "path": "R2-duplicate-fill-offline-adjudication.md",
+      "size": 5559,
+      "sha256": "5D3E118A40F83B08EF6E33E6C34A0692418355ED85B1BCEE6DC046778BE88127"
+    },
+    {
+      "path": "R2-focused-spec.json",
+      "size": 77690,
+      "sha256": "64F297794EE38EF8F10048FD469D4AD7A2C74E2E3F9EF60A308F62C708E14CE3"
+    },
+    {
+      "path": "R2-source-closure.json",
+      "size": 72483,
+      "sha256": "F7B70FC36B56C06630879126E9309780CF73E8801D1A0CFC7CF31BD9321222D8"
+    },
+    {
+      "path": "R3-fixed-source-manifest.json",
+      "size": 4176,
+      "sha256": "DEB0F876EEFDFE4041E2B9AD9C47AC7BFDF70E4B6EF5879194D3004B040A0553"
+    },
+    {
+      "path": "R3-late-fill-failed-run/command.json",
+      "size": 1832,
+      "sha256": "885C857AB60F8CAB994CD14F203731321DC26A33108739847B0E0AFFCA508861"
+    },
+    {
+      "path": "R3-late-fill-failed-run/exit.txt",
+      "size": 3,
+      "sha256": "F1B2F662800122BED0FF255693DF89C4487FBDCF453D3524A42D4EC20C3D9C04"
+    },
+    {
+      "path": "R3-late-fill-failed-run/heads-after.json",
+      "size": 4,
+      "sha256": "E3566B3A06430868D71E9287DFD6C6C520A3DA027AABEA01951D407EE131DC2F"
+    },
+    {
+      "path": "R3-late-fill-failed-run/heads-before.json",
+      "size": 4,
+      "sha256": "E3566B3A06430868D71E9287DFD6C6C520A3DA027AABEA01951D407EE131DC2F"
+    },
+    {
+      "path": "R3-late-fill-failed-run/junit.xml",
+      "size": 22339,
+      "sha256": "A1E43E3948A200E09582F6F4FBEA0CB9DABB11D81640949686499322E17A9B0D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "C460AFE9CA599EEF712852E297E07497E37A88E2C683B2C8C23D6B76FF4FF041"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "D7A67974E01502EB67AA80851023DEAA166B7A6C9F3678047E79DAC02F0CD8D5"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-group_authority.sqlite3",
+      "size": 53248,
+      "sha256": "ECB56B42BABE38A54D194768AA31B41F7A1FE486E063EF84AEAFD29F533CCEA3"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-proof.sqlite3",
+      "size": 4096,
+      "sha256": "31B0F6669E49303BEA772658C76CD8557D01840C6B7B51F2EED54C4C0A44D4FF"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-proof.sqlite3-shm",
+      "size": 32768,
+      "sha256": "EB48D6F7CB9F811D6EBE06D9A9768B19C0CF575FFD927888DE703DAB4F1064B3"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-proof.sqlite3-wal",
+      "size": 144232,
+      "sha256": "401CFBADE91C70FEBD0F5A3A354F3F66BD1EF98642D2075C7631C8E0CDA06B0A"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-provider.sqlite3",
+      "size": 36864,
+      "sha256": "FD3657059255648C8BBCC330ADF468CE740B84B4E7CA7F3D6CBD7C3C0AFDE7AC"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "DFB0A4D0515EB8971EAAA8234F356AA4D1702240CB1C8A78100D88C0D0AC700A"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-risk_gate.sqlite3",
+      "size": 413696,
+      "sha256": "84CFE11629FE38D8A9779654C7EE5275FD8B9717E5851811F8C8A551B1731555"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-risk_order_journal.sqlite3",
+      "size": 90112,
+      "sha256": "8E86A3B9B7A72909435C3570BFD8C4F16D2139A71DF6D94231F7CFB0FEC222D1"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "D84F5FBD609FF4614B4CDD459FA52F9F81A70935DD744C2D86E845FF75D72B41"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-execution.sqlite3",
+      "size": 520192,
+      "sha256": "A5146043670907C3DAFEB187337D247713BF4087C28DAEF2E59815F37E9EAEF6"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-group_authority.sqlite3",
+      "size": 53248,
+      "sha256": "88617E4CDD0C372C5D6F95C55DB760DB437D86523493F86D1175CE226CD821D0"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-proof.sqlite3",
+      "size": 36864,
+      "sha256": "3508539740335D2F9D680D2E0025782189BB39BF4EEE9B9EA574AFEA5BC5D4FC"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-provider.sqlite3",
+      "size": 36864,
+      "sha256": "5316E8142B679F0CF6247E85A70E5D4EDDF6517E8FC8215F359B08380147E2A4"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "74E395FE931554BC0C8A80034DAC841E4E373691C351EF3FD4E61A83C4EDCAE0"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-risk_gate.sqlite3",
+      "size": 413696,
+      "sha256": "D3FE5384EBC059485DCBD4A6ECC3C87B653E36055E06CE9B589616893CEFCFE0"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-risk_order_journal.sqlite3",
+      "size": 90112,
+      "sha256": "460A5BFAA530E2E6A19E8ACEC6783C4E1F95E106873337F405B94B8228A802D8"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/account-b-risk_order_journal.sqlite3.df5ec0455c7746c0e8c9182e66c65ec6c9cfca8813b5c04a3b28eaad7800a99e.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/arb04-owned-child-lifecycle.json",
+      "size": 5686,
+      "sha256": "5F634F98B531690899C64D07E919EA51FF685A8E2D225ABACABF250D7C163AFC"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/coordinator-groups.sqlite3",
+      "size": 81920,
+      "sha256": "61C33A3BB349B5BBF53B227269EABE6E555E5CA6BF042A2F51BD539FA08D423D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "F48B1027D593404F2271717CC6BBD69ED7546857EFB6B59300BE9C8D68618B5D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/coordinator-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R3-late-fill-failed-run/pytest-tmp/test_arb04_unknown_late_fill_e0/coordinator-run-bindings.sqlite3",
+      "size": 36864,
+      "sha256": "9CC60D1D73036C129D6917236E02324EC75FD596CE4F0E56816903EADC4FA080"
+    },
+    {
+      "path": "R3-late-fill-failed-run/result.json",
+      "size": 573,
+      "sha256": "3464D7C879ED57C2F2176E9593B9A0442B036BDA62D7A8BFE6897C80EC7D3EA2"
+    },
+    {
+      "path": "R3-late-fill-failed-run/runner.py",
+      "size": 3517,
+      "sha256": "9DC003ECB1E8C94FE54D9783FBB0C4EEF98E73B2B6751173D00305A715808965"
+    },
+    {
+      "path": "R3-late-fill-failed-run/running.json",
+      "size": 76,
+      "sha256": "9E06AF6BC5300A2B73E92FFB94128C2EA3ABE1A8CC94528A3FA8DD75291E07D9"
+    },
+    {
+      "path": "R3-late-fill-failed-run/source-after.json",
+      "size": 71137,
+      "sha256": "2DD12C763DA3E95C5C7CD75C737DE5D7FA8A183685811E1736A119D54A9D3931"
+    },
+    {
+      "path": "R3-late-fill-failed-run/source-before.json",
+      "size": 71137,
+      "sha256": "2DD12C763DA3E95C5C7CD75C737DE5D7FA8A183685811E1736A119D54A9D3931"
+    },
+    {
+      "path": "R3-late-fill-failed-run/spec.json",
+      "size": 77647,
+      "sha256": "9051F1DA75B4E990C051DD0A58B5EA7CEBCEE4C54B41A9E607DC554EDA8202CA"
+    },
+    {
+      "path": "R3-late-fill-failed-run/stderr.log",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R3-late-fill-failed-run/stdout.log",
+      "size": 23502,
+      "sha256": "882603C213026C048102BBA1877F6C15E14723790174E9DECE3E72BF5B954459"
+    },
+    {
+      "path": "R3-readonly-SQLite-posthoc.json",
+      "size": 16280,
+      "sha256": "B06EA8C480100166592059EB477E2C625D2A2F72A319F56335CB089C76093F4A"
+    },
+    {
+      "path": "R3-source-as-executed/_arb04_group_reply_loss_support.py",
+      "size": 59890,
+      "sha256": "D64EACE191EF103688FD3099F7D53D222E3DA7DE0B84AE40631D594C7AA63F94"
+    },
+    {
+      "path": "R3-source-as-executed/test_arb03_dim05_group_partial_fill_service.py",
+      "size": 107998,
+      "sha256": "55872460AAB594970D198ADA57234CA5AD0A522B742B09D695FC7F78FEB4BB70"
+    },
+    {
+      "path": "R3-source-as-executed/test_arb04_group_cancel_reply_loss_service.py",
+      "size": 56829,
+      "sha256": "B250E5C99E2BEC61CEA7B2028FAA8A987568E4FEC042153A5C23EE7FAEC710AC"
+    },
+    {
+      "path": "R8-readonly-SQLite-sidecar.json",
+      "size": 39276,
+      "sha256": "767916031900B57232EDEB17F322139A2DF9E786ECC6E9E02448B6CC9450D706"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/command.json",
+      "size": 1785,
+      "sha256": "876F518E5127E5D60305183F4C7C2BA9498E14A73ACDE1D18497F3F6F3FEDF33"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/exit.txt",
+      "size": 3,
+      "sha256": "F1B2F662800122BED0FF255693DF89C4487FBDCF453D3524A42D4EC20C3D9C04"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/heads-after.json",
+      "size": 4,
+      "sha256": "E3566B3A06430868D71E9287DFD6C6C520A3DA027AABEA01951D407EE131DC2F"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/heads-before.json",
+      "size": 4,
+      "sha256": "E3566B3A06430868D71E9287DFD6C6C520A3DA027AABEA01951D407EE131DC2F"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/junit.xml",
+      "size": 9239,
+      "sha256": "FD2D3EFD5294716609D824E94AE33D886AF18D37FD9FA0091689644567A26E16"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "63AEBB48F33D89EAA18A20CE411F6111ED0FF223E89055A7891CC09D8DC24DCF"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-accepted.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-accepted.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-execution.sqlite3",
+      "size": 524288,
+      "sha256": "2564F680116B31F7D7B4C3012E0CD1AC67C57944EC51C2A19C862B305896DB02"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-execution.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-execution.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-group_authority.sqlite3",
+      "size": 53248,
+      "sha256": "CB8A312944294C253FC57267C0EC3EB2E364E0864084970C272D27D6B4833B45"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-group_authority.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-group_authority.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-proof.sqlite3",
+      "size": 45056,
+      "sha256": "2B39060F45EFE9562DFF9032DD933DBF66B34E6D97AEB5946700B4B2576C8849"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-proof.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-proof.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-provider.sqlite3",
+      "size": 49152,
+      "sha256": "98611F4DF118908645E5DE62E69A8F6D1B6DAC04017E7D3E5358F5AA2AC6C298"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-registry.sqlite3",
+      "size": 40960,
+      "sha256": "EEA98130B3958E94FCBDE9060D93019AA35A69822C1D336C41A713719AD4E5BD"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-risk_gate.sqlite3",
+      "size": 393216,
+      "sha256": "7DA023C2D182F37F035AFF5517B6CA98A694736F4DB4C9F0EC194485ECC703AB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-risk_gate.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-risk_gate.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-risk_order_journal.sqlite3",
+      "size": 90112,
+      "sha256": "C0F0827B239E5A3225603C8951088AE06195284557E94DE7B56E19E675A5E9C7"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-a-risk_order_journal.sqlite3.f64f4ff007572e1487aaf9be7e1ed70c2123622cea62ba59f66994da295dda5f.writer.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-accepted.sqlite3",
+      "size": 20480,
+      "sha256": "CE1211A86020E45C153AF85557DA1AA1DCE8C029CE8EC274C109ECFBEE8895F2"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-execution.sqlite3",
+      "size": 520192,
+      "sha256": "D1EFA7CD57D56053F035B9243F9AC08B04F5DC62ECFC8726BF9274124AAD90BB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-execution.sqlite3.service_execution_owner.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-group_authority.sqlite3",
+      "size": 53248,
+      "sha256": "0D74BC9BD2CF0C3DB33C15AF5C1879E022EB21D9ED981B0A5766177473B3A709"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-proof.sqlite3",
+      "size": 16384,
+      "sha256": "7D4A9BCFE7DBB9DA7DB71A8F6974042A92C2E35B1657B818AD7AC5356CF4978D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-provider.sqlite3",
+      "size": 49152,
+      "sha256": "2BBA764E41EA7DB273F7E8926967135F2BF1AB32C53C7C536CA464610D6CDD01"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-registry.sqlite3",
+      "size": 40960,
+      "sha256": "3E5DF646B1C3479DED1DF597DEE5E7D06E9112A6F6096460E9F1390831039D17"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-risk_gate.sqlite3",
+      "size": 393216,
+      "sha256": "4C4D40A320C37638E5546644C6746E99810FC3D2674207E1B9CE748FD34F84A5"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/account-b-risk_order_journal.sqlite3",
+      "size": 90112,
+      "sha256": "A84F816F46ECF5D1389269D4722D870CA3701ADFBA4A132161224E79C843F8CD"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/coordinator-groups.sqlite3",
+      "size": 73728,
+      "sha256": "FAE45132B45085D138C5B0C87DDB1149328794CCAD67080FA3B5BF90394A7370"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/coordinator-groups.sqlite3-shm",
+      "size": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/coordinator-groups.sqlite3-wal",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/coordinator-registry.sqlite3",
+      "size": 40960,
+      "sha256": "A4055AD29E7AC794CC81B4C70F17D3AE23B3094D9633A91E38FCFDBC6BD20EF2"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/coordinator-registry.sqlite3.migration-cutover.json.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/coordinator-registry.sqlite3.service_registry.lock",
+      "size": 1,
+      "sha256": "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/pytest-tmp/test_arb04_group_cancel_real_s0/coordinator-run-bindings.sqlite3",
+      "size": 36864,
+      "sha256": "8DCF9C02BC8E625030EA0AD0FF91EC7989DC6215AD91FD80E1E362C7F3946F4C"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/result.json",
+      "size": 574,
+      "sha256": "7229D877083A02499F0FC0594A50830B84B46283267662DC9A29BA24E8D21167"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/runner.py",
+      "size": 3517,
+      "sha256": "9DC003ECB1E8C94FE54D9783FBB0C4EEF98E73B2B6751173D00305A715808965"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/running.json",
+      "size": 76,
+      "sha256": "447481D730B8755990F0F166539742CE83163090FA707CCA08DF5706069A4606"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/source-after.json",
+      "size": 125671,
+      "sha256": "0E6675E36BE5BEF43C94163E7979CA39C985CE7CC9739E91DDEC0EA843944E60"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/source-before.json",
+      "size": 125671,
+      "sha256": "0E6675E36BE5BEF43C94163E7979CA39C985CE7CC9739E91DDEC0EA843944E60"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/spec.json",
+      "size": 130046,
+      "sha256": "CF757BE7F4B2F6319F72947B08AC8AC86E4AD2506C1164892590316315FB9F0F"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/stderr.log",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "R8-socket-disconnect-failed-run/stdout.log",
+      "size": 11549,
+      "sha256": "4AC6F3B7472727E2F779BB9D52AA99B27D25A67BF7D1BBBBD9FF4332DEC52097"
+    },
+    {
+      "path": "candidate-not-executed/R3-oracle-correction.patch",
+      "size": 751,
+      "sha256": "E23AB134AF5521BD7CEDF681B8784DF679BAC0217EE83D16492239540D5F502B"
+    },
+    {
+      "path": "candidate-not-executed/selected-source.patch",
+      "size": 77294,
+      "sha256": "699BBABC4897339FCD5757EC7EF315517EECA37BF2FAF46EF88FFFF3830DEEA5"
+    },
+    {
+      "path": "candidate-not-executed/source-manifest.json",
+      "size": 3154,
+      "sha256": "DACC5894793CD50836AAB6052C6743D73B54BDCDEDEC6270654299B4CD2BC16E"
+    },
+    {
+      "path": "candidate-not-executed/source-scope-record.md",
+      "size": 2512,
+      "sha256": "9B976DBB585CE2229A759512D557A5C38738F78A264915CC337AC53B0E33D6B3"
+    }
+  ]
+}
