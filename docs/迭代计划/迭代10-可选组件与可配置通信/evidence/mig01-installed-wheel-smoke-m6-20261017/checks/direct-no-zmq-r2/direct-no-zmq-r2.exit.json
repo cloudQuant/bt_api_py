@@ -1,0 +1,9 @@
+{
+  "exit_code": 0,
+  "timed_out": false,
+  "elapsed_seconds": 0.641,
+  "stdout_bytes": 488,
+  "stdout_sha256": "41e41f9241aac660c82a077c1982622ad850c621b84e40529e2d49455346132f",
+  "stderr_bytes": 0,
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

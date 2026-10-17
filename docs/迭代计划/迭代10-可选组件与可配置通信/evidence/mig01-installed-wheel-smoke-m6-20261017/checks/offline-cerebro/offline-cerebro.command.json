@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "D:\\t\\m6\\venv\\Scripts\\python.exe",
+    "-I",
+    "D:\\t\\m6\\offline_cerebro_smoke.py"
+  ],
+  "cwd": "D:\\t\\m6",
+  "timeout_seconds": 30,
+  "pythonutf8": "1"
+}

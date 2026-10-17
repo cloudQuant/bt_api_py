@@ -1,0 +1,10 @@
+{
+  "build_python": "C:\\anaconda3\\python.exe",
+  "build_python_version": "Python 3.11.5",
+  "network_allowed": false,
+  "system_site_packages_requested": false,
+  "venv_base_python": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe",
+  "venv_base_python_version": "Python 3.12.10",
+  "wheelhouse": "D:\\source_code\\ai-for-investor\\.codex-tmp\\afi10-local-release-candidate-r1\\wheelhouse",
+  "wheelhouse_wheel_count": 152
+}

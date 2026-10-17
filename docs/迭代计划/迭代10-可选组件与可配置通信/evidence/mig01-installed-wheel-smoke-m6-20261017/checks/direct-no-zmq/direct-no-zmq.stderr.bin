@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "D:\t\m6\direct_no_zmq_smoke.py", line 61, in <module>
+    assert feed.closed == 1
+           ^^^^^^^^^^^^^^^^
+AssertionError

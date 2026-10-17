@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "D:\\t\\m6\\venv\\Scripts\\python.exe",
+    "-I",
+    "D:\\t\\m6\\direct_no_zmq_smoke.py"
+  ],
+  "cwd": "D:\\t\\m6",
+  "timeout_seconds": 20
+}

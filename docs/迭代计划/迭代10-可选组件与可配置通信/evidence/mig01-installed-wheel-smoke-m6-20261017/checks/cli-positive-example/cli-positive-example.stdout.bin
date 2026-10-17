@@ -1,0 +1,223 @@
+{
+  "request": {
+    "identity_mapping": {
+      "account_ref": "account-a01",
+      "legacy_account_id": "legacy-account-01",
+      "legacy_strategy_id": "legacy-strategy-01",
+      "strategy_ref": "strategy-s01"
+    },
+    "legacy_forwarding_config": {
+      "account_id": "legacy-account-01",
+      "command_endpoint": "tcp://127.0.0.1:7401",
+      "market_endpoint": "tcp://127.0.0.1:7402",
+      "private_endpoint": "",
+      "strategy_id": "legacy-strategy-01"
+    },
+    "recovery_plan_ref": "account-a01-manual-reconcile-v1",
+    "target_client_template": {
+      "clients": {
+        "gateway": {
+          "config_schema_version": 1,
+          "settings": {
+            "bindings": [
+              {
+                "instance_id": "account-a01-gateway",
+                "mount": "store.account",
+                "scope_ref": "account-a01",
+                "service_id": "account-a01-service",
+                "transport_ref": "account-a01-client"
+              }
+            ]
+          }
+        }
+      },
+      "communication": {
+        "config_schema_version": 1,
+        "profiles": {
+          "account-a01-client": {
+            "backend": "zmq",
+            "config_schema_version": 1,
+            "endpoints": {
+              "rpc_connect": "tcp://127.0.0.1:7601"
+            },
+            "security_profile_ref": "account-a01-client-curve"
+          }
+        }
+      },
+      "config_schema_version": 6,
+      "process_role": "strategy_client"
+    },
+    "target_scope_refs": [
+      "account-a01"
+    ],
+    "target_service_configs": [
+      {
+        "communication": {
+          "config_schema_version": 1,
+          "profiles": {
+            "account-a01-listener": {
+              "backend": "zmq",
+              "config_schema_version": 1,
+              "endpoints": {
+                "rpc_bind": "tcp://127.0.0.1:7601"
+              },
+              "security_profile_ref": "account-a01-server-curve"
+            }
+          }
+        },
+        "components": {
+          "gateway": {
+            "config_schema_version": 2,
+            "settings": {
+              "bind_ports": [
+                "service.account_read",
+                "service.provider_session"
+              ],
+              "instance_id": "account-a01-gateway",
+              "options": {
+                "account_session_ref": "account-a01-session",
+                "role": "account_session_worker"
+              }
+            }
+          }
+        },
+        "process_role": "service",
+        "registration_policy_ref": "account-a01-policy-v1",
+        "scope_ref": "account-a01",
+        "service_config_schema_version": 1,
+        "service_id": "account-a01-service",
+        "service_requirements_ref": "account-a01-readiness-v1",
+        "transport_ref": "account-a01-listener"
+      }
+    ]
+  },
+  "result": {
+    "client_config": {
+      "clients": {
+        "gateway": {
+          "config_schema_version": 1,
+          "settings": {
+            "bindings": [
+              {
+                "account_ref": "account-a01",
+                "instance_id": "account-a01-gateway",
+                "mount": "store.account",
+                "required": true,
+                "scope_ref": "account-a01",
+                "service_id": "account-a01-service",
+                "transport_ref": "account-a01-client"
+              }
+            ],
+            "options": {
+              "request_timeout_ms": 2000
+            }
+          }
+        }
+      },
+      "communication": {
+        "config_schema_version": 1,
+        "profiles": {
+          "account-a01-client": {
+            "backend": "zmq",
+            "config_schema_version": 1,
+            "endpoints": {
+              "rpc_connect": "tcp://127.0.0.1:7601"
+            },
+            "options": {
+              "high_water_mark": 1000,
+              "max_message_bytes": 1048576,
+              "request_timeout_ms": 2000
+            },
+            "security_profile_ref": "account-a01-client-curve"
+          }
+        }
+      },
+      "config_schema_version": 6,
+      "process_role": "strategy_client",
+      "registration": {
+        "strategy_ref": "strategy-s01"
+      }
+    },
+    "deployment_plan": {
+      "authorization_verified": false,
+      "automatic_failover_supported": false,
+      "external_fencing_supported": false,
+      "remote_readiness_verified": false,
+      "selected_components": [
+        {
+          "bind_ports": [
+            "service.account_read",
+            "service.provider_session"
+          ],
+          "component": "gateway",
+          "instance_id": "account-a01-gateway",
+          "service_id": "account-a01-service"
+        }
+      ],
+      "service_order": [
+        "account-a01-service"
+      ],
+      "services_activated": false
+    },
+    "migration_review": {
+      "authorization_granted": false,
+      "credential_material_copied": false,
+      "legacy_cache_policy_transferred": false,
+      "legacy_endpoints_copied": false,
+      "legacy_recovery_state_transferred": false,
+      "notice": "This draft does not carry legacy endpoint, credential, recovery, or authorization state. Resolve the referenced security profiles and recovery procedure out of band.",
+      "operator_recovery_plan_ref": "account-a01-manual-reconcile-v1",
+      "ready_to_start": false,
+      "recovery_plan_resolved_or_executed": false,
+      "requires_operator_review_before_start": true,
+      "unmapped_legacy_fields": []
+    },
+    "migration_schema_version": 1,
+    "service_configs": [
+      {
+        "communication": {
+          "config_schema_version": 1,
+          "profiles": {
+            "account-a01-listener": {
+              "backend": "zmq",
+              "config_schema_version": 1,
+              "endpoints": {
+                "rpc_bind": "tcp://127.0.0.1:7601"
+              },
+              "options": {
+                "high_water_mark": 1000,
+                "max_message_bytes": 1048576,
+                "request_timeout_ms": 2000
+              },
+              "security_profile_ref": "account-a01-server-curve"
+            }
+          }
+        },
+        "components": {
+          "gateway": {
+            "config_schema_version": 2,
+            "settings": {
+              "bind_ports": [
+                "service.account_read",
+                "service.provider_session"
+              ],
+              "instance_id": "account-a01-gateway",
+              "options": {
+                "account_session_ref": "account-a01-session",
+                "role": "account_session_worker"
+              }
+            }
+          }
+        },
+        "process_role": "service",
+        "registration_policy_ref": "account-a01-policy-v1",
+        "scope_ref": "account-a01",
+        "service_config_schema_version": 1,
+        "service_id": "account-a01-service",
+        "service_requirements_ref": "account-a01-readiness-v1",
+        "transport_ref": "account-a01-listener"
+      }
+    ],
+    "status": "DRAFT_REQUIRES_OPERATOR_REVIEW"
+  }
+}

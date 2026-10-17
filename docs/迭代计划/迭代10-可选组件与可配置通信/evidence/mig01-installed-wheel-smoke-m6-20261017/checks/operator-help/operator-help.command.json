@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "D:\\t\\m6\\venv\\Scripts\\bt-gateway-operator.exe",
+    "--help"
+  ],
+  "cwd": "D:\\t\\m6",
+  "timeout_seconds": 15,
+  "pythonutf8": "1"
+}

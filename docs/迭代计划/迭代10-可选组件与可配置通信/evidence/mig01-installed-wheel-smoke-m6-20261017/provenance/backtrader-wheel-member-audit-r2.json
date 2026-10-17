@@ -1,0 +1,57 @@
+{
+  "evidence": "read-only Backtrader wheel/source archive content and METADATA audit for M6",
+  "audit_date": "2026-10-17",
+  "source": {
+    "repository": "D:/source_code/backtrader",
+    "dev_commit": "b9b226be6a82d91bdcb94bf29dfc1ccdad0611c5",
+    "selected_archive": {
+      "path": "D:\\t\\m6\\backtrader-b9b-selected.tar",
+      "bytes": 8028160,
+      "sha256": "7cde5d5d2482454040add31b2db75900175b87ac704847a3b1938d4c6cd5d3f3"
+    },
+    "archive_identity_note": "The selected source archive and source commit are the values recorded in the original M6 build provenance; this audit verifies member bytes against that pinned archive."
+  },
+  "wheel": {
+    "path": "D:\\t\\m6\\wheels\\backtrader\\backtrader-1.4.0-py3-none-any.whl",
+    "bytes": 1867229,
+    "sha256": "fdd8aea68d42924f3567df6025b8182b2be356dc3337984845947822a70f76f2",
+    "version": "1.4.0",
+    "name": "backtrader",
+    "all_members": 537,
+    "non_dist_info_package_members": 532,
+    "backtrader_package_members": 491,
+    "backtrader_members_exactly_matching_selected_source_archive": 491,
+    "all_package_members_exactly_matching_selected_source_archive": 532,
+    "package_member_mismatches_or_missing": [],
+    "comparison_method": "For every non-dist-info wheel package member, read the same relative member from the selected source tar and compare the unmodified bytes; separately counted the 491 backtrader/ members.",
+    "metadata_member": "backtrader-1.4.0.dist-info/METADATA",
+    "metadata_bytes": 61353,
+    "metadata_sha256": "73d750a3a227cca76fb0182af2059850e5661b41de979f0873104e2fe083a806",
+    "runtime_requires_dist": [
+      "numpy<2.0.0,>=1.20.0; python_version < \"3.13\"",
+      "numpy>=2.1.0; python_version >= \"3.13\"",
+      "pytz>=2021.1",
+      "pandas>=1.3.0",
+      "matplotlib>=3.3.0",
+      "scipy>=1.5.0",
+      "statsmodels>=0.12.0",
+      "PyYAML>=5.4"
+    ],
+    "optional_requires_dist_count": 30,
+    "build_log": {
+      "captured": false,
+      "disclosure": "No separate raw Backtrader build stdout/stderr or command.json was captured. The build command string in the original provenance is transcribed from the completed step; the source archive, wheel hash, wheel member comparison, METADATA and installed direct_url are available."
+    }
+  },
+  "installed_origin_crosscheck": {
+    "environment": "Python 3.12.10 venv with include-system-site-packages=false; --no-index local wheelhouse install",
+    "backtrader_distribution": "1.4.0",
+    "installed_direct_url_wheel_sha256": "fdd8aea68d42924f3567df6025b8182b2be356dc3337984845947822a70f76f2",
+    "package_module_origin": "D:/t/m6/venv/Lib/site-packages/backtrader/__init__.py",
+    "detailed_installed_origin_and_24-package_resolution": "See the original pinned provenance payload provenance/source-wheel-install-provenance.json; this addendum does not duplicate it."
+  },
+  "review": {
+    "independent_static_review": "GO — MIG01 M6 isolated install and ordinary entry acceptance; reviewer confirmed original M6 record/result hashes, R1 53 payload hashes, no-system-site venv, dependency metadata/install agreement, no optional domain packages/ZMQ, and 491/491 Backtrader source members byte-identical.",
+    "reviewer_scope_limit": "No QA was rerun by the reviewer; no pytest, ServiceHost, real account, credentials, or exchange traffic was used."
+  }
+}

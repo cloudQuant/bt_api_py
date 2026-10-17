@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "C:\\anaconda3\\python.exe",
+    "-m",
+    "pip",
+    "wheel",
+    "--no-deps",
+    "--no-build-isolation",
+    "--no-cache-dir",
+    "--wheel-dir",
+    "D:\\t\\m6\\wheels\\base",
+    "D:\\t\\m6\\source\\base"
+  ],
+  "cwd": "D:\\t\\m6\\source\\base",
+  "exit_code": 0,
+  "finished_utc": "2026-10-17T06:37:36.312262+00:00",
+  "started_utc": "2026-10-17T06:37:26.542263+00:00",
+  "stderr_bytes": 143,
+  "stderr_sha256": "8b9a4df5086dedff540222b1824beaaef89cd8a7e03e885dca74dc0a575d5cc6",
+  "stdout_bytes": 676,
+  "stdout_sha256": "7a1f70e84b10230ccf69fd9004c038f72e92a08f0d9155791f75e1da629c079b",
+  "timeout_seconds": 600
+}

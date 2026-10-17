@@ -1,0 +1,17 @@
+{
+  "authorization_granted": false,
+  "filled_identity_refs": {
+    "account_ref": "account-a01",
+    "strategy_ref": "strategy-s01"
+  },
+  "ready_to_start": false,
+  "request_fields": [
+    "identity_mapping",
+    "legacy_forwarding_config",
+    "recovery_plan_ref",
+    "target_client_template",
+    "target_scope_refs",
+    "target_service_configs"
+  ],
+  "status": "DRAFT_REQUIRES_OPERATOR_REVIEW"
+}

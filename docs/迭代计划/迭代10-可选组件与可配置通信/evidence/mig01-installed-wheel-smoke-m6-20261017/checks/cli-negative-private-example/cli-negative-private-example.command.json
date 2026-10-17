@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "D:\\t\\m6\\venv\\Scripts\\python.exe",
+    "-I",
+    "-m",
+    "bt_api_py.config_migration",
+    "--example-reject-private"
+  ],
+  "cwd": "D:\\t\\m6",
+  "exit_code": 2,
+  "finished_utc": "2026-10-17T06:37:57.290468+00:00",
+  "started_utc": "2026-10-17T06:37:56.755730+00:00",
+  "stderr_bytes": 76,
+  "stderr_sha256": "fd27c6154ddf4cda53be89bc04e55583028400b01e02e79fb555d3533f35d9b3",
+  "stdout_bytes": 0,
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "timeout_seconds": 300
+}

@@ -1,0 +1,5 @@
+home = C:\Users\yunji\AppData\Local\Programs\Python\Python312
+include-system-site-packages = false
+version = 3.12.10
+executable = D:\source_code\ai-for-investor\src\backend\.venv\Scripts\python.exe
+command = D:\source_code\ai-for-investor\src\backend\.venv\Scripts\python.exe -m venv D:\t\m6\venv

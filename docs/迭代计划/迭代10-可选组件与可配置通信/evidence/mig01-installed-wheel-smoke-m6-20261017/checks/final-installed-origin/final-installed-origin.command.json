@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "D:\\t\\m6\\venv\\Scripts\\python.exe",
+    "-I",
+    "-c",
+    "import importlib.metadata as m,json,pathlib,sys,bt_api_py,bt_api_base,backtrader; names=('bt-api-py','bt-api-base','backtrader'); ds={n:m.distribution(n) for n in names}; print(json.dumps({'prefix':sys.prefix,'python_version':sys.version,'modules':{'bt_api_py':str(pathlib.Path(bt_api_py.__file__).resolve()),'bt_api_base':str(pathlib.Path(bt_api_base.__file__).resolve()),'backtrader':str(pathlib.Path(backtrader.__file__).resolve())},'distributions':{n:{'version':ds[n].version,'direct_url':ds[n].read_text('direct_url.json')} for n in names},'all_distributions':sorted(d.metadata.get('Name','') for d in m.distributions())}))"
+  ],
+  "cwd": "D:\\t\\m6",
+  "timeout_seconds": 15
+}

@@ -1,0 +1,5 @@
+# Preserved m6 harness diagnostics
+
+The initial `runner.py` invocation stopped after the expected negative converter CLI returned exit 2. Its generic `run_logged` helper treated any nonzero status as unexpected. The CLI output files are preserved exactly in `checks/cli-negative-private-example/`; they show exit 2, empty stdout, and the expected private-channel rejection. The negative command was not rerun.
+
+The first DirectBackend smoke (`checks/direct-no-zmq/`) exited 1 because its temporary smoke script asserted that `BtApi.close()` closes a feed inserted manually into `api.exchange_feeds`. That closure assumption was unsupported. The assertion was removed, and the direct API call was rerun once; successful exact script bytes are `smokes/direct_no_zmq_smoke.py` and its raw command/result are in `checks/direct-no-zmq-r2/`. The pre-fix script was overwritten before its byte hash was recorded; its raw failed output and command remain exact, but the old script source cannot be represented here as a byte-pinned artifact.

@@ -1,0 +1,459 @@
+{
+  "checks": {
+    "converter_negative": {
+      "artifacts": {
+        "command.json": {
+          "bytes": 557,
+          "path": "D:\\t\\m6\\cli-negative-private-example.command.json",
+          "sha256": "6870af261da35ccd9086c9db45d10288516ab3606bb920d829f865fdc4dbeb14"
+        },
+        "exit": {
+          "exit_code": 2
+        },
+        "exit.json": {
+          "bytes": 24,
+          "path": "D:\\t\\m6\\cli-negative-private-example.exit.json",
+          "sha256": "06d024afacdb06eb286956555ef5f1b4b0772ac23ad3b1f107789b9638263be6"
+        },
+        "stderr.bin": {
+          "bytes": 76,
+          "path": "D:\\t\\m6\\cli-negative-private-example.stderr.bin",
+          "sha256": "fd27c6154ddf4cda53be89bc04e55583028400b01e02e79fb555d3533f35d9b3"
+        },
+        "stdout.bin": {
+          "bytes": 0,
+          "path": "D:\\t\\m6\\cli-negative-private-example.stdout.bin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "expected_exit_code": 2,
+      "stderr_exact_windows": true,
+      "verified_existing_invocation_without_rerun": true
+    },
+    "converter_positive": {
+      "artifacts": {
+        "command.json": {
+          "bytes": 544,
+          "path": "D:\\t\\m6\\cli-positive-example.command.json",
+          "sha256": "6d2b39ecd85720960337e1d7a477dfcd89a483f528e0dc8cf951bc9eb1835895"
+        },
+        "exit": {
+          "exit_code": 0
+        },
+        "exit.json": {
+          "bytes": 24,
+          "path": "D:\\t\\m6\\cli-positive-example.exit.json",
+          "sha256": "75876e0e3f497cad271143ba85bd4f36569cd81195509043f860dab14265b716"
+        },
+        "stderr.bin": {
+          "bytes": 0,
+          "path": "D:\\t\\m6\\cli-positive-example.stderr.bin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.bin": {
+          "bytes": 7177,
+          "path": "D:\\t\\m6\\cli-positive-example.stdout.bin",
+          "sha256": "0d4b63b76909121a7b55fb573289d08b03207c67c24f4d6b63969a25ac9e34b5"
+        }
+      },
+      "authorization_granted": false,
+      "filled_identity_refs": {
+        "account_ref": "account-a01",
+        "strategy_ref": "strategy-s01"
+      },
+      "ready_to_start": false,
+      "status": "DRAFT_REQUIRES_OPERATOR_REVIEW"
+    },
+    "direct_sdk_no_zmq_call": {
+      "artifacts": {
+        "command.json": {
+          "bytes": 168,
+          "path": "D:\\t\\m6\\direct-no-zmq-r2.command.json",
+          "sha256": "baaf797bcbbe0dd4749cadda3e8917887905b82d1bd3ccbe83d63c41f8ab8360"
+        },
+        "exit": {
+          "elapsed_seconds": 0.641,
+          "exit_code": 0,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 488,
+          "stdout_sha256": "41e41f9241aac660c82a077c1982622ad850c621b84e40529e2d49455346132f",
+          "timed_out": false
+        },
+        "exit.json": {
+          "bytes": 296,
+          "path": "D:\\t\\m6\\direct-no-zmq-r2.exit.json",
+          "sha256": "f1ae661b231b9cbc18a629bc68738bf9c0175f223595e91e53e451894171e250"
+        },
+        "stderr.bin": {
+          "bytes": 0,
+          "path": "D:\\t\\m6\\direct-no-zmq-r2.stderr.bin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.bin": {
+          "bytes": 488,
+          "path": "D:\\t\\m6\\direct-no-zmq-r2.stdout.bin",
+          "sha256": "41e41f9241aac660c82a077c1982622ad850c621b84e40529e2d49455346132f"
+        }
+      },
+      "result": {
+        "backend_type": "DirectBackend",
+        "base_origin": "D:\\t\\m6\\venv\\Lib\\site-packages\\bt_api_base\\__init__.py",
+        "blocked_import_attempts": [],
+        "call_result": {
+          "price": 12.5,
+          "source": "synthetic-direct-feed",
+          "symbol": "LOCAL-TEST"
+        },
+        "feed_call_count": 1,
+        "feed_closed": 0,
+        "forbidden_distributions_absent": true,
+        "mode": "direct",
+        "network_attempts": [],
+        "sdk_origin": "D:\\t\\m6\\venv\\Lib\\site-packages\\bt_api_py\\bt_api.py",
+        "sys_prefix": "D:\\t\\m6\\venv",
+        "zmq_loaded": false
+      }
+    },
+    "installed_origin_probe": {
+      "command.json": {
+        "bytes": 774,
+        "path": "D:\\t\\m6\\final-installed-origin.command.json",
+        "sha256": "abe2e372ab0d70df1a22ad807db0ab4d443c5bbc2120b08f4562d990cd20a562"
+      },
+      "exit": {
+        "elapsed_seconds": 2.61,
+        "exit_code": 0,
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 2113,
+        "stdout_sha256": "973f2534454cd352efafc9651bc9fc6109fd925f6177db2de847cdcec56c2662",
+        "timed_out": false
+      },
+      "exit.json": {
+        "bytes": 296,
+        "path": "D:\\t\\m6\\final-installed-origin.exit.json",
+        "sha256": "f81c163735c935432844331d83666ee06048fd8e46608a47b4926d9dd40ee8b7"
+      },
+      "stderr.bin": {
+        "bytes": 0,
+        "path": "D:\\t\\m6\\final-installed-origin.stderr.bin",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stdout.bin": {
+        "bytes": 2113,
+        "path": "D:\\t\\m6\\final-installed-origin.stdout.bin",
+        "sha256": "973f2534454cd352efafc9651bc9fc6109fd925f6177db2de847cdcec56c2662"
+      }
+    },
+    "offline_backtest_cerebro": {
+      "artifacts": {
+        "command.json": {
+          "bytes": 192,
+          "path": "D:\\t\\m6\\offline-cerebro.command.json",
+          "sha256": "74b72aa9742fec76754fb578b780f44b65f59c2c8834dfbe57868b4d303ca888"
+        },
+        "exit": {
+          "elapsed_seconds": 2.703,
+          "exit_code": 0,
+          "stderr_bytes": 0,
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_bytes": 330,
+          "stdout_sha256": "fea336dc90f761ceb94a102a59e1b458aa791030d9cc2c1b54ed6fdec8213dd6",
+          "timed_out": false
+        },
+        "exit.json": {
+          "bytes": 296,
+          "path": "D:\\t\\m6\\offline-cerebro.exit.json",
+          "sha256": "6c3a76d44c829e7f1d16eeb8520b3ac5c140d345d3b3b1415fe9623ca2520462"
+        },
+        "stderr.bin": {
+          "bytes": 0,
+          "path": "D:\\t\\m6\\offline-cerebro.stderr.bin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout.bin": {
+          "bytes": 330,
+          "path": "D:\\t\\m6\\offline-cerebro.stdout.bin",
+          "sha256": "fea336dc90f761ceb94a102a59e1b458aa791030d9cc2c1b54ed6fdec8213dd6"
+        }
+      },
+      "result": {
+        "backtrader_origin": "D:\\t\\m6\\venv\\Lib\\site-packages\\backtrader\\__init__.py",
+        "backtrader_version": "1.4.0",
+        "bars_processed": 3,
+        "blocked_import_attempts": [],
+        "domain_distributions_absent": true,
+        "input": "synthetic in-memory local bars",
+        "network_attempts": [],
+        "strategy_results": 1,
+        "sys_prefix": "D:\\t\\m6\\venv"
+      }
+    },
+    "operator_console_help": {
+      "command.json": {
+        "bytes": 165,
+        "path": "D:\\t\\m6\\operator-help.command.json",
+        "sha256": "04944b22d567f0b186e698b305281e04b455f99749e7d1be47182a7a53268541"
+      },
+      "exit": {
+        "elapsed_seconds": 0.781,
+        "exit_code": 0,
+        "stderr_bytes": 0,
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 417,
+        "stdout_sha256": "ce9ffdf9bf15f847f8656dec2aeff6574f656d63490856108ec06a52e4beb901",
+        "timed_out": false
+      },
+      "exit.json": {
+        "bytes": 296,
+        "path": "D:\\t\\m6\\operator-help.exit.json",
+        "sha256": "ef9e62e27278fafbba00dc5c38662ff44341cd3555d31e2c049c021be790d71b"
+      },
+      "stderr.bin": {
+        "bytes": 0,
+        "path": "D:\\t\\m6\\operator-help.stderr.bin",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "stdout.bin": {
+        "bytes": 417,
+        "path": "D:\\t\\m6\\operator-help.stdout.bin",
+        "sha256": "ce9ffdf9bf15f847f8656dec2aeff6574f656d63490856108ec06a52e4beb901"
+      }
+    }
+  },
+  "environment": {
+    "include_system_site_packages": false,
+    "no_index_install": true,
+    "offline_wheelhouse": "D:/source_code/ai-for-investor/.codex-tmp/afi10-local-release-candidate-r1/wheelhouse",
+    "python_executable": "D:\\t\\m6\\venv\\Scripts\\python.exe",
+    "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "venv": "D:\\t\\m6\\venv"
+  },
+  "evidence_files": {
+    "backtrader-runtime-install-report.json": {
+      "bytes": 537929,
+      "path": "D:\\t\\m6\\backtrader-runtime-install-report.json",
+      "sha256": "617cfb82bbc7d1d80a5bcf2a88c84cf090b2f66191bddf02146496f7d0a6d000"
+    },
+    "cli-positive-summary.json": {
+      "bytes": 421,
+      "path": "D:\\t\\m6\\cli-positive-summary.json",
+      "sha256": "56eefc94f77d914fa6783afcd2484332c95fbba4e90c1564480b3652a9761678"
+    },
+    "offline-install.command.json": {
+      "bytes": 878,
+      "path": "D:\\t\\m6\\offline-install.command.json",
+      "sha256": "1f03e5d9399fb6348900f203f6e586a09e2bff24b77e29755b1c8a603f2424f7"
+    },
+    "pyvenv.cfg.copy": {
+      "bytes": 302,
+      "path": "D:\\t\\m6\\pyvenv.cfg.copy",
+      "sha256": "c44afe5210ceb3555a9af905af15f950eb50a02a6e5850d84b1dc4349b1b8fe4"
+    },
+    "wheel-inspection.json": {
+      "bytes": 37076,
+      "path": "D:\\t\\m6\\wheel-inspection.json",
+      "sha256": "030526e68a3ded85175ded533ff8466fd4eed2437c86d36773fdb6811d1fad7b"
+    }
+  },
+  "evidence_level": "FRESH_NO_SYSTEM_SITE_WHEEL_INSTALL_AND_LOCAL_NORMAL_ENTRY_SMOKES",
+  "fixed_sources": {
+    "backtrader_commit": "b9b226be6a82d91bdcb94bf29dfc1ccdad0611c5",
+    "base_commit": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+    "sdk_commit": "35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2"
+  },
+  "installed_origins_and_versions": {
+    "all_distributions": [
+      "PyYAML",
+      "aiohappyeyeballs",
+      "aiohttp",
+      "aiosignal",
+      "annotated-types",
+      "anyio",
+      "attrs",
+      "backtrader",
+      "bt_api_base",
+      "bt_api_py",
+      "certifi",
+      "charset-normalizer",
+      "contourpy",
+      "cycler",
+      "fonttools",
+      "formulaic",
+      "frozenlist",
+      "h11",
+      "httpcore",
+      "httpx",
+      "idna",
+      "interface_meta",
+      "kiwisolver",
+      "matplotlib",
+      "multidict",
+      "narwhals",
+      "numpy",
+      "packaging",
+      "pandas",
+      "patsy",
+      "pillow",
+      "pip",
+      "propcache",
+      "pyarrow",
+      "pydantic",
+      "pydantic_core",
+      "pyparsing",
+      "python-dateutil",
+      "python-dotenv",
+      "python-rapidjson",
+      "pytz",
+      "requests",
+      "scipy",
+      "six",
+      "statsmodels",
+      "typing-inspection",
+      "typing_extensions",
+      "tzdata",
+      "urllib3",
+      "websocket-client",
+      "websockets",
+      "wrapt",
+      "yarl"
+    ],
+    "distributions": {
+      "backtrader": {
+        "direct_url": "{\"archive_info\": {\"hash\": \"sha256=fdd8aea68d42924f3567df6025b8182b2be356dc3337984845947822a70f76f2\", \"hashes\": {\"sha256\": \"fdd8aea68d42924f3567df6025b8182b2be356dc3337984845947822a70f76f2\"}}, \"url\": \"file:///D:/t/m6/wheels/backtrader/backtrader-1.4.0-py3-none-any.whl\"}",
+        "version": "1.4.0"
+      },
+      "bt-api-base": {
+        "direct_url": "{\"archive_info\": {\"hash\": \"sha256=4ecf13ca2258fa4f6a18e3d337b411dddbc222d33599ae1ced7a65d217297b6b\", \"hashes\": {\"sha256\": \"4ecf13ca2258fa4f6a18e3d337b411dddbc222d33599ae1ced7a65d217297b6b\"}}, \"url\": \"file:///D:/t/m6/wheels/base/bt_api_base-0.15.8-py3-none-any.whl\"}",
+        "version": "0.15.8"
+      },
+      "bt-api-py": {
+        "direct_url": "{\"archive_info\": {\"hash\": \"sha256=734b16e8442a75b80fbb90a93ef91d93ba25981c933024ff9c6adb44af2f190c\", \"hashes\": {\"sha256\": \"734b16e8442a75b80fbb90a93ef91d93ba25981c933024ff9c6adb44af2f190c\"}}, \"url\": \"file:///D:/t/m6/wheels/sdk/bt_api_py-0.15.5-py3-none-any.whl\"}",
+        "version": "0.15.5"
+      }
+    },
+    "modules": {
+      "backtrader": "D:\\t\\m6\\venv\\Lib\\site-packages\\backtrader\\__init__.py",
+      "bt_api_base": "D:\\t\\m6\\venv\\Lib\\site-packages\\bt_api_base\\__init__.py",
+      "bt_api_py": "D:\\t\\m6\\venv\\Lib\\site-packages\\bt_api_py\\__init__.py"
+    },
+    "prefix": "D:\\t\\m6\\venv",
+    "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]"
+  },
+  "limits": [
+    "No pytest, ServiceHost, real account, credentials, or exchange connection was run.",
+    "AFI R5 service route is separately accepted and was not rerun; it asserts SDK/Base absence, so it is not part of this SDK+Backtrader venv.",
+    "Direct feed and Cerebro data are synthetic/local; these checks establish installed ordinary entry paths only, not venue/provider acceptance.",
+    "The original m6 wrapper failure on expected negative exit 2 is preserved; the negative CLI was not rerun."
+  ],
+  "offline_backtrader_dependency_install": {
+    "installed_package_count": 24,
+    "local_wheelhouse_only": true,
+    "packages": [
+      "PyYAML==6.0.3",
+      "backtrader==1.4.0",
+      "contourpy==1.3.3",
+      "cycler==0.12.1",
+      "fonttools==4.63.0",
+      "formulaic==1.2.2",
+      "interface_meta==2.0.1",
+      "kiwisolver==1.5.1",
+      "matplotlib==3.11.2",
+      "narwhals==2.26.0",
+      "numpy==1.26.4",
+      "packaging==26.2",
+      "pandas==3.0.3",
+      "patsy==1.0.3",
+      "pillow==12.3.0",
+      "pyparsing==3.3.2",
+      "python-dateutil==2.9.0.post0",
+      "pytz==2026.2",
+      "scipy==1.17.1",
+      "six==1.17.0",
+      "statsmodels==0.15.0",
+      "typing_extensions==4.16.0",
+      "tzdata==2026.5",
+      "wrapt==2.1.2"
+    ],
+    "report": {
+      "bytes": 537929,
+      "path": "D:\\t\\m6\\backtrader-runtime-install-report.json",
+      "sha256": "617cfb82bbc7d1d80a5bcf2a88c84cf090b2f66191bddf02146496f7d0a6d000"
+    }
+  },
+  "preserved_diagnostic": {
+    "first_direct_smoke_exit": {
+      "elapsed_seconds": 0.609,
+      "exit_code": 1,
+      "stderr_bytes": 173,
+      "stderr_sha256": "48bdfd86263e8b974812981b7044443df4fb5a7b0647a9e7a69e9feb477045c1",
+      "stdout_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "timed_out": false
+    },
+    "reason": "temporary assertion expected BtApi.close() to close a manually injected feed; source did not do so. Revised smoke removed that unsupported assertion and the exact DirectBackend API call passed in direct-no-zmq-r2."
+  },
+  "round": "MIG01 m6 fresh isolated wheel/install and normal-entry checks",
+  "source_archives": {
+    "backtrader_selected_tar": {
+      "bytes": 8028160,
+      "path": "D:\\t\\m6\\backtrader-b9b-selected.tar",
+      "sha256": "7cde5d5d2482454040add31b2db75900175b87ac704847a3b1938d4c6cd5d3f3"
+    },
+    "base": {
+      "commit": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+      "extracted_root": "D:\\t\\m6\\source\\base",
+      "member_count": 238,
+      "repo": "D:\\bt_api_py\\bt_api\\bt_api_base",
+      "tar_path": "D:\\t\\m6\\base.tar",
+      "tar_sha256": "aeafce1a887ca45c7bc1552311865e1a01146ef95eab97e9e841da5903f6dab1",
+      "tar_size_bytes": 1218560
+    },
+    "sdk": {
+      "commit": "35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2",
+      "extracted_root": "D:\\t\\m6\\source\\sdk",
+      "member_count": 4435,
+      "repo": "D:\\bt_api_py",
+      "tar_path": "D:\\t\\m6\\sdk.tar",
+      "tar_sha256": "0e63a6ca890c046a3c7ef39f0a16a551e627f3574a75ce06de9c585033dc787d",
+      "tar_size_bytes": 118128640
+    }
+  },
+  "uninstalled_optional_distributions": [
+    "bt-api-gateway",
+    "bt-api-execution",
+    "bt-api-risk",
+    "bt-api-monitor",
+    "bt-api-transport-zmq",
+    "pyzmq"
+  ],
+  "wheel_artifacts": [
+    {
+      "bytes": 1867229,
+      "path": "D:\\t\\m6\\wheels\\backtrader\\backtrader-1.4.0-py3-none-any.whl",
+      "sha256": "fdd8aea68d42924f3567df6025b8182b2be356dc3337984845947822a70f76f2"
+    },
+    {
+      "bytes": 151881,
+      "path": "D:\\t\\m6\\wheels\\base\\bt_api_base-0.15.8-py3-none-any.whl",
+      "sha256": "4ecf13ca2258fa4f6a18e3d337b411dddbc222d33599ae1ced7a65d217297b6b"
+    },
+    {
+      "bytes": 1455969,
+      "config_migration_member": {
+        "bytes": 21474,
+        "sha256": "ee0071b531fe20da3cb29d5b66b7fb321a6ecf811d88d1bf9d2ce6ea809c664c"
+      },
+      "metadata_member": "bt_api_py-0.15.5.dist-info/METADATA",
+      "path": "D:\\t\\m6\\wheels\\sdk\\bt_api_py-0.15.5-py3-none-any.whl",
+      "sha256": "734b16e8442a75b80fbb90a93ef91d93ba25981c933024ff9c6adb44af2f190c",
+      "transport_zmq_metadata_lines": [
+        "Requires-Dist: bt_api_base>=0.15.8",
+        "Requires-Dist: bt_api_base[spdlog]>=0.15.8; extra == \"spdlog\"",
+        "Provides-Extra: transport-zmq",
+        "Requires-Dist: bt_api_transport_zmq>=0.1.0; extra == \"transport-zmq\""
+      ]
+    }
+  ]
+}

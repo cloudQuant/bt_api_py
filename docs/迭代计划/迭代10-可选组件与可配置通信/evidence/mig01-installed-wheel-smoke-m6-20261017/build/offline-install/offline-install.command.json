@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "D:\\t\\m6\\venv\\Scripts\\python.exe",
+    "-m",
+    "pip",
+    "install",
+    "--disable-pip-version-check",
+    "--no-index",
+    "--find-links",
+    "D:\\source_code\\ai-for-investor\\.codex-tmp\\afi10-local-release-candidate-r1\\wheelhouse",
+    "--report",
+    "D:\\t\\m6\\pip-install-report.json",
+    "D:\\t\\m6\\wheels\\sdk\\bt_api_py-0.15.5-py3-none-any.whl",
+    "D:\\t\\m6\\wheels\\base\\bt_api_base-0.15.8-py3-none-any.whl"
+  ],
+  "cwd": "D:\\t\\m6",
+  "exit_code": 0,
+  "finished_utc": "2026-10-17T06:37:55.651743+00:00",
+  "started_utc": "2026-10-17T06:37:40.369147+00:00",
+  "stderr_bytes": 0,
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout_bytes": 7310,
+  "stdout_sha256": "b0be8b7e0ee15cc98fac56b9fdae60c5ca213c74d26942e8af8b5361d0534c0e",
+  "timeout_seconds": 600
+}

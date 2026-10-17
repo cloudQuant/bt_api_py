@@ -1,0 +1,11 @@
+usage: bt-gateway-operator [-h] --config CONFIG
+                           [--startup-timeout STARTUP_TIMEOUT]
+                           [--operation-timeout OPERATION_TIMEOUT]
+
+Foreground launcher for code-registered Gateway operator profiles.
+
+options:
+  -h, --help            show this help message and exit
+  --config CONFIG
+  --startup-timeout STARTUP_TIMEOUT
+  --operation-timeout OPERATION_TIMEOUT

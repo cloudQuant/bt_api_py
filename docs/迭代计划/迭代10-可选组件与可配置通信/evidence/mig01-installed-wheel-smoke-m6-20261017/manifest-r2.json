@@ -1,0 +1,29 @@
+{
+  "packet": "MIG01 installed-wheel M6 additive provenance archive R2",
+  "evidence_only": true,
+  "formal_round_assignment": "not assigned here",
+  "base_manifest": {
+    "path": "manifest.json",
+    "sha256": "edf4a319443d8f89ee10f76b68b2a4cd6fad6744795cfb010977199b5495d788",
+    "payload_count": 53
+  },
+  "payload_count": 3,
+  "payloads": [
+    {
+      "path": "raw/original-m6-round-record.md",
+      "bytes": 2757,
+      "sha256": "8f34a5aae742d4c513cb185dff7824395c97b0c80518841ad6af573d0c9aa4f6"
+    },
+    {
+      "path": "provenance/backtrader-wheel-member-audit-r2.json",
+      "bytes": 3341,
+      "sha256": "4ac4e2313ba3816ef8786e88b2a615f4083dbd76f45d91de8881f031f31f20db"
+    },
+    {
+      "path": "round-record-r2.md",
+      "bytes": 2379,
+      "sha256": "b9ddd4d98431d0ca2532c3de288cf16bf8ff3e32174394993fe3e191aaac4952"
+    }
+  ],
+  "scope_note": "Additive only. Does not alter or replace any R1 payload or the original M6 result."
+}
