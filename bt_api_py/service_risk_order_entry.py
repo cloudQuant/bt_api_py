@@ -756,9 +756,14 @@ class RiskOrderEntryService:
         for scope, target in targets.items():
             if type(scope) is not WireScope or type(target) is not RiskOrderTarget:
                 raise RiskOrderEntryError("RISK_ORDER_TARGET_INVALID")
-            if scope.strategy_ref != target.strategy_id:
+            if not _target_strategy_matches_scope(target, scope):
                 raise RiskOrderEntryError("TARGET_STRATEGY_SCOPE_MISMATCH")
             target_copy[scope] = target
+        if (
+            any(scope.manual_book_ref is not None for scope in target_copy)
+            and len(target_copy) != 1
+        ):
+            raise RiskOrderEntryError("MANUAL_BOOK_TARGET_MUST_BE_SINGLETON")
         admission_copy: dict[WireScope, DurableRiskAdmissionAdapter] = {}
         for scope, adapter in admission.items():
             if type(scope) is not WireScope or type(adapter) is not DurableRiskAdmissionAdapter:
@@ -2410,7 +2415,7 @@ class RiskOrderEntryService:
         _, target, admission, contract = binding
         if (
             target.account_scope != command.scope
-            or target.strategy_id != persisted_scope.strategy_ref
+            or not _target_strategy_matches_scope(target, persisted_scope)
             or target.exchange_name != command.exchange_name
             or target.provider_account_id != command.provider_account_id
         ):
@@ -4239,6 +4244,29 @@ def _assert_group_compensation_authorization(
         raise
     except Exception:
         raise RiskOrderEntryError("GROUP_COMPENSATION_AUTHORIZATION_MISMATCH") from None
+
+
+def _target_strategy_matches_scope(target: RiskOrderTarget, scope: WireScope) -> bool:
+    """Bind a strategy target or one exact account-manual scope.
+
+    Manual orders have no caller-selected strategy or run. Their fixed account
+    and manual-book references come from the trusted service scope;
+    ``target.strategy_id`` remains an internal mapper label and is never copied
+    from the HTTP request. The account Risk policy controls this path without a
+    strategy allocation.
+    """
+
+    if scope.manual_book_ref is not None:
+        return (
+            scope.strategy_ref is None
+            and scope.run_id is None
+            and scope.account_ref is not None
+            and not scope.account_refs
+            and scope.portfolio_ref is None
+            and scope.group_id is None
+            and scope.leg_id is None
+        )
+    return scope.strategy_ref == target.strategy_id
 
 
 def _group_compensation_close_receipt_payload(
