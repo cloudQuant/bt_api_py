@@ -1,0 +1,348 @@
+{
+  "schema": "mig01-installed-wheel-evidence-manifest-v1",
+  "title": "MIG01 Backtrader Store retirement installed-wheel check",
+  "date": "2026-10-17",
+  "evidence_class": "LOCAL_ISOLATED_INSTALLED_WHEEL_SMOKES_ONLY",
+  "source_revisions": {
+    "backtrader": {
+      "commit": "6b25ee94ffec14cfad4b511eb6370eba38521c10",
+      "parent": "b9b226be6a82d91bdcb94bf29dfc1ccdad0611c5"
+    },
+    "bt_api_py_sdk_wheel": {
+      "commit": "35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2",
+      "note": "This is the accepted M6 SDK wheel source revision, not current SDK dev HEAD 6ff06e1e3163ae29c03a0d1ae718f68e43ac3b0a."
+    },
+    "bt_api_base_wheel": {
+      "commit": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d"
+    }
+  },
+  "raw_archive": {
+    "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\mig01-bt-retirement-installed-wheel-r2-20261017\\raw-evidence.zip",
+    "bytes": 341037,
+    "sha256": "9b94dee3ad912076cc6440b1c09a7c780c9716935f994e00ebcc882df5dfc300",
+    "member_count": 31,
+    "uncompressed_bytes": 1330786,
+    "members": [
+      {
+        "path": "r2/tools/build_backtrader_wheel_from_commit.py",
+        "bytes": 8384,
+        "sha256": "ebd8408f87eee6309f6b712473627c28c72670d1e35fb9f9a38bafcd53f57f7f"
+      },
+      {
+        "path": "r2/tools/install_exact_wheels.py",
+        "bytes": 2047,
+        "sha256": "1f83048b091c932e394282d900b74caff8144c692f0077ef1f95ae3e7347027d"
+      },
+      {
+        "path": "r2/tools/run_smokes.py",
+        "bytes": 1938,
+        "sha256": "bc41808d328c6720cb8248654c6d34e3b119fbeea32b324133fdf37ee48b0fb0"
+      },
+      {
+        "path": "r2/checks/direct_no_zmq_smoke.py",
+        "bytes": 3109,
+        "sha256": "6672d05c7a83833aa180c29cdb4bfc36019685fbc9d1688ca01ddfce00a75b8b"
+      },
+      {
+        "path": "r2/checks/offline_cerebro_smoke.py",
+        "bytes": 2600,
+        "sha256": "c7685d642b031ca709bb55704730cddf7b0b122b2d3e753e97006fd248da5279"
+      },
+      {
+        "path": "r2/checks/btapistore_retirement_smoke.py",
+        "bytes": 6572,
+        "sha256": "75bb41506bcfca8af0b434ac4d078a5febe877bfe29faccac632181d1a8d7b25"
+      },
+      {
+        "path": "r2/build/git-archive.command.json",
+        "bytes": 879,
+        "sha256": "ec9fab053e643eb0bf03267f7e8a7ec486137bb5abf7cd4b2cefb33a047be0d7"
+      },
+      {
+        "path": "r2/build/git-archive.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r2/build/wheel-build.command.json",
+        "bytes": 790,
+        "sha256": "6fdbd64f269bc6486b39e73b9f7ea33cc9b3f03807954035fee8316f723e8ec5"
+      },
+      {
+        "path": "r2/build/wheel-build.stdout.bin",
+        "bytes": 142436,
+        "sha256": "e723ebf3e4935ba62f16ebc513207bb9d1328278c3f2832baaee9918e956570c"
+      },
+      {
+        "path": "r2/build/wheel-build.stderr.bin",
+        "bytes": 1152,
+        "sha256": "b86c4ff5227499c47de690cd7da31ee152a56b4e6a92219b529dc1e082c9459d"
+      },
+      {
+        "path": "r2/build/wheel-inspection.json",
+        "bytes": 3204,
+        "sha256": "e034741c95401def1b008d7d992d85933badae928a4823ab2962030b22f0e647"
+      },
+      {
+        "path": "r2/build/pip-install.command.json",
+        "bytes": 2105,
+        "sha256": "70ba49ca56155e4904f2df646568d5b351ae2299da4b319fb2e3a404be542056"
+      },
+      {
+        "path": "r2/build/pip-install.stdout.bin",
+        "bytes": 10340,
+        "sha256": "2cc939074227ff1f9b66a8cda5d61d3ba6d86326146ca196c408bfcd144a7f10"
+      },
+      {
+        "path": "r2/build/pip-install.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r2/build/pip-install-report.json",
+        "bytes": 1122637,
+        "sha256": "e774b7f848cb9d79e43ae6d2a6f0523ebb295414bfaa8742c3717e1cae187f17"
+      },
+      {
+        "path": "r2/build/installed-package-audit.json",
+        "bytes": 2924,
+        "sha256": "be15adfce8e7deb4daebb3fea0f0954a6e2afb1b47cdc039a50333af3ed44679"
+      },
+      {
+        "path": "r2/build/smoke-runner-result.json",
+        "bytes": 6476,
+        "sha256": "0e9d7c8f754e03fd82bc6be08e7aeff22e3335458bf55699ed6004ad2c3dc1f5"
+      },
+      {
+        "path": "r2/build/direct_no_zmq_smoke.py.stdout.bin",
+        "bytes": 572,
+        "sha256": "e940a7e8e8bbb07205c46bb9a6af99f54f44dc0dd772823831bf0af50f678fc9"
+      },
+      {
+        "path": "r2/build/direct_no_zmq_smoke.py.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r2/build/offline_cerebro_smoke.py.stdout.bin",
+        "bytes": 386,
+        "sha256": "d77e7d596c7d0198f7a6018bdbe209b17d9b628024e30bf921a6a86b4e8ca897"
+      },
+      {
+        "path": "r2/build/offline_cerebro_smoke.py.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r2/build/btapistore_retirement_smoke.py.stdout.bin",
+        "bytes": 1209,
+        "sha256": "ae955d35b0331f313cfe30d69633e1dc49f294c0e83ac1d3f8437d889c659147"
+      },
+      {
+        "path": "r2/build/btapistore_retirement_smoke.py.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r2/build/gateway-operator-help.command.json",
+        "bytes": 922,
+        "sha256": "8c09e2cc3ac1c382a15a7f22ed596bdf90a39413af9eb0d053703cb81d6cce4e"
+      },
+      {
+        "path": "r2/build/gateway-operator-help.stdout.txt",
+        "bytes": 417,
+        "sha256": "ce9ffdf9bf15f847f8656dec2aeff6574f656d63490856108ec06a52e4beb901"
+      },
+      {
+        "path": "r2/build/gateway-operator-help.stderr.txt",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r2/venv/pyvenv.cfg",
+        "bytes": 326,
+        "sha256": "9b5459425fbaed9653cef93710d389bf4293f273781be9b7b5a51a4db2ab50ba"
+      },
+      {
+        "path": "setup-failure-r1/tools/build_backtrader_wheel_from_commit.py",
+        "bytes": 8391,
+        "sha256": "456f95aeb28056b2668ee1fdd863fd805b67b162f9cfbc072b704116c0ecbed5"
+      },
+      {
+        "path": "setup-failure-r1/build/git-archive.command.json",
+        "bytes": 884,
+        "sha256": "fabe17f3c305dc3b527be0aa9b6592003f71691b2eeb710b7b40e1de7d7a37f5"
+      },
+      {
+        "path": "setup-failure-r1/build/git-archive.stderr.bin",
+        "bytes": 86,
+        "sha256": "813f74a4c613fc31bac0a0dcd32a529940c8e51c6b2abf6d3ddd5df87af9f8b9"
+      }
+    ]
+  },
+  "external_artifacts": [
+    {
+      "role": "backtrader_git_archive_tar",
+      "path": "D:\\t\\mig01-btapistore-retirement-r2\\source\\backtrader-6b25ee94.tar",
+      "bytes": 474746880,
+      "sha256": "69a0338cd55d6174b124e3ba0046d81abccd233ea3d00ee16b5fa0898568398d",
+      "note": "source commit 6b25ee94ffec14cfad4b511eb6370eba38521c10",
+      "copied_into_zip": false
+    },
+    {
+      "role": "backtrader_built_wheel",
+      "path": "D:\\t\\mig01-btapistore-retirement-r2\\wheels\\backtrader\\backtrader-1.4.0-py3-none-any.whl",
+      "bytes": 1889578,
+      "sha256": "9eec49ee4f3fb9b03df390b0828ec548752da7f05cbd8673b16399c23704f3ac",
+      "note": "built from the selected Git archive; package member bytes verified against archive",
+      "copied_into_zip": false
+    },
+    {
+      "role": "m6_sdk_wheel",
+      "path": "D:\\t\\m6\\wheels\\sdk\\bt_api_py-0.15.5-py3-none-any.whl",
+      "bytes": 1455969,
+      "sha256": "734b16e8442a75b80fbb90a93ef91d93ba25981c933024ff9c6adb44af2f190c",
+      "note": "SDK source commit 35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2",
+      "copied_into_zip": false
+    },
+    {
+      "role": "m6_base_wheel",
+      "path": "D:\\t\\m6\\wheels\\base\\bt_api_base-0.15.8-py3-none-any.whl",
+      "bytes": 151881,
+      "sha256": "4ecf13ca2258fa4f6a18e3d337b411dddbc222d33599ae1ced7a65d217297b6b",
+      "note": "Base source commit fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+      "copied_into_zip": false
+    },
+    {
+      "role": "m6_prior_source_wheel_install_provenance",
+      "path": "D:\\bt_api_py\\docs\\迭代计划\\迭代10-可选组件与可配置通信\\evidence\\mig01-installed-wheel-smoke-m6-20261017\\provenance\\source-wheel-install-provenance.json",
+      "bytes": 8041,
+      "sha256": "6f368334c46624a622a73ad2751eb58e8021842b1d8c28079bc6eab70f58ebf7",
+      "note": "prior M6 provenance; contextual reference only",
+      "copied_into_zip": false
+    }
+  ],
+  "environment": {
+    "venv": "D:\\t\\mig01-btapistore-retirement-r2\\venv",
+    "python_executable": "D:\\t\\mig01-btapistore-retirement-r2\\venv\\Scripts\\python.exe",
+    "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "system_site_packages": false,
+    "pyvenv_cfg_member": "r2/venv/pyvenv.cfg",
+    "install_mode": "pip --no-index using pinned local wheelhouse; PYTHONPATH removed; PYTHONNOUSERSITE=1",
+    "wheelhouse": "D:\\source_code\\ai-for-investor\\.codex-tmp\\afi10-local-release-candidate-r1\\wheelhouse",
+    "installed_package_audit_member": "r2/build/installed-package-audit.json",
+    "pip_report_member": "r2/build/pip-install-report.json",
+    "installed_package_origins": {
+      "backtrader": "D:\\t\\mig01-btapistore-retirement-r2\\venv\\Lib\\site-packages",
+      "bt_api_py": "D:\\t\\mig01-btapistore-retirement-r2\\venv\\Lib\\site-packages",
+      "bt_api_base": "D:\\t\\mig01-btapistore-retirement-r2\\venv\\Lib\\site-packages"
+    },
+    "optional_absent": {
+      "bt-api-gateway": true,
+      "bt-api-execution": true,
+      "bt-api-risk": true,
+      "bt-api-monitor": true,
+      "bt-api-transport-zmq": true
+    }
+  },
+  "wheel_verification": {
+    "wheel_member": "backtrader-1.4.0-py3-none-any.whl",
+    "inspection_member": "r2/build/wheel-inspection.json",
+    "package_member_count": 532,
+    "package_members_matching_source_archive": 532,
+    "mismatch_count": 0,
+    "service_execution_session_member": true,
+    "btapistore_member": true,
+    "retired_gateway_scan_hits": [],
+    "build_command_member": "r2/build/wheel-build.command.json",
+    "build_stdout_member": "r2/build/wheel-build.stdout.bin",
+    "build_stderr_member": "r2/build/wheel-build.stderr.bin",
+    "build_exit_code": 0
+  },
+  "smoke_results": [
+    {
+      "name": "direct_no_zmq_smoke.py",
+      "exit_code": 0,
+      "script": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\checks\\direct_no_zmq_smoke.py",
+        "bytes": 3109,
+        "sha256": "6672d05c7a83833aa180c29cdb4bfc36019685fbc9d1688ca01ddfce00a75b8b"
+      },
+      "stdout": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\build\\direct_no_zmq_smoke.py.stdout.bin",
+        "bytes": 572,
+        "sha256": "e940a7e8e8bbb07205c46bb9a6af99f54f44dc0dd772823831bf0af50f678fc9"
+      },
+      "stderr": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\build\\direct_no_zmq_smoke.py.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "offline_cerebro_smoke.py",
+      "exit_code": 0,
+      "script": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\checks\\offline_cerebro_smoke.py",
+        "bytes": 2600,
+        "sha256": "c7685d642b031ca709bb55704730cddf7b0b122b2d3e753e97006fd248da5279"
+      },
+      "stdout": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\build\\offline_cerebro_smoke.py.stdout.bin",
+        "bytes": 386,
+        "sha256": "d77e7d596c7d0198f7a6018bdbe209b17d9b628024e30bf921a6a86b4e8ca897"
+      },
+      "stderr": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\build\\offline_cerebro_smoke.py.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "btapistore_retirement_smoke.py",
+      "exit_code": 0,
+      "script": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\checks\\btapistore_retirement_smoke.py",
+        "bytes": 6572,
+        "sha256": "75bb41506bcfca8af0b434ac4d078a5febe877bfe29faccac632181d1a8d7b25"
+      },
+      "stdout": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\build\\btapistore_retirement_smoke.py.stdout.bin",
+        "bytes": 1209,
+        "sha256": "ae955d35b0331f313cfe30d69633e1dc49f294c0e83ac1d3f8437d889c659147"
+      },
+      "stderr": {
+        "path": "D:\\t\\mig01-btapistore-retirement-r2\\build\\btapistore_retirement_smoke.py.stderr.bin",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  ],
+  "operator_cli_help": {
+    "receipt_member": "r2/build/gateway-operator-help.command.json",
+    "stdout_member": "r2/build/gateway-operator-help.stdout.txt",
+    "stderr_member": "r2/build/gateway-operator-help.stderr.txt",
+    "exit_code": 0,
+    "scope": "--help only; no config was supplied and no service was started"
+  },
+  "setup_failure_history": {
+    "classification": "HARNESS_SETUP_FAILURE_BEFORE_BUILD",
+    "archive_members": [
+      "setup-failure-r1/tools/build_backtrader_wheel_from_commit.py",
+      "setup-failure-r1/build/git-archive.command.json",
+      "setup-failure-r1/build/git-archive.stderr.bin"
+    ],
+    "summary": "R1 invoked git twice in the git-archive command; Git exited 1 and produced no source archive or wheel. R2 corrected the wrapper and completed."
+  },
+  "excluded_bulk_artifacts": [
+    "474 MB source tar archive",
+    "built wheel artifacts",
+    "venv and installed site-packages"
+  ],
+  "limitations": [
+    "No pytest, Host, real ServiceHost RPC, provider, real venue, credentials, account, or network operation was run.",
+    "Read-only service smoke uses an injected local fake API and proves no write calls only in that synthetic path.",
+    "The SDK package wheel is the accepted M6 wheel from source commit 35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2, not current SDK dev.",
+    "Build emitted setuptools setup.py deprecation, missing setuptools_scm metadata, and Git file-listing warnings; command exit was zero and all package bytes were verified against the selected source archive."
+  ]
+}

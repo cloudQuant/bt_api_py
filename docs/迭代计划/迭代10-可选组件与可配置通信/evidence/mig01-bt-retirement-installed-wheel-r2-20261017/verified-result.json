@@ -1,0 +1,53 @@
+{
+  "case": "MIG01",
+  "verdict": "PASS",
+  "previous_formal_count": 57,
+  "formal_count": 58,
+  "total": 68,
+  "sdk_archive_delivery_parent": "6ff06e1e3163ae29c03a0d1ae718f68e43ac3b0a",
+  "installed_source_revisions": {
+    "backtrader": {
+      "commit": "6b25ee94ffec14cfad4b511eb6370eba38521c10",
+      "parent": "b9b226be6a82d91bdcb94bf29dfc1ccdad0611c5"
+    },
+    "bt_api_py_sdk_wheel": {
+      "commit": "35e3879a7c3c43e38fce0bfdacd0668c1f69d6a2",
+      "note": "This is the accepted M6 SDK wheel source revision, not current SDK dev HEAD 6ff06e1e3163ae29c03a0d1ae718f68e43ac3b0a."
+    },
+    "bt_api_base_wheel": {
+      "commit": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d"
+    }
+  },
+  "provider_source_heads": {
+    "bt_api_binance": "d23492761e7c78502119c541a6693c82ab51388a",
+    "bt_api_ctp": "68a5e1147cb98ad341b0cae79bc39a24f6a74dd0",
+    "bt_api_ib_web": "2ac97b7077326bf5b6fddfba5fdb399d0976e3d0",
+    "bt_api_mt5": "32e1772136bdc3deca71c23df9d272559468d964",
+    "bt_api_okx": "6a326d239559089f5cb2e290f1fa1cf1914b2b96"
+  },
+  "evidence_pins": {
+    "raw-evidence.zip": "9b94dee3ad912076cc6440b1c09a7c780c9716935f994e00ebcc882df5dfc300",
+    "manifest.json": "542efc66a86fbc2716d97d220b1901cb982a7dc6de9bb5805a35bb4c2fbdcf42",
+    "round-record.md": "f9d42a45707d9da8c30dd915feafc1c69dff965a9bc013527a603ad0227d5874"
+  },
+  "zip_members_verified": 31,
+  "backtrader_wheel_members_matched": 532,
+  "smoke_exit_codes": [
+    0,
+    0,
+    0
+  ],
+  "operator_help_exit": 0,
+  "new_host_or_provider_acceptance": false,
+  "independent_reviews": [
+    "audit_afi_remaining_cases: source-clause GO",
+    "mig03_partial_delivery_review: fixed installed-wheel clause GO"
+  ],
+  "limitations": [
+    "Fixed release combination only; SDK wheel is35e, not6ff",
+    "Service smoke uses injected fake read-only API",
+    "Direct feed_closed=0; no feed-close acceptance",
+    "Build warnings and pre-build R1 failure preserved",
+    "SDK full SHA typo in uncommitted proposal corrected from Git/M6 provenance; original drafts preserved"
+  ]
+}
