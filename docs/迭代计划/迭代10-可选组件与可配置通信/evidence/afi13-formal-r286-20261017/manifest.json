@@ -1,0 +1,257 @@
+{
+  "case": "AFI13",
+  "formal_status": "PASS_LOCAL_SYNTHETIC",
+  "parent": "3751e31cb572c47936fe60189a50d44e71dbeeb8",
+  "original_r5_pytest_status": "FAILED",
+  "pytest_exit": 1,
+  "failure": "test used nonexistent PaperMatchReceiptV2.fee; public field is fee_amount",
+  "root_readonly_tail_checks": 22,
+  "root_readonly_tail_all_pass": true,
+  "executed_test_sha256": "0f8e63311e8f4018e2b48eeaa32664a400524cdc8a6ea2ddd1fb901c13cceaa9",
+  "delivered_test_sha256": "fa993c3f251608d76512827f243db287f8c0e55e55e4d6e779febba13b425743",
+  "delivered_test_note": "R5 plus one fee_amount oracle correction; full corrected Host node not rerun",
+  "preserved_canonical_draft": {
+    "path": "D:\\bt_api_py\\.codex-tmp\\afi13-imported-paper-canonical-before-r286-20261017.py",
+    "sha256": "97afb9236bb4efff666355a8688ce5a00937607a2077cba7a3eeb210b0677fb1"
+  },
+  "helper_dependencies": [
+    {
+      "path": "tests/__init__.py",
+      "qa_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "head_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "raw_match": true
+    },
+    {
+      "path": "tests/integration/__init__.py",
+      "qa_sha256": "12e0fbccb521257bcbee12ac880d61f0359165838aa94bed23168e5fffccb526",
+      "head_sha256": "12e0fbccb521257bcbee12ac880d61f0359165838aa94bed23168e5fffccb526",
+      "raw_match": true
+    },
+    {
+      "path": "tests/integration/test_afi13_ai_paper_risk_monitor_http.py",
+      "qa_sha256": "57110b5341c5362f8d27f9ddadd3eeae118072c74a328dde5c8be9533ac1a4db",
+      "head_sha256": "57110b5341c5362f8d27f9ddadd3eeae118072c74a328dde5c8be9533ac1a4db",
+      "raw_match": true
+    },
+    {
+      "path": "tests/integration/test_afi13_managed_paper_multiworker_http.py",
+      "qa_sha256": "f272d71434733dca61cdf1c7348a6b12cdffae6c46e03cd0e6c538d1fdde792f",
+      "head_sha256": "f272d71434733dca61cdf1c7348a6b12cdffae6c46e03cd0e6c538d1fdde792f",
+      "raw_match": true
+    },
+    {
+      "path": "tests/unit/_runtime_origin_pytest_plugin.py",
+      "qa_sha256": "c10e1ccda04fab17324d9a53d13fc15b76525cccaa9cbb8881efd615b9e6b7e9",
+      "head_sha256": "c10e1ccda04fab17324d9a53d13fc15b76525cccaa9cbb8881efd615b9e6b7e9",
+      "raw_match": true
+    },
+    {
+      "path": "tests/unit/_runtime_origin_receipts.py",
+      "qa_sha256": "a4ca48e1f6ae30ae74d17f77689b589d1c11ecc03e0854294fd7c3ca7f087479",
+      "head_sha256": "4f36442504a8756c51e79c592a1e6cda1f765d9c2dbbe91476a6c958599e4c57",
+      "raw_match": false
+    },
+    {
+      "path": "tests/unit/_spawned_process_helpers.py",
+      "qa_sha256": "3de587d67201cd85c77c25428cb551397d10b3956393978c296cc28d1f1f86b4",
+      "head_sha256": "3de587d67201cd85c77c25428cb551397d10b3956393978c296cc28d1f1f86b4",
+      "raw_match": true
+    },
+    {
+      "path": "tests/unit/test_service_execution_paper_host_integration.py",
+      "qa_sha256": "25a96fc2b04a0c956a588d031cbc1460d334268e50cce0586bc8d63486d8db83",
+      "head_sha256": "25a96fc2b04a0c956a588d031cbc1460d334268e50cce0586bc8d63486d8db83",
+      "raw_match": true
+    },
+    {
+      "path": "tests/unit/test_service_execution_paper_risk_monitor_host_integration.py",
+      "qa_sha256": "a7ecabebe5bf8c3a6af403a7592d08c9f0363e2f5c7dd35cb1d35f3e40c1bded",
+      "head_sha256": "a7ecabebe5bf8c3a6af403a7592d08c9f0363e2f5c7dd35cb1d35f3e40c1bded",
+      "raw_match": true
+    }
+  ],
+  "helper_note": "Eight helper blobs match delivery HEAD. The receipt helper is a per-test instrumentation variant; its exact R5 bytes are archived. For the recorded fixed-source invocation, overlay it at tests/unit/_runtime_origin_receipts.py; do not replace the shared canonical R9 helper.",
+  "members": {
+    "executed-source/_runtime_origin_receipts.py": {
+      "source": "D:\\bt_api_py\\.codex-tmp\\afi13-imported-paper-managed-fill-r5-20261017\\parent_overlay\\tests\\unit\\_runtime_origin_receipts.py",
+      "size": 18187,
+      "sha256": "a4ca48e1f6ae30ae74d17f77689b589d1c11ecc03e0854294fd7c3ca7f087479"
+    },
+    "executed-source/test_afi13_imported_paper_managed_fill_http.py": {
+      "source": "D:\\bt_api_py\\.codex-tmp\\afi13-imported-paper-managed-fill-r5-20261017\\parent_overlay\\tests\\integration\\test_afi13_imported_paper_managed_fill_http.py",
+      "size": 58874,
+      "sha256": "0f8e63311e8f4018e2b48eeaa32664a400524cdc8a6ea2ddd1fb901c13cceaa9"
+    },
+    "preserved-r3/junit.xml": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r3-20261017\\junit.xml",
+      "size": 69253,
+      "sha256": "1479fff6cb3de525c2f745bc5cc6f797620271ad2b1a089cf2d541d74a7fc561"
+    },
+    "preserved-r3/result.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r3-20261017\\result.json",
+      "size": 482,
+      "sha256": "0a2b176f62a3f889509fe653795fb6a0c3c43992fd249fd383b26024aea109a6"
+    },
+    "preserved-r3/stdout.log": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r3-20261017\\stdout.log",
+      "size": 78283,
+      "sha256": "5c2b106934bb92678dc655d39fb9a66b82207eef674307469621405463881a45"
+    },
+    "preserved-r4/junit.xml": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r4-20261017\\junit.xml",
+      "size": 78024,
+      "sha256": "140768e79b379e8ad578ec2cc209a59f8b1d1a32bcdcfa5d3bae176d2d32d478"
+    },
+    "preserved-r4/result.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r4-20261017\\result.json",
+      "size": 482,
+      "sha256": "7b4fee13967f773421a45306637fa52fd38891ee34fe9e84dda7bb2c2022fd60"
+    },
+    "preserved-r4/stdout.log": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r4-20261017\\stdout.log",
+      "size": 88511,
+      "sha256": "508622fea819b067c7a644f99341285fec5de4a0e65ea30bec14e91668b0b9c1"
+    },
+    "r5/command.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\command.json",
+      "size": 4802,
+      "sha256": "b49373c187cbd1314fb0e6bc598015a63ca487e0f14fa80710bca0faa721a2ff"
+    },
+    "r5/exit.txt": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\exit.txt",
+      "size": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    "r5/junit.xml": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\junit.xml",
+      "size": 80051,
+      "sha256": "7183760e01f2c494dcc866fa990cf1059c5de07fd2e8a2fd40cf418c3b3e86e2"
+    },
+    "r5/result.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\result.json",
+      "size": 482,
+      "sha256": "16ae38b8d6d385d4307943912c2491725dff4cadfd4cde10007a7bfd44cc38f6"
+    },
+    "r5/runner.py": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runner.py",
+      "size": 3204,
+      "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-execution-owner-64900-c3b8c8dc073849418c1ec3af7c35ff4c-process-exit.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-execution-owner-64900-c3b8c8dc073849418c1ec3af7c35ff4c-process-exit.json",
+      "size": 402,
+      "sha256": "3fc0b0d9d4f035553da90f6589799624925a1e803d79a2c1e86e8a7b639d9757"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-execution-owner-64900-c3b8c8dc073849418c1ec3af7c35ff4c-ready.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-execution-owner-64900-c3b8c8dc073849418c1ec3af7c35ff4c-ready.json",
+      "size": 10461,
+      "sha256": "46d9123929c9b708f92ed6edee53addcb414cdbbf11dffd0214c16435501f045"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-http-worker-33560-ade2042da47040bb817322e7015e981d-process-exit.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-http-worker-33560-ade2042da47040bb817322e7015e981d-process-exit.json",
+      "size": 398,
+      "sha256": "445227ac55f485a827b6a4d92ec9bbbacdc5a21d5260f599aff52a240248c88a"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-http-worker-33560-ade2042da47040bb817322e7015e981d-ready.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-http-worker-33560-ade2042da47040bb817322e7015e981d-ready.json",
+      "size": 5870,
+      "sha256": "b2c5e554a0c648bf067b9f627b38bdb025f73645b58b4f382f72cf9ce064d284"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-http-worker-52972-19ebf14a9aee405ea01aa500aa3711e4-process-exit.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-http-worker-52972-19ebf14a9aee405ea01aa500aa3711e4-process-exit.json",
+      "size": 398,
+      "sha256": "6bf7b046973e03c1d62bcee5afe11db8138ca6c1985312d7e6003ef399819912"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-http-worker-52972-19ebf14a9aee405ea01aa500aa3711e4-ready.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-http-worker-52972-19ebf14a9aee405ea01aa500aa3711e4-ready.json",
+      "size": 5862,
+      "sha256": "443382675ebfe8ff1f3a6c834fff8c81db4ab71811ec6fe35bc81f1cf4bb09c1"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-http-worker-77032-ee844716aa374429acc5f07ce5c4d3b1-process-exit.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-http-worker-77032-ee844716aa374429acc5f07ce5c4d3b1-process-exit.json",
+      "size": 398,
+      "sha256": "4d04dc563f39670352a585f9c297470bbea9972f03912019a0a087b0328e9ab1"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-http-worker-77032-ee844716aa374429acc5f07ce5c4d3b1-ready.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-http-worker-77032-ee844716aa374429acc5f07ce5c4d3b1-ready.json",
+      "size": 5862,
+      "sha256": "b119519460e55339c3cc469883634a17eefb97904e5f89a9c9a7862f78bd31b8"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-monitor-worker-66988-b5759a97904e4baaaf088dcf0c59a4e2-process-exit.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-monitor-worker-66988-b5759a97904e4baaaf088dcf0c59a4e2-process-exit.json",
+      "size": 401,
+      "sha256": "4513b864c8c7a286054fbf0bbd5f2149a90d7675e6d4acdf6eccbfe02f0deda1"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-monitor-worker-66988-b5759a97904e4baaaf088dcf0c59a4e2-ready.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-monitor-worker-66988-b5759a97904e4baaaf088dcf0c59a4e2-ready.json",
+      "size": 5057,
+      "sha256": "35453cc32e8290a469536e58bc9e6f61452b803c8a0bd660d9ba26c757475b76"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-pytest-parent-66032-0b8360c18d734d2b991c9b7e224e4c29-pytest-collection-finish.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-pytest-parent-66032-0b8360c18d734d2b991c9b7e224e4c29-pytest-collection-finish.json",
+      "size": 5639,
+      "sha256": "2db0a10f2b5655bb08889f1b6e9c424fdfe7595a84daaf05c2e673888c602cc3"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-pytest-parent-66032-0b8360c18d734d2b991c9b7e224e4c29-pytest-session-finish.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-pytest-parent-66032-0b8360c18d734d2b991c9b7e224e4c29-pytest-session-finish.json",
+      "size": 6757,
+      "sha256": "01dd99b195c783385c764c099cbd7f1c16398830ef1690cfce6a4c810c2456d3"
+    },
+    "r5/runtime-receipts/afi13-imported-paper-managed-fill-r5-20261017-pytest-parent-66032-0b8360c18d734d2b991c9b7e224e4c29-pytest-session-start.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\runtime-receipts\\afi13-imported-paper-managed-fill-r5-20261017-pytest-parent-66032-0b8360c18d734d2b991c9b7e224e4c29-pytest-session-start.json",
+      "size": 2292,
+      "sha256": "ea20b7375638f591b43ecc494dfef731ffe732b6dff7093a108584a25b1ab60c"
+    },
+    "r5/source-after.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\source-after.json",
+      "size": 766853,
+      "sha256": "1b53f284b7714e2c48d17696b2289813827b30495d6176e98e8338031e9ece71"
+    },
+    "r5/source-before.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\source-before.json",
+      "size": 766853,
+      "sha256": "1b53f284b7714e2c48d17696b2289813827b30495d6176e98e8338031e9ece71"
+    },
+    "r5/spec.json": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\spec.json",
+      "size": 778938,
+      "sha256": "33e5b901ec54e319b72aa36b9a1432f5888ac2d5d8dec77f67dc0634e72438f6"
+    },
+    "r5/stderr.log": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\stderr.log",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "r5/stdout.log": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\stdout.log",
+      "size": 91075,
+      "sha256": "257111ec502e4ffe65df55fb72a39fae870ba81bdcfb3bd52f11f25d434c5f11"
+    },
+    "r5/synthetic-databases/afi12-http-host-execution.sqlite3": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\pytest-tmp\\test_nonempty_import_explicit_0\\afi12-http-host-execution.sqlite3",
+      "size": 585728,
+      "sha256": "83587d78409b36de4afaaa830c2b12c7dac305dfe09dc9b0f084081615e36424"
+    },
+    "r5/synthetic-databases/afi13-imported-paper-app.sqlite3": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\pytest-tmp\\test_nonempty_import_explicit_0\\afi13-imported-paper-app.sqlite3",
+      "size": 3850240,
+      "sha256": "cd8a9cb54b44013eab08b2c92322fbfee51c980ba7d4f1204fed99f1aee87fa5"
+    },
+    "r5/synthetic-databases/afi13-imported-paper-monitor-outbox.sqlite3": {
+      "source": "D:\\temp\\afi13-imported-paper-managed-fill-root-r5-20261017\\pytest-tmp\\test_nonempty_import_explicit_0\\afi13-imported-paper-monitor-outbox.sqlite3",
+      "size": 36864,
+      "sha256": "1f0b63638a0063d5b3a7e7eb5a1e017bded39cc9a3527fcc5ccd056c8ab48492"
+    },
+    "readonly-tail/audit.py": {
+      "source": "D:\\bt_api_py\\.codex-tmp\\afi13-r5-root-readonly-tail-audit-20261017.py",
+      "size": 13899,
+      "sha256": "1220f998ce8846afbc2cf87e0bfd5db25a56a77626c29070d03352477140f296"
+    },
+    "readonly-tail/result.json": {
+      "source": "D:\\bt_api_py\\.codex-tmp\\afi13-r5-root-readonly-tail-audit-20261017.json",
+      "size": 8539,
+      "sha256": "767f0911c3c0603c8e2823a45ee321ba17329150f46a953ccede0970d6984898"
+    }
+  },
+  "raw_archive_sha256": "4221e3c5fd90269388de3265c4a1f23a1dd52b1f651d4256ca1ced5cb7b41dc6"
+}

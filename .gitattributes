@@ -80,3 +80,4 @@ test_support/arb06_r18_sdk_support/integration/_dim05_roll_exit_risk_host_fixtur
 test_support/arb06_r18_sdk_support/integration/test_arb03_dim05_group_partial_fill_service.py -text
 test_support/arb06_r18_sdk_support/integration/test_service_execution_group_local_process.py -text
 test_support/arb06_r18_sdk_support/unit/_service_group_provider_fixtures.py -text
+tests/integration/test_afi13_imported_paper_managed_fill_http.py -text
