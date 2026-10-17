@@ -371,6 +371,7 @@ class TrustedGroupWritePolicy:
                 "orders.submit_group_leg",
                 "orders.cancel_group_leg",
                 "orders.submit_group_compensation_close",
+                "orders.submit_group_roll_exit",
             }
             or not _text(self.run_id)
             or self.scope.execution_domain_ref is None
@@ -1683,7 +1684,7 @@ class ServiceRegistry:
             write_operations = frozenset(json.loads(registration["write_operations_json"]))
             principal = registration["principal"]
             group_order_writes = write_operations.intersection(
-                {"orders.submit_group_leg", "orders.submit_group_compensation_close"}
+                {"orders.submit_group_leg", "orders.submit_group_compensation_close", "orders.submit_group_roll_exit"}
             )
             operation = (
                 next(iter(group_order_writes))

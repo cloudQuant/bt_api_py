@@ -51,6 +51,8 @@ MOUNT_PORTS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "upstream.telemetry": ("service.telemetry_ingress",),
         "upstream.owner_control": ("service.owner_control",),
         "upstream.account_reservations": ("service.group_reservations",),
+        "upstream.group_roll_exit_orders": ("service.order_entry",),
+        "upstream.group_roll_exit_order_query": ("service.order_query",),
     }
 )
 

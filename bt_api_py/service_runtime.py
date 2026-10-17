@@ -70,6 +70,7 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.submit_group_leg",
                 "orders.resolve_group_leg",
             "orders.submit_group_compensation_close",
+            "orders.submit_group_roll_exit",
                 "orders.cancel_group_leg",
             }
         ),
@@ -84,10 +85,14 @@ PORT_OPERATIONS = MappingProxyType(
                 "orders.query_group_cancel",
             "orders.prepare_group_compensation_close",
             "orders.query_group_compensation_close",
+            "orders.prepare_group_roll_exit",
+            "orders.query_group_roll_exit",
                 "execution.account_books.query",
             }
         ),
-        "service.order_group_entry": frozenset({"groups.submit", "groups.query", "groups.cancel"}),
+        "service.order_group_entry": frozenset(
+            {"groups.submit", "groups.query", "groups.cancel", "groups.roll_exit", "groups.query_roll_exit"}
+        ),
         "service.risk_query": frozenset(
             {"risk.snapshot", "risk.head", "risk.read_after", "risk.ack"}
         ),
@@ -143,6 +148,9 @@ _GROUP_ORDER_ENTRY_ALL_OPERATIONS = (
 )
 _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS = frozenset(
     {"orders.submit_group_compensation_close"}
+)
+_GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS = frozenset(
+    {"orders.submit_group_roll_exit"}
 )
 _DEFAULT_GROUP_ORDER_ENTRY_OPERATIONS = frozenset({"groups.submit", "groups.query"})
 _APPROVED_ORDER_ENTRY_OPERATIONS = frozenset({"orders.submit_approved_target"})
@@ -1302,10 +1310,17 @@ class ServiceClientRuntime:
                 == _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
                 and operations == _GROUP_COMPENSATION_ORDER_ENTRY_OPERATIONS
             )
+            explicit_group_roll_exit_only = (
+                requested is not None
+                and requested.intersection(PORT_OPERATIONS[port])
+                == _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS
+                and operations == _GROUP_ROLL_EXIT_ORDER_ENTRY_OPERATIONS
+            )
             if not (
                 explicit_group_owner
                 or explicit_approved_target_only
                 or explicit_group_compensation_only
+                or explicit_group_roll_exit_only
             ):
                 raise ServiceRuntimeError("CAPABILITY_UNAVAILABLE")
         digest = hashlib.sha256(

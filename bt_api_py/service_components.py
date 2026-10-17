@@ -635,11 +635,11 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             operations_attribute=("GROUP_COORDINATOR_OPERATIONS",),
             resource_keys=frozenset({"store", "targets", "run_bindings"}),
             public_ports=MappingProxyType(
-                {"service.order_group_entry": frozenset({"groups.submit", "groups.query", "groups.cancel"})}
+                {"service.order_group_entry": frozenset({"groups.submit", "groups.query", "groups.cancel", "groups.roll_exit", "groups.query_roll_exit"})}
             ),
             internal_ports=frozenset(),
             write_operations_by_port=MappingProxyType(
-                {"service.order_group_entry": frozenset({"groups.submit", "groups.cancel"})}
+                {"service.order_group_entry": frozenset({"groups.submit", "groups.cancel", "groups.roll_exit"})}
             ),
         ),
         ("execution", "legacy_import_owner"): _Builtin(
@@ -783,6 +783,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             optional_resource_keys=frozenset(
                 {
                     "group_compensation_authorization_source",
+                    "group_roll_exit_authorization_source",
                     "position_valuation_resolver",
                     "account_policy_admission_resolver",
                     "account_policy_scope",
@@ -794,6 +795,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                         {
                             "orders.submit",
                             "orders.submit_group_compensation_close",
+                            "orders.submit_group_roll_exit",
                         }
                     ),
                     "service.order_query": frozenset(
@@ -801,6 +803,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "orders.query",
                             "orders.prepare_group_compensation_close",
                             "orders.query_group_compensation_close",
+                            "orders.prepare_group_roll_exit",
+                            "orders.query_group_roll_exit",
                         }
                     ),
                 }
@@ -810,7 +814,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
             write_operations_by_port=MappingProxyType(
                 {
                     "service.order_entry": frozenset(
-                        {"orders.submit", "orders.submit_group_compensation_close"}
+                        {"orders.submit", "orders.submit_group_compensation_close", "orders.submit_group_roll_exit"}
                     )
                 }
             ),
@@ -831,6 +835,14 @@ _GROUP_COMPENSATION_OPERATIONS: Final[frozenset[str]] = frozenset(
     }
 )
 _GROUP_COMPENSATION_SUBMIT: Final[str] = "orders.submit_group_compensation_close"
+_GROUP_ROLL_EXIT_OPERATIONS: Final[frozenset[str]] = frozenset(
+    {
+        "orders.prepare_group_roll_exit",
+        "orders.submit_group_roll_exit",
+        "orders.query_group_roll_exit",
+    }
+)
+_GROUP_ROLL_EXIT_SUBMIT: Final[str] = "orders.submit_group_roll_exit"
 
 _EXECUTION_OWNER_LOCK_GUARD = threading.Lock()
 _EXECUTION_OWNER_LOCK_PATHS: set[str] = set()
@@ -1768,6 +1780,8 @@ def build_component(
             raise ServiceComponentError("RESOURCE_KEYS_MISMATCH")
         group_compensation_source: object | None = None
         group_compensation_policy: TrustedGroupWritePolicy | None = None
+        group_roll_exit_source: object | None = None
+        group_roll_exit_policy: TrustedGroupWritePolicy | None = None
         if spec.component == "risk" and spec.options.get("role") == "account_owner":
             candidate_source = resources.values.get(
                 "group_compensation_authorization_source"
@@ -1836,6 +1850,57 @@ def build_component(
                 group_compensation_policy = matches[0]
             elif compensation_policies:
                 raise ServiceComponentError("GROUP_COMPENSATION_SOURCE_UNAVAILABLE")
+            candidate_roll_source = resources.values.get("group_roll_exit_authorization_source")
+            if (
+                "group_roll_exit_authorization_source" in resources.values
+                and candidate_roll_source is None
+            ):
+                raise ServiceComponentError("GROUP_ROLL_EXIT_SOURCE_UNAVAILABLE")
+            roll_policies = tuple(
+                policy
+                for policy in trusted_group_write_policies
+                if policy.operation == _GROUP_ROLL_EXIT_SUBMIT
+                and policy.instance_id == spec.instance_id
+            )
+            if candidate_roll_source is not None:
+                if (
+                    prepared.operations_by_port.get("service.order_entry") is None
+                    or _GROUP_ROLL_EXIT_SUBMIT
+                    not in prepared.operations_by_port["service.order_entry"]
+                    or prepared.operations_by_port.get("service.order_query") is None
+                    or not {
+                        "orders.prepare_group_roll_exit",
+                        "orders.query_group_roll_exit",
+                    }.issubset(prepared.operations_by_port["service.order_query"])
+                ):
+                    raise ServiceComponentError("GROUP_ROLL_EXIT_ROUTE_UNAVAILABLE")
+                try:
+                    source_module = importlib.import_module(
+                        "bt_api_py.service_execution_group_roll_exit_source"
+                    )
+                    source_type = getattr(source_module, "GroupRollExitAuthorizationSourceV1")
+                    if (
+                        not isinstance(source_type, type)
+                        or type(candidate_roll_source) is not source_type
+                        or candidate_roll_source.ready is not True
+                    ):
+                        raise TypeError
+                except Exception:
+                    raise ServiceComponentError("GROUP_ROLL_EXIT_SOURCE_UNAVAILABLE") from None
+                if type(service_identity) is not WireIdentity or service_identity.role is not WireRole.SERVICE:
+                    raise ServiceComponentError("GROUP_ROLL_EXIT_SERVICE_IDENTITY_REQUIRED")
+                if (
+                    len(roll_policies) != 1
+                    or roll_policies[0].instance_id != spec.instance_id
+                    or roll_policies[0].identity.role is not WireRole.SERVICE
+                    or roll_policies[0].identity.principal_ref != candidate_roll_source.coordinator_principal_ref
+                    or roll_policies[0].principal_ref != candidate_roll_source.coordinator_principal_ref
+                ):
+                    raise ServiceComponentError("GROUP_ROLL_EXIT_WRITE_POLICY_REQUIRED")
+                group_roll_exit_source = candidate_roll_source
+                group_roll_exit_policy = roll_policies[0]
+            elif roll_policies:
+                raise ServiceComponentError("GROUP_ROLL_EXIT_SOURCE_UNAVAILABLE")
         account_risk_policy_bindings, account_risk_policy_required_ports = (
             _account_risk_policy_metadata(
                 resources,
@@ -1942,6 +2007,8 @@ def build_component(
                     values["provider_contracts"],
                     group_compensation_source=group_compensation_source,
                     group_compensation_policy=group_compensation_policy,
+                    group_roll_exit_authorization_source=group_roll_exit_source,
+                    group_roll_exit_policy=group_roll_exit_policy,
                 )
                 if (
                     "service.order_entry" in spec.bind_ports
@@ -2397,6 +2464,12 @@ def build_component(
                 operations = operations - (
                     _GROUP_COMPENSATION_OPERATIONS & operations
                 )
+            if (
+                spec.component == "risk"
+                and spec.options.get("role") == "account_owner"
+                and group_roll_exit_source is None
+            ):
+                operations = operations - (_GROUP_ROLL_EXIT_OPERATIONS & operations)
             if spec.component == "risk" and spec.options.get("role") == "group_reservations":
                 configured_operations = getattr(adapter, "supported_operations", None)
                 if type(
@@ -2771,6 +2844,16 @@ def build_component(
                         arguments=arguments,
                     )
                 if (
+                    spec.component == "risk"
+                    and spec.options.get("role") == "account_owner"
+                    and _operation in _GROUP_ROLL_EXIT_OPERATIONS
+                ):
+                    return _adapter.handle(  # type: ignore[attr-defined]
+                        _operation,
+                        context=context,
+                        arguments=arguments,
+                    )
+                if (
                     spec.component in {"execution", "risk"}
                     and spec.options.get("role") == "account_owner"
                 ):
@@ -2866,6 +2949,10 @@ def build_component(
             spec.component == "risk"
             and spec.options.get("role") == "account_owner"
             and group_compensation_source is not None
+        ) or (
+            spec.component == "risk"
+            and spec.options.get("role") == "account_owner"
+            and group_roll_exit_source is not None
         ):
             candidate_maintain_contexts = getattr(adapter, "maintain_registrations", None)
             if not callable(candidate_maintain_contexts):

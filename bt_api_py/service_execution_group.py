@@ -96,6 +96,15 @@ from .service_group_compensation_contracts import (
     GroupCompensationCloseAuthorization,
 )
 
+from .service_group_roll_exit import (
+    GroupRollExitActionRecordV1,
+    GroupRollExitActionStore,
+    GroupRollExitAuthorizationV1,
+    GroupRollExitError,
+    GroupRollExitObservationV1,
+    GroupRollExitPhase,
+    GroupRollExitRequestV1,
+)
 from .service_registry import (
     ActiveRegistrationContext,
     ServiceCallContext,
@@ -105,8 +114,9 @@ from .service_registry import (
 
 _GROUP_COORDINATOR_BASE_OPERATIONS = frozenset({"groups.submit", "groups.query"})
 _GROUP_COORDINATOR_FULL_OPERATIONS = _GROUP_COORDINATOR_BASE_OPERATIONS | {"groups.cancel"}
-_GROUP_COORDINATOR_WRITE_OPERATIONS = frozenset({"groups.submit", "groups.cancel"})
-GROUP_COORDINATOR_OPERATIONS = _GROUP_COORDINATOR_FULL_OPERATIONS
+_GROUP_COORDINATOR_ROLL_EXIT_OPERATIONS = frozenset({"groups.roll_exit", "groups.query_roll_exit"})
+_GROUP_COORDINATOR_WRITE_OPERATIONS = frozenset({"groups.submit", "groups.cancel", "groups.roll_exit"})
+GROUP_COORDINATOR_OPERATIONS = _GROUP_COORDINATOR_FULL_OPERATIONS | _GROUP_COORDINATOR_ROLL_EXIT_OPERATIONS
 _GROUP_ACCOUNT_OWNER_BASE_OPERATIONS = frozenset(
     {"orders.submit_group_leg", "orders.query_group_leg", "orders.resolve_group_leg"}
 )
@@ -128,6 +138,8 @@ _ORDERS_MOUNT = "upstream.orders"
 _ORDER_QUERY_MOUNT = "upstream.order_query"
 _COMPENSATION_ORDERS_MOUNT = "upstream.group_compensation_orders"
 _COMPENSATION_QUERY_MOUNT = "upstream.group_compensation_order_query"
+_ROLL_EXIT_ORDERS_MOUNT = _ORDERS_MOUNT
+_ROLL_EXIT_QUERY_MOUNT = _ORDER_QUERY_MOUNT
 _MAX_REPLY_BYTES = 1_000_000
 _GROUP_COMPENSATION_TERMINAL = frozenset(
     {ExecutionState.FILLED, ExecutionState.CANCELLED, ExecutionState.REJECTED}
@@ -191,6 +203,8 @@ class GroupAccountRoute:
     instruments: Mapping[str, GroupInstrumentRule]
     compensation_order_scope_ref: str | None = None
     compensation_query_scope_ref: str | None = None
+    roll_exit_order_scope_ref: str | None = None
+    roll_exit_query_scope_ref: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.execution_scope) is not ExecutionScope:
@@ -216,6 +230,17 @@ class GroupAccountRoute:
             for value in (
                 self.compensation_order_scope_ref,
                 self.compensation_query_scope_ref,
+            )
+        ):
+            raise ServiceExecutionGroupError("GROUP_ROUTE_INVALID")
+        if (self.roll_exit_order_scope_ref is None) != (
+            self.roll_exit_query_scope_ref is None
+        ) or any(
+            value is not None
+            and (type(value) is not str or _REFERENCE.fullmatch(value) is None)
+            for value in (
+                self.roll_exit_order_scope_ref,
+                self.roll_exit_query_scope_ref,
             )
         ):
             raise ServiceExecutionGroupError("GROUP_ROUTE_INVALID")
@@ -626,6 +651,145 @@ class _OrdersRpcPort:
         body = _rpc_result(response)
         return body
 
+    def prepare_group_roll_exit(
+        self, request: GroupRollExitRequestV1
+    ) -> tuple[GroupRollExitPhase, GroupRollExitAuthorizationV1, GroupRollExitObservationV1 | None]:
+        if type(request) is not GroupRollExitRequestV1:
+            raise RuntimeError("typed roll-exit request is required")
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        if route.roll_exit_query_scope_ref is None:
+            raise RuntimeError("roll-exit query route is not configured")
+        response = self._upstream.call(
+            _ROLL_EXIT_QUERY_MOUNT,
+            "orders.prepare_group_roll_exit",
+            request.to_payload(),
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.roll_exit_query_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        body = _rpc_result(response)
+        if set(body) != {"phase", "authorization", "observation"}:
+            raise RuntimeError("roll-exit prepare reply is invalid")
+        try:
+            phase = GroupRollExitPhase(body["phase"])
+            authorization = GroupRollExitAuthorizationV1.from_payload(body["authorization"])
+            observation = (
+                None
+                if body["observation"] is None
+                else GroupRollExitObservationV1.from_payload(body["observation"])
+            )
+        except Exception:
+            raise RuntimeError("roll-exit prepare reply is invalid") from None
+        if (
+            phase is GroupRollExitPhase.NOT_FOUND
+            or authorization.request != request
+            or (phase is GroupRollExitPhase.PREPARED and observation is not None)
+            or (phase is not GroupRollExitPhase.PREPARED and observation is None)
+            or (
+                observation is not None
+                and not _roll_exit_observation_matches(authorization, phase, observation)
+            )
+        ):
+            raise RuntimeError("roll-exit prepare identity is inconsistent")
+        return phase, authorization, observation
+    def submit_group_roll_exit(
+        self, authorization: GroupRollExitAuthorizationV1
+    ) -> GroupRollExitObservationV1:
+        if type(authorization) is not GroupRollExitAuthorizationV1:
+            raise RuntimeError("typed roll-exit authorization is required")
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        if route.roll_exit_order_scope_ref is None:
+            raise RuntimeError("roll-exit entry route is not configured")
+        response = self._upstream.call(
+            _ROLL_EXIT_ORDERS_MOUNT,
+            "orders.submit_group_roll_exit",
+            {"authorization": authorization.to_payload()},
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.roll_exit_order_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        return _roll_exit_observation_response(response, authorization)
+    def query_group_roll_exit(
+        self, authorization: GroupRollExitAuthorizationV1
+    ) -> GroupRollExitObservationV1 | None:
+        if type(authorization) is not GroupRollExitAuthorizationV1:
+            raise RuntimeError("typed roll-exit authorization is required")
+        current = _required_coordinator_call(self._account_ref)
+        route = current.target.accounts[self._account_ref]
+        if route.roll_exit_query_scope_ref is None:
+            raise RuntimeError("roll-exit query route is not configured")
+        response = self._upstream.call(
+            _ROLL_EXIT_QUERY_MOUNT,
+            "orders.query_group_roll_exit",
+            {
+                "action_id": authorization.action_id,
+                "authorization_sha256": authorization.authorization_sha256,
+            },
+            account_ref=self._account_ref,
+            portfolio_ref=current.binding.request.portfolio_ref,
+            scope_ref=route.roll_exit_query_scope_ref,
+            max_reply_message_bytes=_MAX_REPLY_BYTES,
+        )
+        body = _rpc_result(response)
+        if set(body) != {"phase", "observation"}:
+            raise RuntimeError("roll-exit query reply is invalid")
+        try:
+            phase = GroupRollExitPhase(body["phase"])
+            observation = (
+                None
+                if body["observation"] is None
+                else GroupRollExitObservationV1.from_payload(body["observation"])
+            )
+        except Exception:
+            raise RuntimeError("roll-exit query reply is invalid") from None
+        if phase is GroupRollExitPhase.NOT_FOUND:
+            if observation is not None:
+                raise RuntimeError("roll-exit NOT_FOUND reply carried an observation")
+            return None
+        if observation is None or not _roll_exit_observation_matches(
+            authorization, phase, observation
+        ):
+            raise RuntimeError("roll-exit query identity is inconsistent")
+        return observation
+
+def _roll_exit_observation_matches(
+    authorization: GroupRollExitAuthorizationV1,
+    phase: GroupRollExitPhase,
+    observation: GroupRollExitObservationV1,
+) -> bool:
+    return (
+        type(authorization) is GroupRollExitAuthorizationV1
+        and type(observation) is GroupRollExitObservationV1
+        and observation.phase is phase
+        and observation.action_id == authorization.action_id
+        and observation.source_digest == authorization.source.digest
+        and observation.request_fingerprint == authorization.request.fingerprint
+        and observation.authorization_sha256 == authorization.authorization_sha256
+        and observation.intent_id == authorization.intent.intent_id
+        and observation.requested_quantity == authorization.intent.quantity
+    )
+def _roll_exit_observation_response(
+    response: object, authorization: GroupRollExitAuthorizationV1
+) -> GroupRollExitObservationV1:
+    body = _rpc_result(response)
+    if set(body) != {"phase", "observation"}:
+        raise RuntimeError("roll-exit submit reply is invalid")
+    try:
+        phase = GroupRollExitPhase(body["phase"])
+        observation = GroupRollExitObservationV1.from_payload(body["observation"])
+    except Exception:
+        raise RuntimeError("roll-exit submit reply is invalid") from None
+    if phase in {GroupRollExitPhase.PREPARED, GroupRollExitPhase.NOT_FOUND} or not _roll_exit_observation_matches(
+        authorization, phase, observation
+    ):
+        raise RuntimeError("roll-exit submit identity is inconsistent")
+    return observation
+
+
 class GroupCoordinatorService:
     """Normal ServiceHost entry for durable, ordered two-leg and v3 group requests."""
 
@@ -729,6 +893,10 @@ class GroupCoordinatorService:
             raise ServiceExecutionGroupError("GROUP_COORDINATOR_INVALID") from None
         self._order_ports = MappingProxyType(orders)
         self._reservation_ports = MappingProxyType(reservations)
+        try:
+            self._roll_exit_actions = GroupRollExitActionStore(run_bindings)
+        except GroupRollExitError:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE") from None
         self._targets = MappingProxyType(target_copy)
 
     @property
@@ -1258,6 +1426,10 @@ class GroupCoordinatorService:
                 return self._query(registration, target, arguments)
             if operation == "groups.cancel":
                 return self._cancel(registration, target_scope, target, arguments)
+            if operation == "groups.roll_exit":
+                return self._roll_exit(registration, target_scope, target, arguments)
+            if operation == "groups.query_roll_exit":
+                return self._query_roll_exit(registration, target_scope, target, arguments)
             if target.portfolio_budget_policy is None or target.budget_quote_builder is None:
                 return _failure("GROUP_BUDGET_POLICY_REQUIRED")
             run_binding = self._existing_submit_binding(registration, arguments)
@@ -1310,6 +1482,8 @@ class GroupCoordinatorService:
             return _failure(error.code)
         except GroupCancelPlanError as error:
             return _failure(str(error))
+        except GroupRollExitError:
+            return _failure("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
         except AcceptedGroupConflictError:
             return _failure("GROUP_BINDING_CONFLICT")
         except AcceptedGroupBindingError:
@@ -1441,6 +1615,7 @@ class GroupCoordinatorService:
         with self._lock:
             self._registrations = MappingProxyType({})
             self._closed = True
+        self._roll_exit_actions.close()
 
     def _authorize(
         self, operation: str, context: ServiceCallContext
@@ -1487,6 +1662,7 @@ class GroupCoordinatorService:
         coordinator_operation_sets = {
             _GROUP_COORDINATOR_BASE_OPERATIONS,
             _GROUP_COORDINATOR_FULL_OPERATIONS,
+            _GROUP_COORDINATOR_BASE_OPERATIONS | _GROUP_COORDINATOR_ROLL_EXIT_OPERATIONS,
             self.SUPPORTED_OPERATIONS,
         }
         write_operations = registration.write_operations
@@ -1500,6 +1676,7 @@ class GroupCoordinatorService:
             registration.operations
             in {
                 frozenset({"groups.query"}),
+                frozenset({"groups.query_roll_exit"}),
             }
             and registration.write_operations == frozenset()
         )
@@ -1692,6 +1869,325 @@ class GroupCoordinatorService:
         return _success({"found": True, "snapshot": snapshot.to_payload()})
 
 
+    def _roll_exit(
+        self,
+        registration: ActiveRegistrationContext,
+        target_scope: WireScope,
+        target: GroupCoordinatorTarget,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if not isinstance(arguments, Mapping) or set(arguments) != {
+            "group_id",
+            "source_leg_id",
+            "limit_price",
+        }:
+            raise ServiceExecutionGroupError("INVALID_REQUEST")
+        group_id = _reference(arguments["group_id"], "GROUP_ID_INVALID")
+        source_leg_id = _reference(arguments["source_leg_id"], "GROUP_LEG_INVALID")
+        request = GroupRollExitRequestV1(
+            portfolio_ref=registration.context.scope.portfolio_ref,
+            group_id=group_id,
+            source_leg_id=source_leg_id,
+            limit_price=_parse_roll_exit_price(arguments["limit_price"]),
+        )
+        binding = self._run_bindings.get_for_registration(
+            registration,
+            group_id,
+            coordinator_principal_ref=self._identity.principal_ref,
+            operation="groups.roll_exit",
+        )
+        if binding is None:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+        snapshot = self._store.get(request.portfolio_ref, group_id)
+        if (
+            type(snapshot) is not GroupOrderSnapshot
+            or not self._recovery_binding_matches(binding, snapshot, target_scope, target)
+            or snapshot.request.version not in {1, 2}
+            or len(snapshot.request.legs) != 2
+            or snapshot.request.compensation_budget_policy is not None
+        ):
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+        source_plans = tuple(
+            plan for plan in snapshot.request.legs if plan.leg_id == source_leg_id
+        )
+        if len(source_plans) != 1:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_SOURCE_LEG_INVALID")
+        account_ref = source_plans[0].account_ref
+        if account_ref not in target.accounts:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_TARGET_UNAVAILABLE")
+        prior_actions = self._roll_exit_actions.find_for_source(
+            request.portfolio_ref, group_id, source_leg_id
+        )
+        active = tuple(
+            item
+            for item in prior_actions
+            if item.phase
+            in {
+                GroupRollExitPhase.PREPARED,
+                GroupRollExitPhase.SUBMIT_STARTED,
+                GroupRollExitPhase.STATUS_OBSERVED,
+                GroupRollExitPhase.UNKNOWN,
+            }
+        )
+        if len(active) > 1:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_RECOVERY_REQUIRED")
+        if active:
+            record = active[0]
+            source = record.authorization.source
+            route = target.accounts[account_ref]
+            source_plan = source_plans[0]
+            if record.authorization.request != request:
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_RECOVERY_REQUIRED")
+            if (
+                source.portfolio_ref != request.portfolio_ref
+                or source.origin_run_id != binding.origin_run_id
+                or source.group_id != group_id
+                or source.group_version != snapshot.request.version
+                or source.group_fingerprint != snapshot.request.fingerprint
+                or source.group_request != snapshot.request
+                or source.account_ref != account_ref
+                or source.strategy_id != snapshot.request.strategy_id
+                or source.source_leg_id != source_leg_id
+                or source.source_intent_id != source_plan.maximum_intent.intent_id
+                or source.source_execution_scope != route.execution_scope
+                or source.service_write_run_id != binding.origin_run_id
+            ):
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+            record = self._recover_roll_exit(
+                registration,
+                target_scope,
+                target,
+                binding,
+                account_ref,
+                record,
+            )
+            return _success({"found": True, "action": _roll_exit_action_projection(record)})
+
+        call = _CoordinatorCall(registration, target_scope, target, binding)
+        token = _CURRENT_COORDINATOR_CALL.set(call)
+        try:
+            try:
+                risk_phase, authorization, observation = self._order_ports[
+                    account_ref
+                ].prepare_group_roll_exit(request)
+            except Exception:
+                raise ServiceExecutionGroupError(
+                    "GROUP_ROLL_EXIT_PREPARE_UNAVAILABLE"
+                ) from None
+            if (
+                authorization.source.group_fingerprint != snapshot.request.fingerprint
+                or authorization.source.group_request != snapshot.request
+                or authorization.source.origin_run_id != binding.origin_run_id
+                or authorization.source.strategy_id != binding.request.strategy_id
+                or authorization.source.account_ref != account_ref
+                or authorization.source.source_leg_id != source_leg_id
+            ):
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+            try:
+                record = self._roll_exit_actions.prepare(authorization)
+                if observation is not None:
+                    record = self._roll_exit_actions.record_observation(observation)
+            except GroupRollExitError:
+                raise
+            if risk_phase is not GroupRollExitPhase.PREPARED or observation is not None:
+                return _success(
+                    {"found": True, "action": _roll_exit_action_projection(record)}
+                )
+            if record.phase is not GroupRollExitPhase.PREPARED:
+                # A local durable record already crossed the submit CAS. Even
+                # a Risk PREPARED replay cannot authorize a second dispatch.
+                return _success(
+                    {"found": True, "action": _roll_exit_action_projection(record)}
+                )
+            if not self._roll_exit_actions.claim_submit(
+                authorization.action_id, authorization.authorization_sha256
+            ):
+                record = self._roll_exit_actions.get(authorization.action_id)
+                if record is None:
+                    raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
+                record = self._recover_roll_exit(
+                    registration,
+                    target_scope,
+                    target,
+                    binding,
+                    account_ref,
+                    record,
+                )
+                return _success(
+                    {"found": True, "action": _roll_exit_action_projection(record)}
+                )
+            try:
+                observation = self._order_ports[account_ref].submit_group_roll_exit(
+                    authorization
+                )
+            except Exception:
+                observation = _roll_exit_unknown_observation(
+                    authorization, "RISK_SUBMIT_RESPONSE_UNAVAILABLE"
+                )
+            record = self._roll_exit_actions.record_observation(observation)
+            return _success({"found": True, "action": _roll_exit_action_projection(record)})
+        finally:
+            _CURRENT_COORDINATOR_CALL.reset(token)
+    def _query_roll_exit(
+        self,
+        registration: ActiveRegistrationContext,
+        target_scope: WireScope,
+        target: GroupCoordinatorTarget,
+        arguments: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if not isinstance(arguments, Mapping) or set(arguments) != {"action_id"}:
+            raise ServiceExecutionGroupError("INVALID_REQUEST")
+        action_id = _reference(arguments["action_id"], "GROUP_ROLL_EXIT_ACTION_INVALID")
+        record = self._roll_exit_actions.get(action_id)
+        if record is None:
+            return _success({"found": False, "action": None})
+        request = record.authorization.request
+        binding = self._run_bindings.get_for_registration(
+            registration,
+            request.group_id,
+            coordinator_principal_ref=self._identity.principal_ref,
+            operation="groups.query_roll_exit",
+        )
+        if (
+            binding is None
+            or binding.request.portfolio_ref != request.portfolio_ref
+            or record.authorization.source.origin_run_id != binding.origin_run_id
+            or record.authorization.source.strategy_id != binding.request.strategy_id
+            or record.authorization.source.account_ref not in target.accounts
+        ):
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+        snapshot = self._store.get(request.portfolio_ref, request.group_id)
+        if (
+            type(snapshot) is not GroupOrderSnapshot
+            or not self._recovery_binding_matches(binding, snapshot, target_scope, target)
+            or snapshot.request.version not in {1, 2}
+            or len(snapshot.request.legs) != 2
+            or record.authorization.source.group_fingerprint != snapshot.request.fingerprint
+            or record.authorization.source.group_request != snapshot.request
+        ):
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+        source_plans = tuple(
+            plan for plan in snapshot.request.legs if plan.leg_id == request.source_leg_id
+        )
+        if len(source_plans) != 1 or source_plans[0].account_ref != record.authorization.source.account_ref:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+        if record.phase is GroupRollExitPhase.RESOLVED:
+            return _success({"found": True, "action": _roll_exit_action_projection(record)})
+        call = _CoordinatorCall(registration, target_scope, target, binding)
+        token = _CURRENT_COORDINATOR_CALL.set(call)
+        try:
+            try:
+                observation = self._order_ports[
+                    source_plans[0].account_ref
+                ].query_group_roll_exit(record.authorization)
+            except Exception:
+                observation = _roll_exit_unknown_observation(
+                    record.authorization,
+                    "RISK_QUERY_UNAVAILABLE",
+                    previous=record.observation,
+                )
+            if observation is None:
+                observation = _roll_exit_unknown_observation(
+                    record.authorization,
+                    "RISK_ACTION_NOT_FOUND",
+                    previous=record.observation,
+                )
+            if not _roll_exit_observation_matches(
+                record.authorization, observation.phase, observation
+            ):
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_QUERY_INVALID")
+            # A query may read the Risk projection but never claim or submit a
+            # prepared action, and it does not mutate the local action journal.
+            observation = _roll_exit_query_observation(record, observation)
+            return _success(
+                {
+                    "found": True,
+                    "action": _roll_exit_action_projection(
+                        record, observation=observation
+                    ),
+                }
+            )
+        finally:
+            _CURRENT_COORDINATOR_CALL.reset(token)
+    def _recover_roll_exit(
+        self,
+        registration: ActiveRegistrationContext,
+        target_scope: WireScope,
+        target: GroupCoordinatorTarget,
+        binding: GroupOriginRunBinding,
+        account_ref: str,
+        record: GroupRollExitActionRecordV1,
+    ) -> GroupRollExitActionRecordV1:
+        if record.phase is GroupRollExitPhase.RESOLVED:
+            return record
+        call = _CoordinatorCall(registration, target_scope, target, binding)
+        token = _CURRENT_COORDINATOR_CALL.set(call)
+        try:
+            try:
+                observation = self._order_ports[account_ref].query_group_roll_exit(
+                    record.authorization
+                )
+            except Exception:
+                observation = _roll_exit_unknown_observation(
+                    record.authorization,
+                    "RISK_QUERY_UNAVAILABLE",
+                    previous=record.observation,
+                )
+            if observation is None:
+                observation = _roll_exit_unknown_observation(
+                    record.authorization,
+                    "RISK_ACTION_NOT_FOUND",
+                    previous=record.observation,
+                )
+            if observation.phase not in {
+                GroupRollExitPhase.PREPARED,
+                GroupRollExitPhase.SUBMIT_STARTED,
+                GroupRollExitPhase.STATUS_OBSERVED,
+                GroupRollExitPhase.UNKNOWN,
+                GroupRollExitPhase.RESOLVED,
+            }:
+                return record
+            if observation.phase is GroupRollExitPhase.PREPARED:
+                if record.phase is GroupRollExitPhase.PREPARED:
+                    current = self._roll_exit_actions.record_observation(observation)
+                    if current.phase is not GroupRollExitPhase.PREPARED:
+                        return current
+                    if not self._roll_exit_actions.claim_submit(
+                        current.authorization.action_id,
+                        current.authorization.authorization_sha256,
+                    ):
+                        refreshed = self._roll_exit_actions.get(
+                            current.authorization.action_id
+                        )
+                        return current if refreshed is None else refreshed
+                    record = current
+                elif record.phase not in {
+                    GroupRollExitPhase.SUBMIT_STARTED,
+                    GroupRollExitPhase.UNKNOWN,
+                }:
+                    # Risk has not crossed its durable start boundary, but a
+                    # local status observation says the order already did.
+                    # Treat this as a conflict instead of replaying a close.
+                    raise ServiceExecutionGroupError(
+                        "GROUP_ROLL_EXIT_STATE_CONFLICT"
+                    )
+                # For a local SUBMIT_STARTED or UNKNOWN action, this exact
+                # Risk PREPARED reply proves no provider dispatch was started.
+                # The Risk endpoint owns the persistent CAS and is idempotent:
+                # it may start once and all concurrent retries only query.
+                try:
+                    observation = self._order_ports[account_ref].submit_group_roll_exit(
+                        record.authorization
+                    )
+                except Exception:
+                    observation = _roll_exit_unknown_observation(
+                        record.authorization,
+                        "RISK_SUBMIT_RESPONSE_UNAVAILABLE",
+                        previous=record.observation,
+                    )
+            return self._roll_exit_actions.record_observation(observation)
+        finally:
+            _CURRENT_COORDINATOR_CALL.reset(token)
     def _cancel(
         self,
         registration: ActiveRegistrationContext,
@@ -3600,6 +4096,136 @@ def _parse_ratio(value: object) -> Decimal:
     return ratio
 
 
+def _parse_roll_exit_price(value: object) -> Decimal:
+    """Require a bounded canonical positive decimal from the strategy wire."""
+
+    if (
+        type(value) is not str
+        or len(value) > 256
+        or _RATIO_DECIMAL.fullmatch(value) is None
+    ):
+        raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_PRICE_INVALID")
+    try:
+        price = Decimal(value)
+    except Exception:
+        raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_PRICE_INVALID") from None
+    if not price.is_finite() or price <= 0:
+        raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_PRICE_INVALID")
+    try:
+        # The typed contract enforces the same decimal magnitude/digit caps as
+        # its persisted representation before the request can be fingerprinted.
+        GroupRollExitRequestV1(
+            portfolio_ref="price-check",
+            group_id="price-check",
+            source_leg_id="price-check",
+            limit_price=price,
+        )
+    except (TypeError, ValueError):
+        raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_PRICE_INVALID") from None
+    if format(price, "f") != value:
+        raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_PRICE_INVALID")
+    return price
+def _roll_exit_unknown_observation(
+    authorization: GroupRollExitAuthorizationV1,
+    detail_code: str,
+    *,
+    previous: GroupRollExitObservationV1 | None = None,
+) -> GroupRollExitObservationV1:
+    if previous is not None and not _roll_exit_observation_matches(
+        authorization, previous.phase, previous
+    ):
+        previous = None
+    return GroupRollExitObservationV1(
+        action_id=authorization.action_id,
+        phase=GroupRollExitPhase.UNKNOWN,
+        source_digest=authorization.source.digest,
+        request_fingerprint=authorization.request.fingerprint,
+        authorization_sha256=authorization.authorization_sha256,
+        intent_id=authorization.intent.intent_id,
+        close_state=ExecutionState.UNKNOWN,
+        requested_quantity=authorization.intent.quantity,
+        filled_quantity=(Decimal(0) if previous is None else previous.filled_quantity),
+        order_revision=None if previous is None else previous.order_revision,
+        close_receipt_sha256=None,
+        detail_code=detail_code,
+    )
+def _roll_exit_query_observation(
+    record: GroupRollExitActionRecordV1,
+    observed: GroupRollExitObservationV1,
+) -> GroupRollExitObservationV1 | None:
+    """Keep a read-only Risk query from projecting an older status as newer."""
+
+    allowed = {
+        GroupRollExitPhase.PREPARED: {
+            GroupRollExitPhase.PREPARED,
+            GroupRollExitPhase.SUBMIT_STARTED,
+            GroupRollExitPhase.UNKNOWN,
+            GroupRollExitPhase.RESOLVED,
+        },
+        GroupRollExitPhase.SUBMIT_STARTED: {
+            GroupRollExitPhase.SUBMIT_STARTED,
+            GroupRollExitPhase.STATUS_OBSERVED,
+            GroupRollExitPhase.UNKNOWN,
+            GroupRollExitPhase.RESOLVED,
+        },
+        GroupRollExitPhase.STATUS_OBSERVED: {
+            GroupRollExitPhase.STATUS_OBSERVED,
+            GroupRollExitPhase.UNKNOWN,
+            GroupRollExitPhase.RESOLVED,
+        },
+        GroupRollExitPhase.UNKNOWN: {
+            GroupRollExitPhase.UNKNOWN,
+            GroupRollExitPhase.STATUS_OBSERVED,
+            GroupRollExitPhase.RESOLVED,
+        },
+        GroupRollExitPhase.RESOLVED: {GroupRollExitPhase.RESOLVED},
+    }
+    if observed.phase not in allowed[record.phase]:
+        return record.observation
+    previous = record.observation
+    if previous is None:
+        return observed
+    if (
+        previous.order_revision is not None
+        and observed.order_revision is not None
+        and observed.order_revision < previous.order_revision
+    ):
+        return previous
+    if observed.filled_quantity < previous.filled_quantity:
+        if observed.phase is not GroupRollExitPhase.UNKNOWN:
+            return previous
+        observed = replace(observed, filled_quantity=previous.filled_quantity)
+    if previous.order_revision is not None and observed.order_revision is None:
+        if observed.phase is not GroupRollExitPhase.UNKNOWN:
+            return previous
+        observed = replace(observed, order_revision=previous.order_revision)
+    return observed
+def _roll_exit_action_projection(
+    record: GroupRollExitActionRecordV1,
+    *,
+    observation: GroupRollExitObservationV1 | None = None,
+) -> Mapping[str, object]:
+    """Expose a bounded action status without leaking the internal authorization."""
+
+    observation = record.observation if observation is None else observation
+    return {
+        "action_id": record.authorization.action_id,
+        "group_id": record.authorization.request.group_id,
+        "source_leg_id": record.authorization.request.source_leg_id,
+        "phase": observation.phase.value if observation is not None else record.phase.value,
+        "close_state": (
+            None
+            if observation is None or observation.close_state is None
+            else observation.close_state.value
+        ),
+        "requested_quantity": format(record.authorization.intent.quantity, "f"),
+        "filled_quantity": (
+            "0" if observation is None else format(observation.filled_quantity, "f")
+        ),
+        "order_revision": None if observation is None else observation.order_revision,
+        "detail_code": None if observation is None else observation.detail_code,
+        "updated_at_ns": record.updated_at_ns,
+    }
 def _reference(value: object, error_code: str) -> str:
     if type(value) is not str or _REFERENCE.fullmatch(value) is None:
         raise ServiceExecutionGroupError(error_code)

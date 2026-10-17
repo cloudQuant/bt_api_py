@@ -48,6 +48,9 @@ _ACCOUNT_GROUP_PORTS = {
     "orders.prepare_group_compensation_close": ("service.order_query", False),
     "orders.query_group_compensation_close": ("service.order_query", False),
     "orders.submit_group_compensation_close": ("service.order_entry", True),
+    "orders.prepare_group_roll_exit": ("service.order_query", False),
+    "orders.query_group_roll_exit": ("service.order_query", False),
+    "orders.submit_group_roll_exit": ("service.order_entry", True),
 }
 _REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -1029,10 +1032,20 @@ def _validate_coordinator_registration(
     context = registration.context
     scope = context.scope
     if (
-        operation not in {"groups.submit", "groups.query", "groups.cancel"}
+        operation
+        not in {
+            "groups.submit",
+            "groups.query",
+            "groups.cancel",
+            "groups.roll_exit",
+            "groups.query_roll_exit",
+        }
         or registration.port != "service.order_group_entry"
         or operation not in registration.operations
-        or (operation in {"groups.submit", "groups.cancel"} and operation not in registration.write_operations)
+        or (
+            operation in {"groups.submit", "groups.cancel", "groups.roll_exit"}
+            and operation not in registration.write_operations
+        )
         or type(context.identity.role) is not WireRole
         or context.identity.role is not WireRole.STRATEGY_CLIENT
         or context.identity.actor_ref != scope.strategy_ref

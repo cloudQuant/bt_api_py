@@ -63,6 +63,8 @@ _UPSTREAM_MOUNTS: Final[frozenset[str]] = frozenset(
         "upstream.telemetry",
         "upstream.owner_control",
         "upstream.account_reservations",
+        "upstream.group_roll_exit_orders",
+        "upstream.group_roll_exit_order_query",
     }
 )
 _MOUNTS_BY_ROLE: Final[dict[str, frozenset[str]]] = {
@@ -87,6 +89,8 @@ _ACCOUNT_MOUNTS: Final[frozenset[str]] = frozenset(
         "upstream.order_query",
         "upstream.risk_read",
         "upstream.account_reservations",
+        "upstream.group_roll_exit_orders",
+        "upstream.group_roll_exit_order_query",
     }
 )
 _PORTFOLIO_MOUNTS: Final[frozenset[str]] = frozenset(
@@ -95,6 +99,8 @@ _PORTFOLIO_MOUNTS: Final[frozenset[str]] = frozenset(
         "broker.group_monitor",
         "application.order_groups",
         "application.risk_analysis",
+        "upstream.group_roll_exit_orders",
+        "upstream.group_roll_exit_order_query",
     }
 )
 _OPTIONAL_MOUNTS: Final[frozenset[str]] = frozenset(
@@ -116,7 +122,12 @@ _OPTIONAL_MOUNTS: Final[frozenset[str]] = frozenset(
     }
 )
 _WRITER_MOUNTS: Final[frozenset[str]] = frozenset(
-    {"broker.orders", "application.orders", "upstream.orders"}
+    {
+        "broker.orders",
+        "application.orders",
+        "upstream.orders",
+        "upstream.group_roll_exit_orders",
+    }
 )
 _OWNER_CONTROL_MOUNTS: Final[frozenset[str]] = frozenset(
     {"application.owner_control", "upstream.owner_control"}
@@ -145,6 +156,8 @@ _CLIENT_ALIAS_MOUNTS: Final[dict[str, frozenset[str]]] = {
             "application.order_groups",
             "upstream.orders",
             "upstream.order_query",
+            "upstream.group_roll_exit_orders",
+            "upstream.group_roll_exit_order_query",
             "application.owner_control",
             "upstream.owner_control",
         }

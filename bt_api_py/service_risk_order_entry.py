@@ -83,8 +83,18 @@ GROUP_COMPENSATION_OPERATIONS = frozenset(
         GROUP_COMPENSATION_QUERY_OPERATION,
     }
 )
+GROUP_ROLL_EXIT_PREPARE_OPERATION = "orders.prepare_group_roll_exit"
+GROUP_ROLL_EXIT_SUBMIT_OPERATION = "orders.submit_group_roll_exit"
+GROUP_ROLL_EXIT_QUERY_OPERATION = "orders.query_group_roll_exit"
+GROUP_ROLL_EXIT_OPERATIONS = frozenset(
+    {
+        GROUP_ROLL_EXIT_PREPARE_OPERATION,
+        GROUP_ROLL_EXIT_SUBMIT_OPERATION,
+        GROUP_ROLL_EXIT_QUERY_OPERATION,
+    }
+)
 SUPPORTED_OPERATIONS = frozenset(
-    {SUBMIT_OPERATION, QUERY_OPERATION, *GROUP_COMPENSATION_OPERATIONS}
+    {SUBMIT_OPERATION, QUERY_OPERATION, *GROUP_COMPENSATION_OPERATIONS, *GROUP_ROLL_EXIT_OPERATIONS}
 )
 _GROUP_COMPENSATION_WRITE_OPERATIONS = frozenset(
     {GROUP_COMPENSATION_SUBMIT_OPERATION}
@@ -736,6 +746,8 @@ class RiskOrderEntryService:
         *,
         group_compensation_source: object | None = None,
         group_compensation_policy: TrustedGroupWritePolicy | None = None,
+        group_roll_exit_authorization_source: object | None = None,
+        group_roll_exit_policy: TrustedGroupWritePolicy | None = None,
     ) -> None:
         if type(bt_api) is not BtApi:
             raise RiskOrderEntryError("BT_API_REQUIRED")
@@ -807,17 +819,45 @@ class RiskOrderEntryService:
                 contract_copy,
             )
 
+        self._group_roll_exit_owner = None
+        if group_roll_exit_authorization_source is None:
+            if group_roll_exit_policy is not None:
+                raise RiskOrderEntryError("GROUP_ROLL_EXIT_POLICY_WITHOUT_SOURCE")
+        else:
+            _validate_group_roll_exit_composition(
+                group_roll_exit_authorization_source,
+                group_roll_exit_policy,
+                target_copy,
+                contract_copy,
+            )
+            try:
+                from .service_risk_group_roll_exit import RiskGroupRollExitOwner
+
+                self._group_roll_exit_owner = RiskGroupRollExitOwner(
+                    self, group_roll_exit_authorization_source, group_roll_exit_policy
+                )
+            except Exception:
+                raise RiskOrderEntryError("GROUP_ROLL_EXIT_OWNER_UNAVAILABLE") from None
+
     @property
     def ready(self) -> bool:
         """Report exact static composition readiness for the optional bridge."""
 
         source = self._group_compensation_source
-        if source is None:
-            return True
-        try:
-            return source.ready is True
-        except Exception:
-            return False
+        if source is not None:
+            try:
+                if source.ready is not True:
+                    return False
+            except Exception:
+                return False
+        roll_owner = self._group_roll_exit_owner
+        if roll_owner is not None:
+            try:
+                if roll_owner.ready is not True:
+                    return False
+            except Exception:
+                return False
+        return True
 
     def maintain_registrations(
         self, contexts: tuple[ActiveRegistrationContext, ...]
@@ -826,6 +866,8 @@ class RiskOrderEntryService:
 
         if type(contexts) is not tuple:
             raise RiskOrderEntryError("GROUP_COMPENSATION_REGISTRATION_SNAPSHOT_INVALID")
+        if self._group_roll_exit_owner is not None:
+            self._group_roll_exit_owner.maintain_registrations(contexts)
         source = self._group_compensation_source
         policy = self._group_compensation_policy
         if source is None or policy is None:
@@ -1869,6 +1911,18 @@ class RiskOrderEntryService:
     ) -> Mapping[str, Any]:
         """Handle one authenticated service request without trusting payload scope."""
 
+        if type(operation) is str and operation in GROUP_ROLL_EXIT_OPERATIONS:
+            if type(context) is not ServiceCallContext:
+                return _reply(False, "GROUP_ROLL_EXIT_REGISTRATION_REQUIRED", {
+                    "phase": "UNSTARTED", "authorization": None, "observation": None
+                })
+            owner = self._group_roll_exit_owner
+            if owner is None:
+                return _reply(False, "GROUP_ROLL_EXIT_UNAVAILABLE", {
+                    "phase": "UNSTARTED", "authorization": None, "observation": None
+                })
+            return owner.handle(operation, context, arguments)
+
         if type(operation) is str and operation in GROUP_COMPENSATION_OPERATIONS:
             if type(context) is not ServiceCallContext:
                 return _reply(False, "GROUP_COMPENSATION_REGISTRATION_REQUIRED", {
@@ -2068,14 +2122,17 @@ class RiskOrderEntryService:
         trusted_client_order_id: str | None = None,
         reject_duplicate: bool = False,
         internal_group_compensation: bool = False,
+        internal_group_roll_exit: bool = False,
     ) -> Mapping[str, Any]:
         if (
             type(reject_duplicate) is not bool
             or type(internal_group_compensation) is not bool
+            or type(internal_group_roll_exit) is not bool
+            or internal_group_compensation and internal_group_roll_exit
             or (trusted_client_order_id is None) is reject_duplicate
-            or internal_group_compensation is not reject_duplicate
+            or (internal_group_compensation or internal_group_roll_exit) is not reject_duplicate
             or (
-                internal_group_compensation
+                (internal_group_compensation or internal_group_roll_exit)
                 and arguments.get("position_effect") != "CLOSE"
             )
         ):
@@ -2107,7 +2164,11 @@ class RiskOrderEntryService:
                         command,
                         target.account_scope,
                         ok=False,
-                        code="GROUP_COMPENSATION_SUBMIT_ALREADY_RECORDED",
+                        code=(
+                            "GROUP_ROLL_EXIT_SUBMIT_ALREADY_RECORDED"
+                            if internal_group_roll_exit
+                            else "GROUP_COMPENSATION_SUBMIT_ALREADY_RECORDED"
+                        ),
                     )
                 command = self._resolve_duplicate(
                     fence, command, target=target, admission=admission, contract=contract
@@ -3641,6 +3702,61 @@ def _group_compensation_runtime_types() -> tuple[type, type, type, type]:
     )
 
 
+def _validate_group_roll_exit_composition(
+    source: object,
+    policy: TrustedGroupWritePolicy | None,
+    targets: Mapping[WireScope, RiskOrderTarget],
+    contracts: Mapping[WireScope, RiskBtApiProviderContract],
+) -> None:
+    """Require one exact v1/v2 source owner, Risk account and CLOSE profile."""
+
+    try:
+        from bt_api_execution import ExecutionScope
+
+        from .service_execution_group_roll_exit_source import (
+            GroupRollExitAuthorizationSourceV1,
+        )
+
+        if (
+            type(source) is not GroupRollExitAuthorizationSourceV1
+            or source.ready is not True
+            or type(source.account_scope) is not AccountScope
+            or type(source.execution_scope) is not ExecutionScope
+            or type(source.coordinator_principal_ref) is not str
+            or type(policy) is not TrustedGroupWritePolicy
+            or policy.operation != GROUP_ROLL_EXIT_SUBMIT_OPERATION
+            or policy.port != "service.order_entry"
+            or policy.identity.role is not WireRole.SERVICE
+            or policy.principal_ref != policy.identity.principal_ref
+            or source.coordinator_principal_ref != policy.principal_ref
+            or source.execution_scope.account_ref != policy.scope.account_ref
+            or source.execution_scope.strategy_id != policy.scope.strategy_ref
+            or source.execution_scope.provider.casefold()
+            != source.account_scope.provider.casefold()
+            or source.execution_scope.environment != source.account_scope.environment
+        ):
+            raise TypeError
+        matches = tuple(
+            (scope, target)
+            for scope, target in targets.items()
+            if target.account_scope is source.account_scope
+            and target.strategy_id == source.execution_scope.strategy_id
+            and scope.account_ref == policy.scope.account_ref
+            and scope.strategy_ref == source.execution_scope.strategy_id
+        )
+        if len(matches) != 1:
+            raise TypeError
+        target_scope, target = matches[0]
+        contract = contracts.get(target_scope)
+        if (
+            type(contract) is not RiskBtApiProviderContract
+            or contract.exchange_name != target.exchange_name
+            or not contract.exposure_ready
+            or "CLOSE" not in contract.supported_position_effects
+        ):
+            raise TypeError
+    except Exception:
+        raise RiskOrderEntryError("GROUP_ROLL_EXIT_SOURCE_COMPOSITION_INVALID") from None
 def _validate_group_compensation_composition(
     source: object,
     policy: TrustedGroupWritePolicy | None,

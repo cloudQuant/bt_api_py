@@ -800,6 +800,23 @@ class ServiceHost:
                         }
                         and actual.write_operations == planned.write_operations
                     )
+                    or (
+                        planned.port == "service.order_entry"
+                        and actual.operations
+                        == planned.operations - {"orders.submit_group_roll_exit"}
+                        and actual.write_operations
+                        == planned.write_operations - {"orders.submit_group_roll_exit"}
+                    )
+                    or (
+                        planned.port == "service.order_query"
+                        and actual.operations
+                        == planned.operations
+                        - {
+                            "orders.prepare_group_roll_exit",
+                            "orders.query_group_roll_exit",
+                        }
+                        and actual.write_operations == planned.write_operations
+                    )
                 )
                 or actual.market_wire_version != planned.market_wire_version
                 for actual, planned in zip(capabilities, planned_capabilities, strict=True)
@@ -2331,12 +2348,23 @@ class ServiceHost:
                 and spec.component == "risk"
                 and role == "portfolio_analytics"
             )
+            risk_group_roll_exit_writer = (
+                spec is not None
+                and spec.component == "risk"
+                and role == "account_owner"
+                and any(
+                    capability.port == "service.order_entry"
+                    and "orders.submit_group_roll_exit" in capability.write_operations
+                    for capability in component.capabilities
+                )
+            )
             group_registration_writer = spec is not None and (
                 (
                     spec.component == "execution"
                     and role in {"group_coordinator", "group_account_owner"}
                 )
                 or (spec.component == "risk" and role == "group_reservations")
+                or risk_group_roll_exit_writer
             )
             maintain = None if registrations_only else component.maintain
             maintain_registrations = component.maintain_registrations
@@ -2388,6 +2416,15 @@ class ServiceHost:
                             and "orders.submit_group_leg" in context.write_operations
                         ):
                             operation = "orders.submit_group_leg"
+                        elif (
+                            context.port == "service.order_entry"
+                            and spec is not None
+                            and spec.component == "risk"
+                            and role == "account_owner"
+                            and "orders.submit_group_roll_exit"
+                            in context.write_operations
+                        ):
+                            operation = "orders.submit_group_roll_exit"
                         elif (
                             context.port == "service.group_reservations"
                             and "reservations.reserve" in context.write_operations
