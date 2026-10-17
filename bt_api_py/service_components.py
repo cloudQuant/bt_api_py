@@ -2431,7 +2431,6 @@ def build_component(
             if (
                 spec.component == "execution"
                 and spec.options.get("role") == "account_owner"
-                and port == "service.order_entry"
             ):
                 write_operations = write_operations.intersection(operations)
             if (

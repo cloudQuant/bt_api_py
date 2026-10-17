@@ -7,13 +7,24 @@ from decimal import Decimal
 import pytest
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
+    ApprovedTargetAuthorityV1,
+    ApprovedTargetOwnerBindingV1,
+    ApprovedTargetOwnerBindingsV1,
     CancelObservation,
     ContractValidationError,
+    ExecutionAdmissionValidatorRegistry,
+    ExecutionBasicAdmissionGate,
+    ExecutionProviderValidatorV1,
     ExecutionScope,
     ExecutionState,
     OrderIntent,
+    OrderType,
+    PositionEffect,
+    ProtectedApprovedTargetScopesV1,
     ProviderObservation,
+    Side,
     SqliteExecutionStore,
+    TimeInForce,
 )
 
 from bt_api_py.service_components import (
@@ -51,6 +62,42 @@ class _Provider:
         return CancelObservation.accepted(
             intent.cancel_id, intent.target_intent_id, intent.provider_order_id
         )
+
+
+class _AuthorizedBuildOnlyProvider(_Provider):
+    def submit_authorized(self, _intent, _authorization):
+        raise AssertionError("builder-only capability check must not dispatch")
+
+
+class _BuildOnlyAtomicAdmissionGate:
+    def reserve(self, *_args, **_kwargs):
+        raise AssertionError("builder-only capability check must not reserve")
+
+    def claim_for_dispatch(self, *_args, **_kwargs):
+        raise AssertionError("builder-only capability check must not claim")
+
+    def release(self, *_args, **_kwargs):
+        raise AssertionError("builder-only capability check must not release")
+
+
+def _basic_admission_gate(store, provider):
+    validator = ExecutionProviderValidatorV1(
+        provider_id="PAPER",
+        validator_id="sdk-owner-write-capability-test",
+        version="1",
+        dispatch_port=provider,
+        instrument_map={"BTC-USDT": "BTC-USDT"},
+        quantity_steps={"BTC-USDT": Decimal("0.1")},
+        max_quantities={"BTC-USDT": Decimal("10")},
+        price_ticks={"BTC-USDT": Decimal("0.01")},
+        supported_order_types=(OrderType.LIMIT,),
+        supported_time_in_force=(TimeInForce.GTC,),
+        supported_actions=((Side.BUY, PositionEffect.OPEN),),
+        supports_reduce_only=False,
+    )
+    return ExecutionBasicAdmissionGate(
+        store, ExecutionAdmissionValidatorRegistry((validator,))
+    )
 
 
 def _prepared(options=None, ports=("service.order_entry", "service.order_query")):
@@ -196,6 +243,98 @@ def test_owner_control_handler_uses_injected_quota_admission(tmp_path):
     finally:
         component.close()
         store.close()
+
+
+@pytest.mark.parametrize("with_approved_target_authority", [False, True])
+def test_account_owner_build_filters_optional_write_capabilities_per_port(
+    tmp_path, with_approved_target_authority
+):
+    store = SqliteExecutionStore(
+        tmp_path / f"owner-write-capabilities-{with_approved_target_authority}.sqlite3"
+    )
+    provider = (
+        _AuthorizedBuildOnlyProvider()
+        if with_approved_target_authority
+        else _Provider()
+    )
+    values = {
+        "store": store,
+        "targets": {_SCOPE: _execution_scope()},
+        "dispatch": provider,
+        "admission": {"allow_unprotected": True},
+    }
+    if with_approved_target_authority:
+        identity = WireIdentity(WireRole.STRATEGY_CLIENT, _PRINCIPAL, _STRATEGY)
+
+        class AuthorityPort:
+            def reserve_approved_target_operation(self, **_kwargs):
+                raise AssertionError("build-only authority must not be called")
+
+            def resolve_approved_target_v1(self, **_kwargs):
+                raise AssertionError("build-only authority must not be called")
+
+            def consume_approved_target_v1(self, **_kwargs):
+                raise AssertionError("build-only authority must not be called")
+
+        values["approved_target_authority"] = ApprovedTargetAuthorityV1(
+            AuthorityPort(),
+            ApprovedTargetOwnerBindingsV1(
+                (
+                    ApprovedTargetOwnerBindingV1(
+                        principal_ref=_PRINCIPAL,
+                        identity=identity,
+                        wire_scope=_SCOPE,
+                        owner_subject="owner-subject-a",
+                        expected_scope_ref="approved-scope-a-v1",
+                    ),
+                )
+            ),
+            ProtectedApprovedTargetScopesV1((_SCOPE,)),
+        )
+        values["admission"] = {
+            "order_gate": _BuildOnlyAtomicAdmissionGate(),
+            "basic_admission_gate": _basic_admission_gate(store, provider),
+            "allow_unprotected": False,
+        }
+
+    prepared = _prepared(
+        ports=("service.order_entry", "service.order_query", "service.owner_control")
+    )
+    component = None
+    try:
+        component = build_component(
+            prepared,
+            scope=_SCOPE,
+            resource_provider=lambda *_: ComponentResources.borrowed(
+                values, ready=lambda: True
+            ),
+        )
+        capabilities = {capability.port: capability for capability in component.capabilities}
+        owner_control = capabilities["service.owner_control"]
+        assert "owner.cancel" in owner_control.operations
+        assert "owner.cancel" in owner_control.write_operations
+        if with_approved_target_authority:
+            assert "owner.reduce" in owner_control.operations
+            assert "owner.reduce" in owner_control.write_operations
+            assert "orders.submit_approved_target" in capabilities[
+                "service.order_entry"
+            ].operations
+        else:
+            assert "owner.reduce" not in owner_control.operations
+            assert "owner.reduce" not in owner_control.write_operations
+            assert "orders.submit_approved_target" not in capabilities[
+                "service.order_entry"
+            ].operations
+        assert all(
+            capability.write_operations.issubset(capability.operations)
+            for capability in capabilities.values()
+        )
+    finally:
+        try:
+            if component is not None:
+                component.close()
+        finally:
+            store.close()
 
 
 def test_account_owner_binding_only_the_query_port_advertises_no_write_operation():
