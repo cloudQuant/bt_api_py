@@ -32,15 +32,16 @@ from bt_api_execution import (
     CancelRecord,
     ContractValidationError,
     ExecutionRecord,
-    ExecutionScope,
     ExecutionState,
+    ExecutionScope,
     GroupAccountReservationSnapshot,
+    GroupBudgetReservationState,
     GroupBudgetQuote,
     GroupBudgetQuoteBuilder,
-    GroupBudgetReservationState,
     GroupBudgetUnsupportedOrderError,
     GroupChildOrderStatus,
     GroupCompensationBudgetPolicy,
+    GroupReservationPhase,
     GroupDispatchResolutionReceipt,
     GroupLegClaimReceipt,
     GroupLegOrderReceipt,
@@ -52,7 +53,6 @@ from bt_api_execution import (
     GroupOrderState,
     GroupPermitBinding,
     GroupReservationDeniedError,
-    GroupReservationPhase,
     GroupRiskLegSnapshot,
     ManagedCancellationFacade,
     OrderIntent,
@@ -67,6 +67,16 @@ from bt_api_execution import (
     order_intent_from_payload,
     payload_sha256,
 )
+from bt_api_execution.group_roll_exit_contracts import (
+    GroupRollExitBudgetReleaseV1,
+    GroupRollExitCloseActionV1,
+    GroupRollExitCloseFeeEvidenceV1 as ExecutionGroupRollExitCloseFeeEvidenceV1,
+    GroupRollExitCloseFeeFillV1 as ExecutionGroupRollExitCloseFeeFillV1,
+    GroupRollExitClosedProofV1,
+    GroupRollExitLegClosedV1,
+    GroupRollExitSourceFeeEvidenceV1,
+)
+from bt_api_execution.group_roll_exit_validation import group_event_chain_sha256
 from bt_api_risk import (
     INSTRUMENT_METADATA_DIGEST_TAG,
     InstrumentRiskMetadata,
@@ -95,11 +105,11 @@ from .service_group_compensation_contracts import (
     GroupCompensationActionPhase,
     GroupCompensationCloseAuthorization,
 )
-
 from .service_group_roll_exit import (
     GroupRollExitActionRecordV1,
     GroupRollExitActionStore,
     GroupRollExitAuthorizationV1,
+    GroupRollExitCloseFeeEvidenceV1,
     GroupRollExitError,
     GroupRollExitObservationV1,
     GroupRollExitPhase,
@@ -115,8 +125,19 @@ from .service_registry import (
 _GROUP_COORDINATOR_BASE_OPERATIONS = frozenset({"groups.submit", "groups.query"})
 _GROUP_COORDINATOR_FULL_OPERATIONS = _GROUP_COORDINATOR_BASE_OPERATIONS | {"groups.cancel"}
 _GROUP_COORDINATOR_ROLL_EXIT_OPERATIONS = frozenset({"groups.roll_exit", "groups.query_roll_exit"})
-_GROUP_COORDINATOR_WRITE_OPERATIONS = frozenset({"groups.submit", "groups.cancel", "groups.roll_exit"})
+_GROUP_ROLL_EXIT_EVENT_TYPES = frozenset(
+    {
+        "GROUP_ROLL_EXIT_PLAN_RECORDED",
+        "GROUP_ROLL_EXIT_SUBMIT_STARTED",
+        "GROUP_ROLL_EXIT_STATUS_OBSERVED",
+        "GROUP_ROLL_EXIT_RESOLVED",
+        "GROUP_ROLL_EXIT_CLOSED",
+    }
+)
 GROUP_COORDINATOR_OPERATIONS = _GROUP_COORDINATOR_FULL_OPERATIONS | _GROUP_COORDINATOR_ROLL_EXIT_OPERATIONS
+_GROUP_COORDINATOR_WRITE_OPERATIONS = frozenset(
+    {"groups.submit", "groups.cancel", "groups.roll_exit"}
+)
 _GROUP_ACCOUNT_OWNER_BASE_OPERATIONS = frozenset(
     {"orders.submit_group_leg", "orders.query_group_leg", "orders.resolve_group_leg"}
 )
@@ -138,12 +159,11 @@ _ORDERS_MOUNT = "upstream.orders"
 _ORDER_QUERY_MOUNT = "upstream.order_query"
 _COMPENSATION_ORDERS_MOUNT = "upstream.group_compensation_orders"
 _COMPENSATION_QUERY_MOUNT = "upstream.group_compensation_order_query"
+# Roll-exit operations use dedicated mounts so their exact service grants and
+# scope bindings cannot be reached through ordinary orders/query bindings.
 _ROLL_EXIT_ORDERS_MOUNT = "upstream.group_roll_exit_orders"
 _ROLL_EXIT_QUERY_MOUNT = "upstream.group_roll_exit_order_query"
 _MAX_REPLY_BYTES = 1_000_000
-_GROUP_COMPENSATION_TERMINAL = frozenset(
-    {ExecutionState.FILLED, ExecutionState.CANCELLED, ExecutionState.REJECTED}
-)
 _MAX_RPC_JSON_DEPTH = 64
 _MAX_SQLITE_INTEGER = (1 << 63) - 1
 _REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -338,7 +358,6 @@ class _CoordinatorCall:
     binding: GroupOriginRunBinding
 
 
-
 class _AcceptedGroupCancelAdmissionGate:
     """Bind cancellation admission to one current accepted group child.
 
@@ -389,6 +408,8 @@ class _AcceptedGroupCancelAdmissionGate:
     def release(self, permit_reference: str, _reason: str) -> None:
         if permit_reference != self._permit_reference:
             raise PermissionError("accepted group cancellation permit changed")
+
+
 _CURRENT_COORDINATOR_CALL: contextvars.ContextVar[_CoordinatorCall | None] = contextvars.ContextVar(
     "bt_api_group_coordinator_call", default=None
 )
@@ -579,8 +600,6 @@ class _OrdersRpcPort:
         )
         return _cancel_result_response(response)
 
-
-
     def prepare_group_compensation_close(
         self, group_id: str, source_leg_id: str
     ) -> Mapping[str, Any]:
@@ -694,6 +713,7 @@ class _OrdersRpcPort:
         ):
             raise RuntimeError("roll-exit prepare identity is inconsistent")
         return phase, authorization, observation
+
     def submit_group_roll_exit(
         self, authorization: GroupRollExitAuthorizationV1
     ) -> GroupRollExitObservationV1:
@@ -713,6 +733,7 @@ class _OrdersRpcPort:
             max_reply_message_bytes=_MAX_REPLY_BYTES,
         )
         return _roll_exit_observation_response(response, authorization)
+
     def query_group_roll_exit(
         self, authorization: GroupRollExitAuthorizationV1
     ) -> GroupRollExitObservationV1 | None:
@@ -756,6 +777,7 @@ class _OrdersRpcPort:
             raise RuntimeError("roll-exit query identity is inconsistent")
         return observation
 
+
 def _roll_exit_observation_matches(
     authorization: GroupRollExitAuthorizationV1,
     phase: GroupRollExitPhase,
@@ -770,8 +792,247 @@ def _roll_exit_observation_matches(
         and observation.request_fingerprint == authorization.request.fingerprint
         and observation.authorization_sha256 == authorization.authorization_sha256
         and observation.intent_id == authorization.intent.intent_id
+        and observation.risk_intent_id == authorization.risk_intent_id
         and observation.requested_quantity == authorization.intent.quantity
     )
+
+
+def _execution_roll_exit_close_fee_evidence(
+    authorization: GroupRollExitAuthorizationV1,
+    observation: GroupRollExitObservationV1,
+) -> ExecutionGroupRollExitCloseFeeEvidenceV1 | None:
+    """Adapt the raw Risk fee projection to Execution's canonical proof DTO."""
+
+    fee = observation.close_fee_evidence
+    if (
+        type(authorization) is not GroupRollExitAuthorizationV1
+        or type(observation) is not GroupRollExitObservationV1
+        or type(fee) is not GroupRollExitCloseFeeEvidenceV1
+        or authorization.risk_intent_id is None
+        or authorization.intent.intent_id != authorization.action_id
+        or fee.intent_id != authorization.action_id
+    ):
+        return None
+    try:
+        return ExecutionGroupRollExitCloseFeeEvidenceV1(
+            intent_id=authorization.action_id,
+            journal_revision=fee.journal_revision,
+            fill_observation_sha256=fee.fill_observation_sha256,
+            fee_amount=fee.fee_amount,
+            fee_currency=fee.fee_currency,
+            fills=tuple(
+                ExecutionGroupRollExitCloseFeeFillV1(
+                    fill_id=item.fill_id,
+                    fill_fingerprint=item.fill_fingerprint,
+                    source_row_sha256=item.source_row_sha256,
+                    amount=item.amount,
+                    currency=item.currency,
+                )
+                for item in fee.fills
+            ),
+        )
+    except Exception:
+        return None
+
+
+def _roll_exit_action_has_closure_evidence(action: Mapping[str, Any]) -> bool:
+    """Return whether a terminal action can be included in a CLOSED proof."""
+
+    authorization = action.get("authorization")
+    observation = action.get("observation")
+    if (
+        action.get("phase") != "RESOLVED"
+        or type(authorization) is not GroupRollExitAuthorizationV1
+        or type(observation) is not GroupRollExitObservationV1
+        or observation.phase is not GroupRollExitPhase.RESOLVED
+        or observation.close_state is not ExecutionState.FILLED
+        or observation.close_receipt is None
+        or observation.filled_quantity != authorization.intent.quantity
+        or not _roll_exit_observation_matches(
+            authorization, observation.phase, observation
+        )
+        or type(authorization.source.source_terminal_status) is not GroupChildOrderStatus
+    ):
+        return False
+    fee = _execution_roll_exit_close_fee_evidence(authorization, observation)
+    source_status = authorization.source.source_terminal_status
+    return (
+        fee is not None
+        and source_status.cumulative_commission_currency is not None
+        and fee.fee_currency == source_status.cumulative_commission_currency
+    )
+
+
+def _roll_exit_source_matches_snapshot(
+    authorization: GroupRollExitAuthorizationV1,
+    snapshot: GroupOrderSnapshot,
+    *,
+    expected_plan_revision: int,
+) -> bool:
+    """Bind a Risk-built action to the accepted, unchanged source leg."""
+
+    if (
+        type(authorization) is not GroupRollExitAuthorizationV1
+        or type(snapshot) is not GroupOrderSnapshot
+        or type(expected_plan_revision) is not int
+        or expected_plan_revision < 0
+        or authorization.risk_intent_id is None
+        or snapshot.request.version not in {1, 2}
+        or len(snapshot.request.legs) != 2
+        or snapshot.request.compensation_budget_policy is not None
+        or authorization.request.portfolio_ref != snapshot.request.portfolio_ref
+        or authorization.request.group_id != snapshot.request.group_id
+        or authorization.source.portfolio_ref != snapshot.request.portfolio_ref
+        or authorization.source.group_id != snapshot.request.group_id
+        or authorization.source.group_version != snapshot.request.version
+        or authorization.source.group_revision != expected_plan_revision
+        or authorization.source.group_fingerprint != snapshot.request.fingerprint
+        or authorization.source.group_request != snapshot.request
+        or authorization.source.strategy_id != snapshot.request.strategy_id
+        or authorization.request.source_leg_id != authorization.source.source_leg_id
+    ):
+        return False
+    matches = tuple(
+        plan
+        for plan in snapshot.request.legs
+        if plan.leg_id == authorization.source.source_leg_id
+    )
+    if len(matches) != 1:
+        return False
+    plan = matches[0]
+    progress_matches = tuple(item for item in snapshot.legs if item.leg_id == plan.leg_id)
+    if len(progress_matches) != 1:
+        return False
+    progress = progress_matches[0]
+    status = progress.child_status
+    source = authorization.source
+    risk_reservation_fingerprint = getattr(
+        source, "source_risk_reservation_fingerprint", None
+    )
+    risk_intent_fingerprint = getattr(source, "source_risk_intent_fingerprint", None)
+    matching_reservations = tuple(
+        reservation
+        for reservation in snapshot.reservations
+        if type(reservation) is GroupAccountReservationSnapshot
+        and reservation.account_ref == source.account_ref
+        and reservation.group_id == snapshot.request.group_id
+    )
+    if len(matching_reservations) != 1:
+        return False
+    reservation = matching_reservations[0]
+    expected_account_leg_ids = tuple(
+        item.leg_id
+        for item in snapshot.request.legs
+        if item.account_ref == source.account_ref
+    )
+    reservation_leg_ids = tuple(item.leg_id for item in reservation.legs)
+    if (
+        not expected_account_leg_ids
+        or len(set(expected_account_leg_ids)) != len(expected_account_leg_ids)
+        or len(reservation_leg_ids) != len(expected_account_leg_ids)
+        or len(set(reservation_leg_ids)) != len(reservation_leg_ids)
+        or reservation_leg_ids != tuple(sorted(expected_account_leg_ids))
+    ):
+        return False
+    matching_risk_legs = tuple(
+        risk_leg
+        for risk_leg in reservation.legs
+        if type(risk_leg) is GroupRiskLegSnapshot
+        and risk_leg.leg_id == source.source_leg_id
+    )
+    if len(matching_risk_legs) != 1:
+        return False
+    risk_leg = matching_risk_legs[0]
+    claim = source.source_claim
+    if (
+        type(risk_reservation_fingerprint) is not str
+        or type(risk_intent_fingerprint) is not str
+        or reservation.group_fingerprint != risk_reservation_fingerprint
+        or risk_leg.actual_intent_hash != risk_intent_fingerprint
+        or risk_leg.permit_id != claim.permit.permit_id
+        or risk_leg.intent_id != source.source_child_intent.intent_id
+        or risk_leg.reserved_intent_hash != claim.permit.reserved_intent_hash
+        or risk_leg.exposure_profile_fingerprint
+        != claim.permit.exposure_profile_fingerprint
+        or not risk_leg.claimed
+        or not risk_leg.resolved
+        or claim.actual_child_intent_hash != risk_intent_fingerprint
+        or claim.permit.group_fingerprint != risk_reservation_fingerprint
+        or claim.permit.order_intent_hash != source.source_child_intent.fingerprint
+        or claim.permit.group_id != snapshot.request.group_id
+        or claim.permit.portfolio_ref != snapshot.request.portfolio_ref
+        or claim.permit.strategy_id != snapshot.request.strategy_id
+        or claim.permit.coordinator_principal_ref
+        != snapshot.request.coordinator_principal_ref
+        or claim.permit.account_ref != source.account_ref
+        or claim.permit.leg_id != source.source_leg_id
+    ):
+        return False
+    return (
+        plan.account_ref == source.account_ref
+        and plan.maximum_intent.intent_id == source.source_intent_id
+        and progress.phase.value == "OBSERVED"
+        and type(progress.submitted_intent) is OrderIntent
+        and progress.submitted_intent == source.source_child_intent
+        and progress.submitted_intent.intent_id == source.source_intent_id
+        and progress.submitted_intent.fingerprint == source.source_request_fingerprint
+        and type(status) is GroupChildOrderStatus
+        and status == source.source_terminal_status
+        and status.cumulative_commission is not None
+        and status.cumulative_commission_currency is not None
+        and progress.claim_receipt == source.source_claim
+        and progress.resolution_receipt == source.source_risk_resolution
+        and source.source_filled_quantity == status.filled_quantity
+        and source.source_event_digest is not None
+    )
+
+
+def _roll_exit_authorization_matches_snapshot(
+    authorization: GroupRollExitAuthorizationV1,
+    snapshot: GroupOrderSnapshot,
+    binding: GroupOriginRunBinding,
+    target_route: Any,
+    *,
+    expected_plan_revision: int,
+) -> bool:
+    if (
+        type(binding) is not GroupOriginRunBinding
+        or not _roll_exit_source_matches_snapshot(
+            authorization,
+            snapshot,
+            expected_plan_revision=expected_plan_revision,
+        )
+    ):
+        return False
+    source = authorization.source
+    route_scope = getattr(target_route, "execution_scope", None)
+    risk_reservations = tuple(
+        reservation
+        for reservation in snapshot.reservations
+        if type(reservation) is GroupAccountReservationSnapshot
+        and reservation.account_ref == source.account_ref
+        and reservation.group_id == snapshot.request.group_id
+    )
+    return (
+        type(target_route) is GroupAccountRoute
+        and len(risk_reservations) == 1
+        and risk_reservations[0].scope_fingerprint
+        == target_route.risk_scope_fingerprint
+        and source.origin_run_id == binding.origin_run_id
+        and source.service_write_run_id == binding.origin_run_id
+        and source.strategy_id == binding.request.strategy_id
+        and source.account_ref in binding.request.account_refs
+        and source.account_ref == authorization.source.source_execution_scope.account_ref
+        and source.source_execution_scope == route_scope
+        and authorization.request == GroupRollExitRequestV1(
+            portfolio_ref=snapshot.request.portfolio_ref,
+            group_id=snapshot.request.group_id,
+            source_leg_id=source.source_leg_id,
+            limit_price=authorization.request.limit_price,
+        )
+    )
+
+
 def _roll_exit_observation_response(
     response: object, authorization: GroupRollExitAuthorizationV1
 ) -> GroupRollExitObservationV1:
@@ -848,6 +1109,10 @@ class GroupCoordinatorService:
             target_copy[stable_scope] = target
         self._store = store
         self._run_bindings = run_bindings
+        try:
+            self._roll_exit_actions = GroupRollExitActionStore(run_bindings)
+        except GroupRollExitError:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE") from None
         self._cancel_plans = GroupCancelPlanStore(run_bindings)
         self._upstream = borrowed_upstream
         self._identity = service_identity
@@ -871,6 +1136,8 @@ class GroupCoordinatorService:
             for account, fingerprint in fingerprints.items()
         }
         orders = {account: _OrdersRpcPort(account, borrowed_upstream) for account in fingerprints}
+        self._reservation_ports = MappingProxyType(reservations)
+        self._order_ports = MappingProxyType(orders)
         portfolio_policies: dict[str, PortfolioGroupBudgetPolicy] = {}
         for stable_scope, target in target_copy.items():
             policy = target.portfolio_budget_policy
@@ -892,11 +1159,6 @@ class GroupCoordinatorService:
         except Exception:
             raise ServiceExecutionGroupError("GROUP_COORDINATOR_INVALID") from None
         self._order_ports = MappingProxyType(orders)
-        self._reservation_ports = MappingProxyType(reservations)
-        try:
-            self._roll_exit_actions = GroupRollExitActionStore(run_bindings)
-        except GroupRollExitError:
-            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE") from None
         self._targets = MappingProxyType(target_copy)
 
     @property
@@ -1024,6 +1286,16 @@ class GroupCoordinatorService:
                     # action (or plan the next bounded action) through its
                     # dedicated query/submit rules.
                     self._maintain_group_compensation(snapshot)
+                    return
+                if any(event.event_type in _GROUP_ROLL_EXIT_EVENT_TYPES for event in history):
+                    # A durable roll-exit plan owns this legacy two-leg group
+                    # until its terminal CLOSE proof is committed. Normal
+                    # advance_group recovery would otherwise rewrite the
+                    # state-machine progress before the same Risk action is
+                    # queried and resolved.
+                    self._maintain_group_roll_exit(
+                        snapshot, binding, target_scope, target
+                    )
                     return
                 advanced = self._coordinator.advance_group(
                     request.portfolio_ref, request.group_id
@@ -1249,6 +1521,545 @@ class GroupCoordinatorService:
             # A missing route, uncertain reply, malformed receipt, or stale
             # source projection never becomes a dispatch retry or a release.
             return
+
+    def _maintain_group_roll_exit(
+        self,
+        snapshot: GroupOrderSnapshot,
+        binding: GroupOriginRunBinding,
+        target_scope: WireScope,
+        target: GroupCoordinatorTarget,
+    ) -> None:
+        """Recover one persisted v1/v2 roll-exit action without normal dispatch."""
+
+        request = snapshot.request
+        if (
+            snapshot.state not in {GroupOrderState.UNWINDING, GroupOrderState.RECOVERY_REQUIRED}
+            or request.version not in {1, 2}
+            or len(request.legs) != 2
+        ):
+            return
+        try:
+            if not self._recovery_binding_matches(binding, snapshot, target_scope, target):
+                return
+            history = self._store.events(request.portfolio_ref, request.group_id)
+            actions = _owner_roll_exit_actions(snapshot, history)
+            pending = [item for item in actions if item["phase"] != "RESOLVED"]
+            if len(pending) > 1:
+                return
+            if pending:
+                action = pending[0]
+                authorization = action["authorization"]
+                account_ref = authorization.source.account_ref
+                if (
+                    account_ref not in target.accounts
+                    or authorization.source.origin_run_id != binding.origin_run_id
+                    or authorization.source.strategy_id != snapshot.request.strategy_id
+                    or authorization.source.group_request != snapshot.request
+                    or authorization.source.group_fingerprint != snapshot.request.fingerprint
+                    or authorization.source.service_write_run_id != binding.origin_run_id
+                    or authorization.source.source_execution_scope
+                    != target.accounts[account_ref].execution_scope
+                ):
+                    return
+                record = self._roll_exit_actions.get(authorization.action_id)
+                if record is None:
+                    # The group event is the durable authority. Rebuild only
+                    # the local query index from that verified plan; this does
+                    # not cross the Risk submit boundary.
+                    record = self._roll_exit_actions.prepare(authorization)
+                if (
+                    record is None
+                    or record.authorization.to_payload() != authorization.to_payload()
+                    or record.authorization.authorization_sha256
+                    != action["authorization_sha256"]
+                ):
+                    return
+                if account_ref not in self._order_ports:
+                    return
+                record = self._recover_roll_exit(
+                    snapshot,
+                    None,
+                    target_scope,
+                    target,
+                    binding,
+                    account_ref,
+                    record,
+                )
+                current = self._store.get(request.portfolio_ref, request.group_id)
+                if type(current) is GroupOrderSnapshot and record.observation is not None:
+                    current = self._record_roll_exit_group_observation(
+                        current, record.authorization, record.observation
+                    )
+                    if current is not None and record.phase is GroupRollExitPhase.RESOLVED:
+                        self._try_close_roll_exit_group(current)
+                return
+            self._try_close_roll_exit_group(snapshot)
+        except Exception:
+            # Recovery never converts incomplete evidence into another action.
+            return
+
+    def _record_roll_exit_plan(
+        self,
+        snapshot: GroupOrderSnapshot,
+        authorization: GroupRollExitAuthorizationV1,
+    ) -> GroupOrderSnapshot | None:
+        if (
+            type(snapshot) is not GroupOrderSnapshot
+            or type(authorization) is not GroupRollExitAuthorizationV1
+            or authorization.risk_intent_id is None
+            or authorization.source.group_revision != snapshot.revision
+            or authorization.source.group_fingerprint != snapshot.request.fingerprint
+            or authorization.source.group_request != snapshot.request
+            or snapshot.state not in {
+                GroupOrderState.PAIRED,
+                GroupOrderState.UNWINDING,
+                GroupOrderState.RECOVERY_REQUIRED,
+            }
+        ):
+            return None
+        history = self._store.events(snapshot.request.portfolio_ref, snapshot.request.group_id)
+        actions = _owner_roll_exit_actions(snapshot, history)
+        existing = next(
+            (item for item in actions if item["action_id"] == authorization.action_id),
+            None,
+        )
+        if existing is not None:
+            if (
+                existing["authorization_sha256"] != authorization.authorization_sha256
+                or existing["authorization"].to_payload() != authorization.to_payload()
+            ):
+                return None
+            return snapshot
+        if any(item["phase"] != "RESOLVED" for item in actions):
+            return None
+        try:
+            return self._store.update(
+                snapshot,
+                event_type="GROUP_ROLL_EXIT_PLAN_RECORDED",
+                event_payload={
+                    "action_id": authorization.action_id,
+                    "authorization_sha256": authorization.authorization_sha256,
+                    "authorization": authorization.to_payload(),
+                },
+                state=GroupOrderState.UNWINDING,
+                error_code=None,
+            )
+        except Exception:
+            return None
+
+    def _record_roll_exit_submit_started(
+        self,
+        snapshot: GroupOrderSnapshot,
+        authorization: GroupRollExitAuthorizationV1,
+    ) -> GroupOrderSnapshot | None:
+        if type(snapshot) is not GroupOrderSnapshot or authorization.risk_intent_id is None:
+            return None
+        history = self._store.events(snapshot.request.portfolio_ref, snapshot.request.group_id)
+        actions = _owner_roll_exit_actions(snapshot, history)
+        action = next((item for item in actions if item["action_id"] == authorization.action_id), None)
+        if action is None or action["authorization_sha256"] != authorization.authorization_sha256:
+            return None
+        if action["phase"] in {"STARTED", "OBSERVED", "RESOLVED"}:
+            return snapshot
+        try:
+            return self._store.update(
+                snapshot,
+                event_type="GROUP_ROLL_EXIT_SUBMIT_STARTED",
+                event_payload={
+                    "action_id": authorization.action_id,
+                    "authorization_sha256": authorization.authorization_sha256,
+                    "risk_intent_id": authorization.risk_intent_id,
+                    "intent_id": authorization.intent.intent_id,
+                    "client_order_id": authorization.client_order_id,
+                },
+                state=GroupOrderState.UNWINDING,
+                error_code=None,
+            )
+        except Exception:
+            return None
+
+    def _record_roll_exit_group_observation(
+        self,
+        snapshot: GroupOrderSnapshot,
+        authorization: GroupRollExitAuthorizationV1,
+        observation: GroupRollExitObservationV1,
+    ) -> GroupOrderSnapshot | None:
+        if (
+            type(snapshot) is not GroupOrderSnapshot
+            or not _roll_exit_observation_matches(authorization, observation.phase, observation)
+        ):
+            return None
+        history = self._store.events(snapshot.request.portfolio_ref, snapshot.request.group_id)
+        actions = _owner_roll_exit_actions(snapshot, history)
+        action = next((item for item in actions if item["action_id"] == authorization.action_id), None)
+        if action is None or action["authorization_sha256"] != authorization.authorization_sha256:
+            return None
+        if action["phase"] == "RESOLVED":
+            return snapshot if action["observation"] == observation else None
+        if observation.phase is GroupRollExitPhase.RESOLVED:
+            if action["phase"] not in {"STARTED", "OBSERVED"}:
+                return None
+            event_type = "GROUP_ROLL_EXIT_RESOLVED"
+            receipt = observation.close_receipt
+            fee = observation.close_fee_evidence
+            payload = {
+                "action_id": authorization.action_id,
+                "authorization_sha256": authorization.authorization_sha256,
+                "risk_intent_id": authorization.risk_intent_id,
+                "observation": observation.to_payload(),
+                "risk_receipt": None if receipt is None else _plain_rpc_json(receipt),
+                "close_fee_evidence": None if fee is None else fee.to_payload(),
+            }
+            target_state = GroupOrderState.UNWINDING
+        else:
+            if observation.phase is GroupRollExitPhase.PREPARED:
+                if action["phase"] not in {"PLANNED", "PREPARED"}:
+                    return None
+            elif action["phase"] not in {"STARTED", "OBSERVED"}:
+                return None
+            latest = next(
+                (
+                    item
+                    for item in reversed(history)
+                    if item.event_type in {
+                        "GROUP_ROLL_EXIT_STATUS_OBSERVED",
+                        "GROUP_ROLL_EXIT_RESOLVED",
+                    }
+                    and item.payload.get("action_id") == authorization.action_id
+                ),
+                None,
+            )
+            payload = {
+                "action_id": authorization.action_id,
+                "authorization_sha256": authorization.authorization_sha256,
+                "risk_intent_id": authorization.risk_intent_id,
+                "observation": observation.to_payload(),
+            }
+            if latest is not None and latest.event_type == "GROUP_ROLL_EXIT_STATUS_OBSERVED":
+                if _plain_rpc_json(latest.payload) == payload:
+                    return snapshot
+            event_type = "GROUP_ROLL_EXIT_STATUS_OBSERVED"
+            target_state = (
+                GroupOrderState.RECOVERY_REQUIRED
+                if observation.phase is GroupRollExitPhase.UNKNOWN
+                else GroupOrderState.UNWINDING
+            )
+        try:
+            return self._store.update(
+                snapshot,
+                event_type=event_type,
+                event_payload=payload,
+                state=target_state,
+                error_code=None,
+            )
+        except Exception:
+            return None
+
+    def _release_roll_exit_reservations(
+        self, snapshot: GroupOrderSnapshot
+    ) -> GroupOrderSnapshot | None:
+        request = snapshot.request
+        if len(snapshot.reservations) != len(request.account_refs):
+            return None
+        for account_ref in request.account_refs:
+            port = self._reservation_ports.get(account_ref)
+            if port is None:
+                return None
+            try:
+                current = self._store.get(request.portfolio_ref, request.group_id)
+                if type(current) is not GroupOrderSnapshot:
+                    return None
+                remote = self._coordinator._query_reservation(current, account_ref)
+                current = self._store.get(request.portfolio_ref, request.group_id)
+                if type(current) is not GroupOrderSnapshot:
+                    return None
+                verified = self._coordinator._reservation_from_receipt(
+                    current, account_ref, remote
+                )
+                plans = {plan.leg_id: plan for plan in request.legs_for_account(account_ref)}
+                local = next(
+                    (item for item in current.reservations if item.account_ref == account_ref),
+                    None,
+                )
+                if (
+                    local is None
+                    or verified.group_id != request.group_id
+                    or verified.account_ref != account_ref
+                    or verified.group_fingerprint != local.group_fingerprint
+                    or verified.scope_fingerprint != local.scope_fingerprint
+                    or verified.deadline_ns != request.deadline_ns
+                    or {item.leg_id for item in verified.legs} != set(plans)
+                ):
+                    return None
+                progress_by_leg = {item.leg_id: item for item in current.legs}
+                if len(progress_by_leg) != len(current.legs):
+                    return None
+                for item in verified.legs:
+                    plan = plans.get(item.leg_id)
+                    progress = progress_by_leg.get(item.leg_id)
+                    if progress is None:
+                        return None
+                    submitted = progress.submitted_intent
+                    status = progress.child_status
+                    claim = progress.claim_receipt
+                    resolution = progress.resolution_receipt
+                    if (
+                        plan is None
+                        or not item.claimed
+                        or not item.resolved
+                        or item.state != "SETTLED"
+                        or item.intent_id != plan.maximum_intent.intent_id
+                        or type(submitted) is not OrderIntent
+                        or submitted.intent_id != item.intent_id
+                        or type(status) is not GroupChildOrderStatus
+                        or status.intent_id != item.intent_id
+                        or type(claim) is not GroupLegClaimReceipt
+                        or type(resolution) is not GroupDispatchResolutionReceipt
+                        or item.actual_intent_hash != claim.actual_child_intent_hash
+                        or item.permit_id != claim.permit.permit_id
+                        or item.reserved_intent_hash != claim.permit.reserved_intent_hash
+                        or item.exposure_profile_fingerprint
+                        != claim.permit.exposure_profile_fingerprint
+                        or claim.permit.group_id != request.group_id
+                        or claim.permit.leg_id != item.leg_id
+                        or claim.permit.portfolio_ref != request.portfolio_ref
+                        or claim.permit.strategy_id != request.strategy_id
+                        or claim.permit.account_ref != account_ref
+                        or claim.permit.coordinator_principal_ref
+                        != request.coordinator_principal_ref
+                        or claim.permit.group_fingerprint != local.group_fingerprint
+                        or claim.permit.order_intent_hash != submitted.fingerprint
+                        or resolution.claim != claim
+                        or resolution.final_state != status.state
+                        or resolution.requested_quantity != submitted.quantity
+                        or resolution.filled_quantity != status.filled_quantity
+                        or (
+                            status.order_revision is not None
+                            and resolution.order_revision != status.order_revision
+                        )
+                        or (
+                            status.trade_count is not None
+                            and resolution.trade_count != status.trade_count
+                        )
+                    ):
+                        return None
+                if local.phase is not GroupReservationPhase.RELEASED:
+                    current = self._coordinator._replace_reservation(
+                        current,
+                        replace(verified, phase=GroupReservationPhase.RELEASED),
+                        event_type="RESERVATION_RELEASED",
+                        payload={"account_ref": account_ref, "roll_exit_settled": True},
+                        phase=GroupReservationPhase.RELEASED,
+                    )
+                snapshot = current
+            except Exception:
+                return None
+        return snapshot
+
+    def _try_close_roll_exit_group(self, snapshot: GroupOrderSnapshot) -> GroupOrderSnapshot | None:
+        """Atomically close only after both source legs and all close evidence reconcile."""
+
+        try:
+            if (
+                type(snapshot) is not GroupOrderSnapshot
+                or snapshot.state not in {
+                    GroupOrderState.UNWINDING,
+                    GroupOrderState.RECOVERY_REQUIRED,
+                }
+                or snapshot.request.version not in {1, 2}
+                or len(snapshot.request.legs) != 2
+            ):
+                return None
+            request = snapshot.request
+            history = self._store.events(request.portfolio_ref, request.group_id)
+            actions = _owner_roll_exit_actions(snapshot, history)
+            if not actions or any(item["phase"] != "RESOLVED" for item in actions):
+                return None
+            by_leg: dict[str, list[dict[str, Any]]] = {plan.leg_id: [] for plan in request.legs}
+            for action in actions:
+                source_leg_id = action["authorization"].source.source_leg_id
+                if source_leg_id not in by_leg:
+                    return None
+                by_leg[source_leg_id].append(action)
+            if any(not items for items in by_leg.values()):
+                return None
+            progress_by_leg = {item.leg_id: item for item in snapshot.legs}
+            if len(progress_by_leg) != len(snapshot.legs) or set(progress_by_leg) != set(by_leg):
+                return None
+            for plan in request.legs:
+                progress = progress_by_leg.get(plan.leg_id)
+                if progress is None:
+                    return None
+                status = progress.child_status
+                if (
+                    progress.submitted_intent is None
+                    or progress.claim_receipt is None
+                    or progress.resolution_receipt is None
+                    or type(status) is not GroupChildOrderStatus
+                    or status.state not in {ExecutionState.FILLED, ExecutionState.CANCELLED}
+                    or status.filled_quantity <= 0
+                    or status.cumulative_commission is None
+                    or status.cumulative_commission_currency is None
+                    or any(
+                        item["authorization"].source.source_intent_id
+                        != progress.submitted_intent.intent_id
+                        or item["authorization"].source.source_terminal_status != status
+                        or item["authorization"].source.source_claim != progress.claim_receipt
+                        or item["authorization"].source.source_risk_resolution
+                        != progress.resolution_receipt
+                        or item["authorization"].source.source_filled_quantity
+                        != status.filled_quantity
+                        or _SHA256.fullmatch(
+                            item["authorization"].source.source_event_digest
+                        ) is None
+                        for item in by_leg[plan.leg_id]
+                    )
+                ):
+                    return None
+            # A reservation is released only after every action is backed by a
+            # complete full-fill receipt and its independent fee evidence.
+            execution_fees: dict[str, ExecutionGroupRollExitCloseFeeEvidenceV1] = {}
+            for plan in request.legs:
+                leg_actions = by_leg[plan.leg_id]
+                progress = progress_by_leg.get(plan.leg_id)
+                if progress is None:
+                    return None
+                status = progress.child_status
+                source = leg_actions[0]["authorization"].source
+                if type(status) is not GroupChildOrderStatus:
+                    return None
+                for item in leg_actions:
+                    authorization = item["authorization"]
+                    observation = item["observation"]
+                    if (
+                        item["phase"] != "RESOLVED"
+                        or type(observation) is not GroupRollExitObservationV1
+                        or observation.phase is not GroupRollExitPhase.RESOLVED
+                        or observation.close_state is not ExecutionState.FILLED
+                        or observation.close_receipt is None
+                        or authorization.source.source_event_digest
+                        != source.source_event_digest
+                    ):
+                        return None
+                    execution_fee = _execution_roll_exit_close_fee_evidence(
+                        authorization, observation
+                    )
+                    if (
+                        execution_fee is None
+                        or execution_fee.fee_currency
+                        != status.cumulative_commission_currency
+                    ):
+                        return None
+                    execution_fees[authorization.action_id] = execution_fee
+                if sum(
+                    (Fraction(item["observation"].filled_quantity) for item in leg_actions),
+                    Fraction(0),
+                ) != Fraction(status.filled_quantity):
+                    return None
+            snapshot = self._release_roll_exit_reservations(snapshot)
+            if snapshot is None:
+                return None
+            history = self._store.events(request.portfolio_ref, request.group_id)
+            actions = _owner_roll_exit_actions(snapshot, history)
+            progress_by_leg = {item.leg_id: item for item in snapshot.legs}
+            legs: list[GroupRollExitLegClosedV1] = []
+            for plan in request.legs:
+                progress = progress_by_leg[plan.leg_id]
+                status = progress.child_status
+                claim = progress.claim_receipt
+                resolution = progress.resolution_receipt
+                if (
+                    status is None
+                    or claim is None
+                    or resolution is None
+                    or progress.submitted_intent is None
+                ):
+                    return None
+                leg_actions: list[GroupRollExitCloseActionV1] = []
+                for action in actions:
+                    authorization = action["authorization"]
+                    if authorization.source.source_leg_id != plan.leg_id:
+                        continue
+                    observation = action["observation"]
+                    receipt = observation.close_receipt
+                    fee = execution_fees.get(authorization.action_id)
+                    if (
+                        observation.phase is not GroupRollExitPhase.RESOLVED
+                        or observation.close_state is not ExecutionState.FILLED
+                        or receipt is None
+                        or fee is None
+                        or authorization.risk_intent_id is None
+                    ):
+                        return None
+                    leg_actions.append(
+                        GroupRollExitCloseActionV1(
+                            action_id=authorization.action_id,
+                            authorization_sha256=authorization.authorization_sha256,
+                            risk_intent_id=authorization.risk_intent_id,
+                            receipt_sha256=observation.close_receipt_sha256,
+                            close_fee_evidence_sha256=fee.evidence_sha256,
+                            close_quantity=observation.filled_quantity,
+                            close_fee_amount=fee.fee_amount,
+                            close_fee_currency=fee.fee_currency,
+                        )
+                    )
+                source_event_sha256 = next(
+                    action["authorization"].source.source_event_digest
+                    for action in actions
+                    if action["authorization"].source.source_leg_id == plan.leg_id
+                )
+                legs.append(
+                    GroupRollExitLegClosedV1(
+                        leg_id=plan.leg_id,
+                        source_intent_id=progress.submitted_intent.intent_id,
+                        source_event_sha256=source_event_sha256,
+                        source_claim_digest=claim.claim_digest,
+                        source_resolution_sha256=payload_sha256(resolution.to_payload()),
+                        source_filled_quantity=status.filled_quantity,
+                        source_fee=GroupRollExitSourceFeeEvidenceV1(
+                            intent_id=status.intent_id,
+                            amount=status.cumulative_commission,
+                            currency=status.cumulative_commission_currency,
+                            source_event_sha256=source_event_sha256,
+                        ),
+                        close_actions=tuple(leg_actions),
+                    )
+                )
+            budget_release = None
+            if request.version == 2:
+                budget = snapshot.budget_reservation
+                if budget is None or budget.state is not GroupBudgetReservationState.HELD:
+                    return None
+                budget_release = GroupRollExitBudgetReleaseV1(
+                    policy_fingerprint=budget.policy_fingerprint,
+                    quote_fingerprint=budget.quote_fingerprint,
+                    valuation_unit=budget.valuation_unit,
+                    gross_notional=budget.gross_notional,
+                    deadline_ns=budget.deadline_ns,
+                )
+            proof = GroupRollExitClosedProofV1(
+                portfolio_ref=request.portfolio_ref,
+                group_id=request.group_id,
+                group_version=request.version,
+                group_fingerprint=request.fingerprint,
+                expected_revision=snapshot.revision,
+                prior_group_event_chain_sha256=group_event_chain_sha256(snapshot, history),
+                legs=tuple(legs),
+                reservation_sha256s=tuple(
+                    payload_sha256(
+                        next(
+                            item.to_payload()
+                            for item in snapshot.reservations
+                            if item.account_ref == account_ref
+                        )
+                    )
+                    for account_ref in request.account_refs
+                ),
+                budget_release=budget_release,
+            )
+            return self._store.close_roll_exit(snapshot, proof)
+        except Exception:
+            return None
 
     def _advance_pending_compensation(
         self,
@@ -1480,14 +2291,14 @@ class GroupCoordinatorService:
             return _success({"found": True, "snapshot": snapshot.to_payload()})
         except ServiceExecutionGroupError as error:
             return _failure(error.code)
-        except GroupCancelPlanError as error:
-            return _failure(str(error))
-        except GroupRollExitError:
-            return _failure("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
         except AcceptedGroupConflictError:
             return _failure("GROUP_BINDING_CONFLICT")
         except AcceptedGroupBindingError:
             return _failure("GROUP_BINDING_UNAVAILABLE")
+        except GroupCancelPlanError as error:
+            return _failure(str(error))
+        except GroupRollExitError:
+            return _failure("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
         except (TypeError, ValueError, KeyError):
             return _failure("INVALID_REQUEST")
 
@@ -1676,7 +2487,7 @@ class GroupCoordinatorService:
             registration.operations
             in {
                 frozenset({"groups.query"}),
-                frozenset({"groups.query_roll_exit"}),
+                frozenset({"groups.query", "groups.query_roll_exit"}),
             }
             and registration.write_operations == frozenset()
         )
@@ -1868,7 +2679,6 @@ class GroupCoordinatorService:
             return _failure("GROUP_JOURNAL_INCOMPLETE")
         return _success({"found": True, "snapshot": snapshot.to_payload()})
 
-
     def _roll_exit(
         self,
         registration: ActiveRegistrationContext,
@@ -1905,6 +2715,12 @@ class GroupCoordinatorService:
             or snapshot.request.version not in {1, 2}
             or len(snapshot.request.legs) != 2
             or snapshot.request.compensation_budget_policy is not None
+            or snapshot.state not in {
+                GroupOrderState.PAIRED,
+                GroupOrderState.UNWINDING,
+                GroupOrderState.RECOVERY_REQUIRED,
+                GroupOrderState.CLOSED,
+            }
         ):
             raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
         source_plans = tuple(
@@ -1915,45 +2731,38 @@ class GroupCoordinatorService:
         account_ref = source_plans[0].account_ref
         if account_ref not in target.accounts:
             raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_TARGET_UNAVAILABLE")
-        prior_actions = self._roll_exit_actions.find_for_source(
-            request.portfolio_ref, group_id, source_leg_id
-        )
-        active = tuple(
-            item
-            for item in prior_actions
-            if item.phase
-            in {
-                GroupRollExitPhase.PREPARED,
-                GroupRollExitPhase.SUBMIT_STARTED,
-                GroupRollExitPhase.STATUS_OBSERVED,
-                GroupRollExitPhase.UNKNOWN,
-            }
-        )
-        if len(active) > 1:
+        history = self._store.events(request.portfolio_ref, group_id)
+        actions = _owner_roll_exit_actions(snapshot, history)
+        pending = tuple(item for item in actions if item["phase"] != "RESOLVED")
+        if len(pending) > 1:
             raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_RECOVERY_REQUIRED")
-        if active:
-            record = active[0]
-            source = record.authorization.source
-            route = target.accounts[account_ref]
-            source_plan = source_plans[0]
-            if record.authorization.request != request:
-                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_RECOVERY_REQUIRED")
+        if pending:
+            action = pending[0]
+            authorization = action["authorization"]
             if (
-                source.portfolio_ref != request.portfolio_ref
-                or source.origin_run_id != binding.origin_run_id
-                or source.group_id != group_id
-                or source.group_version != snapshot.request.version
-                or source.group_fingerprint != snapshot.request.fingerprint
-                or source.group_request != snapshot.request
-                or source.account_ref != account_ref
-                or source.strategy_id != snapshot.request.strategy_id
-                or source.source_leg_id != source_leg_id
-                or source.source_intent_id != source_plan.maximum_intent.intent_id
-                or source.source_execution_scope != route.execution_scope
-                or source.service_write_run_id != binding.origin_run_id
+                authorization.request != request
+                or authorization.source.source_leg_id != source_leg_id
+                or authorization.source.account_ref != account_ref
+            ):
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_RECOVERY_REQUIRED")
+            if not _roll_exit_authorization_matches_snapshot(
+                authorization,
+                snapshot,
+                binding,
+                target.accounts[account_ref],
+                expected_plan_revision=action["plan_index"] - 1,
             ):
                 raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
+            try:
+                record = self._roll_exit_actions.get(authorization.action_id)
+                if record is None:
+                    record = self._roll_exit_actions.prepare(authorization)
+                if record.authorization.to_payload() != authorization.to_payload():
+                    raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
+            except GroupRollExitError:
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE") from None
             record = self._recover_roll_exit(
+                snapshot,
                 registration,
                 target_scope,
                 target,
@@ -1961,7 +2770,68 @@ class GroupCoordinatorService:
                 account_ref,
                 record,
             )
+            current = self._store.get(request.portfolio_ref, group_id)
+            if type(current) is GroupOrderSnapshot and record.observation is not None:
+                current = self._record_roll_exit_group_observation(
+                    current, authorization, record.observation
+                )
+                if current is not None and record.phase is GroupRollExitPhase.RESOLVED:
+                    call = _CoordinatorCall(registration, target_scope, target, binding)
+                    token = _CURRENT_COORDINATOR_CALL.set(call)
+                    try:
+                        self._try_close_roll_exit_group(current)
+                    finally:
+                        _CURRENT_COORDINATOR_CALL.reset(token)
             return _success({"found": True, "action": _roll_exit_action_projection(record)})
+
+        prior_same_request = next(
+            (
+                item
+                for item in reversed(actions)
+                if item["authorization"].source.source_leg_id == source_leg_id
+                and item["authorization"].request == request
+            ),
+            None,
+        )
+        if prior_same_request is not None:
+            authorization = prior_same_request["authorization"]
+            if prior_same_request["phase"] != "RESOLVED":
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_RECOVERY_REQUIRED")
+            try:
+                record = self._roll_exit_actions.get(authorization.action_id)
+                if record is None:
+                    record = self._roll_exit_actions.prepare(authorization)
+                    if prior_same_request["observation"] is None:
+                        raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
+                    record = self._roll_exit_actions.record_observation(
+                        prior_same_request["observation"]
+                    )
+            except GroupRollExitError:
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE") from None
+            # Replaying the exact accepted action may finish an aggregate
+            # close whose prior durable write failed. Reservation readback in
+            # that close is still a trusted coordinator call, so bind only
+            # this recovery step to the already-validated registration.
+            call = _CoordinatorCall(registration, target_scope, target, binding)
+            token = _CURRENT_COORDINATOR_CALL.set(call)
+            try:
+                self._try_close_roll_exit_group(snapshot)
+            finally:
+                _CURRENT_COORDINATOR_CALL.reset(token)
+            return _success({"found": True, "action": _roll_exit_action_projection(record)})
+
+        if any(
+            not _roll_exit_action_has_closure_evidence(item)
+            for item in actions
+            if item["phase"] == "RESOLVED"
+        ):
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_RECOVERY_REQUIRED")
+
+        # A closed group may only replay an exact action already present in
+        # the verified journal.  Never ask Risk for a fresh authorization or
+        # create another action after aggregate closure.
+        if snapshot.state is GroupOrderState.CLOSED:
+            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
 
         call = _CoordinatorCall(registration, target_scope, target, binding)
         token = _CURRENT_COORDINATOR_CALL.set(call)
@@ -1974,60 +2844,82 @@ class GroupCoordinatorService:
                 raise ServiceExecutionGroupError(
                     "GROUP_ROLL_EXIT_PREPARE_UNAVAILABLE"
                 ) from None
-            if (
-                authorization.source.group_fingerprint != snapshot.request.fingerprint
-                or authorization.source.group_request != snapshot.request
-                or authorization.source.origin_run_id != binding.origin_run_id
-                or authorization.source.strategy_id != binding.request.strategy_id
-                or authorization.source.account_ref != account_ref
-                or authorization.source.source_leg_id != source_leg_id
+            if not _roll_exit_authorization_matches_snapshot(
+                authorization,
+                snapshot,
+                binding,
+                target.accounts[account_ref],
+                expected_plan_revision=snapshot.revision,
             ):
                 raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_NOT_AUTHORIZED")
             try:
-                record = self._roll_exit_actions.prepare(authorization)
-                if observation is not None:
-                    record = self._roll_exit_actions.record_observation(observation)
-            except GroupRollExitError:
-                raise
-            if risk_phase is not GroupRollExitPhase.PREPARED or observation is not None:
-                return _success(
-                    {"found": True, "action": _roll_exit_action_projection(record)}
-                )
-            if record.phase is not GroupRollExitPhase.PREPARED:
-                # A local durable record already crossed the submit CAS. Even
-                # a Risk PREPARED replay cannot authorize a second dispatch.
-                return _success(
-                    {"found": True, "action": _roll_exit_action_projection(record)}
-                )
-            if not self._roll_exit_actions.claim_submit(
-                authorization.action_id, authorization.authorization_sha256
-            ):
-                record = self._roll_exit_actions.get(authorization.action_id)
-                if record is None:
+                planned = self._record_roll_exit_plan(snapshot, authorization)
+                if planned is None:
                     raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
-                record = self._recover_roll_exit(
-                    registration,
-                    target_scope,
-                    target,
-                    binding,
-                    account_ref,
-                    record,
+                record = self._roll_exit_actions.prepare(authorization)
+            except GroupRollExitError:
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE") from None
+            except ServiceExecutionGroupError:
+                raise
+            current = self._store.get(request.portfolio_ref, group_id)
+            if type(current) is not GroupOrderSnapshot:
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
+            started = self._record_roll_exit_submit_started(current, authorization)
+            if started is None:
+                raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
+
+            if risk_phase is GroupRollExitPhase.PREPARED and observation is None:
+                if not self._roll_exit_actions.claim_submit(
+                    authorization.action_id, authorization.authorization_sha256
+                ):
+                    record = self._roll_exit_actions.get(authorization.action_id)
+                    if record is None:
+                        raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
+                    record = self._recover_roll_exit(
+                        started,
+                        registration,
+                        target_scope,
+                        target,
+                        binding,
+                        account_ref,
+                        record,
+                    )
+                else:
+                    try:
+                        observation = self._order_ports[account_ref].submit_group_roll_exit(
+                            authorization
+                        )
+                    except Exception:
+                        observation = _roll_exit_unknown_observation(
+                            authorization, "RISK_SUBMIT_RESPONSE_UNAVAILABLE"
+                        )
+                    record = self._roll_exit_actions.record_observation(observation)
+            else:
+                if observation is None:
+                    raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_QUERY_INVALID")
+                if record.phase is GroupRollExitPhase.PREPARED:
+                    if not self._roll_exit_actions.claim_submit(
+                        authorization.action_id, authorization.authorization_sha256
+                    ):
+                        refreshed = self._roll_exit_actions.get(authorization.action_id)
+                        if refreshed is None:
+                            raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_STORE_UNAVAILABLE")
+                        record = refreshed
+                    else:
+                        record = self._roll_exit_actions.get(authorization.action_id)
+                record = self._roll_exit_actions.record_observation(observation)
+
+            current = self._store.get(request.portfolio_ref, group_id)
+            if type(current) is GroupOrderSnapshot and record.observation is not None:
+                current = self._record_roll_exit_group_observation(
+                    current, authorization, record.observation
                 )
-                return _success(
-                    {"found": True, "action": _roll_exit_action_projection(record)}
-                )
-            try:
-                observation = self._order_ports[account_ref].submit_group_roll_exit(
-                    authorization
-                )
-            except Exception:
-                observation = _roll_exit_unknown_observation(
-                    authorization, "RISK_SUBMIT_RESPONSE_UNAVAILABLE"
-                )
-            record = self._roll_exit_actions.record_observation(observation)
+                if current is not None and record.phase is GroupRollExitPhase.RESOLVED:
+                    self._try_close_roll_exit_group(current)
             return _success({"found": True, "action": _roll_exit_action_projection(record)})
         finally:
             _CURRENT_COORDINATOR_CALL.reset(token)
+
     def _query_roll_exit(
         self,
         registration: ActiveRegistrationContext,
@@ -2109,16 +3001,55 @@ class GroupCoordinatorService:
             )
         finally:
             _CURRENT_COORDINATOR_CALL.reset(token)
+
     def _recover_roll_exit(
         self,
-        registration: ActiveRegistrationContext,
+        snapshot: GroupOrderSnapshot,
+        registration: ActiveRegistrationContext | None,
         target_scope: WireScope,
         target: GroupCoordinatorTarget,
         binding: GroupOriginRunBinding,
         account_ref: str,
         record: GroupRollExitActionRecordV1,
     ) -> GroupRollExitActionRecordV1:
-        if record.phase is GroupRollExitPhase.RESOLVED:
+        if (
+            type(snapshot) is not GroupOrderSnapshot
+            or type(record) is not GroupRollExitActionRecordV1
+            or account_ref != record.authorization.source.account_ref
+            or account_ref not in target.accounts
+        ):
+            return record
+        authorization = record.authorization
+        try:
+            history = self._store.events(
+                snapshot.request.portfolio_ref, snapshot.request.group_id
+            )
+            actions = _owner_roll_exit_actions(snapshot, history)
+            durable = next(
+                (
+                    item
+                    for item in actions
+                    if item["authorization"].action_id == authorization.action_id
+                ),
+                None,
+            )
+            if (
+                durable is None
+                or durable["authorization_sha256"]
+                != authorization.authorization_sha256
+                or durable["authorization"].to_payload()
+                != authorization.to_payload()
+                or not _roll_exit_authorization_matches_snapshot(
+                    authorization,
+                    snapshot,
+                    binding,
+                    target.accounts[account_ref],
+                    expected_plan_revision=durable["plan_index"] - 1,
+                )
+                or durable["phase"] == "RESOLVED"
+            ):
+                return record
+        except Exception:
             return record
         call = _CoordinatorCall(registration, target_scope, target, binding)
         token = _CURRENT_COORDINATOR_CALL.set(call)
@@ -2148,29 +3079,44 @@ class GroupCoordinatorService:
             }:
                 return record
             if observation.phase is GroupRollExitPhase.PREPARED:
+                if durable["phase"] == "OBSERVED" or record.phase in {
+                    GroupRollExitPhase.STATUS_OBSERVED,
+                    GroupRollExitPhase.RESOLVED,
+                }:
+                    # A previously observed order cannot regress to PREPARED.
+                    return record
+                if durable["phase"] in {"PLANNED", "PREPARED"}:
+                    current_snapshot = self._store.get(
+                        snapshot.request.portfolio_ref, snapshot.request.group_id
+                    )
+                    if type(current_snapshot) is not GroupOrderSnapshot:
+                        return record
+                    current_snapshot = self._record_roll_exit_submit_started(
+                        current_snapshot, authorization
+                    )
+                    if current_snapshot is None:
+                        return record
+                    durable_phase = "STARTED"
+                else:
+                    durable_phase = durable["phase"]
+                if durable_phase != "STARTED":
+                    return record
                 if record.phase is GroupRollExitPhase.PREPARED:
-                    current = self._roll_exit_actions.record_observation(observation)
-                    if current.phase is not GroupRollExitPhase.PREPARED:
-                        return current
+                    try:
+                        record = self._roll_exit_actions.record_observation(observation)
+                    except GroupRollExitError:
+                        return record
                     if not self._roll_exit_actions.claim_submit(
-                        current.authorization.action_id,
-                        current.authorization.authorization_sha256,
+                        authorization.action_id,
+                        authorization.authorization_sha256,
                     ):
-                        refreshed = self._roll_exit_actions.get(
-                            current.authorization.action_id
-                        )
-                        return current if refreshed is None else refreshed
-                    record = current
+                        refreshed = self._roll_exit_actions.get(authorization.action_id)
+                        return record if refreshed is None else refreshed
                 elif record.phase not in {
                     GroupRollExitPhase.SUBMIT_STARTED,
                     GroupRollExitPhase.UNKNOWN,
                 }:
-                    # Risk has not crossed its durable start boundary, but a
-                    # local status observation says the order already did.
-                    # Treat this as a conflict instead of replaying a close.
-                    raise ServiceExecutionGroupError(
-                        "GROUP_ROLL_EXIT_STATE_CONFLICT"
-                    )
+                    return record
                 # For a local SUBMIT_STARTED or UNKNOWN action, this exact
                 # Risk PREPARED reply proves no provider dispatch was started.
                 # The Risk endpoint owns the persistent CAS and is idempotent:
@@ -2185,9 +3131,17 @@ class GroupCoordinatorService:
                         "RISK_SUBMIT_RESPONSE_UNAVAILABLE",
                         previous=record.observation,
                     )
-            return self._roll_exit_actions.record_observation(observation)
+            elif durable["phase"] not in {"STARTED", "OBSERVED"}:
+                # A Risk observation after submit cannot be reconciled unless
+                # the group journal already contains the pre-submit marker.
+                return record
+            try:
+                return self._roll_exit_actions.record_observation(observation)
+            except GroupRollExitError:
+                return record
         finally:
             _CURRENT_COORDINATOR_CALL.reset(token)
+
     def _cancel(
         self,
         registration: ActiveRegistrationContext,
@@ -2376,6 +3330,7 @@ class GroupCoordinatorService:
             "cancel_request_id": persisted.cancel_request_id,
             "legs": [_cancel_plan_leg_payload(item) for item in persisted.legs],
         })
+
 
 class ExecutionGroupOrderEntryService:
     """Authenticated account-owner adapter for the three group-only routes.
@@ -3811,7 +4766,6 @@ _CANCEL_RECORD_WIRE_FIELDS = frozenset(
         "is_terminal",
     }
 )
-
 _CANCEL_RECORD_WIRE_STATES = frozenset(
     {
         "PENDING_ADMISSION",
@@ -3824,6 +4778,7 @@ _CANCEL_RECORD_WIRE_STATES = frozenset(
         "BLOCKED",
     }
 )
+
 
 def _cancel_record_payload(record: CancelRecord) -> dict[str, object]:
     """Project only identity and outcome fields from the local cancel journal."""
@@ -3845,6 +4800,7 @@ def _cancel_record_payload(record: CancelRecord) -> dict[str, object]:
     }
     return _validate_cancel_record_wire_payload(payload)
 
+
 def _cancel_result_response(response: object) -> Mapping[str, Any]:
     body = _rpc_result(response)
     if not isinstance(body, Mapping) or set(body) != {"found", "record"}:
@@ -3859,6 +4815,7 @@ def _cancel_result_response(response: object) -> Mapping[str, Any]:
         "found": True,
         "record": _validate_cancel_record_wire_payload(body["record"]),
     }
+
 
 def _validate_cancel_record_wire_payload(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping) or set(value) != _CANCEL_RECORD_WIRE_FIELDS:
@@ -3892,6 +4849,7 @@ def _validate_cancel_record_wire_payload(value: object) -> dict[str, object]:
         raise RuntimeError("cancellation record reply is invalid")
     return record
 
+
 def _cancel_plan_leg_payload(item: GroupCancelPlanLeg) -> dict[str, object]:
     if type(item) is not GroupCancelPlanLeg:
         raise RuntimeError("group cancellation plan leg is invalid")
@@ -3905,6 +4863,7 @@ def _cancel_plan_leg_payload(item: GroupCancelPlanLeg) -> dict[str, object]:
         "result": None if item.result is None else _plain_rpc_json(item.result),
         "updated_at_ns": item.updated_at_ns,
     }
+
 
 def _rpc_result(response: object, *, allow_none: bool = False) -> object:
     if not isinstance(response, Mapping) or set(response) != {"ok", "code", "result"}:
@@ -4125,6 +5084,8 @@ def _parse_roll_exit_price(value: object) -> Decimal:
     if format(price, "f") != value:
         raise ServiceExecutionGroupError("GROUP_ROLL_EXIT_PRICE_INVALID")
     return price
+
+
 def _roll_exit_unknown_observation(
     authorization: GroupRollExitAuthorizationV1,
     detail_code: str,
@@ -4148,7 +5109,10 @@ def _roll_exit_unknown_observation(
         order_revision=None if previous is None else previous.order_revision,
         close_receipt_sha256=None,
         detail_code=detail_code,
+        risk_intent_id=authorization.risk_intent_id,
     )
+
+
 def _roll_exit_query_observation(
     record: GroupRollExitActionRecordV1,
     observed: GroupRollExitObservationV1,
@@ -4200,6 +5164,306 @@ def _roll_exit_query_observation(
             return previous
         observed = replace(observed, order_revision=previous.order_revision)
     return observed
+
+
+def _roll_exit_observation_progresses(
+    previous: GroupRollExitObservationV1,
+    current: GroupRollExitObservationV1,
+) -> bool:
+    """Check monotonic status facts while replaying durable roll-exit events."""
+
+    phase_rank = {
+        GroupRollExitPhase.PREPARED: 0,
+        GroupRollExitPhase.SUBMIT_STARTED: 1,
+        GroupRollExitPhase.STATUS_OBSERVED: 2,
+        GroupRollExitPhase.UNKNOWN: 2,
+        GroupRollExitPhase.RESOLVED: 3,
+    }
+    if phase_rank[current.phase] < phase_rank[previous.phase]:
+        return False
+    if (
+        previous.order_revision is not None
+        and current.order_revision is not None
+        and current.order_revision < previous.order_revision
+    ):
+        return False
+    if current.filled_quantity < previous.filled_quantity:
+        return False
+    if (
+        previous.order_revision is not None
+        and current.order_revision == previous.order_revision
+        and (
+            current.close_state is not previous.close_state
+            or current.filled_quantity != previous.filled_quantity
+        )
+    ):
+        return False
+    allowed = {
+        None: {
+            ExecutionState.PENDING_ADMISSION,
+            ExecutionState.PENDING_DISPATCH,
+            ExecutionState.DISPATCHING,
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+            ExecutionState.FILLED,
+            ExecutionState.CANCELLED,
+            ExecutionState.REJECTED,
+            ExecutionState.UNKNOWN,
+        },
+        ExecutionState.PENDING_ADMISSION: {
+            ExecutionState.PENDING_ADMISSION,
+            ExecutionState.PENDING_DISPATCH,
+            ExecutionState.DISPATCHING,
+            ExecutionState.UNKNOWN,
+        },
+        ExecutionState.PENDING_DISPATCH: {
+            ExecutionState.PENDING_DISPATCH,
+            ExecutionState.DISPATCHING,
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+            ExecutionState.FILLED,
+            ExecutionState.CANCELLED,
+            ExecutionState.REJECTED,
+            ExecutionState.UNKNOWN,
+        },
+        ExecutionState.DISPATCHING: {
+            ExecutionState.DISPATCHING,
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+            ExecutionState.FILLED,
+            ExecutionState.CANCELLED,
+            ExecutionState.REJECTED,
+            ExecutionState.UNKNOWN,
+        },
+        ExecutionState.ACKED: {
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+            ExecutionState.FILLED,
+            ExecutionState.CANCELLED,
+            ExecutionState.REJECTED,
+            ExecutionState.UNKNOWN,
+        },
+        ExecutionState.PARTIALLY_FILLED: {
+            ExecutionState.PARTIALLY_FILLED,
+            ExecutionState.FILLED,
+            ExecutionState.CANCELLED,
+            ExecutionState.UNKNOWN,
+        },
+        ExecutionState.UNKNOWN: {
+            ExecutionState.UNKNOWN,
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+            ExecutionState.FILLED,
+            ExecutionState.CANCELLED,
+            ExecutionState.REJECTED,
+        },
+        ExecutionState.FILLED: {ExecutionState.FILLED},
+        ExecutionState.CANCELLED: {ExecutionState.CANCELLED},
+        ExecutionState.REJECTED: {ExecutionState.REJECTED},
+    }
+    return current.close_state in allowed[previous.close_state]
+
+
+def _owner_roll_exit_actions(
+    snapshot: GroupOrderSnapshot,
+    history: Sequence[object],
+) -> tuple[Mapping[str, Any], ...]:
+    """Rebuild the Risk action index from the exact hash-verified group journal."""
+
+    if type(snapshot) is not GroupOrderSnapshot:
+        raise ValueError("invalid roll-exit group snapshot")
+    events = tuple(history)
+    # This also checks revision count and strictly increasing positive global
+    # SQLite event sequence values; interleaved groups may leave sequence gaps.
+    group_event_chain_sha256(snapshot, events)
+    actions: dict[str, dict[str, Any]] = {}
+    closed = False
+    for index, event in enumerate(events):
+        event_type = getattr(event, "event_type", None)
+        payload = getattr(event, "payload", None)
+        if not isinstance(payload, Mapping):
+            raise ValueError("invalid group roll-exit event payload")
+        if closed:
+            raise ValueError("group event follows roll-exit closure")
+        if event_type == "GROUP_ROLL_EXIT_CLOSED":
+            if (
+                set(payload) != {"schema", "proof", "proof_sha256"}
+                or payload.get("schema") != "group-roll-exit-closed-event-v1"
+                or not actions
+                or any(action["phase"] != "RESOLVED" for action in actions.values())
+                or not isinstance(payload.get("proof"), Mapping)
+            ):
+                raise ValueError("invalid roll-exit closure event")
+            proof = GroupRollExitClosedProofV1.from_payload(
+                _plain_rpc_json(payload["proof"])
+            )
+            if payload.get("proof_sha256") != proof.proof_sha256:
+                raise ValueError("roll-exit closure proof digest mismatch")
+            if (
+                snapshot.state is not GroupOrderState.CLOSED
+                or proof.portfolio_ref != snapshot.request.portfolio_ref
+                or proof.group_id != snapshot.request.group_id
+                or proof.group_version != snapshot.request.version
+                or proof.group_fingerprint != snapshot.request.fingerprint
+                or proof.expected_revision + 1 != snapshot.revision
+                or tuple(item.leg_id for item in proof.legs)
+                != tuple(item.leg_id for item in snapshot.request.legs)
+            ):
+                raise ValueError("roll-exit closure proof differs from the current group")
+            closed = True
+            continue
+        if event_type == "GROUP_ROLL_EXIT_PLAN_RECORDED":
+            if set(payload) != {"action_id", "authorization_sha256", "authorization"}:
+                raise ValueError("invalid roll-exit plan event")
+            authorization = GroupRollExitAuthorizationV1.from_payload(
+                _plain_rpc_json(payload["authorization"])
+            )
+            action_id = authorization.action_id
+            if (
+                action_id in actions
+                or payload.get("action_id") != action_id
+                or payload.get("authorization_sha256")
+                != authorization.authorization_sha256
+                or len(actions) >= 64
+                or any(action["phase"] != "RESOLVED" for action in actions.values())
+                or not _roll_exit_source_matches_snapshot(
+                    authorization,
+                    snapshot,
+                    expected_plan_revision=index - 1,
+                )
+            ):
+                raise ValueError("unbound or concurrent roll-exit plan")
+            actions[action_id] = {
+                "action_id": action_id,
+                "plan_index": index,
+                "authorization": authorization,
+                "authorization_sha256": authorization.authorization_sha256,
+                "phase": "PLANNED",
+                "observation": None,
+            }
+            continue
+
+        if event_type not in {
+            "GROUP_ROLL_EXIT_SUBMIT_STARTED",
+            "GROUP_ROLL_EXIT_STATUS_OBSERVED",
+            "GROUP_ROLL_EXIT_RESOLVED",
+        }:
+            continue
+        action_id = payload.get("action_id")
+        action = actions.get(action_id) if type(action_id) is str else None
+        if action is None:
+            raise ValueError("roll-exit event has no durable plan")
+        authorization = action["authorization"]
+        if event_type == "GROUP_ROLL_EXIT_SUBMIT_STARTED":
+            if (
+                set(payload)
+                != {
+                    "action_id",
+                    "authorization_sha256",
+                    "risk_intent_id",
+                    "intent_id",
+                    "client_order_id",
+                }
+                or action["phase"] not in {"PLANNED", "PREPARED"}
+                or payload.get("authorization_sha256")
+                != authorization.authorization_sha256
+                or payload.get("risk_intent_id") != authorization.risk_intent_id
+                or payload.get("intent_id") != authorization.intent.intent_id
+                or payload.get("client_order_id") != authorization.client_order_id
+            ):
+                raise ValueError("unbound roll-exit submit-start event")
+            action["phase"] = "STARTED"
+            continue
+
+        if event_type == "GROUP_ROLL_EXIT_STATUS_OBSERVED":
+            if (
+                set(payload)
+                != {
+                    "action_id",
+                    "authorization_sha256",
+                    "risk_intent_id",
+                    "observation",
+                }
+                or action["phase"] == "RESOLVED"
+                or payload.get("authorization_sha256")
+                != authorization.authorization_sha256
+                or payload.get("risk_intent_id") != authorization.risk_intent_id
+            ):
+                raise ValueError("unbound roll-exit status event")
+            observation = GroupRollExitObservationV1.from_payload(
+                _plain_rpc_json(payload["observation"])
+            )
+            if (
+                observation.phase is GroupRollExitPhase.RESOLVED
+                or not _roll_exit_observation_matches(
+                    authorization, observation.phase, observation
+                )
+            ):
+                raise ValueError("invalid roll-exit status observation")
+            if observation.phase is GroupRollExitPhase.PREPARED:
+                if action["phase"] not in {"PLANNED", "PREPARED"}:
+                    raise ValueError("prepared roll-exit status followed submit")
+                action["phase"] = "PREPARED"
+            else:
+                if action["phase"] not in {"STARTED", "OBSERVED"}:
+                    raise ValueError("roll-exit status preceded submit start")
+                previous = action["observation"]
+                if previous is not None and not _roll_exit_observation_progresses(
+                    previous, observation
+                ):
+                    raise ValueError("roll-exit status regressed")
+                action["phase"] = "OBSERVED"
+            action["observation"] = observation
+            continue
+
+        if (
+            set(payload)
+            != {
+                "action_id",
+                "authorization_sha256",
+                "risk_intent_id",
+                "observation",
+                "risk_receipt",
+                "close_fee_evidence",
+            }
+            or action["phase"] not in {"STARTED", "OBSERVED"}
+            or payload.get("authorization_sha256")
+            != authorization.authorization_sha256
+            or payload.get("risk_intent_id") != authorization.risk_intent_id
+        ):
+            raise ValueError("unbound roll-exit resolution event")
+        observation = GroupRollExitObservationV1.from_payload(
+            _plain_rpc_json(payload["observation"])
+        )
+        if (
+            observation.phase is not GroupRollExitPhase.RESOLVED
+            or not _roll_exit_observation_matches(
+                authorization, observation.phase, observation
+            )
+            or _plain_rpc_json(payload.get("risk_receipt"))
+            != _plain_rpc_json(observation.close_receipt)
+            or _plain_rpc_json(payload.get("close_fee_evidence"))
+            != (
+                None
+                if observation.close_fee_evidence is None
+                else observation.close_fee_evidence.to_payload()
+            )
+            or (
+                action["observation"] is not None
+                and not _roll_exit_observation_progresses(
+                    action["observation"], observation
+                )
+            )
+        ):
+            raise ValueError("roll-exit resolution proof differs from observation")
+        action["phase"] = "RESOLVED"
+        action["observation"] = observation
+
+    if closed is not (snapshot.state is GroupOrderState.CLOSED):
+        raise ValueError("roll-exit closure event and group state differ")
+    return tuple(sorted(actions.values(), key=lambda action: action["plan_index"]))
+
+
 def _roll_exit_action_projection(
     record: GroupRollExitActionRecordV1,
     *,
@@ -4226,6 +5490,8 @@ def _roll_exit_action_projection(
         "detail_code": None if observation is None else observation.detail_code,
         "updated_at_ns": record.updated_at_ns,
     }
+
+
 def _reference(value: object, error_code: str) -> str:
     if type(value) is not str or _REFERENCE.fullmatch(value) is None:
         raise ServiceExecutionGroupError(error_code)
@@ -4296,17 +5562,9 @@ def _same_call(expected: ServiceCallContext, actual: ServiceCallContext) -> bool
     )
 
 
-__all__ = [
-    "GROUP_ACCOUNT_OWNER_OPERATIONS",
-    "GROUP_COORDINATOR_OPERATIONS",
-    "GroupAccountRoute",
-    "GroupCoordinatorService",
-    "GroupCoordinatorTarget",
-    "GroupInstrumentRule",
-    "ExecutionGroupOrderEntryService",
-    "ServiceExecutionGroupError",
-    "validate_service_options",
-]
+_GROUP_COMPENSATION_TERMINAL = frozenset(
+    {ExecutionState.FILLED, ExecutionState.CANCELLED, ExecutionState.REJECTED}
+)
 
 
 def _owner_compensation_actions(history: Sequence[object]) -> tuple[Mapping[str, Any], ...]:
@@ -4452,6 +5710,7 @@ def _owner_compensation_actions(history: Sequence[object]) -> tuple[Mapping[str,
         raise ValueError("unbounded group compensation action history")
     return tuple(sorted(actions.values(), key=lambda item: item["plan_index"]))
 
+
 def _group_source_is_compensation_ready(snapshot: GroupOrderSnapshot) -> bool:
     """Require terminal, proof-resolved source legs before any compensating write."""
 
@@ -4513,6 +5772,7 @@ def _group_source_is_compensation_ready(snapshot: GroupOrderSnapshot) -> bool:
             return False
     return True
 
+
 def _owner_signed_filled_exposure(
     snapshot: GroupOrderSnapshot,
     actions: Sequence[Mapping[str, Any]],
@@ -4572,6 +5832,7 @@ def _owner_signed_filled_exposure(
         )
     return exposure
 
+
 def _group_has_filled_source(snapshot: GroupOrderSnapshot) -> bool:
     return any(
         progress.submitted_intent is not None
@@ -4579,6 +5840,7 @@ def _group_has_filled_source(snapshot: GroupOrderSnapshot) -> bool:
         and progress.child_status.filled_quantity > 0
         for progress in snapshot.legs
     )
+
 
 def _fraction_decimal(value: Fraction) -> Decimal:
     """Convert a finite exact rational into Decimal without context rounding."""
@@ -4608,3 +5870,16 @@ def _fraction_decimal(value: Fraction) -> Decimal:
     if Fraction(result) != value:
         raise ValueError("fraction conversion was not exact")
     return result
+
+
+__all__ = [
+    "GROUP_ACCOUNT_OWNER_OPERATIONS",
+    "GROUP_COORDINATOR_OPERATIONS",
+    "GroupAccountRoute",
+    "GroupCoordinatorService",
+    "GroupCoordinatorTarget",
+    "GroupInstrumentRule",
+    "ExecutionGroupOrderEntryService",
+    "ServiceExecutionGroupError",
+    "validate_service_options",
+]

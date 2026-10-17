@@ -298,6 +298,7 @@ def _service_fixture(
         )
         source_claim = replace(
             source.source_claim,
+            actual_child_intent_hash=source_child_intent.fingerprint,
             permit=replace(
                 source.source_claim.permit,
                 order_intent_hash=source_child_intent.fingerprint,
@@ -307,6 +308,7 @@ def _service_fixture(
             source,
             group_request=group_request,
             group_fingerprint=group_request.fingerprint,
+            source_risk_intent_fingerprint=source_claim.actual_child_intent_hash,
             source_child_intent=source_child_intent,
             source_request_fingerprint=source_child_intent.fingerprint,
             source_claim=source_claim,
