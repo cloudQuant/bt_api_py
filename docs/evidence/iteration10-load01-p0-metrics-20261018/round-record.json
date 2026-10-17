@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "round": "iteration10-load01-p0-metrics-helper-20261018",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "base_head": "ecf7ef88fb8fc1b14e8b12305b394b2e16a394ba",
+  "accepted_scope": [
+    "tests/unit/_load01_metrics.py",
+    "tests/unit/test_load01_metrics.py",
+    "docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json"
+  ],
+  "accepted_source_sha256": {
+    "tests/unit/_load01_metrics.py": "063bff8e0a6bc3edf4df510e68146012b3f722d16c104af36b9b729a77e2c3f8",
+    "tests/unit/test_load01_metrics.py": "466a9994951747ec535dad198f8237f7921c4e822802ba9b6cb55ba097172b16",
+    "docs/evidence/iteration10-load01-p0-metrics-20261018/threshold-registration.json": "c29a4a6f90f491a947e371dbf29aca6aa27bda9354d9505b29b081fbab0ce828"
+  },
+  "evidence_level": "BOUNDED_METRIC_HELPER_UNIT_ONLY",
+  "qa": {
+    "passed": 14,
+    "reported_duration_seconds": 0.38,
+    "pytest_exit": 0,
+    "warnings": 0,
+    "stderr_bytes": 0,
+    "pins_unchanged": 7,
+    "head_unchanged": true,
+    "result_path": "D:\\temp\\load01-metrics-qa-20261018\\result.json",
+    "result_sha256": "7b602df54c27413dba8c4160340370dcf8ec96ed555bedd762a4e67c0a3e69c4",
+    "stdout_sha256": "36fbba151db1efaf6f585be8f172e2b6e7242324a01bf5bf0c87d357e2e8bdb5",
+    "junit_sha256": "df7d0f766205aa43515e2977cda294b178c6966128c5d0800c7b22d0e47e3ea9"
+  },
+  "behavior": [
+    "Bounded deterministic per-strategy/per-operation latency samples and exact all-call success/error/timeout counts; outcome classification belongs to the caller",
+    "Nearest-rank quantiles; unobserved populations remain null and incomplete coverage never passes",
+    "CPU statistics derive actual samples with expected count coverage; no implicit acceptance",
+    "Candidate engineering threshold contract embeds fixed machine metadata and accepted configured resource bounds"
+  ],
+  "contract_status": "Root-proposed engineering targets, not user SLA or frozen full-run acceptance; historical c5 source scope is retained accurately. N5 profile source has since been committed separately; sustained integration remains pending.",
+  "pending": [
+    "Actual runner operation-boundary recording and error classification",
+    "Source-bound per-profile engineering registration and runtime eligibility",
+    "Sequence-watermark recovery proof",
+    "N6 simultaneous workload injection and full100-strategy1800-second validation"
+  ],
+  "preservation": "Only explicit new helper/test/candidate contract/record are included; other dirty source and retained sessions are untouched.",
+  "formal_progress": "62/68 unchanged; no LOAD01 or provider/account acceptance",
+  "commit_note": "Git history/postcommit record supplies actual commit hash."
+}

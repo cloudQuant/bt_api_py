@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "status": "ROOT_PROPOSED_ENGINEERING_CONTRACT_NOT_USER_SLA",
+  "case_id": "LOAD01",
+  "purpose": "Register fixed-machine inputs, workload scope, measurement targets, and coverage rules before a future full run.",
+  "source_scope": {
+    "accepted_sdk_head": "c5e373eadd6e679cd0ba3c34deccfc3cf88c1fab",
+    "runner_path": "tests/unit/test_load01_hundred_strategy_30min.py",
+    "runner_git_blob_at_accepted_head": "d29c89b6e3b8bc23f37ec883e22ce3dd38b9305c",
+    "runner_blob_bytes": 402891,
+    "profile_path": "tests/unit/_load01_profiles.py",
+    "profile_git_blob_at_accepted_head": "78b060ce90c82ce43bbf48d978c193456b5fd448",
+    "profile_blob_bytes": 17754,
+    "accepted_child_gitlinks_from_git_ls_tree": {
+      "bt_api/bt_api_base": "fb47f3dd733613494aa1d86cfd94b2d6fe70314d",
+      "bt_api/bt_api_execution": "456eb3ce9a49fa8924a6f908d1a4e336e7120ce8",
+      "bt_api/bt_api_gateway": "12e8de6f9552f7974a450f3217d497fb9c89e33d",
+      "bt_api/bt_api_monitor": "02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8",
+      "bt_api/bt_api_risk": "b6e4a7bce74a5ae5dee4c8f514a9d95fd68073d9",
+      "bt_api/bt_api_transport_zmq": "acd74ba03494615aeb2d60423ac853e06029cba7"
+    },
+    "runner_embedded_package_gitlink_literals": {
+      "status": "STALE_VERIFIER_DECLARATIONS_NOT_ACCEPTED_SOURCE_REVISIONS",
+      "note": "The accepted child revisions are the gitlinks above. Do not use the runner's older literal revision strings as provenance or source pins."
+    },
+    "working_tree_boundary": {
+      "runner_and_profile_checkout_have_uncommitted_N5_work": true,
+      "uncommitted_N5_is_excluded_from_this_registration": true,
+      "current_candidate_does_not_modify_runner_or_profile": true
+    }
+  },
+  "machine_baseline": {
+    "path": ".codex-tmp/iteration10-load01-machine-baseline-20261018.json",
+    "sha256": "a2c305d7e9d97d5063b2e901e69c03ade492e1c1e6be2ffd790a3709e8978b3a",
+    "classification": "FIXED_MACHINE_METADATA_NOT_BENCHMARK_RESULT",
+    "values": {
+      "captured_at_utc": "2026-10-17T19:09:31.910159+00:00",
+      "scope": "Fixed-machine hardware/software metadata only, not a benchmark or formal acceptance",
+      "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900HX",
+      "logical_cpus": 32,
+      "physical_cores": 24,
+      "physical_memory_bytes": 34049220608,
+      "platform": "Windows-10-10.0.26300-SP0",
+      "windows_version": [
+        "10",
+        "10.0.26300",
+        "SP0",
+        "Multiprocessor Free"
+      ],
+      "machine": "AMD64",
+      "python_executable": "C:\\Anaconda3\\python.exe",
+      "python_version": "3.11.5 | packaged by Anaconda, Inc. | (main, Sep 11 2023, 13:26:23) [MSC v.1916 64 bit (AMD64)]",
+      "sqlite_version": "3.41.2",
+      "psutil_version": "5.9.0",
+      "perf_counter": {
+        "implementation": "QueryPerformanceCounter()",
+        "resolution_seconds": 1e-07,
+        "monotonic": true,
+        "adjustable": false
+      },
+      "D_drive": {
+        "total": 666712928256,
+        "used": 571981869056,
+        "free": 94731059200
+      },
+      "baseline_does_not_establish_latency_SLA": true
+    },
+    "important_capacity_context": {
+      "required_pre_spawn_available_memory_bytes": 10603200512,
+      "reason": "112 children at 72 MiB each plus a 2 GiB reserve; the threshold is unchanged.",
+      "latest_capacity_diagnostic": "Three reads were 10.3208, 10.2888, and 10.2603 GB, each below threshold; the full LOAD01 pilot was not launched."
+    }
+  },
+  "workload_contract": {
+    "full_duration_seconds": 1800,
+    "strategy_processes": 100,
+    "account_owner_processes": 10,
+    "market_hub_processes": 1,
+    "monitor_processes": 1,
+    "total_child_processes": 112,
+    "market_topics": 20,
+    "input_rate_per_second": 200,
+    "default_U0_delivery_target_per_second": 20000,
+    "default_U0_order_cycles_per_account_per_second": 2,
+    "resource_sample_interval_seconds": 5,
+    "minimum_available_memory_before_spawn_bytes": 10603200512,
+    "minimum_memory_reserve_bytes": 2147483648,
+    "database_tree_limit_bytes": 2147483648,
+    "profiles": {
+      "accepted_runner_profiles": ["U0", "N1", "N2", "N3", "N4"],
+      "N1_to_N4_status": "IMPLEMENTED_CANDIDATES_NOT_YET_REGISTERED_AS_P0",
+      "N5_status": "UNCOMMITTED_WORKING_TREE_CANDIDATE_EXCLUDED",
+      "N6_status": "ACCEPTED_DIM07_HELPER_NOT_INTEGRATED_AS_A_SUSTAINED_LOAD01_PROFILE",
+      "P0_scope": "Any profile selected for P0 must be registered with its own source-derived input, delivery, per-account order, and market-key targets before the 1800-second run. The current code does not make N1-N6 P0-eligible."
+    },
+    "configured_limits_from_accepted_c5_runner": {
+      "market_subscriber_queue": {
+        "max_events_per_strategy": 256,
+        "max_bytes_per_strategy": 524288
+      },
+      "telemetry_client_queue": {
+        "max_events_per_strategy": 16,
+        "max_bytes_per_strategy": 65536
+      },
+      "zmq": {
+        "max_message_bytes": 262144,
+        "high_water_mark_by_role": {
+          "market_hub_and_market_client": 128,
+          "account_session_server": 64,
+          "execution_owner_server": 64,
+          "telemetry_ingress_server": 128,
+          "owner_relay_listener_and_client": 32
+        }
+      },
+      "market_replay": {
+        "max_events": 2048,
+        "max_bytes": 1048576
+      },
+      "monitor_durable_outbox": {
+        "max_events": 1000000,
+        "max_bytes": 536870912,
+        "max_event_bytes": 16384
+      },
+      "monitor_telemetry_storage": {
+        "max_streams": 256,
+        "max_bytes": 16777216,
+        "heartbeat_timeout_seconds": 90,
+        "retention_seconds": 3600
+      },
+      "database_tree_max_bytes": 2147483648,
+      "source": "The accepted c5 runner's fixed config builders and constants; values describe configured bounds, not observed high-water usage."
+    }
+  },
+  "engineering_targets": {
+    "label": "ROOT_PROPOSED_ENGINEERING_TARGETS_SUBJECT_TO_ROOT_REVIEW_NOT_USER_SLA",
+    "goodput": {
+      "tolerance_fraction": 0.05,
+      "targets_are_derived_from": "The selected accepted profile's source-defined per-topic input, logical delivery, and per-account order targets.",
+      "must_measure": [
+        "input messages by topic",
+        "delivered messages by strategy and topic",
+        "submit/query/cancel operation attempts and outcomes",
+        "per-account order cycles",
+        "published and consumed sequence watermarks"
+      ]
+    },
+    "latency": {
+      "market_end_to_end_ms": {"p50_max": 50, "p95_max": 250, "p99_max": 1000},
+      "order_rpc_ms_each_operation": {"p50_max": 250, "p95_max": 2000, "p99_max": 5000},
+      "ordinary_order_rpc_timeout_count_max": 0,
+      "percentile_method": "Nearest-rank: rank=ceil(q*n), one-based.",
+      "outcome_classification": "The future runner caller must classify each observed response or exception as success, error, or timeout; the collector validates the supplied category and does not infer it.",
+      "operation_coverage_by_profile": {
+        "U0_N1_N2_N3": ["orders.submit", "orders.cancel"],
+        "N4": ["orders.submit", "orders.query", "orders.cancel"],
+        "N5_N6": "Not applicable until a source-accepted profile is registered and wired."
+      },
+      "aggregation": "Report counts and nearest-rank latency for each strategy and operation; evaluate every required strategy-operation stratum against these targets. Operation-presence coverage requires each registered operation to be observed at least once per strategy, while workload-volume completeness is checked against the registered profile target counts. Also report total counts by operation. Do not pool per-strategy bounded samples as if they were one uniform population.",
+      "sampling": "A deterministic bounded reservoir may estimate percentiles; report total observations, retained sample count, capacity, coverage fraction, and whether the full population was retained. Never label sampled estimates as a full-population distribution."
+    },
+    "recovery": {
+      "publish_stop_to_consumer_catchup_seconds_max": 10,
+      "reconnect_gap_recovery_seconds_max": 10,
+      "must_measure": [
+        "published source sequence at the stop point",
+        "per-strategy last consumed sequence",
+        "time to close the sequence gap after slow pause or reconnect"
+      ],
+      "profile_scope": "Measure separately for each registered full-run profile; the existing reconnect path alone does not establish per-strategy catch-up."
+    },
+    "cpu": {
+      "system_mean_percent_max": 85,
+      "system_p95_percent_max": 95,
+      "hard_stop": "Preserve the existing stop after 12 consecutive five-second samples above 95 percent.",
+      "summary_source": "Actual resource samples only; report observed and expected sample counts, coverage, mean, p95, min, and max."
+    },
+    "resources_and_lifecycle": {
+      "preserve_existing_memory_and_database_hard_limits": true,
+      "report_configured_and_observed_limits_for": [
+        "market and telemetry queues",
+        "transport socket HWM and message-size limits",
+        "replay buffers",
+        "monitor outbox and telemetry storage",
+        "SQLite database tree",
+        "registration and provider-key counts"
+      ],
+      "normal_shutdown_required": [
+        "all expected children acknowledge normal close and exit zero",
+        "no owned child remains alive",
+        "no unresolved registration, provider key, or uncertain unregister remains"
+      ],
+      "lifecycle_metric_is_distinct_from_order_rpc_latency": true
+    }
+  },
+  "scope_and_evidence_limits": {
+    "current_measurement_code_level": "NOT_IMPLEMENTED_IN_ACCEPTED_C5_RUNNER",
+    "new_helper_and_unit_tests_level": "SOURCE_UNIT_CANDIDATE_ONLY_NOT_RUN",
+    "no_load01_full_pilot_or_1800_second_run_is_claimed": true,
+    "no_formal_LOAD01_acceptance_is_claimed": true,
+    "dim07_reference": "The accepted DIM07 coverage is separate evidence. LOAD01 should integrate its accepted CTP_QUERY hot-wave policy for N6 if/when N6 is registered, without repeating DIM07 account/API-key/IP/429/cancel-reservation/login evidence as new LOAD01 prerequisites.",
+    "N6_integration_boundary": "The current N6 helper exercises synthetic shared-domain CTP_QUERY admission and deadline outcomes, not sustained concurrent workload/provider 429 behavior. A future LOAD01 N6 profile must show the admission wave during the registered workload and keep expected admission deadline outcomes separate from ordinary RPC timeouts."
+  },
+  "measurement_gaps_before_wiring": [
+    "No accepted runner collector reports per-operation submit/query/cancel latency percentiles or outcome counts.",
+    "No accepted full-run report summarizes CPU mean and p95 from all expected five-second samples.",
+    "Current full mode records published/consumed local counts but does not prove each strategy caught up to the exact final source-sequence watermark within the recovery target.",
+    "N6 is an accepted helper/unit round, not a sustained LOAD01 profile; N5 is uncommitted and excluded.",
+    "The current accepted runner records normal order lifecycle latency separately; preserve that metric and do not relabel it as any individual RPC latency."
+  ]
+}
