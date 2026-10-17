@@ -101,6 +101,7 @@ exclude_docs: |
   security/
   superpowers/
   迭代计划/
+  ITERATION*.md
   AGENTS.md
   CODE_QUALITY.md
   MIGRATION_GUIDE.md

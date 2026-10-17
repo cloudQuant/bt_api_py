@@ -1,8 +1,8 @@
 ﻿# 使用 BtApi
 
-## 选择 transport
+## 选择运行入口
 
-默认 direct mode 适用于本进程已加载 Feed 的既有调用。ZMQ mode 适用于已部署 forwarding service 的策略进程；它不会尝试连接本地 Feed 作为失败回退。
+默认 direct mode 适用于本进程已加载 Feed 的既有调用。共享行情与账户读取使用已配置的 service-v2 读服务；受管实盘订单通过 Backtrader 的 `ServiceExecutionSession`、`ServiceHost` 和 `service.order_entry` 执行。旧 forwarding service 已退役，服务故障不会自动切回 direct。入口边界见 [Core contract](../reference/core-api.md) 和[运行时架构](../explanation/architecture.md)。
 
 ```python
 from bt_api_py import BtApi
@@ -40,8 +40,8 @@ api.cancel_order("BINANCE___SPOT", cancel)
 
 The compatibility form `make_order(exchange, symbol, volume, price, "buy-limit")` remains available for old direct integrations. It is not a substitute for an explicit `Side` in new code.
 
-## ZMQ cache and failures
+## 缓存与请求结果
 
-In forwarding mode, request `Consistency.LIVE` only when a publisher is expected to emit a new scoped event. Use `Consistency.CACHE_OK` only when the caller accepts a bounded stale result and handles `StaleDataUnavailableError`.
+service-v2 读取支持 `Consistency.LIVE` 与 `Consistency.CACHE_OK`。只有调用方允许有界的旧数据，并处理 `StaleDataUnavailableError` 时，才使用 `CACHE_OK`；具体读取边界见 [Core contract](../reference/core-api.md)。
 
-For command timeouts, catch `CommandResultUnknownError` and call `get_command_status`; do not create a fresh idempotency key and blindly retry.
+旧 forwarding 的 `CommandAck` / `get_command_status` 路径已退役。受管订单的预留、派发日志与恢复由 service-v2 session 和 Host 持有。请求超时后保留原业务标识，使用对应服务的查询与恢复入口核对事实；结果尚未确认时，不创建新的幂等键重复下单。
