@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import Base
 from app.models.approved_target_http_operation import ApprovedTargetHttpOperation
+from app.models.legacy_paper_import import LegacyPaperImportReceipt
 from app.models.paper_runtime import PaperEquitySnapshot
 from app.models.paper_trading import Account, Order, PaperTrade, Position
 from app.models.service_order_operation import ServiceOrderOperation
@@ -39,6 +40,7 @@ from app.models.strategy_target_approval import (
     StrategyTargetApprovalEvent,
 )
 from app.services.mig03_boundary_inventory import (
+    assert_afi_state_conserved,
     capture_afi_boundary,
     stop_paper_snapshot_writers,
 )
@@ -229,11 +231,13 @@ def _assert_all_fixed_origins() -> dict[str, str]:
     expected_afi = Path(afi_root).resolve() / "src/backend"
     symbols = (
         capture_afi_boundary,
+        assert_afi_state_conserved,
         Account,
         Order,
         Position,
         PaperTrade,
         PaperEquitySnapshot,
+        LegacyPaperImportReceipt,
         ServiceOrderOperation,
         ApprovedTargetHttpOperation,
         StrategyTargetApproval,
@@ -264,6 +268,7 @@ def _seed_afi_database(path: Path) -> None:
             Order,
             PaperTrade,
             PaperEquitySnapshot,
+            LegacyPaperImportReceipt,
         )
         Base.metadata.create_all(engine, tables=[model.__table__ for model in models])
         with Session(engine) as session:
@@ -772,7 +777,6 @@ def _sdk_state_conservation(
     risk_path: Path,
     gateway_path: Path,
     consumer_checkpoint: Any,
-    afi_snapshot: Any,
     target_registration: Any,
 ) -> StateConservation:
     execution = migration._execution_projection(execution_path)
@@ -787,21 +791,6 @@ def _sdk_state_conservation(
     assert len(permit_ids) == 1
     dispatch_freeze = f"dispatch-inflight:{drill._NEW_INTENT_ID}"
     assert risk_unknown["freezes"] == ((dispatch_freeze, dispatch_freeze, 1),)
-    assert afi_snapshot.reservation_ids == tuple(
-        sorted((drill._INTENT_ID, drill._NEW_INTENT_ID))
-    )
-    assert (
-        "afi_operations.manual_key",
-        _AFI_HASH_1,
-        "execution.intent_id",
-        drill._INTENT_ID,
-    ) in afi_snapshot.identity_links
-    assert (
-        "afi_approval_ref",
-        "mig03-afi-approval",
-        "execution.intent_id",
-        drill._NEW_INTENT_ID,
-    ) in afi_snapshot.identity_links
 
     connection = sqlite3.connect(gateway_path)
     try:
@@ -858,18 +847,6 @@ def _sdk_state_conservation(
             target_registration.run_ref,
         ),
         (
-            "afi_account_ref",
-            _AFI_ACCOUNT_REF,
-            "target_account_ref",
-            target_registration.account_ref,
-        ),
-        (
-            "afi_strategy_ref",
-            _AFI_STRATEGY_REF,
-            "target_strategy_ref",
-            target_registration.strategy_ref,
-        ),
-        (
             "paper_run_ref",
             drill._RUN_ID,
             "execution_run_ref",
@@ -887,22 +864,16 @@ def _sdk_state_conservation(
             "target_instrument",
             target_registration.booked_instrument,
         ),
-        *afi_snapshot.identity_links,
     )
     amounts = (
         ("execution:filled_quantity", filled[4]),
         ("execution:average_price", filled[5]),
         ("execution:commission", filled[6]),
         ("risk:reserved_notional", str(risk_unknown["reservations"][0][4])),
-        *afi_snapshot.amounts,
     )
-    positions = (*gateway_positions, *afi_snapshot.positions)
-    unresolved_ids = (
-        drill._NEW_INTENT_ID,
-        "mig03-afi-paper-pending",
-        "mig03-integrated-unallocated-legacy-event",
-    )
-    reservations = (*permit_ids, *afi_snapshot.reservation_ids)
+    positions = gateway_positions
+    unresolved_ids = (drill._NEW_INTENT_ID,)
+    reservations = permit_ids
     cursors = (
         (
             "consumer:old-account-projection",
@@ -920,6 +891,32 @@ def _sdk_state_conservation(
         reservation_ids=reservations,
         stream_cursors=cursors,
     )
+
+
+def _assert_r235_afi_seed_crosswalk(afi_snapshot: Any) -> None:
+    """Check the AFI-to-SDK links created only by this test's explicit seed."""
+
+    assert afi_snapshot.account_ref == _AFI_ACCOUNT_REF
+    assert afi_snapshot.strategy_refs == (_AFI_STRATEGY_REF,)
+    assert afi_snapshot.reservation_ids == tuple(
+        sorted((drill._INTENT_ID, drill._NEW_INTENT_ID))
+    )
+    assert afi_snapshot.unresolved_ids == ("mig03-afi-paper-pending",)
+    expected_links = (
+        (
+            "afi_operations.manual_key",
+            _AFI_HASH_1,
+            "execution.intent_id",
+            drill._INTENT_ID,
+        ),
+        (
+            "afi_approval_ref",
+            "mig03-afi-approval",
+            "execution.intent_id",
+            drill._NEW_INTENT_ID,
+        ),
+    )
+    assert all(link in afi_snapshot.identity_links for link in expected_links)
 
 
 def test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state(
@@ -1137,6 +1134,7 @@ def test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state(
         )
         afi_config_sha256 = _afi_config_sha256(afi_path)
         afi_before = _capture_afi(afi_path, afi_config_sha256)
+        _assert_r235_afi_seed_crosswalk(afi_before)
         registry_identity_before = _registry_identity_projection(registry_path)
 
         _assert_group_component_absent(raw_config)
@@ -1218,7 +1216,6 @@ def test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state(
             risk_path,
             gateway_path,
             consumer_checkpoint,
-            afi_before,
             target_registration,
         )
 
@@ -1333,6 +1330,8 @@ def test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state(
             expected_schema_sha256=gateway_before.schema_sha256,
         )
         afi_after = _capture_afi(afi_path, afi_config_sha256)
+        _assert_r235_afi_seed_crosswalk(afi_after)
+        assert_afi_state_conserved(afi_before, afi_after)
         consumer_evidence_after, consumer_digest_after, consumer_identity_after = (
             _consumer_facts(
                 consumer_checkpoint,
@@ -1386,12 +1385,9 @@ def test_mig03_full_boundary_inventory_handoffs_same_paths_and_conserves_state(
             risk_path,
             gateway_path,
             consumer_checkpoint,
-            afi_after,
             target_registration,
         )
         assert_state_conserved(before_conservation, after_conservation)
-        assert afi_before.amounts == afi_after.amounts
-        assert afi_before.positions == afi_after.positions
 
         # A service restart keeps the same journal stream epoch. Reject a
         # client that supplies any other epoch without changing progress, then

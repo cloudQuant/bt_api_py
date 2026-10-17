@@ -19,6 +19,7 @@ from bt_api_py.service_migration_boundary import (
     CODE_BOUNDARY_UNKNOWN_PARTICIPANT,
     CODE_BOUNDARY_INVALID,
     DISPOSITION_IN_PLACE_RETAINED,
+    ConfiguredConsumer,
     MigrationBoundaryError,
     ParticipantEvidence,
     ConsumerStopEvidence,
@@ -28,6 +29,7 @@ from bt_api_py.service_migration_boundary import (
     assert_state_conserved,
     capture_sqlite_participant,
     consumer_inventory_sha256,
+    configured_consumer_inventory_sha256,
     not_applicable_participant,
     prepare_migration_boundary,
     require_old_epoch_refused_after_new_write,
@@ -52,13 +54,29 @@ def _consumers() -> tuple[ConsumerStopEvidence, ...]:
     )
 
 
+def _configured_consumers() -> tuple[ConfiguredConsumer, ...]:
+    return (
+        ConfiguredConsumer(
+            consumer_id="old-strategy-client",
+            consumer_kind="configured_component",
+            configuration_sha256=_CONFIG_SHA256,
+            scope_sha256=_IDENTITY_SHA256,
+            operations_sha256=_SCHEMA_SHA256,
+        ),
+    )
+
+
 def _participants() -> tuple[ParticipantEvidence, ...]:
     retained = tuple(
         ParticipantEvidence(
             participant_id=participant_id,
             disposition=DISPOSITION_IN_PLACE_RETAINED,
             source_ref=f"synthetic://{participant_id}",
-            configuration_sha256=_CONFIG_SHA256,
+            configuration_sha256=(
+                configured_consumer_inventory_sha256(_configured_consumers())
+                if participant_id == "consumers"
+                else _CONFIG_SHA256
+            ),
             state_sha256=_STATE_SHA256,
             identity_sha256=(
                 consumer_inventory_sha256(_consumers())
@@ -73,7 +91,7 @@ def _participants() -> tuple[ParticipantEvidence, ...]:
             "execution",
             "risk",
             "gateway",
-        "consumers",
+                "consumers",
             "afi_operations",
             "afi_paper",
         )
@@ -97,6 +115,8 @@ def _plan(**changes):
         "consumers": _consumers(),
         "participants": _participants(),
         "fence_reference": "synthetic-process-and-service-epoch-observation",
+        "source_configured_consumers": _configured_consumers(),
+        "destination_configured_consumers": _configured_consumers(),
     }
     arguments.update(changes)
     return prepare_migration_boundary(**arguments)
@@ -135,7 +155,12 @@ def test_preflight_requires_every_fixed_boundary_category_before_arm(tmp_path: P
     assert not marker.exists()
 
     valid = _plan()
-    marker_record = arm_migration_boundary(state_path, valid)
+    marker_record = arm_migration_boundary(
+        state_path,
+        valid,
+        source_configured_consumers=_configured_consumers(),
+        destination_configured_consumers=_configured_consumers(),
+    )
     assert marker_record.source_epoch == "stable-old-deployment-r1"
     assert marker_record.destination_epoch == "stable-new-deployment-r1"
     assert marker.exists()
@@ -170,6 +195,13 @@ def test_preflight_requires_real_normal_exit_and_consumer_close_facts() -> None:
     with pytest.raises(MigrationBoundaryError) as no_consumer:
         _plan(consumers=missing_receipt)
     assert no_consumer.value.code == CODE_BOUNDARY_INCOMPLETE
+
+    with pytest.raises(MigrationBoundaryError) as no_inventory:
+        _plan(
+            source_configured_consumers=None,
+            destination_configured_consumers=None,
+        )
+    assert no_inventory.value.code == CODE_BOUNDARY_INCOMPLETE
 
 
 def test_post_write_check_rejects_old_epoch_acceptance_and_missing_write_kind() -> None:

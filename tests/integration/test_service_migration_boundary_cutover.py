@@ -70,6 +70,11 @@ from tests.unit import test_service_migration_integration as migration
 
 _GROUP_NOW_NS = 1_900_000_000_000_000_000
 _MIGRATION_ID = "mig03-real-consumer-close-group-cutover"
+# The normal R235 composition still exercises an unfenced AFI snapshot task.
+# A dedicated successor can flip this flag while composing the same cutover
+# with the production AFI12 ACTIVE receipt, in which case the destination
+# correctly restores no legacy scheduler task.
+_EXPECT_ACTIVE_AFI12_IMPORT = False
 
 
 def _sha256_json(value: Any) -> str:
@@ -1176,7 +1181,6 @@ def test_mig03_spawned_consumers_group_and_cursor_cross_cutover(tmp_path: Path) 
             risk_path,
             gateway_path,
             checkpoint,
-            afi_before,
             target_registration,
         )
         after_conservation = r235._sdk_state_conservation(
@@ -1184,10 +1188,11 @@ def test_mig03_spawned_consumers_group_and_cursor_cross_cutover(tmp_path: Path) 
             risk_path,
             gateway_path,
             checkpoint,
-            afi_after_readback,
             target_registration,
         )
         assert_state_conserved(before_conservation, after_conservation)
+        r235.assert_afi_state_conserved(afi_before, afi_after_readback)
+        assert afi_before.account_ref == target_registration.account_ref
         # The digest is an operator audit reference, not a proof token.  The
         # evidence above is verified before the production Host enable call.
         readiness_sha256 = _sha256_json(
@@ -1244,12 +1249,21 @@ def test_mig03_spawned_consumers_group_and_cursor_cross_cutover(tmp_path: Path) 
         destination_scheduler_start = _receive_owned(destination_scheduler)
         assert destination_scheduler_start[0] == "ready"
         assert destination_scheduler_start[1]["task_name"] == scheduler_task_name
+        expected_destination_tasks = 0 if _EXPECT_ACTIVE_AFI12_IMPORT else 1
+        if _EXPECT_ACTIVE_AFI12_IMPORT:
+            assert destination_scheduler_start[1]["start_existing_count"] == 0
+            assert (
+                destination_scheduler_start[1]["snapshot_rows_before_start"]
+                == destination_scheduler_start[1]["snapshot_rows_after_start"]
+            )
         destination_scheduler_close, _destination_scheduler_pid = _close_owned_normally(
             destination_scheduler
         )
-        assert destination_scheduler_close["tasks_before"] == 1
+        assert destination_scheduler_close["tasks_before"] == expected_destination_tasks
         assert destination_scheduler_close["tasks_after"] == 0
-        assert destination_scheduler_close["stopped_task_names"] == (scheduler_task_name,)
+        assert destination_scheduler_close["stopped_task_names"] == (
+            (scheduler_task_name,) if expected_destination_tasks else ()
+        )
 
         # Reopen the same durable account projection under the destination
         # registration.  Its cursor predates compaction, so the real consumer
