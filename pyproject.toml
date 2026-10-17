@@ -269,7 +269,6 @@ spdlog = [
     "bt_api_base[spdlog]>=0.15.8",
 ]
 transport-zmq = [
-    "bt_api_base[transport-zmq]>=0.15.8",
     "bt_api_transport_zmq>=0.1.0",
 ]
 security = [
