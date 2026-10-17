@@ -31,6 +31,11 @@ from tests.unit._load01_resource_diagnostics import (
     capture_market_queue_snapshot,
     capture_process_resource_row,
 )
+from tests.unit._load01_profiles import (
+    load01_profile,
+    market_keys_for_profile,
+    market_payload_data,
+)
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
@@ -978,37 +983,13 @@ def _load01_rpc_timing_report(snapshots: Mapping[str, Any]) -> dict[str, Any]:
         "processes": processes, "correlated_requests": requests,
     }
 
-def _market_keys() -> tuple[MarketSubscriptionKey, ...]:
-    return tuple(
-        MarketSubscriptionKey(
-            source_ref="load01-synthetic-source",
-            entitlement_ref="load01-public-entitlement",
-            instrument=MarketInstrumentKey(
-                provider="synthetic",
-                venue="loopback",
-                environment="paper",
-                product_type="spot",
-                instrument_id=f"load01-instrument-{index:02d}",
-                native_symbol=f"LOAD{index:02d}-USD",
-            ),
-            channel="trades",
-        )
-        for index in range(_TOPICS)
-    )
+def _market_keys(profile_id: str = "U0") -> tuple[MarketSubscriptionKey, ...]:
+    return market_keys_for_profile(profile_id)
 
 
-def _strategy_startup_waves() -> tuple[tuple[int, ...], ...]:
-    """Release one strategy per account in each bounded startup wave."""
-
-    if _STRATEGIES != _ACCOUNTS * _PER_ACCOUNT or _STARTUP_STRATEGY_SLOTS != _ACCOUNTS:
-        raise AssertionError("LOAD01 startup wave shape no longer matches the pinned topology")
-    waves = tuple(
-        tuple(account_index * _PER_ACCOUNT + wave_index for account_index in range(_ACCOUNTS))
-        for wave_index in range(_PER_ACCOUNT)
-    )
-    if any(len(wave) != _STARTUP_STRATEGY_SLOTS for wave in waves):
-        raise AssertionError("LOAD01 startup wave exceeded its fixed registration slots")
-    return waves
+def _strategy_startup_waves(profile_id: str = "U0") -> tuple[tuple[int, ...], ...]:
+    """Release no more than the fixed ten strategy registrations in one wave."""
+    return load01_profile(profile_id).startup_waves(_STARTUP_STRATEGY_SLOTS)
 
 
 def _market_service_config(rpc_endpoint: str, market_endpoint: str) -> dict[str, Any]:
@@ -1231,6 +1212,8 @@ def _owner_relay_config(
     account_index: int,
     monitor_endpoint: str,
     unused_listener_endpoint: str,
+    *,
+    scope_count: int = _PER_ACCOUNT,
 ) -> dict[str, Any]:
     client_ref = f"{_RELAY_CLIENT_PREFIX}{account_index:02d}-v1"
     bindings = [
@@ -1241,7 +1224,7 @@ def _owner_relay_config(
             "scope_ref": _durable_scope_ref(account_index, local_index),
             "transport_ref": client_ref,
         }
-        for local_index in range(_PER_ACCOUNT)
+        for local_index in range(scope_count)
     ]
     profiles: dict[str, Any] = {
         f"owner-relay-unused-listener-{account_index:02d}-v1": {
@@ -1301,8 +1284,11 @@ def _strategy_config(
     market_rpc: str,
     market_pub: str,
     telemetry_rpc: str,
+    *,
+    account_index: int | None = None,
 ) -> dict[str, Any]:
-    account_index = index // _PER_ACCOUNT
+    if account_index is None:
+        account_index = index // _PER_ACCOUNT
     account_ref = _ACCOUNT_REFS[account_index]
     market_transport = _MARKET_CLIENT_REF
     account_transport = f"{_ACCOUNT_CLIENT_PREFIX}{account_index:02d}-v1"
@@ -1474,13 +1460,16 @@ def _market_wave_strategy_config(
     }
 
 
-def _market_authority_audience(strategy_keys: dict[int, tuple[bytes, bytes]]):
+def _market_authority_audience(
+    strategy_keys: dict[int, tuple[bytes, bytes]], profile_id: str = "U0"
+):
+    profile = load01_profile(profile_id)
     return tuple(
         (
             strategy_keys[index][0],
             _principal_ref(index),
             _strategy_ref(index),
-            _ACCOUNT_REFS[index // _PER_ACCOUNT],
+            _ACCOUNT_REFS[profile.account_for_strategy(index)],
         )
         for index in range(_STRATEGIES)
     )
@@ -1561,6 +1550,7 @@ class _CountedMarketProvider:
         self.hub: GatewayMarketHub | None = None
         self.source_sequence: Counter[str] = Counter()
         self.source_payload_bytes = 0
+        self.source_payload_bytes_by_topic: Counter[str] = Counter()
         self.first_publish_ns: int | None = None
         self.last_publish_ns: int | None = None
 
@@ -1586,16 +1576,9 @@ class _CountedMarketProvider:
             raise AssertionError("market hub did not retain its one synthetic source")
         self.source_sequence[key.stream_id] += 1
         ordinal = self.source_sequence[key.stream_id]
-        data = {
-            "source": "load01-synthetic-provider",
-            "topic": key.stream_id,
-            "ordinal": ordinal,
-            "publish_ns": publish_ns,
-            "padding": "x" * 160,
-        }
-        self.source_payload_bytes += len(
-            json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        )
+        data, payload_bytes = market_payload_data(key, ordinal, publish_ns)
+        self.source_payload_bytes += payload_bytes
+        self.source_payload_bytes_by_topic[key.stream_id] += payload_bytes
         if self.first_publish_ns is None:
             self.first_publish_ns = publish_ns
         self.last_publish_ns = publish_ns
@@ -1658,6 +1641,7 @@ def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
         "bt_api_transport_zmq.events",
         "tests.unit.test_service_gateway_hundred_strategy_integration",
         "tests.unit._load01_resource_diagnostics",
+        "tests.unit._load01_profiles",
     )
     import importlib
 
@@ -1683,6 +1667,14 @@ def _check_fixed_source_manifest(manifest_path: str | Path) -> dict[str, Any]:
     checked["load_runner"] = {
         "path": runner_relative,
         "sha256": _sha256(runner),
+    }
+    profile_test = root / "tests" / "unit" / "test_load01_profiles.py"
+    profile_test_relative = profile_test.relative_to(root).as_posix()
+    if file_pins.get(profile_test_relative) != _sha256(profile_test):
+        raise AssertionError("LOAD01 profile regression digest does not match its fixed-source manifest")
+    checked["load_profile_tests"] = {
+        "path": profile_test_relative,
+        "sha256": _sha256(profile_test),
     }
     return checked
 
@@ -1779,6 +1771,8 @@ def _write_source_run_manifest(
         Path("tests/unit/test_service_gateway_hundred_strategy_integration.py"),
         Path("tests/unit/test_load01_hundred_strategy_30min.py"),
         Path("tests/unit/_load01_resource_diagnostics.py"),
+        Path("tests/unit/_load01_profiles.py"),
+        Path("tests/unit/test_load01_profiles.py"),
     ):
         paths.add(root / relative)
     file_pins = {path.relative_to(root).as_posix(): _sha256(path) for path in sorted(paths)}
@@ -1806,6 +1800,7 @@ def _market_host_process(
     load_start_event,
     load_start_value,
     stop_event,
+    profile_id="U0",
 ):
     _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
     config = parse_service_config(raw_config)
@@ -1868,7 +1863,8 @@ def _market_host_process(
         control.send(("ready", "market", os.getpid(), host.endpoint, host.market_endpoint))
         next_publish = None
         interval_ns = 1_000_000_000 // _MARKET_HZ
-        topic_index = 0
+        topic_schedule = load01_profile(profile_id).topic_publish_schedule()
+        schedule_index = 0
         last_report = time.monotonic()
         while True:
             now = time.monotonic()
@@ -1881,9 +1877,9 @@ def _market_host_process(
                     next_publish = time.perf_counter_ns()
                 now_ns = time.perf_counter_ns()
                 if now_ns >= next_publish:
-                    key = market_keys[topic_index]
+                    key = market_keys[topic_schedule[schedule_index]]
                     provider.publish_one(key, now_ns)
-                    topic_index = (topic_index + 1) % len(market_keys)
+                    schedule_index = (schedule_index + 1) % len(topic_schedule)
                     next_publish = max(next_publish + interval_ns, now_ns + interval_ns // 4)
 
             host.serve_once(timeout_ms=0)
@@ -1933,6 +1929,7 @@ def _market_status(provider: _CountedMarketProvider, hub: GatewayMarketHub) -> d
         "active_provider_keys": tuple(sorted(provider.generations)),
         "source_sequences": dict(provider.source_sequence),
         "source_payload_bytes": provider.source_payload_bytes,
+        "source_payload_bytes_by_topic": dict(provider.source_payload_bytes_by_topic),
         "first_publish_ns": provider.first_publish_ns,
         "last_publish_ns": provider.last_publish_ns,
         "hub_readiness": dict(hub.readiness),
@@ -2584,9 +2581,17 @@ def _owner_process(
         execution_host.start()
         owner_phase = "owner-started"
 
+        owner_strategy_indices = tuple(
+            int(strategy["index"]) for strategy in strategy_audience
+        )
+        if (
+            not owner_strategy_indices
+            or len(set(owner_strategy_indices)) != len(owner_strategy_indices)
+            or any(not 0 <= index < _STRATEGIES for index in owner_strategy_indices)
+        ):
+            raise AssertionError("LOAD01 owner audience has an invalid strategy assignment")
         scope_records = []
-        for local_index in range(_PER_ACCOUNT):
-            strategy_index = account_index * _PER_ACCOUNT + local_index
+        for local_index, strategy_index in enumerate(owner_strategy_indices):
             execution_scope = ExecutionScope(
                 "synthetic",
                 "paper",
@@ -2631,7 +2636,10 @@ def _owner_process(
         _, monitor_endpoint, monitor_server_public, relay_identity = command
         relay_principal, relay_actor_ref, relay_public, relay_secret = relay_identity
         relay_config_raw = _owner_relay_config(
-            account_index, monitor_endpoint, unused_relay_endpoint
+            account_index,
+            monitor_endpoint,
+            unused_relay_endpoint,
+            scope_count=len(scope_records),
         )
         relay_config = parse_service_config(relay_config_raw)
         relay_identity_obj = WireIdentity(WireRole.SERVICE, relay_principal, relay_actor_ref)
@@ -2664,10 +2672,10 @@ def _owner_process(
                 checkpoint_path=Path(checkpoint_directory)
                 / f"relay-{account_index:02d}-{local_index:02d}-checkpoint.sqlite3",
             )
-        if len(relay_runtime.bindings) != _PER_ACCOUNT or not all(
+        if len(relay_runtime.bindings) != len(scope_records) or not all(
             binding.active for binding in relay_runtime.bindings
         ):
-            raise AssertionError("LOAD01 owner failed to register its ten Monitor relay scopes")
+            raise AssertionError("LOAD01 owner failed to register all Monitor relay scopes")
         control.send(("relay-ready", account_index, os.getpid(), len(relay_runtime.bindings)))
         owner_phase = "owner-active"
 
@@ -2968,11 +2976,17 @@ def _strategy_process(
     stop_event,
     abort_event,
     mode,
+    profile_id="U0",
 ):
     _check_fixed_source_manifest(os.environ["BT_API_LOAD01_SOURCE_MANIFEST"])
     rpc_trace = _install_load01_rpc_trace("strategy")
-    account_index = index // _PER_ACCOUNT
-    local_index = index % _PER_ACCOUNT
+    profile = load01_profile(profile_id)
+    account_index = profile.account_for_strategy(index)
+    local_index = profile.strategy_indices_by_account[account_index].index(index)
+    subscribed_market_keys = tuple(
+        market_keys[topic_index] for topic_index in profile.subscribed_topic_indices(index)
+    )
+    subscribed_stream_ids = tuple(key.stream_id for key in subscribed_market_keys)
     account_ref = _ACCOUNT_REFS[account_index]
     strategy_ref = _strategy_ref(index)
     principal_ref = _principal_ref(index)
@@ -2983,7 +2997,7 @@ def _strategy_process(
     markets: dict[str, ServiceMarketClient] = {}
     pending_markets: dict[str, ServiceMarketClient] = {}
     market_poll_scheduler = _RoundRobinMarketPollScheduler(
-        tuple(key.stream_id for key in market_keys)
+        subscribed_stream_ids
     )
     market_poll_failure: dict[str, Any] | None = None
     market_client_start_batches: list[dict[str, Any]] = []
@@ -3034,7 +3048,7 @@ def _strategy_process(
         market_security = ClientCurveKeys(*security_material[_MARKET_SECURITY_REF])
         factory = ZmqMarketTransportFactory({_MARKET_SECURITY_REF: market_security})
         clients = []
-        for key in market_keys:
+        for key in subscribed_market_keys:
             client = ServiceMarketClient(
                 runtime,
                 "store.market",
@@ -3061,7 +3075,9 @@ def _strategy_process(
         runtime_probe._maintain_if_due("market-client-start-boundary")
         if not runtime.healthy:
             raise _Load01StartupLeaseError()
-        for key, client, bootstrap in zip(market_keys, clients, bootstraps, strict=True):
+        for key, client, bootstrap in zip(
+            subscribed_market_keys, clients, bootstraps, strict=True
+        ):
             markets[key.stream_id] = client
             pending_markets.pop(key.stream_id, None)
             snapshots[key.stream_id] = bootstrap.snapshot_sequence
@@ -3086,7 +3102,7 @@ def _strategy_process(
                 lost += stream_lost
                 reconnect_gaps_by_stream[stream_id] += stream_lost
             last_sequences[stream_id] = snapshot_sequence
-            for key in market_keys:
+            for key in subscribed_market_keys:
                 if key.stream_id == stream_id:
                     market = markets[stream_id]
                     bootstrap = market.last_bootstrap
@@ -3111,7 +3127,7 @@ def _strategy_process(
         stream_id = market_poll_scheduler.next_stream_id(enabled=not pause)
         if stream_id is None:
             return
-        key = next(key for key in market_keys if key.stream_id == stream_id)
+        key = next(key for key in subscribed_market_keys if key.stream_id == stream_id)
         client = markets[stream_id]
         poll_started_monotonic = time.monotonic()
         poll_started = time.perf_counter_ns()
@@ -3317,8 +3333,8 @@ def _strategy_process(
         )
         initial_bindings = len(runtime.bindings)
         initial_degraded = startup.degraded_count
-        if initial_degraded or initial_bindings != 5 or len(markets) != _TOPICS:
-            raise AssertionError("LOAD01 strategy did not activate all five routes and 20 topics")
+        if initial_degraded or initial_bindings != 5 or len(markets) != len(subscribed_market_keys):
+            raise AssertionError("LOAD01 strategy did not activate its routes and profile topics")
         startup_maintenance_snapshot = runtime_probe.snapshot()
         runtime_probe.set_phase("steady-load")
         control.send(
@@ -3386,7 +3402,8 @@ def _strategy_process(
             control.send(("aborted", index, os.getpid()))
             return
         next_account_read = load_start + 60
-        phase_offset = local_index * 0.5
+        order_interval = profile.order_interval_seconds_by_strategy[index]
+        phase_offset = profile.order_phase_seconds_by_strategy[index]
         next_order = load_start + phase_offset
         next_telemetry = load_start + 30
         next_metrics = load_start + 60
@@ -3433,7 +3450,9 @@ def _strategy_process(
                     # terminal window of the full-mode timeline.
                     if window >= 1 and window < _FULL_LOAD_SECONDS // 300:
                         reconnect_window = window
-                        target_local = (window - 1) % _PER_ACCOUNT
+                        target_local = (window - 1) % len(
+                            profile.strategy_indices_by_account[account_index]
+                        )
                         target_at = window * 300 + account_index * 1.0
                         reconnect_due = (
                             local_index == target_local
@@ -3450,11 +3469,11 @@ def _strategy_process(
                 if now >= next_order:
                     cycle = order_cycles + 1
                     run_order_cycle(cycle)
-                    next_order += 5.0
+                    next_order += order_interval
                     after_order = time.monotonic()
-                    if next_order < after_order - 2.5:
-                        skipped = int((after_order - next_order) // 5.0) + 1
-                        next_order += skipped * 5.0
+                    if next_order < after_order - order_interval / 2:
+                        skipped = int((after_order - next_order) // order_interval) + 1
+                        next_order += skipped * order_interval
 
                 now = time.monotonic()
                 if now >= next_account_read:
@@ -3508,6 +3527,7 @@ def _strategy_process(
                     reconnect_records=reconnect_records,
                     reconnect_gaps_by_stream=reconnect_gaps_by_stream,
                     slow_pause_observed=slow_pause_observed,
+                    profile_id=profile_id,
                     telemetry=telemetry,
                     telemetry_queue_drops=telemetry_queue_drops,
                     telemetry_delivery_drops=telemetry_delivery_drops,
@@ -3587,6 +3607,7 @@ def _strategy_process(
             max_market_poll_ms=max_market_poll_ms,
             account_identity=account_identity,
             runtime=runtime,
+            profile_id=profile_id,
             include_samples=True,
         )
         control.send(
@@ -3979,13 +4000,17 @@ def _strategy_stats(
     max_market_poll_ms,
     account_identity,
     runtime,
+    profile_id="U0",
     include_samples=False,
 ):
     telem = telemetry.stats
+    profile = load01_profile(profile_id)
     return {
         "index": index,
-        "account_index": index // _PER_ACCOUNT,
-        "local_index": index % _PER_ACCOUNT,
+        "account_index": profile.account_for_strategy(index),
+        "local_index": profile.strategy_indices_by_account[
+            profile.account_for_strategy(index)
+        ].index(index),
         "market_events": sum(market_receives.values()),
         "market_by_stream": dict(market_receives),
         "last_sequences": dict(last_sequences),
@@ -4538,7 +4563,9 @@ def _resource_sample(
     )
 
 
-def _progress_summary(progress: dict[str, Any]) -> dict[str, Any]:
+def _progress_summary(
+    progress: dict[str, Any], *, expected_clients_per_strategy: int = _TOPICS
+) -> dict[str, Any]:
     strategy_rows = tuple(progress.get("strategy", {}).values())
     return {
         "strategy_progress_count": len(strategy_rows),
@@ -4562,7 +4589,7 @@ def _progress_summary(progress: dict[str, Any]) -> dict[str, Any]:
         "market_queue_snapshot": aggregate_strategy_queue_snapshots(
             strategy_rows,
             expected_strategy_count=_STRATEGIES,
-            expected_clients_per_strategy=_TOPICS,
+            expected_clients_per_strategy=expected_clients_per_strategy,
         ),
         "market": progress.get("market"),
         "monitor": progress.get("monitor"),
@@ -4757,6 +4784,31 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     mode = os.environ.get("BT_API_LOAD01_MODE", "full")
     if mode not in {"pilot", "full"}:
         raise ValueError("BT_API_LOAD01_MODE must be pilot or full")
+    profile_id = os.environ.get("BT_API_LOAD01_PROFILE", "U0")
+    profile = load01_profile(profile_id)
+    startup_waves = profile.startup_waves(_STARTUP_STRATEGY_SLOTS)
+    startup_wave_by_strategy = {
+        strategy_index: wave_index
+        for wave_index, wave in enumerate(startup_waves)
+        for strategy_index in wave
+    }
+    topic_rate_targets = {
+        f"K{index:02d}": rate
+        for index, rate in enumerate(profile.topic_messages_per_second)
+    }
+    topic_subscriber_targets = {
+        f"K{index:02d}": count
+        for index, count in enumerate(profile.topic_subscriber_counts)
+    }
+    account_strategy_targets = {
+        _ACCOUNT_REFS[index]: len(strategy_indices)
+        for index, strategy_indices in enumerate(profile.strategy_indices_by_account)
+    }
+    account_order_rate_targets = {
+        _ACCOUNT_REFS[index]: rate
+        for index, rate in enumerate(profile.order_targets_per_account_per_second)
+    }
+    expected_clients_per_strategy = len(profile.topic_indices_by_strategy[0])
     duration_seconds = 120 if mode == "pilot" else _FULL_LOAD_SECONDS
     source_root = _fixed_source_root()
     export_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
@@ -4793,8 +4845,15 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         "schema_version": 1,
         "case": "LOAD01_LOCAL_SYNTHETIC_100_STRATEGY_10_ACCOUNT",
         "mode": mode,
+        "load_profile": profile_id,
+        "profile_registration_status": profile.registration_status,
+        "profile_registration_status_source": (
+            "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md:807-813 (U0 initial LOAD01 baseline)"
+            if profile_id == "U0"
+            else "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md:17-26 (candidate only)"
+        ),
         "state": "PREFLIGHT",
-        "formal_acceptance_eligible": mode == "full",
+        "formal_acceptance_eligible": profile.formal_acceptance_eligible(mode),
         "started_at_utc": _utc_now(),
         "fixed_parent_commit": _FIXED_PARENT,
         "python_executable": sys.executable,
@@ -4808,13 +4867,32 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "total_child_processes": 112,
             "pytest_controller_processes": 1,
             "total_load_processes_including_controller": 113,
-            "strategies_per_account": _PER_ACCOUNT,
+            "strategies_per_account": (
+                _PER_ACCOUNT
+                if len(set(account_strategy_targets.values())) == 1
+                else None
+            ),
+            "strategies_per_account_by_account": account_strategy_targets,
             "public_market_topics": _TOPICS,
-            "upstream_input_target_per_second": _MARKET_HZ,
-            "strategy_market_deliveries_target_per_second": _MARKET_HZ * _STRATEGIES,
-            "order_lifecycles_target_per_account_per_second": _LIFECYCLES_PER_ACCOUNT_HZ,
-            "order_lifecycles_target_total_per_second": _LIFECYCLES_PER_ACCOUNT_HZ * _ACCOUNTS,
-            "topic_payload_target_bytes": 256,
+            "market_registry_sessions_target": _STRATEGIES,
+            "market_subscription_client_count_target": sum(
+                len(topics) for topics in profile.topic_indices_by_strategy
+            ),
+            "strategy_topic_binding_count": sum(
+                len(topics) for topics in profile.topic_indices_by_strategy
+            ),
+            "market_topics_per_strategy": expected_clients_per_strategy,
+            "topic_input_target_per_second": topic_rate_targets,
+            "topic_subscriber_count": topic_subscriber_targets,
+            "upstream_input_target_per_second": profile.total_input_target_per_second,
+            "strategy_market_deliveries_target_per_second": profile.total_delivery_target_per_second,
+            "order_lifecycles_target_per_account_per_second": account_order_rate_targets,
+            "order_lifecycles_target_total_per_second": sum(
+                profile.order_targets_per_account_per_second
+            ),
+            "startup_wave_count": len(startup_waves),
+            "topic_payload_target_bytes": 256 if profile_id == "U0" else None,
+            "topic_payload_reference_target": {"profile_id": "U0", "bytes_per_message": 256},
         },
         "preflight": {
             "logical_cpu_count": logical_cpu_count,
@@ -4889,7 +4967,14 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             index: endpoints[endpoint_index + index] for index in range(_ACCOUNTS)
         }
 
-        market_keys = _market_keys()
+        market_keys = _market_keys(profile_id)
+        strategy_market_streams = {
+            index: tuple(
+                market_keys[topic_index].stream_id
+                for topic_index in profile.subscribed_topic_indices(index)
+            )
+            for index in range(_STRATEGIES)
+        }
         market_server_keys = zmq.curve_keypair()
         strategy_keys = {index: zmq.curve_keypair() for index in range(_STRATEGIES)}
         account_server_keys = {index: zmq.curve_keypair() for index in range(_ACCOUNTS)}
@@ -4910,13 +4995,13 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             )
             for index in range(_ACCOUNTS)
         }
-        market_audience = _market_authority_audience(strategy_keys)
+        market_audience = _market_authority_audience(strategy_keys, profile_id)
         strategy_audience = tuple(
             (
                 strategy_keys[index][0],
                 _principal_ref(index),
                 _strategy_ref(index),
-                _ACCOUNT_REFS[index // _PER_ACCOUNT],
+                _ACCOUNT_REFS[profile.account_for_strategy(index)],
             )
             for index in range(_STRATEGIES)
         )
@@ -4928,9 +5013,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     "principal_ref": _principal_ref(strategy_index),
                     "strategy_ref": _strategy_ref(strategy_index),
                 }
-                for strategy_index in range(
-                    account_index * _PER_ACCOUNT, (account_index + 1) * _PER_ACCOUNT
-                )
+                for strategy_index in profile.strategy_indices_by_account[account_index]
             )
             for account_index in range(_ACCOUNTS)
         }
@@ -5008,10 +5091,12 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 checkpoint_directory
                 / f"relay-{account_index:02d}-{local_index:02d}-checkpoint.sqlite3"
                 for account_index in range(_ACCOUNTS)
-                for local_index in range(_PER_ACCOUNT)
+                for local_index in range(
+                    len(profile.strategy_indices_by_account[account_index])
+                )
             ),
         )
-        registration_events = [context.Event() for _ in range(_STARTUP_STRATEGY_SLOTS)]
+        registration_events = [context.Event() for _ in startup_waves]
         load_event = context.Event()
         stop_event = context.Event()
         abort_event = context.Event()
@@ -5039,6 +5124,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 load_event,
                 load_start_value,
                 stop_event,
+                profile_id,
             ),
         )
         market_message = _collect_expected({0: market_record}, "ready", 60.0, "market", progress)[0]
@@ -5051,7 +5137,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         market_record["ready"] = True
         market_rpc = market_message[3]
         market_pub = market_message[4]
-        report["progress"] = _progress_summary(progress)
+        report["progress"] = _progress_summary(
+            progress, expected_clients_per_strategy=expected_clients_per_strategy
+        )
 
         phase = "start-account-owners"
         for account_index in range(_ACCOUNTS):
@@ -5148,10 +5236,10 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             if (
                 message[1] != account_index
                 or message[2] != owner_records[account_index]["pid"]
-                or message[3] != 10
+                or message[3] != account_strategy_targets[_ACCOUNT_REFS[account_index]]
             ):
                 raise AssertionError(
-                    f"LOAD01 owner did not register ten durable scopes: {account_index}"
+                    f"LOAD01 owner did not register its profile durable scopes: {account_index}"
                 )
             owner_records[account_index]["rpc_diagnostic_ready"] = True
 
@@ -5178,7 +5266,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
 
         phase = "load-strategy-processes"
         for index in range(_STRATEGIES):
-            account_index = index // _PER_ACCOUNT
+            account_index = profile.account_for_strategy(index)
             account_service = account_services[account_index]
             execution_service = execution_services[account_index]
             raw_strategy_config = _strategy_config(
@@ -5188,6 +5276,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 market_rpc,
                 market_pub,
                 monitor_message[4],
+                account_index=account_index,
             )
             client_public, client_secret = strategy_keys[index]
             security_material = {
@@ -5224,12 +5313,13 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     service_records,
                     security_material,
                     market_keys,
-                    registration_events[index % _STARTUP_STRATEGY_SLOTS],
+                    registration_events[startup_wave_by_strategy[index]],
                     load_event,
                     load_start_value,
                     stop_event,
                     abort_event,
                     mode,
+                    profile_id,
                 ),
             )
         loaded = _collect_expected(
@@ -5251,7 +5341,6 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 "LOAD01 all-strategy barrier could not retain 2 GiB free: "
                 f"available={barrier_memory}"
             )
-        startup_waves = _strategy_startup_waves()
         startup_deadline = time.monotonic() + 300.0
         strategy_ready: dict[int, tuple[Any, ...]] = {}
         startup_wave_receipts = []
@@ -5279,18 +5368,20 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     message[1] != index
                     or message[2] != record["pid"]
                     or message[3] != _strategy_ref(index)
-                    or message[4] != _ACCOUNT_REFS[index // _PER_ACCOUNT]
+                    or message[4] != _ACCOUNT_REFS[profile.account_for_strategy(index)]
                     or message[7] != 5
                     or message[8] != 0
-                    or message[9] != _ACCOUNT_KEYS[index // _PER_ACCOUNT].to_dict()
-                    or len(message[10]) != _TOPICS
-                    or any(sequence != 0 for _stream, sequence in message[10])
+                    or message[9]
+                    != _ACCOUNT_KEYS[profile.account_for_strategy(index)].to_dict()
+                    or len(message[10]) != expected_clients_per_strategy
+                    or dict(message[10])
+                    != dict.fromkeys(strategy_market_streams[index], 0)
                 ):
                     raise AssertionError(
                         f"LOAD01 strategy did not pass its registration barrier: {index}"
                     )
                 record["ready"] = True
-                record["account_index"] = index // _PER_ACCOUNT
+                record["account_index"] = profile.account_for_strategy(index)
                 record["startup_ms"] = message[6]
                 record["startup_diagnostic"] = message[11]
             wave_receipt = {
@@ -5392,13 +5483,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 f"LOAD01 all-ready barrier could not retain 2 GiB free: available={barrier_memory}"
             )
         registry_before = _registered_session_inventory(registries)
-        expected_registry_sessions = {
-            "market": 100,
-            "monitor-durable": 100,
-            "monitor-telemetry": 100,
-            **{f"account-{index:02d}": 10 for index in range(_ACCOUNTS)},
-            **{f"execution-{index:02d}": 20 for index in range(_ACCOUNTS)},
-        }
+        expected_registry_sessions = profile.expected_registry_sessions
         if registry_before != expected_registry_sessions:
             raise AssertionError(
                 "LOAD01 service registrations do not match the 100-strategy topology"
@@ -5435,9 +5520,16 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         report["load"] = {
             "scheduled_monotonic_start": load_start,
             "requested_duration_seconds": duration_seconds,
-            "market_input_target_per_second": _MARKET_HZ,
-            "market_payload_bytes_target": 256,
-            "order_lifecycle_target_per_account_per_second": _LIFECYCLES_PER_ACCOUNT_HZ,
+            "profile_id": profile_id,
+            "market_input_target_per_second": profile.total_input_target_per_second,
+            "topic_input_target_per_second": topic_rate_targets,
+            "strategy_market_deliveries_target_per_second": profile.total_delivery_target_per_second,
+            "market_payload_bytes_target": 256 if profile_id == "U0" else None,
+            "market_payload_bytes_reference_target": {"profile_id": "U0", "bytes_per_message": 256},
+            "order_lifecycle_target_per_account_per_second": account_order_rate_targets,
+            "order_lifecycle_target_total_per_second": sum(
+                profile.order_targets_per_account_per_second
+            ),
             "load_start_at_utc": _utc_now(),
         }
         _write_report(output_path, report)
@@ -5493,7 +5585,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     raise RuntimeError("LOAD01 free memory remained below 2 GiB for two samples")
                 if high_cpu_samples >= 12:
                     raise RuntimeError("LOAD01 system CPU remained above 95% for one minute")
-            report["progress"] = _progress_summary(progress)
+            report["progress"] = _progress_summary(
+                progress, expected_clients_per_strategy=expected_clients_per_strategy
+            )
             if now >= next_report_at:
                 report["last_progress_at_utc"] = _utc_now()
                 _write_report(output_path, report)
@@ -5516,7 +5610,9 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         while time.monotonic() < settle_deadline:
             _drain_progress(child_records, progress)
             time.sleep(0.02)
-        report["progress"] = _progress_summary(progress)
+        report["progress"] = _progress_summary(
+            progress, expected_clients_per_strategy=expected_clients_per_strategy
+        )
 
         phase = "normal-strategy-shutdown"
         for record in strategy_records.values():
@@ -5647,7 +5743,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             account_cycles = sum(
                 row["order_cycles"]
                 for index, row in strategy_results.items()
-                if index // _PER_ACCOUNT == account_index
+                if profile.account_for_strategy(index) == account_index
             )
             if (
                 account_record["provider_submit_calls"] != account_cycles
@@ -5710,8 +5806,16 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         ):
             raise AssertionError("LOAD01 found an unrecovered data gap, duplicate, or client drop")
         source_sequences = market_status["source_sequences"]
-        if max(source_sequences.values()) - min(source_sequences.values()) > 1:
-            raise AssertionError("LOAD01 synthetic provider did not rotate evenly across 20 topics")
+        if set(source_sequences) != {key.stream_id for key in market_keys}:
+            raise AssertionError("LOAD01 synthetic provider did not publish every profile topic")
+        if mode == "full":
+            for topic_index, key in enumerate(market_keys):
+                expected_rate = profile.topic_messages_per_second[topic_index]
+                actual_topic_rate = source_sequences[key.stream_id] / actual_duration
+                if abs(actual_topic_rate - expected_rate) > expected_rate * 0.05:
+                    raise AssertionError(
+                        f"LOAD01 topic K{topic_index:02d} was outside its 5% input target band"
+                    )
 
         report["state"] = (
             "PILOT_COMPLETE_NOT_FORMAL" if mode == "pilot" else "LOAD_PROFILE_COMPLETE"
@@ -5734,9 +5838,8 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 "order_lifecycles_per_second": lifecycle_rate,
                 "order_lifecycles_per_account_per_second": {
                     _ACCOUNT_REFS[index]: sum(
-                        row["order_cycles"]
-                        for strategy_index, row in strategy_results.items()
-                        if strategy_index // _PER_ACCOUNT == index
+                        strategy_results[strategy_index]["order_cycles"]
+                        for strategy_index in profile.strategy_indices_by_account[index]
                     )
                     / actual_duration
                     for index in range(_ACCOUNTS)
@@ -5754,6 +5857,26 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "provider_stop_counts": market_stop_counts,
             "active_provider_keys_after_close": list(market_status["active_provider_keys"]),
             "input_messages_by_topic": source_sequences,
+            "input_target_per_second_by_topic": topic_rate_targets,
+            "subscriber_count_by_topic": topic_subscriber_targets,
+            "topic_stream_id_by_topic": {
+                f"K{index:02d}": key.stream_id for index, key in enumerate(market_keys)
+            },
+            "input_payload_bytes_by_topic": {
+                f"K{index:02d}": market_status["source_payload_bytes_by_topic"].get(
+                    key.stream_id, 0
+                )
+                for index, key in enumerate(market_keys)
+            },
+            "input_payload_bytes_per_message_by_topic": {
+                f"K{index:02d}": (
+                    market_status["source_payload_bytes_by_topic"].get(key.stream_id, 0)
+                    / source_sequences[key.stream_id]
+                    if source_sequences[key.stream_id]
+                    else None
+                )
+                for index, key in enumerate(market_keys)
+            },
             "logical_strategy_deliveries_by_strategy": {
                 _strategy_ref(index): row["market_events"]
                 for index, row in strategy_results.items()
@@ -5823,7 +5946,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         report["market_queue_snapshot_final"] = aggregate_strategy_queue_snapshots(
             strategy_results.values(),
             expected_strategy_count=_STRATEGIES,
-            expected_clients_per_strategy=_TOPICS,
+            expected_clients_per_strategy=expected_clients_per_strategy,
         )
         report["latency_samples"] = {
             "market_end_to_end_ms": e2e_values,
@@ -5842,17 +5965,29 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             ),
             "distinct_child_pids": len({record["pid"] for record in child_records.values()}),
         }
-        if mode == "full" and abs(market_rate - _MARKET_HZ) > _MARKET_HZ * 0.05:
+        if mode == "full" and abs(market_rate - profile.total_input_target_per_second) > (
+            profile.total_input_target_per_second * 0.05
+        ):
             raise AssertionError("LOAD01 sustained provider input was outside the 5% target band")
-        target_order_rate = _LIFECYCLES_PER_ACCOUNT_HZ * _ACCOUNTS
+        target_order_rate = sum(profile.order_targets_per_account_per_second)
         if mode == "full" and abs(lifecycle_rate - target_order_rate) > target_order_rate * 0.05:
             raise AssertionError(
                 "LOAD01 sustained order lifecycle rate was outside the 5% target band"
             )
-        if mode == "full" and abs(delivery_rate - _MARKET_HZ * _STRATEGIES) > (
-            _MARKET_HZ * _STRATEGIES * 0.05
+        if mode == "full" and abs(delivery_rate - profile.total_delivery_target_per_second) > (
+            profile.total_delivery_target_per_second * 0.05
         ):
             raise AssertionError("LOAD01 logical delivery rate was outside the 5% target band")
+        if mode == "full":
+            account_rates = report["load"]["order_lifecycles_per_account_per_second"]
+            for account_index, expected_rate in enumerate(
+                profile.order_targets_per_account_per_second
+            ):
+                actual_rate = account_rates[_ACCOUNT_REFS[account_index]]
+                if abs(actual_rate - expected_rate) > expected_rate * 0.05:
+                    raise AssertionError(
+                        f"LOAD01 account {account_index:02d} was outside its 5% order target band"
+                    )
     except BaseException as exc:
         failure = {
             "phase": phase,

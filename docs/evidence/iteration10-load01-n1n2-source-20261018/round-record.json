@@ -1,0 +1,58 @@
+{
+  "round": "LOAD01 N1/N2 workload source component",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "parent": "7516a1c6287c14f159bfb1f337af7dbcb6a8fd3a",
+  "status": "ACCEPTED_SOURCE_COMPONENT_ONLY",
+  "formal_case_progress": {
+    "before": 62,
+    "after": 62,
+    "total": 68,
+    "load01_pass": false
+  },
+  "scope": [
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "tests/unit/_load01_profiles.py",
+    "tests/unit/test_load01_profiles.py",
+    "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md",
+    "docs/evidence/iteration10-load01-n1n2-source-20261018/round-record.json"
+  ],
+  "changes": [
+    "Default U0 preserved; N1 partial-overlap, cross-venue symbol and direct multi-timeframe bar updates; N2 hotspot market/account distribution",
+    "Profile-derived input, deliveries, account order cadence and registry checks used by existing runner",
+    "N1/N2 full profiles remain explicitly ineligible for formal acceptance until P0 registration and actual validation"
+  ],
+  "verification": {
+    "focused_tests": "6 passed in 0.42s; no warnings; stderr empty",
+    "source_checks": 104,
+    "independent_review": "Static GO on exact HEAD-only overlay wiring and resource/rate guards; no Host executed by reviewer",
+    "evidence_level": "SOURCE_COMPONENT_PROFILE_HELPER_TESTS_ONLY_RUNNER_WIRING_STATIC_NO_HOST",
+    "qa_output": "D:\\temp\\load01-n1n2-focused-qa-20261018",
+    "qa_result_sha256": "9ccd4c208ae1849be3d1539f7f2c8ea442ff0961b5b64746cad13883953194bd",
+    "qa_stdout": "......                                                                   [100%]\n---- generated xml file: D:\\temp\\load01-n1n2-focused-qa-20261018\\junit.xml ----\n6 passed in 0.42s\n",
+    "delivery_only_delta": "After focused QA, one report documentation-reference string points to the byte-identical committed candidate draft. Profile helper/test bytes and runner logic unchanged; no accepted QA repeated."
+  },
+  "code_sources": {
+    "tests/unit/test_load01_hundred_strategy_30min.py": {
+      "bytes": 332381,
+      "sha256": "a35b9ba6c0c2bf2fda9b4882f9c95d974c26334380aa07e5bf5ced70bf72d09a"
+    },
+    "tests/unit/_load01_profiles.py": {
+      "bytes": 13292,
+      "sha256": "002904e4ae6b053aec01f7a232c11ad3e289a91a75a02b5e2190993a162dfbc1"
+    },
+    "tests/unit/test_load01_profiles.py": {
+      "bytes": 5972,
+      "sha256": "e56b639e87b50e3a4b56109bd4236d3e086098805a9504303b21c90d8b2b9516"
+    }
+  },
+  "candidate_sha256": "6f7222e9a0c50cc344aaec142d0bc0e31705e77dc8e2d2c0975df5f645758461",
+  "limitations": [
+    "No new load Host or 100-strategy/30-minute run; R14 remains consumed and failed on free-memory guard",
+    "N3-N6 and formal latency registration remain outstanding",
+    "Actual payload fields measured; 256-byte target/reference applies to U0 only",
+    "Runner integration reviewed statically; six tests exercise the profile/payload helpers, not the multiprocess path"
+  ],
+  "unrelated_changes_preserved": true,
+  "commit_reference": "git log -- docs/evidence/iteration10-load01-n1n2-source-20261018/round-record.json"
+}
