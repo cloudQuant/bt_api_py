@@ -97,6 +97,7 @@ PORT_OPERATIONS = MappingProxyType(
         "service.risk_policy": frozenset(
             {
                 "policy.read", "policy.draft", "policy.approve", "policy.publish", "policy.receipt",
+                "policy.inspect", "policy.confirmation.read",
                 "policy.budget.propose", "policy.budget.approve", "policy.budget.publish_member",
                 "policy.budget.confirm_member", "policy.budget.owner_confirm_member",
                 "policy.budget.reject_member",

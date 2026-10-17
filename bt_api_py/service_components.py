@@ -710,6 +710,8 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                             "policy.approve",
                             "policy.publish",
                             "policy.receipt",
+                            "policy.inspect",
+                            "policy.confirmation.read",
                             "policy.budget.propose",
                             "policy.budget.approve",
                             "policy.budget.publish_member",
