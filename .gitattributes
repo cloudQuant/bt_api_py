@@ -76,3 +76,7 @@ tests/unit/_runtime_origin_receipts.py -text
 tests/unit/_runtime_origin_pytest_plugin.py -text
 tests/integration/test_afi13_ai_paper_risk_monitor_http.py -text
 tests/unit/test_service_execution_paper_risk_monitor_host_integration.py -text
+test_support/arb06_r18_sdk_support/integration/_dim05_roll_exit_risk_host_fixture_diagnostic.py -text
+test_support/arb06_r18_sdk_support/integration/test_arb03_dim05_group_partial_fill_service.py -text
+test_support/arb06_r18_sdk_support/integration/test_service_execution_group_local_process.py -text
+test_support/arb06_r18_sdk_support/unit/_service_group_provider_fixtures.py -text
