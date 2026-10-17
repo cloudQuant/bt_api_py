@@ -3740,6 +3740,7 @@ def _load01_market_wave_strategy_process(
     runtime_probe = None
     markets: dict[str, ServiceMarketClient] = {}
     pending_markets: dict[str, ServiceMarketClient] = {}
+    market_client_start_batches: list[dict[str, Any]] = []
     try:
         config = parse_client_config(raw_config)
         identity = WireIdentity(WireRole.STRATEGY_CLIENT, principal_ref, strategy_ref)
@@ -3769,6 +3770,7 @@ def _load01_market_wave_strategy_process(
             raise _Load01StartupLeaseError()
 
         subscriber_factory = ZmqMarketTransportFactory({_MARKET_SECURITY_REF: security})
+        clients: list[ServiceMarketClient] = []
         for key in market_keys:
             if abort_event.is_set():
                 raise _Load01StartupWaveAborted()
@@ -3783,12 +3785,26 @@ def _load01_market_wave_strategy_process(
                 head_check_interval_seconds=1.0,
             )
             pending_markets[key.stream_id] = client
-            client.start()
-            runtime_probe._maintain_if_due("market-wave-start-boundary")
-            if abort_event.is_set():
-                raise _Load01StartupWaveAborted()
-            if not runtime.healthy:
-                raise _Load01StartupLeaseError()
+            clients.append(client)
+        if abort_event.is_set():
+            raise _Load01StartupWaveAborted()
+        started_ns = time.perf_counter_ns()
+        try:
+            bootstraps = ServiceMarketClient.start_many(clients)
+        finally:
+            market_client_start_batches.append(
+                {
+                    "stream_count": len(clients),
+                    "duration_ms": (time.perf_counter_ns() - started_ns) / 1_000_000,
+                    "measurement_scope": "same-registration-market-batch",
+                }
+            )
+        runtime_probe._maintain_if_due("market-wave-start-boundary")
+        if abort_event.is_set():
+            raise _Load01StartupWaveAborted()
+        if not runtime.healthy:
+            raise _Load01StartupLeaseError()
+        for key, client, _bootstrap in zip(market_keys, clients, bootstraps, strict=True):
             markets[key.stream_id] = client
             pending_markets.pop(key.stream_id, None)
 
@@ -3811,6 +3827,7 @@ def _load01_market_wave_strategy_process(
                 tuple(sorted(markets)),
                 lease_snapshot,
                 runtime_probe.snapshot(),
+                tuple(market_client_start_batches),
             )
         )
 
@@ -3847,6 +3864,7 @@ def _load01_market_wave_strategy_process(
                 "maintenance_calls_by_reason"
             ].get("market-wave-ready-barrier", 0),
             "maintenance": barrier_maintenance,
+            "market_client_start_batches": tuple(market_client_start_batches),
             "runtime_state": runtime.state,
             "runtime_cleanup_failures": runtime.cleanup_failures,
             "runtime_unregister_uncertainties": runtime.unregister_uncertainties,
@@ -7272,6 +7290,7 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
         assert len({message[2] for message in strategy_ready.values()}) == _STARTUP_STRATEGY_SLOTS
         for index, record in strategy_records.items():
             message = strategy_ready[index]
+            assert type(message) is tuple and len(message) == 10
             assert message[1:6] == (
                 index,
                 record["pid"],
@@ -7281,6 +7300,15 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
             )
             assert message[6] == tuple(sorted(key.stream_id for key in market_keys))
             assert message[7]["healthy"] is True
+            batch_facts = message[9]
+            assert type(batch_facts) is tuple and len(batch_facts) == 1
+            batch = batch_facts[0]
+            assert type(batch) is dict
+            assert set(batch) == {"stream_count", "duration_ms", "measurement_scope"}
+            assert batch["stream_count"] == _TOPICS
+            assert batch["measurement_scope"] == "same-registration-market-batch"
+            assert type(batch["duration_ms"]) in (int, float)
+            assert 0 <= batch["duration_ms"] < float("inf")
             assert message[7]["required_min_lease_remaining_ms"] > (
                 _RPC_LEASE_HEADROOM_SECONDS * 1000
             )
@@ -7322,6 +7350,10 @@ def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(
             assert close_facts["lease_seconds"] == _LEASE_SECONDS
             assert close_facts["market_clients_started"] == _TOPICS
             assert close_facts["market_clients_closed"] == _TOPICS
+            assert (
+                close_facts["market_client_start_batches"]
+                == strategy_ready[index][9]
+            )
             assert close_facts["closed_streams"] == tuple(
                 sorted(key.stream_id for key in market_keys)
             )

@@ -1,0 +1,23 @@
+# LOAD01 10×20 bootstrap pilot R3b
+
+Status: Root fixed-source focused pilot passed; ready for the Root’s scoped commit. This is one 10-strategy/20-topic startup, lease and normal-close pilot, not full LOAD01 or DIM07 acceptance.
+
+## Scope and source identity
+
+- `bt_api_py` `dev` HEAD when the patch was first prepared: `e20368eabdaf6d55e39c6bf0fe2e8d8e44ecefc6`. Current HEAD is `876fcac6a3522637c7dd3f6987861f603168401a`, with e203 as an ancestor. The target test's base blob is unchanged (`fd4b89c0598044bc17103cc4755bdeffb7a23718` at both commits), and the selected patch passes `git apply --cached --check --whitespace=error` against the current empty index.
+- The selected source export is based on accepted SDK commit `74a5094fcfcb2995f5a79f75b423e1b5103864b7` and its six committed package gitlinks: Base `fb47f3dd733613494aa1d86cfd94b2d6fe70314d`, Execution `4374237705478039d60760e5f68df0e6ed076907`, Gateway `6580a894011d70d3ea747b9d299fbc73390d9796`, Monitor `02ee0c42a1e63a9cecbb666376e70c6f72b0d6e8`, Risk `beb1939dd379b519ef18d0ecb83d1f1ff217ac47`, Transport `ee4cacaee04182fda2d1b9124c2f3a1675aed07b`.
+- The current checkout candidate for `tests/unit/test_load01_hundred_strategy_30min.py` is 321,887 bytes, SHA-256 `c47b3b1f208ce9f295dabb5e98235a2ebd677a6f99f9e835eda87eb23d400465`. It differs from current HEAD by 38 insertions and 6 deletions in this file only. The reviewable patch is `.codex-tmp/load01-bootstrap-many-topic-test-r3b.patch`, 5,221 bytes, SHA-256 `5fad51030285bf730903876f7998ee1d195fb551995e3bd38de61e0427e6e847`; `git apply --cached --check --whitespace=error` passed and the index remains empty.
+- The fixed-source QA export is `D:\temp\l01bm-batch-r3b\source`; its runner is 321,887 bytes, SHA-256 `59ab5ae77b9c7e74db547836b24964c92dde8cf9635690e26fed6d38ff7d2029`. Relative to the reviewed checkout candidate, the export runner changes only `_FIXED_PARENT` and the six `_FIXED_PACKAGE_GITLINKS` values to match the fixed source ancestry. Those provenance substitutions are not part of the current-HEAD code patch.
+- Spec `.codex-tmp/iteration10-load01-bootstrap-many-topic-hostpilot-spec-r3b-20261017.json` is 902,110 bytes / `32f8ae2dde562d49a6e6dd208b90e5df9775501cae6f1cf12bd8a3439e767eae`; prep manifest `.codex-tmp/iteration10-load01-bootstrap-many-topic-hostpilot-prep-r3b-20261017.json` is 7,209 bytes / `b0c58560e3b32254689f556ec31a1e85262b2a1a73cfc2536fe96a77f5e27af0`; source-export pins are 5,295 bytes / `9093e4e5409696a11fbad05b3376f94cbfd0f93a5e894f9a692530ec720ad037`.
+
+## Root run and assertions
+
+Root ran the single selected node once (tool `520acc`, result receipt `7f16bc`) from the fixed export. `result.json` is 502 bytes / `73c5b2cb21e73a523d4d1315254af6c818b052619219f9483937ea264b51f6e0`; it reports pytest exit 0, 4,149 source pins unchanged, and empty stderr. JUnit is 381 bytes / `1f5c88b403e5c4779a4cb1c8f9de9ea8ae691aaa930d638f7668b17005d98af4` (one test, no errors/failures/skips); stdout is 632 bytes / `5ee55a47a259e5804334458bea2f660fbe57a053cc2dfe4eaba59b97fec8adc0` (`1 passed`, one existing `asyncio_default_fixture_loop_scope` config warning); stderr is empty. The before/after source maps are both 892,264 bytes and share SHA-256 `f9963f9f203750196f4d8d2995e5403ac9be3055bc3442cd6ef9a33fbde10e56`.
+
+The passed node asserts ten distinct strategy process IDs; each child’s single `start_many` batch covers 20 stream IDs and its requested/granted capability is `market.bootstrap_many`. It checks the returned batch record is finite/nonnegative and preserved unchanged in the child’s close receipt. After the 11-second wait it verifies 200 active registrations, 20 upstreams, one provider start per stream and no stops. Normal client/Host close assertions require 20 clients started/closed per strategy, every expected stream closed, runtime `closed`, zero cleanup failures, unregister uncertainties and unknown registrations, then zero Host registrations/upstreams and one provider stop per stream.
+
+The numeric per-strategy `duration_ms` values were carried in child IPC and checked, but are not persisted in `result.json`, JUnit, stdout or stderr. The run therefore proves the batch assertions passed; it does not provide recoverable latency measurements. Do not infer or report numeric batch durations from this output.
+
+The 100-process node remains unrun because the unchanged 10,603,200,512-byte resource gate is unmet. No full LOAD01, DIM07, provider, account or formal-case acceptance is claimed. The unexecuted R2 export/spec remain historical and unchanged.
+
+The scoped dev commit hash and postcommit checks are recorded in `.codex-tmp/load01-batch-pilot-root-postcommit-20261017.json`.
