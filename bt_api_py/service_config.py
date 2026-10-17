@@ -206,6 +206,12 @@ _COMPONENT_PORTS: Final[dict[str, dict[str | None, frozenset[str]]]] = {
                 "service.order_query",
             }
         ),
+        "account_group_owner": frozenset(
+            {
+                "service.order_entry",
+                "service.order_query",
+            }
+        ),
         "group_coordinator": frozenset({"service.order_group_entry"}),
         "legacy_import_owner": frozenset({"service.paper_legacy_import"}),
     },
@@ -1020,6 +1026,9 @@ def _validate_component_options(
                 result["paper_composition"] = paper_composition
             return result
         if role == "group_account_owner":
+            _check_keys(raw, {"role"}, options_path)
+            return {"role": role}
+        if role == "account_group_owner":
             _check_keys(raw, {"role"}, options_path)
             return {"role": role}
         fields = {"role", "portfolio_ref"}

@@ -1,0 +1,38 @@
+{
+  "scope": "One execution account_group_owner component composed from existing ordinary and group adapters under one owner lock, store, dispatcher and writer.",
+  "repository": "D:/bt_api_py",
+  "branch": "dev",
+  "qa_parent": "307edc66edd97159929b80b967587d26a6b8c412",
+  "evidence_level": "COMPONENT_SOURCE_FAKE_ONLY",
+  "selected_source_sha256": {
+    "bt_api_py/service_components.py": "e4965e133554f0d68801d318bde5110357201fa2a8387e729a963bcf205b401d",
+    "bt_api_py/service_config.py": "4cbf89da619c931dead543e7a64cc850ac4ba086448ce3ed9022771ab6d0c9ad",
+    "bt_api_py/service_host.py": "34bf74ccd6ccf4040b2e0216cfbb3c00a026337e479d5718c1439006b78a7c16",
+    "bt_api_py/service_execution_account_group_owner.py": "849db7df99183fd36949fe1b338ebe4255fa4cc30034f522c14e4b6b74f8cb42",
+    "tests/unit/test_service_execution_account_group_owner.py": "2045df7cfca65ae6570e7d39076fed002564380e5b93cd1170586665a997d831"
+  },
+  "qa": {
+    "tests": 3,
+    "passed": 3,
+    "elapsed_seconds": 5.58,
+    "source_pins_verified": 385,
+    "result_path": "D:\\temp\\account-group-owner-clean-r6-focused-20261018\\result.json",
+    "result_sha256": "526bf8773e9be5f2a37a6e4026e703202444db12cab9ea3e621e6c6d64fcce6d",
+    "spec_path": "D:\\bt_api_py\\.codex-tmp\\account-group-owner-clean-r6-focused-qa-spec.json",
+    "spec_sha256": "c4b0a63473c07264f2f0df03f1fb168ac9704f6d79f82cc8a3e5c982f8a78f55",
+    "stdout_sha256": "f2779fec19bc430acd846a50358d9d148fd758a3b64d5732e7088f78db435830",
+    "junit_sha256": "3500215765a29c1b11e81d3f743ef88b7b991be4ba6be8a452a704cb47d689ff",
+    "stderr_empty": true,
+    "sources_and_heads_unchanged": true
+  },
+  "review": {
+    "independent": "gateway_native_free_close_review GO_STATIC for R5 component; R6 removes only an identical duplicate pre-existing role dictionary entry.",
+    "root_incremental_review": "Verified exact R5-to-R6 removal and all other candidate source pins; no broad WIP staged."
+  },
+  "limits": [
+    "Synthetic ActiveRegistrationContext and direct component handler calls; no real ServiceRegistry or Host scheduling acceptance.",
+    "No real provider/account or LOAD01 acceptance.",
+    "Formal Iteration10 count remains 62/68."
+  ],
+  "preservation": "Existing mixed production checkout files remain unchanged; only accepted selected source blobs will be staged. R1/R2 failures and R5 candidate remain as historical outputs."
+}

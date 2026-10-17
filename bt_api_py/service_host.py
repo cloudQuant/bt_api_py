@@ -1969,7 +1969,8 @@ class ServiceHost:
             item.spec.component == "risk" and item.spec.options.get("role") == "group_reservations"
         ) or (
             item.spec.component == "execution"
-            and item.spec.options.get("role") == "group_account_owner"
+            and item.spec.options.get("role")
+            in {"group_account_owner", "account_group_owner"}
         ):
             self._group_runtime_resources.append((item, resources))
         if "service.market_source" not in item.operations_by_port:
@@ -2361,7 +2362,12 @@ class ServiceHost:
             group_registration_writer = spec is not None and (
                 (
                     spec.component == "execution"
-                    and role in {"group_coordinator", "group_account_owner"}
+                    and role
+                    in {
+                        "group_coordinator",
+                        "group_account_owner",
+                        "account_group_owner",
+                    }
                 )
                 or (spec.component == "risk" and role == "group_reservations")
                 or risk_group_roll_exit_writer
