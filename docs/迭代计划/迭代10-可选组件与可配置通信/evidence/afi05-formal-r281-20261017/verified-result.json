@@ -1,0 +1,29 @@
+{
+  "adjudicator": "Root",
+  "decision": "PASS_AFI05_LOCAL_SCOPE",
+  "run_result": {
+    "pytest_exit": 0,
+    "finished_utc": "2026-10-17T03:52:26.588653+00:00",
+    "source_count": 2940,
+    "sources_unchanged": true,
+    "heads_before": {},
+    "heads_after": {},
+    "heads_unchanged": true,
+    "stdout_sha256": "e8ca61768d89898c89875b6206988a193eafab1e1b824923bf0555d9132c5ccd",
+    "stderr_sha256": "592322dd8051ec35fc69832c62c8cef1061e6b6d57a2e0df529c420ee1fcd0b9",
+    "evidence_level": "AUTHOR_LOCAL_SYNTHETIC_FIXED_SOURCE_HOST_CANDIDATE"
+  },
+  "run_identity_limit": "Original evidence_level is preserved; it does not independently prove which agent launched pytest. Acceptance uses verified raw execution artifacts, pinned source and clause coverage.",
+  "run_output": "D:\\temp\\iteration10-afi05-partial-effective-r13-sdk-feb91480-metadata-binding-out-20261017",
+  "spec_sha256": "523c997b7bf35b7185ee79aed9b7310efe4634a346230f0ba4259571eff67c11",
+  "all_2940_original_sources_revalidated": true,
+  "junit_sha256": "bb7305c873943e465c0287a635b526a213dc5c7f9236c153422b2a1a327c1a09",
+  "node": "test_authenticated_ordinary_account_policy_partially_activates_a_and_retains_b_old_version",
+  "test_seconds": "6.079",
+  "AFI_backend_commit": "ad2171b5a97f522cfb55c983a8e5039dc823f92a",
+  "AFI_ui_commit": "090552b062f81b76e20e203e584dbe009e56c9e1",
+  "UI_result_path": "D:/temp/afi05-policy-ui-20261017-root-r2/result.json",
+  "UI_result_sha256": "3a8e5eecd170f48216b9586b8c8c63f1168d6a975462f7bdf58995b783902afa",
+  "source_fake_does_not_establish_provider_acceptance": true,
+  "accepted_suites_repeated": false
+}
