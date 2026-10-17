@@ -351,3 +351,112 @@ def test_manual_account_policy_rejects_an_additional_manual_target_without_rebin
         resources.close()
         gate.close()
         confirmed.close()
+
+def test_account_owner_first_activation_binds_and_persists_exact_published_policy(
+    tmp_path,
+):
+    catalog = PolicyCatalogStore(
+        str(tmp_path / "first-activation-catalog.sqlite3"),
+        trusted_approver_principals=("policy-startup-checker",),
+    )
+    confirmed = ConfirmedPolicyStore(
+        str(tmp_path / "first-activation-confirmed.sqlite3")
+    )
+    service = PolicyCatalogService(catalog, confirmation_store=confirmed)
+    account_ref = "policy-account-a"
+    policy_ref = "account-policy-a-v2"
+    policy_scope = _owner_scope(account_ref)
+    _receipt, content = _confirmed_receipt(account_ref, policy_ref, "15")
+    gate = None
+    resources = None
+    service_closed = False
+    catalog_closed = False
+    try:
+        assert service.handle(
+            "policy.draft",
+            principal_ref=_PRINCIPAL,
+            scope=policy_scope,
+            arguments={"policy_ref": policy_ref, "content": content},
+        )["ok"] is True
+        assert service.handle(
+            "policy.approve",
+            principal_ref="policy-startup-checker",
+            scope=policy_scope,
+            arguments={"policy_ref": policy_ref},
+        )["ok"] is True
+        assert service.handle(
+            "policy.publish",
+            principal_ref=_PRINCIPAL,
+            scope=policy_scope,
+            arguments={"policy_ref": policy_ref},
+        )["ok"] is True
+
+        resolver = PolicyCatalogAccountAdmissionResolver(catalog, confirmed)
+        published = resolver.resolve_published(
+            policy_ref, account_ref, scope=policy_scope
+        )
+        account_scope = AccountScope("paper", account_ref, "demo")
+        gate = DurableRiskGate(
+            str(tmp_path / "first-activation-risk.sqlite3"), published.risk_policy
+        )
+        wire_scope = WireScope(_DOMAIN, account_ref=account_ref, strategy_ref=_STRATEGY)
+        resources, _admission = _resource_set(
+            gate=gate,
+            target=_target(account_scope),
+            scope=wire_scope,
+            resolver=resolver,
+            policy_scope=policy_scope,
+            account_scope=account_scope,
+        )
+
+        bindings, required_ports = _bind_confirmed_account_policy(resources, policy_ref)
+        assert required_ports == frozenset({"service.order_entry"})
+        assert len(bindings) == 1
+        assert bindings[0].policy_ref == policy_ref
+        assert bindings[0].policy_version == published.risk_policy.fingerprint
+        confirmed_row = confirmed.resolve_document(policy_ref)
+        assert confirmed_row["policy_version"] == published.policy_version
+        assert confirmed_row["owner_principal"] == _PRINCIPAL
+        assert confirmed_row["content"] == content
+        assert gate.bind_policy(account_scope).policy_fingerprint == (
+            published.risk_policy.fingerprint
+        )
+
+        # Normal restart stays on the durable exact document when the catalog
+        # and its mutable publication pointer are unavailable.
+        resources.close()
+        resources = None
+        service.close()
+        service_closed = True
+        catalog.close()
+        catalog_closed = True
+        offline = PolicyCatalogAccountAdmissionResolver(None, confirmed)
+        restarted, _ = _resource_set(
+            gate=gate,
+            target=_target(account_scope),
+            scope=wire_scope,
+            resolver=offline,
+            policy_scope=policy_scope,
+            account_scope=account_scope,
+        )
+        try:
+            restarted_bindings, _ = _bind_confirmed_account_policy(
+                restarted, policy_ref
+            )
+            assert restarted_bindings[0].policy_version == bindings[0].policy_version
+            assert gate.bind_policy(account_scope).policy_fingerprint == (
+                published.risk_policy.fingerprint
+            )
+        finally:
+            restarted.close()
+    finally:
+        if resources is not None:
+            resources.close()
+        if gate is not None:
+            gate.close()
+        if not service_closed:
+            service.close()
+        if not catalog_closed:
+            catalog.close()
+        confirmed.close()
+

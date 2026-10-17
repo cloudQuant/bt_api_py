@@ -1422,6 +1422,9 @@ def _confirm_account_policy_startup_binding(
         )
         resolved_type = getattr(admission_module, "ResolvedAccountPolicy", None)
         bound_type = getattr(admission_module, "BoundAccountPolicy", None)
+        resolution_error_type = getattr(
+            admission_module, "PolicyAdmissionResolutionError", None
+        )
         binding_type = getattr(risk_module, "DurableRiskPolicyBinding", None)
         resolver = resources.values["account_policy_admission_resolver"]
         policy_scope = resources.values["account_policy_scope"]
@@ -1434,6 +1437,8 @@ def _confirm_account_policy_startup_binding(
         or type(policy_scope) is not WireScope
         or not isinstance(resolved_type, type)
         or not isinstance(bound_type, type)
+        or not isinstance(resolution_error_type, type)
+        or not issubclass(resolution_error_type, Exception)
         or not isinstance(binding_type, type)
         or not isinstance(durable_gate_type, type)
         or type(gate) is not durable_gate_type
@@ -1485,13 +1490,49 @@ def _confirm_account_policy_startup_binding(
 
         account_ref = next(iter(account_refs))
         account_scope = next(iter(target_account_scopes))
-        bound = resolver.resolve_confirmed_and_bind(
-            configured_ref,
-            account_ref,
-            scope=policy_scope,
-            account_scope=account_scope,
-            gate=gate,
-        )
+        try:
+            bound = resolver.resolve_confirmed_and_bind(
+                configured_ref,
+                account_ref,
+                scope=policy_scope,
+                account_scope=account_scope,
+                gate=gate,
+            )
+        except resolution_error_type as error:
+            if error.code != "POLICY_NOT_CONFIRMED":
+                raise
+            # First activation is an owner startup action only for the exact
+            # published account policy, and only after the same durable gate
+            # has accepted and read back that policy. Every other failure,
+            # including a conflicting active ledger, remains fail-closed.
+            published = resolver.resolve_published(
+                configured_ref,
+                account_ref,
+                scope=policy_scope,
+            )
+            if (
+                type(published) is not resolved_type
+                or published.policy_ref != configured_ref
+                or published.account_ref != account_ref
+                or type(published.policy_version) is not str
+                or len(published.policy_version) != 64
+                or any(character not in "0123456789abcdef" for character in published.policy_version)
+                or type(published.owner_principal) is not str
+                or not published.owner_principal
+                or published.confirmed_utc is not None
+                or type(published.risk_policy) is not policy_type
+                or published.risk_policy.policy_id != policy_id
+                or published.risk_policy.fingerprint != fingerprint
+            ):
+                raise TypeError("published owner policy does not match the account gate") from None
+            bound = resolver.confirm_after_gate_binding(
+                configured_ref,
+                account_ref,
+                principal_ref=published.owner_principal,
+                scope=policy_scope,
+                account_scope=account_scope,
+                gate=gate,
+            )
         resolved = bound.resolved
         persisted = bound.binding
         if (
