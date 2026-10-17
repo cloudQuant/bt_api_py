@@ -1,0 +1,13 @@
+# Iteration10 RPC context factory accepted component round
+
+Repository: bt_api_py, existing dev; QA parent 8effbcae375037a4bdf46ae1047ad073989eaec1. No worktree. Scope: the os import and ZmqTransportFactory slice only, its new focused test, Transport gitlink, this record and root-qa.zip. Other service_runtime.py changes remain unstaged and preserved.
+
+Accepted Transport dev commit: acd74ba03494615aeb2d60423ac853e06029cba7. Its four-path postcommit check confirmed exact production/test/archive bytes, an empty index/clean checkout, and only the normal CRLF checkout versus LF Git representation in its Markdown record. The initial all-raw-byte staging assertion rejected that Markdown conversion; the subsequent commit nevertheless ran in the same orchestration cell, so the exact postcommit verification is the delivery evidence.
+
+Each factory now lazily provides one process-bound context pool to its clients. Initialization is serialized; inherited factories reject use before entering a potentially inherited lock. Credentials, expected peers, sockets, wire limits and request/uncertainty state remain independent. Existing configuration/error behavior is preserved, including transport HWM values above 100000. Client leases own normal cleanup; the factory does not destroy sockets.
+
+Independent static review: GO_STATIC. Root ran the seven focused factory tests once against Git HEAD sources plus only the selected factory overlay: 7 passed in 1.33 s, no warnings, exit zero, 283 pins and three repository HEADs unchanged. The test uses fake transport leaves for wiring and concurrency; real CURVE lifecycle evidence is recorded in the Transport component round. The clean overlay is 82103 bytes / b17419b551922d1b907c49f067300154e91c519965ef8b4a71a76c52c7e1fe1e. Test is 9355 bytes / 3f61c07a6706990b3e6225d5ebbe13e1a468729d602befcc20c63bbc16bb0563. The original dirty runtime snapshot and exact factory patch were retained; the full dirty file is not accepted by this round.
+
+Evidence archive: root-qa.zip, 49985 bytes, 12 entries, SHA-256 f2d8c011e1999007ff69bb0fd31372e1535f9c7d51d4560210130036d9463de3.
+
+R13 source has five bindings but four distinct RPC transports per strategy, because order entry and query share one transport. This change can reduce those four RPC contexts to one; the 20 market subscriptions already use one separate shared context. This is a structural resource reduction, not a measured explanation of R13's approximately 3 GB RSS growth. No hundred-strategy rerun or memory-saving claim is made. LOAD01 and formal progress remain pending / 62 of 68. The next step is early per-role resource and queue diagnostics, then a fresh bounded load pilot with all existing resource guards.

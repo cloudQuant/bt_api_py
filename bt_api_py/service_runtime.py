@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import threading
 import time
 import uuid
@@ -212,14 +213,18 @@ class ClientCurveKeys:
 
 
 class ZmqTransportFactory:
-    """Code-registered ZMQ factory; resolves only explicitly provided key refs."""
+    """Code-registered ZMQ factory sharing one lazy context per process."""
 
     def __init__(self, security_profiles: Mapping[str, ClientCurveKeys]) -> None:
         self._profiles = dict(security_profiles)
+        self._owner_pid = os.getpid()
+        self._context_pool_init_lock = threading.Lock()
+        self._context_pool = None
 
     def __call__(
         self, profile: Mapping[str, Any], expected_peer: WireIdentity
     ) -> RequestReplyTransport:
+        self._require_owner_process()
         if profile.get("backend") != "zmq":
             raise ServiceRuntimeError("UNKNOWN_BACKEND")
         keys = self._profiles.get(profile["security_profile_ref"])
@@ -228,27 +233,51 @@ class ZmqTransportFactory:
         endpoint = profile["endpoints"].get("rpc_connect")
         if not endpoint:
             raise ServiceRuntimeError("RPC_ENDPOINT_REQUIRED")
+
         # Only this explicit activation point loads the optional transport.
         from bt_api_transport_zmq.server import CurveClientCredentials
         from bt_api_transport_zmq.service_v2 import (
             RequestNotSentError,
             ServiceTransportStartupCleanupError,
+            ZmqServiceContextPool,
             ZmqServiceClient,
         )
 
+        credentials = CurveClientCredentials(
+            keys.server_key, keys.public_key, keys.secret_key
+        )
+        high_water_mark = profile["options"]["high_water_mark"]
+        max_message_bytes = profile["options"]["max_message_bytes"]
+        context_pool = self._shared_context_pool(ZmqServiceContextPool)
         try:
             client = ZmqServiceClient(
                 endpoint,
                 expected_peer,
-                credentials=CurveClientCredentials(
-                    keys.server_key, keys.public_key, keys.secret_key
-                ),
-                high_water_mark=profile["options"]["high_water_mark"],
-                max_message_bytes=profile["options"]["max_message_bytes"],
+                credentials=credentials,
+                high_water_mark=high_water_mark,
+                max_message_bytes=max_message_bytes,
+                context_pool=context_pool,
             )
         except ServiceTransportStartupCleanupError as error:
             raise ServiceRuntimeStartupCleanupError(error.transport) from None
         return _RequestNotSentAdapter(client, RequestNotSentError)
+
+    def _require_owner_process(self) -> None:
+        if os.getpid() != self._owner_pid:
+            raise ServiceRuntimeError("PROCESS_BOUNDARY")
+
+    def _shared_context_pool(self, pool_type: type[Any]) -> Any:
+        self._require_owner_process()
+        context_pool = self._context_pool
+        if context_pool is not None:
+            return context_pool
+        with self._context_pool_init_lock:
+            self._require_owner_process()
+            context_pool = self._context_pool
+            if context_pool is None:
+                context_pool = pool_type()
+                self._context_pool = context_pool
+        return context_pool
 
 
 class _RequestNotSentAdapter:
