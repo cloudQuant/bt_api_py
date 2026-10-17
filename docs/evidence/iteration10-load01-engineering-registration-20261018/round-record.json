@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "accepted_parent": "43415645a84f2c5b88333a0292a02aa68777cf13",
+  "scope": [
+    "scripts/load01_matrix_consumer.py",
+    "tests/unit/test_load01_matrix_consumer.py",
+    "tests/unit/test_load01_external_source_binding.py",
+    "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json",
+    "docs/evidence/iteration10-load01-engineering-registration-20261018/round-record.json",
+    ".gitattributes"
+  ],
+  "summary": "Offline source-bound LOAD01 engineering-stability evaluator for U0 and N1-N6 with complete latency observations, separate ordinary/group RPC counts, actual N5 source identities and external source receipts.",
+  "user_decision": "工程稳定性验收：吞吐量±5%、单次RPC 5秒、重连10秒等既有稳定性门槛；完整报告p50/p95/p99，不作低延迟或HFT达标结论。",
+  "source_sha256": {
+    "scripts/load01_matrix_consumer.py": "8d81e12e5e01d06b570d257277e03b0cd00654aecdc2738d9928394308b64f87",
+    "tests/unit/test_load01_matrix_consumer.py": "5b5a59987f4d5e15f13a0858a89637f787765aa441f63b13f7cc9f243b3edfaf",
+    "tests/unit/test_load01_external_source_binding.py": "c3077f60862a6f44498909bf7968a42dc67b5434e47665547c67ddb225aaa92b",
+    "docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json": "7f5384444627e7338c6ccad7a200dd666741a63e064e92e560f6f6ebe3a987bf"
+  },
+  "acceptance": [
+    {
+      "round": 1,
+      "pytest_exit": 2,
+      "passed": 0,
+      "failed": 0,
+      "errors": 1,
+      "source_count": 14,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "output": "D:\\temp\\l01eng18qa1",
+      "pins": {
+        "result.json": "8c781e636f775042c2df77df21f024670d0cd5e62574b2f342e94ea1bb06c4e1",
+        "stdout.log": "b8ce3d8d7a294d9867afeeba8a5fcf503d4b60f8ee41ff4907c415ce85af6c28",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "junit.xml": "b586eb5c40f79c2bc7f4c157f85181e8c31312faee75d58d490a6afd8d9cfd83",
+        "spec.json": "8fab15037eea0283f41ddfe1740f395b1591435eae79288ac7b4537de093140c"
+      }
+    },
+    {
+      "round": 2,
+      "pytest_exit": 1,
+      "passed": 10,
+      "failed": 8,
+      "errors": 0,
+      "source_count": 15,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "output": "D:\\temp\\l01eng18qa2",
+      "pins": {
+        "result.json": "686a905e21543c8387ccd95d4b578bc17c1e073d447d519ab896d5f5001a8e2e",
+        "stdout.log": "1485e8a9721492adcccb9f622f74d64bd9721e618fb8037be194c98a387d8019",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "junit.xml": "420e74db8637127e8f6a830b9b6d643b2bfff5e8b637d4e2b1cdecf543417f2a",
+        "spec.json": "251254742426b76c02df72e59ff3d834fec2a0f922597fb0cc7317a0cbf798b9"
+      }
+    },
+    {
+      "round": 3,
+      "pytest_exit": 0,
+      "passed": 8,
+      "failed": 0,
+      "errors": 0,
+      "source_count": 14,
+      "sources_unchanged": true,
+      "heads_unchanged": true,
+      "output": "D:\\temp\\l01eng18qa3",
+      "pins": {
+        "result.json": "c148d9fb2681f4b7bffc5e65d5bab592397a37dc4e6b9aa555d4680a449a084b",
+        "stdout.log": "00b8c821e89b46986ddead1512f17d4989947ac449c01ff50511d34addb360cc",
+        "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "junit.xml": "de77e497c1c4b81b0a9e858b2c7a7fcedd4fb250bd40f300a68032114e6f579a",
+        "spec.json": "6dda64ba6972229f2712142e60df79ef334e2c8e0a5611e24e23ff0c44c6c260"
+      }
+    }
+  ],
+  "accepted_node_total": 18,
+  "evidence_level": "PURE_OFFLINE_ENGINEERING_CONTRACT_CONSUMER_CANONICAL_LAYOUT_PYTHON311_NO_HOST",
+  "notes": [
+    "R1 stopped at collection on a stale artifact import. R2 passed 10 and failed 8 because market p99 still indexed the removed limit. R3 removed that obsolete comparison and ran only those eight failures: all passed.",
+    "A separate R3 precheck stopped before creating its output because the inventory accidentally included an independently evolving, unimported runner artifact. The scoped spec removes only its two unused paths.",
+    "Earlier Python 3.14 transcript-only author runs are not the acceptance evidence for these final files.",
+    "The runner binding/measurement integration is a separate pending source round; this standalone evaluator does not make a runtime or formal LOAD01 claim.",
+    "Market p50/p95/p99 are finite required observations; ordinary/group RPC p50/p95 are observations, with the five-second RPC bound and zero unexpected timeouts preserved."
+  ],
+  "formal_pass_count": 62,
+  "formal_case_count": 68,
+  "byte_preservation": "Five exact -text rules preserve accepted consumer, tests, registration and receipt bytes, including CRLF registration bytes. No source normalization or QA repetition."
+}

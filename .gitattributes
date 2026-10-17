@@ -81,3 +81,8 @@ test_support/arb06_r18_sdk_support/integration/test_arb03_dim05_group_partial_fi
 test_support/arb06_r18_sdk_support/integration/test_service_execution_group_local_process.py -text
 test_support/arb06_r18_sdk_support/unit/_service_group_provider_fixtures.py -text
 tests/integration/test_afi13_imported_paper_managed_fill_http.py -text
+scripts/load01_matrix_consumer.py -text
+tests/unit/test_load01_matrix_consumer.py -text
+tests/unit/test_load01_external_source_binding.py -text
+docs/evidence/iteration10-load01-engineering-registration-20261018/threshold-registration.json -text
+docs/evidence/iteration10-load01-engineering-registration-20261018/round-record.json -text
