@@ -24,6 +24,13 @@ from typing import Any
 import psutil
 import pytest
 import zmq
+from tests.unit._load01_resource_diagnostics import (
+    aggregate_strategy_queue_snapshots,
+    aggregate_role_resources,
+    append_and_validate_load01_resource_sample,
+    capture_market_queue_snapshot,
+    capture_process_resource_row,
+)
 from bt_api_base.market_protocol import MarketInstrumentKey, MarketSubscriptionKey
 from bt_api_base.service_protocol import WireIdentity, WireRole, WireScope
 from bt_api_execution import (
@@ -3381,7 +3388,7 @@ def _strategy_process(
         next_order = load_start + phase_offset
         next_telemetry = load_start + 30
         next_metrics = load_start + 60
-        next_report = load_start + 30
+        next_report = load_start + 5
         while True:
             now = time.monotonic()
             if not _load01_has_started(now, load_start):
@@ -3505,6 +3512,11 @@ def _strategy_process(
                     telemetry_delivered=telemetry_delivered,
                     max_queue_count=max_queue_count,
                     max_queue_bytes=max_queue_bytes,
+                    market_queue_snapshot=capture_market_queue_snapshot(
+                        markets.values(),
+                        load_start_monotonic_seconds=load_start,
+                        monotonic_clock=time.monotonic,
+                    ),
                     max_market_poll_ms=max_market_poll_ms,
                     account_identity=account_identity,
                     runtime=runtime,
@@ -3535,6 +3547,11 @@ def _strategy_process(
                 slow_pause_observed.setdefault("pause_ended_seconds", elapsed)
             time.sleep(0.0005)
 
+        final_market_queue_snapshot = capture_market_queue_snapshot(
+            markets.values(),
+            load_start_monotonic_seconds=load_start,
+            monotonic_clock=time.monotonic,
+        )
         for market in markets.values():
             market.close()
         markets.clear()
@@ -3564,6 +3581,7 @@ def _strategy_process(
             telemetry_delivered=telemetry_delivered,
             max_queue_count=max_queue_count,
             max_queue_bytes=max_queue_bytes,
+            market_queue_snapshot=final_market_queue_snapshot,
             max_market_poll_ms=max_market_poll_ms,
             account_identity=account_identity,
             runtime=runtime,
@@ -3955,6 +3973,7 @@ def _strategy_stats(
     telemetry_delivered,
     max_queue_count,
     max_queue_bytes,
+    market_queue_snapshot,
     max_market_poll_ms,
     account_identity,
     runtime,
@@ -3982,6 +4001,7 @@ def _strategy_stats(
         "slow_pause": slow_pause_observed,
         "market_queue_max_count": max_queue_count,
         "market_queue_max_bytes": max_queue_bytes,
+        "market_queue_snapshot": market_queue_snapshot,
         "market_poll_max_ms": max_market_poll_ms,
         "telemetry": {
             "queued_events": telem.queued_events,
@@ -4438,29 +4458,77 @@ def _resource_sample(
 ) -> tuple[dict[str, Any], dict[int, float]]:
     rss_values = {}
     current_cpu = {}
+    resource_rows = []
+    cpu_missing_pids = []
     cpu_delta_seconds = 0.0
     for record in records.values():
-        process = record["process"]
         pid = record["pid"]
-        proc = psutil.Process(pid)
-        rss_values[record["name"]] = proc.memory_info().rss
-        cpu = proc.cpu_times()
+        process_gone_errors = (psutil.NoSuchProcess, psutil.ZombieProcess)
+        row, proc = capture_process_resource_row(
+            str(record.get("kind", "unknown")),
+            pid,
+            psutil.Process,
+            process_gone_errors=process_gone_errors,
+            access_denied_errors=(psutil.AccessDenied,),
+        )
+        resource_rows.append(row)
+        if row["rss_bytes"] is not None:
+            rss_values[record["name"]] = row["rss_bytes"]
+        if proc is None:
+            cpu_missing_pids.append(pid)
+            continue
+        try:
+            cpu = proc.cpu_times()
+        except process_gone_errors:
+            cpu_missing_pids.append(pid)
+            continue
+        except psutil.AccessDenied:
+            cpu_missing_pids.append(pid)
+            continue
         total_cpu = float(cpu.user + cpu.system)
         current_cpu[pid] = total_cpu
         cpu_delta_seconds += max(0.0, total_cpu - prior_cpu.get(pid, total_cpu))
-        if not process.is_alive():
-            raise AssertionError(f"LOAD01 process exited during load: {record['name']}")
     interval = max(0.001, sample_at - previous_sample_at)
     return (
         {
             "elapsed_seconds": sample_at - started_at,
             "sample_interval_seconds": interval,
             "available_memory_bytes": psutil.virtual_memory().available,
-            "child_rss_bytes": sum(rss_values.values()),
-            "child_rss_max_bytes": max(rss_values.values(), default=0),
+            "child_rss_bytes": (
+                sum(rss_values.values()) if len(rss_values) == len(records) else None
+            ),
+            "child_rss_max_bytes": (
+                max(rss_values.values()) if len(rss_values) == len(records) else None
+            ),
             "child_process_count": len(rss_values),
+            "child_pid_count": len(records),
+            "child_pid_coverage_count": len(
+                {
+                    row["pid"]
+                    for row in resource_rows
+                    if type(row.get("pid")) is int and row["pid"] > 0
+                }
+            ),
+            "child_process_coverage_count": sum(
+                row["process_state"] == "available" for row in resource_rows
+            ),
+            "child_rss_coverage_count": len(rss_values),
+            "child_cpu_time_coverage_count": len(current_cpu),
+            "child_resource_missing_pids": sorted(
+                set(
+                    [
+                        int(row["pid"])
+                        for row in resource_rows
+                        if row["process_state"] != "available" or row["rss_bytes"] is None
+                    ]
+                    + cpu_missing_pids
+                )
+            ),
+            "role_resources": aggregate_role_resources(resource_rows),
             "child_cpu_percent_of_machine": (
                 100.0 * cpu_delta_seconds / interval / logical_cpu_count
+                if len(current_cpu) == len(records)
+                else None
             ),
             "system_cpu_percent": psutil.cpu_percent(interval=None),
         },
@@ -4488,6 +4556,11 @@ def _progress_summary(progress: dict[str, Any]) -> dict[str, Any]:
         ),
         "max_market_queue_bytes": max(
             (int(row.get("market_queue_max_bytes", 0)) for row in strategy_rows), default=0
+        ),
+        "market_queue_snapshot": aggregate_strategy_queue_snapshots(
+            strategy_rows,
+            expected_strategy_count=_STRATEGIES,
+            expected_clients_per_strategy=_TOPICS,
         ),
         "market": progress.get("market"),
         "monitor": progress.get("monitor"),
@@ -5372,7 +5445,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         high_cpu_samples = 0
         last_resource_at = load_start
         next_resource_at = load_start
-        next_report_at = load_start + 30
+        next_report_at = load_start + 5
         stop_requested_at = None
         while True:
             _drain_progress(child_records, progress)
@@ -5401,7 +5474,7 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                     logical_cpu_count=logical_cpu_count,
                 )
                 sample["database_tree_bytes"] = _database_tree_size(database_paths)
-                report["resource_samples"].append(sample)
+                append_and_validate_load01_resource_sample(report, sample, child_records)
                 last_resource_at = now
                 next_resource_at = now + 5.0
                 low_memory_samples = (
@@ -5745,6 +5818,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             }
             for index, row in strategy_results.items()
         }
+        report["market_queue_snapshot_final"] = aggregate_strategy_queue_snapshots(
+            strategy_results.values(),
+            expected_strategy_count=_STRATEGIES,
+            expected_clients_per_strategy=_TOPICS,
+        )
         report["latency_samples"] = {
             "market_end_to_end_ms": e2e_values,
             "order_submit_cancel_roundtrip_ms": order_values,
