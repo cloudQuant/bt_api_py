@@ -1,0 +1,337 @@
+{
+  "round": 276,
+  "case": "MIG03",
+  "decision": "FORMAL_PASS",
+  "formal_total_before": "49/68",
+  "formal_total_after": "50/68",
+  "source_repository": "D:/bt_api_py",
+  "source_branch": "dev",
+  "source_commit": "002d8d45be73be25d6622f5028bab1120685c9fc",
+  "source_commit_parent": "460e4a1eac5b6aec905bf5e01ac59d4ffc909fe6",
+  "current_repository_head_when_packaged": "ad9c23c3df9b18280766b649c355f2c844e626d9",
+  "evidence_level": "ROOT_FORMAL_ADJUDICATION_COMPOSITE_LOCAL_SYNTHETIC_AND_REAL_PROCESSES",
+  "root_qa": {
+    "selector": "test_mig03_cutover_composes_real_afi12_scheduler_and_stop_new_receipt",
+    "output_directory": "D:\\temp\\m03-cutover-afi12-stopnew-root-r4-20261017",
+    "pytest_exit": 0,
+    "passed": 1,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "duration_seconds": 35.9,
+    "warnings": 8,
+    "stderr_bytes": 0,
+    "source_count": 3588,
+    "sources_unchanged": true,
+    "source_before_sha256": "30673528d1c6c5cad6912c9d1c734332795d0406b0f456a18205cad6f99fcfe0",
+    "source_after_sha256": "30673528d1c6c5cad6912c9d1c734332795d0406b0f456a18205cad6f99fcfe0",
+    "result_sha256": "2bee4c26c193b68f6ac43071cc3eb407cab036db85e48dde82e3f2eb8b431e2f",
+    "junit_sha256": "61b7abd9a693764ee38081778d1e139bd261791c6aeb0951a6be2e0484ae9a0d",
+    "stdout_sha256": "9226a4b96c2a92aded6301e0755cd0680ef2d362259083e1f7a1327362f04670",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "spec_sha256": "58078332bbf01e46e5ff882d920577cdbc88653e47f712bce77d5b96637febbd",
+    "runner_sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+    "cleanup_receipt": {
+      "archive_name": "r4-accepted-composition/cleanup/mig03-owned-host-cleanup-receipt.json",
+      "sha256": "8fc2e893290f598c9d0d9bd265e2dd1d202e54b0f5a1b49dcd318533cda3a437",
+      "schema": "mig03-owned-host-cleanup-receipt-v1",
+      "hosts": 3,
+      "host_reaper_errors": [],
+      "normal_exit_codes": [
+        0,
+        0,
+        0
+      ],
+      "process_handles_closed": [
+        true,
+        true,
+        true
+      ],
+      "cleanup_failures": [
+        [],
+        [],
+        []
+      ],
+      "fallback_cleanup": [
+        "not_attempted",
+        "not_attempted",
+        "not_attempted"
+      ],
+      "final_alive": [
+        null,
+        null,
+        null
+      ]
+    }
+  },
+  "unit_compatibility": {
+    "output_directory": "D:\\temp\\m03-boundary-unit-compat-root-r1-20261017",
+    "pytest_exit": 0,
+    "passed": 4,
+    "failed": 0,
+    "duration_seconds": 0.42,
+    "source_count": 7,
+    "source_unchanged": true,
+    "head": "460e4a1eac5b6aec905bf5e01ac59d4ffc909fe6",
+    "result_sha256": "e43e98104061177572aaed542b5f31e633d78f5ceed28e1d5f0c4321e4f18dd8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "role": "boundary fixture compatibility support; not independent end-to-end migration acceptance"
+  },
+  "accepted_clause_evidence": [
+    {
+      "round": 188,
+      "scope": "two-epoch real-process/CURVE/SQLite drill, stale epoch and single-owner refusal, UNKNOWN retention, failure/reverse boundary"
+    },
+    {
+      "round": 210,
+      "scope": "typed offline migration map/import and persistent identity registration evidence"
+    },
+    {
+      "round": 235,
+      "selector": "R13",
+      "scope": "source/target projection and conservation, readback, explicit destination enable, old epoch refusal"
+    },
+    {
+      "round": 273,
+      "scope": "AFI12 imported legacy paper records and ACTIVE receipt writer fencing"
+    },
+    {
+      "round": 276,
+      "selector": "R4",
+      "scope": "real AFI snapshot scheduler persistence and normal stop/join composed with import/readback and old writer refusal"
+    }
+  ],
+  "disclosures": [
+    "R4 STOP_NEW receipt/claim belongs to an adjacent run and proves preservation, not a direct STOP_NEW fence for the AFI paper account in this cutover.",
+    "Readiness digest is a caller-supplied audit reference, not independent code-verified identity or state proof.",
+    "Evidence is local synthetic state with real local process/service lifecycles; it is not real provider, account, or dual-machine acceptance.",
+    "The earlier R3 missing-json failure remains archived. R2 failed before a verifiable cleanup receipt; cleanup status remains unproven."
+  ],
+  "raw_evidence_archive": {
+    "path": "raw-evidence.zip",
+    "sha256": "c4b290ef9705422ca4e4e43d9704cc3a22efbb81b8a115286bc9c488fdac34cd",
+    "bytes": 1600037,
+    "members": [
+      {
+        "name": "r4-accepted-composition/command.json",
+        "bytes": 2885,
+        "sha256": "9960a396e8be91928202d649f0138e5fdd5ab874c9eaadada2da91a581d7fa36"
+      },
+      {
+        "name": "r4-accepted-composition/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "name": "r4-accepted-composition/junit.xml",
+        "bytes": 433,
+        "sha256": "61b7abd9a693764ee38081778d1e139bd261791c6aeb0951a6be2e0484ae9a0d"
+      },
+      {
+        "name": "r4-accepted-composition/result.json",
+        "bytes": 484,
+        "sha256": "2bee4c26c193b68f6ac43071cc3eb407cab036db85e48dde82e3f2eb8b431e2f"
+      },
+      {
+        "name": "r4-accepted-composition/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "name": "r4-accepted-composition/source-before.json",
+        "bytes": 676064,
+        "sha256": "30673528d1c6c5cad6912c9d1c734332795d0406b0f456a18205cad6f99fcfe0"
+      },
+      {
+        "name": "r4-accepted-composition/source-after.json",
+        "bytes": 676064,
+        "sha256": "30673528d1c6c5cad6912c9d1c734332795d0406b0f456a18205cad6f99fcfe0"
+      },
+      {
+        "name": "r4-accepted-composition/spec.json",
+        "bytes": 690737,
+        "sha256": "58078332bbf01e46e5ff882d920577cdbc88653e47f712bce77d5b96637febbd"
+      },
+      {
+        "name": "r4-accepted-composition/stdout.log",
+        "bytes": 4092,
+        "sha256": "9226a4b96c2a92aded6301e0755cd0680ef2d362259083e1f7a1327362f04670"
+      },
+      {
+        "name": "r4-accepted-composition/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "unit-compatibility/command.json",
+        "bytes": 1738,
+        "sha256": "33f1306063fc27ae6e677f303596e4c11c687a1d25efef50824ac685598d5a4f"
+      },
+      {
+        "name": "unit-compatibility/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "name": "unit-compatibility/junit.xml",
+        "bytes": 852,
+        "sha256": "9cd2abc92f43467d01d030e2e0a1a60ff8243568bfa21e6d3f1dfedc0283ea82"
+      },
+      {
+        "name": "unit-compatibility/result.json",
+        "bytes": 609,
+        "sha256": "e43e98104061177572aaed542b5f31e633d78f5ceed28e1d5f0c4321e4f18dd8"
+      },
+      {
+        "name": "unit-compatibility/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "name": "unit-compatibility/source-before.json",
+        "bytes": 925,
+        "sha256": "a03f375b9ab6b930f246ef3a068bcb99dae71d2275b854623c122e26b2f7707b"
+      },
+      {
+        "name": "unit-compatibility/source-after.json",
+        "bytes": 925,
+        "sha256": "a03f375b9ab6b930f246ef3a068bcb99dae71d2275b854623c122e26b2f7707b"
+      },
+      {
+        "name": "unit-compatibility/spec.json",
+        "bytes": 2738,
+        "sha256": "0b33772c6e01b7b1fac2a23b8864659c50bb6a09dc86604da421b2b44ed6db39"
+      },
+      {
+        "name": "unit-compatibility/stdout.log",
+        "bytes": 100,
+        "sha256": "9687366a2c0ecb1e7cc62a554816f7d09063ca0059d451b75e322bb49043269b"
+      },
+      {
+        "name": "unit-compatibility/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "history-r3-missing-json-failure/command.json",
+        "bytes": 2877,
+        "sha256": "66110d7ae79d11ac6c1b35f2991c6c3176b6758cbe3f15a8bd86e91c31b5c00a"
+      },
+      {
+        "name": "history-r3-missing-json-failure/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "name": "history-r3-missing-json-failure/junit.xml",
+        "bytes": 18154,
+        "sha256": "eab707768f20b2631213512b42148e36d590718232ef6b2e231e553ca299b26a"
+      },
+      {
+        "name": "history-r3-missing-json-failure/result.json",
+        "bytes": 484,
+        "sha256": "de0a0ce0433761a50499ba08015a72db661af818232e4c5c7d2188267ec06bfc"
+      },
+      {
+        "name": "history-r3-missing-json-failure/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "name": "history-r3-missing-json-failure/source-before.json",
+        "bytes": 675864,
+        "sha256": "4c8f6f46b3b6534433d81531d94d453cbf201226690f18f7627b46d1b2793124"
+      },
+      {
+        "name": "history-r3-missing-json-failure/source-after.json",
+        "bytes": 675864,
+        "sha256": "4c8f6f46b3b6534433d81531d94d453cbf201226690f18f7627b46d1b2793124"
+      },
+      {
+        "name": "history-r3-missing-json-failure/spec.json",
+        "bytes": 690392,
+        "sha256": "63ab06ce498263906113a34c6352a9c646d8d9846a566f6865f011278227c947"
+      },
+      {
+        "name": "history-r3-missing-json-failure/stdout.log",
+        "bytes": 23181,
+        "sha256": "eea6bcc3f57de3f5c71ca4d9d3d8df1617583498fdbcbb4d5bfb2af43f8eedec"
+      },
+      {
+        "name": "history-r3-missing-json-failure/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/command.json",
+        "bytes": 2885,
+        "sha256": "3a5a77e2eb31e5a27469a0fe7ae8f8f2c66abac69729c687038fbb1eb821ea96"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/exit.txt",
+        "bytes": 3,
+        "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/junit.xml",
+        "bytes": 9142,
+        "sha256": "6973fa2ee9862606090c1fea050717118b1a8ff72edac29b542bb372baf15048"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/result.json",
+        "bytes": 484,
+        "sha256": "9774247976817cf712c4261683971905d50a16a0d18f230816793be76e4ccf18"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/source-before.json",
+        "bytes": 675892,
+        "sha256": "257dc7920988ba30685ded1fe5a97fc61c4be0a61c85f4ed2b913aec8ffcf6cc"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/source-after.json",
+        "bytes": 675892,
+        "sha256": "257dc7920988ba30685ded1fe5a97fc61c4be0a61c85f4ed2b913aec8ffcf6cc"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/spec.json",
+        "bytes": 690000,
+        "sha256": "a770cfe9e7905983586059f54caf5db9bab0ec5f729a4437677d45ff422fcce0"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/stdout.log",
+        "bytes": 14060,
+        "sha256": "0648e6c3f66d6b2de6e7e485513a328c78598ec35c2a780c1538519ff37459ac"
+      },
+      {
+        "name": "history-r2-cleanup-unproven/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "r4-accepted-composition/cleanup/mig03-owned-host-cleanup-receipt.json",
+        "bytes": 1380,
+        "sha256": "8fc2e893290f598c9d0d9bd265e2dd1d202e54b0f5a1b49dcd318533cda3a437"
+      }
+    ]
+  },
+  "root_readonly_verification": {
+    "source_pins": 3588,
+    "all_source_pins_matched": true,
+    "tested_source_commit": "002d8d45be73be25d6622f5028bab1120685c9fc",
+    "committed_test_blobs_equal_checkout": 4,
+    "junit_counts": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "cleanup_receipt_hosts_normal_exit_zero": 3,
+    "cleanup_receipt_handles_closed": 3,
+    "cleanup_receipt_final_alive": "null/unobserved"
+  }
+}
