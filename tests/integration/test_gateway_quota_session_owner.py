@@ -637,3 +637,196 @@ def test_two_account_scopes_share_one_api_key_ip_ctp_quota(tmp_path: Path) -> No
         results.close()
         ready.join_thread()
         results.join_thread()
+
+
+def _crash_reconnect_attempt_process(
+    label: str,
+    quota_path: str,
+    calls_path: str,
+    guard_directory: str,
+    work_directory: str,
+    ready: Any,
+    start: Any,
+    results: Any,
+) -> None:
+    worker = _make_worker(
+        label=label,
+        account_ref="crash-account",
+        quota_path=quota_path,
+        calls_path=calls_path,
+        guard_directory=guard_directory,
+        work_directory=work_directory,
+    )
+    ready.put(label)
+    if not start.wait(10.0):
+        results.put((label, "denied", "START_SIGNAL_TIMEOUT"))
+        return
+    try:
+        worker.start()
+    except GatewayAccountSessionWorkerError as exc:
+        worker.close()
+        results.put((label, "denied", exc.code))
+        return
+    worker.close()
+    results.put((label, "started", None))
+
+
+@pytest.mark.integration
+def test_concurrent_crash_reconnect_wave_does_not_repeat_provider_login(
+    tmp_path: Path,
+) -> None:
+    """An unresolved crashed owner fails closed under simultaneous restarts."""
+
+    context = multiprocessing.get_context("spawn")
+    quota_path = tmp_path / "reconnect-wave-quota.sqlite3"
+    calls_path = tmp_path / "reconnect-wave-provider-calls.sqlite3"
+    guard_directory = tmp_path / "reconnect-wave-guards"
+    work_directory = tmp_path / "reconnect-wave-state"
+    guard_directory.mkdir()
+    work_directory.mkdir()
+    shared_domain = GatewayQuotaDomainBinding(_domain_config(quota_path))
+    crash = context.Event()
+    parent_pipe, child_pipe = context.Pipe(duplex=False)
+    crashed_owner = context.Process(
+        target=_crash_after_start_process,
+        args=(
+            str(quota_path),
+            str(calls_path),
+            str(guard_directory),
+            str(work_directory),
+            child_pipe,
+            crash,
+        ),
+    )
+    ready = context.Queue()
+    results = context.Queue()
+    start = context.Event()
+    reconnectors = [
+        context.Process(
+            target=_crash_reconnect_attempt_process,
+            args=(
+                f"crash-reconnect-{index}",
+                str(quota_path),
+                str(calls_path),
+                str(guard_directory),
+                str(work_directory),
+                ready,
+                start,
+                results,
+            ),
+        )
+        for index in range(4)
+    ]
+    children = [crashed_owner, *reconnectors]
+    started_children: set[int] = set()
+    primary_error: BaseException | None = None
+    try:
+        crashed_owner.start()
+        started_children.add(id(crashed_owner))
+        child_pipe.close()
+        assert parent_pipe.poll(15.0)
+        crash_owner_result = parent_pipe.recv()
+        assert crash_owner_result[0] == "started"
+        crash_generation = crash_owner_result[1]
+        assert isinstance(crash_generation, str) and crash_generation
+        crash.set()
+        crashed_owner.join(10.0)
+        assert crashed_owner.exitcode == 0
+        parent_pipe.close()
+
+        persisted_guard = LocalAccountSessionGuard(
+            guard_directory,
+            AccountKey("synthetic", "loopback", "paper", "crash-account").account_key_id,
+            "read-only-reconnect-wave-observer",
+        )
+        record_before_wave = json.loads(persisted_guard.lock_path.read_text(encoding="ascii"))
+        assert record_before_wave["status"] == "active"
+        assert record_before_wave["generation"] == crash_generation
+
+        grants_before_wave = shared_domain.admission.status()["grants_in_window"]
+        for child in reconnectors:
+            child.start()
+            started_children.add(id(child))
+        assert {ready.get(timeout=15.0) for _ in reconnectors} == {
+            f"crash-reconnect-{index}" for index in range(4)
+        }
+        start.set()
+        deadline = time.monotonic() + 15.0
+        outcomes = [
+            results.get(timeout=max(0.001, deadline - time.monotonic()))
+            for _ in reconnectors
+        ]
+        assert {item[0] for item in outcomes} == {
+            f"crash-reconnect-{index}" for index in range(4)
+        }, outcomes
+        assert all(
+            item[1] == "denied"
+            and item[2] in {"SESSION_ALREADY_OWNED", "SESSION_RECONCILIATION_REQUIRED"}
+            for item in outcomes
+        ), outcomes
+        assert any(item[2] == "SESSION_RECONCILIATION_REQUIRED" for item in outcomes), outcomes
+        for child in reconnectors:
+            child.join(5.0)
+            assert child.exitcode == 0
+
+        with sqlite3.connect(calls_path) as connection:
+            calls = connection.execute(
+                "SELECT operation, COUNT(*) FROM provider_calls "
+                "WHERE account_ref = 'crash-account' GROUP BY operation ORDER BY operation"
+            ).fetchall()
+        assert calls == [("connect", 1), ("read_account", 1)]
+        assert shared_domain.admission.status()["grants_in_window"] == grants_before_wave
+        record_after_wave = json.loads(persisted_guard.lock_path.read_text(encoding="ascii"))
+        assert record_after_wave["status"] == "active"
+        assert record_after_wave["generation"] == crash_generation
+    except BaseException as exc:
+        primary_error = exc
+        raise
+    finally:
+        cleanup_errors: list[str] = []
+
+        def cleanup_call(label: str, operation: Any) -> Any:
+            try:
+                return operation()
+            except BaseException as exc:
+                cleanup_errors.append(f"{label}: {type(exc).__name__}: {exc}")
+                return None
+
+        cleanup_call("crash event set", crash.set)
+        cleanup_call("start event set", start.set)
+        cleanup_call("parent pipe close", parent_pipe.close)
+        cleanup_call("child pipe close", child_pipe.close)
+        unresolved: list[int] = []
+        for index, child in enumerate(children):
+            if id(child) not in started_children:
+                continue
+            label = f"child[{index}]"
+            pid = cleanup_call(f"{label} pid", lambda child=child: child.pid)
+            alive = cleanup_call(f"{label} initial is_alive", child.is_alive)
+            if alive is not False:
+                cleanup_call(f"{label} terminate", child.terminate)
+            cleanup_call(f"{label} first join", lambda child=child: child.join(3.0))
+            alive = cleanup_call(f"{label} post-terminate is_alive", child.is_alive)
+            if alive is not False:
+                cleanup_call(f"{label} kill", child.kill)
+                cleanup_call(f"{label} final join", lambda child=child: child.join(3.0))
+                alive = cleanup_call(f"{label} post-kill is_alive", child.is_alive)
+            if alive is not False:
+                unresolved.append(int(pid) if isinstance(pid, int) else -(index + 1))
+            else:
+                cleanup_call(f"{label} close", child.close)
+        cleanup_call("ready queue close", ready.close)
+        cleanup_call("results queue close", results.close)
+        cleanup_call("ready queue feeder join", ready.join_thread)
+        cleanup_call("results queue feeder join", results.join_thread)
+        if unresolved or cleanup_errors:
+            details = []
+            if unresolved:
+                details.append(f"unresolved child pids/slots: {unresolved}")
+            if cleanup_errors:
+                details.append("cleanup exceptions: " + "; ".join(cleanup_errors))
+            message = "reconnect wave cleanup failed: " + " | ".join(details)
+            if primary_error is not None:
+                primary_error.add_note(message)
+            else:
+                raise AssertionError(message)
