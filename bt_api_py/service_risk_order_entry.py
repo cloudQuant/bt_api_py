@@ -2269,7 +2269,7 @@ class RiskOrderEntryService:
             pass
         try:
             receipt = self._gate.dispatch_exposure_resolution_receipt(command.permit_id)
-            return (
+            if (
                 receipt.status is DispatchExposureResolutionReceiptStatus.TERMINAL_EXPOSURE_RESOLVED
                 and self._journal.has_resolved_terminal_exposure_history(
                     fence,
@@ -2277,7 +2277,8 @@ class RiskOrderEntryService:
                     intent_id=command.intent_id,
                     receipt=receipt,
                 )
-            )
+            ):
+                return True
         except Exception:
             pass
         try:

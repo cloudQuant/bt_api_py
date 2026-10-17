@@ -1641,14 +1641,44 @@ class RiskOrderJournal:
         if len(row) != 1:
             return False
         event = self._event_from_row(row[0], fence.scope)
+        reference_row = connection.execute(
+            "SELECT reference_json, reference_sha256 FROM risk_order_exposure_references "
+            "WHERE scope_key=? AND principal_ref=? AND intent_id=?",
+            (fence.scope.key, command.principal_ref, command.intent_id),
+        ).fetchone()
+        if reference_row is None:
+            return False
+        try:
+            reference_json = str(reference_row["reference_json"])
+            reference = json.loads(reference_json)
+        except (TypeError, ValueError):
+            return False
+        if (
+            canonical_json(reference) != reference_json
+            or sha256_text(reference_json) != str(reference_row["reference_sha256"])
+        ):
+            return False
         source_rows = connection.execute(
             "SELECT * FROM risk_order_events WHERE scope_key=? AND principal_ref=? "
             "AND intent_id=? AND event_type='FILL_OBSERVATION' ORDER BY revision",
             (fence.scope.key, command.principal_ref, command.intent_id),
         ).fetchall()
-        if len(source_rows) != 1:
+        is_close = command.canonical_payload.get("position_effect", "OPEN") == "CLOSE"
+        if not source_rows or (not is_close and len(source_rows) != 1):
             return False
-        source_event = self._event_from_row(source_rows[0], fence.scope)
+        # A CLOSE may accumulate several query observations before terminal
+        # resolution.  Its immutable exposure reference selects the exact
+        # final fill row; do not reject the valid source history merely because
+        # it contains an earlier partial-fill observation.
+        source_row = source_rows[-1] if is_close else source_rows[0]
+        if is_close and (
+            type(reference.get("fill_observation_revision")) is not int
+            or int(source_row["revision"]) != reference.get("fill_observation_revision")
+            or str(source_row["record_sha256"])
+            != reference.get("fill_observation_record_sha256")
+        ):
+            return False
+        source_event = self._event_from_row(source_row, fence.scope)
         source_token = source_event.writer_fencing_token
         ack_token = event.writer_fencing_token
         if (
@@ -1685,16 +1715,6 @@ class RiskOrderJournal:
         ):
             # Source rows keep their original fence. A later owner may append
             # the ACK only while holding the current fence.
-            return False
-        reference_row = connection.execute(
-            "SELECT reference_json FROM risk_order_exposure_references WHERE scope_key=? AND principal_ref=? AND intent_id=?",
-            (fence.scope.key, command.principal_ref, command.intent_id),
-        ).fetchone()
-        if reference_row is None:
-            return False
-        try:
-            reference = json.loads(reference_row["reference_json"])
-        except (TypeError, ValueError):
             return False
         expected = _terminal_ack_payload(receipt, reference)
         payload = dict(event.payload)
@@ -1898,6 +1918,14 @@ class RiskOrderJournal:
                         or proof_row["writer_fence_sha256"] != observation.writer_fence_sha256
                     ):
                         return None
+                observation_fence = source_fence
+                if is_close:
+                    observation_fence = RiskOrderWriterFence(
+                        fence.scope,
+                        fill_event.writer_owner_id,
+                        fill_event.writer_fencing_token,
+                        fill_event.writer_fence_sha256,
+                    )
                 if not _terminal_exposure_source_matches(
                     observation=observation,
                     claim=claim,
@@ -1907,7 +1935,7 @@ class RiskOrderJournal:
                     reference=reference,
                     reference_id=str(reference_row["reservation_id"]),
                     reference_sha256=str(reference_row["reference_sha256"]),
-                    fence=source_fence,
+                    fence=observation_fence,
                     reconciliation_evidence_sha256=reconciliation,
                 ):
                     return None
@@ -4995,15 +5023,15 @@ def _terminal_exposure_lifecycle(
     RiskOrderJournalEvent,
     RiskOrderJournalEvent | None,
 ]:
-    """Validate the exact first-terminal command suffix in both proof paths.
+    """Validate the terminal command suffix in both proof paths.
 
-    A provider-query failure can append one ``UNKNOWN`` after a complete
-    order/fill observation.  That event changes the command's latest state,
-    but it does not replace the immutable fill observation named by Risk's
-    proof.  Keep the accepted history deliberately narrow: the only supported
-    forms are the complete first-dispatch lifecycle ending at FILL_OBSERVATION
-    or that same lifecycle with one exact trailing UNKNOWN.  This rejects
-    UNKNOWN-before-fill, duplicate UNKNOWNs and every later event.
+    OPEN still accepts only its original first-dispatch observation pair,
+    optionally followed by one UNKNOWN.  CLOSE may be reconciled repeatedly
+    after an uncertain dispatch: each query appends one complete order/fill
+    pair and a nonterminal result may append UNKNOWN before the next query.
+    Every CLOSE pair is independently source-validated and must monotonically
+    extend the same order's cumulative fill history.  The returned pair is the
+    latest pair, which is the exact pair named by the terminal CLOSE proof.
     """
 
     base_sequence = (
@@ -5015,10 +5043,20 @@ def _terminal_exposure_lifecycle(
         "FILL_OBSERVATION",
     )
     event_types = tuple(event.event_type for event in events)
-    if event_types == base_sequence:
-        unknown_event = None
+    is_close = (
+        isinstance(command, RiskOrderCommand)
+        and command.canonical_payload.get("position_effect", "OPEN") == "CLOSE"
+    )
+    if is_close:
+        order_event, fill_event, unknown_event = _terminal_close_observation_history(
+            command,
+            command_row,
+            events,
+        )
+    elif event_types == base_sequence:
+        order_event, fill_event, unknown_event = events[4], events[5], None
     elif event_types == (*base_sequence, "UNKNOWN"):
-        unknown_event = events[-1]
+        order_event, fill_event, unknown_event = events[4], events[5], events[-1]
     else:
         raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
 
@@ -5046,9 +5084,14 @@ def _terminal_exposure_lifecycle(
         event.scope != fence.scope
         or event.principal_ref != command.principal_ref
         or event.intent_id != command.intent_id
-        or event.writer_owner_id != fence.owner_id
-        or event.writer_fencing_token != fence.fencing_token
-        or event.writer_fence_sha256 != fence.fence_sha256
+        or (
+            not is_close
+            and (
+                event.writer_owner_id != fence.owner_id
+                or event.writer_fencing_token != fence.fencing_token
+                or event.writer_fence_sha256 != fence.fence_sha256
+            )
+        )
         or type(event.revision) is not int
         or event.revision <= 0
         or type(event.payload.get("updated_at_ns")) is not int
@@ -5094,8 +5137,6 @@ def _terminal_exposure_lifecycle(
     if command.permit_id != permit_id:
         raise RiskOrderJournalError("TERMINAL_EXPOSURE_DISPATCH_HISTORY_INVALID")
 
-    order_event = events[4]
-    fill_event = events[5]
     if (
         not _is_v2_order_event(order_event.payload)
         or not _is_v2_fill_event(fill_event.payload)
@@ -6983,6 +7024,32 @@ __all__ = [
 ]
 
 
+def _position_dimensions_from_payload(payload: object) -> tuple[str, str]:
+    """Read only the canonical optional position qualifiers, with v1 defaults."""
+
+    if not isinstance(payload, Mapping):
+        raise RiskOrderJournalError("POSITION_DIMENSIONS_INVALID")
+    position_side = payload.get("position_side", "NET")
+    position_bucket = payload.get("position_bucket", "ALL")
+    if (
+        type(position_side) is not str
+        or position_side not in {"NET", "LONG", "SHORT"}
+        or type(position_bucket) is not str
+        or position_bucket not in {"ALL", "TODAY", "YESTERDAY"}
+    ):
+        raise RiskOrderJournalError("POSITION_DIMENSIONS_INVALID")
+    return position_side, position_bucket
+
+
+def _position_dimensions_match(payload: object, expected: tuple[str, str]) -> bool:
+    if not isinstance(payload, Mapping):
+        return False
+    return (
+        payload.get("position_side", "NET") == expected[0]
+        and payload.get("position_bucket", "ALL") == expected[1]
+    )
+
+
 def _terminal_close_proof_payload(
     proof: DispatchExposureResolutionProof,
 ) -> dict[str, Any]:
@@ -7168,6 +7235,351 @@ def _terminal_close_proof_from_payload(
     return proof
 
 
+def _terminal_close_observation_history(
+    command: RiskOrderCommand,
+    command_row: sqlite3.Row,
+    events: tuple[RiskOrderJournalEvent, ...],
+) -> tuple[
+    RiskOrderJournalEvent,
+    RiskOrderJournalEvent,
+    RiskOrderJournalEvent | None,
+]:
+    """Validate every source pair in a query-only CLOSE recovery history."""
+
+    prefix = ("PREPARED", "RESERVED", "CLAIMED", "DISPATCHING")
+    if (
+        type(command) is not RiskOrderCommand
+        or type(command_row) is not sqlite3.Row
+        or len(events) < len(prefix) + 2
+        or tuple(event.event_type for event in events[: len(prefix)]) != prefix
+    ):
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+
+    try:
+        request_quantity = Decimal(str(command.order_request["quantity"]))
+        request_instrument = command.order_request["symbol"]
+        request_side = str(command.order_request["side"]).upper()
+        permit_id = events[1].payload["permit_id"]
+        claimed_payload = events[2].payload["claim"]
+        claim_digest = claimed_payload["claim_digest"]
+        dimensions = _position_dimensions_from_payload(command.canonical_payload)
+    except (KeyError, TypeError, ValueError, InvalidOperation, RiskOrderJournalError):
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID") from None
+    if (
+        not request_quantity.is_finite()
+        or request_quantity <= 0
+        or type(request_instrument) is not str
+        or not request_instrument
+        or request_side not in {"BUY", "SELL"}
+        or type(permit_id) is not str
+        or not permit_id
+        or type(claim_digest) is not str
+        or not re.fullmatch(r"[0-9a-f]{64}", claim_digest)
+        or type(claimed_payload) is not dict
+    ):
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+
+    cursor = len(prefix)
+    unknown_event: RiskOrderJournalEvent | None = None
+
+    def validate_unknown(event: RiskOrderJournalEvent) -> None:
+        payload = event.payload
+        allowed = {
+            frozenset(
+                {
+                    "dispatch_attempt_count",
+                    "permit_id",
+                    "public_state",
+                    "reason_code",
+                    "updated_at_ns",
+                }
+            ),
+            frozenset(
+                {
+                    "claim",
+                    "claim_digest",
+                    "dispatch_attempt_count",
+                    "permit_id",
+                    "public_state",
+                    "reason_code",
+                    "updated_at_ns",
+                }
+            ),
+        }
+        reason_code = payload.get("reason_code")
+        has_claim = "claim" in payload or "claim_digest" in payload
+        if (
+            event.event_type != "UNKNOWN"
+            or frozenset(payload) not in allowed
+            or payload.get("permit_id") != permit_id
+            or payload.get("dispatch_attempt_count") != 1
+            or type(payload.get("dispatch_attempt_count")) is not int
+            or payload.get("public_state") != "UNKNOWN"
+            or type(reason_code) is not str
+            or re.fullmatch(r"[A-Z][A-Z0-9_]{0,95}", reason_code) is None
+            or (has_claim and (
+                payload.get("claim") != claimed_payload
+                or payload.get("claim_digest") != claim_digest
+            ))
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_UNKNOWN_INVALID")
+
+    # A lost initial acknowledgement can leave UNKNOWN before the first query.
+    if cursor < len(events) and events[cursor].event_type == "UNKNOWN":
+        validate_unknown(events[cursor])
+        unknown_event = events[cursor]
+        cursor += 1
+
+    pairs: list[tuple[RiskOrderJournalEvent, RiskOrderJournalEvent]] = []
+    previous_order_revision = 0
+    previous_fill_watermark = 0
+    previous_filled = Fraction(0)
+    previous_state: str | None = None
+    previous_order_record: Mapping[str, Any] | None = None
+    previous_facts: dict[str, OrderFillFact] = {}
+    previous_metadata_facts: str | None = None
+    previous_provider_order_id: str | None = None
+
+    while cursor < len(events):
+        if (
+            cursor + 1 >= len(events)
+            or events[cursor].event_type != "ORDER_OBSERVATION"
+            or events[cursor + 1].event_type != "FILL_OBSERVATION"
+            or len(pairs) >= 256
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+        # A later query supersedes any preceding UNKNOWN projection.  Keep an
+        # UNKNOWN only when it remains the suffix after the latest observation.
+        unknown_event = None
+        order_event, fill_event = events[cursor], events[cursor + 1]
+        order, fills = order_event.payload, fill_event.payload
+        if not _is_v2_order_event(order) or not _is_v2_fill_event(fills):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+        try:
+            order_record = order["record"]
+            if type(order_record) is not dict:
+                raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+            order_filled = Fraction(Decimal(str(order["filled_quantity"])))
+            fill_filled = Fraction(Decimal(str(fills["filled_quantity"])))
+            quantity = Fraction(Decimal(str(order["quantity"])))
+            record_filled = Fraction(Decimal(str(order_record.get("filled"))))
+            order_revision = order["order_revision"]
+            fill_watermark = fills["fill_watermark_revision"]
+            state = order["exposure_state"]
+            facts = _fill_facts_from_event(fills)
+            facts_by_id = {fact.trade_id: fact for fact in facts}
+            metadata_json = canonical_json(order["metadata_facts"])
+        except (KeyError, TypeError, ValueError, InvalidOperation, RiskOrderJournalError):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID") from None
+        if (
+            len(facts_by_id) != len(facts)
+            or order_filled != fill_filled
+            or quantity != Fraction(request_quantity)
+            or order_filled < 0
+            or order_filled > quantity
+            or sum((Fraction(fact.quantity) for fact in facts), Fraction(0))
+            != fill_filled
+            or type(order_revision) is not int
+            or type(fill_watermark) is not int
+            or fill_watermark < order_revision
+            or order_revision < previous_order_revision
+            or fill_watermark < previous_fill_watermark
+            or fill_filled < previous_filled
+            or state not in {item.value for item in OrderExposureState}
+            or order.get("client_order_id") != command.client_order_id
+            or fills.get("client_order_id") != command.client_order_id
+            or order.get("provider_order_id") != order_record.get("order_id")
+            or (
+                previous_provider_order_id is not None
+                and order.get("provider_order_id") != previous_provider_order_id
+            )
+            or order.get("account_id") != command.provider_account_id
+            or fills.get("account_id") != command.provider_account_id
+            or order.get("instrument") != request_instrument
+            or str(order.get("side", "")).upper() != request_side
+            or not _decimal_text_matches(order.get("quantity"), request_quantity)
+            or not _decimal_text_matches(order_record.get("size"), request_quantity)
+            or record_filled != order_filled
+            or order.get("risk_intent_id") != command.risk_intent_id
+            or fills.get("risk_intent_id") != command.risk_intent_id
+            or order.get("claim_digest") != claim_digest
+            or fills.get("claim_digest") != claim_digest
+            or order.get("position_effect") != "CLOSE"
+            or fills.get("position_effect") != "CLOSE"
+            or order.get("reduce_only") is not True
+            or not _position_dimensions_match(order, dimensions)
+            or not _position_dimensions_match(fills, dimensions)
+            or order.get("provider_contract_sha256")
+            != fills.get("provider_contract_sha256")
+            or metadata_json != canonical_json(fills.get("metadata_facts"))
+            or (previous_metadata_facts is not None and metadata_json != previous_metadata_facts)
+            or any(
+                fact.side != request_side
+                or fact.position_effect != "CLOSE"
+                for fact in facts
+            )
+            or any(
+                record.get("account_id") != command.provider_account_id
+                or record.get("client_order_id") != command.client_order_id
+                or record.get("order_id") != order.get("provider_order_id")
+                or record.get("symbol") != request_instrument
+                or str(record.get("side", "")).upper() != request_side
+                for record in fills.get("records", ())
+            )
+            or any(
+                facts_by_id.get(trade_id) != fact
+                for trade_id, fact in previous_facts.items()
+            )
+            or (
+                order_revision == previous_order_revision
+                and previous_order_record is not None
+                and order_record != previous_order_record
+            )
+            or (
+                fill_watermark == previous_fill_watermark
+                and previous_facts
+                and facts_by_id != previous_facts
+            )
+            or (
+                previous_state in {
+                    OrderExposureState.FILLED.value,
+                    OrderExposureState.CANCELLED.value,
+                    OrderExposureState.REJECTED.value,
+                }
+                and (
+                    state != previous_state
+                    or order_record != previous_order_record
+                    or facts_by_id != previous_facts
+                )
+            )
+            or (
+                state == OrderExposureState.ACKED.value and order_filled != 0
+            )
+            or (
+                state == OrderExposureState.PARTIALLY_FILLED.value
+                and not 0 < order_filled < quantity
+            )
+            or (
+                state == OrderExposureState.FILLED.value and order_filled != quantity
+            )
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_INVALID")
+
+        pairs.append((order_event, fill_event))
+        previous_order_revision = order_revision
+        previous_fill_watermark = fill_watermark
+        previous_filled = fill_filled
+        previous_state = state
+        previous_order_record = order_record
+        previous_facts = facts_by_id
+        previous_metadata_facts = metadata_json
+        if order.get("provider_order_id") is not None:
+            previous_provider_order_id = order["provider_order_id"]
+        cursor += 2
+        if cursor < len(events) and events[cursor].event_type == "UNKNOWN":
+            validate_unknown(events[cursor])
+            unknown_event = events[cursor]
+            cursor += 1
+
+    if not pairs:
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+    return pairs[-1][0], pairs[-1][1], unknown_event
+
+
+def _terminal_close_source_fences(
+    events: tuple[RiskOrderJournalEvent, ...],
+    current_fence: RiskOrderWriterFence,
+) -> tuple[RiskOrderWriterFence, RiskOrderWriterFence]:
+    """Check CLOSE observation leases as a monotonic UNKNOWN-delimited chain."""
+
+    prefix = ("PREPARED", "RESERVED", "CLAIMED", "DISPATCHING")
+    if (
+        type(current_fence) is not RiskOrderWriterFence
+        or len(events) < len(prefix) + 2
+        or tuple(event.event_type for event in events[: len(prefix)]) != prefix
+    ):
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+
+    def event_fence(event: RiskOrderJournalEvent) -> RiskOrderWriterFence:
+        owner_id = event.writer_owner_id
+        token = event.writer_fencing_token
+        digest = event.writer_fence_sha256
+        if (
+            type(owner_id) is not str
+            or not owner_id
+            or type(token) is not int
+            or token <= 0
+            or type(digest) is not str
+            or digest
+            != _fence_digest(current_fence.scope, owner_id, token)
+            or token > current_fence.fencing_token
+            or (
+                token == current_fence.fencing_token
+                and (
+                    owner_id != current_fence.owner_id
+                    or digest != current_fence.fence_sha256
+                )
+            )
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+        return RiskOrderWriterFence(current_fence.scope, owner_id, token, digest)
+
+    first_fence = event_fence(events[0])
+    prefix_fences = tuple(event_fence(event) for event in events[: len(prefix)])
+    if any(item != first_fence for item in prefix_fences):
+        raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+
+    cursor = len(prefix)
+    previous_fence = first_fence
+    previous_was_unknown = False
+    if cursor < len(events) and events[cursor].event_type == "UNKNOWN":
+        unknown_fence = event_fence(events[cursor])
+        if unknown_fence != previous_fence:
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+        previous_was_unknown = True
+        cursor += 1
+
+    while cursor < len(events):
+        if (
+            cursor + 1 >= len(events)
+            or events[cursor].event_type != "ORDER_OBSERVATION"
+            or events[cursor + 1].event_type != "FILL_OBSERVATION"
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+        order_fence = event_fence(events[cursor])
+        fill_fence = event_fence(events[cursor + 1])
+        if (
+            order_fence != fill_fence
+            or order_fence.fencing_token < previous_fence.fencing_token
+            or (
+                previous_was_unknown
+                and order_fence.fencing_token <= previous_fence.fencing_token
+            )
+            or (
+                order_fence.fencing_token == previous_fence.fencing_token
+                and order_fence != previous_fence
+            )
+            or (
+                order_fence.fencing_token > previous_fence.fencing_token
+                and not previous_was_unknown
+            )
+        ):
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+        cursor += 2
+        previous_fence = order_fence
+        previous_was_unknown = False
+        if cursor < len(events) and events[cursor].event_type == "UNKNOWN":
+            unknown_fence = event_fence(events[cursor])
+            if unknown_fence != previous_fence:
+                raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
+            previous_was_unknown = True
+            cursor += 1
+        if cursor < len(events) and not previous_was_unknown:
+            raise RiskOrderJournalError("TERMINAL_EXPOSURE_EVENT_SEQUENCE_INVALID")
+
+    return first_fence, previous_fence
+
+
 def _terminal_exposure_source_projection(
     command: RiskOrderCommand,
     command_row: sqlite3.Row,
@@ -7202,7 +7614,14 @@ def _terminal_exposure_source_projection(
         origin.writer_fencing_token,
         origin.writer_fence_sha256,
     )
-    if (
+    is_close = command.canonical_payload.get("position_effect", "OPEN") == "CLOSE"
+    if is_close:
+        # CLOSE may be queried repeatedly, and each query is a new writer
+        # lease.  Keep each immutable observation pair on one lease and allow
+        # a lease advance only after the previous attempt durably ended UNKNOWN.
+        _terminal_close_observation_history(command, command_row, source_events)
+        _terminal_close_source_fences(source_events, current_fence)
+    elif (
         source_fence.fence_sha256
         != _fence_digest(source_fence.scope, source_fence.owner_id, source_fence.fencing_token)
         or source_fence.fencing_token > current_fence.fencing_token
@@ -7222,6 +7641,16 @@ def _terminal_exposure_source_projection(
     ):
         raise RiskOrderJournalError("TERMINAL_EXPOSURE_SOURCE_FENCE_INVALID")
     if ack_event is not None:
+        ack_minimum_fence = (
+            RiskOrderWriterFence(
+                current_fence.scope,
+                source_events[-1].writer_owner_id,
+                source_events[-1].writer_fencing_token,
+                source_events[-1].writer_fence_sha256,
+            )
+            if is_close
+            else source_fence
+        )
         if (
             ack_event.event_type != "ACKED_TRACKED"
             or ack_event.writer_fence_sha256
@@ -7230,13 +7659,13 @@ def _terminal_exposure_source_projection(
                 ack_event.writer_owner_id,
                 ack_event.writer_fencing_token,
             )
-            or ack_event.writer_fencing_token < source_fence.fencing_token
+            or ack_event.writer_fencing_token < ack_minimum_fence.fencing_token
             or ack_event.writer_fencing_token > current_fence.fencing_token
             or (
-                ack_event.writer_fencing_token == source_fence.fencing_token
+                ack_event.writer_fencing_token == ack_minimum_fence.fencing_token
                 and (
-                    ack_event.writer_owner_id != source_fence.owner_id
-                    or ack_event.writer_fence_sha256 != source_fence.fence_sha256
+                    ack_event.writer_owner_id != ack_minimum_fence.owner_id
+                    or ack_event.writer_fence_sha256 != ack_minimum_fence.fence_sha256
                 )
             )
             or (
