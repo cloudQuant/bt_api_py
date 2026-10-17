@@ -1,0 +1,347 @@
+{
+  "schema": "bt-api-py.iteration10.afi06-formal-r278/v1",
+  "packet_id": "afi06-formal-r278-20261017",
+  "date": "2026-10-17",
+  "status": "PREPARED_FOR_ROOT_ADJUDICATION",
+  "formal_case": {
+    "case_id": "AFI06",
+    "clause_reference": "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md:798",
+    "proposed_disposition": "PASS",
+    "count_before": "51/68",
+    "count_after_if_root_accepts": "52/68",
+    "pass_delta_if_root_accepts": 1,
+    "global_tracker_modified": false
+  },
+  "review_provenance": {
+    "independent_reviewer": "resume_afi10_retirement",
+    "verdict": "GO for complete AFI06 clause mapping, as relayed by Root",
+    "standalone_review_artifact_in_packet": false,
+    "note": "This packet preserves the accepted round records and outputs; the reviewer verdict was supplied as a collaboration message, not a separate saved review file."
+  },
+  "root_direction": "Root approved the complete AFI06 mapping and requested this packet; Root retains global plan/count writeback.",
+  "evidence_level": "SYNTHETIC_FIXED_SOURCE_COMPOSITE_WITH_LOCAL_SQLITE_OCCUPANCY_RECONCILIATION",
+  "source_repository": "D:\\source_code\\ai-for-investor",
+  "source_test_commit": {
+    "repository": "D:\\source_code\\ai-for-investor",
+    "branch": "dev",
+    "commit": "b637c2eb5e325a3352a9c4828b2dbef4bd46d64a",
+    "parent": "811ae17522568653a73c2f66df54c58f17fa29c3",
+    "source_path": "src/backend/tests/test_afi06_budget_directory_owner_occupancy.py",
+    "source_bytes": 16328,
+    "source_sha256": "452c7a72f631e7bb5cb35da7bad4cca4f3628f62403b604b896d453e087e19c0",
+    "git_blob": "71a9e8db3a3ce6d9bad2671c7138466957a81d86",
+    "run_source_is_separate_fixed_export": true
+  },
+  "r269_fixed_source": {
+    "output_directory": "D:\\temp\\afi06-budget-occupancy-fixed-source-20261017-r1",
+    "selector": "tests/test_afi06_budget_directory_owner_occupancy.py::test_reopened_budget_generation_reconciles_with_active_and_unknown_account_ledgers",
+    "executor": "D:\\source_code\\ai-for-investor\\src\\backend\\.venv\\Scripts\\python.exe (Python 3.12)",
+    "runner_path": "D:\\bt_api_py\\.codex-tmp\\afi05-06-static-budget-20261016\\root-qa\\runner.py",
+    "runner_sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed",
+    "result": {
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "pytest_exit": 0,
+      "pinned_sources": 143,
+      "sources_unchanged": true,
+      "attribution": "Author-run fixed-source local SQLite evidence, per R269 round record. Raw result JSON is preserved unchanged; its evidence_level string is not used to relabel the executor.",
+      "junit": {
+        "bytes": 416,
+        "sha256": "ab138d7f69d3166d718c248aa2b57d79caf075c62c2948f7b75260b67bca2412"
+      },
+      "stdout_sha256": "cfe5f639ab1958b8f5184e3690d597579da0db6c3b8ab69ab1fa487d5cfa574d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_before_sha256": "f2a921c219756617e5c2d47fe758170737215ccca38a506c006c0fab40fef4c4",
+      "source_after_sha256": "f2a921c219756617e5c2d47fe758170737215ccca38a506c006c0fab40fef4c4",
+      "spec_sha256": "ec104f403f467f7f23cea86b25886579804b58b96dc23e5b921332d8fa253a16",
+      "module_origins_sha256": "15f52c0feda036d5970ccf73149f4e4d28f3f98e87068385cb4377da9ae1643d"
+    },
+    "fixed_source_commits": {
+      "parent_sdk": "8c8131ccdcb0df817fdaaaaf583e756de0ec52c2",
+      "base": "09d3ea8b07f8d3f724f2124271a2ac53a0be863e",
+      "risk": "ad5c693e69b66b0982b7f889e6f237ca3629e587",
+      "source_export_manifest_bytes": 39299,
+      "source_export_manifest_sha256": "61a2c45b1a5f4916247ec71a8287bea80c295c108b526c6b8445cfef48856a77",
+      "base_source_tar_bytes": 757760,
+      "base_source_tar_sha256": "25ce479fcf2760ce32e53aa89b4d2d0f62b51a3ed5922ea6b5dad7f5656745c8",
+      "risk_source_tar_bytes": 1505280,
+      "risk_source_tar_sha256": "85ad5a8aee40f95bc2baba24fe0c6c29a9fd93df24e78067755f8a49b1941a4c",
+      "package_source_files": 139,
+      "verification": "Each exported package file was checked against the committed Git blob."
+    },
+    "observed_values": {
+      "generation": "authority_ready",
+      "consumer_effective": false,
+      "total": 50,
+      "member_allocations": [
+        25,
+        15
+      ],
+      "unallocated": 10,
+      "pool_capacity": 100,
+      "pool_used": 50,
+      "pool_available": 50,
+      "account_a_active_reservation": 7,
+      "account_b_unresolved_active_reservation": 4,
+      "reopened": [
+        "PolicyCatalogStore",
+        "ConfirmedPolicyStore",
+        "DurableRiskGate account A",
+        "DurableRiskGate account B"
+      ],
+      "risk_snapshot": "RiskReadService"
+    }
+  },
+  "accepted_rounds": [
+    {
+      "id": "R219",
+      "record": "afi05-06-static-budget-20261016/round-record.md",
+      "afi_commit": "5be2e26c9cbb558187ed4ba7cce622989cb50c0e",
+      "output_directory": "D:\\temp\\iteration10-afi05-06-budget-focused-root-20261016-r1",
+      "result": "Root fixed-source 16 passed; exact amount/unit conservation and static invalid metric/currency/amount refusals.",
+      "limitation": "Offline compiler/Catalog; not AFI HTTP/consumer or live FX."
+    },
+    {
+      "id": "R226",
+      "record": "afi05-06-budget-authority-r226-20261016/round-record.md",
+      "risk_commit": "ede55dec5e8e7ad1c5376969eb54e9933ebf9e85",
+      "r3_output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r3",
+      "r3_result": "Same run: 6 tests, 5 unit passes and 1 SDK Host registration failure, exit 1, 543 source pins unchanged.",
+      "r4_output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r4",
+      "r4_result": "One Host test failure after immutable mapping reply; dict-only assertion. Preserved.",
+      "r5_output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r5",
+      "r5_result": "Earlier composed Host node passed 1/1, 557 source pins; preserved as earlier run.",
+      "r7_output_directory": "D:\\temp\\iteration10-afi-budget-authority-host-focused-root-20261016-r7",
+      "r7_result": "Final R223+R221+R226 fixed-source Host node passed 1/1, 569 pins unchanged, stderr empty, one Proactor/ZMQ warning.",
+      "r7_stdout_sha256": "649a12e0965dfad135be2898144608f65342deef7632d774ee8a373e7bda38a1",
+      "limitation": "Single durable SQLite authority; published partial/UNKNOWN/missing confirmation holds; no global cross-account atomicity."
+    },
+    {
+      "id": "R228",
+      "record": "afi05-06-budget-admission-resolver-r228-20261016/round-record.md",
+      "output_directory": "D:\\temp\\iteration10-afi-budget-resolver-focused-root-20261016-r2",
+      "result": "Root fixed-source resolver nodes 2 passed; 147 source pins unchanged; exact generation/member/confirmed receipt after reopen.",
+      "limitation": "Resolver only; not broad AFI HTTP or live order consumer."
+    },
+    {
+      "id": "R268",
+      "record": "risk-budget-fx-r268-20261017/round-record.md",
+      "risk_commit": "6d51dc8ec28364cb79688caeb0073e0d3615beff",
+      "author_r5_output_directory": "D:\\temp\\iteration10-afi-budget-fx-focused-author-20261017-r5",
+      "result": "Author R5 reran two previously failing FX nodes; 2 passed; fixed-source SQLite/catalog FX contract.",
+      "runtime_risk": "503a0b351e309529a2e863aff9f57d0846d7d9cf",
+      "runtime_base": "be51f280b70f52e5d86b37d3e3f9a148700deb9a",
+      "limitation": "Trusted test FX freshness/rechecks, not live market feed; do not confuse with AFI04 analytics R268."
+    },
+    {
+      "id": "R250",
+      "record": "afi05-06-budget-manual-host-r250-20261016/round-record.md",
+      "author_r8_output_directory": "D:\\temp\\iteration10-afi-budget-manual-host-root-20261016-r8",
+      "result": "Author R8: one authenticated synthetic AFI HTTP to SDK ServiceHost to Risk admission test passed; 2190 pins unchanged.",
+      "runtime_sdk": "53f33158429f89fd9b4dce83c068056c99d6778f",
+      "runtime_risk": "ccac8818312c1474077c00bfe9d8f12521af39c9",
+      "runtime_base": "cc6036c89c534a17d93e6b793f930c576b4aa960",
+      "runtime_zmq": "a397fdb460d2deb22e67ceb4963992ef63dbbb0e",
+      "afi_runtime": "ac52830cd66c8ca79547db5be56a971906ccef4c",
+      "limitation": "Author-run, single synthetic account; not multi-account catalog reconciliation."
+    }
+  ],
+  "excluded_evidence": [
+    "Any author one-pass result without a pinned fixed source/module-origin record is not counted as fixed-source evidence.",
+    "AFI04 formal R268 analytics packet is not AFI06 budget/FX evidence.",
+    "No real-account/provider/deployment evidence is claimed."
+  ],
+  "raw_archive": {
+    "path": "raw-evidence.zip",
+    "bytes": 5827201,
+    "sha256": "a0dcb326f915f20a2cd3ef5188f58e511b6adbc49f0b4d5c533a08dcc046a04b",
+    "member_count": 33,
+    "members": [
+      {
+        "path": "prior/afi05-06-static-budget-20261016/manifest.json",
+        "bytes": 30431,
+        "sha256": "5a9b2abec0ecf09a7d6e9ba944c6356fa754bb1147862e5f1ee665a42afb8414"
+      },
+      {
+        "path": "r269/fixed-source/risk-source.tar",
+        "bytes": 1505280,
+        "sha256": "85ad5a8aee40f95bc2baba24fe0c6c29a9fd93df24e78067755f8a49b1941a4c"
+      },
+      {
+        "path": "r269/fixed-source/base-source.tar",
+        "bytes": 757760,
+        "sha256": "25ce479fcf2760ce32e53aa89b4d2d0f62b51a3ed5922ea6b5dad7f5656745c8"
+      },
+      {
+        "path": "r269/fixed-source/source-export-manifest.json",
+        "bytes": 39299,
+        "sha256": "61a2c45b1a5f4916247ec71a8287bea80c295c108b526c6b8445cfef48856a77"
+      },
+      {
+        "path": "r269/run/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "r269/run/stdout.log",
+        "bytes": 100,
+        "sha256": "cfe5f639ab1958b8f5184e3690d597579da0db6c3b8ab69ab1fa487d5cfa574d"
+      },
+      {
+        "path": "r269/run/runner.py",
+        "bytes": 3204,
+        "sha256": "8b7f470be77270adeb9d72a83776b827c4653004b39835eeca0f43bf63cf24ed"
+      },
+      {
+        "path": "r269/run/spec.json",
+        "bytes": 31121,
+        "sha256": "ec104f403f467f7f23cea86b25886579804b58b96dc23e5b921332d8fa253a16"
+      },
+      {
+        "path": "r269/run/source-after.json",
+        "bytes": 28397,
+        "sha256": "f2a921c219756617e5c2d47fe758170737215ccca38a506c006c0fab40fef4c4"
+      },
+      {
+        "path": "r269/run/source-before.json",
+        "bytes": 28397,
+        "sha256": "f2a921c219756617e5c2d47fe758170737215ccca38a506c006c0fab40fef4c4"
+      },
+      {
+        "path": "r269/run/result.json",
+        "bytes": 486,
+        "sha256": "cdb5f906f521c08f14719b48b0d16575ca7ca9b629c0c6c05b462428cc5e704a"
+      },
+      {
+        "path": "r269/run/module-origins.json",
+        "bytes": 2179,
+        "sha256": "15f52c0feda036d5970ccf73149f4e4d28f3f98e87068385cb4377da9ae1643d"
+      },
+      {
+        "path": "r269/run/junit.xml",
+        "bytes": 416,
+        "sha256": "ab138d7f69d3166d718c248aa2b57d79caf075c62c2948f7b75260b67bca2412"
+      },
+      {
+        "path": "r269/run/exit.txt",
+        "bytes": 3,
+        "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+      },
+      {
+        "path": "r269/run/command.json",
+        "bytes": 1556,
+        "sha256": "63229d3beaf18316bbb2159269c0c30d77b49d5ba26f53f6b80dfd53486b0a2a"
+      },
+      {
+        "path": "r269/commit/afi-b637c2eb-receipt.txt",
+        "bytes": 251,
+        "sha256": "3b413371c3aed175a0493ebe69d14fb0dc98f1ebe9661df9165b3360e829e963"
+      },
+      {
+        "path": "r269/test-source.py",
+        "bytes": 16328,
+        "sha256": "452c7a72f631e7bb5cb35da7bad4cca4f3628f62403b604b896d453e087e19c0"
+      },
+      {
+        "path": "prior/risk-budget-fx-r268-20261017/round-record.md",
+        "bytes": 1571,
+        "sha256": "cba5f251c4c2e32acb2e5da7140dd4b73724a5a370cf05914343649fff06fb7e"
+      },
+      {
+        "path": "prior/risk-budget-fx-r268-20261017/accepted-source-and-output.zip",
+        "bytes": 47214,
+        "sha256": "90b307d22aefef437e65da3b718bf6d86be0d461618c187607ba4b7a2d44b8f7"
+      },
+      {
+        "path": "prior/risk-budget-fx-r268-20261017/manifest.json",
+        "bytes": 2307,
+        "sha256": "66b5c7c79de94c613f12ddc663a1aa7e208b451c519eedf500f44e65ae102a3f"
+      },
+      {
+        "path": "prior/afi05-06-budget-manual-host-r250-20261016/round-record.md",
+        "bytes": 6913,
+        "sha256": "742ebc21dc13e9509ebbd5c0d6fff318053a63c4fc410bf342481f024c284cdb"
+      },
+      {
+        "path": "prior/afi05-06-budget-manual-host-r250-20261016/raw-evidence.zip",
+        "bytes": 875884,
+        "sha256": "64c63e89dc88114a4357e0ea4e70c88cee56fd4abc797c097cbbacc157be2290"
+      },
+      {
+        "path": "prior/afi05-06-budget-manual-host-r250-20261016/manifest.json",
+        "bytes": 24704,
+        "sha256": "e9c2d99dc1a7764ca9bfdb87bb468a9baa851290a8c69b6225f36fb6a13cec1e"
+      },
+      {
+        "path": "prior/afi05-06-budget-admission-resolver-r228-20261016/round-record.md",
+        "bytes": 3792,
+        "sha256": "587b681bc4bcfd0d4aa7f3b629cf8302b1b3c1dd5398dde0e76bfae3b1672e18"
+      },
+      {
+        "path": "prior/afi05-06-budget-admission-resolver-r228-20261016/raw-evidence.zip",
+        "bytes": 480131,
+        "sha256": "2100be360fe9cbf27379df7781ac302975f9090c3bebfc840d7e5969bcaa6676"
+      },
+      {
+        "path": "prior/afi05-06-budget-admission-resolver-r228-20261016/manifest.json",
+        "bytes": 44245,
+        "sha256": "910e4dd729d4ab58cf06ffdb174a60674b787b208b0a021a20d59e40a354d7f9"
+      },
+      {
+        "path": "prior/afi05-06-budget-authority-r226-20261016/round-record.md",
+        "bytes": 4937,
+        "sha256": "fd1fa1ab403262ad2b6581ef7da3559dd5c159070f2300cf621bc7d603c2626b"
+      },
+      {
+        "path": "prior/afi05-06-budget-authority-r226-20261016/raw-evidence.zip",
+        "bytes": 3856996,
+        "sha256": "b6ba4a9e22cce2d1fc96f9d162a53d6aeab9c68d5f5ec21468288f8d2068d11a"
+      },
+      {
+        "path": "prior/afi05-06-budget-authority-r226-20261016/manifest.json",
+        "bytes": 168341,
+        "sha256": "9dc56f8c6d8bcd3e80ef3bcafe2f8e5787a77b67a46afc7d78e9c6cb0787c45d"
+      },
+      {
+        "path": "prior/afi05-06-static-budget-20261016/round-record.md",
+        "bytes": 1376,
+        "sha256": "390ade7966f68f4aecbc4516a31ffb8a6ef51542c547748aca2b00d951ceab78"
+      },
+      {
+        "path": "prior/afi05-06-static-budget-20261016/raw-evidence.zip",
+        "bytes": 459759,
+        "sha256": "86f5fa8ca5e176e6d674a8614a88008a05e35662a9beb38c47b072b106081569"
+      },
+      {
+        "path": "r269/round-record.md",
+        "bytes": 5281,
+        "sha256": "99b869b86a6365700019b022c609637418b944c7f09216c40cbe73a47a3c1f46"
+      },
+      {
+        "path": "r269/fixed-source/source-commits.txt",
+        "bytes": 240,
+        "sha256": "39b6bb1a60b5e4a4ccbf13c8a08f274795ba41ca6a713af9dc72112be62c36e1"
+      }
+    ],
+    "contents": "Prior five canonical evidence archives with their original manifests/records, plus R269 fixed-source exports, test source, command/spec, module origins, source before/after, JUnit, stdout/stderr, result, and commit receipt."
+  },
+  "packet_files": {
+    "adjudication": {
+      "path": "adjudication.md",
+      "bytes": 8591,
+      "sha256": "f8a090a82f964183d9413df56461ba806a46b1b406680f593dbfdb23837f2be3"
+    },
+    "manifest": {
+      "path": "manifest.json",
+      "self_hash_omitted": true
+    }
+  },
+  "limitations": [
+    "Synthetic/local SQLite evidence only; no actual exchange account, provider, FX feed, or deployment.",
+    "Asynchronous budget directory summary is not a global atomic cross-account admission transaction.",
+    "R269 intentionally leaves authority_ready with consumer_effective=false; it reconciles the two tested account snapshots and does not claim every member is effective.",
+    "R226 R3 failure and subsequent R7 pass are distinct preserved runs; neither result overwrites the other."
+  ]
+}
