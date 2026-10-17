@@ -1015,6 +1015,7 @@ class ServiceHost:
             and not capability.write_operations
             and capability.operations <= frozenset(
                 {
+                    "market.bootstrap_many",
                     "market.subscribe",
                     "market.unsubscribe",
                     "market.snapshot",

@@ -53,7 +53,10 @@ _MARKET_OPERATIONS = frozenset(
         "market.read_after",
     }
 )
+
 _BOOTSTRAP_OPERATIONS = _MARKET_OPERATIONS
+_BATCH_BOOTSTRAP_OPERATION = "market.bootstrap_many"
+_MAX_BOOTSTRAP_BATCH = 20
 _HISTORY_OPERATION = "market.history"
 _HISTORY_OPERATIONS = frozenset({_HISTORY_OPERATION})
 _MAX_POLL_TIMEOUT_MS = 60_000
@@ -374,6 +377,255 @@ class ServiceMarketClient:
         ):
             return None
         return self._source_descriptor
+
+    @classmethod
+    def start_many(
+        cls, clients: tuple[ServiceMarketClient, ...] | list[ServiceMarketClient]
+    ) -> tuple[MarketBootstrap, ...]:
+        """Start a bounded same-registration group with one market bootstrap RPC.
+
+        Existing gateways without the optional batch operation keep working:
+        they fall back to the established per-client lifecycle before any
+        subscriber or remote registration is created.
+        """
+        if type(clients) not in (tuple, list) or not 1 <= len(clients) <= _MAX_BOOTSTRAP_BATCH:
+            raise ServiceMarketError("INVALID_BOOTSTRAP_BATCH")
+        selected = tuple(clients)
+        if any(type(client) is not cls for client in selected):
+            raise ServiceMarketError("INVALID_BOOTSTRAP_BATCH")
+        first = selected[0]
+        for client in selected:
+            client._assert_owner()
+            if (
+                client._state != "new"
+                or client._runtime is not first._runtime
+                or client.mount != first.mount
+                or client.stream_scope != first.stream_scope
+                or client._subscriber_factory is None
+                or (client.key.channel == "bar" and client._subscriber_factory is None)
+            ):
+                raise ServiceMarketError("INCOMPATIBLE_BOOTSTRAP_CLIENTS")
+        if len({client.key for client in selected}) != len(selected):
+            raise ServiceMarketError("DUPLICATE_MARKET_KEY")
+
+        # The optional operation is deliberately not part of the ordinary
+        # single-client requirement set. Older Hub deployments therefore
+        # continue through the original subscribe/snapshot/head calls.
+        binding = first._get_binding()
+        if _BATCH_BOOTSTRAP_OPERATION not in binding.operations:
+            # A missing operation in the authenticated binding is the only
+            # compatibility signal. Do not retry through the legacy path after
+            # a batch request was sent or after an unrelated runtime failure.
+            return tuple(client.start() for client in selected)
+
+        for client in selected:
+            other = client._get_binding()
+            if (
+                not _same_binding(binding, other)
+                or binding.operations != other.operations
+                or _market_wire_version(binding) != _market_wire_version(other)
+            ):
+                raise ServiceMarketError("INCOMPATIBLE_BOOTSTRAP_BINDINGS")
+            client._check_public_domain(binding)
+            if client._queue_max_bytes < binding.max_message_bytes:
+                raise ServiceMarketError("QUEUE_TOO_SMALL_FOR_MARKET_FRAME")
+            if client.key.channel == "bar" and client._subscriber_factory is None:
+                raise ServiceMarketError("HISTORY_ONLY_CLIENT")
+
+        # Bind and open every local SUB socket before the service can start an
+        # upstream publisher, avoiding a gap between server subscription and
+        # local topic readiness.
+        try:
+            for client in selected:
+                client._binding = binding
+                client._state = "starting"
+                client._source_descriptor = None
+                client._subscriber = client._make_subscriber(binding)
+        except BaseException as error:
+            cleanup_failed = False
+            for client in selected:
+                if client._binding is not None:
+                    client._cleanup_failed_start()
+                    cleanup_failed = cleanup_failed or client._state == "close_failed"
+            if cleanup_failed:
+                raise ServiceMarketError("BATCH_LOCAL_CLEANUP_FAILED") from None
+            if isinstance(error, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                raise
+            if isinstance(error, ServiceMarketError):
+                raise
+            raise ServiceMarketError("START_FAILED") from None
+
+        arguments = {
+            "subscriptions": [
+                {
+                    "key": client.key.to_dict(),
+                    **(
+                        {"require_source_descriptor": True}
+                        if client._require_source_descriptor
+                        else {}
+                    ),
+                }
+                for client in selected
+            ]
+        }
+        for client in selected:
+            client._remote_unknown = True
+        try:
+            result = first._rpc(
+                _BATCH_BOOTSTRAP_OPERATION,
+                arguments,
+                binding=binding,
+            )
+        except ServiceMarketError as error:
+            if error.code == "CONTROL_REQUEST_NOT_SENT":
+                for client in selected:
+                    client._remote_active = False
+                    client._remote_unknown = False
+                cleanup_failed = False
+                for client in selected:
+                    client._cleanup_failed_start()
+                    cleanup_failed = cleanup_failed or client._state == "close_failed"
+                if cleanup_failed:
+                    raise ServiceMarketError("BATCH_LOCAL_CLEANUP_FAILED") from None
+            else:
+                for client in selected:
+                    client._remote_active = False
+                    client._remote_unknown = True
+                    client._set_unsubscription_uncertain(binding.registration_id)
+                    client._state = "close_failed"
+            raise
+
+        status = result.get("status")
+        if status == "rejected":
+            if set(result) != {"status", "code"}:
+                status = "invalid"
+            else:
+                code = result["code"]
+                if type(code) is not str or not code:
+                    status = "invalid"
+                else:
+                    for client in selected:
+                        client._remote_active = False
+                        client._remote_unknown = False
+                    cleanup_failed = False
+                    for client in selected:
+                        client._cleanup_failed_start()
+                        cleanup_failed = cleanup_failed or client._state == "close_failed"
+                    if cleanup_failed:
+                        raise ServiceMarketError("BATCH_LOCAL_CLEANUP_FAILED")
+                    raise ServiceMarketError("BATCH_START_REJECTED", cause_code=code)
+
+        if status == "unknown":
+            if set(result) != {"status", "code", "uncertain_stream_ids"}:
+                status = "invalid"
+            else:
+                uncertain_ids = result["uncertain_stream_ids"]
+                if (
+                    type(result["code"]) is not str
+                    or not result["code"]
+                    or type(uncertain_ids) not in (tuple, list)
+                    or any(type(value) is not str for value in uncertain_ids)
+                    or len(set(uncertain_ids)) != len(uncertain_ids)
+                    or not set(uncertain_ids) <= {client.key.stream_id for client in selected}
+                    or not uncertain_ids
+                ):
+                    status = "invalid"
+                else:
+                    uncertain = set(uncertain_ids)
+                    cleanup_failed = False
+                    for client in selected:
+                        if client.key.stream_id in uncertain:
+                            client._remote_active = False
+                            client._remote_unknown = True
+                            client._set_unsubscription_uncertain(binding.registration_id)
+                            client._state = "close_failed"
+                        else:
+                            client._remote_active = False
+                            client._remote_unknown = False
+                            client._cleanup_failed_start()
+                            cleanup_failed = cleanup_failed or client._state == "close_failed"
+                    if cleanup_failed:
+                        raise ServiceMarketError("BATCH_LOCAL_CLEANUP_FAILED")
+                    raise ServiceMarketError("BATCH_START_OUTCOME_UNKNOWN")
+
+        if status != "active" or set(result) != {"status", "items"}:
+            for client in selected:
+                client._remote_active = False
+                client._remote_unknown = True
+                client._set_unsubscription_uncertain(binding.registration_id)
+                client._state = "close_failed"
+            raise ServiceMarketError("INVALID_BATCH_REPLY")
+
+        raw_items = result["items"]
+        if type(raw_items) not in (tuple, list) or len(raw_items) != len(selected):
+            for client in selected:
+                client._remote_active = False
+                client._remote_unknown = True
+                client._set_unsubscription_uncertain(binding.registration_id)
+                client._state = "close_failed"
+            raise ServiceMarketError("INVALID_BATCH_REPLY")
+
+        try:
+            parsed_items: list[tuple[MarketBootstrap, Mapping[str, Any]]] = []
+            for client, raw_item in zip(selected, raw_items, strict=True):
+                if not isinstance(raw_item, Mapping) or set(raw_item) != {
+                    "subscription",
+                    "snapshot",
+                    "head",
+                }:
+                    raise ServiceMarketError("INVALID_BATCH_REPLY")
+                subscription = raw_item["subscription"]
+                client._source_descriptor = client._validate_subscription_reply(subscription)
+                snapshot = client._snapshot_from_reply(raw_item["snapshot"])
+                head = raw_item["head"]
+                client._validate_head_reply(head)
+                if head["epoch"] != snapshot.snapshot_epoch or head["head"] < snapshot.snapshot_sequence:
+                    # A concurrent stream transition requires ordinary explicit
+                    # resynchronization; do not claim a consistent batch cut.
+                    raise ServiceMarketError("INVALID_BATCH_CURSOR")
+                parsed_items.append((snapshot, head))
+        except Exception:
+            for client in selected:
+                client._source_descriptor = None
+                client._remote_active = False
+                client._remote_unknown = True
+                client._set_unsubscription_uncertain(binding.registration_id)
+                client._state = "close_failed"
+            raise ServiceMarketError("INVALID_BATCH_REPLY") from None
+
+        bootstraps: list[MarketBootstrap] = []
+        for client, (snapshot, head) in zip(selected, parsed_items, strict=True):
+            client._remote_active = True
+            client._remote_unknown = False
+            client._unsubscription_uncertain = False
+            client._uncertain_registration_id = None
+            client._cursor_epoch = snapshot.snapshot_epoch
+            client._cursor_sequence = snapshot.snapshot_sequence
+            client._queued_epoch = snapshot.snapshot_epoch
+            client._queued_sequence = snapshot.snapshot_sequence
+            client._state = "started"
+            client._last_bootstrap = snapshot
+            client._next_head_check = client._now()
+            if not client._head_and_replay(head_reply=head):
+                if client._pending_resync is not None:
+                    bootstrap = client._pending_resync
+                else:
+                    bootstrap = client._bootstrap(
+                        snapshot.snapshot,
+                        snapshot.snapshot_epoch,
+                        snapshot.snapshot_sequence,
+                        resync_required=False,
+                    )
+            else:
+                bootstrap = client._bootstrap(
+                    snapshot.snapshot,
+                    snapshot.snapshot_epoch,
+                    snapshot.snapshot_sequence,
+                    resync_required=False,
+                )
+            client._last_bootstrap = bootstrap
+            bootstraps.append(bootstrap)
+        return tuple(bootstraps)
 
     def start(self) -> MarketBootstrap:
         self._assert_owner()
@@ -741,12 +993,16 @@ class ServiceMarketClient:
         if self._unsubscription_uncertain:
             raise ServiceMarketError("UNSUBSCRIPTION_UNCERTAIN")
 
-    def _head_and_replay(self) -> bool:
+    def _head_and_replay(self, *, head_reply: Mapping[str, Any] | None = None) -> bool:
         if self._cursor_epoch is None or self._queued_epoch is None:
             self._recovery_required = True
             return False
         try:
-            head = self._rpc("market.head", {"key": self.key.to_dict()})
+            head = (
+                self._rpc("market.head", {"key": self.key.to_dict()})
+                if head_reply is None
+                else head_reply
+            )
             self._validate_head_reply(head)
             if head["epoch"] != self._queued_epoch:
                 snapshot = self._get_snapshot()
@@ -892,6 +1148,9 @@ class ServiceMarketClient:
 
     def _get_snapshot(self) -> MarketBootstrap:
         reply = self._rpc("market.snapshot", {"key": self.key.to_dict()})
+        return self._snapshot_from_reply(reply)
+
+    def _snapshot_from_reply(self, reply: Mapping[str, Any]) -> MarketBootstrap:
         self._validate_snapshot_reply(reply)
         descriptor = self._source_descriptor
         if descriptor is not None and (
@@ -899,6 +1158,8 @@ class ServiceMarketClient:
             or descriptor.epoch != reply["epoch"]
         ):
             self._source_descriptor = None
+            if self._require_source_descriptor:
+                raise ServiceMarketError("SOURCE_DESCRIPTOR_EPOCH_MISMATCH")
             descriptor = None
         event = None if reply["event"] is None else _decode_envelope_mapping(reply["event"])
         if event is not None:
@@ -1164,7 +1425,11 @@ class ServiceMarketClient:
     ) -> Mapping[str, Any]:
         if binding is None:
             binding = self._require_binding()
-        write_operation = operation in {"market.subscribe", "market.unsubscribe"}
+        write_operation = operation in {
+            "market.subscribe",
+            "market.unsubscribe",
+            _BATCH_BOOTSTRAP_OPERATION,
+        }
         previous_remote_active = self._remote_active
         previous_remote_unknown = self._remote_unknown
         if write_operation:

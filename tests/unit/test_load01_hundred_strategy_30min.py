@@ -101,6 +101,7 @@ _MIN_FREE_BYTES = 2 * 1024**3
 _FULL_LOAD_SECONDS = 30 * 60
 _MARKET_OPS = frozenset(
     {
+        "market.bootstrap_many",
         "market.subscribe",
         "market.unsubscribe",
         "market.snapshot",
@@ -2976,7 +2977,7 @@ def _strategy_process(
         tuple(key.stream_id for key in market_keys)
     )
     market_poll_failure: dict[str, Any] | None = None
-    market_client_start_samples: list[dict[str, Any]] = []
+    market_client_start_batches: list[dict[str, Any]] = []
     runtime_start_duration_ms: float | None = None
     account_refresh_duration_ms: float | None = None
     registration_lease_snapshot: dict[str, Any] | None = None
@@ -3023,6 +3024,7 @@ def _strategy_process(
         snapshots: dict[str, int] = {}
         market_security = ClientCurveKeys(*security_material[_MARKET_SECURITY_REF])
         factory = ZmqMarketTransportFactory({_MARKET_SECURITY_REF: market_security})
+        clients = []
         for key in market_keys:
             client = ServiceMarketClient(
                 runtime,
@@ -3035,19 +3037,22 @@ def _strategy_process(
                 head_check_interval_seconds=1.0,
             )
             pending_markets[key.stream_id] = client
-            started_ns = time.perf_counter_ns()
-            try:
-                bootstrap = client.start()
-            finally:
-                market_client_start_samples.append(
-                    {
-                        "stream_id": key.stream_id,
-                        "duration_ms": (time.perf_counter_ns() - started_ns) / 1_000_000,
-                    }
-                )
-            runtime_probe._maintain_if_due("market-client-start-boundary")
-            if not runtime.healthy:
-                raise _Load01StartupLeaseError()
+            clients.append(client)
+        started_ns = time.perf_counter_ns()
+        try:
+            bootstraps = ServiceMarketClient.start_many(clients)
+        finally:
+            market_client_start_batches.append(
+                {
+                    "stream_count": len(clients),
+                    "duration_ms": (time.perf_counter_ns() - started_ns) / 1_000_000,
+                    "measurement_scope": "same-registration-market-batch",
+                }
+            )
+        runtime_probe._maintain_if_due("market-client-start-boundary")
+        if not runtime.healthy:
+            raise _Load01StartupLeaseError()
+        for key, client, bootstrap in zip(market_keys, clients, bootstraps, strict=True):
             markets[key.stream_id] = client
             pending_markets.pop(key.stream_id, None)
             snapshots[key.stream_id] = bootstrap.snapshot_sequence
@@ -3326,7 +3331,7 @@ def _strategy_process(
                     "post_registration_lease": post_registration_lease_snapshot,
                     "market_loop_lease": market_lease_snapshot,
                     "account_read_lease": account_read_lease_snapshot,
-                    "market_client_start_durations": market_client_start_samples,
+                    "market_client_start_batches": market_client_start_batches,
                     "account_refresh_duration_ms": account_refresh_duration_ms,
                     "maintenance": startup_maintenance_snapshot,
                 },
@@ -3603,7 +3608,7 @@ def _strategy_process(
             "account_read_lease": (
                 account_read_lease_snapshot if "account_read_lease_snapshot" in locals() else None
             ),
-            "market_client_start_durations": market_client_start_samples,
+            "market_client_start_batches": market_client_start_batches,
             "account_refresh_duration_ms": account_refresh_duration_ms,
             "maintenance": runtime_probe.snapshot() if runtime_probe is not None else None,
             "runtime_lease_at_failure": (
@@ -4002,7 +4007,7 @@ def _startup_maintenance_report(
 ) -> dict[str, Any]:
     runtime_start_ms = []
     account_refresh_ms = []
-    market_start_ms = []
+    market_start_batch_ms = []
     boundary_checks = 0
     delay_checks = 0
     rpc_calls_by_phase: Counter[str] = Counter()
@@ -4014,8 +4019,8 @@ def _startup_maintenance_report(
     for strategy_index, diagnostic in sorted(diagnostics_by_strategy.items()):
         runtime_start_ms.append(diagnostic["runtime_start_duration_ms"])
         account_refresh_ms.append(diagnostic["account_refresh_duration_ms"])
-        market_start_ms.extend(
-            item["duration_ms"] for item in diagnostic["market_client_start_durations"]
+        market_start_batch_ms.extend(
+            item["duration_ms"] for item in diagnostic["market_client_start_batches"]
         )
         maintenance = diagnostic["maintenance"]
         boundary_checks += maintenance["rpc_boundary_checks"]
@@ -4036,7 +4041,7 @@ def _startup_maintenance_report(
                 "post_registration_lease": diagnostic["post_registration_lease"],
                 "market_loop_lease": diagnostic["market_loop_lease"],
                 "account_read_lease": diagnostic["account_read_lease"],
-                "market_client_start_durations": diagnostic["market_client_start_durations"],
+                "market_client_start_batches": diagnostic["market_client_start_batches"],
                 "account_refresh_duration_ms": diagnostic["account_refresh_duration_ms"],
                 "maintenance": maintenance,
             }
@@ -4045,7 +4050,7 @@ def _startup_maintenance_report(
         "lease_seconds": _LEASE_SECONDS,
         "rpc_timeout_seconds": _RPC_TIMEOUT_MS / 1000,
         "runtime_start_duration_ms": _percentile_summary(runtime_start_ms),
-        "single_market_client_start_duration_ms": _percentile_summary(market_start_ms),
+        "market_client_start_batch_duration_ms": _percentile_summary(market_start_batch_ms),
         "account_refresh_duration_ms": _percentile_summary(account_refresh_ms),
         "rpc_boundary_checks": boundary_checks,
         "maintenance_delay_checks": delay_checks,
@@ -4662,8 +4667,22 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
     duration_seconds = 120 if mode == "pilot" else _FULL_LOAD_SECONDS
     source_root = _fixed_source_root()
     export_pin_path = Path(os.environ["BT_API_LOAD01_EXPORT_PINS"]).resolve()
-    archive_validation = _verify_fixed_archives(source_root, export_pin_path)
-    source_manifest = _write_source_run_manifest(source_root, tmp_path)
+    runner_path = Path(__file__).resolve()
+    runner_relative = runner_path.relative_to(source_root).as_posix()
+    runner_overlay_sha256 = os.environ["BT_API_LOAD01_RUNNER_OVERLAY_SHA256"]
+    if _sha256(runner_path) != runner_overlay_sha256:
+        raise AssertionError("LOAD01 runner overlay differs from the external spec pin")
+    allowed_overlays = {runner_relative: runner_overlay_sha256}
+    archive_validation = _verify_fixed_archives(
+        source_root,
+        export_pin_path,
+        allowed_overlays=allowed_overlays,
+    )
+    source_manifest = _write_source_run_manifest(
+        source_root,
+        tmp_path,
+        allowed_overlays=allowed_overlays,
+    )
     os.environ["BT_API_LOAD01_SOURCE_ROOT"] = str(source_root)
     os.environ["BT_API_LOAD01_SOURCE_MANIFEST"] = str(source_manifest)
     source_bindings = _check_fixed_source_manifest(source_manifest)

@@ -505,6 +505,7 @@ _ROLE_BUILTINS: Mapping[tuple[str, str], _Builtin] = MappingProxyType(
                 {
                     "service.market_source": frozenset(
                         {
+                            "market.bootstrap_many",
                             "market.subscribe",
                             "market.unsubscribe",
                             "market.snapshot",

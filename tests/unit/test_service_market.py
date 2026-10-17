@@ -46,6 +46,7 @@ _PUBLIC_SCOPE = WireScope(_DOMAIN)
 _CLIENT_SCOPE = WireScope(_DOMAIN, strategy_ref="strategy-market")
 _OPERATIONS = frozenset(
     {
+        "market.bootstrap_many",
         "market.subscribe",
         "market.unsubscribe",
         "market.snapshot",
@@ -53,6 +54,7 @@ _OPERATIONS = frozenset(
         "market.read_after",
     }
 )
+_LEGACY_OPERATIONS = _OPERATIONS - {"market.bootstrap_many"}
 _KEY = MarketSubscriptionKey(
     source_ref="unit-source",
     entitlement_ref="unit-public-entitlement",
@@ -106,6 +108,55 @@ class FakeMarketService:
         self.source_descriptor: MarketSourceDescriptor | None = None
 
     def handle(self, context, arguments, operation: str):
+        if operation == "market.bootstrap_many":
+            items = []
+            for subscription in arguments["subscriptions"]:
+                key = MarketSubscriptionKey.from_dict(subscription["key"])
+                stream_id = key.stream_id
+                epoch = self.epochs.setdefault(stream_id, "market-epoch-one")
+                events = self.events.setdefault(stream_id, [])
+                registrations = self.registrations.setdefault(stream_id, set())
+                already_subscribed = context.registration_id in registrations
+                if not registrations:
+                    self.starts[stream_id] = self.starts.get(stream_id, 0) + 1
+                registrations.add(context.registration_id)
+                subscribe_reply = {
+                    "stream_id": stream_id,
+                    "epoch": epoch,
+                    "head": events[-1].header.sequence if events else 0,
+                    "oldest_sequence": events[0].header.sequence if events else 1,
+                    "already_subscribed": already_subscribed,
+                }
+                if (
+                    subscription.get("require_source_descriptor") is True
+                    and self.source_descriptor is not None
+                ):
+                    subscribe_reply["source_descriptor"] = self.source_descriptor.to_dict()
+                snapshot = {
+                    "snapshot_kind": "latest_event",
+                    "complete": False,
+                    "stream_id": stream_id,
+                    "epoch": epoch,
+                    "head": events[-1].header.sequence if events else 0,
+                    "event": _plain_envelope(events[-1]) if events else None,
+                }
+                head = {
+                    "stream_id": stream_id,
+                    "epoch": epoch,
+                    "head": events[-1].header.sequence if events else 0,
+                    "oldest_sequence": events[0].header.sequence if events else 1,
+                    "latest_observed_at_utc": (
+                        events[-1].header.sent_at_utc if events else None
+                    ),
+                }
+                items.append(
+                    {
+                        "subscription": subscribe_reply,
+                        "snapshot": snapshot,
+                        "head": head,
+                    }
+                )
+            return {"status": "active", "items": items}
         key = MarketSubscriptionKey.from_dict(arguments["key"])
         stream_id = key.stream_id
         epoch = self.epochs.setdefault(stream_id, "market-epoch-one")
@@ -234,14 +285,31 @@ class LocalControlTransport:
         self.registry = registry
         self.fail_after_dispatch: set[str] = set()
         self.not_sent: set[str] = set()
+        self.operations: list[str] = []
+        self.batch_snapshot_epoch_override: str | None = None
 
     def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
         del timeout
         operation = request.header.operation
+        self.operations.append(operation)
         if operation in self.not_sent:
             self.not_sent.remove(operation)
             raise ServiceRuntimeRequestNotSentError()
         result = self.registry.handle(_CLIENT.principal_ref, request)
+        if operation == "market.bootstrap_many" and self.batch_snapshot_epoch_override is not None:
+            result = dict(result)
+            batch_result = dict(result["result"])
+            items = list(batch_result["items"])
+            first_item = dict(items[0])
+            snapshot = dict(first_item["snapshot"])
+            snapshot["epoch"] = self.batch_snapshot_epoch_override
+            first_item["snapshot"] = snapshot
+            head = dict(first_item["head"])
+            head["epoch"] = self.batch_snapshot_epoch_override
+            first_item["head"] = head
+            items[0] = first_item
+            batch_result["items"] = items
+            result["result"] = batch_result
         if operation in self.fail_after_dispatch:
             self.fail_after_dispatch.remove(operation)
             raise TimeoutError("injected lost service reply")
@@ -297,17 +365,18 @@ def _make_client(
     tmp_path,
     *,
     key: MarketSubscriptionKey = _KEY,
+    operations=_OPERATIONS,
     queue_capacity=16,
     queue_max_bytes=1_048_576,
     require_source_descriptor=False,
 ):
-    capability = ServiceCapability("market-instance", "service.market_source", _OPERATIONS)
+    capability = ServiceCapability("market-instance", "service.market_source", operations)
     grant = ResourceGrant(
         "market-instance",
         "service.market_source",
         "market-scope-v1",
         _CLIENT_SCOPE,
-        _OPERATIONS,
+        operations,
     )
     registry = ServiceRegistry(
         tmp_path / f"market-{uuid4().hex}.sqlite3",
@@ -319,7 +388,7 @@ def _make_client(
         lease_seconds=30,
     )
     market = FakeMarketService()
-    for operation in _OPERATIONS:
+    for operation in operations:
         registry.register_handler(
             "market-instance",
             operation,
@@ -377,7 +446,7 @@ def _make_client(
         peer_resolver=lambda _service_id: _PEER,
         transport_factory=lambda _profile, _peer: transport,
         run_id="market-run-1",
-        requested_operations={"store.market": _OPERATIONS},
+        requested_operations={"store.market": operations},
         monotonic_clock=clock,
     )
     runtime.start()
@@ -405,6 +474,139 @@ def _close_all(client, runtime, registry) -> None:
         if runtime.state != "closed":
             runtime.close()
         registry.close()
+
+
+def _close_many(clients, runtime, registry) -> None:
+    try:
+        for client in clients:
+            if client._state not in {"new", "closed"}:
+                client.close()
+    finally:
+        if runtime.state != "closed":
+            runtime.close()
+        registry.close()
+
+
+def _same_runtime_client(runtime, subscribers, key):
+    return ServiceMarketClient(
+        runtime,
+        "store.market",
+        key,
+        subscriber_factory=subscribers,
+        stream_scope=_PUBLIC_SCOPE,
+        queue_capacity=16,
+        queue_max_bytes=1_048_576,
+        head_check_interval_seconds=10.0,
+        monotonic_clock=runtime._monotonic_clock,
+    )
+
+
+def test_start_many_uses_one_authorized_batch_and_per_key_bootstrap(tmp_path):
+    first, runtime, registry, market, transport, subscribers = _make_client(tmp_path)
+    second = _same_runtime_client(runtime, subscribers, _OTHER_KEY)
+    clients = (first, second)
+    try:
+        bootstraps = ServiceMarketClient.start_many(clients)
+        assert len(bootstraps) == 2
+        assert [bootstrap.stream_id for bootstrap in bootstraps] == [
+            _KEY.stream_id,
+            _OTHER_KEY.stream_id,
+        ]
+        assert [bootstrap.snapshot_sequence for bootstrap in bootstraps] == [0, 0]
+        assert all(client.healthy for client in clients)
+        assert all(client._remote_active and not client._remote_unknown for client in clients)
+        assert all(
+            market.registrations[key.stream_id] == {first._binding.registration_id}
+            for key in (_KEY, _OTHER_KEY)
+        )
+        market_operations = [op for op in transport.operations if op.startswith("market.")]
+        assert market_operations == ["market.bootstrap_many"]
+        assert market.starts == {_KEY.stream_id: 1, _OTHER_KEY.stream_id: 1}
+    finally:
+        _close_many(clients, runtime, registry)
+
+
+def test_start_many_uses_legacy_path_only_when_binding_omits_batch_operation(tmp_path):
+    first, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path, operations=_LEGACY_OPERATIONS
+    )
+    second = _same_runtime_client(runtime, subscribers, _OTHER_KEY)
+    clients = (first, second)
+    try:
+        bootstraps = ServiceMarketClient.start_many(clients)
+        assert len(bootstraps) == 2
+        market_operations = [op for op in transport.operations if op.startswith("market.")]
+        assert "market.bootstrap_many" not in market_operations
+        assert market_operations == [
+            "market.subscribe",
+            "market.snapshot",
+            "market.head",
+            "market.subscribe",
+            "market.snapshot",
+            "market.head",
+        ]
+        assert all(client.healthy for client in clients)
+        assert market.starts == {_KEY.stream_id: 1, _OTHER_KEY.stream_id: 1}
+    finally:
+        _close_many(clients, runtime, registry)
+
+
+def test_start_many_lost_reply_retains_per_key_unknown_until_explicit_close(tmp_path):
+    first, runtime, registry, market, transport, subscribers = _make_client(tmp_path)
+    second = _same_runtime_client(runtime, subscribers, _OTHER_KEY)
+    clients = (first, second)
+    transport.fail_after_dispatch.add("market.bootstrap_many")
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            ServiceMarketClient.start_many(clients)
+        assert error.value.code == "CONTROL_OUTCOME_UNKNOWN"
+        assert transport.operations.count("market.bootstrap_many") == 1
+        assert all(client._remote_unknown for client in clients)
+        assert all(client.unsubscription_uncertain for client in clients)
+        assert all(client._subscriber is not None for client in clients)
+        assert all(
+            market.registrations[key.stream_id] == {first._binding.registration_id}
+            for key in (_KEY, _OTHER_KEY)
+        )
+        for client in clients:
+            client.close()
+        assert all(client._state == "closed" for client in clients)
+        assert all(not market.registrations[key.stream_id] for key in (_KEY, _OTHER_KEY))
+        assert transport.operations.count("market.bootstrap_many") == 1
+        assert "market.subscribe" not in transport.operations
+        assert transport.operations.count("market.unsubscribe") == 2
+    finally:
+        _close_many(clients, runtime, registry)
+
+
+def test_start_many_required_source_descriptor_rejects_mixed_epoch_and_retains_unknown(tmp_path):
+    client, runtime, registry, market, transport, subscribers = _make_client(
+        tmp_path, require_source_descriptor=True
+    )
+    market.source_descriptor = _test_source_descriptor()
+    transport.batch_snapshot_epoch_override = "market-epoch-two"
+    try:
+        with pytest.raises(ServiceMarketError) as error:
+            ServiceMarketClient.start_many((client,))
+        assert error.value.code == "INVALID_BATCH_REPLY"
+        assert transport.operations.count("market.bootstrap_many") == 1
+        assert client._state == "close_failed"
+        assert client._remote_unknown is True
+        assert client.unsubscription_uncertain is True
+        assert client._source_descriptor is None
+        assert client._subscriber is subscribers.created[0]
+        assert subscribers.created[0].closed is False
+        assert market.registrations[_KEY.stream_id] == {client._binding.registration_id}
+
+        # The malformed successful-looking reply leaves remote state uncertain;
+        # cleanup is explicit and uses the existing registration, with no retry.
+        client.close()
+        assert client._state == "closed"
+        assert not market.registrations[_KEY.stream_id]
+        assert transport.operations.count("market.bootstrap_many") == 1
+        assert transport.operations.count("market.unsubscribe") == 1
+    finally:
+        _close_many((client,), runtime, registry)
 
 
 def test_recover_reuses_registration_and_replays_lost_pub_tail(tmp_path):

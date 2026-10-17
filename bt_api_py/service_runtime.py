@@ -41,6 +41,7 @@ PORT_OPERATIONS = MappingProxyType(
     {
         "service.market_source": frozenset(
             {
+                "market.bootstrap_many",
                 "market.subscribe",
                 "market.unsubscribe",
                 "market.snapshot",
