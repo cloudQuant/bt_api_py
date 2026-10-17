@@ -28,7 +28,7 @@ class Load01Profile:
     order_phase_seconds_by_strategy: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        if self.profile_id not in {"U0", "N1", "N2", "N3", "N4"}:
+        if self.profile_id not in {"U0", "N1", "N2", "N3", "N4", "N5"}:
             raise ValueError("LOAD01 profile id is not registered")
         if not (
             len(self.accounts_by_strategy)
@@ -79,7 +79,11 @@ class Load01Profile:
     def expected_bindings_per_strategy(self, strategy_index: int) -> int:
         # One shared market binding plus account, order, query and telemetry
         # bindings for each authorized account route.
-        return 1 + 4 * len(self.accounts_for_strategy(strategy_index))
+        group_binding = int(
+            self.profile_id == "N5"
+            and strategy_index in self.expected_group_capable_strategies
+        )
+        return 1 + 4 * len(self.accounts_for_strategy(strategy_index)) + group_binding
 
     def subscribed_topic_indices(self, strategy_index: int) -> tuple[int, ...]:
         return self.topic_indices_by_strategy[strategy_index]
@@ -92,6 +96,52 @@ class Load01Profile:
             raise ValueError("LOAD01 order cycles are one-based")
         topics = self.subscribed_topic_indices(strategy_index)
         return topics[(cycle - 1) % len(topics)]
+
+    def order_kind_for_cycle(self, strategy_index: int, cycle: int) -> str:
+        """Return the registered logical request kind for a one-based cycle."""
+        if cycle < 1:
+            raise ValueError("LOAD01 order cycles are one-based")
+        if (
+            self.profile_id == "N5"
+            and strategy_index % _STRATEGIES_PER_ACCOUNT == 0
+            and cycle % 2 == 1
+        ):
+            return "group"
+        return "single"
+
+    @property
+    def group_targets_per_account_per_second(self) -> tuple[float, ...]:
+        if self.profile_id != "N5":
+            return (0.0,) * _ACCOUNT_COUNT
+        return (0.1,) * _ACCOUNT_COUNT
+
+    @property
+    def single_targets_per_account_per_second(self) -> tuple[float, ...]:
+        return tuple(
+            logical - group
+            for logical, group in zip(
+                self.order_targets_per_account_per_second,
+                self.group_targets_per_account_per_second,
+                strict=True,
+            )
+        )
+
+    @property
+    def child_dispatch_targets_per_account_per_second(self) -> tuple[float, ...]:
+        return tuple(
+            single + 3 * group
+            for single, group in zip(
+                self.single_targets_per_account_per_second,
+                self.group_targets_per_account_per_second,
+                strict=True,
+            )
+        )
+
+    @property
+    def expected_group_capable_strategies(self) -> tuple[int, ...]:
+        if self.profile_id != "N5":
+            return ()
+        return tuple(indices[0] for indices in self.strategy_indices_by_account)
 
     @property
     def topic_subscriber_counts(self) -> tuple[int, ...]:
@@ -132,7 +182,7 @@ class Load01Profile:
         account_strategy_counts = tuple(
             len(indices) for indices in self.strategy_indices_by_account
         )
-        return {
+        sessions = {
             "market": _STRATEGY_COUNT,
             "monitor-durable": self.strategy_account_binding_count,
             "monitor-telemetry": self.strategy_account_binding_count,
@@ -145,6 +195,11 @@ class Load01Profile:
                 for index in range(_ACCOUNT_COUNT)
             },
         }
+        if self.profile_id == "N5":
+            # Ten client registration sessions share one portfolio
+            # coordinator instance; this count is not an instance/host count.
+            sessions["group-coordinator"] = len(self.expected_group_capable_strategies)
+        return sessions
 
     @property
     def order_targets_per_account_per_second(self) -> tuple[float, ...]:
@@ -165,7 +220,17 @@ class Load01Profile:
         ]
         for strategy_index, interval in enumerate(self.order_interval_seconds_by_strategy):
             topics = self.subscribed_topic_indices(strategy_index)
-            per_topic_rate = 1.0 / interval / len(topics)
+            single_rate = 1.0 / interval
+            if (
+                self.profile_id == "N5"
+                and strategy_index in self.expected_group_capable_strategies
+            ):
+                # The designated strategy alternates one group and one
+                # ordinary order cycle. Only its ordinary half is attributed
+                # to market topics; the three group legs use the separate
+                # DIM09 instrument contract.
+                single_rate *= 0.5
+            per_topic_rate = single_rate / len(topics)
             for account_index in self.accounts_for_strategy(strategy_index):
                 for topic_index in topics:
                     contributions[account_index][topic_index].append(per_topic_rate)
@@ -212,8 +277,8 @@ class Load01Profile:
 
 
 def _profile(profile_id: str) -> Load01Profile:
-    if profile_id not in {"U0", "N1", "N2", "N3", "N4"}:
-        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, N3, or N4")
+    if profile_id not in {"U0", "N1", "N2", "N3", "N4", "N5"}:
+        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, N3, N4, or N5")
 
     if profile_id == "N3":
         accounts_by_strategy = tuple(
@@ -233,10 +298,10 @@ def _profile(profile_id: str) -> Load01Profile:
             for strategy_index in range(_STRATEGY_COUNT)
         )
 
-    if profile_id in {"U0", "N3"}:
+    if profile_id in {"U0", "N3", "N5"}:
         topic_indices = tuple(tuple(range(_TOPIC_COUNT)) for _ in range(_STRATEGY_COUNT))
         topic_rates = (10,) * _TOPIC_COUNT
-        if profile_id == "U0":
+        if profile_id in {"U0", "N5"}:
             intervals = (5.0,) * _STRATEGY_COUNT
             phases = tuple(
                 (index % _STRATEGIES_PER_ACCOUNT) * 0.5
@@ -369,7 +434,7 @@ def market_keys_for_profile(profile_id: str = "U0") -> tuple[MarketSubscriptionK
     profile = load01_profile(profile_id)
     keys = []
     for index in range(_TOPIC_COUNT):
-        if profile.profile_id in {"U0", "N3"}:
+        if profile.profile_id in {"U0", "N3", "N5"}:
             venue = "loopback"
             instrument_id = f"load01-instrument-{index:02d}"
             native_symbol = f"LOAD{index:02d}-USD"

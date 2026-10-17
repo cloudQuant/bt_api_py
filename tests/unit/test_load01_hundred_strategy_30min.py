@@ -5275,6 +5275,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         raise ValueError("BT_API_LOAD01_MODE must be pilot or full")
     profile_id = os.environ.get("BT_API_LOAD01_PROFILE", "U0")
     profile = load01_profile(profile_id)
+    if profile_id == "N5":
+        raise RuntimeError(
+            "LOAD01 N5 is not runnable in this load runner yet: its group-owner, "
+            "Risk reservation and shared coordinator topology is not wired."
+        )
     startup_waves = profile.startup_waves(_STARTUP_STRATEGY_SLOTS)
     startup_wave_by_strategy = {
         strategy_index: wave_index

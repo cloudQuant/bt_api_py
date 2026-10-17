@@ -1,5 +1,6 @@
 import json
 from collections import Counter
+from math import fsum
 
 import pytest
 
@@ -189,6 +190,48 @@ def test_n4_same_account_market_rotation_and_cycle_quotas_are_explicit() -> None
     assert profile.formal_acceptance_eligible("full") is False
 
 
+def test_n5_group_mix_preserves_u0_market_and_separates_logical_and_leg_rates() -> None:
+    profile = load01_profile("N5")
+    keys = market_keys_for_profile("N5")
+
+    assert profile.accounts_by_strategy == tuple((index // 10,) for index in range(100))
+    assert profile.topic_indices_by_strategy == (tuple(range(20)),) * 100
+    assert keys == market_keys_for_profile("U0")
+    assert profile.order_interval_seconds_by_strategy == (5.0,) * 100
+    assert profile.order_phase_seconds_by_strategy == tuple(
+        (index % 10) * 0.5 for index in range(100)
+    )
+    assert profile.expected_group_capable_strategies == tuple(range(0, 100, 10))
+    assert profile.expected_bindings_per_strategy(0) == 6
+    assert profile.expected_bindings_per_strategy(1) == 5
+    assert profile.expected_registry_sessions["group-coordinator"] == 10
+
+    account_mix = []
+    for account_index in range(10):
+        strategy_indices = profile.strategy_indices_by_account[account_index]
+        cycles = [
+            profile.order_kind_for_cycle(strategy_index, cycle)
+            for strategy_index in strategy_indices
+            for cycle in (1, 2)
+        ]
+        account_mix.append((cycles.count("single"), cycles.count("group")))
+    assert account_mix == [(19, 1)] * 10
+    assert profile.order_targets_per_account_per_second == (2.0,) * 10
+    assert profile.single_targets_per_account_per_second == (1.9,) * 10
+    assert profile.group_targets_per_account_per_second == (0.1,) * 10
+    assert profile.child_dispatch_targets_per_account_per_second == (2.2,) * 10
+    assert fsum(profile.order_targets_per_account_per_second) == 20.0
+    assert fsum(profile.group_targets_per_account_per_second) == 1.0
+    assert fsum(profile.child_dispatch_targets_per_account_per_second) == 22.0
+    assert profile.order_targets_by_account_topic_per_second == ((0.095,) * 20,) * 10
+    assert all(
+        fsum(topic_rates) == 1.9
+        for topic_rates in profile.order_targets_by_account_topic_per_second
+    )
+    assert profile.registration_status == "CANDIDATE_NOT_P0_REGISTERED"
+    assert profile.formal_acceptance_eligible("full") is False
+
+
 def test_bars_are_direct_facts_with_per_message_json_byte_measurement() -> None:
     keys = market_keys_for_profile("N1")[2:5]
 
@@ -227,5 +270,5 @@ def test_n1_and_n2_startup_waves_keep_the_ten_strategy_slot_guard() -> None:
 
 
 def test_unknown_profile_fails_closed() -> None:
-    with pytest.raises(ValueError, match="U0, N1, N2, N3, or N4"):
-        load01_profile("N5")
+    with pytest.raises(ValueError, match="U0, N1, N2, N3, N4, or N5"):
+        load01_profile("N6")

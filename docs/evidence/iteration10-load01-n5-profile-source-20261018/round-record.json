@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "round": "iteration10-load01-n5-profile-source-20261018",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "base_head": "c5e373eadd6e679cd0ba3c34deccfc3cf88c1fab",
+  "scope": [
+    "tests/unit/_load01_profiles.py",
+    "tests/unit/test_load01_profiles.py",
+    "tests/unit/test_load01_hundred_strategy_30min.py"
+  ],
+  "source_sha256": {
+    "tests/unit/_load01_profiles.py": "e8c6eda90ea6f6391e2532988628034c2d8b4a58b5b9cfcb8a0d407f4217b108",
+    "tests/unit/test_load01_profiles.py": "b8ece2e2f217a0bd4b828f3c0fac475f8688f1300edf7a50d8f8e8dc3c218153",
+    "tests/unit/test_load01_hundred_strategy_30min.py": "7e72c69183e4b0e1497c83a5b9986cc6cf5953b5b4d2604b56077798e387e453"
+  },
+  "acceptance": "N5_PROFILE_CONTRACT_AND_FAIL_CLOSED_RUNNER_GUARD_ONLY",
+  "result": {
+    "passed_nodes": [
+      "test_n5_group_mix_preserves_u0_market_and_separates_logical_and_leg_rates",
+      "test_unknown_profile_fails_closed"
+    ],
+    "source_qa_exit": 1,
+    "source_qa_total": "2 passed; 1 failed (excluded group-workload test)",
+    "source_pins_unchanged": 392,
+    "stderr_bytes": 0,
+    "qa_result_path": "D:\\temp\\load01-n5-group-qa-r3-20261018\\result.json",
+    "qa_result_sha256": "b34a943258d8bd64680eee5a32e278b3481350b14fcdc4ef5f1741a0b9344567",
+    "stdout_sha256": "f559c8448cd2e4ac1663dd7fb66409374c168459ae76c925d17da915eeec3a52",
+    "junit_sha256": "851d3554d3771ed499598ab1e13c41d397282123eb42766a1ca34f6970102a17"
+  },
+  "behavior": {
+    "market": "U0: 20 topics,200 upstream events/s,100 strategies all subscribed",
+    "orders": "Per account:19 ordinary and1 three-leg group logical requests per10s; aggregate20logical requests/s and22child dispatch targets/s",
+    "coordinator": "10 client registrations to one coordinator instance; not10coordinators",
+    "runner": "Explicit N5 fail-closed guard before load setup until complete owner/coordinator topology is accepted"
+  },
+  "preservation": {
+    "runner_working_tree_sha256": "7d64d5c0efc442d5c0d2799ef97fb8312b3b55f91c9ce6ec58b8ae78cbe4750f",
+    "selected_runner_delta": "Only225-byte guard relative to accepted HEAD;17 preexisting WIP changes remain unstaged",
+    "excluded_unaccepted_paths": [
+      "tests/unit/_load01_group_workload.py",
+      "tests/unit/test_load01_group_workload.py"
+    ],
+    "prior_R2_and_R3_failures": "Preserved; group component remains unaccepted and is being repaired; no accepted test rerun for delivery"
+  },
+  "limits": [
+    "No N5 Host/topology/load execution or throughput acceptance",
+    "No provider/account acceptance",
+    "Formal62/68 unchanged; LOAD01 pending"
+  ],
+  "review": "R2 and R3 independent static delta reviews plus Root scope review; profile nodes accepted from actual R3 result, not an all-suite PASS",
+  "commit_note": "Commit hash is supplied by Git history and a separate postcommit observation, not predicted here."
+}
