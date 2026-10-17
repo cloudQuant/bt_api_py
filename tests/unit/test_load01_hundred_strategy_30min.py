@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from math import fsum
 import multiprocessing
 from multiprocessing.connection import wait as wait_connections
 import os
@@ -19,6 +20,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -48,12 +50,14 @@ from bt_api_base.service_protocol import (
 from bt_api_execution import (
     CancelDispatchClaimReceiptV1,
     CancelObservation,
+    ExecutionState,
     ExecutionScope,
     OrderIntent,
     ProviderObservation,
     SqliteExecutionStore,
 )
 from bt_api_execution.journal_reader import ExecutionJournalReader
+from bt_api_execution.service_order_entry import ExecutionOrderEntryService
 from bt_api_gateway import GatewayCommandKind, GatewayEventJournal, GatewayPrincipal
 from bt_api_gateway.account_session_worker import GatewayAccountSessionWorker
 from bt_api_gateway.market_hub import GatewayMarketHub
@@ -72,6 +76,7 @@ from bt_api_py.service_execution_monitor import (
 from bt_api_py.service_execution_monitor import (
     _outbox_scope as _relay_outbox_scope,
 )
+from bt_api_py.service_execution import ServiceExecutionClient, ServiceExecutionError
 from bt_api_py.service_host import ServiceHost, TrustedServiceAuthority
 from bt_api_py.service_market import (
     ServiceMarketClient,
@@ -132,6 +137,8 @@ _MARKET_OPS = frozenset(
 _ACCOUNT_OPS = frozenset({"account.snapshot"})
 _ORDER_OPS = frozenset({"orders.submit", "orders.cancel"})
 _QUERY_OPS = frozenset({"orders.query"})
+_N4_MARKET_STREAM_TAG = "load01_market_stream"
+_N4_LIFECYCLE_TAG = "load01_n4_lifecycle"
 _TELEMETRY_OPS = frozenset({"telemetry.append"})
 _INGRESS_OPS = frozenset({"events.append"})
 _MAX_RPC_BYTES = 262_144
@@ -1539,11 +1546,27 @@ def _market_authority_audience(
     )
 
 
-def _sample_intent(intent_id: str) -> dict[str, Any]:
+def _sample_intent(
+    intent_id: str,
+    *,
+    instrument: str = "LOAD01-USD",
+    market_stream: str | None = None,
+    lifecycle: str | None = None,
+) -> dict[str, Any]:
+    tags = {"scenario": "LOAD01", "synthetic": "true"}
+    if market_stream is not None or lifecycle is not None:
+        if (
+            type(market_stream) is not str
+            or not market_stream
+            or lifecycle not in {"fill", "cancel"}
+        ):
+            raise ValueError("LOAD01 N4 intents require a stream and lifecycle tag")
+        tags[_N4_MARKET_STREAM_TAG] = market_stream
+        tags[_N4_LIFECYCLE_TAG] = lifecycle
     return {
         "intent_id": intent_id,
         "signal_id": f"signal-{intent_id}",
-        "instrument": "LOAD01-USD",
+        "instrument": instrument,
         "side": "BUY",
         "position_effect": "OPEN",
         "order_type": "LIMIT",
@@ -1553,7 +1576,7 @@ def _sample_intent(intent_id: str) -> dict[str, Any]:
         "reduce_only": False,
         "metadata_version": "load01-synthetic-v1",
         "deadline_ns": None,
-        "tags": {"scenario": "LOAD01", "synthetic": "true"},
+        "tags": tags,
     }
 
 
@@ -1561,14 +1584,151 @@ class _SyntheticOrderProvider:
     def __init__(self) -> None:
         self.submitted = 0
         self.cancelled = 0
+        self.filled = 0
+        self._store: SqliteExecutionStore | None = None
+        self._n4_market_facts: dict[tuple[str, str, str], Counter[str]] = {}
+        self._n4_active: dict[
+            str, tuple[tuple[str, str, str], str, str]
+        ] = {}
+        self._n4_terminal_fills: dict[str, tuple[str, str, str]] = {}
+
+    def attach_store(self, store: SqliteExecutionStore) -> None:
+        if type(store) is not SqliteExecutionStore or self._store is not None:
+            raise AssertionError("LOAD01 synthetic provider store binding is invalid")
+        self._store = store
+
+    def _n4_context(self, intent: OrderIntent) -> tuple[tuple[str, str, str], str] | None:
+        stream_id = intent.tags.get(_N4_MARKET_STREAM_TAG)
+        lifecycle = intent.tags.get(_N4_LIFECYCLE_TAG)
+        if stream_id is None and lifecycle is None:
+            return None
+        if (
+            type(stream_id) is not str
+            or not stream_id
+            or lifecycle not in {"fill", "cancel"}
+            or self._store is None
+            or type(intent.scope.account_ref) is not str
+        ):
+            raise AssertionError("LOAD01 N4 provider received incomplete source facts")
+        persisted = self._store.get_intent(intent.intent_id, scope=intent.scope)
+        if (
+            persisted is None
+            or persisted != intent
+            or persisted.fingerprint != intent.fingerprint
+            or persisted.instrument != intent.instrument
+            or persisted.tags.get(_N4_MARKET_STREAM_TAG) != stream_id
+            or persisted.tags.get(_N4_LIFECYCLE_TAG) != lifecycle
+        ):
+            raise AssertionError("LOAD01 N4 provider intent differed from its durable journal")
+        key = (intent.scope.account_ref, intent.instrument, stream_id)
+        self._n4_market_facts.setdefault(key, Counter())["intent_readbacks"] += 1
+        return key, lifecycle
+
+    def facts_snapshot(self) -> dict[str, Any]:
+        market_counter_fields = (
+            "submit_calls",
+            "intent_readbacks",
+            "cumulative_fill_observations",
+            "acknowledged_orders",
+            "cancel_calls",
+        )
+        return {
+            "evidence": "synthetic_provider_cumulative_fill_observation_and_sqlite_query",
+            "market_facts": [
+                {
+                    "account_ref": account_ref,
+                    "instrument_id": instrument_id,
+                    "market_stream_id": stream_id,
+                    **{name: counts[name] for name in market_counter_fields},
+                }
+                for (account_ref, instrument_id, stream_id), counts in sorted(
+                    self._n4_market_facts.items()
+                )
+            ],
+            "active_acknowledged_orders": len(self._n4_active),
+            "terminal_fill_count": len(self._n4_terminal_fills),
+        }
 
     def submit(self, intent: OrderIntent) -> ProviderObservation:
         self.submitted += 1
-        return ProviderObservation.accepted(intent.intent_id, f"paper-{intent.intent_id}")
+        provider_order_id = f"paper-{intent.intent_id}"
+        n4_context = self._n4_context(intent)
+        if n4_context is None:
+            return ProviderObservation.accepted(intent.intent_id, provider_order_id)
+        key, lifecycle = n4_context
+        facts = self._n4_market_facts[key]
+        facts["submit_calls"] += 1
+        if lifecycle == "fill":
+            if intent.price is None or intent.quantity <= 0:
+                raise AssertionError("LOAD01 N4 synthetic fill requires a priced quantity")
+            self.filled += 1
+            facts["cumulative_fill_observations"] += 1
+            self._n4_terminal_fills[intent.intent_id] = key
+            if len(self._n4_terminal_fills) > _PER_ACCOUNT:
+                raise AssertionError("LOAD01 N4 provider retained too many terminal fills")
+            return ProviderObservation(
+                intent.intent_id,
+                ExecutionState.FILLED,
+                provider_order_id=provider_order_id,
+                filled_quantity=intent.quantity,
+                average_price=intent.price,
+            )
+        if intent.intent_id in self._n4_active or intent.intent_id in self._n4_terminal_fills:
+            raise AssertionError("LOAD01 N4 provider saw a duplicate active order")
+        self._n4_active[intent.intent_id] = (key, intent.scope.key, provider_order_id)
+        facts["acknowledged_orders"] += 1
+        return ProviderObservation.accepted(intent.intent_id, provider_order_id)
 
     def cancel(self, intent: Any) -> CancelObservation:
         self.cancelled += 1
-        return CancelObservation.accepted(
+        active = self._n4_active.get(intent.target_intent_id)
+        filled_key = self._n4_terminal_fills.get(intent.target_intent_id)
+        if active is None and filled_key is None:
+            return CancelObservation.accepted(
+                intent.cancel_id, intent.target_intent_id, intent.provider_order_id
+            )
+        if self._store is None:
+            raise AssertionError("LOAD01 N4 cancel lost its execution store")
+        persisted = self._store.get_intent(intent.target_intent_id, scope=intent.scope)
+        target_record = self._store.get(intent.target_intent_id, scope=intent.scope)
+        if persisted is None or target_record is None:
+            raise AssertionError("LOAD01 N4 cancellation target was not journaled")
+        if (
+            persisted.scope != intent.scope
+            or persisted.fingerprint != target_record.payload_sha256
+            or target_record.intent_id != intent.target_intent_id
+            or target_record.scope_key != intent.scope.key
+            or target_record.provider_order_id != intent.provider_order_id
+        ):
+            raise AssertionError("LOAD01 N4 cancel target failed journal binding")
+        if target_record.state is ExecutionState.FILLED:
+            return CancelObservation.rejected(
+                intent.cancel_id,
+                intent.target_intent_id,
+                intent.provider_order_id,
+                "already_filled",
+            )
+        if target_record.state not in {
+            ExecutionState.ACKED,
+            ExecutionState.PARTIALLY_FILLED,
+        }:
+            return CancelObservation.rejected(
+                intent.cancel_id,
+                intent.target_intent_id,
+                intent.provider_order_id,
+                "target_not_cancellable",
+            )
+        if (
+            active is None
+            or active[1] != persisted.scope.key
+            or active[2] != intent.provider_order_id
+            or filled_key is not None
+        ):
+            raise AssertionError("LOAD01 N4 acknowledged cancel did not match owner facts")
+        facts = self._n4_market_facts[active[0]]
+        facts["cancel_calls"] += 1
+        self._n4_active.pop(intent.target_intent_id)
+        return CancelObservation.cancelled(
             intent.cancel_id, intent.target_intent_id, intent.provider_order_id
         )
 
@@ -2461,6 +2621,7 @@ def _owner_process(
             "execution_host": host_facts(execution_host),
             "account_host": host_facts(account_host),
             "account_worker": worker_facts,
+            "synthetic_execution": order_provider.facts_snapshot(),
             "component_close_callback_errors": list(close_callback_errors),
         }
 
@@ -2644,6 +2805,7 @@ def _owner_process(
             )
 
         store = SqliteExecutionStore(execution_store_path)
+        order_provider.attach_store(store)
         account_host = ServiceHost(
             account_config, account_authority, account_registry_path, account_resources
         )
@@ -3100,6 +3262,7 @@ def _strategy_process(
     account_reads_by_account: Counter[int] = Counter()
     order_cycles = 0
     order_cycles_by_account: Counter[int] = Counter()
+    n4_order_facts_by_stream: dict[str, dict[str, Any]] = {}
     order_ticks = 0
     order_failures = 0
     telemetry_queue_drops = 0
@@ -3273,15 +3436,52 @@ def _strategy_process(
             route_account_ref = _ACCOUNT_REFS[route_account_index]
             route_execution_service = execution_services[route_account_index]
             order_scope_ref = route_execution_service["order_scope_ref"]
+            query_scope_ref = route_execution_service["query_scope_ref"]
             intent_id = (
                 f"load01-{route_account_index:02d}-{route_local_index:02d}-"
                 f"{cycle:07d}"
             )
+            n4 = profile.profile_id == "N4"
+            if n4:
+                topic_index = profile.order_topic_index(index, cycle)
+                if topic_index is None:
+                    raise AssertionError("LOAD01 N4 order cycle omitted its market key")
+                market_key = market_keys[topic_index]
+                instrument_id = market_key.instrument.instrument_id
+                market_stream_id = market_key.stream_id
+                lifecycle = "fill" if cycle == 1 else "cancel"
+                order_facts = n4_order_facts_by_stream.setdefault(
+                    market_stream_id,
+                    {
+                        "instrument_id": instrument_id,
+                        "cycles": 0,
+                        "submit_calls": 0,
+                        "cumulative_fill_observations": 0,
+                        "cancelled_orders": 0,
+                        "query_count": 0,
+                        "query_states": Counter(),
+                        "journal_fingerprint_matches": 0,
+                    },
+                )
+                if order_facts["instrument_id"] != instrument_id:
+                    raise AssertionError("LOAD01 N4 stream resolved to multiple instruments")
+                order_facts["cycles"] += 1
+                order_facts["submit_calls"] += 1
+            else:
+                instrument_id = "LOAD01-USD"
+                market_stream_id = None
+                lifecycle = None
+                order_facts = None
             order_started = time.perf_counter_ns()
             submitted = runtime.call(
                 "broker.orders",
                 "orders.submit",
-                _sample_intent(intent_id),
+                _sample_intent(
+                    intent_id,
+                    instrument=instrument_id,
+                    market_stream=market_stream_id,
+                    lifecycle=lifecycle,
+                ),
                 account_ref=route_account_ref,
                 scope_ref=order_scope_ref,
             )
@@ -3293,23 +3493,103 @@ def _strategy_process(
             if type(provider_order_id) is not str or not provider_order_id:
                 order_failures += 1
                 raise AssertionError("synthetic execution submit omitted its provider identity")
-            cancel_id = f"cancel-{intent_id}"
-            cancelled = runtime.call(
-                "broker.orders",
-                "orders.cancel",
-                {
-                    "cancel_id": cancel_id,
-                    "target_intent_id": intent_id,
-                    "provider_order_id": provider_order_id,
-                    "metadata_version": "load01-synthetic-v1",
-                    "tags": {"scenario": "LOAD01", "synthetic": "true"},
-                },
-                account_ref=route_account_ref,
-                scope_ref=order_scope_ref,
-            )
-            if cancelled.get("code") != "OK":
-                order_failures += 1
-                raise AssertionError("synthetic execution cancel was not acknowledged")
+            if n4:
+                expected_state = "FILLED" if lifecycle == "fill" else "ACKED"
+                expected_filled_quantity = "1" if lifecycle == "fill" else "0"
+                expected_average_price = "1" if lifecycle == "fill" else None
+                if (
+                    record.get("state") != expected_state
+                    or record.get("filled_quantity") != expected_filled_quantity
+                    or record.get("average_price") != expected_average_price
+                    or record.get("is_terminal") is not (lifecycle == "fill")
+                ):
+                    order_failures += 1
+                    raise AssertionError("LOAD01 N4 submit did not match its lifecycle facts")
+                if lifecycle == "fill":
+                    order_facts["cumulative_fill_observations"] += 1
+                else:
+                    order_facts["cancelled_orders"] += 1
+
+                def query_and_verify(expected: str) -> None:
+                    nonlocal order_failures
+                    queried = runtime.call(
+                        "broker.order_query",
+                        "orders.query",
+                        {"intent_id": intent_id},
+                        account_ref=route_account_ref,
+                        scope_ref=query_scope_ref,
+                    )
+                    result = queried.get("result", {})
+                    query_record = result.get("record") if result.get("found") else None
+                    if (
+                        queried.get("code") != "OK"
+                        or queried.get("ok") is not True
+                        or type(query_record) is not dict
+                        or query_record.get("intent_id") != intent_id
+                        or query_record.get("payload_sha256") != record.get("payload_sha256")
+                        or query_record.get("provider_order_id") != provider_order_id
+                        or query_record.get("state") != expected
+                        or query_record.get("filled_quantity") != expected_filled_quantity
+                        or query_record.get("average_price") != expected_average_price
+                        or query_record.get("is_terminal") is not (expected != "ACKED")
+                    ):
+                        order_failures += 1
+                        raise AssertionError(
+                            f"LOAD01 N4 journal query did not match {expected} submit facts"
+                        )
+                    order_facts["query_count"] += 1
+                    order_facts["query_states"][expected] += 1
+                    order_facts["journal_fingerprint_matches"] += 1
+
+                if lifecycle == "fill":
+                    query_and_verify("FILLED")
+                else:
+                    query_and_verify("ACKED")
+                    cancel_id = f"cancel-{intent_id}"
+                    cancelled = runtime.call(
+                        "broker.orders",
+                        "orders.cancel",
+                        {
+                            "cancel_id": cancel_id,
+                            "target_intent_id": intent_id,
+                            "provider_order_id": provider_order_id,
+                            "metadata_version": "load01-synthetic-v1",
+                            "tags": {"scenario": "LOAD01", "synthetic": "true"},
+                        },
+                        account_ref=route_account_ref,
+                        scope_ref=order_scope_ref,
+                    )
+                    if cancelled.get("code") != "OK":
+                        order_failures += 1
+                        raise AssertionError("synthetic execution cancel was not acknowledged")
+                    cancel_record = cancelled.get("result", {}).get("record")
+                    if (
+                        type(cancel_record) is not dict
+                        or cancel_record.get("target_intent_id") != intent_id
+                        or cancel_record.get("provider_order_id") != provider_order_id
+                        or cancel_record.get("state") != "CANCELLED"
+                    ):
+                        order_failures += 1
+                        raise AssertionError("LOAD01 N4 cancel did not persist a terminal result")
+                    query_and_verify("CANCELLED")
+            else:
+                cancel_id = f"cancel-{intent_id}"
+                cancelled = runtime.call(
+                    "broker.orders",
+                    "orders.cancel",
+                    {
+                        "cancel_id": cancel_id,
+                        "target_intent_id": intent_id,
+                        "provider_order_id": provider_order_id,
+                        "metadata_version": "load01-synthetic-v1",
+                        "tags": {"scenario": "LOAD01", "synthetic": "true"},
+                    },
+                    account_ref=route_account_ref,
+                    scope_ref=order_scope_ref,
+                )
+                if cancelled.get("code") != "OK":
+                    order_failures += 1
+                    raise AssertionError("synthetic execution cancel was not acknowledged")
             order_cycles += 1
             order_cycles_by_account[route_account_index] += 1
             elapsed_ms = (time.perf_counter_ns() - order_started) / 1_000_000
@@ -3759,6 +4039,33 @@ def _strategy_process(
             profile_id=profile_id,
             include_samples=True,
         )
+        if profile.profile_id == "N4":
+            n4_execution_by_stream = {}
+            for stream_id, facts in sorted(n4_order_facts_by_stream.items()):
+                query_states = dict(sorted(facts["query_states"].items()))
+                filled = facts["cumulative_fill_observations"]
+                cancelled = facts["cancelled_orders"]
+                if (
+                    facts["submit_calls"] != facts["cycles"]
+                    or filled + cancelled != facts["cycles"]
+                    or query_states.get("FILLED", 0) != filled
+                    or query_states.get("ACKED", 0) != cancelled
+                    or query_states.get("CANCELLED", 0) != cancelled
+                    or facts["query_count"] != filled + 2 * cancelled
+                    or facts["journal_fingerprint_matches"] != facts["query_count"]
+                ):
+                    raise AssertionError(
+                        f"LOAD01 N4 lifecycle/query facts diverged for {stream_id}"
+                    )
+                n4_execution_by_stream[stream_id] = {
+                    **{
+                        key: value
+                        for key, value in facts.items()
+                        if key != "query_states"
+                    },
+                    "query_states": query_states,
+                }
+            final_stats["n4_execution_by_stream"] = n4_execution_by_stream
         control.send(
             (
                 "closed",
@@ -5032,7 +5339,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         "profile_registration_status_source": (
             "docs/迭代计划/迭代10-可选组件与可配置通信/正式迭代计划.md:807-813 (U0 initial LOAD01 baseline)"
             if profile_id == "U0"
-            else "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md:17-26 (candidate only)"
+            else (
+                "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md:24 (N4 candidate only)"
+                if profile_id == "N4"
+                else "docs/evidence/iteration10-load01-n1n2-source-20261018/candidate-registration.md:17-26 (candidate only)"
+            )
         ),
         "state": "PREFLIGHT",
         "formal_acceptance_eligible": profile.formal_acceptance_eligible(mode),
@@ -5902,6 +6213,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
                 "provider_cancel_calls": message[11],
                 "relayed_event_count": message[12],
                 "account_provider": status,
+                "synthetic_execution": (
+                    message[17].get("synthetic_execution")
+                    if len(message) > 17 and type(message[17]) is dict
+                    else None
+                ),
             }
             if (
                 message[1] != account_index
@@ -5944,12 +6260,145 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
         phase = "exact-durable-and-registration-audit"
         durable_audit = _durable_outbox_audit(outbox_path, tuple(owner_source_records))
         total_strategy_cycles = sum(row["order_cycles"] for row in strategy_results.values())
+        n4_strategy_market_totals: dict[tuple[str, str, str], Counter[str]] = {}
+        n4_strategy_instrument_totals: dict[tuple[str, str], Counter[str]] = {}
+        if profile.profile_id == "N4":
+            for row in strategy_results.values():
+                account_ref = _ACCOUNT_REFS[row["account_index"]]
+                for stream_id, facts in row.get("n4_execution_by_stream", {}).items():
+                    key = (account_ref, facts["instrument_id"], stream_id)
+                    totals = n4_strategy_market_totals.setdefault(key, Counter())
+                    instrument_totals = n4_strategy_instrument_totals.setdefault(
+                        (account_ref, facts["instrument_id"]), Counter()
+                    )
+                    for field in (
+                        "cycles",
+                        "submit_calls",
+                        "cumulative_fill_observations",
+                        "cancelled_orders",
+                        "query_count",
+                        "journal_fingerprint_matches",
+                    ):
+                        totals[field] += facts[field]
+                        instrument_totals[field] += facts[field]
+                    for state, count in facts["query_states"].items():
+                        totals[f"query_{state}"] += count
+                        instrument_totals[f"query_{state}"] += count
         for account_index, account_record in owner_totals.items():
             account_cycles = sum(
                 row["order_cycles_by_account"].get(_ACCOUNT_REFS[account_index], 0)
                 for row in strategy_results.values()
             )
-            if (
+            if profile.profile_id == "N4":
+                synthetic_execution = account_record["synthetic_execution"]
+                if (
+                    type(synthetic_execution) is not dict
+                    or type(synthetic_execution.get("market_facts")) is not list
+                ):
+                    raise AssertionError("LOAD01 N4 owner omitted bounded provider facts")
+                expected_fill_count = sum(
+                    totals["cumulative_fill_observations"]
+                    for key, totals in n4_strategy_market_totals.items()
+                    if key[0] == _ACCOUNT_REFS[account_index]
+                )
+                expected_cancel_count = account_cycles - expected_fill_count
+                actual_market_facts = {
+                    (
+                        fact["account_ref"],
+                        fact["instrument_id"],
+                        fact["market_stream_id"],
+                    ): fact
+                    for fact in synthetic_execution["market_facts"]
+                }
+                account_ref = _ACCOUNT_REFS[account_index]
+                expected_keys = {
+                    (
+                        account_ref,
+                        market_keys[topic_index].instrument.instrument_id,
+                        market_keys[topic_index].stream_id,
+                    )
+                    for strategy_index in profile.strategy_indices_by_account[account_index]
+                    for topic_index in profile.subscribed_topic_indices(strategy_index)
+                }
+                expected_instrument_keys = {
+                    (account_ref, market_keys[topic_index].instrument.instrument_id)
+                    for strategy_index in profile.strategy_indices_by_account[account_index]
+                    for topic_index in profile.subscribed_topic_indices(strategy_index)
+                }
+                actual_instrument_facts: dict[tuple[str, str], Counter[str]] = {}
+                for (fact_account, instrument_id, _stream_id), fact in actual_market_facts.items():
+                    instrument_fact = actual_instrument_facts.setdefault(
+                        (fact_account, instrument_id), Counter()
+                    )
+                    for field in (
+                        "submit_calls",
+                        "intent_readbacks",
+                        "cumulative_fill_observations",
+                        "cancel_calls",
+                        "acknowledged_orders",
+                    ):
+                        instrument_fact[field] += fact.get(field, 0)
+                if (
+                    account_record["provider_submit_calls"] != account_cycles
+                    or account_record["provider_cancel_calls"] != expected_cancel_count
+                    or account_record["provider_submit_calls"] - expected_cancel_count
+                    != expected_fill_count
+                    or synthetic_execution["active_acknowledged_orders"] != 0
+                    or synthetic_execution["terminal_fill_count"] != expected_fill_count
+                    or set(actual_market_facts) != expected_keys
+                    or set(actual_instrument_facts) != expected_instrument_keys
+                ):
+                    raise AssertionError(
+                        f"LOAD01 N4 lifecycle provider totals differ for account {account_index}"
+                    )
+                for key in expected_keys:
+                    expected = n4_strategy_market_totals[key]
+                    actual = actual_market_facts[key]
+                    if (
+                        actual.get("submit_calls") != expected["submit_calls"]
+                        or actual.get("intent_readbacks") != expected["submit_calls"]
+                        or actual.get("cumulative_fill_observations")
+                        != expected["cumulative_fill_observations"]
+                        or actual.get("cancel_calls") != expected["cancelled_orders"]
+                        or actual.get("acknowledged_orders") != expected["cancelled_orders"]
+                        or expected["cycles"]
+                        != expected["cumulative_fill_observations"]
+                        + expected["cancelled_orders"]
+                        or expected["query_FILLED"]
+                        != expected["cumulative_fill_observations"]
+                        or expected["query_ACKED"] != expected["cancelled_orders"]
+                        or expected["query_CANCELLED"] != expected["cancelled_orders"]
+                        or expected["query_count"]
+                        != expected["cumulative_fill_observations"]
+                        + 2 * expected["cancelled_orders"]
+                        or expected["journal_fingerprint_matches"] != expected["query_count"]
+                    ):
+                        raise AssertionError(
+                            f"LOAD01 N4 instrument/query journal facts diverged for {key}"
+                        )
+                for instrument_key in expected_instrument_keys:
+                    expected = n4_strategy_instrument_totals[instrument_key]
+                    actual = actual_instrument_facts[instrument_key]
+                    if (
+                        actual.get("submit_calls") != expected["submit_calls"]
+                        or actual.get("intent_readbacks") != expected["submit_calls"]
+                        or actual.get("cumulative_fill_observations")
+                        != expected["cumulative_fill_observations"]
+                        or actual.get("cancel_calls") != expected["cancelled_orders"]
+                        or actual.get("acknowledged_orders") != expected["cancelled_orders"]
+                        or expected["query_FILLED"]
+                        != expected["cumulative_fill_observations"]
+                        or expected["query_ACKED"] != expected["cancelled_orders"]
+                        or expected["query_CANCELLED"] != expected["cancelled_orders"]
+                        or expected["query_count"]
+                        != expected["cumulative_fill_observations"]
+                        + 2 * expected["cancelled_orders"]
+                        or expected["journal_fingerprint_matches"] != expected["query_count"]
+                    ):
+                        raise AssertionError(
+                            f"LOAD01 N4 instrument-aggregated journal facts diverged for {instrument_key}"
+                        )
+            elif (
                 account_record["provider_submit_calls"] != account_cycles
                 or account_record["provider_cancel_calls"] != account_cycles
             ):
@@ -6058,6 +6507,11 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "account_read": _percentile_summary(account_values),
             "performance_threshold_registration": "NOT_REGISTERED_IN_P0",
         }
+        if profile.profile_id == "N4":
+            report["latency_ms"]["order_submit_cancel_roundtrip_semantics"] = (
+                "Per-cycle samples include submit plus durable query; non-fill cycles also "
+                "include ACKED query, cancel, and CANCELLED query. No N4 latency threshold is registered."
+            )
         report["market"] = {
             "provider_start_counts": market_start_counts,
             "provider_stop_counts": market_stop_counts,
@@ -6129,6 +6583,152 @@ def test_load01_hundred_strategy_sustained(tmp_path: Path) -> None:
             "provider_timeouts": 0,
             "provider_errors": 0,
         }
+        if profile.profile_id == "N4":
+            topic_execution_distribution = []
+            instrument_execution_distribution = []
+            order_topic_targets = profile.order_targets_by_account_topic_per_second
+            for account_index in range(_ACCOUNTS):
+                account_ref = _ACCOUNT_REFS[account_index]
+                account_topics = set(
+                    topic_index
+                    for strategy_index in profile.strategy_indices_by_account[account_index]
+                    for topic_index in profile.subscribed_topic_indices(strategy_index)
+                )
+                account_instruments = sorted(
+                    {
+                        market_keys[topic_index].instrument.instrument_id
+                        for topic_index in account_topics
+                    }
+                )
+                provider_by_instrument: dict[str, Counter[str]] = {}
+                for provider_fact in owner_totals[account_index]["synthetic_execution"][
+                    "market_facts"
+                ]:
+                    provider_instrument = provider_by_instrument.setdefault(
+                        provider_fact["instrument_id"], Counter()
+                    )
+                    for field in (
+                        "submit_calls",
+                        "intent_readbacks",
+                        "cumulative_fill_observations",
+                        "cancel_calls",
+                        "acknowledged_orders",
+                    ):
+                        provider_instrument[field] += provider_fact.get(field, 0)
+                for instrument_id in account_instruments:
+                    instrument_totals = n4_strategy_instrument_totals[
+                        (account_ref, instrument_id)
+                    ]
+                    provider_totals = provider_by_instrument[instrument_id]
+                    instrument_topics = tuple(
+                        topic_index
+                        for topic_index in sorted(account_topics)
+                        if market_keys[topic_index].instrument.instrument_id == instrument_id
+                    )
+                    instrument_target_rate = fsum(
+                        order_topic_targets[account_index][topic_index]
+                        for topic_index in instrument_topics
+                    )
+                    instrument_execution_distribution.append(
+                        {
+                            "account_ref": account_ref,
+                            "instrument_id": instrument_id,
+                            "market_topic_keys": [
+                                f"K{topic_index:02d}" for topic_index in instrument_topics
+                            ],
+                            "market_stream_ids": [
+                                market_keys[topic_index].stream_id
+                                for topic_index in instrument_topics
+                            ],
+                            "expected_lifecycle_targets_per_second": instrument_target_rate,
+                            "expected_lifecycle_targets_per_10_seconds": 10
+                            * instrument_target_rate,
+                            "observed_lifecycle_count": instrument_totals["cycles"],
+                            "observed_lifecycles_per_second": (
+                                instrument_totals["cycles"] / actual_duration
+                            ),
+                            "provider_submit_calls": provider_totals["submit_calls"],
+                            "journal_intent_readbacks": provider_totals["intent_readbacks"],
+                            "cumulative_fill_observations": provider_totals[
+                                "cumulative_fill_observations"
+                            ],
+                            "provider_cancel_calls": provider_totals["cancel_calls"],
+                            "acknowledged_orders": provider_totals[
+                                "acknowledged_orders"
+                            ],
+                            "query_states": {
+                                state: instrument_totals.get(f"query_{state}", 0)
+                                for state in ("FILLED", "ACKED", "CANCELLED")
+                            },
+                            "journal_fingerprint_matches": instrument_totals[
+                                "journal_fingerprint_matches"
+                            ],
+                        }
+                    )
+                for topic_index, market_key in enumerate(market_keys):
+                    facts = n4_strategy_market_totals.get(
+                        (
+                            account_ref,
+                            market_key.instrument.instrument_id,
+                            market_key.stream_id,
+                        ),
+                        Counter(),
+                    )
+                    cycles = facts.get("cycles", 0)
+                    topic_execution_distribution.append(
+                        {
+                            "account_ref": account_ref,
+                            "topic_key": f"K{topic_index:02d}",
+                            "market_stream_id": market_key.stream_id,
+                            "instrument_id": market_key.instrument.instrument_id,
+                            "subscribed": topic_index in account_topics,
+                            "expected_lifecycle_targets_per_second": order_topic_targets[
+                                account_index
+                            ][topic_index],
+                            "expected_lifecycle_targets_per_10_seconds": (
+                                10 * order_topic_targets[account_index][topic_index]
+                            ),
+                            "observed_lifecycle_count": cycles,
+                            "observed_lifecycles_per_second": cycles / actual_duration,
+                            "cumulative_fill_observations": facts.get(
+                                "cumulative_fill_observations", 0
+                            ),
+                            "cancelled_orders": facts.get("cancelled_orders", 0),
+                            "query_states": {
+                                state: facts.get(f"query_{state}", 0)
+                                for state in ("FILLED", "ACKED", "CANCELLED")
+                            },
+                            "journal_fingerprint_matches": facts.get(
+                                "journal_fingerprint_matches", 0
+                            ),
+                        }
+                    )
+            report["accounts_and_execution"]["n4_market_execution_distribution"] = {
+                "evidence_basis": (
+                    "Synthetic cumulative fill observations persisted through the execution "
+                    "facade and SQLite journal; query fingerprints and states were checked. "
+                    "This is not per-trade OrderFillFact evidence."
+                ),
+                "cycle_target_window_seconds": 10,
+                "distinct_instrument_ids_by_account": {
+                    _ACCOUNT_REFS[account_index]: sorted(
+                        {
+                            market_keys[topic_index].instrument.instrument_id
+                            for strategy_index in profile.strategy_indices_by_account[
+                                account_index
+                            ]
+                            for topic_index in profile.subscribed_topic_indices(
+                                strategy_index
+                            )
+                        }
+                    )
+                    for account_index in range(_ACCOUNTS)
+                },
+                "by_account_instrument": instrument_execution_distribution,
+                "by_account_topic_stream": topic_execution_distribution,
+                "per_topic_target_is_report_only": True,
+                "latency_threshold_registered": False,
+            }
         report["durable_monitor"] = {
             **durable_audit,
             "sqlite_bytes_after_close": _sqlite_tree_bytes(outbox_path),
@@ -7793,6 +8393,434 @@ def test_load01_n3_strategy_config_binds_each_assigned_account_route() -> None:
 
     assert runtime.cleanup_failures == 0
     assert all(transport.closed for transport in transports.values())
+
+
+@pytest.mark.unit
+def test_load01_n4_client_facade_sqlite_fill_cancel_query_binding(tmp_path: Path) -> None:
+    """Exercise N4 key selection through the client, real execution facade and journal.
+
+    Only the runtime transport leaf is synthetic: the SDK route selector, SDK
+    execution client, execution service, provider observation and SQLite
+    journal are the actual implementations. No service Host or network socket
+    is started by this focused node.
+    """
+
+    profile = load01_profile("N4")
+    account_index = 1
+    strategy_index = profile.strategy_indices_by_account[account_index][0]
+    account_ref = _ACCOUNT_REFS[account_index]
+    strategy_ref = _strategy_ref(strategy_index)
+    assert profile.accounts_for_strategy(strategy_index) == (account_index,)
+    topic_indices = tuple(
+        profile.order_topic_index(strategy_index, cycle) for cycle in range(1, 5)
+    )
+    assert topic_indices == (2, 3, 4, 5)
+    market_keys = market_keys_for_profile("N4")
+    selected_keys = tuple(market_keys[index] for index in topic_indices)
+    assert tuple(key.instrument.instrument_id for key in selected_keys) == (
+        "SYNTH-X",
+        "SYNTH-X",
+        "SYNTH-X",
+        "load01-instrument-05",
+    )
+    assert len({key.instrument.instrument_id for key in selected_keys}) == 2
+
+    order_scope_ref = "load01-n4-client-test-orders-v1"
+    query_scope_ref = "load01-n4-client-test-query-v1"
+    service_id = f"{_EXEC_SERVICE_PREFIX}{account_index:02d}"
+    instance_id = f"{_EXEC_INSTANCE_PREFIX}{account_index:02d}"
+    transport_ref = "load01-n4-client-test-execution-v1"
+    security_ref = "load01-n4-client-test-security-v1"
+    scope_template = WireScope(
+        _DOMAIN,
+        account_ref=account_ref,
+        strategy_ref=strategy_ref,
+    )
+    execution_scope = ExecutionScope(
+        "synthetic", "paper", account_ref, strategy_ref, _EXECUTION_DAY
+    )
+    identity = WireIdentity(
+        WireRole.STRATEGY_CLIENT,
+        _principal_ref(strategy_index),
+        strategy_ref,
+    )
+    peer = WireIdentity(WireRole.SERVICE, _EXEC_SERVICE_PRINCIPAL, service_id)
+    provider = _SyntheticOrderProvider()
+    store = SqliteExecutionStore(tmp_path / "load01-n4-order-entry.sqlite")
+    provider.attach_store(store)
+    entry = ExecutionOrderEntryService(
+        store,
+        {scope_template: execution_scope},
+        provider,
+        allow_unprotected=True,
+    )
+
+    class ExecutionServiceTransport:
+        """Fake the wire leaf while dispatching into the actual execution service."""
+
+        def __init__(self) -> None:
+            self.registrations: dict[str, dict[str, Any]] = {}
+            self.business_routes: list[dict[str, str]] = []
+            self.closed = False
+
+        def request(self, request: WireEnvelope, *, timeout: float) -> WireEnvelope:
+            assert timeout > 0
+            operation = request.header.operation
+            payload = request.payload
+            if operation == "service.discover":
+                result: dict[str, Any] = {
+                    "protocol_version": 2,
+                    "service_id": service_id,
+                    "ready": True,
+                    "capabilities": [
+                        {
+                            "instance_id": instance_id,
+                            "port": "service.order_entry",
+                            "operations": sorted(_ORDER_OPS),
+                        },
+                        {
+                            "instance_id": instance_id,
+                            "port": "service.order_query",
+                            "operations": sorted(_QUERY_OPS),
+                        },
+                    ],
+                }
+            elif operation == "service.register":
+                registration_id = "load01-n4-registration-" + payload["port"]
+                registration = {
+                    "registration_id": registration_id,
+                    "service_epoch": "load01-n4-test-epoch-v1",
+                    "scope_ref": payload["scope_ref"],
+                    "port": payload["port"],
+                    "operations": tuple(payload["operations"]),
+                }
+                self.registrations[registration_id] = registration
+                result = {
+                    "registration_id": registration_id,
+                    "service_epoch": registration["service_epoch"],
+                    "policy_version": "load01-n4-test-policy-v1",
+                    "requirements_version": "load01-n4-test-requirements-v1",
+                    "operations": list(payload["operations"]),
+                    "expires_at": time.time() + 120.0,
+                    "lease_remaining_seconds": 120.0,
+                }
+            elif operation == "service.renew":
+                registration = self.registrations[payload["registration_id"]]
+                result = {
+                    "registration_id": registration["registration_id"],
+                    "service_epoch": registration["service_epoch"],
+                    "policy_version": "load01-n4-test-policy-v1",
+                    "requirements_version": "load01-n4-test-requirements-v1",
+                    "operations": list(registration["operations"]),
+                    "expires_at": time.time() + 120.0,
+                    "lease_remaining_seconds": 120.0,
+                }
+            elif operation == "service.unregister":
+                registration_id = payload["registration_id"]
+                result = {
+                    "unregistered": self.registrations.pop(registration_id, None) is not None,
+                    "registration_id": registration_id,
+                }
+            else:
+                registration = self.registrations[payload["registration_id"]]
+                assert operation in registration["operations"]
+                expected_scope_ref = (
+                    query_scope_ref if operation == "orders.query" else order_scope_ref
+                )
+                assert registration["scope_ref"] == expected_scope_ref
+                assert request.header.scope.account_ref == account_ref
+                assert request.header.scope.strategy_ref == strategy_ref
+                self.business_routes.append(
+                    {
+                        "operation": operation,
+                        "scope_ref": registration["scope_ref"],
+                        "account_ref": request.header.scope.account_ref,
+                        "strategy_ref": request.header.scope.strategy_ref,
+                    }
+                )
+                result = entry.handle(
+                    operation,
+                    principal_ref=request.header.identity.principal_ref,
+                    identity=request.header.identity,
+                    scope=request.header.scope,
+                    arguments=payload["arguments"],
+                )
+            return WireEnvelope(
+                replace(
+                    request.header,
+                    kind=WireMessageKind.REPLY,
+                    message_id="reply-" + request.header.message_id,
+                    correlation_id=request.header.message_id,
+                    identity=peer,
+                ),
+                {"ok": True, "result": result},
+            )
+
+        def close(self) -> None:
+            self.closed = True
+
+    raw_config = {
+        "client_config_schema_version": 1,
+        "process_role": "strategy_client",
+        "registration": {"strategy_ref": strategy_ref},
+        "clients": {
+            "execution": {
+                "config_schema_version": 1,
+                "settings": {
+                    "bindings": [
+                        {
+                            "mount": "broker.orders",
+                            "service_id": service_id,
+                            "instance_id": instance_id,
+                            "scope_ref": order_scope_ref,
+                            "account_ref": account_ref,
+                            "transport_ref": transport_ref,
+                        },
+                        {
+                            "mount": "broker.order_query",
+                            "service_id": service_id,
+                            "instance_id": instance_id,
+                            "scope_ref": query_scope_ref,
+                            "account_ref": account_ref,
+                            "transport_ref": transport_ref,
+                        },
+                    ],
+                    "options": {
+                        "request_timeout_ms": _RPC_TIMEOUT_MS,
+                        "heartbeat_interval_seconds": _HEARTBEAT_SECONDS,
+                    },
+                },
+            }
+        },
+        "communication": {
+            "config_schema_version": 1,
+            "profiles": {
+                transport_ref: {
+                    "backend": "zmq",
+                    "config_schema_version": 1,
+                    "endpoints": {"rpc_connect": "tcp://127.0.0.1:31991"},
+                    "security_profile_ref": security_ref,
+                    "options": {"request_timeout_ms": _RPC_TIMEOUT_MS},
+                }
+            },
+        },
+    }
+    parsed_config = parse_client_config(raw_config)
+    transports: list[ExecutionServiceTransport] = []
+    def peer_for(requested_service: str) -> WireIdentity:
+        if requested_service != service_id:
+            raise AssertionError("unexpected N4 service route")
+        return peer
+
+    def transport_factory(_profile, _peer: WireIdentity) -> ExecutionServiceTransport:
+        transport = ExecutionServiceTransport()
+        transports.append(transport)
+        return transport
+
+    runtime = ServiceClientRuntime(
+        parsed_config,
+        identity=identity,
+        scope_resolver=lambda _scope_ref: scope_template,
+        peer_resolver=peer_for,
+        transport_factory=transport_factory,
+        client_session_id="load01-n4-client-test-session",
+        run_id="load01-n4-client-test-run",
+    )
+
+    try:
+        runtime.start()
+        orders = ServiceExecutionClient(
+            runtime,
+            "broker.orders",
+            scope_ref=order_scope_ref,
+            query_mount="broker.order_query",
+            query_scope_ref=query_scope_ref,
+        )
+        for cycle, market_key in enumerate(selected_keys, start=1):
+            intent_id = f"load01-n4-a01-cycle-{cycle:02d}"
+            lifecycle = "fill" if cycle == 1 else "cancel"
+            tags = {
+                "scenario": "LOAD01",
+                "synthetic": "true",
+                _N4_MARKET_STREAM_TAG: market_key.stream_id,
+                _N4_LIFECYCLE_TAG: lifecycle,
+            }
+            submitted = orders.submit(
+                intent_id=intent_id,
+                signal_id=f"signal-{intent_id}",
+                instrument=market_key.instrument.instrument_id,
+                side="BUY",
+                position_effect="OPEN",
+                order_type="LIMIT",
+                quantity="1",
+                price="1",
+                metadata_version="load01-synthetic-v1",
+                tags=tags,
+            )
+            expected_submit_state = "FILLED" if lifecycle == "fill" else "ACKED"
+            expected_filled_quantity = Decimal("1") if lifecycle == "fill" else Decimal("0")
+            expected_average_price = Decimal("1") if lifecycle == "fill" else None
+            assert submitted.state == expected_submit_state
+            assert submitted.filled_quantity == expected_filled_quantity
+            assert submitted.average_price == expected_average_price
+            assert submitted.provider_order_id == f"paper-{intent_id}"
+            assert submitted.is_terminal is (lifecycle == "fill")
+
+            durable_intent = store.get_intent(intent_id, scope=execution_scope)
+            durable_record = store.get(intent_id, scope=execution_scope)
+            assert durable_intent is not None and durable_record is not None
+            assert durable_intent.scope.account_ref == account_ref
+            assert durable_intent.scope.strategy_id == strategy_ref
+            assert durable_intent.instrument == market_key.instrument.instrument_id
+            assert durable_intent.tags[_N4_MARKET_STREAM_TAG] == market_key.stream_id
+            assert durable_intent.tags[_N4_LIFECYCLE_TAG] == lifecycle
+            assert durable_intent.fingerprint == durable_record.payload_sha256
+            assert durable_record.scope_key == execution_scope.key
+
+            queried = orders.query(intent_id)
+            assert queried is not None
+            assert queried.state == expected_submit_state
+            assert queried.scope_key == execution_scope.key
+            assert queried.provider_order_id == submitted.provider_order_id
+            assert queried.filled_quantity == expected_filled_quantity
+            assert queried.average_price == expected_average_price
+            assert queried.is_terminal is (lifecycle == "fill")
+
+            if lifecycle == "fill":
+                assert provider.cancelled == 0
+                assert durable_record.state is ExecutionState.FILLED
+                assert durable_record.payload_sha256 == durable_intent.fingerprint
+                with pytest.raises(ServiceExecutionError) as cancel_error:
+                    orders.cancel(
+                        cancel_id=f"cancel-filled-{intent_id}",
+                        target_intent_id=intent_id,
+                        provider_order_id=submitted.provider_order_id,
+                        metadata_version="load01-synthetic-v1",
+                        tags={"scenario": "LOAD01", "synthetic": "true"},
+                    )
+                assert cancel_error.value.code == "INVALID_REQUEST"
+                assert provider.cancelled == 0
+                still_filled = orders.query(intent_id)
+                assert still_filled is not None
+                assert still_filled.state == "FILLED"
+                assert still_filled.scope_key == execution_scope.key
+                assert still_filled.provider_order_id == submitted.provider_order_id
+                assert still_filled.filled_quantity == Decimal("1")
+                assert still_filled.average_price == Decimal("1")
+                assert still_filled.is_terminal is True
+                durable_after_cancel = store.get(intent_id, scope=execution_scope)
+                assert durable_after_cancel is not None
+                assert durable_after_cancel.state is ExecutionState.FILLED
+                assert durable_after_cancel.payload_sha256 == durable_intent.fingerprint
+                continue
+
+            cancellation = orders.cancel(
+                cancel_id=f"cancel-{intent_id}",
+                target_intent_id=intent_id,
+                provider_order_id=submitted.provider_order_id,
+                metadata_version="load01-synthetic-v1",
+                tags={"scenario": "LOAD01", "synthetic": "true"},
+            )
+            assert cancellation.state == "CANCELLED"
+            cancelled_query = orders.query(intent_id)
+            assert cancelled_query is not None
+            assert cancelled_query.state == "CANCELLED"
+            assert cancelled_query.scope_key == execution_scope.key
+            assert cancelled_query.provider_order_id == submitted.provider_order_id
+            assert cancelled_query.filled_quantity == Decimal("0")
+            assert cancelled_query.average_price is None
+            assert cancelled_query.is_terminal is True
+            durable_record = store.get(intent_id, scope=execution_scope)
+            assert durable_record is not None
+            assert durable_record.state is ExecutionState.CANCELLED
+            assert durable_record.payload_sha256 == durable_intent.fingerprint
+
+        assert provider.submitted == 4
+        assert provider.filled == 1
+        assert provider.cancelled == 3
+        assert not provider._n4_active
+        assert len(provider._n4_terminal_fills) == 1
+        assert len(transports) == 1
+        assert transports[0].business_routes == [
+            {
+                "operation": operation,
+                "scope_ref": query_scope_ref if operation == "orders.query" else order_scope_ref,
+                "account_ref": account_ref,
+                "strategy_ref": strategy_ref,
+            }
+            for operation in (
+                "orders.submit",
+                "orders.query",
+                "orders.cancel",
+                "orders.query",
+                "orders.submit",
+                "orders.query",
+                "orders.cancel",
+                "orders.query",
+                "orders.submit",
+                "orders.query",
+                "orders.cancel",
+                "orders.query",
+                "orders.submit",
+                "orders.query",
+                "orders.cancel",
+                "orders.query",
+            )
+        ]
+        facts_by_key = {
+            (fact["account_ref"], fact["instrument_id"], fact["market_stream_id"]): fact
+            for fact in provider.facts_snapshot()["market_facts"]
+        }
+        expected_fact_keys = {
+            (account_ref, key.instrument.instrument_id, key.stream_id)
+            for key in selected_keys
+        }
+        assert set(facts_by_key) == expected_fact_keys
+        for cycle, market_key in enumerate(selected_keys, start=1):
+            facts = facts_by_key[(account_ref, market_key.instrument.instrument_id, market_key.stream_id)]
+            assert facts["submit_calls"] == 1
+            assert facts["intent_readbacks"] == 1
+            assert facts["cumulative_fill_observations"] == (1 if cycle == 1 else 0)
+            assert facts["acknowledged_orders"] == (0 if cycle == 1 else 1)
+            assert facts["cancel_calls"] == (0 if cycle == 1 else 1)
+        by_instrument: dict[str, Counter[str]] = {}
+        for fact in facts_by_key.values():
+            totals = by_instrument.setdefault(fact["instrument_id"], Counter())
+            for name in (
+                "submit_calls",
+                "intent_readbacks",
+                "cumulative_fill_observations",
+                "acknowledged_orders",
+                "cancel_calls",
+            ):
+                totals[name] += fact[name]
+        assert by_instrument == {
+            "SYNTH-X": Counter(
+                {
+                    "submit_calls": 3,
+                    "intent_readbacks": 3,
+                    "cumulative_fill_observations": 1,
+                    "acknowledged_orders": 2,
+                    "cancel_calls": 2,
+                }
+            ),
+            "load01-instrument-05": Counter(
+                {
+                    "submit_calls": 1,
+                    "intent_readbacks": 1,
+                    "cumulative_fill_observations": 0,
+                    "acknowledged_orders": 1,
+                    "cancel_calls": 1,
+                }
+            ),
+        }
+    finally:
+        if runtime.state == "registered":
+            runtime.close()
+        store.close()
+
+    assert runtime.cleanup_failures == 0
+    assert all(transport.closed for transport in transports)
 
 
 def test_load01_ten_strategy_twenty_topic_startup_wave_stays_healthy_and_closes(

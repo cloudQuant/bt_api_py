@@ -1,0 +1,72 @@
+{
+  "round": "Iteration10 LOAD01 N4 multi-instrument lifecycle profile and runtime wiring",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "bacb08b691ccf900fe634bbeef03a36d0540dd08",
+  "commit_lookup": "git log -1 -- docs/evidence/iteration10-load01-n4-source-20261018/round-record.json",
+  "scope": [
+    "tests/unit/_load01_profiles.py",
+    "tests/unit/test_load01_profiles.py",
+    "tests/unit/test_load01_hundred_strategy_30min.py",
+    "docs/evidence/iteration10-load01-n4-source-20261018/round-record.json"
+  ],
+  "source_pins": {
+    "tests/unit/_load01_profiles.py": "104fcbca482c546d091d70a9234d21e4eaa764fe784617a26b324038a7cdfd9c",
+    "tests/unit/test_load01_profiles.py": "078adb546f72e0ee9d0d6ddf1cf73ba2dceed3b14095b24855ad231cc92f0697",
+    "tests/unit/test_load01_hundred_strategy_30min.py": "79cb23fb4748f42907568bb2fca5f768ac15dd87d1499f4882affd945746aee6"
+  },
+  "profile": {
+    "account_count": 10,
+    "strategies_per_account": 10,
+    "market_binding_count": 130,
+    "account_market_keys": "K[(2*a+j)%20], j=0..3; local strategy zero rotates all four, other strategies use local_index%4",
+    "target_logical_cycles_per_account_per_10s": 20,
+    "instrument_note": "Market keys 2,3,4 are SYNTH-X bars at different timeframes. Four market keys do not imply four distinct instruments.",
+    "lifecycle": "First order per strategy yields a typed cumulative FILLED provider observation and journal query. Other cycles ACKED -> query -> cancel -> CANCELLED query. No per-trade OrderFillFact claim."
+  },
+  "change": "Strategies bind selected account/instrument/stream to stored intents and read back journal state. Provider observations pass through the actual execution entry/facade/SQLite path. Snapshot exports five real counter fields including explicit zero values; full-runner checks stay strict.",
+  "acceptance": {
+    "evidence_level": "N4_SOURCE_PROFILE_AND_REAL_CLIENT_RUNTIME_ENTRY_FACADE_SQLITE_WITH_FAKE_TRANSPORT_AND_SYNTHETIC_PROVIDER_NO_HOST",
+    "profile_and_N3_regression": "9 passed in first run; not repeated after focused-only fixture and producer projection fixes",
+    "N4_focus": "1 passed in 2.49s in final run; zero warnings and empty stderr",
+    "covered": "Actual ServiceExecutionClient/Runtime selection through fake wire transport into real ExecutionOrderEntryService/facade/synthetic provider/SQLite; four market keys, fill and cancel lifecycle, FILLED cancel rejected without provider dispatch, immutable journal fingerprint/account/instrument, query states, aggregate zero counts, transport/store cleanup.",
+    "qa_outputs": [
+      {
+        "path": "D:/temp/load01-n4-focused-qa-r2-20261018",
+        "result_sha256": "01338792d524e8e9b1d75922a43c9e0df3b512720a452a882d9c6939f233b0ba",
+        "pytest_exit": 1
+      },
+      {
+        "path": "D:/temp/load01-n4-focused-qa-r3-20261018",
+        "result_sha256": "934a70685e3a4a66c76c9fef24b574f3ddbf7c3dfdc165d5f11eeddfd464e6d5",
+        "pytest_exit": 1
+      },
+      {
+        "path": "D:/temp/load01-n4-focused-qa-r4-20261018",
+        "result_sha256": "206e79fab485937916e578a2f6913005e946bef9092546ccca3a20d7c3e94377",
+        "pytest_exit": 0
+      }
+    ],
+    "preserved_failures": [
+      "R2 focused setup referenced nonexistent constant; corrected to actual account strategy assignment. R2 also had one unknown unit marker warning in minimal QA config, registered in R3.",
+      "R3 reached all business-path assertions then exposed omitted zero counter fields; R4 fixed producer schema, not the strict consumer expectations."
+    ],
+    "independent_review": "gateway_native_free_close_review GO_STATIC on R4 exact pins, including real filled-cancel rejection and zero-counter projection",
+    "source_pins_unchanged_each_run": 387,
+    "not_proven": [
+      "N4 service Host or multi-process sustained run",
+      "N4 formal LOAD01 acceptance",
+      "P0 performance SLA registration"
+    ]
+  },
+  "preservation": {
+    "HEAD_only_runner_overlay": "D:\\bt_api_py\\.codex-tmp\\load01-n4-freeze-20261018-r4\\head-overlay\\tests\\unit\\test_load01_hundred_strategy_30min.py",
+    "N4_hunks": 27,
+    "preexisting_runner_WIP_hunks_preserved": 17,
+    "working_runner_sha256": "9628d4fd31d048fc31ce865b72e46286ab77a07faae4c6c1c672b24a1a3b615d",
+    "new_worktree": false
+  },
+  "formal_pass_count_before": 62,
+  "formal_pass_count_after": 62,
+  "next": "Implement N5 grouped-order source wiring while market runtime performance work continues independently."
+}

@@ -126,6 +126,69 @@ def test_n3_multi_account_bindings_keep_u0_market_and_per_account_order_targets(
     assert profile.formal_acceptance_eligible("full") is False
 
 
+def test_n4_same_account_market_rotation_and_cycle_quotas_are_explicit() -> None:
+    profile = load01_profile("N4")
+    keys = market_keys_for_profile("N4")
+    expected_intervals = (2.5, 5.0, 5.0, 5.0, 5.0, 10.0, 5.0, 5.0, 5.0, 10.0)
+    expected_phases = (0.0, 0.0, 0.5, 1.0, 1.5, 2.5, 3.0, 3.5, 4.0, 7.5)
+
+    assert profile.accounts_by_strategy == tuple(
+        (strategy_index // 10,) for strategy_index in range(100)
+    )
+    for strategy_index in range(100):
+        account_index, local_index = divmod(strategy_index, 10)
+        account_keys = tuple((2 * account_index + offset) % 20 for offset in range(4))
+        expected_topics = account_keys if local_index == 0 else (account_keys[local_index % 4],)
+
+        assert profile.subscribed_topic_indices(strategy_index) == expected_topics
+        assert profile.order_interval_seconds_by_strategy[strategy_index] == expected_intervals[
+            local_index
+        ]
+        assert profile.order_phase_seconds_by_strategy[strategy_index] == expected_phases[
+            local_index
+        ]
+        assert profile.order_topic_index(strategy_index, 1) == expected_topics[0]
+        assert profile.order_topic_index(strategy_index, 4) == expected_topics[(3 % len(expected_topics))]
+
+    assert tuple(key.instrument.instrument_id for key in keys[:5]) == (
+        "sim-sim-a-btc-usdt",
+        "sim-sim-b-btc-usdt",
+        "SYNTH-X",
+        "SYNTH-X",
+        "SYNTH-X",
+    )
+    assert tuple(key.timeframe for key in keys[2:5]) == ("1m", "5m", "15m")
+    account_one_topics = profile.subscribed_topic_indices(10)
+    account_one_instruments = tuple(
+        keys[topic_index].instrument.instrument_id for topic_index in account_one_topics
+    )
+    assert account_one_topics == (2, 3, 4, 5)
+    assert account_one_instruments == (
+        "SYNTH-X",
+        "SYNTH-X",
+        "SYNTH-X",
+        "load01-instrument-05",
+    )
+    assert len(set(account_one_instruments)) == 2
+    assert sum(map(len, profile.topic_indices_by_strategy)) == 130
+    assert profile.topic_subscriber_counts == (6, 7) * 10
+    assert profile.topic_messages_per_second == (10,) * 20
+    assert profile.total_input_target_per_second == 200
+    assert profile.total_delivery_target_per_second == 1_300
+    assert profile.order_targets_per_account_per_second == (2.0,) * 10
+    for account_index, topic_rates in enumerate(
+        profile.order_targets_by_account_topic_per_second
+    ):
+        expected = [0.0] * 20
+        for topic_index in range(4):
+            expected[(2 * account_index + topic_index) % 20] = 0.5
+        assert topic_rates == tuple(expected)
+    assert profile.order_topic_index(0, 1) == 0
+    assert tuple(profile.order_topic_index(0, cycle) for cycle in range(1, 5)) == (0, 1, 2, 3)
+    assert profile.registration_status == "CANDIDATE_NOT_P0_REGISTERED"
+    assert profile.formal_acceptance_eligible("full") is False
+
+
 def test_bars_are_direct_facts_with_per_message_json_byte_measurement() -> None:
     keys = market_keys_for_profile("N1")[2:5]
 
@@ -164,5 +227,5 @@ def test_n1_and_n2_startup_waves_keep_the_ten_strategy_slot_guard() -> None:
 
 
 def test_unknown_profile_fails_closed() -> None:
-    with pytest.raises(ValueError, match="U0, N1, N2, or N3"):
-        load01_profile("N4")
+    with pytest.raises(ValueError, match="U0, N1, N2, N3, or N4"):
+        load01_profile("N5")

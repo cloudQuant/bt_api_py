@@ -28,7 +28,7 @@ class Load01Profile:
     order_phase_seconds_by_strategy: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        if self.profile_id not in {"U0", "N1", "N2", "N3"}:
+        if self.profile_id not in {"U0", "N1", "N2", "N3", "N4"}:
             raise ValueError("LOAD01 profile id is not registered")
         if not (
             len(self.accounts_by_strategy)
@@ -83,6 +83,15 @@ class Load01Profile:
 
     def subscribed_topic_indices(self, strategy_index: int) -> tuple[int, ...]:
         return self.topic_indices_by_strategy[strategy_index]
+
+    def order_topic_index(self, strategy_index: int, cycle: int) -> int | None:
+        """Return the N4 instrument key for a one-based strategy order cycle."""
+        if self.profile_id != "N4":
+            return None
+        if cycle < 1:
+            raise ValueError("LOAD01 order cycles are one-based")
+        topics = self.subscribed_topic_indices(strategy_index)
+        return topics[(cycle - 1) % len(topics)]
 
     @property
     def topic_subscriber_counts(self) -> tuple[int, ...]:
@@ -149,6 +158,22 @@ class Load01Profile:
         ]
         return tuple(fsum(rates) for rates in rates_by_account)
 
+    @property
+    def order_targets_by_account_topic_per_second(self) -> tuple[tuple[float, ...], ...]:
+        contributions: list[list[list[float]]] = [
+            [[] for _ in range(_TOPIC_COUNT)] for _ in range(_ACCOUNT_COUNT)
+        ]
+        for strategy_index, interval in enumerate(self.order_interval_seconds_by_strategy):
+            topics = self.subscribed_topic_indices(strategy_index)
+            per_topic_rate = 1.0 / interval / len(topics)
+            for account_index in self.accounts_for_strategy(strategy_index):
+                for topic_index in topics:
+                    contributions[account_index][topic_index].append(per_topic_rate)
+        return tuple(
+            tuple(fsum(topic_rates) for topic_rates in account_rates)
+            for account_rates in contributions
+        )
+
     def topic_publish_schedule(self) -> tuple[int, ...]:
         """Return a smooth weighted round-robin period with exact topic quotas."""
         weights = self.topic_messages_per_second
@@ -187,8 +212,8 @@ class Load01Profile:
 
 
 def _profile(profile_id: str) -> Load01Profile:
-    if profile_id not in {"U0", "N1", "N2", "N3"}:
-        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, or N3")
+    if profile_id not in {"U0", "N1", "N2", "N3", "N4"}:
+        raise ValueError("BT_API_LOAD01_PROFILE must be U0, N1, N2, N3, or N4")
 
     if profile_id == "N3":
         accounts_by_strategy = tuple(
@@ -235,6 +260,44 @@ def _profile(profile_id: str) -> Load01Profile:
                     phase_values.append(local_index * 0.5)
             intervals = tuple(interval_values)
             phases = tuple(phase_values)
+    elif profile_id == "N4":
+        market_keys_by_account = tuple(
+            tuple((2 * account_index + offset) % _TOPIC_COUNT for offset in range(4))
+            for account_index in range(_ACCOUNT_COUNT)
+        )
+        topic_indices = tuple(
+            market_keys_by_account[strategy_index // _STRATEGIES_PER_ACCOUNT]
+            if strategy_index % _STRATEGIES_PER_ACCOUNT == 0
+            else (
+                market_keys_by_account[strategy_index // _STRATEGIES_PER_ACCOUNT][
+                    strategy_index % _STRATEGIES_PER_ACCOUNT % 4
+                ],
+            )
+            for strategy_index in range(_STRATEGY_COUNT)
+        )
+        topic_rates = (10,) * _TOPIC_COUNT
+        interval_values = []
+        phase_values = []
+        phase_by_local = {
+            0: 0.0,
+            1: 0.0,
+            2: 0.5,
+            3: 1.0,
+            4: 1.5,
+            5: 2.5,
+            6: 3.0,
+            7: 3.5,
+            8: 4.0,
+            9: 7.5,
+        }
+        for strategy_index in range(_STRATEGY_COUNT):
+            local_index = strategy_index % _STRATEGIES_PER_ACCOUNT
+            interval_values.append(
+                2.5 if local_index == 0 else (10.0 if local_index in {5, 9} else 5.0)
+            )
+            phase_values.append(phase_by_local[local_index])
+        intervals = tuple(interval_values)
+        phases = tuple(phase_values)
     else:
         groups = (
             (0, 34, tuple(range(5, 10))),
