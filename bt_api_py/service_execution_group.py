@@ -138,8 +138,8 @@ _ORDERS_MOUNT = "upstream.orders"
 _ORDER_QUERY_MOUNT = "upstream.order_query"
 _COMPENSATION_ORDERS_MOUNT = "upstream.group_compensation_orders"
 _COMPENSATION_QUERY_MOUNT = "upstream.group_compensation_order_query"
-_ROLL_EXIT_ORDERS_MOUNT = _ORDERS_MOUNT
-_ROLL_EXIT_QUERY_MOUNT = _ORDER_QUERY_MOUNT
+_ROLL_EXIT_ORDERS_MOUNT = "upstream.group_roll_exit_orders"
+_ROLL_EXIT_QUERY_MOUNT = "upstream.group_roll_exit_order_query"
 _MAX_REPLY_BYTES = 1_000_000
 _GROUP_COMPENSATION_TERMINAL = frozenset(
     {ExecutionState.FILLED, ExecutionState.CANCELLED, ExecutionState.REJECTED}
