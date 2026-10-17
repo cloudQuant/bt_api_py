@@ -1,0 +1,45 @@
+{
+  "round": "Iteration10 N6 quota-wave source helper",
+  "repository": "D:\\bt_api_py",
+  "branch": "dev",
+  "parent_commit": "6b9cfbf395fedd49410046b2a6f6577b3aba81fb",
+  "commit_lookup": "git log -1 -- docs/evidence/iteration10-load01-n6-quota-source-20261018/round-record.json",
+  "scope": [
+    "tests/unit/_load01_quota_wave.py",
+    "tests/unit/test_load01_quota_wave.py",
+    "docs/evidence/iteration10-load01-n6-quota-source-20261018/round-record.json"
+  ],
+  "source_pins": {
+    "tests/unit/_load01_quota_wave.py": "12fc242570911a5af1a2b1152bd25e2876030130ce15c4ff7e61c967a78ef754",
+    "tests/unit/test_load01_quota_wave.py": "5e144bead20626813613d26a0799f3628992f20f05f56bc2333ea874b90d984a"
+  },
+  "change": "Separate 100-grant parent seed and per-strategy two-thread CTP_QUERY admission using the existing DIM07 quota policy. Market loop start/poll do not wait for quota. Finite join retains thread custody on timeout; complete requires both outcomes and reaped threads. Summary checks 200 offers, 100 grants and 100 deadline denials, per-strategy fairness, latency and zero pending waiters.",
+  "acceptance": {
+    "evidence_level": "N6_QUOTA_HELPER_SOURCE_FAKE_AND_TWO_REAL_SQLITE_THREAD_ADMISSIONS_ONLY_NOT_100_STRATEGY_FAIRNESS_OR_PROVIDER_OR_LOAD01",
+    "output": "D:\\temp\\load01-n6-quota-qa-20261018",
+    "result_sha256": "0619ee4afef5363e9f3338fb77a9441a8cdd4720bb2c0f9b6e14f897711d623f",
+    "tests_passed": 5,
+    "warnings": 0,
+    "source_pins_unchanged": 383,
+    "independent_review": "resume_load01_prepare GO_STATIC on final pins",
+    "review_repairs": [
+      "Partial thread-start must not report the two-request wave complete after reaping only one thread.",
+      "Missing-row summary regression now expects the length assertion; a separate 200-row 99/101 case tests grant/denial counts."
+    ],
+    "real_scope": "Two immediate SQLite admissions in two threads; remaining focused assertions use synthetic inputs.",
+    "not_proven": [
+      "100-strategy simultaneous fairness in LOAD01",
+      "N6 parent/worker runner integration",
+      "Provider query execution",
+      "Formal LOAD01 acceptance"
+    ]
+  },
+  "formal_pass_count_before": 62,
+  "formal_pass_count_after": 62,
+  "preservation": {
+    "existing_dev": true,
+    "new_worktree": false,
+    "N5_and_unrelated_WIP_excluded": true
+  },
+  "next": "Integrate the committed helper after the N5 runner round; seed near the scheduled wave after worker readiness."
+}
