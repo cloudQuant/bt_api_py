@@ -3514,6 +3514,10 @@ class RiskOrderEntryService:
         metadata = target.registry.get(request.symbol)
         if metadata is None:
             raise RiskOrderEntryError("INSTRUMENT_METADATA_MISSING")
+        binding = self._binding_for_command(command)
+        if binding is None or binding[1] is not target:
+            raise RiskOrderEntryError("RISK_ORDER_SCOPE_UNAVAILABLE")
+        wire_scope = binding[0]
         payload_sha256 = command.payload_sha256
         if parsed is not None:
             payload_sha256 = command.payload_sha256
@@ -3524,7 +3528,7 @@ class RiskOrderEntryService:
             scope=_AdmissionScope(
                 provider=target.account_scope.provider,
                 environment=target.account_scope.environment,
-                account_ref=target.account_scope.account_id,
+                account_ref=wire_scope.account_ref,
                 strategy_id=target.strategy_id,
             ),
             instrument=request.symbol,
